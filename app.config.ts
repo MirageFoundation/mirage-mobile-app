@@ -1,0 +1,94 @@
+import { ExpoConfig, ConfigContext } from 'expo/config';
+
+export default ({ config }: ConfigContext): ExpoConfig => {
+  const env = process.env.EXPO_PUBLIC_ENV || 'dev';
+  const name = env === 'production' ? 'Mirage' : `Mirage (${env})`;
+  const slug = 'mirage';
+
+  return {
+    ...config,
+    name,
+    slug,
+    version: '1.0.0',
+    orientation: 'portrait',
+    icon: './assets/images/icon.png',
+    scheme: 'mirage',
+    userInterfaceStyle: 'automatic',
+    newArchEnabled: true,
+    ios: {
+      supportsTablet: true,
+      bundleIdentifier: 'com.mirage.app',
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
+      },
+    },
+    android: {
+      adaptiveIcon: {
+        backgroundColor: '#E6F4FE',
+        foregroundImage: './assets/images/android-icon-foreground.png',
+        backgroundImage: './assets/images/android-icon-background.png',
+        monochromeImage: './assets/images/android-icon-monochrome.png',
+      },
+      package: 'com.mirage.app',
+      edgeToEdgeEnabled: true,
+      predictiveBackGestureEnabled: false,
+    },
+    web: {
+      output: 'static',
+      favicon: './assets/images/favicon.png',
+    },
+    plugins: [
+      'expo-router',
+      [
+        'expo-splash-screen',
+        {
+          image: './assets/images/splash-icon.png',
+          imageWidth: 200,
+          resizeMode: 'contain',
+          backgroundColor: '#ffffff',
+          dark: {
+            backgroundColor: '#000000',
+          },
+        },
+      ],
+      'expo-secure-store',
+      'expo-web-browser',
+      [
+        'expo-build-properties',
+        {
+          ios: {
+            deploymentTarget: '16.0',
+          },
+          android: {
+            compileSdkVersion: 35,
+          },
+        },
+      ],
+      'expo-sqlite',
+      'react-native-cloud-storage',
+      'react-native-edge-to-edge',
+      [
+        'expo-font',
+        {
+          fonts: [],
+        },
+      ],
+      [
+        'react-native-vision-camera',
+        {
+          cameraPermissionText: '$(PRODUCT_NAME) needs access to your Camera.',
+          enableCodeScanner: true,
+        },
+      ],
+    ],
+    experiments: {
+      typedRoutes: true,
+      reactCompiler: true,
+    },
+    extra: {
+      eas: {
+        projectId: '25839d12-3bbc-4a6a-b1ee-67c4a6de816f',
+      },
+    },
+  };
+};
