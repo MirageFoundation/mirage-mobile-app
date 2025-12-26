@@ -17,7 +17,7 @@ import "fast-text-encoding"; // Redundant if in ai.ts, but safe
 import "react-native-url-polyfill/auto";
 
 // 6. Styles (Unistyles/others)
-// import "@/utils/unistyles"; // Replace with your style setup if different
+import "@/utils/unistyles"; // Replace with your style setup if different
 
 // 7. Expo Router Entry
 import "expo-router/entry";
