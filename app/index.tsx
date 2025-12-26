@@ -1,15 +1,9 @@
-import { Text, View } from "react-native";
+import { Box, Text } from "@/src/components/ui/primitives";
 
 export default function Index() {
   return (
-    <View
-      style={{
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-      }}
-    >
+    <Box center flex>
       <Text>Edit app/index.tsx to edit this screen.</Text>
-    </View>
+    </Box>
   );
 }
