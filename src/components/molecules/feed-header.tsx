@@ -27,40 +27,42 @@ export const FeedHeader = ({
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
 
-  const feedTypeLabels: Record<FeedType, string> = {
-    home: "Home",
-    popular: "Popular",
-    news: "News",
-  };
-
   return (
     <Animated.View
       style={[styles.container, { paddingTop: insets.top }, animatedStyle]}
     >
       <View style={styles.content}>
-        {/* Left - Menu button */}
-        <Pressable onPress={onMenuPress} style={styles.iconButton}>
-          <Ionicons name="menu" size={24} color={theme.colors.text.default} />
-        </Pressable>
-
-        {/* Center - Title with dropdown */}
-        <Pressable onPress={onFeedTypePress} style={styles.titleContainer}>
-          <Text size="lg" weight="semibold">
-            {feedType ? feedTypeLabels[feedType] : title}
-          </Text>
-          {feedType && (
+        {/* Left section - Menu button and Title (as feed type selector) */}
+        <View style={styles.leftSection}>
+          <Pressable onPress={onMenuPress} style={styles.iconButton}>
             <Ionicons
-              name="chevron-down"
-              size={16}
-              color={theme.colors.text.subtle}
-              style={{ marginLeft: 4 }}
+              name="menu-outline"
+              size={24}
+              color={theme.colors.text.default}
             />
-          )}
-        </Pressable>
+          </Pressable>
+          <Pressable onPress={onFeedTypePress} style={styles.titleButton}>
+            <Text size="xl" weight="bold">
+              {title}
+            </Text>
+            {feedType && (
+              <Ionicons
+                name="chevron-down"
+                size={16}
+                color={theme.colors.text.subtle}
+                style={{ marginLeft: 4 }}
+              />
+            )}
+          </Pressable>
+        </View>
 
-        {/* Right - Search button */}
+        {/* Right section - Search */}
         <Pressable onPress={onSearchPress} style={styles.iconButton}>
-          <Ionicons name="search" size={24} color={theme.colors.text.default} />
+          <Ionicons
+            name="search-outline"
+            size={22}
+            color={theme.colors.text.default}
+          />
         </Pressable>
       </View>
     </Animated.View>
@@ -85,6 +87,10 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "space-between",
     paddingHorizontal: theme.spacing.md,
   },
+  leftSection: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   iconButton: {
     width: 40,
     height: 40,
@@ -92,7 +98,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     borderRadius: theme.radius.full,
   },
-  titleContainer: {
+  titleButton: {
     flexDirection: "row",
     alignItems: "center",
   },

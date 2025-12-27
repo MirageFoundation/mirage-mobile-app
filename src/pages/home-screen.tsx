@@ -77,7 +77,7 @@ export function HomeScreen() {
 
       {/* Animated Header */}
       <FeedHeader
-        title="Home"
+        title="Mirage"
         feedType={feedType}
         onFeedTypePress={handleFeedTypePress}
         animatedStyle={headerAnimatedStyle}

@@ -8,7 +8,7 @@ import {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const HEADER_HEIGHT = 56;
+const HEADER_HEIGHT = 44;
 const TAB_BAR_HEIGHT = 56;
 const SCROLL_THRESHOLD = 50;
 
