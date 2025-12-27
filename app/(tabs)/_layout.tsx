@@ -1,18 +1,18 @@
+import {
+  ScrollAnimationProvider,
+  TAB_BAR_HEIGHT,
+  useScrollAnimationContext,
+} from "@/src/providers/scroll-animation-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { View } from "react-native";
+import { Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StyleSheet } from "react-native-unistyles";
-import {
-  ScrollAnimationProvider,
-  useScrollAnimationContext,
-  TAB_BAR_HEIGHT,
-} from "@/src/providers/scroll-animation-context";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
   const insets = useSafeAreaInsets();
@@ -21,7 +21,7 @@ const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
   return (
     <Animated.View
       style={[
-        styles.tabBar,
+        styles.tabBar as any,
         { paddingBottom: insets.bottom },
         tabBarAnimatedStyle,
       ]}
@@ -72,6 +72,7 @@ const TabBarItem = ({
   onPress: () => void;
 }) => {
   const scale = useSharedValue(1);
+  const { theme } = useUnistyles();
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -94,9 +95,20 @@ const TabBarItem = ({
     >
       <Ionicons
         name={iconName as any}
-        size={24}
+        size={22}
         style={[styles.tabIcon, isFocused && styles.tabIconFocused]}
       />
+      <Text
+        style={{
+          fontSize: 9,
+          fontWeight: "500",
+          color: isFocused
+            ? theme.colors.primary[500]
+            : theme.colors.text.subtle,
+        }}
+      >
+        {label}
+      </Text>
     </Animated.View>
   );
 };
@@ -182,13 +194,13 @@ const styles = StyleSheet.create((theme, rt) => ({
     height: TAB_BAR_HEIGHT,
     alignItems: "center",
     justifyContent: "space-around",
-    paddingHorizontal: theme.spacing.md,
+    // paddingHorizontal: theme.spacing.md,
   },
   tabItem: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: theme.spacing.sm,
+    gap: 2,
   },
   tabIcon: {
     color: theme.colors.text.subtle,

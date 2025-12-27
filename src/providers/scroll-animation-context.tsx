@@ -1,15 +1,15 @@
 import React, { createContext, useContext, useMemo } from "react";
 import {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
   useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
   type SharedValue,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const HEADER_HEIGHT = 56;
-const TAB_BAR_HEIGHT = 60;
+const TAB_BAR_HEIGHT = 56;
 const SCROLL_THRESHOLD = 50;
 
 type ScrollAnimationContextType = {
@@ -45,8 +45,12 @@ export const ScrollAnimationProvider = ({
 
       if (diff > 0 && currentY > SCROLL_THRESHOLD) {
         // Scrolling down - hide completely
-        headerTranslateY.value = withTiming(-fullHeaderHeight, { duration: 200 });
-        tabBarTranslateY.value = withTiming(fullTabBarHeight, { duration: 200 });
+        headerTranslateY.value = withTiming(-fullHeaderHeight, {
+          duration: 200,
+        });
+        tabBarTranslateY.value = withTiming(fullTabBarHeight, {
+          duration: 200,
+        });
       } else if (diff < -5) {
         // Scrolling up - show
         headerTranslateY.value = withTiming(0, { duration: 200 });
@@ -73,7 +77,13 @@ export const ScrollAnimationProvider = ({
       headerTranslateY,
       tabBarTranslateY,
     }),
-    [scrollHandler, headerAnimatedStyle, tabBarAnimatedStyle, headerTranslateY, tabBarTranslateY]
+    [
+      scrollHandler,
+      headerAnimatedStyle,
+      tabBarAnimatedStyle,
+      headerTranslateY,
+      tabBarTranslateY,
+    ]
   );
 
   return (
