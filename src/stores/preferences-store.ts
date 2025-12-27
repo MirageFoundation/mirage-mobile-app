@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import { mmkvStorage } from "./mmkv-storage";
 
 export type FeedType = "home" | "popular" | "news" | "watch" | "latest";
@@ -32,4 +32,3 @@ export const usePreferencesStore = create<PreferencesState>()(
     }
   )
 );
-

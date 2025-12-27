@@ -1,8 +1,8 @@
-import { useRef } from "react";
-import { Animated, Pressable, ActivityIndicator } from "react-native";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useRef } from "react";
+import { ActivityIndicator, Animated, Pressable } from "react-native";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type FollowButtonSize = "sm" | "md" | "lg";
 

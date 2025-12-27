@@ -1152,6 +1152,11 @@ colors: {
 - [x] PostCard UI refinements (compact layout, more button, smaller avatar)
 - [x] PostActions redesign (pill containers, arrow icons, share right-aligned)
 - [x] FollowButton size reduction
+- [x] FeedHeader popup menu (react-native-popup-menu with feed type options)
+- [x] Feed type options: Home, Popular, Latest, News, Watch (with icons)
+- [x] Mirage branding (orange color rgb(232, 84, 41) for home feed title)
+- [x] Animated chevron rotation on menu open/close
+- [ ] Following tab empty state UI redesign
 
 ### Phase 5: Comments System (Week 3)
 
@@ -1206,6 +1211,6 @@ colors: {
 
 ---
 
-_Document Version: 1.2_
+_Document Version: 1.3_
 _Created: December 2024_
 _Last Updated: December 28, 2024_
