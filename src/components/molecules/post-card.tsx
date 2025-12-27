@@ -1,18 +1,18 @@
-import { useState } from "react";
-import { View, Pressable, type ViewStyle, type StyleProp } from "react-native";
-import { Image } from "expo-image";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { Text } from "@/src/components/ui/primitives";
 import {
   Avatar,
-  TimeAgo,
-  TopicChip,
-  FollowButton,
   ContentWarningBadge,
+  FollowButton,
+  TimeAgo,
   type ContentWarningType,
 } from "@/src/components/atoms";
-import { PostActions } from "./post-actions";
+import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
+import { useState } from "react";
+import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { PostActions } from "./post-actions";
 
 export type PostAuthor = {
   id: string;
@@ -55,10 +55,10 @@ type PostCardProps = {
   onPress?: () => void;
   /** Callback when author avatar/username is pressed */
   onAuthorPress?: () => void;
-  /** Callback when topic is pressed */
-  onTopicPress?: () => void;
   /** Callback when follow button is pressed */
   onFollowPress?: () => void;
+  /** Callback when more options (three dots) is pressed */
+  onMorePress?: () => void;
   /** Callback when like is pressed */
   onLikePress?: () => void;
   /** Callback when dislike is pressed */
@@ -84,8 +84,8 @@ export const PostCard = ({
   isOwnPost = false,
   onPress,
   onAuthorPress,
-  onTopicPress,
   onFollowPress,
+  onMorePress,
   onLikePress,
   onDislikePress,
   onCommentPress,
@@ -103,7 +103,6 @@ export const PostCard = ({
     author,
     title,
     body,
-    topic,
     media,
     contentWarnings,
     likes,
@@ -139,43 +138,50 @@ export const PostCard = ({
     onAuthorPress?.();
   };
 
+  const handleMorePress = () => {
+    triggerHaptic("selection");
+    onMorePress?.();
+  };
+
   return (
     <Pressable onPress={handlePress} style={[styles.container, style]}>
-      {/* Header: Avatar, Username, Time, Topic, Follow */}
+      {/* Header: Avatar, Username, Time, Follow, More */}
       <View style={styles.header}>
         <Pressable onPress={handleAuthorPress} style={styles.authorSection}>
           <Avatar
-            size="md"
+            size="sm"
             seed={author.avatarSeed ?? author.username}
             source={author.avatarUrl ? { uri: author.avatarUrl } : undefined}
+            bordered
           />
           <View style={styles.authorInfo}>
             <View style={styles.authorRow}>
               <Text size="sm" weight="semibold" numberOfLines={1}>
                 @{author.username}
               </Text>
-              <TimeAgo timestamp={createdAt} showSuffix={false} />
+              <TimeAgo timestamp={createdAt} showSuffix={false} size="xs" />
             </View>
-            {topic && (
-              <TopicChip
-                label={topic}
-                size="sm"
-                onPress={onTopicPress}
-                style={{ marginTop: 2 }}
-              />
-            )}
           </View>
         </Pressable>
 
-        {/* Follow button - don't show for own posts */}
-        {!isOwnPost && (
-          <FollowButton
-            isFollowing={isFollowing ?? false}
-            onPress={onFollowPress}
-            loading={followLoading}
-            size="sm"
-          />
-        )}
+        {/* Right section: Follow button + More options */}
+        <View style={styles.headerActions}>
+          {!isOwnPost && (
+            <FollowButton
+              isFollowing={isFollowing ?? false}
+              onPress={onFollowPress}
+              loading={followLoading}
+              size="sm"
+            />
+          )}
+          <Pressable onPress={handleMorePress} style={styles.moreButton}>
+            <Ionicons
+              name="ellipsis-horizontal"
+              size={18}
+              color={theme.colors.text.subtle}
+            />
+          </Pressable>
+        </View>
       </View>
 
       {/* Content Warning Badge */}
@@ -248,10 +254,7 @@ export const PostCard = ({
 
             {/* Blur overlay with reveal button */}
             {shouldBlurContent && (
-              <Pressable
-                onPress={onRevealContent}
-                style={styles.blurOverlay}
-              >
+              <Pressable onPress={onRevealContent} style={styles.blurOverlay}>
                 <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
                   Tap to reveal
                 </Text>
@@ -263,12 +266,7 @@ export const PostCard = ({
 
       {/* Body text */}
       {body && !shouldBlurContent && (
-        <Text
-          size="md"
-          mode="default"
-          style={styles.body}
-          numberOfLines={4}
-        >
+        <Text size="sm" mode="default" style={styles.body} numberOfLines={4}>
           {body}
         </Text>
       )}
@@ -302,32 +300,45 @@ const styles = StyleSheet.create((theme) => ({
   },
   header: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
   },
   authorSection: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     flex: 1,
   },
   authorInfo: {
     flex: 1,
-    marginLeft: theme.spacing.sm,
+    marginLeft: theme.spacing.xs,
+    justifyContent: "center",
   },
   authorRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+  },
+  moreButton: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.radius.full,
   },
   warningBadge: {
     marginTop: theme.spacing.sm,
   },
   title: {
-    marginTop: theme.spacing.sm,
-    lineHeight: 24,
+    marginTop: theme.spacing.xs,
+    lineHeight: 20,
   },
   mediaContainer: {
-    marginTop: theme.spacing.md,
+    marginTop: theme.spacing.sm,
     borderRadius: theme.radius.md,
     overflow: "hidden",
   },
@@ -379,12 +390,10 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "rgba(0, 0, 0, 0.3)",
   },
   body: {
-    marginTop: theme.spacing.sm,
-    lineHeight: 22,
+    marginTop: theme.spacing.xs,
+    lineHeight: 16,
   },
   actions: {
-    marginTop: theme.spacing.md,
-    paddingTop: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
   },
 }));
-

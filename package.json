@@ -71,6 +71,7 @@
     "react-native-otp-entry": "^1.8.5",
     "react-native-pager-view": "6.9.1",
     "react-native-passkeys": "^0.4.0",
+    "react-native-popup-menu": "^0.19.0",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",

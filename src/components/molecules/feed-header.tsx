@@ -1,16 +1,67 @@
-import { Text } from "@/src/components/ui/primitives";
-import { HEADER_HEIGHT } from "@/src/hooks/use-scroll-animation";
-import type { FeedType } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, View } from "react-native";
-import Animated from "react-native-reanimated";
+import {
+  Menu,
+  MenuOption,
+  MenuOptions,
+  MenuTrigger,
+} from "react-native-popup-menu";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+
+import { Text } from "@/src/components/ui/primitives";
+import { triggerHaptic } from "@/src/components/utils/haptics";
+import { HEADER_HEIGHT } from "@/src/hooks/use-scroll-animation";
+import type { FeedType } from "@/src/stores";
+
+// Mirage brand color
+const MIRAGE_COLOR = "rgb(232, 84, 41)";
+
+type FeedOption = {
+  value: FeedType;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  iconFilled: keyof typeof Ionicons.glyphMap;
+};
+
+const FEED_OPTIONS: FeedOption[] = [
+  { value: "home", label: "Home", icon: "home-outline", iconFilled: "home" },
+  {
+    value: "popular",
+    label: "Popular",
+    icon: "flame-outline",
+    iconFilled: "flame",
+  },
+  {
+    value: "latest",
+    label: "Latest",
+    icon: "time-outline",
+    iconFilled: "time",
+  },
+  {
+    value: "news",
+    label: "News",
+    icon: "newspaper-outline",
+    iconFilled: "newspaper",
+  },
+  {
+    value: "watch",
+    label: "Watch",
+    icon: "play-circle-outline",
+    iconFilled: "play-circle",
+  },
+];
 
 type FeedHeaderProps = {
   title: string;
   feedType?: FeedType;
-  onFeedTypePress?: () => void;
+  onFeedTypeChange?: (feedType: FeedType) => void;
   onMenuPress?: () => void;
   onSearchPress?: () => void;
   animatedStyle?: any;
@@ -18,14 +69,41 @@ type FeedHeaderProps = {
 
 export const FeedHeader = ({
   title,
-  feedType,
-  onFeedTypePress,
+  feedType = "home",
+  onFeedTypeChange,
   onMenuPress,
   onSearchPress,
   animatedStyle,
 }: FeedHeaderProps) => {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
+
+  // Rotation animation for chevron
+  const rotation = useSharedValue(0);
+
+  const chevronAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotation.value}deg` }],
+  }));
+
+  const handleMenuOpen = () => {
+    triggerHaptic("selection");
+    rotation.value = withTiming(180, {
+      duration: 200,
+      easing: Easing.ease,
+    });
+  };
+
+  const handleMenuClose = () => {
+    rotation.value = withTiming(0, {
+      duration: 200,
+      easing: Easing.ease,
+    });
+  };
+
+  const handleOptionSelect = (option: FeedOption) => {
+    triggerHaptic("light");
+    onFeedTypeChange?.(option.value);
+  };
 
   return (
     <Animated.View
@@ -41,19 +119,120 @@ export const FeedHeader = ({
               color={theme.colors.text.default}
             />
           </Pressable>
-          <Pressable onPress={onFeedTypePress} style={styles.titleButton}>
-            <Text size="xl" weight="bold">
-              {title}
-            </Text>
-            {feedType && (
-              <Ionicons
-                name="chevron-down"
-                size={16}
-                color={theme.colors.text.subtle}
-                style={{ marginLeft: 4 }}
-              />
-            )}
-          </Pressable>
+
+          {onFeedTypeChange ? (
+            <Menu onOpen={handleMenuOpen} onClose={handleMenuClose}>
+              <MenuTrigger>
+                <View style={styles.titleButton}>
+                  <Text
+                    size="xl"
+                    weight="bold"
+                    style={
+                      feedType === "home" ? { color: MIRAGE_COLOR } : undefined
+                    }
+                  >
+                    {title}
+                  </Text>
+                  <Animated.View
+                    style={[{ marginLeft: 4 }, chevronAnimatedStyle]}
+                  >
+                    <Ionicons
+                      name="chevron-down"
+                      size={16}
+                      color={theme.colors.text.subtle}
+                    />
+                  </Animated.View>
+                </View>
+              </MenuTrigger>
+              <MenuOptions
+                customStyles={{
+                  optionsContainer: {
+                    backgroundColor: theme.colors.background.default,
+                    borderRadius: theme.radius.lg,
+                    minWidth: 160,
+                    shadowColor: theme.colors.contrast.base,
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.15,
+                    shadowRadius: 12,
+                    elevation: 8,
+                    borderWidth: 1,
+                    borderColor: theme.colors.border.subtle,
+                    marginTop: 37,
+                    marginLeft: -8,
+                  },
+                }}
+              >
+                {FEED_OPTIONS.map((option, index) => {
+                  const isSelected = option.value === feedType;
+                  const isFirst = index === 0;
+                  const isLast = index === FEED_OPTIONS.length - 1;
+                  return (
+                    <MenuOption
+                      key={option.value}
+                      onSelect={() => handleOptionSelect(option)}
+                      customStyles={{
+                        optionWrapper: {
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          paddingVertical: theme.spacing.sm + 4,
+                          paddingHorizontal: theme.spacing.md,
+                          backgroundColor: isSelected
+                            ? theme.colors.background.subtle
+                            : "transparent",
+                          ...(isSelected &&
+                            isFirst && {
+                              borderTopLeftRadius: theme.radius.lg,
+                              borderTopRightRadius: theme.radius.lg,
+                            }),
+                          ...(isSelected &&
+                            isLast && {
+                              borderBottomLeftRadius: theme.radius.lg,
+                              borderBottomRightRadius: theme.radius.lg,
+                            }),
+                        },
+                      }}
+                    >
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 10,
+                        }}
+                      >
+                        <Ionicons
+                          name={isSelected ? option.iconFilled : option.icon}
+                          size={18}
+                          color={
+                            isSelected
+                              ? theme.colors.primary[500]
+                              : theme.colors.text.subtle
+                          }
+                        />
+                        <Text
+                          size="md"
+                          weight={isSelected ? "bold" : "medium"}
+                          style={
+                            isSelected
+                              ? { color: theme.colors.primary[500] }
+                              : undefined
+                          }
+                        >
+                          {option.label}
+                        </Text>
+                      </View>
+                    </MenuOption>
+                  );
+                })}
+              </MenuOptions>
+            </Menu>
+          ) : (
+            <View style={styles.titleButton}>
+              <Text size="xl" weight="bold">
+                {title}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Right section - Search */}
@@ -101,5 +280,7 @@ const styles = StyleSheet.create((theme) => ({
   titleButton: {
     flexDirection: "row",
     alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
 }));

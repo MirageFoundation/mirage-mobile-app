@@ -64,6 +64,7 @@
         "react-native-otp-entry": "^1.8.5",
         "react-native-pager-view": "6.9.1",
         "react-native-passkeys": "^0.4.0",
+        "react-native-popup-menu": "^0.19.0",
         "react-native-reanimated": "~4.1.1",
         "react-native-safe-area-context": "~5.6.0",
         "react-native-screens": "~4.16.0",
@@ -1632,6 +1633,8 @@
     "react-native-pager-view": ["react-native-pager-view@6.9.1", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-uUT0MMMbNtoSbxe9pRvdJJKEi9snjuJ3fXlZhG8F2vVMOBJVt/AFtqMPUHu9yMflmqOr08PewKzj9EPl/Yj+Gw=="],
 
     "react-native-passkeys": ["react-native-passkeys@0.4.0", "", { "peerDependencies": { "expo": ">=48.0.0", "react": "*", "react-native": ">=0.71.0" } }, "sha512-WX0jw60tDyZ3SwhnKvAdddwC27efT4CWWcq/j8O+RyGU/wIidQXeaAtX0kX1CMGNsXnoDDgbMAhUbIG+Ia786Q=="],
+
+    "react-native-popup-menu": ["react-native-popup-menu@0.19.0", "", {}, "sha512-mWC2VCLMmTDPlqgIy39JUy57yZV0//4/dITIrTM0Wu0QtUDlbDmSKl115YjAAY4mj2iceTxo0nOmXrLu8Tp8UQ=="],
 
     "react-native-reanimated": ["react-native-reanimated@4.1.6", "", { "dependencies": { "react-native-is-edge-to-edge": "^1.2.1", "semver": "7.7.2" }, "peerDependencies": { "@babel/core": "^7.0.0-0", "react": "*", "react-native": "*", "react-native-worklets": ">=0.5.0" } }, "sha512-F+ZJBYiok/6Jzp1re75F/9aLzkgoQCOh4yxrnwATa8392RvM3kx+fiXXFvwcgE59v48lMwd9q0nzF1oJLXpfxQ=="],
 

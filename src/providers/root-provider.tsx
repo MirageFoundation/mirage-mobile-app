@@ -2,6 +2,7 @@ import React, { memo } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
+import { MenuProvider } from "react-native-popup-menu";
 
 import { QueryProvider } from "./query-provider";
 import { QueryClearProvider } from "./query-clear-provider";
@@ -30,15 +31,17 @@ export const RootProvider = memo(
   ({ children }: { children: React.ReactNode }) => {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <CoreProviders>
-          <KeyboardProvider>
-            <AuthProviders>
-              <BottomSheetModalProvider>
-                {children}
-              </BottomSheetModalProvider>
-            </AuthProviders>
-          </KeyboardProvider>
-        </CoreProviders>
+        <MenuProvider>
+          <CoreProviders>
+            <KeyboardProvider>
+              <AuthProviders>
+                <BottomSheetModalProvider>
+                  {children}
+                </BottomSheetModalProvider>
+              </AuthProviders>
+            </KeyboardProvider>
+          </CoreProviders>
+        </MenuProvider>
       </GestureHandlerRootView>
     );
   }

@@ -7,9 +7,9 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 type FollowButtonSize = "sm" | "md" | "lg";
 
 const SIZE_CONFIG: Record<FollowButtonSize, { height: number; paddingHorizontal: number; fontSize: "xs" | "sm" | "md" }> = {
-  sm: { height: 28, paddingHorizontal: 12, fontSize: "xs" },
-  md: { height: 32, paddingHorizontal: 16, fontSize: "sm" },
-  lg: { height: 38, paddingHorizontal: 20, fontSize: "md" },
+  sm: { height: 22, paddingHorizontal: 8, fontSize: "xs" },
+  md: { height: 26, paddingHorizontal: 10, fontSize: "xs" },
+  lg: { height: 32, paddingHorizontal: 14, fontSize: "sm" },
 };
 
 type FollowButtonProps = {
@@ -102,7 +102,7 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: theme.radius.full,
-    minWidth: 80,
+    minWidth: 54,
     variants: {
       isFollowing: {
         true: {

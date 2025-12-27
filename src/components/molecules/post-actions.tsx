@@ -1,7 +1,10 @@
-import { VoteButton } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { Ionicons } from "@expo/vector-icons";
+import {
+  AntDesign,
+  Ionicons,
+  MaterialCommunityIcons,
+} from "@expo/vector-icons";
 import {
   Pressable,
   Share,
@@ -43,9 +46,27 @@ type PostActionsProps = {
 };
 
 const SIZE_CONFIG = {
-  sm: { iconSize: 16, gap: 12, textSize: "xs" as const },
-  md: { iconSize: 20, gap: 16, textSize: "sm" as const },
-  lg: { iconSize: 24, gap: 20, textSize: "md" as const },
+  sm: {
+    iconSize: 12,
+    gap: 10,
+    textSize: "xs" as const,
+    pillHeight: 24,
+    voteTextSize: "xs" as const,
+  },
+  md: {
+    iconSize: 14,
+    gap: 14,
+    textSize: "xs" as const,
+    pillHeight: 26,
+    voteTextSize: "xs" as const,
+  },
+  lg: {
+    iconSize: 18,
+    gap: 18,
+    textSize: "sm" as const,
+    pillHeight: 32,
+    voteTextSize: "sm" as const,
+  },
 };
 
 export const PostActions = ({
@@ -65,7 +86,19 @@ export const PostActions = ({
   style,
 }: PostActionsProps) => {
   const { theme } = useUnistyles();
-  const { iconSize, gap, textSize } = SIZE_CONFIG[size];
+  const { iconSize, gap, pillHeight, voteTextSize } = SIZE_CONFIG[size];
+
+  const handleLikePress = () => {
+    if (disabled) return;
+    triggerHaptic(hasLiked ? "light" : "medium");
+    onLikePress?.();
+  };
+
+  const handleDislikePress = () => {
+    if (disabled) return;
+    triggerHaptic(hasDisliked ? "light" : "medium");
+    onDislikePress?.();
+  };
 
   const handleShare = async () => {
     triggerHaptic("light", disabled);
@@ -100,71 +133,77 @@ export const PostActions = ({
     return num.toString();
   };
 
+  const iconColor = theme.colors.text.default;
+  const textColor = theme.colors.text.default;
+
   return (
     <View style={[styles.container, { gap }, style]}>
-      {/* Vote buttons section */}
-      <View style={[styles.voteSection, { gap: gap / 2 }]}>
-        <VoteButton
-          type="like"
-          count={likes}
-          isActive={hasLiked}
-          onPress={onLikePress}
-          size={size}
+      {/* Vote pill container */}
+      <View style={[styles.votePill, { height: pillHeight }]}>
+        {/* Like button */}
+        <Pressable
+          onPress={handleLikePress}
           disabled={disabled}
-        />
-        <VoteButton
-          type="dislike"
-          count={dislikes}
-          isActive={hasDisliked}
-          onPress={onDislikePress}
-          size={size}
+          style={[styles.voteButton, disabled && styles.disabled]}
+        >
+          <AntDesign name="arrow-up" size={iconSize} color={iconColor} />
+          <Text
+            size={voteTextSize}
+            weight={hasLiked ? "semibold" : "regular"}
+            style={{ marginLeft: 3, color: textColor }}
+          >
+            {formatCount(likes)}
+          </Text>
+        </Pressable>
+
+        {/* Divider */}
+        <View style={styles.voteDivider} />
+
+        {/* Dislike button */}
+        <Pressable
+          onPress={handleDislikePress}
           disabled={disabled}
-        />
+          style={[styles.voteButton, disabled && styles.disabled]}
+        >
+          <AntDesign name="arrow-down" size={iconSize} color={iconColor} />
+        </Pressable>
       </View>
 
-      {/* Divider */}
-      <View style={styles.divider} />
+      {/* Comment pill container */}
+      <View style={[styles.votePill, { height: pillHeight }]}>
+        <Pressable
+          onPress={() => {
+            if (disabled) return;
+            triggerHaptic("selection");
+            onCommentPress?.();
+          }}
+          disabled={disabled}
+          style={[styles.voteButton, disabled && styles.disabled]}
+        >
+          <MaterialCommunityIcons
+            name="comment-outline"
+            size={iconSize}
+            color={iconColor}
+          />
+          <Text size={voteTextSize} style={{ marginLeft: 3, color: textColor }}>
+            {formatCount(comments)}
+          </Text>
+        </Pressable>
+      </View>
 
-      {/* Comment button */}
-      <Pressable
-        onPress={() => {
-          if (disabled) return;
-          triggerHaptic("selection");
-          onCommentPress?.();
-        }}
-        disabled={disabled}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        style={[styles.actionButton, disabled && styles.disabled]}
-      >
-        <Ionicons
-          name="chatbubble-outline"
-          size={iconSize}
-          color={theme.colors.text.subtle}
-        />
-        <Text size={textSize} mode="subtle" style={{ marginLeft: 4 }}>
-          {formatCount(comments)}
-        </Text>
-      </Pressable>
+      {/* Spacer to push share to the right */}
+      <View style={styles.spacer} />
 
-      {/* Divider */}
-      <View style={styles.divider} />
-
-      {/* Share button */}
-      <Pressable
-        onPress={handleShare}
-        disabled={disabled}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        style={[styles.actionButton, disabled && styles.disabled]}
-      >
-        <Ionicons
-          name="share-outline"
-          size={iconSize}
-          color={theme.colors.text.subtle}
-        />
-        <Text size={textSize} mode="subtle" style={{ marginLeft: 4 }}>
-          Share
-        </Text>
-      </Pressable>
+      {/* Share pill container */}
+      <View style={[styles.votePill, { height: pillHeight }]}>
+        <Pressable
+          onPress={handleShare}
+          disabled={disabled}
+          style={[styles.voteButton, disabled && styles.disabled]}
+        >
+          <Ionicons name="share-outline" size={iconSize} color={iconColor} />
+        </Pressable>
+      </View>
     </View>
   );
 };
@@ -174,19 +213,32 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
   },
-  voteSection: {
+  votePill: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "transparent",
+    borderRadius: theme.radius.full,
+    borderWidth: 0.5,
+    borderColor: theme.colors.border.default,
+    paddingHorizontal: 2,
   },
-  divider: {
+  voteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  voteDivider: {
     width: 1,
-    height: 16,
-    backgroundColor: theme.colors.border.subtle,
-    opacity: 0.5,
+    height: "60%",
+    backgroundColor: theme.colors.border.default,
   },
   actionButton: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  spacer: {
+    flex: 1,
   },
   disabled: {
     opacity: 0.5,

@@ -1138,17 +1138,20 @@ colors: {
 - [x] ContentWarningBadge atom
 - [x] MediaThumbnail atom
 
-### Phase 3: Feed Molecules (Week 2)
+### Phase 3: Feed Molecules (Week 2) ✅
 
-- [ ] PostCard molecule
-- [ ] PostActions molecule
+- [x] PostCard molecule
+- [x] PostActions molecule
 - [x] FeedHeader molecule
 
-### Phase 4: Home & Following Pages (Week 2-3)
+### Phase 4: Home & Following Pages (Week 2-3) ✅
 
-- [ ] HomePage with feed (placeholder exists)
-- [ ] FollowingPage (placeholder exists)
+- [x] HomePage with feed (mock data, auth-guarded actions, optimistic updates)
+- [x] FollowingPage (guest state, logged-in feed, empty state)
 - [x] Scroll-based header animation
+- [x] PostCard UI refinements (compact layout, more button, smaller avatar)
+- [x] PostActions redesign (pill containers, arrow icons, share right-aligned)
+- [x] FollowButton size reduction
 
 ### Phase 5: Comments System (Week 3)
 
@@ -1203,6 +1206,6 @@ colors: {
 
 ---
 
-_Document Version: 1.1_
+_Document Version: 1.2_
 _Created: December 2024_
 _Last Updated: December 28, 2024_

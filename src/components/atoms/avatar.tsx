@@ -41,17 +41,16 @@ export const Avatar = ({
   const resolvedSize = typeof size === "number" ? size : AVATAR_SIZES[size];
 
   const imageSource = source ?? {
-    uri: `https://api.dicebear.com/7.x/${variant}/png?seed=${seed ?? "default"}&size=${resolvedSize * 2}`,
+    uri: `https://api.dicebear.com/7.x/${variant}/png?seed=${
+      seed ?? "default"
+    }&size=${resolvedSize * 2}`,
   };
 
   styles.useVariants({ rounded, bordered });
 
   return (
     <View
-      style={[
-        styles.container,
-        { width: resolvedSize, height: resolvedSize },
-      ]}
+      style={[styles.container, { width: resolvedSize, height: resolvedSize }]}
     >
       <Image
         source={imageSource}
@@ -68,6 +67,7 @@ const styles = StyleSheet.create((theme) => ({
   container: {
     overflow: "hidden",
     backgroundColor: theme.colors.background.subtle,
+
     variants: {
       rounded: {
         none: { borderRadius: 0 },
@@ -78,7 +78,7 @@ const styles = StyleSheet.create((theme) => ({
       },
       bordered: {
         true: {
-          borderWidth: 2,
+          borderWidth: 0.5,
           borderColor: theme.colors.border.default,
         },
         false: {
@@ -88,8 +88,8 @@ const styles = StyleSheet.create((theme) => ({
     },
   },
   image: {
-    width: "100%",
-    height: "100%",
+    width: "85%",
+    height: "85%",
+    alignSelf: "center",
   },
 }));
-
