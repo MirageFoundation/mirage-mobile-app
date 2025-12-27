@@ -1,6 +1,6 @@
+import { Text } from "@/src/components/ui/primitives";
 import { View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { Text } from "@/src/components/ui/primitives";
 
 type BadgeSize = "sm" | "md" | "lg";
 type BadgeMode = "default" | "primary" | "error" | "success" | "warning";
@@ -20,7 +20,15 @@ type BadgeProps = {
   visible?: boolean;
 };
 
-const SIZE_CONFIG: Record<BadgeSize, { minSize: number; padding: number; fontSize: "xs" | "sm" | "md"; dotSize: number }> = {
+const SIZE_CONFIG: Record<
+  BadgeSize,
+  {
+    minSize: number;
+    padding: number;
+    fontSize: "xs" | "sm" | "md";
+    dotSize: number;
+  }
+> = {
   sm: { minSize: 16, padding: 4, fontSize: "xs", dotSize: 8 },
   md: { minSize: 20, padding: 6, fontSize: "xs", dotSize: 10 },
   lg: { minSize: 24, padding: 8, fontSize: "sm", dotSize: 12 },
@@ -35,22 +43,22 @@ export const Badge = ({
   visible = true,
 }: BadgeProps) => {
   const { theme } = useUnistyles();
-  
+
   if (!visible) return null;
-  
+
   // For dot mode, don't show count
   if (dot) {
     const { dotSize } = SIZE_CONFIG[size];
     return (
-      <View 
+      <View
         style={[
-          styles.dot, 
-          { 
-            width: dotSize, 
+          styles.dot,
+          {
+            width: dotSize,
             height: dotSize,
             backgroundColor: getBadgeColor(mode, theme),
-          }
-        ]} 
+          },
+        ]}
       />
     );
   }
@@ -60,27 +68,27 @@ export const Badge = ({
 
   const { minSize, padding, fontSize } = SIZE_CONFIG[size];
   const displayCount = count > maxCount ? `${maxCount}+` : count.toString();
-  
+
   // Adjust width based on content length
   const isMultiDigit = displayCount.length > 1;
   const width = isMultiDigit ? "auto" : minSize;
 
   return (
-    <View 
+    <View
       style={[
-        styles.container, 
-        { 
-          minWidth: minSize, 
+        styles.container,
+        {
+          minWidth: minSize,
           height: minSize,
           width,
           paddingHorizontal: isMultiDigit ? padding : 0,
           backgroundColor: getBadgeColor(mode, theme),
-        }
+        },
       ]}
     >
-      <Text 
-        size={fontSize} 
-        weight="bold" 
+      <Text
+        size={fontSize}
+        weight="bold"
         style={{ color: theme.colors.background.default }}
       >
         {displayCount}
@@ -104,17 +112,6 @@ const getBadgeColor = (mode: BadgeMode, theme: any) => {
   }
 };
 
-const styles = StyleSheet.create((theme) => ({
-  container: {
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: theme.radius.full,
-  },
-  dot: {
-    borderRadius: theme.radius.full,
-  },
-}));
-
 /**
  * Wrapper component to position badge relative to another element
  */
@@ -125,10 +122,10 @@ type BadgeWrapperProps = {
   position?: "top-right" | "top-left" | "bottom-right" | "bottom-left";
 };
 
-export const BadgeWrapper = ({ 
-  children, 
-  badge, 
-  position = "top-right" 
+export const BadgeWrapper = ({
+  children,
+  badge,
+  position = "top-right",
 }: BadgeWrapperProps) => {
   const getPositionStyle = () => {
     switch (position) {
@@ -170,4 +167,3 @@ const styles = StyleSheet.create((theme) => ({
     zIndex: 1,
   },
 }));
-

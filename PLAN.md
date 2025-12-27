@@ -1124,31 +1124,31 @@ colors: {
 - [x] Implement auth guard hook
 - [x] Create auth bottom sheet molecule
 
-### Phase 2: Atoms (Week 1-2)
+### Phase 2: Atoms (Week 1-2) ✅
 
-- [ ] Avatar atom
-- [ ] IconButton atom
-- [ ] VoteButton atom
-- [ ] FollowButton atom
-- [ ] TimeAgo atom
-- [ ] Badge atom
-- [ ] TopicChip atom
-- [ ] WordChip atom
-- [ ] StatusStep atom
-- [ ] ContentWarningBadge atom
-- [ ] MediaThumbnail atom
+- [x] Avatar atom
+- [x] IconButton atom
+- [x] VoteButton atom
+- [x] FollowButton atom
+- [x] TimeAgo atom
+- [x] Badge atom
+- [x] TopicChip atom
+- [x] WordChip atom
+- [x] StatusStep atom
+- [x] ContentWarningBadge atom
+- [x] MediaThumbnail atom
 
 ### Phase 3: Feed Molecules (Week 2)
 
 - [ ] PostCard molecule
 - [ ] PostActions molecule
-- [ ] FeedHeader molecule
+- [x] FeedHeader molecule
 
 ### Phase 4: Home & Following Pages (Week 2-3)
 
-- [ ] HomePage with feed
-- [ ] FollowingPage
-- [ ] Scroll-based header animation
+- [ ] HomePage with feed (placeholder exists)
+- [ ] FollowingPage (placeholder exists)
+- [x] Scroll-based header animation
 
 ### Phase 5: Comments System (Week 3)
 
@@ -1160,13 +1160,13 @@ colors: {
 
 ### Phase 6: Authentication (Week 3-4)
 
-- [ ] AuthSheet molecule
+- [x] AuthSheet molecule
 - [ ] RecoveryPhraseGrid molecule
 - [ ] RecoveryPhraseInput molecule
 - [ ] OnboardingProgress molecule
-- [ ] UsernamePage
-- [ ] RecoveryPhrasePage
-- [ ] LoginPage
+- [ ] UsernamePage (skeleton exists)
+- [ ] RecoveryPhrasePage (skeleton exists)
+- [ ] LoginPage (skeleton exists)
 - [ ] AdultContentPopup molecule
 
 ### Phase 7: Create Post (Week 4)
@@ -1203,5 +1203,6 @@ colors: {
 
 ---
 
-_Document Version: 1.0_
+_Document Version: 1.1_
 _Created: December 2024_
+_Last Updated: December 28, 2024_
