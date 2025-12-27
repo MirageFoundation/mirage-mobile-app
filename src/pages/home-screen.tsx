@@ -1,6 +1,10 @@
 import { FeedHeader } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
-import { HEADER_HEIGHT, TAB_BAR_HEIGHT, useScrollAnimation } from "@/src/hooks";
+import {
+  HEADER_HEIGHT,
+  TAB_BAR_HEIGHT,
+  useScrollAnimationContext,
+} from "@/src/providers/scroll-animation-context";
 import { usePreferencesStore } from "@/src/stores";
 import { View } from "react-native";
 import Animated from "react-native-reanimated";
@@ -51,7 +55,7 @@ const PlaceholderPostCard = ({ index }: { index: number }) => {
 
 export function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { scrollHandler, headerAnimatedStyle } = useScrollAnimation();
+  const { scrollHandler, headerAnimatedStyle } = useScrollAnimationContext();
   const feedType = usePreferencesStore((s) => s.feedType);
   const setFeedType = usePreferencesStore((s) => s.setFeedType);
 
@@ -68,6 +72,9 @@ export function HomeScreen() {
 
   return (
     <Box flex background="base">
+      {/* Fixed Status Bar Background */}
+      <View style={[styles.statusBarBackground, { height: insets.top }]} />
+
       {/* Animated Header */}
       <FeedHeader
         title="Home"
@@ -96,6 +103,14 @@ export function HomeScreen() {
 }
 
 const styles = StyleSheet.create((theme) => ({
+  statusBarBackground: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: theme.colors.background.default,
+    zIndex: 101,
+  },
   postCard: {
     shadowColor: theme.colors.contrast.base,
     shadowOffset: { width: 0, height: 2 },
@@ -110,4 +125,3 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.background.subtle,
   },
 }));
-

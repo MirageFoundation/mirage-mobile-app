@@ -8,14 +8,24 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
-
-const TAB_BAR_HEIGHT = 60;
+import {
+  ScrollAnimationProvider,
+  useScrollAnimationContext,
+  TAB_BAR_HEIGHT,
+} from "@/src/providers/scroll-animation-context";
 
 const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
   const insets = useSafeAreaInsets();
+  const { tabBarAnimatedStyle } = useScrollAnimationContext();
 
   return (
-    <View style={[styles.tabBar, { paddingBottom: insets.bottom }]}>
+    <Animated.View
+      style={[
+        styles.tabBar,
+        { paddingBottom: insets.bottom },
+        tabBarAnimatedStyle,
+      ]}
+    >
       <View style={styles.tabBarContent}>
         {state.routes.map((route: any, index: number) => {
           const { options } = descriptors[route.key];
@@ -46,7 +56,7 @@ const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
           );
         })}
       </View>
-    </View>
+    </Animated.View>
   );
 };
 
@@ -107,7 +117,7 @@ const getIconName = (routeName: string, isFocused: boolean): string => {
   return isFocused ? icon.focused : icon.unfocused;
 };
 
-export default function TabLayout() {
+function TabsContent() {
   return (
     <Tabs
       tabBar={(props) => <AnimatedTabBar {...props} />}
@@ -146,6 +156,14 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+  );
+}
+
+export default function TabLayout() {
+  return (
+    <ScrollAnimationProvider>
+      <TabsContent />
+    </ScrollAnimationProvider>
   );
 }
 
