@@ -1,22 +1,64 @@
-import { useState, useCallback, useMemo } from "react";
-import { View, Pressable, ScrollView } from "react-native";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter, useLocalSearchParams } from "expo-router";
-import { Box, Text, Button, Checkbox } from "@/src/components/ui/primitives";
 import { RecoveryPhraseGrid } from "@/src/components/molecules";
+import { Box, Button, Checkbox, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useAuthStore, useUIStore } from "@/src/stores";
+import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
+import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAuthStore } from "@/src/stores";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 // BIP-39 word list sample (in production, use a proper library)
 const SAMPLE_WORDS = [
-  "abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract",
-  "absurd", "abuse", "access", "accident", "account", "accuse", "achieve", "acid",
-  "acoustic", "acquire", "across", "act", "action", "actor", "actress", "actual",
-  "adapt", "add", "addict", "address", "adjust", "admit", "adult", "advance",
-  "advice", "aerobic", "affair", "afford", "afraid", "again", "age", "agent",
-  "agree", "ahead", "aim", "air", "airport", "aisle", "alarm", "album",
+  "abandon",
+  "ability",
+  "able",
+  "about",
+  "above",
+  "absent",
+  "absorb",
+  "abstract",
+  "absurd",
+  "abuse",
+  "access",
+  "accident",
+  "account",
+  "accuse",
+  "achieve",
+  "acid",
+  "acoustic",
+  "acquire",
+  "across",
+  "act",
+  "action",
+  "actor",
+  "actress",
+  "actual",
+  "adapt",
+  "add",
+  "addict",
+  "address",
+  "adjust",
+  "admit",
+  "adult",
+  "advance",
+  "advice",
+  "aerobic",
+  "affair",
+  "afford",
+  "afraid",
+  "again",
+  "age",
+  "agent",
+  "agree",
+  "ahead",
+  "aim",
+  "air",
+  "airport",
+  "aisle",
+  "alarm",
+  "album",
 ];
 
 // Generate random 12-word phrase (mock - use proper crypto in production)
@@ -35,6 +77,7 @@ export default function RecoveryPhraseScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const setRecoveryPhrase = useAuthStore((s) => s.setRecoveryPhrase);
+  const showAuthSheet = useUIStore((s) => s.showAuthSheet);
 
   // Generate phrase on mount
   const words = useMemo(() => generateMockPhrase(), []);
@@ -46,6 +89,15 @@ export default function RecoveryPhraseScreen() {
     triggerHaptic("selection");
     router.back();
   }, [router]);
+
+  const handleClose = useCallback(() => {
+    triggerHaptic("selection");
+    router.dismissAll();
+    // Show auth sheet after dismissing
+    setTimeout(() => {
+      showAuthSheet();
+    }, 100);
+  }, [router, showAuthSheet]);
 
   const handleCopy = useCallback(() => {
     setCopied(true);
@@ -74,16 +126,22 @@ export default function RecoveryPhraseScreen() {
   }, [hasSaved, words, setRecoveryPhrase, router]);
 
   return (
-    <Box flex background="base" style={{ paddingTop: insets.top }}>
+    <Box flex background="base">
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top }]}>
         <Pressable onPress={handleBack} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={theme.colors.text.default} />
+          <Ionicons
+            name="arrow-back"
+            size={24}
+            color={theme.colors.text.default}
+          />
         </Pressable>
-        <Text size="lg" weight="semibold">
+        <Text size="lg" weight="semibold" style={styles.headerTitle}>
           Recovery Phrase
         </Text>
-        <View style={styles.headerSpacer} />
+        <Pressable onPress={handleClose} style={styles.closeButton}>
+          <Ionicons name="close" size={28} color={theme.colors.text.default} />
+        </Pressable>
       </View>
 
       {/* Content */}
@@ -198,18 +256,23 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border.subtle,
+    paddingBottom: theme.spacing.sm,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
   },
-  headerSpacer: {
-    width: 40,
+  headerTitle: {
+    flex: 1,
+    textAlign: "center",
+  },
+  closeButton: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
   },
   scrollView: {
     flex: 1,

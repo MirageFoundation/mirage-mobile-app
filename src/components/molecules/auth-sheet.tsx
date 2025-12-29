@@ -1,5 +1,4 @@
-import { useCallback, useMemo, useRef, useEffect } from "react";
-import { View, Pressable } from "react-native";
+import { useCallback, useRef, useEffect } from "react";
 import {
   BottomSheetModal,
   BottomSheetBackdrop,
@@ -64,10 +63,6 @@ export const AuthSheet = () => {
     router.push("/(auth)/login");
   };
 
-  const handleClose = () => {
-    hideAuthSheet();
-  };
-
   return (
     <BottomSheetModal
       ref={bottomSheetRef}
@@ -76,29 +71,21 @@ export const AuthSheet = () => {
       enablePanDownToClose
       enableDynamicSizing
       backdropComponent={renderBackdrop}
+      handleComponent={null}
       backgroundStyle={{
         backgroundColor: theme.colors.background.default,
-      }}
-      handleIndicatorStyle={{
-        backgroundColor: theme.colors.border.default,
-        width: 40,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
       }}
     >
       <BottomSheetView style={styles.container}>
-        {/* Close button */}
-        <Pressable onPress={handleClose} style={styles.closeButton}>
-          <Ionicons name="close" size={24} color={theme.colors.text.subtle} />
-        </Pressable>
-
         {/* Title */}
-        <Box center style={{ marginBottom: 32 }}>
-          <Text size="xxl" weight="bold">
-            Welcome to Mirage
-          </Text>
-        </Box>
+        <Text size="xl" weight="bold" style={styles.title}>
+          Create an account to continue
+        </Text>
 
         {/* Options */}
-        <Box gap="md" px="md" style={{ paddingBottom: 40 }}>
+        <Box gap="md" style={{ paddingBottom: 40 }}>
           {/* Create Account */}
           <Button
             size="lg"
@@ -125,7 +112,7 @@ export const AuthSheet = () => {
             variant="outline"
             rounded="lg"
             onPress={handleLogin}
-            style={styles.optionButton}
+            style={[styles.optionButton, styles.loginButton]}
           >
             <Button.Icon>
               {({ color, size }) => (
@@ -149,22 +136,21 @@ export const AuthSheet = () => {
 
 const styles = StyleSheet.create((theme) => ({
   container: {
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
   },
-  closeButton: {
-    position: "absolute",
-    top: theme.spacing.sm,
-    right: theme.spacing.md,
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 10,
+  title: {
+    textAlign: "center",
+    marginBottom: theme.spacing.lg,
   },
   optionButton: {
     height: 72,
     justifyContent: "flex-start",
     paddingHorizontal: theme.spacing.md,
+  },
+  loginButton: {
+    backgroundColor: theme.colors.background.subtle,
+    borderWidth: 0.5,
+    borderColor: theme.colors.border.default,
   },
 }));

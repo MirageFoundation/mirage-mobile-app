@@ -1,11 +1,24 @@
-import { useState, useCallback, useEffect } from "react";
-import { View, Pressable, Keyboard } from "react-native";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { Box, Text, Button, Input } from "@/src/components/ui/primitives";
+import {
+  Box,
+  Button,
+  Divider,
+  Input,
+  Text,
+} from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useUIStore } from "@/src/stores";
+import { EvilIcons, Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  Keyboard,
+  Pressable,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid";
 
@@ -13,6 +26,7 @@ export default function UsernameScreen() {
   const router = useRouter();
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
+  const showAuthSheet = useUIStore((s) => s.showAuthSheet);
 
   const [username, setUsername] = useState("");
   const [status, setStatus] = useState<UsernameStatus>("idle");
@@ -70,29 +84,28 @@ export default function UsernameScreen() {
     });
   }, [status, username, router]);
 
-  const handleBack = useCallback(() => {
+  const handleClose = useCallback(() => {
     triggerHaptic("selection");
     router.back();
+    // Show auth sheet after going back
+    setTimeout(() => {
+      showAuthSheet();
+    }, 100);
+  }, [router, showAuthSheet]);
+
+  const handleLogin = useCallback(() => {
+    triggerHaptic("selection");
+    router.replace("/(auth)/login");
   }, [router]);
 
   const getStatusIcon = () => {
     switch (status) {
       case "checking":
         return (
-          <Ionicons
-            name="sync"
-            size={20}
-            color={theme.colors.text.subtle}
-          />
+          <ActivityIndicator size="small" color={theme.colors.text.subtle} />
         );
       case "available":
-        return (
-          <Ionicons
-            name="checkmark-circle"
-            size={20}
-            color={theme.colors.success[500]}
-          />
-        );
+        return <Ionicons name="checkmark" size={20} color="rgb(47,105,35)" />;
       case "taken":
         return (
           <Ionicons
@@ -119,7 +132,7 @@ export default function UsernameScreen() {
       case "checking":
         return "Checking availability...";
       case "available":
-        return "Username is available!";
+        return "Great name! It's not taken, so it's all yours.";
       case "taken":
         return "This username is already taken";
       case "invalid":
@@ -132,7 +145,7 @@ export default function UsernameScreen() {
   const getStatusColor = () => {
     switch (status) {
       case "available":
-        return theme.colors.success[500];
+        return "rgb(47,105,35)";
       case "taken":
         return theme.colors.error[500];
       case "invalid":
@@ -142,45 +155,48 @@ export default function UsernameScreen() {
     }
   };
 
+  const isButtonEnabled = status === "available";
+
   return (
-    <Box flex background="base" style={{ paddingTop: insets.top }}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={handleBack} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={theme.colors.text.default} />
+    <Box flex background="base">
+      {/* Header with close button */}
+      <View style={[styles.header, { paddingTop: 20 }]}>
+        <Pressable onPress={handleClose} style={styles.closeButton}>
+          <EvilIcons name="close" size={36} color={theme.colors.text.default} />
         </Pressable>
-        <Text size="lg" weight="semibold">
-          Create Account
-        </Text>
-        <View style={styles.headerSpacer} />
       </View>
 
       {/* Content */}
       <View style={styles.content}>
-        <Box center style={{ marginBottom: 32 }}>
-          <Text size="xxl" weight="bold">
-            Choose your username
-          </Text>
-          <Text size="sm" mode="subtle" style={{ marginTop: 8, textAlign: "center" }}>
-            This will be your identity on Mirage
-          </Text>
-        </Box>
+        {/* App Icon */}
+        <View style={styles.iconContainer}>
+          <Image
+            source={require("@/assets/images/app-icon.png")}
+            style={styles.appIcon}
+            resizeMode="contain"
+          />
+        </View>
+
+        {/* Title */}
+        <View style={styles.titleContainer}>
+          <Text style={styles.titleText}>Hi new friend,</Text>
+          <Text style={styles.titleText}>welcome to Mirage</Text>
+        </View>
+
+        {/* Subtitle */}
+        <Text style={styles.subtitle}>Choose your username to get started</Text>
 
         {/* Username input */}
-        <View style={styles.inputContainer}>
-          <View style={styles.atSymbol}>
-            <Text size="lg" mode="subtle" weight="medium">
-              @
-            </Text>
-          </View>
+        <View style={styles.inputWrapper}>
           <Input
             value={username}
             onChangeText={handleUsernameChange}
-            placeholder="username"
+            placeholder="Username"
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="username"
             size="lg"
+            variant="filled"
             style={styles.input}
             maxLength={20}
             rightAccessory={
@@ -192,44 +208,68 @@ export default function UsernameScreen() {
         </View>
 
         {/* Status message */}
-        {status !== "idle" && (
-          <View style={styles.statusContainer}>
+
+        <View style={styles.statusContainer}>
+          {status !== "idle" && (
             <Text size="sm" style={{ color: getStatusColor() }}>
               {getStatusMessage()}
             </Text>
-          </View>
-        )}
-
-        {/* Username rules */}
-        <View style={styles.rules}>
-          <Text size="xs" mode="subtle">
-            • Must start with a letter
-          </Text>
-          <Text size="xs" mode="subtle">
-            • 3-20 characters long
-          </Text>
-          <Text size="xs" mode="subtle">
-            • Only letters, numbers, and underscores
-          </Text>
+          )}
         </View>
+
+        {/* Continue button */}
+        <Button
+          size="lg"
+          rounded="full"
+          onPress={handleContinue}
+          disabled={!isButtonEnabled}
+          style={[
+            styles.continueButton,
+            {
+              backgroundColor: isButtonEnabled
+                ? "rgb(226, 79, 34)"
+                : "rgb(242,242,242)",
+            },
+          ]}
+        >
+          <Button.Text
+            weight="medium"
+            style={{
+              color: isButtonEnabled ? "#fff" : theme.colors.text.subtle,
+            }}
+          >
+            Continue
+          </Button.Text>
+        </Button>
+
+        {/* Terms text */}
+        <Text style={styles.termsText}>
+          By continuing, you agree to our{" "}
+          <Text
+            weight="semibold"
+            style={styles.termsLink}
+            onPress={() => console.log("User Agreement")}
+          >
+            User Agreement
+          </Text>{" "}
+          and acknowledge that you understand the{" "}
+          <Text
+            weight="semibold"
+            style={styles.termsLink}
+            onPress={() => console.log("Privacy Policy")}
+          >
+            Privacy Policy
+          </Text>
+          .
+        </Text>
       </View>
 
       {/* Footer */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-        <Button
-          size="lg"
-          rounded="lg"
-          onPress={handleContinue}
-          disabled={status !== "available"}
-          style={{ width: "100%" }}
-        >
-          <Button.Text weight="semibold">Continue</Button.Text>
-          <Button.Icon>
-            {({ color, size }) => (
-              <Ionicons name="arrow-forward" size={size} color={color} />
-            )}
-          </Button.Icon>
-        </Button>
+        <Divider size="extraThin" />
+        <Pressable onPress={handleLogin} style={styles.loginLink}>
+          <Text style={styles.loginText}>Log into existing account</Text>
+        </Pressable>
       </View>
     </Box>
   );
@@ -239,55 +279,92 @@ const styles = StyleSheet.create((theme) => ({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border.subtle,
+    paddingHorizontal: theme.spacing.sm,
   },
-  backButton: {
+  closeButton: {
     width: 40,
     height: 40,
     alignItems: "center",
     justifyContent: "center",
   },
-  headerSpacer: {
-    width: 40,
-  },
   content: {
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.xl,
-  },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  atSymbol: {
-    width: 32,
-    height: 50,
-    alignItems: "center",
     justifyContent: "center",
   },
+  iconContainer: {
+    alignItems: "center",
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  appIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+  },
+  titleContainer: {
+    alignItems: "center",
+    marginTop: theme.spacing.sm,
+  },
+  titleText: {
+    textAlign: "center",
+    fontSize: 26,
+    fontWeight: "700",
+    lineHeight: 30,
+  },
+  subtitle: {
+    textAlign: "center",
+    marginVertical: theme.spacing.lg,
+    fontSize: 16,
+    color: "rgb(100,100,100)",
+  },
+  inputWrapper: {
+    marginBottom: theme.spacing.xs,
+  },
   input: {
-    flex: 1,
+    backgroundColor: "rgb(230,236,238)",
+    paddingLeft: 12,
   },
   statusIcon: {
     paddingHorizontal: theme.spacing.sm,
+    backgroundColor: "rgb(230,236,238)",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
   },
   statusContainer: {
-    marginTop: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
+    borderRadius: 8,
+    height: 20,
+    // backgroundColor: "red",
   },
-  rules: {
-    marginTop: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.md,
-    gap: theme.spacing.xs,
+  continueButton: {
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
+  },
+  termsText: {
+    textAlign: "center",
+    lineHeight: 20,
+    paddingHorizontal: theme.spacing.sm,
+    fontSize: 13,
+    color: theme.colors.text.subtle,
+  },
+  termsLink: {
+    color: theme.colors.text.default,
+    textDecorationLine: "underline",
+    fontSize: 13,
   },
   footer: {
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border.subtle,
+    paddingTop: theme.spacing.sm,
+  },
+  loginLink: {
+    alignItems: "center",
+    paddingVertical: theme.spacing.md,
+  },
+  loginText: {
+    color: "rgb(34,74,154)",
+    fontSize: 13,
+    fontWeight: "500",
   },
 }));

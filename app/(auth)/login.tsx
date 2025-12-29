@@ -7,7 +7,7 @@ import { Box, Text, Button } from "@/src/components/ui/primitives";
 import { RecoveryPhraseInput } from "@/src/components/molecules";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAuthStore } from "@/src/stores";
+import { useAuthStore, useUIStore } from "@/src/stores";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -16,6 +16,7 @@ export default function LoginScreen() {
 
   const setUser = useAuthStore((s) => s.setUser);
   const setRecoveryPhrase = useAuthStore((s) => s.setRecoveryPhrase);
+  const showAuthSheet = useUIStore((s) => s.showAuthSheet);
 
   const [words, setWords] = useState<string[]>(Array(12).fill(""));
   const [errors, setErrors] = useState<Record<number, boolean>>({});
@@ -27,7 +28,11 @@ export default function LoginScreen() {
   const handleBack = useCallback(() => {
     triggerHaptic("selection");
     router.back();
-  }, [router]);
+    // Show auth sheet after going back
+    setTimeout(() => {
+      showAuthSheet();
+    }, 100);
+  }, [router, showAuthSheet]);
 
   const handleWordsChange = useCallback((newWords: string[]) => {
     setWords(newWords);
@@ -95,13 +100,13 @@ export default function LoginScreen() {
   }, [isComplete, words, validatePhrase, setUser, setRecoveryPhrase, router]);
 
   return (
-    <Box flex background="base" style={{ paddingTop: insets.top }}>
+    <Box flex background="base">
       {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={handleBack} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={theme.colors.text.default} />
+      <View style={[styles.header, { paddingTop: insets.top }]}>
+        <Pressable onPress={handleBack} style={styles.closeButton}>
+          <Ionicons name="close" size={28} color={theme.colors.text.default} />
         </Pressable>
-        <Text size="lg" weight="semibold">
+        <Text size="lg" weight="semibold" style={styles.headerTitle}>
           Login
         </Text>
         <View style={styles.headerSpacer} />
@@ -211,18 +216,20 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border.subtle,
+    paddingBottom: theme.spacing.sm,
   },
-  backButton: {
-    width: 40,
-    height: 40,
+  closeButton: {
+    width: 44,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
   },
+  headerTitle: {
+    flex: 1,
+    textAlign: "center",
+  },
   headerSpacer: {
-    width: 40,
+    width: 44,
   },
   scrollView: {
     flex: 1,
