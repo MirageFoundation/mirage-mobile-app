@@ -1,10 +1,10 @@
 import { WordChip } from "@/src/components/atoms";
-import { Button, Text } from "@/src/components/ui/primitives";
+import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
-import { useCallback, useState } from "react";
-import { Pressable, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Animated, Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type RecoveryPhraseGridProps = {
@@ -25,13 +25,58 @@ export const RecoveryPhraseGrid = ({
   onCopy,
 }: RecoveryPhraseGridProps) => {
   const { theme } = useUnistyles();
-  const [masked, setMasked] = useState(initialMasked);
+  const [masked] = useState(initialMasked);
   const [copied, setCopied] = useState(false);
 
-  const handleToggleMask = useCallback(() => {
-    triggerHaptic("selection");
-    setMasked((prev) => !prev);
-  }, []);
+  // Animation values for icon and text - simplified for performance
+  const iconScale = useRef(new Animated.Value(1)).current;
+  const textScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (copied) {
+      // Quick scale animation for both icon and text
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(iconScale, {
+            toValue: 1.15,
+            duration: 150,
+            useNativeDriver: true,
+          }),
+          Animated.timing(iconScale, {
+            toValue: 1,
+            duration: 150,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.sequence([
+          Animated.timing(textScale, {
+            toValue: 1.15,
+            duration: 150,
+            useNativeDriver: true,
+          }),
+          Animated.timing(textScale, {
+            toValue: 1,
+            duration: 150,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]).start();
+    } else {
+      // Reset animations quickly
+      Animated.parallel([
+        Animated.timing(iconScale, {
+          toValue: 1,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(textScale, {
+          toValue: 1,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [copied, iconScale, textScale]);
 
   const handleCopy = useCallback(async () => {
     triggerHaptic("success");
@@ -54,13 +99,20 @@ export const RecoveryPhraseGrid = ({
       {/* Warning banner */}
       <View style={styles.warningBanner}>
         <Ionicons name="warning" size={18} color={theme.colors.warning[500]} />
-        <Text
-          size="xs"
-          style={{ color: theme.colors.warning[500], flex: 1, marginLeft: 8 }}
-        >
-          Write down these 12 words in order. This is the ONLY way to recover
-          your account.
-        </Text>
+        <View style={{ flex: 1, marginLeft: 8 }}>
+          <Text
+            size="sm"
+            weight="semibold"
+            style={{ color: theme.colors.warning[500], marginBottom: 4 }}
+          >
+            Important: Below Is Your Recovery Phrase.
+          </Text>
+          <Text size="xs" style={{ color: theme.colors.warning[500] }}>
+            This 12-word phrase is the ONLY way to recover your account. Write
+            it down and store it safely offline. Anyone with this phrase can
+            access your account!
+          </Text>
+        </View>
       </View>
 
       {/* Word grid */}
@@ -83,46 +135,56 @@ export const RecoveryPhraseGrid = ({
         ))}
       </View>
 
-      {/* Action buttons */}
-      <View style={styles.actions}>
-        {/* Toggle visibility */}
-        <Pressable onPress={handleToggleMask} style={styles.toggleButton}>
-          <Ionicons
-            name={masked ? "eye-off-outline" : "eye-outline"}
-            size={18}
-            color={theme.colors.text.subtle}
-          />
-          <Text size="xs" mode="subtle" style={{ marginLeft: 6 }}>
-            {masked ? "Show" : "Hide"}
-          </Text>
-        </Pressable>
-
-        {/* Copy button */}
-        {showCopyButton && (
-          <Button
-            size="sm"
-            variant="outline"
-            rounded="lg"
-            onPress={handleCopy}
-            style={styles.copyButton}
-          >
-            <Button.Icon>
-              {({ color, size }) => (
-                <Ionicons
-                  name={copied ? "checkmark" : "copy-outline"}
-                  size={size}
-                  color={copied ? theme.colors.success[500] : color}
-                />
-              )}
-            </Button.Icon>
-            <Button.Text
-              style={copied ? { color: theme.colors.success[500] } : undefined}
+      {/* Copy button */}
+      {showCopyButton && (
+        <View
+          style={[
+            styles.copyButtonContainer,
+            {
+              backgroundColor: copied
+                ? `${theme.colors.success[500]}15`
+                : theme.colors.background.subtle,
+              borderColor: copied
+                ? theme.colors.success[500]
+                : theme.colors.border.subtle,
+            },
+          ]}
+        >
+          <Pressable onPress={handleCopy} style={styles.copyButton}>
+            <Animated.View
+              style={{
+                transform: [{ scale: iconScale }],
+              }}
             >
-              {copied ? "Copied!" : "Copy All"}
-            </Button.Text>
-          </Button>
-        )}
-      </View>
+              <Ionicons
+                name={copied ? "checkmark" : "copy-outline"}
+                size={18}
+                color={
+                  copied ? theme.colors.success[500] : theme.colors.text.default
+                }
+              />
+            </Animated.View>
+            <Animated.View
+              style={{
+                transform: [{ scale: textScale }],
+                marginLeft: 8,
+              }}
+            >
+              <Text
+                size="sm"
+                weight="semibold"
+                style={{
+                  color: copied
+                    ? theme.colors.success.base
+                    : theme.colors.text.default,
+                }}
+              >
+                {copied ? "Copied!" : "Copy Phrase"}
+              </Text>
+            </Animated.View>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 };
@@ -137,33 +199,32 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: `${theme.colors.warning[500]}15`,
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
     borderWidth: 1,
     borderColor: `${theme.colors.warning[500]}30`,
   },
   grid: {
     gap: theme.spacing.sm,
-    backgroundColor: theme.colors.background.subtle,
+    backgroundColor: theme.colors.background.base,
     borderRadius: theme.radius.lg,
-    padding: theme.spacing.md,
+    padding: theme.spacing.sm,
     borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
+    borderColor: theme.colors.border.default,
   },
   row: {
     flexDirection: "row",
     gap: theme.spacing.sm,
   },
-  actions: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  toggleButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
+  copyButtonContainer: {
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    overflow: "hidden",
   },
   copyButton: {
-    minWidth: 110,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
   },
 }));

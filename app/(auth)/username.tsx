@@ -223,14 +223,7 @@ export default function UsernameScreen() {
           rounded="full"
           onPress={handleContinue}
           disabled={!isButtonEnabled}
-          style={[
-            styles.continueButton,
-            {
-              backgroundColor: isButtonEnabled
-                ? "rgb(226, 79, 34)"
-                : "rgb(242,242,242)",
-            },
-          ]}
+          style={[styles.continueButton]}
         >
           <Button.Text
             weight="medium"
@@ -298,8 +291,8 @@ const styles = StyleSheet.create((theme) => ({
     marginBottom: theme.spacing.md,
   },
   appIcon: {
-    width: 64,
-    height: 64,
+    width: 44,
+    height: 44,
     borderRadius: 16,
   },
   titleContainer: {

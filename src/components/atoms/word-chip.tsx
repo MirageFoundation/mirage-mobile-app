@@ -1,8 +1,8 @@
-import { useState, useRef } from "react";
-import { View, TextInput, Pressable, Animated } from "react-native";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useRef, useState } from "react";
+import { Animated, Pressable, TextInput, View } from "react-native";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type WordChipProps = {
   /** The recovery phrase word */
@@ -68,10 +68,10 @@ export const WordChip = ({
 
   const displayWord = masked && word ? "•".repeat(word.length) : word;
 
-  styles.useVariants({ 
-    editable, 
-    focused: isFocused, 
-    error, 
+  styles.useVariants({
+    editable,
+    focused: isFocused,
+    error,
     highlighted,
     hasValue: word.length > 0,
   });
@@ -79,13 +79,6 @@ export const WordChip = ({
   return (
     <Animated.View style={[styles.wrapper, { transform: [{ scale }] }]}>
       <Pressable onPress={handlePress} style={styles.container}>
-        {/* Index number */}
-        <View style={styles.indexContainer}>
-          <Text size="xs" mode="subtle" weight="medium">
-            {index}
-          </Text>
-        </View>
-
         {/* Word content */}
         <View style={styles.wordContainer}>
           {editable ? (
@@ -95,10 +88,7 @@ export const WordChip = ({
               onChangeText={onChangeText}
               onFocus={handleFocus}
               onBlur={handleBlur}
-              style={[
-                styles.input,
-                { color: theme.colors.text.default },
-              ]}
+              style={[styles.input, { color: theme.colors.text.default }]}
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="off"
@@ -108,8 +98,8 @@ export const WordChip = ({
               selectionColor={theme.colors.primary[500]}
             />
           ) : (
-            <Text 
-              size="sm" 
+            <Text
+              size="sm"
               weight="medium"
               style={masked && word ? { letterSpacing: 2 } : undefined}
             >
@@ -131,12 +121,13 @@ const styles = StyleSheet.create((theme) => ({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    height: 44,
+    height: 34,
     borderRadius: theme.radius.md,
     backgroundColor: theme.colors.background.subtle,
     borderWidth: 1,
     borderColor: theme.colors.border.subtle,
     overflow: "hidden",
+    paddingHorizontal: theme.spacing.xs,
     variants: {
       editable: {
         true: {},
@@ -169,18 +160,10 @@ const styles = StyleSheet.create((theme) => ({
       },
     },
   },
-  indexContainer: {
-    width: 24,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRightWidth: 1,
-    borderRightColor: theme.colors.border.subtle,
-    height: "100%",
-  },
   wordContainer: {
     flex: 1,
-    paddingHorizontal: theme.spacing.sm,
     justifyContent: "center",
+    alignItems: "center",
   },
   input: {
     flex: 1,
@@ -190,4 +173,3 @@ const styles = StyleSheet.create((theme) => ({
     margin: 0,
   },
 }));
-

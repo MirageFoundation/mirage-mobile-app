@@ -1,11 +1,11 @@
 import { RecoveryPhraseGrid } from "@/src/components/molecules";
 import { Box, Button, Checkbox, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { useAuthStore, useUIStore } from "@/src/stores";
-import { Ionicons } from "@expo/vector-icons";
+import { useAuthStore } from "@/src/stores";
+import { AntDesign, Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Image, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -77,31 +77,16 @@ export default function RecoveryPhraseScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const setRecoveryPhrase = useAuthStore((s) => s.setRecoveryPhrase);
-  const showAuthSheet = useUIStore((s) => s.showAuthSheet);
 
   // Generate phrase on mount
   const words = useMemo(() => generateMockPhrase(), []);
 
   const [hasSaved, setHasSaved] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const handleBack = useCallback(() => {
     triggerHaptic("selection");
     router.back();
   }, [router]);
-
-  const handleClose = useCallback(() => {
-    triggerHaptic("selection");
-    router.dismissAll();
-    // Show auth sheet after dismissing
-    setTimeout(() => {
-      showAuthSheet();
-    }, 100);
-  }, [router, showAuthSheet]);
-
-  const handleCopy = useCallback(() => {
-    setCopied(true);
-  }, []);
 
   const handleCheckboxChange = useCallback(() => {
     triggerHaptic("selection");
@@ -128,20 +113,22 @@ export default function RecoveryPhraseScreen() {
   return (
     <Box flex background="base">
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top }]}>
+      <View style={[styles.header, { paddingTop: 20 }]}>
         <Pressable onPress={handleBack} style={styles.backButton}>
-          <Ionicons
-            name="arrow-back"
+          <AntDesign
+            name="arrow-left"
             size={24}
             color={theme.colors.text.default}
           />
         </Pressable>
-        <Text size="lg" weight="semibold" style={styles.headerTitle}>
-          Recovery Phrase
-        </Text>
-        <Pressable onPress={handleClose} style={styles.closeButton}>
-          <Ionicons name="close" size={28} color={theme.colors.text.default} />
-        </Pressable>
+        <View style={styles.headerCenter}>
+          <Image
+            source={require("@/assets/images/app-icon.png")}
+            style={styles.appIcon}
+            resizeMode="contain"
+          />
+        </View>
+        <View style={styles.headerRight} />
       </View>
 
       {/* Content */}
@@ -155,16 +142,16 @@ export default function RecoveryPhraseScreen() {
           <View style={styles.lockIcon}>
             <Ionicons
               name="shield-checkmark"
-              size={40}
+              size={32}
               color={theme.colors.brand[500]}
             />
           </View>
-          <Text size="xxl" weight="bold" style={{ textAlign: "center" }}>
+          <Text size="xl" weight="bold" style={{ textAlign: "center" }}>
             Save Your Recovery Phrase
           </Text>
           {params.username && (
             <Text size="sm" mode="subtle" style={{ marginTop: 4 }}>
-              Creating account: @{params.username}
+              @{params.username}
             </Text>
           )}
         </View>
@@ -175,7 +162,6 @@ export default function RecoveryPhraseScreen() {
             words={words}
             masked={false}
             showCopyButton={true}
-            onCopy={handleCopy}
           />
         </View>
 
@@ -184,66 +170,27 @@ export default function RecoveryPhraseScreen() {
           <Checkbox
             checked={hasSaved}
             onChange={handleCheckboxChange}
-            size="md"
+            size="sm"
           />
-          <Text size="sm" style={{ flex: 1, marginLeft: 12 }}>
+          <Text
+            size="sm"
+            style={{ flex: 1, marginLeft: 8, color: theme.colors.text.subtle }}
+          >
             I have saved my recovery phrase securely
           </Text>
         </Pressable>
-
-        {/* Security tips */}
-        <View style={styles.tips}>
-          <Text size="sm" weight="semibold" style={{ marginBottom: 8 }}>
-            Security Tips
-          </Text>
-          <View style={styles.tipRow}>
-            <Ionicons
-              name="checkmark-circle"
-              size={16}
-              color={theme.colors.success[500]}
-            />
-            <Text size="xs" mode="subtle" style={{ marginLeft: 8, flex: 1 }}>
-              Write it down on paper and store in a safe place
-            </Text>
-          </View>
-          <View style={styles.tipRow}>
-            <Ionicons
-              name="checkmark-circle"
-              size={16}
-              color={theme.colors.success[500]}
-            />
-            <Text size="xs" mode="subtle" style={{ marginLeft: 8, flex: 1 }}>
-              Never share your recovery phrase with anyone
-            </Text>
-          </View>
-          <View style={styles.tipRow}>
-            <Ionicons
-              name="close-circle"
-              size={16}
-              color={theme.colors.error[500]}
-            />
-            <Text size="xs" mode="subtle" style={{ marginLeft: 8, flex: 1 }}>
-              Don't store it in plain text on your device
-            </Text>
-          </View>
-        </View>
       </ScrollView>
 
       {/* Footer */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <Button
           size="lg"
-          rounded="lg"
+          rounded="full"
           onPress={handleContinue}
           disabled={!hasSaved}
           style={{ width: "100%" }}
         >
-          <Button.Text weight="semibold">Create Account</Button.Text>
-          <Button.Icon>
-            {({ color, size }) => (
-              <Ionicons name="arrow-forward" size={size} color={color} />
-            )}
-          </Button.Icon>
+          <Button.Text weight="semibold">Continue to Mirage</Button.Text>
         </Button>
       </View>
     </Box>
@@ -264,15 +211,18 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  headerTitle: {
+  headerCenter: {
     flex: 1,
-    textAlign: "center",
-  },
-  closeButton: {
-    width: 44,
-    height: 44,
     alignItems: "center",
     justifyContent: "center",
+  },
+  appIcon: {
+    width: 28,
+    height: 28,
+  },
+  headerRight: {
+    width: 44,
+    height: 44,
   },
   scrollView: {
     flex: 1,
@@ -287,9 +237,9 @@ const styles = StyleSheet.create((theme) => ({
     marginBottom: theme.spacing.lg,
   },
   lockIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: `${theme.colors.brand[500]}15`,
     alignItems: "center",
     justifyContent: "center",
@@ -303,18 +253,8 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     backgroundColor: theme.colors.background.subtle,
     borderRadius: theme.radius.md,
-    padding: theme.spacing.md,
+    padding: theme.spacing.sm,
     marginBottom: theme.spacing.lg,
-  },
-  tips: {
-    backgroundColor: theme.colors.background.subtle,
-    borderRadius: theme.radius.md,
-    padding: theme.spacing.md,
-  },
-  tipRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginTop: theme.spacing.sm,
   },
   footer: {
     paddingHorizontal: theme.spacing.lg,

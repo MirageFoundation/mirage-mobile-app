@@ -1,23 +1,23 @@
-import { Pressable, useColorScheme } from "react-native";
-import type { StyleProp, ViewStyle } from "react-native";
-import { StyleSheet, UnistylesRuntime } from "react-native-unistyles";
-import { Feather } from "@expo/vector-icons";
-import { Icon } from "./icon";
-import { useMemo, useState } from "react";
 import { getContrastColor, getIconSize } from "@/utils/theme";
+import { Feather } from "@expo/vector-icons";
+import { useMemo, useState } from "react";
+import type { StyleProp, ViewStyle } from "react-native";
+import { Pressable, useColorScheme } from "react-native";
+import { StyleSheet, UnistylesRuntime } from "react-native-unistyles";
+import { Icon } from "./icon";
 
 export type CheckboxProps = {
   style?: StyleProp<ViewStyle>;
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
   mode?: "primary" | "secondary" | "warning" | "error" | "success" | "disabled";
   checked?: boolean;
   defaultChecked?: boolean;
   onChange?: (checked: boolean) => void;
 };
 
-const Checkbox = ({
+export const Checkbox = ({
   style,
-  size = "sm",
+  size = "xs",
   mode,
   checked: controlledChecked,
   defaultChecked,
@@ -63,15 +63,13 @@ const Checkbox = ({
         <Icon
           icon={Feather}
           name="check"
-          size={getIconSize(size)}
+          size={getIconSize(size as "sm" | "md" | "lg" | "auto")}
           color={iconColor}
         />
       )}
     </Pressable>
   );
 };
-
-export default Checkbox;
 
 const styles = StyleSheet.create((theme) => ({
   container: {
@@ -83,6 +81,10 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     variants: {
       size: {
+        xs: {
+          width: theme.spacing.md,
+          height: theme.spacing.md,
+        },
         sm: {
           width: theme.spacing.lg,
           height: theme.spacing.lg,
