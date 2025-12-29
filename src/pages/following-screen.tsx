@@ -2,9 +2,8 @@ import { useCallback, useState } from "react";
 import { FlatList, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { StyleSheet } from "react-native-unistyles";
 import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 
 import { FeedHeader, PostCard, type Post } from "@/src/components/molecules";
 import { Box, Text, Button } from "@/src/components/ui/primitives";
@@ -13,7 +12,7 @@ import {
   TAB_BAR_HEIGHT,
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
-import { useAuthStore, useUIStore } from "@/src/stores";
+import { useAuthStore } from "@/src/stores";
 import { useAuthGuard } from "@/src/hooks";
 
 // Mock data for posts from followed users
@@ -111,12 +110,10 @@ const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Post>);
 export function FollowingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { theme } = useUnistyles();
   const { scrollHandler, headerAnimatedStyle } = useScrollAnimationContext();
-  const { requireAuth, isLoggedIn } = useAuthGuard();
+  const { requireAuth } = useAuthGuard();
   
   const currentUser = useAuthStore((s) => s.user);
-  const showAuthSheet = useUIStore((s) => s.showAuthSheet);
 
   // Local state for optimistic updates
   const [posts, setPosts] = useState<Post[]>(MOCK_FOLLOWING_POSTS);
@@ -241,13 +238,6 @@ export function FollowingScreen() {
   const ListEmptyComponent = useCallback(
     () => (
       <Box flex center p="lg" style={styles.emptyContainer}>
-        <View style={styles.emptyIconContainer}>
-          <Ionicons
-            name="people-outline"
-            size={64}
-            color={theme.colors.text.subtle}
-          />
-        </View>
         <Text size="xl" weight="semibold" style={{ marginTop: 16 }}>
           No posts yet
         </Text>
@@ -268,63 +258,8 @@ export function FollowingScreen() {
         </Button>
       </Box>
     ),
-    [theme, router]
+    [router]
   );
-
-  // Guest state - show prompt to sign up/login
-  if (!isLoggedIn) {
-    return (
-      <Box flex background="base">
-        {/* Fixed Status Bar Background */}
-        <View style={[styles.statusBarBackground, { height: insets.top }]} />
-
-        {/* Header */}
-        <FeedHeader title="Following" animatedStyle={headerAnimatedStyle} />
-
-        {/* Guest Empty State */}
-        <Box
-          flex
-          center
-          p="lg"
-          style={{ paddingTop: insets.top + HEADER_HEIGHT + 80 }}
-        >
-          <View style={styles.guestIconContainer}>
-            <Ionicons
-              name="lock-closed-outline"
-              size={48}
-              color={theme.colors.text.subtle}
-            />
-          </View>
-          <Text size="xxl" weight="bold" style={{ marginTop: 24 }}>
-            Sign in to follow
-          </Text>
-          <Text
-            size="md"
-            mode="subtle"
-            style={{ marginTop: 12, textAlign: "center", maxWidth: 300, lineHeight: 22 }}
-          >
-            Create an account or sign in to follow your favorite creators and see their posts here
-          </Text>
-          <Button
-            size="lg"
-            mode="brand"
-            style={{ marginTop: 32, minWidth: 200 }}
-            onPress={showAuthSheet}
-          >
-            <Button.Text>Get Started</Button.Text>
-          </Button>
-          <Button
-            size="md"
-            variant="ghost"
-            style={{ marginTop: 12 }}
-            onPress={() => router.push("/")}
-          >
-            <Button.Text mode="subtle">Browse as Guest</Button.Text>
-          </Button>
-        </Box>
-      </Box>
-    );
-  }
 
   return (
     <Box flex background="base">
@@ -369,22 +304,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   emptyContainer: {
     flex: 1,
-    justifyContent: "center",
-  },
-  emptyIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: theme.colors.background.subtle,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  guestIconContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: theme.colors.background.subtle,
-    alignItems: "center",
     justifyContent: "center",
   },
 }));

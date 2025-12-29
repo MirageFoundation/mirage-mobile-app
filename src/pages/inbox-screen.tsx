@@ -1,8 +1,12 @@
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 import { Box, Text } from "@/src/components/ui/primitives";
 
 export function InboxScreen() {
+  const insets = useSafeAreaInsets();
+
   return (
-    <Box flex background="base" safeAreaTop>
+    <Box flex background="base" style={{ paddingTop: insets.top }}>
       <Box p="md">
         <Text size="xl" weight="bold">
           Inbox
@@ -14,4 +18,3 @@ export function InboxScreen() {
     </Box>
   );
 }
-

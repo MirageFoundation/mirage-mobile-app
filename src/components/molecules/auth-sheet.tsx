@@ -1,6 +1,10 @@
 import { useCallback, useMemo, useRef, useEffect } from "react";
 import { View, Pressable } from "react-native";
-import BottomSheet, { BottomSheetBackdrop } from "@gorhom/bottom-sheet";
+import {
+  BottomSheetModal,
+  BottomSheetBackdrop,
+  BottomSheetView,
+} from "@gorhom/bottom-sheet";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -8,21 +12,19 @@ import { Box, Text, Button } from "@/src/components/ui/primitives";
 import { useUIStore } from "@/src/stores";
 
 export const AuthSheet = () => {
-  const bottomSheetRef = useRef<BottomSheet>(null);
+  const bottomSheetRef = useRef<BottomSheetModal>(null);
   const router = useRouter();
   const { theme } = useUnistyles();
 
   const authSheetVisible = useUIStore((s) => s.authSheetVisible);
   const hideAuthSheet = useUIStore((s) => s.hideAuthSheet);
 
-  const snapPoints = useMemo(() => ["50%"], []);
-
   // Control sheet visibility based on store state
   useEffect(() => {
     if (authSheetVisible) {
-      bottomSheetRef.current?.expand();
+      bottomSheetRef.current?.present();
     } else {
-      bottomSheetRef.current?.close();
+      bottomSheetRef.current?.dismiss();
     }
   }, [authSheetVisible]);
 
@@ -35,6 +37,10 @@ export const AuthSheet = () => {
     [hideAuthSheet]
   );
 
+  const handleDismiss = useCallback(() => {
+    hideAuthSheet();
+  }, [hideAuthSheet]);
+
   const renderBackdrop = useCallback(
     (props: any) => (
       <BottomSheetBackdrop
@@ -42,6 +48,7 @@ export const AuthSheet = () => {
         disappearsOnIndex={-1}
         appearsOnIndex={0}
         opacity={0.5}
+        pressBehavior="close"
       />
     ),
     []
@@ -62,12 +69,12 @@ export const AuthSheet = () => {
   };
 
   return (
-    <BottomSheet
+    <BottomSheetModal
       ref={bottomSheetRef}
-      index={-1}
-      snapPoints={snapPoints}
       onChange={handleSheetChanges}
+      onDismiss={handleDismiss}
       enablePanDownToClose
+      enableDynamicSizing
       backdropComponent={renderBackdrop}
       backgroundStyle={{
         backgroundColor: theme.colors.background.default,
@@ -77,7 +84,7 @@ export const AuthSheet = () => {
         width: 40,
       }}
     >
-      <View style={styles.container}>
+      <BottomSheetView style={styles.container}>
         {/* Close button */}
         <Pressable onPress={handleClose} style={styles.closeButton}>
           <Ionicons name="close" size={24} color={theme.colors.text.subtle} />
@@ -91,7 +98,7 @@ export const AuthSheet = () => {
         </Box>
 
         {/* Options */}
-        <Box gap="md" px="md">
+        <Box gap="md" px="md" style={{ paddingBottom: 40 }}>
           {/* Create Account */}
           <Button
             size="lg"
@@ -135,14 +142,13 @@ export const AuthSheet = () => {
             </Box>
           </Button>
         </Box>
-      </View>
-    </BottomSheet>
+      </BottomSheetView>
+    </BottomSheetModal>
   );
 };
 
 const styles = StyleSheet.create((theme) => ({
   container: {
-    flex: 1,
     paddingHorizontal: theme.spacing.md,
     paddingTop: theme.spacing.md,
   },
@@ -162,4 +168,3 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing.md,
   },
 }));
-

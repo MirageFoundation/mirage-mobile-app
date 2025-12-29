@@ -16,3 +16,9 @@ export {
   type CommentOptionsSheetRef,
 } from "./comment-options-sheet";
 export { CommentThread } from "./comment-thread";
+
+// Authentication & Onboarding
+export { AdultContentPopup } from "./adult-content-popup";
+export { OnboardingProgress } from "./onboarding-progress";
+export { RecoveryPhraseGrid } from "./recovery-phrase-grid";
+export { RecoveryPhraseInput } from "./recovery-phrase-input";

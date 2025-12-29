@@ -1158,24 +1158,24 @@ colors: {
 - [x] Animated chevron rotation on menu open/close
 - [ ] Following tab empty state UI redesign
 
-### Phase 5: Comments System (Week 3)
+### Phase 5: Comments System (Week 3) ✅
 
-- [ ] CommentItem molecule
-- [ ] CommentThread molecule
-- [ ] CommentInput molecule
-- [ ] CommentOptionsSheet molecule
-- [ ] PostDetailPage
+- [x] CommentItem molecule
+- [x] CommentThread molecule
+- [x] CommentInput molecule
+- [x] CommentOptionsSheet molecule
+- [x] PostDetailPage
 
-### Phase 6: Authentication (Week 3-4)
+### Phase 6: Authentication (Week 3-4) ✅
 
 - [x] AuthSheet molecule
-- [ ] RecoveryPhraseGrid molecule
-- [ ] RecoveryPhraseInput molecule
-- [ ] OnboardingProgress molecule
-- [ ] UsernamePage (skeleton exists)
-- [ ] RecoveryPhrasePage (skeleton exists)
-- [ ] LoginPage (skeleton exists)
-- [ ] AdultContentPopup molecule
+- [x] RecoveryPhraseGrid molecule
+- [x] RecoveryPhraseInput molecule
+- [x] OnboardingProgress molecule
+- [x] UsernamePage
+- [x] RecoveryPhrasePage
+- [x] LoginPage
+- [x] AdultContentPopup molecule
 
 ### Phase 7: Create Post (Week 4)
 
@@ -1211,6 +1211,6 @@ colors: {
 
 ---
 
-_Document Version: 1.3_
+_Document Version: 1.4_
 _Created: December 2024_
-_Last Updated: December 28, 2024_
+_Last Updated: December 29, 2024_

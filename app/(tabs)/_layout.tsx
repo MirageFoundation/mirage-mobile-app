@@ -3,6 +3,7 @@ import {
   TAB_BAR_HEIGHT,
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
+import { useAuthStore, useUIStore } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { Text, View } from "react-native";
@@ -14,9 +15,16 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+// Tabs that require authentication
+const PROTECTED_TABS = ["following", "create", "inbox", "profile"];
+
 const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { tabBarAnimatedStyle } = useScrollAnimationContext();
+  
+  // Auth state
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const showAuthSheet = useUIStore((s) => s.showAuthSheet);
 
   return (
     <Animated.View
@@ -32,6 +40,13 @@ const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
           const isFocused = state.index === index;
 
           const onPress = () => {
+            // Check if this is a protected tab and user is not logged in
+            if (PROTECTED_TABS.includes(route.name) && !isLoggedIn) {
+              // Show auth sheet instead of navigating
+              showAuthSheet();
+              return;
+            }
+
             const event = navigation.emit({
               type: "tabPress",
               target: route.key,

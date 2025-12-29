@@ -10,7 +10,7 @@ import {
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useAuthGuard } from "@/src/hooks";
-import { useAuthStore } from "@/src/stores";
+import { useAuthStore, useUIStore } from "@/src/stores";
 import {
   AntDesign,
   Ionicons,
@@ -206,9 +206,10 @@ export default function PostDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
-  const { requireAuth } = useAuthGuard();
+  const { requireAuth, isLoggedIn } = useAuthGuard();
 
   const currentUser = useAuthStore((s) => s.user);
+  const showAuthSheet = useUIStore((s) => s.showAuthSheet);
   const optionsSheetRef = useRef<CommentOptionsSheetRef>(null);
 
   // Local state
@@ -607,7 +608,8 @@ export default function PostDetailScreen() {
 
         {/* Comment input */}
         <CommentInput
-          isLoggedIn={true}
+          isLoggedIn={isLoggedIn}
+          onAuthRequired={showAuthSheet}
           replyingTo={replyingTo?.author.username}
           onCancelReply={handleCancelReply}
           onSubmit={handleSubmitComment}

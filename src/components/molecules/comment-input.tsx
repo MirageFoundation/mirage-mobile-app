@@ -36,6 +36,8 @@ type CommentInputProps = {
   onAddGif?: (url: string) => void;
   /** Whether the user is logged in */
   isLoggedIn?: boolean;
+  /** Callback when auth is required (guest tries to comment) */
+  onAuthRequired?: () => void;
   /** Whether the input is disabled */
   disabled?: boolean;
   /** Loading state (while submitting) */
@@ -66,6 +68,7 @@ export const CommentInput = ({
   onAddImage,
   onAddGif,
   isLoggedIn = false,
+  onAuthRequired,
   disabled = false,
   loading = false,
   replyingTo,
@@ -86,10 +89,14 @@ export const CommentInput = ({
   const canAddLink = linkName.trim().length > 0 && linkUrl.trim().length > 0;
 
   const handleActivate = useCallback(() => {
-    if (!isLoggedIn) return;
+    if (!isLoggedIn) {
+      // Trigger auth sheet for guests
+      onAuthRequired?.();
+      return;
+    }
     setIsActive(true);
     bottomSheetRef.current?.expand();
-  }, [isLoggedIn]);
+  }, [isLoggedIn, onAuthRequired]);
 
   const handleDeactivate = useCallback(() => {
     setIsActive(false);
