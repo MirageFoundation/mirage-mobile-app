@@ -1,10 +1,10 @@
-import { useCallback, useMemo, useRef, useEffect } from "react";
-import { View } from "react-native";
-import BottomSheet, { BottomSheetBackdrop } from "@gorhom/bottom-sheet";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { Ionicons } from "@expo/vector-icons";
-import { Box, Text, Button } from "@/src/components/ui/primitives";
+import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { Ionicons } from "@expo/vector-icons";
+import BottomSheet, { BottomSheetBackdrop } from "@gorhom/bottom-sheet";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { View } from "react-native";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type AdultContentPopupProps = {
   /** Whether the popup is visible */
@@ -116,11 +116,7 @@ export const AdultContentPopup = ({
 
         {/* Buttons */}
         <Box gap="md" style={{ marginTop: 24 }}>
-          <Button
-            size="lg"
-            rounded="lg"
-            onPress={handleEnable}
-          >
+          <Button size="lg" rounded="lg" onPress={handleEnable}>
             <Button.Text weight="semibold">Yes, Enable</Button.Text>
           </Button>
 
@@ -155,4 +151,3 @@ const styles = StyleSheet.create((theme) => ({
     marginBottom: theme.spacing.md,
   },
 }));
-

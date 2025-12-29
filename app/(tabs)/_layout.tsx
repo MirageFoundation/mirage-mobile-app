@@ -21,7 +21,7 @@ const PROTECTED_TABS = ["following", "create", "inbox", "profile"];
 const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { tabBarAnimatedStyle } = useScrollAnimationContext();
-  
+
   // Auth state
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);

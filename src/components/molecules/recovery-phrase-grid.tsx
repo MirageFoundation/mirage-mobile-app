@@ -1,11 +1,11 @@
-import { useCallback, useState } from "react";
-import { View, Pressable } from "react-native";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { WordChip } from "@/src/components/atoms";
+import { Button, Text } from "@/src/components/ui/primitives";
+import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
-import { WordChip } from "@/src/components/atoms";
-import { Box, Text, Button } from "@/src/components/ui/primitives";
-import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useCallback, useState } from "react";
+import { Pressable, View } from "react-native";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type RecoveryPhraseGridProps = {
   /** Array of 12 recovery phrase words */
@@ -47,23 +47,19 @@ export const RecoveryPhraseGrid = ({
   }, [words, onCopy]);
 
   // Split words into rows of 4
-  const rows = [
-    words.slice(0, 4),
-    words.slice(4, 8),
-    words.slice(8, 12),
-  ];
+  const rows = [words.slice(0, 4), words.slice(4, 8), words.slice(8, 12)];
 
   return (
     <View style={styles.container}>
       {/* Warning banner */}
       <View style={styles.warningBanner}>
-        <Ionicons
-          name="warning"
-          size={18}
-          color={theme.colors.warning[500]}
-        />
-        <Text size="xs" style={{ color: theme.colors.warning[500], flex: 1, marginLeft: 8 }}>
-          Write down these 12 words in order. This is the ONLY way to recover your account.
+        <Ionicons name="warning" size={18} color={theme.colors.warning[500]} />
+        <Text
+          size="xs"
+          style={{ color: theme.colors.warning[500], flex: 1, marginLeft: 8 }}
+        >
+          Write down these 12 words in order. This is the ONLY way to recover
+          your account.
         </Text>
       </View>
 
@@ -171,4 +167,3 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 110,
   },
 }));
-

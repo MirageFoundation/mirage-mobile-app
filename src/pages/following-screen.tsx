@@ -1,19 +1,19 @@
+import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { FlatList, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
-import { useRouter } from "expo-router";
 
 import { FeedHeader, PostCard, type Post } from "@/src/components/molecules";
-import { Box, Text, Button } from "@/src/components/ui/primitives";
+import { Box, Button, Text } from "@/src/components/ui/primitives";
+import { useAuthGuard } from "@/src/hooks";
 import {
   HEADER_HEIGHT,
   TAB_BAR_HEIGHT,
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
 import { useAuthStore } from "@/src/stores";
-import { useAuthGuard } from "@/src/hooks";
 
 // Mock data for posts from followed users
 const MOCK_FOLLOWING_POSTS: Post[] = [
@@ -24,7 +24,8 @@ const MOCK_FOLLOWING_POSTS: Post[] = [
       username: "tech_insider",
       avatarSeed: "tech_insider",
     },
-    title: "Just got early access to the new M4 MacBook Pro - here are my first impressions",
+    title:
+      "Just got early access to the new M4 MacBook Pro - here are my first impressions",
     body: "The performance gains are insane. Compiling our entire codebase now takes 40% less time. The new display is also noticeably brighter.",
     media: [
       {
@@ -112,16 +113,19 @@ export function FollowingScreen() {
   const router = useRouter();
   const { scrollHandler, headerAnimatedStyle } = useScrollAnimationContext();
   const { requireAuth } = useAuthGuard();
-  
+
   const currentUser = useAuthStore((s) => s.user);
 
   // Local state for optimistic updates
   const [posts, setPosts] = useState<Post[]>(MOCK_FOLLOWING_POSTS);
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
-  const handlePostPress = useCallback((postId: string) => {
-    router.push(`/post/${postId}`);
-  }, [router]);
+  const handlePostPress = useCallback(
+    (postId: string) => {
+      router.push(`/post/${postId}`);
+    },
+    [router]
+  );
 
   const handleAuthorPress = useCallback((authorId: string) => {
     // TODO: Navigate to user profile
@@ -133,65 +137,77 @@ export function FollowingScreen() {
     console.log("More options for post:", postId);
   }, []);
 
-  const handleLikePress = useCallback((postId: string) => {
-    requireAuth(() => {
-      setPosts((prev) =>
-        prev.map((post) => {
-          if (post.id !== postId) return post;
-          
-          const wasLiked = post.hasLiked;
-          const wasDisliked = post.hasDisliked;
-          
-          return {
-            ...post,
-            hasLiked: !wasLiked,
-            hasDisliked: false,
-            likes: wasLiked ? post.likes - 1 : post.likes + 1,
-            dislikes: wasDisliked ? post.dislikes - 1 : post.dislikes,
-          };
-        })
-      );
-    });
-  }, [requireAuth]);
+  const handleLikePress = useCallback(
+    (postId: string) => {
+      requireAuth(() => {
+        setPosts((prev) =>
+          prev.map((post) => {
+            if (post.id !== postId) return post;
 
-  const handleDislikePress = useCallback((postId: string) => {
-    requireAuth(() => {
-      setPosts((prev) =>
-        prev.map((post) => {
-          if (post.id !== postId) return post;
-          
-          const wasLiked = post.hasLiked;
-          const wasDisliked = post.hasDisliked;
-          
-          return {
-            ...post,
-            hasDisliked: !wasDisliked,
-            hasLiked: false,
-            dislikes: wasDisliked ? post.dislikes - 1 : post.dislikes + 1,
-            likes: wasLiked ? post.likes - 1 : post.likes,
-          };
-        })
-      );
-    });
-  }, [requireAuth]);
+            const wasLiked = post.hasLiked;
+            const wasDisliked = post.hasDisliked;
 
-  const handleCommentPress = useCallback((postId: string) => {
-    router.push(`/post/${postId}`);
-  }, [router]);
+            return {
+              ...post,
+              hasLiked: !wasLiked,
+              hasDisliked: false,
+              likes: wasLiked ? post.likes - 1 : post.likes + 1,
+              dislikes: wasDisliked ? post.dislikes - 1 : post.dislikes,
+            };
+          })
+        );
+      });
+    },
+    [requireAuth]
+  );
 
-  const handleFollowPress = useCallback((authorId: string) => {
-    requireAuth(() => {
-      setPosts((prev) =>
-        prev.map((post) => {
-          if (post.author.id !== authorId) return post;
-          return {
-            ...post,
-            isFollowing: !post.isFollowing,
-          };
-        })
-      );
-    });
-  }, [requireAuth]);
+  const handleDislikePress = useCallback(
+    (postId: string) => {
+      requireAuth(() => {
+        setPosts((prev) =>
+          prev.map((post) => {
+            if (post.id !== postId) return post;
+
+            const wasLiked = post.hasLiked;
+            const wasDisliked = post.hasDisliked;
+
+            return {
+              ...post,
+              hasDisliked: !wasDisliked,
+              hasLiked: false,
+              dislikes: wasDisliked ? post.dislikes - 1 : post.dislikes + 1,
+              likes: wasLiked ? post.likes - 1 : post.likes,
+            };
+          })
+        );
+      });
+    },
+    [requireAuth]
+  );
+
+  const handleCommentPress = useCallback(
+    (postId: string) => {
+      router.push(`/post/${postId}`);
+    },
+    [router]
+  );
+
+  const handleFollowPress = useCallback(
+    (authorId: string) => {
+      requireAuth(() => {
+        setPosts((prev) =>
+          prev.map((post) => {
+            if (post.author.id !== authorId) return post;
+            return {
+              ...post,
+              isFollowing: !post.isFollowing,
+            };
+          })
+        );
+      });
+    },
+    [requireAuth]
+  );
 
   const handleRevealContent = useCallback((postId: string) => {
     setRevealedPosts((prev) => {

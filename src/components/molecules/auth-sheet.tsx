@@ -1,14 +1,14 @@
-import { useCallback, useRef, useEffect } from "react";
+import { Box, Button, Text } from "@/src/components/ui/primitives";
+import { useUIStore } from "@/src/stores";
+import { Ionicons } from "@expo/vector-icons";
 import {
-  BottomSheetModal,
   BottomSheetBackdrop,
+  BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { Box, Text, Button } from "@/src/components/ui/primitives";
-import { useUIStore } from "@/src/stores";
+import { useCallback, useEffect, useRef } from "react";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 export const AuthSheet = () => {
   const bottomSheetRef = useRef<BottomSheetModal>(null);

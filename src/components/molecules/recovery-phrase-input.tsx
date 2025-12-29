@@ -1,11 +1,11 @@
-import { useCallback, useRef, useState } from "react";
-import { View, TextInput, Pressable } from "react-native";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { WordChip } from "@/src/components/atoms";
+import { Button, Text } from "@/src/components/ui/primitives";
+import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
-import { WordChip } from "@/src/components/atoms";
-import { Box, Text, Button } from "@/src/components/ui/primitives";
-import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useCallback, useRef, useState } from "react";
+import { Pressable, TextInput, View } from "react-native";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type RecoveryPhraseInputProps = {
   /** Current words array (12 items, empty strings for unfilled) */
@@ -120,11 +120,7 @@ export const RecoveryPhraseInput = ({
   }, [onWordsChange]);
 
   // Split words into rows of 4
-  const rows = [
-    words.slice(0, 4),
-    words.slice(4, 8),
-    words.slice(8, 12),
-  ];
+  const rows = [words.slice(0, 4), words.slice(4, 8), words.slice(8, 12)];
 
   const filledCount = words.filter((w) => w.length > 0).length;
 
@@ -245,4 +241,3 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing.sm,
   },
 }));
-

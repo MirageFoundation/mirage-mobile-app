@@ -1168,14 +1168,16 @@ colors: {
 
 ### Phase 6: Authentication (Week 3-4) ✅
 
-- [x] AuthSheet molecule
+- [x] AuthSheet molecule (BottomSheetModal, no handle, centered title)
 - [x] RecoveryPhraseGrid molecule
 - [x] RecoveryPhraseInput molecule
 - [x] OnboardingProgress molecule
-- [x] UsernamePage
-- [x] RecoveryPhrasePage
-- [x] LoginPage
 - [x] AdultContentPopup molecule
+- [x] UsernamePage (full UI with username validation, availability check, terms)
+- [x] RecoveryPhrasePage (12-word display with copy, security tips)
+- [x] LoginPage (12-word input with paste support)
+- [x] Protected tab navigation (auth sheet on Create/Following/Profile/Inbox tabs)
+- [x] Auth flow navigation (back to auth sheet from auth pages)
 
 ### Phase 7: Create Post (Week 4)
 
@@ -1211,6 +1213,6 @@ colors: {
 
 ---
 
-_Document Version: 1.4_
+_Document Version: 1.5_
 _Created: December 2024_
 _Last Updated: December 29, 2024_

@@ -1,13 +1,13 @@
-import { useState, useCallback } from "react";
-import { View, Pressable, ScrollView, Keyboard } from "react-native";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { RecoveryPhraseInput } from "@/src/components/molecules";
+import { Box, Button, Text } from "@/src/components/ui/primitives";
+import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useAuthStore, useUIStore } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { Box, Text, Button } from "@/src/components/ui/primitives";
-import { RecoveryPhraseInput } from "@/src/components/molecules";
-import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useCallback, useState } from "react";
+import { Keyboard, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAuthStore, useUIStore } from "@/src/stores";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -122,11 +122,7 @@ export default function LoginScreen() {
         {/* Title section */}
         <View style={styles.titleSection}>
           <View style={styles.keyIcon}>
-            <Ionicons
-              name="key"
-              size={40}
-              color={theme.colors.brand[500]}
-            />
+            <Ionicons name="key" size={40} color={theme.colors.brand[500]} />
           </View>
           <Text size="xxl" weight="bold" style={{ textAlign: "center" }}>
             Enter Recovery Phrase
