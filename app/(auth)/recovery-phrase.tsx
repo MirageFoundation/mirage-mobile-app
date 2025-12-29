@@ -102,12 +102,12 @@ export default function RecoveryPhraseScreen() {
     const phrase = words.join(" ");
     setRecoveryPhrase(phrase);
 
-    // In a real app, this would trigger the onboarding progress
-    // For now, just go back to home (simulating account creation)
-    router.dismissAll();
-
-    // Show success message or navigate to onboarding progress
-    // router.push("/(auth)/onboarding-progress");
+    // Dismiss all modals and navigate to home tab
+    // router.dismissAll();
+    // Navigate to home tab after a brief delay to ensure modal is dismissed
+    setTimeout(() => {
+      router.dismissTo("/(tabs)");
+    }, 100);
   }, [hasSaved, words, setRecoveryPhrase, router]);
 
   return (

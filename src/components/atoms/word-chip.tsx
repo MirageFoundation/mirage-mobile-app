@@ -136,7 +136,7 @@ const styles = StyleSheet.create((theme) => ({
       focused: {
         true: {
           borderColor: theme.colors.primary[500],
-          borderWidth: 2,
+          borderWidth: 1,
         },
         false: {},
       },

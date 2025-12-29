@@ -426,30 +426,34 @@ src/components/
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │ ┌────────────────────────────────────────────────────────────┐ │
-│ │  ←  │        Recovery Phrase          │                    │ │
+│ │  ←  │              [App Icon]              │              │ │
 │ └────────────────────────────────────────────────────────────┘ │
 ├────────────────────────────────────────────────────────────────┤
 │                                                                │
 │          🔐 Save Your Recovery Phrase                          │
+│                    @username                                    │
 │                                                                │
-│   ⚠️  Write down these 12 words in order.                      │
-│       This is the ONLY way to recover your account.            │
+│   ⚠️  Important: Below Is Your Recovery Phrase.                 │
+│       This 12-word phrase is the ONLY way to recover           │
+│       your account. Write it down and store it safely           │
+│       offline. Anyone with this phrase can access your          │
+│       account!                                                  │
 │                                                                │
 │   ┌────────────────────────────────────────────────────────┐   │
 │   │                                                        │   │
 │   │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐      │   │
-│   │  │ 1.word  │ │ 2.word  │ │ 3.word  │ │ 4.word  │      │   │
+│   │  │1 word   │ │2 word   │ │3 word   │ │4 word   │      │   │
 │   │  └─────────┘ └─────────┘ └─────────┘ └─────────┘      │   │
 │   │                                                        │   │
 │   │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐      │   │
-│   │  │ 5.word  │ │ 6.word  │ │ 7.word  │ │ 8.word  │      │   │
+│   │  │5 word   │ │6 word   │ │7 word   │ │8 word   │      │   │
 │   │  └─────────┘ └─────────┘ └─────────┘ └─────────┘      │   │
 │   │                                                        │   │
 │   │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐      │   │
-│   │  │ 9.word  │ │10.word  │ │11.word  │ │12.word  │      │   │
+│   │  │9 word   │ │10 word  │ │11 word  │ │12 word  │      │   │
 │   │  └─────────┘ └─────────┘ └─────────┘ └─────────┘      │   │
 │   │                                                        │   │
-│   │                   [ 📋 Copy All ]                      │   │
+│   │              [ 📋 Copy Phrase ]                        │   │
 │   └────────────────────────────────────────────────────────┘   │
 │                                                                │
 │      ☐ I have saved my recovery phrase securely                │
@@ -457,13 +461,83 @@ src/components/
 ├────────────────────────────────────────────────────────────────┤
 │                                                                │
 │     ┌──────────────────────────────────────────────────┐       │
-│     │                   Continue                        │       │
+│     │            Continue to Mirage                     │       │
 │     └──────────────────────────────────────────────────┘       │
 │                                                                │
 └────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.8 Onboarding Progress (Status Display)
+**Design Details:**
+
+- Header: Back button (left), app icon (center), empty space (right) - no title or close button
+- Shield icon: Reduced size (32px icon, 60x60 container)
+- Title: "Save Your Recovery Phrase" (xl size)
+- Subtitle: "@username" format
+- Warning banner: Updated text with "Important: Below Is Your Recovery Phrase." in semibold
+- Word chips: No divider between number and word, reduced padding, compact design
+- Copy button: Redesigned with animated icon/text transitions, success state styling
+- Checkbox: Smaller size (sm checkbox, xs text, reduced padding)
+- Button: "Continue to Mirage" text, no arrow icon, full rounded corners
+- Navigation: Dismisses all auth modals and navigates to home tab on continue
+
+### 4.8 Login Page
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ ┌────────────────────────────────────────────────────────────┐ │
+│ │  ✕  │                                      │               │ │
+│ └────────────────────────────────────────────────────────────┘ │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│                      ┌───────────┐                             │
+│                      │ App Icon  │                             │
+│                      └───────────┘                             │
+│                                                                │
+│                    Login to Mirage                             │
+│                                                                │
+│        Sign in to your existing Mirage account                 │
+│           with your 12-word recovery phrase:                   │
+│                                                                │
+│   ┌────────────────────────────────────────────────────────┐   │
+│   │                                                        │   │
+│   │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐      │   │
+│   │  │1 ______ │ │2 ______ │ │3 ______ │ │4 ______ │      │   │
+│   │  └─────────┘ └─────────┘ └─────────┘ └─────────┘      │   │
+│   │                                                        │   │
+│   │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐      │   │
+│   │  │5 ______ │ │6 ______ │ │7 ______ │ │8 ______ │      │   │
+│   │  └─────────┘ └─────────┘ └─────────┘ └─────────┘      │   │
+│   │                                                        │   │
+│   │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐      │   │
+│   │  │9 ______ │ │10 _____ │ │11 _____ │ │12 _____ │      │   │
+│   │  └─────────┘ └─────────┘ └─────────┘ └─────────┘      │   │
+│   │                                                        │   │
+│   │           ████████████░░░░░░░░░░░░ 6/12                │   │
+│   │                                                        │   │
+│   └────────────────────────────────────────────────────────┘   │
+│                                                                │
+│                                                                │
+│      ⚠️ Some words appear to be invalid (error message)        │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│     ┌──────────────────────────────────────────────────┐       │
+│     │                    Log in                         │       │
+│     └──────────────────────────────────────────────────┘       │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+**Design Details:**
+
+- Header: Close button (left) only, no title
+- App icon: 44x44 with 16px border radius
+- Title: "Login to Mirage" (26px, bold)
+- Subtitle: "Sign in to your existing Mirage account with your 12-word recovery phrase:"
+- Recovery phrase input: 4x3 grid with progress bar
+- Error message: Left-aligned, positioned above footer border
+- Footer: Absolutely positioned at bottom with "Log in" button (fully rounded)
+
+### 4.10 Onboarding Progress (Status Display)
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -493,7 +567,7 @@ src/components/
 └────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.9 Comment More Options Sheet
+### 4.11 Comment More Options Sheet
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -526,7 +600,7 @@ src/components/
 └────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.10 Adult Content Popup
+### 4.12 Adult Content Popup
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -1170,12 +1244,37 @@ colors: {
 
 - [x] AuthSheet molecule (BottomSheetModal, no handle, centered title)
 - [x] RecoveryPhraseGrid molecule
+  - [x] Updated warning banner with new text formatting
+  - [x] Redesigned copy button with animated transitions (icon/text scale animation)
+  - [x] Copy button success state styling (background/border color changes)
+  - [x] Removed hide/show toggle button
+  - [x] Updated word grid styling
 - [x] RecoveryPhraseInput molecule
 - [x] OnboardingProgress molecule
 - [x] AdultContentPopup molecule
 - [x] UsernamePage (full UI with username validation, availability check, terms)
-- [x] RecoveryPhrasePage (12-word display with copy, security tips)
-- [x] LoginPage (12-word input with paste support)
+- [x] RecoveryPhrasePage
+  - [x] Header redesign: app icon center, no title, no close button
+  - [x] Reduced shield icon size (32px icon, 60x60 container)
+  - [x] Reduced title size (xl)
+  - [x] Subtitle format: "@username"
+  - [x] Updated warning banner text with emphasis formatting
+  - [x] Removed security tips section
+  - [x] Reduced checkbox confirmation size
+  - [x] Button text: "Continue to Mirage" (no arrow icon, full rounded)
+  - [x] Navigation: dismisses all auth modals and navigates to home tab
+- [x] WordChip atom updates
+  - [x] Removed divider between number and word
+  - [x] Reduced padding and height (34px height)
+  - [x] Compact design with centered content
+- [x] LoginPage
+  - [x] Header redesign: close button only (no title)
+  - [x] App icon instead of key icon
+  - [x] Title: "Login to Mirage"
+  - [x] Subtitle: "Sign in to your existing Mirage account with your 12-word recovery phrase:"
+  - [x] 12-word recovery phrase input with paste support
+  - [x] "Log in" button (fully rounded, positioned in footer)
+  - [x] Error message positioned above footer border, left-aligned
 - [x] Protected tab navigation (auth sheet on Create/Following/Profile/Inbox tabs)
 - [x] Auth flow navigation (back to auth sheet from auth pages)
 
@@ -1213,6 +1312,6 @@ colors: {
 
 ---
 
-_Document Version: 1.5_
+_Document Version: 1.7_
 _Created: December 2024_
-_Last Updated: December 29, 2024_
+_Last Updated: December 2024_

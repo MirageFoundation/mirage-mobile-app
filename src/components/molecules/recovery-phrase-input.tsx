@@ -1,7 +1,7 @@
 import { WordChip } from "@/src/components/atoms";
 import { Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { useCallback, useRef, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
@@ -134,7 +134,11 @@ export const RecoveryPhraseInput = ({
         <Button size="sm" variant="ghost" onPress={handlePaste}>
           <Button.Icon>
             {({ color, size }) => (
-              <Ionicons name="clipboard-outline" size={size} color={color} />
+              <MaterialCommunityIcons
+                name="clipboard-multiple-outline"
+                size={size}
+                color={color}
+              />
             )}
           </Button.Icon>
           <Button.Text>Paste</Button.Text>
@@ -207,7 +211,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   grid: {
     gap: theme.spacing.sm,
-    backgroundColor: theme.colors.background.subtle,
     borderRadius: theme.radius.lg,
     padding: theme.spacing.md,
     borderWidth: 1,
@@ -224,7 +227,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   progressContainer: {
     flex: 1,
-    height: 4,
+    height: 3,
     backgroundColor: theme.colors.background.emphasis,
     borderRadius: 2,
     overflow: "hidden",
