@@ -1282,12 +1282,25 @@ colors: {
 - [x] Protected tab navigation (auth sheet on Create/Following/Profile/Inbox tabs)
 - [x] Auth flow navigation (back to auth sheet from auth pages)
 
-### Phase 7: Create Post (Week 4)
+### Phase 7: Create Post (Week 4) 🚧
 
-- [ ] TopicSelector molecule
+- [x] CommunitySelectionModal (replaces TopicSelector)
 - [ ] ContentWarningSelector molecule
-- [ ] MediaPickerBar molecule
-- [ ] CreatePage
+- [x] MediaPickerBar (inline in CreatePage)
+- [x] CreatePage
+  - [x] Header with close button and Post button
+  - [x] Community selector with avatar and name
+  - [x] Title input (required)
+  - [x] Tags button (placeholder)
+  - [x] Link input with URL validation
+  - [x] Image picker with full-width preview (auto height based on aspect ratio)
+  - [x] Video picker
+  - [x] Body input (optional)
+  - [x] Media picker bar (link, image, video, poll icons)
+  - [x] Draft state management with Zustand
+  - [x] Updated to use new expo-image-picker API (MediaType instead of deprecated MediaTypeOptions)
+  - [ ] Poll creation
+  - [ ] Content warning selection
 
 ### Phase 8: Profile (Week 4-5)
 
@@ -1316,6 +1329,6 @@ colors: {
 
 ---
 
-_Document Version: 1.8_
+_Document Version: 1.9_
 _Created: December 2024_
-_Last Updated: December 2024_
+_Last Updated: January 2025_

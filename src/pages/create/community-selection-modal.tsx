@@ -1,30 +1,29 @@
-import { useCallback, useRef, useState, useMemo, useEffect } from "react";
+import { EvilIcons, Feather } from "@expo/vector-icons";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  TextInput,
-  Pressable,
   FlatList,
-  Modal,
   Keyboard,
+  Modal,
+  Pressable,
+  TextInput,
+  View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-  withSpring,
-  runOnJS,
   FadeIn,
   FadeOut,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
 } from "react-native-reanimated";
-import { Feather } from "@expo/vector-icons";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { Box, Text, Button } from "@/src/components/ui/primitives";
 import { Avatar } from "@/src/components/atoms";
-import { type Community } from "@/src/stores/draft-store";
-import { useAuthStore } from "@/src/stores/auth-store";
+import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useAuthStore } from "@/src/stores/auth-store";
+import { type Community } from "@/src/stores/draft-store";
 
 // Mock communities data
 const MOCK_COMMUNITIES: Community[] = [
@@ -49,7 +48,8 @@ const MOCK_COMMUNITIES: Community[] = [
     name: "Cryptocurrency",
     avatar: undefined,
     memberCount: 56000,
-    description: "Crypto news, trading strategies, and blockchain tech",
+    description:
+      "Crypto news, trading strategies, and blockchain tech Crypto news, trading strategies, and blockchain tech",
     isSubscribed: false,
   },
   {
@@ -152,37 +152,26 @@ const CommunityItem = ({
         />
         <View style={styles.communityInfo}>
           <View style={styles.communityHeader}>
-            <Text size="md" weight="semibold" numberOfLines={1}>
+            <Text size="lg" weight="semibold" numberOfLines={1}>
               {community.name}
             </Text>
-            {community.isSubscribed && (
-              <View
-                style={[
-                  styles.subscribedBadge,
-                  { backgroundColor: theme.colors.success[500] + "20" },
-                ]}
-              >
-                <Text
-                  size="xs"
-                  style={{ color: theme.colors.success[500] }}
-                  weight="medium"
-                >
-                  Subscribed
-                </Text>
-              </View>
-            )}
           </View>
-          <Text size="sm" mode="subtle">
+          <Text size="md" mode="subtle" style={{ lineHeight: 18 }}>
             {formatMemberCount(community.memberCount)} members
           </Text>
           {community.description && (
-            <Text size="sm" mode="subtle" numberOfLines={2} style={{ marginTop: 2 }}>
+            <Text
+              size="md"
+              mode="subtle"
+              numberOfLines={2}
+              style={{ marginTop: 2, lineHeight: 18 }}
+            >
               {community.description}
             </Text>
           )}
         </View>
         {isSelected && (
-          <Feather name="check" size={20} color={theme.colors.brand} />
+          <Feather name="check" size={20} color={theme.colors.brand[500]} />
         )}
       </Animated.View>
     </Pressable>
@@ -195,17 +184,14 @@ export const CommunitySelectionModal = ({
   onSelect,
   selectedCommunity,
 }: CommunitySelectionModalProps) => {
-  const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const { user } = useAuthStore();
 
   // State
   const [searchText, setSearchText] = useState("");
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchInputRef = useRef<TextInput>(null);
 
   // Animation values
-  const headerOpacity = useSharedValue(1);
   const searchExpandProgress = useSharedValue(0);
 
   // User's profile as first community option
@@ -237,26 +223,20 @@ export const CommunitySelectionModal = ({
 
   // Handle search focus
   const handleSearchFocus = useCallback(() => {
-    setIsSearchFocused(true);
-    headerOpacity.value = withTiming(0, { duration: 200 });
-    searchExpandProgress.value = withTiming(1, { duration: 250 });
-  }, []);
+    searchExpandProgress.value = withTiming(1, { duration: 200 });
+  }, [searchExpandProgress]);
 
   const handleSearchBlur = useCallback(() => {
     if (searchText.length === 0) {
-      setIsSearchFocused(false);
-      headerOpacity.value = withTiming(1, { duration: 200 });
-      searchExpandProgress.value = withTiming(0, { duration: 250 });
+      searchExpandProgress.value = withTiming(0, { duration: 200 });
     }
-  }, [searchText]);
+  }, [searchText, searchExpandProgress]);
 
   const handleCancel = useCallback(() => {
     Keyboard.dismiss();
     setSearchText("");
-    setIsSearchFocused(false);
-    headerOpacity.value = withTiming(1, { duration: 200 });
-    searchExpandProgress.value = withTiming(0, { duration: 250 });
-  }, []);
+    searchExpandProgress.value = withTiming(0, { duration: 200 });
+  }, [searchExpandProgress]);
 
   const handleClearSearch = useCallback(() => {
     setSearchText("");
@@ -265,38 +245,29 @@ export const CommunitySelectionModal = ({
 
   const handleClose = useCallback(() => {
     setSearchText("");
-    setIsSearchFocused(false);
-    headerOpacity.value = 1;
     searchExpandProgress.value = 0;
     onClose();
-  }, [onClose]);
+  }, [onClose, searchExpandProgress]);
 
   // Animated styles
   const headerAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: headerOpacity.value,
-    height: headerOpacity.value === 0 ? 0 : "auto",
-    overflow: "hidden",
-  }));
-
-  const searchContainerAnimatedStyle = useAnimatedStyle(() => ({
-    marginLeft: searchExpandProgress.value * -40,
+    opacity: interpolate(searchExpandProgress.value, [0, 1], [1, 0]),
+    height: interpolate(searchExpandProgress.value, [0, 1], [48, 0]),
+    overflow: "hidden" as const,
   }));
 
   const cancelButtonAnimatedStyle = useAnimatedStyle(() => ({
     opacity: searchExpandProgress.value,
-    width: searchExpandProgress.value * 70,
-    marginLeft: searchExpandProgress.value * 8,
+    width: interpolate(searchExpandProgress.value, [0, 1], [0, 68]),
   }));
 
   // Reset state when modal closes
   useEffect(() => {
     if (!visible) {
       setSearchText("");
-      setIsSearchFocused(false);
-      headerOpacity.value = 1;
       searchExpandProgress.value = 0;
     }
-  }, [visible]);
+  }, [visible, searchExpandProgress]);
 
   const renderCommunityItem = useCallback(
     ({ item }: { item: Community }) => (
@@ -319,21 +290,24 @@ export const CommunitySelectionModal = ({
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
     >
-      <View
+      <Box
         style={[
           styles.container,
           {
             backgroundColor: theme.colors.background.default,
-            paddingTop: insets.top,
           },
         ]}
       >
         {/* Header */}
         <Animated.View style={[styles.header, headerAnimatedStyle]}>
           <Pressable onPress={handleClose} style={styles.closeButton}>
-            <Feather name="x" size={24} color={theme.colors.text.default} />
+            <EvilIcons
+              name="close"
+              size={36}
+              color={theme.colors.text.default}
+            />
           </Pressable>
-          <Text size="lg" weight="semibold" style={styles.headerTitle}>
+          <Text size="md" weight="semibold" style={styles.headerTitle}>
             Post to
           </Text>
           <View style={styles.closeButton} />
@@ -341,30 +315,28 @@ export const CommunitySelectionModal = ({
 
         {/* Search Bar */}
         <View style={styles.searchContainer}>
-          <Animated.View
-            style={[styles.searchInputContainer, searchContainerAnimatedStyle]}
-          >
+          <View style={styles.searchInputContainer}>
             <View
               style={[
                 styles.searchInputWrapper,
                 {
-                  backgroundColor: theme.colors.background.subtle,
-                  borderColor: isSearchFocused
-                    ? theme.colors.brand
-                    : theme.colors.border.subtle,
+                  backgroundColor: "rgb(227,229,230)",
                 },
               ]}
             >
               <Feather
                 name="search"
-                size={18}
+                size={16}
                 color={theme.colors.text.subtle}
-                style={{ marginRight: 8 }}
+                style={{ marginRight: 6 }}
               />
               <TextInput
                 ref={searchInputRef}
-                style={[styles.searchInput, { color: theme.colors.text.default }]}
-                placeholder="Search communities"
+                style={[
+                  styles.searchInput,
+                  { color: theme.colors.text.default },
+                ]}
+                placeholder="Search for a community"
                 placeholderTextColor={theme.colors.text.subtle}
                 value={searchText}
                 onChangeText={setSearchText}
@@ -374,19 +346,31 @@ export const CommunitySelectionModal = ({
                 autoCorrect={false}
               />
               {searchText.length > 0 && (
-                <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(150)}>
-                  <Pressable onPress={handleClearSearch} style={styles.clearButton}>
-                    <Feather name="x-circle" size={18} color={theme.colors.text.subtle} />
+                <Animated.View
+                  entering={FadeIn.duration(150)}
+                  exiting={FadeOut.duration(150)}
+                >
+                  <Pressable
+                    onPress={handleClearSearch}
+                    style={styles.clearButton}
+                  >
+                    <Feather
+                      name="x-circle"
+                      size={14}
+                      color={theme.colors.text.subtle}
+                    />
                   </Pressable>
                 </Animated.View>
               )}
             </View>
-          </Animated.View>
+          </View>
 
           {/* Cancel Button */}
-          <Animated.View style={cancelButtonAnimatedStyle}>
-            <Pressable onPress={handleCancel}>
-              <Text size="md" style={{ color: theme.colors.brand }}>
+          <Animated.View
+            style={[styles.cancelButtonContainer, cancelButtonAnimatedStyle]}
+          >
+            <Pressable onPress={handleCancel} hitSlop={8}>
+              <Text size="md" style={{ color: "rgb(29,68,150)" }}>
                 Cancel
               </Text>
             </Pressable>
@@ -407,8 +391,9 @@ export const CommunitySelectionModal = ({
               <Text mode="subtle">No communities found</Text>
             </Box>
           }
+          ListFooterComponent={() => <View style={{ height: 100 }} />}
         />
-      </View>
+      </Box>
     </Modal>
   );
 };
@@ -422,7 +407,8 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.xs,
   },
   closeButton: {
     width: 40,
@@ -436,38 +422,44 @@ const styles = StyleSheet.create((theme) => ({
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
+    marginTop: theme.spacing.md,
     paddingHorizontal: theme.spacing.md,
-    paddingBottom: theme.spacing.md,
+    paddingBottom: theme.spacing.xs,
   },
   searchInputContainer: {
     flex: 1,
   },
+  cancelButtonContainer: {
+    overflow: "hidden",
+    justifyContent: "center",
+    alignItems: "flex-end",
+    height: 36,
+  },
   searchInputWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    height: 44,
+    height: 42,
     borderRadius: theme.radius.lg,
-    paddingHorizontal: theme.spacing.md,
-    borderWidth: 1,
+    paddingHorizontal: theme.spacing.sm,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: theme.typography.family.mono,
     height: "100%",
+    fontWeight: "400",
   },
   clearButton: {
     padding: theme.spacing.xs,
   },
   listContent: {
     paddingHorizontal: theme.spacing.md,
-    paddingBottom: theme.spacing.lg,
   },
   communityItem: {
     flexDirection: "row",
-    alignItems: "center",
+    gap: theme.spacing.sm,
     paddingVertical: theme.spacing.md,
-    gap: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
   },
   communityInfo: {
     flex: 1,
@@ -487,4 +479,3 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.border.subtle,
   },
 }));
-
