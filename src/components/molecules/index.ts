@@ -22,3 +22,6 @@ export { AdultContentPopup } from "./adult-content-popup";
 export { OnboardingProgress } from "./onboarding-progress";
 export { RecoveryPhraseGrid } from "./recovery-phrase-grid";
 export { RecoveryPhraseInput } from "./recovery-phrase-input";
+
+// Profile
+export { ProfileHeader } from "./profile-header";
