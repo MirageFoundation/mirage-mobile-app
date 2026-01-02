@@ -17,6 +17,8 @@ import {
   PROFILE_CONTENT_HEIGHT,
   ProfileContent,
   ProfileHeaderBar,
+  ProfileMenuSheet,
+  ProfileMenuSheetRef,
   ProfileTabBar,
   ProfileTabContent,
 } from "@/src/components/molecules";
@@ -41,6 +43,9 @@ export function ProfileScreen() {
   // Tab state
   const [activeTab, setActiveTab] = useState(0);
   const pagerRef = useRef<PagerView>(null);
+
+  // Menu sheet ref
+  const menuSheetRef = useRef<ProfileMenuSheetRef>(null);
 
   // Calculate heights
   const headerHeight = insets.top + HEADER_BAR_HEIGHT;
@@ -95,7 +100,40 @@ export function ProfileScreen() {
   }, [user?.username]);
 
   const handleMenuPress = useCallback(() => {
-    console.log("Menu pressed");
+    menuSheetRef.current?.present();
+  }, []);
+
+  // Menu sheet handlers
+  const handleMenuSettings = useCallback(() => {
+    console.log("Settings pressed");
+  }, []);
+
+  const handleMenuSubscription = useCallback(() => {
+    console.log("Subscription pressed");
+  }, []);
+
+  const handleMenuNetwork = useCallback(() => {
+    console.log("Network pressed");
+  }, []);
+
+  const handleMenuInviteAndEarn = useCallback(() => {
+    console.log("Invite and Earn pressed");
+  }, []);
+
+  const handleMenuDrafts = useCallback(() => {
+    console.log("Drafts pressed");
+  }, []);
+
+  const handleMenuHistory = useCallback(() => {
+    console.log("History pressed");
+  }, []);
+
+  const handleMenuSaved = useCallback(() => {
+    console.log("Saved pressed");
+  }, []);
+
+  const handleOnlineStatusChange = useCallback((isOnline: boolean) => {
+    console.log("Online status changed:", isOnline);
   }, []);
 
   const handleEditPress = useCallback(() => {
@@ -230,6 +268,20 @@ export function ProfileScreen() {
           </PagerView>
         </View>
       </Animated.ScrollView>
+
+      {/* Profile Menu Bottom Sheet */}
+      <ProfileMenuSheet
+        ref={menuSheetRef}
+        isOnline={true}
+        onSettings={handleMenuSettings}
+        onSubscription={handleMenuSubscription}
+        onNetwork={handleMenuNetwork}
+        onInviteAndEarn={handleMenuInviteAndEarn}
+        onDrafts={handleMenuDrafts}
+        onHistory={handleMenuHistory}
+        onSaved={handleMenuSaved}
+        onOnlineStatusChange={handleOnlineStatusChange}
+      />
     </Box>
   );
 }

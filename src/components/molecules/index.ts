@@ -33,3 +33,7 @@ export {
   SCROLL_THRESHOLD,
 } from "./profile-header";
 export { ProfileTabs, ProfileTabBar, ProfileTabContent, type TabType } from "./profile-tabs";
+export {
+  ProfileMenuSheet,
+  type ProfileMenuSheetRef,
+} from "./profile-menu-sheet";
