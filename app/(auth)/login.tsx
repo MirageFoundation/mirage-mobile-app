@@ -157,9 +157,21 @@ export default function LoginScreen() {
           onPress={handleLogin}
           disabled={!isComplete || isLoading}
           loading={isLoading}
-          style={{ width: "100%" }}
+          style={{
+            width: "100%",
+            backgroundColor:
+              !isComplete || isLoading
+                ? "rgb(242, 242, 242)"
+                : theme.colors.primary[500],
+          }}
         >
-          <Button.Text weight="semibold">
+          <Button.Text
+            style={{
+              color:
+                !isComplete || isLoading ? theme.colors.text.subtle : "#fff",
+            }}
+            weight="medium"
+          >
             {isLoading ? "Logging in..." : "Log in"}
           </Button.Text>
         </Button>

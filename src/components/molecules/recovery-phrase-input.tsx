@@ -227,13 +227,13 @@ const styles = StyleSheet.create((theme) => ({
   },
   progressContainer: {
     flex: 1,
-    height: 3,
+    height: 2,
     backgroundColor: theme.colors.background.emphasis,
     borderRadius: 2,
     overflow: "hidden",
   },
   progressBar: {
-    height: "100%",
+    height: 3,
     backgroundColor: theme.colors.success[500],
     borderRadius: 2,
   },

@@ -21,6 +21,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type InputMode = "keyboard" | "link" | "gif" | "photo";
@@ -75,6 +76,7 @@ export const CommentInput = ({
   onCancelReply,
   style,
 }: CommentInputProps) => {
+  const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const bottomSheetRef = useRef<BottomSheet>(null);
   const inputRef = useRef<TextInput>(null);
@@ -183,7 +185,13 @@ export const CommentInput = ({
   // Inactive state - simple input bar
   if (!isActive) {
     return (
-      <View style={[styles.inactiveContainer, style]}>
+      <View
+        style={[
+          styles.inactiveContainer,
+          style,
+          { paddingBottom: insets.bottom },
+        ]}
+      >
         <Pressable
           onPress={handleActivate}
           style={styles.inactiveInput}
@@ -500,7 +508,7 @@ const styles = StyleSheet.create((theme) => ({
   inactiveIcons: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
   },
   inactiveIconButton: {
     padding: 4,

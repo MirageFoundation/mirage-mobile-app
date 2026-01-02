@@ -223,7 +223,14 @@ export default function UsernameScreen() {
           rounded="full"
           onPress={handleContinue}
           disabled={!isButtonEnabled}
-          style={[styles.continueButton]}
+          style={[
+            styles.continueButton,
+            {
+              backgroundColor: isButtonEnabled
+                ? theme.colors.primary[500]
+                : "rgb(242, 242, 242)",
+            },
+          ]}
         >
           <Button.Text
             weight="medium"

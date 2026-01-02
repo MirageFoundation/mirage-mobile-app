@@ -188,9 +188,19 @@ export default function RecoveryPhraseScreen() {
           rounded="full"
           onPress={handleContinue}
           disabled={!hasSaved}
-          style={{ width: "100%" }}
+          style={{
+            width: "100%",
+            backgroundColor: !hasSaved
+              ? "rgb(242, 242, 242)"
+              : theme.colors.primary[500],
+          }}
         >
-          <Button.Text weight="semibold">Continue to Mirage</Button.Text>
+          <Button.Text
+            style={{ color: !hasSaved ? theme.colors.text.subtle : "#fff" }}
+            weight="medium"
+          >
+            Continue to Mirage
+          </Button.Text>
         </Button>
       </View>
     </Box>
