@@ -24,5 +24,12 @@ export { RecoveryPhraseGrid } from "./recovery-phrase-grid";
 export { RecoveryPhraseInput } from "./recovery-phrase-input";
 
 // Profile
-export { ProfileHeader } from "./profile-header";
-export { ProfileTabs } from "./profile-tabs";
+export {
+  ProfileHeader,
+  ProfileHeaderBar,
+  ProfileContent,
+  getGradientColor,
+  PROFILE_CONTENT_HEIGHT,
+  SCROLL_THRESHOLD,
+} from "./profile-header";
+export { ProfileTabs, ProfileTabBar, ProfileTabContent, type TabType } from "./profile-tabs";

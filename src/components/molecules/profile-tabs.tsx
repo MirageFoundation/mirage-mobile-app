@@ -6,7 +6,6 @@ import {
   ImageSourcePropType,
   Pressable,
   Text as RNText,
-  ScrollView,
   View,
 } from "react-native";
 import PagerView from "react-native-pager-view";
@@ -20,7 +19,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-type TabType = "posts" | "comments" | "about";
+export type TabType = "posts" | "comments" | "about";
 
 type ProfileTabsProps = {
   onSettingsPress?: () => void;
@@ -67,8 +66,8 @@ const EMPTY_STATE_CONFIG: Record<
   },
 };
 
-// Empty State Component
-const EmptyState = ({
+// Empty State / Tab Content Component - No nested scroll
+export const ProfileTabContent = ({
   tabType,
   onSettingsPress,
 }: {
@@ -83,7 +82,7 @@ const EmptyState = ({
     <View
       style={[
         styles.emptyStateContainer,
-        { paddingBottom: insets.bottom + 80 },
+        { paddingBottom: insets.bottom + 100 },
       ]}
     >
       {/* Image */}
@@ -113,8 +112,8 @@ const EmptyState = ({
   );
 };
 
-// Tab Bar Component
-const TabBar = ({
+// Tab Bar Component - exported for use in ProfileScreen
+export const ProfileTabBar = ({
   activeTab,
   onTabChange,
   tabWidth,
@@ -200,6 +199,7 @@ const TabBar = ({
   );
 };
 
+// Full ProfileTabs component (for standalone use)
 export const ProfileTabs = ({ onSettingsPress }: ProfileTabsProps) => {
   const [activeTab, setActiveTab] = useState(0);
   const pagerRef = useRef<PagerView>(null);
@@ -216,7 +216,7 @@ export const ProfileTabs = ({ onSettingsPress }: ProfileTabsProps) => {
   return (
     <View style={styles.container}>
       {/* Tab Bar */}
-      <TabBar
+      <ProfileTabBar
         activeTab={activeTab}
         onTabChange={handleTabChange}
         tabWidth={SCREEN_WIDTH}
@@ -231,12 +231,10 @@ export const ProfileTabs = ({ onSettingsPress }: ProfileTabsProps) => {
       >
         {TABS.map((tab) => (
           <View key={tab.key} style={styles.page}>
-            <ScrollView
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <EmptyState tabType={tab.key} onSettingsPress={onSettingsPress} />
-            </ScrollView>
+            <ProfileTabContent
+              tabType={tab.key}
+              onSettingsPress={onSettingsPress}
+            />
           </View>
         ))}
       </PagerView>
@@ -283,20 +281,15 @@ const styles = StyleSheet.create((theme) => ({
   page: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-  },
   emptyStateContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 40,
+    paddingTop: 60,
     paddingHorizontal: 32,
-    minHeight: 400,
   },
   emptyImage: {
     width: 180,
     height: 180,
-    // marginBottom: 24,
   },
   emptyTitle: {
     textAlign: "center",

@@ -2,7 +2,13 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Pressable } from "react-native";
+import { Animated as RNAnimated, Pressable, View } from "react-native";
+import Animated, {
+  interpolate,
+  interpolateColor,
+  SharedValue,
+  useAnimatedStyle,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 
@@ -24,7 +30,22 @@ const GRADIENT_COLORS = [
   "#F97316", // Orange
 ];
 
-type ProfileHeaderProps = {
+// Header dimensions - exported for use in ProfileScreen
+export const PROFILE_CONTENT_HEIGHT = 280; // Approximate height of profile content
+export const SCROLL_THRESHOLD = PROFILE_CONTENT_HEIGHT;
+
+type ProfileHeaderBarProps = {
+  username: string;
+  gradientColor: string;
+  scrollY?: SharedValue<number>;
+  onBackPress?: () => void;
+  onUsernamePress?: () => void;
+  onSearchPress?: () => void;
+  onSharePress?: () => void;
+  onMenuPress?: () => void;
+};
+
+type ProfileContentProps = {
   username: string;
   avatarSeed?: string;
   avatarUrl?: string;
@@ -33,14 +54,13 @@ type ProfileHeaderProps = {
   balance: number;
   reserve: number;
   accountAgeDays: number;
-  onBackPress?: () => void;
-  onUsernamePress?: () => void;
-  onSearchPress?: () => void;
-  onSharePress?: () => void;
-  onMenuPress?: () => void;
+  gradientColor: string;
+  scrollY?: SharedValue<number>;
   onEditPress?: () => void;
   onFollowersPress?: () => void;
 };
+
+type ProfileHeaderProps = ProfileHeaderBarProps & ProfileContentProps;
 
 // Format account age to human readable
 const formatAccountAge = (days: number): string => {
@@ -69,7 +89,106 @@ const formatNumber = (num: number): string => {
   return num.toString();
 };
 
-export const ProfileHeader = ({
+// Generate gradient color from username
+export const getGradientColor = (username: string): string => {
+  if (!username) return GRADIENT_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < username.length; i++) {
+    hash = username.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return GRADIENT_COLORS[Math.abs(hash) % GRADIENT_COLORS.length];
+};
+
+// Fixed Header Bar Component - Always visible at top
+export const ProfileHeaderBar = ({
+  username,
+  gradientColor,
+  scrollY,
+  onBackPress,
+  onUsernamePress,
+  onSearchPress,
+  onSharePress,
+  onMenuPress,
+}: ProfileHeaderBarProps) => {
+  const insets = useSafeAreaInsets();
+
+  // Animate background from gradient color to black as user scrolls
+  const headerBgStyle = useAnimatedStyle(() => {
+    if (!scrollY) return { backgroundColor: gradientColor };
+    
+    const backgroundColor = interpolateColor(
+      scrollY.value,
+      [0, SCROLL_THRESHOLD * 0.3, SCROLL_THRESHOLD * 0.7, SCROLL_THRESHOLD],
+      [gradientColor, gradientColor, '#000000', '#000000']
+    );
+    
+    return { backgroundColor };
+  });
+
+  return (
+    <Animated.View style={[styles.headerBar, { paddingTop: insets.top }, headerBgStyle]}>
+      <Box direction="row" center px="md" py="sm" style={styles.headerRow}>
+        {/* Left Side - Back + Username */}
+        <Box direction="row" center gap="xs">
+          <IconButton
+            name="arrow-back"
+            size="md"
+            color="#FFFFFF"
+            onPress={onBackPress}
+            style={styles.iconButton}
+          />
+
+          <Pressable onPress={onUsernamePress} hitSlop={4}>
+            <Box
+              direction="row"
+              center
+              gap="xs"
+              style={styles.usernameButton}
+            >
+              <Text size="md" weight="semibold" style={styles.whiteText}>
+                {username}
+              </Text>
+              <Icon
+                icon={Ionicons}
+                name="chevron-down"
+                size={16}
+                color="rgba(255,255,255,0.9)"
+              />
+            </Box>
+          </Pressable>
+        </Box>
+
+        {/* Right Side - Icons */}
+        <Box direction="row" center gap="xs">
+          <IconButton
+            name="search-outline"
+            size="md"
+            color="#FFFFFF"
+            onPress={onSearchPress}
+            style={styles.iconButton}
+          />
+          <IconButton
+            name="share-outline"
+            size="md"
+            color="#FFFFFF"
+            onPress={onSharePress}
+            style={styles.iconButton}
+          />
+          <IconButton
+            name="ellipsis-horizontal"
+            size="md"
+            color="#FFFFFF"
+            onPress={onMenuPress}
+            style={styles.iconButton}
+          />
+        </Box>
+      </Box>
+    </Animated.View>
+  );
+};
+
+// Profile Content Component - Scrolls and fades
+export const ProfileContent = ({
   username,
   avatarSeed,
   avatarUrl,
@@ -78,27 +197,13 @@ export const ProfileHeader = ({
   balance,
   reserve,
   accountAgeDays,
-  onBackPress,
-  onUsernamePress,
-  onSearchPress,
-  onSharePress,
-  onMenuPress,
+  gradientColor,
+  scrollY,
   onEditPress,
   onFollowersPress,
-}: ProfileHeaderProps) => {
-  const insets = useSafeAreaInsets();
+}: ProfileContentProps) => {
   const [copied, setCopied] = useState(false);
-  const walletScale = useRef(new Animated.Value(1)).current;
-
-  // Generate a consistent random gradient color based on username
-  const gradientColor = useMemo(() => {
-    if (!username) return GRADIENT_COLORS[0];
-    let hash = 0;
-    for (let i = 0; i < username.length; i++) {
-      hash = username.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return GRADIENT_COLORS[Math.abs(hash) % GRADIENT_COLORS.length];
-  }, [username]);
+  const walletScale = useRef(new RNAnimated.Value(1)).current;
 
   // Truncate wallet address
   const truncatedAddress = useMemo(() => {
@@ -126,7 +231,7 @@ export const ProfileHeader = ({
   }, [walletAddress]);
 
   const handleWalletPressIn = useCallback(() => {
-    Animated.spring(walletScale, {
+    RNAnimated.spring(walletScale, {
       toValue: 0.95,
       useNativeDriver: true,
       friction: 8,
@@ -135,7 +240,7 @@ export const ProfileHeader = ({
   }, [walletScale]);
 
   const handleWalletPressOut = useCallback(() => {
-    Animated.spring(walletScale, {
+    RNAnimated.spring(walletScale, {
       toValue: 1,
       useNativeDriver: true,
       friction: 8,
@@ -143,75 +248,29 @@ export const ProfileHeader = ({
     }).start();
   }, [walletScale]);
 
+  // Fade content as it scrolls
+  const contentFadeStyle = useAnimatedStyle(() => {
+    if (!scrollY) return { opacity: 1 };
+    
+    const opacity = interpolate(
+      scrollY.value,
+      [0, SCROLL_THRESHOLD * 0.6, SCROLL_THRESHOLD],
+      [1, 0.3, 0],
+      'clamp'
+    );
+    
+    return { opacity };
+  });
+
   return (
-    <Box style={styles.container}>
-      {/* Gradient Background */}
-      <LinearGradient
-        colors={[gradientColor, "#000000"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={[styles.gradient, { paddingTop: insets.top }]}
-      >
-        {/* Header Row */}
-        <Box direction="row" center px="md" py="sm" style={styles.header}>
-          {/* Left Side - Back + Username */}
-          <Box direction="row" center gap="xs">
-            <IconButton
-              name="arrow-back"
-              size="md"
-              color="#FFFFFF"
-              onPress={onBackPress}
-              style={styles.iconButton}
-            />
-
-            <Pressable onPress={onUsernamePress} hitSlop={4}>
-              <Box
-                direction="row"
-                center
-                gap="xs"
-                style={styles.usernameButton}
-              >
-                <Text size="md" weight="semibold" style={styles.whiteText}>
-                  {username}
-                </Text>
-                <Icon
-                  icon={Ionicons}
-                  name="chevron-down"
-                  size={16}
-                  color="rgba(255,255,255,0.9)"
-                />
-              </Box>
-            </Pressable>
-          </Box>
-
-          {/* Right Side - Icons */}
-          <Box direction="row" center gap="xs">
-            <IconButton
-              name="search-outline"
-              size="md"
-              color="#FFFFFF"
-              onPress={onSearchPress}
-              style={styles.iconButton}
-            />
-            <IconButton
-              name="share-outline"
-              size="md"
-              color="#FFFFFF"
-              onPress={onSharePress}
-              style={styles.iconButton}
-            />
-            <IconButton
-              name="ellipsis-horizontal"
-              size="md"
-              color="#FFFFFF"
-              onPress={onMenuPress}
-              style={styles.iconButton}
-            />
-          </Box>
-        </Box>
-
-        {/* Profile Content */}
-        <Box px="lg" pt="md">
+    <LinearGradient
+      colors={[gradientColor, "#000000"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={styles.gradientContent}
+    >
+      <Animated.View style={[styles.profileContentInner, contentFadeStyle]}>
+        <Box px="lg" pt="sm">
           {/* Large Avatar */}
           <Avatar
             size={80}
@@ -272,7 +331,7 @@ export const ProfileHeader = ({
           </Pressable>
 
           {/* Wallet Address + Copy */}
-          <Animated.View
+          <RNAnimated.View
             style={[
               styles.walletAnimatedContainer,
               { transform: [{ scale: walletScale }] },
@@ -315,7 +374,7 @@ export const ProfileHeader = ({
                 />
               </Box>
             </Pressable>
-          </Animated.View>
+          </RNAnimated.View>
 
           {/* Stats Row */}
           <Box
@@ -362,8 +421,49 @@ export const ProfileHeader = ({
             </Box>
           </Box>
         </Box>
-      </LinearGradient>
-    </Box>
+      </Animated.View>
+    </LinearGradient>
+  );
+};
+
+// Combined ProfileHeader for backward compatibility
+export const ProfileHeader = ({
+  username,
+  avatarSeed,
+  avatarUrl,
+  walletAddress,
+  followersCount,
+  balance,
+  reserve,
+  accountAgeDays,
+  scrollY,
+  onBackPress,
+  onUsernamePress,
+  onSearchPress,
+  onSharePress,
+  onMenuPress,
+  onEditPress,
+  onFollowersPress,
+}: ProfileHeaderProps) => {
+  const gradientColor = useMemo(() => getGradientColor(username), [username]);
+
+  return (
+    <View style={styles.container}>
+      <ProfileContent
+        username={username}
+        avatarSeed={avatarSeed}
+        avatarUrl={avatarUrl}
+        walletAddress={walletAddress}
+        followersCount={followersCount}
+        balance={balance}
+        reserve={reserve}
+        accountAgeDays={accountAgeDays}
+        gradientColor={gradientColor}
+        scrollY={scrollY}
+        onEditPress={onEditPress}
+        onFollowersPress={onFollowersPress}
+      />
+    </View>
   );
 };
 
@@ -371,12 +471,22 @@ const styles = StyleSheet.create((theme) => ({
   container: {
     width: "100%",
   },
-  gradient: {
+  headerBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+  },
+  headerRow: {
+    justifyContent: "space-between",
+  },
+  gradientContent: {
     width: "100%",
     paddingBottom: theme.spacing.lg,
   },
-  header: {
-    justifyContent: "space-between",
+  profileContentInner: {
+    // Container for fade animation
   },
   iconButton: {
     backgroundColor: "rgba(0,0,0,0.3)",
@@ -397,7 +507,6 @@ const styles = StyleSheet.create((theme) => ({
   subtleWhiteText: {
     color: "rgba(255,255,255,0.7)",
   },
-  spaceBetween: {},
   dot: {
     width: 3,
     height: 3,
