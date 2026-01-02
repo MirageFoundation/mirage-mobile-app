@@ -1,8 +1,12 @@
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
-import BottomSheet, { BottomSheetBackdrop } from "@gorhom/bottom-sheet";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetView,
+} from "@gorhom/bottom-sheet";
+import { useCallback, useEffect, useRef } from "react";
 import { View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -13,37 +17,23 @@ type AdultContentPopupProps = {
   onEnable: () => void;
   /** Callback when user declines adult content */
   onDecline: () => void;
-  /** Callback when popup is dismissed */
-  onDismiss?: () => void;
 };
 
 export const AdultContentPopup = ({
   visible,
   onEnable,
   onDecline,
-  onDismiss,
 }: AdultContentPopupProps) => {
-  const bottomSheetRef = useRef<BottomSheet>(null);
   const { theme } = useUnistyles();
-
-  const snapPoints = useMemo(() => ["45%"], []);
+  const bottomSheetRef = useRef<BottomSheetModal>(null);
 
   useEffect(() => {
     if (visible) {
-      bottomSheetRef.current?.expand();
+      bottomSheetRef.current?.present();
     } else {
-      bottomSheetRef.current?.close();
+      bottomSheetRef.current?.dismiss();
     }
   }, [visible]);
-
-  const handleSheetChanges = useCallback(
-    (index: number) => {
-      if (index === -1) {
-        onDismiss?.();
-      }
-    },
-    [onDismiss]
-  );
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -52,6 +42,7 @@ export const AdultContentPopup = ({
         disappearsOnIndex={-1}
         appearsOnIndex={0}
         opacity={0.6}
+        pressBehavior="none"
       />
     ),
     []
@@ -68,12 +59,10 @@ export const AdultContentPopup = ({
   }, [onDecline]);
 
   return (
-    <BottomSheet
+    <BottomSheetModal
       ref={bottomSheetRef}
-      index={-1}
-      snapPoints={snapPoints}
-      onChange={handleSheetChanges}
-      enablePanDownToClose
+      enablePanDownToClose={false}
+      enableDynamicSizing
       backdropComponent={renderBackdrop}
       backgroundStyle={{
         backgroundColor: theme.colors.background.default,
@@ -83,12 +72,12 @@ export const AdultContentPopup = ({
         width: 40,
       }}
     >
-      <View style={styles.container}>
+      <BottomSheetView style={styles.container}>
         {/* Icon */}
         <View style={styles.iconContainer}>
           <Ionicons
-            name="warning"
-            size={48}
+            name="eye-off"
+            size={40}
             color={theme.colors.warning[500]}
           />
         </View>
@@ -102,22 +91,17 @@ export const AdultContentPopup = ({
         <Text
           size="sm"
           mode="subtle"
-          style={{ textAlign: "center", marginTop: 8 }}
+          style={{ textAlign: "center", marginTop: 12, lineHeight: 20 }}
         >
-          Would you like to enable adult content in your feed?
-        </Text>
-        <Text
-          size="xs"
-          mode="subtle"
-          style={{ textAlign: "center", marginTop: 4 }}
-        >
-          You can change this later in settings.
+          Mirage is uncensored and includes adult content like pornography,
+          violence, and other NSFW material. Would you like to see this content
+          in your feed?
         </Text>
 
         {/* Buttons */}
-        <Box gap="md" style={{ marginTop: 24 }}>
+        <Box gap="sm" style={{ marginTop: 24, width: "100%" }}>
           <Button size="lg" rounded="lg" onPress={handleEnable}>
-            <Button.Text weight="semibold">Yes, Enable</Button.Text>
+            <Button.Text weight="semibold">Yes, show everything</Button.Text>
           </Button>
 
           <Button
@@ -125,26 +109,39 @@ export const AdultContentPopup = ({
             variant="outline"
             rounded="lg"
             onPress={handleDecline}
+            style={{
+              backgroundColor: theme.colors.background.subtle,
+              borderWidth: 0.5,
+              borderColor: theme.colors.border.default,
+            }}
           >
-            <Button.Text weight="semibold">No Thanks</Button.Text>
+            <Button.Text weight="semibold">No, keep it clean</Button.Text>
           </Button>
         </Box>
-      </View>
-    </BottomSheet>
+
+        {/* Settings note */}
+        <Text
+          size="xs"
+          mode="subtle"
+          style={{ textAlign: "center", marginTop: 16, paddingBottom: 24 }}
+        >
+          You can change this anytime in settings.
+        </Text>
+      </BottomSheetView>
+    </BottomSheetModal>
   );
 };
 
 const styles = StyleSheet.create((theme) => ({
   container: {
-    flex: 1,
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.xl,
     paddingTop: theme.spacing.md,
     alignItems: "center",
   },
   iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: `${theme.colors.warning[500]}15`,
     alignItems: "center",
     justifyContent: "center",

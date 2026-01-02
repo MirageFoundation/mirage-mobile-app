@@ -5,7 +5,12 @@ import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 
-import { FeedHeader, PostCard, type Post } from "@/src/components/molecules";
+import {
+  AdultContentPopup,
+  FeedHeader,
+  PostCard,
+  type Post,
+} from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useAuthGuard } from "@/src/hooks";
 import {
@@ -207,7 +212,30 @@ export function HomeScreen() {
 
   const feedType = usePreferencesStore((s) => s.feedType);
   const setFeedType = usePreferencesStore((s) => s.setFeedType);
+  const hasSeenAdultPrompt = usePreferencesStore((s) => s.hasSeenAdultPrompt);
+  const setHasSeenAdultPrompt = usePreferencesStore(
+    (s) => s.setHasSeenAdultPrompt
+  );
+  const setAdultContent = usePreferencesStore((s) => s.setAdultContent);
   const currentUser = useAuthStore((s) => s.user);
+
+  // Show adult content popup if user hasn't seen it
+  // TODO: Remove `true ||` after testing
+  const [showAdultPopup, setShowAdultPopup] = useState(
+    true || !hasSeenAdultPrompt
+  );
+
+  const handleEnableAdultContent = useCallback(() => {
+    setAdultContent(true);
+    setHasSeenAdultPrompt();
+    setShowAdultPopup(false);
+  }, [setAdultContent, setHasSeenAdultPrompt]);
+
+  const handleDeclineAdultContent = useCallback(() => {
+    setAdultContent(false);
+    setHasSeenAdultPrompt();
+    setShowAdultPopup(false);
+  }, [setAdultContent, setHasSeenAdultPrompt]);
 
   // Local state for optimistic updates
   const [posts, setPosts] = useState<Post[]>(MOCK_POSTS);
@@ -408,6 +436,13 @@ export function HomeScreen() {
         windowSize={7}
         initialNumToRender={5}
         getItemLayout={undefined} // Can't use with variable height items
+      />
+
+      {/* Adult Content Permission Popup */}
+      <AdultContentPopup
+        visible={showAdultPopup}
+        onEnable={handleEnableAdultContent}
+        onDecline={handleDeclineAdultContent}
       />
     </Box>
   );

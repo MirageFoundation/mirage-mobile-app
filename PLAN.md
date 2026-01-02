@@ -1285,7 +1285,7 @@ colors: {
 ### Phase 7: Create Post (Week 4) 🚧
 
 - [x] CommunitySelectionModal (replaces TopicSelector)
-- [ ] ContentWarningSelector molecule
+- [x] AdultContentPopup (permission popup shown on first visit to home feed)
 - [x] MediaPickerBar (inline in CreatePage)
 - [x] CreatePage
   - [x] Header with close button and Post button
@@ -1296,11 +1296,10 @@ colors: {
   - [x] Image picker with full-width preview (auto height based on aspect ratio)
   - [x] Video picker
   - [x] Body input (optional)
-  - [x] Media picker bar (link, image, video, poll icons)
+  - [x] Media picker bar (link, image, video icons)
   - [x] Draft state management with Zustand
   - [x] Updated to use new expo-image-picker API (MediaType instead of deprecated MediaTypeOptions)
-  - [ ] Poll creation
-  - [ ] Content warning selection
+  - [ ] Content warning selection for posts
 
 ### Phase 8: Profile (Week 4-5)
 
