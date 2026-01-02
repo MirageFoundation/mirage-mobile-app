@@ -1,11 +1,13 @@
 import { useRouter } from "expo-router";
 import { useCallback } from "react";
-import { ScrollView, Share } from "react-native";
+import { Dimensions, ScrollView, Share, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
-import { ProfileHeader } from "@/src/components/molecules";
-import { Box, Text } from "@/src/components/ui/primitives";
+import { ProfileHeader, ProfileTabs } from "@/src/components/molecules";
+import { Box } from "@/src/components/ui/primitives";
 import { useAuthStore } from "@/src/stores";
+
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 export function ProfileScreen() {
   const router = useRouter();
@@ -58,13 +60,20 @@ export function ProfileScreen() {
     console.log("Followers pressed");
   }, []);
 
+  const handleSettingsPress = useCallback(() => {
+    // TODO: Navigate to settings
+    console.log("Settings pressed");
+  }, []);
+
   return (
     <Box flex background="base">
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        nestedScrollEnabled
       >
+        {/* Profile Header */}
         <ProfileHeader
           username={user?.username || "user"}
           avatarSeed={user?.username}
@@ -82,18 +91,10 @@ export function ProfileScreen() {
           onFollowersPress={handleFollowersPress}
         />
 
-        {/* Placeholder for tabs and content */}
-        <Box p="lg" gap="md">
-          <Box
-            p="md"
-            rounded="lg"
-            style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
-          >
-            <Text size="sm" mode="subtle" style={{ textAlign: "center" }}>
-              Posts, Comments, and About tabs coming soon...
-            </Text>
-          </Box>
-        </Box>
+        {/* Profile Tabs - Fixed height for PagerView to work */}
+        <View style={styles.tabsContainer}>
+          <ProfileTabs onSettingsPress={handleSettingsPress} />
+        </View>
       </ScrollView>
     </Box>
   );
@@ -105,5 +106,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   scrollContent: {
     flexGrow: 1,
+  },
+  tabsContainer: {
+    height: SCREEN_HEIGHT * 0.6, // 60% of screen height for tabs
+    minHeight: 450,
   },
 }));

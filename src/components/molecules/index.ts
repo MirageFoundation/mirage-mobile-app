@@ -25,3 +25,4 @@ export { RecoveryPhraseInput } from "./recovery-phrase-input";
 
 // Profile
 export { ProfileHeader } from "./profile-header";
+export { ProfileTabs } from "./profile-tabs";
