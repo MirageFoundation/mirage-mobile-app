@@ -1,13 +1,28 @@
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import { mmkvStorage } from "./mmkv-storage";
 
+export type Community = {
+  id: string;
+  name: string;
+  avatar?: string;
+  memberCount: number;
+  description?: string;
+  isSubscribed: boolean;
+};
+
+export type AttachmentType = "link" | "image" | "video" | "poll" | null;
+
 export type PostDraft = {
+  community: Community | null;
   topic: string | null;
   title: string;
   body: string;
   contentWarning: string[];
   mediaUris: string[];
+  linkUrl: string | null;
+  attachmentType: AttachmentType;
+  tags: string[];
 };
 
 type DraftState = {
@@ -17,14 +32,20 @@ type DraftState = {
   // Actions
   updateDraft: (partial: Partial<PostDraft>) => void;
   clearDraft: () => void;
+  setAttachment: (type: AttachmentType, uri?: string) => void;
+  removeAttachment: () => void;
 };
 
 const emptyDraft: PostDraft = {
+  community: null,
   topic: null,
   title: "",
   body: "",
   contentWarning: [],
   mediaUris: [],
+  linkUrl: null,
+  attachmentType: null,
+  tags: [],
 };
 
 export const useDraftStore = create<DraftState>()(
@@ -39,6 +60,26 @@ export const useDraftStore = create<DraftState>()(
           hasDraft: true,
         })),
       clearDraft: () => set({ draft: emptyDraft, hasDraft: false }),
+      setAttachment: (type, uri) =>
+        set((state) => ({
+          draft: {
+            ...state.draft,
+            attachmentType: type,
+            linkUrl: type === "link" ? uri ?? null : null,
+            mediaUris:
+              type === "image" || type === "video" ? (uri ? [uri] : []) : [],
+          },
+          hasDraft: true,
+        })),
+      removeAttachment: () =>
+        set((state) => ({
+          draft: {
+            ...state.draft,
+            attachmentType: null,
+            linkUrl: null,
+            mediaUris: [],
+          },
+        })),
     }),
     {
       name: "draft-storage",
@@ -46,4 +87,3 @@ export const useDraftStore = create<DraftState>()(
     }
   )
 );
-

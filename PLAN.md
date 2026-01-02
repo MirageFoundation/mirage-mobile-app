@@ -516,14 +516,14 @@ src/components/
 │   │                                                        │   │
 │   └────────────────────────────────────────────────────────┘   │
 │                                                                │
-│                                                                │
 │      ⚠️ Some words appear to be invalid (error message)        │
-├────────────────────────────────────────────────────────────────┤
 │                                                                │
 │     ┌──────────────────────────────────────────────────┐       │
 │     │                    Log in                         │       │
 │     └──────────────────────────────────────────────────┘       │
 │                                                                │
+├────────────────────────────────────────────────────────────────┤
+│                  Create a new account                          │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -534,8 +534,10 @@ src/components/
 - Title: "Login to Mirage" (26px, bold)
 - Subtitle: "Sign in to your existing Mirage account with your 12-word recovery phrase:"
 - Recovery phrase input: 4x3 grid with progress bar
-- Error message: Left-aligned, positioned above footer border
-- Footer: Absolutely positioned at bottom with "Log in" button (fully rounded)
+- Content: Vertically centered
+- Error message: Left-aligned, positioned above login button
+- Login button: Below progress bar (fully rounded, custom disabled state: gray bg, subtle text)
+- Footer: Divider line + "Create a new account" link (navigates to username page)
 
 ### 4.10 Onboarding Progress (Status Display)
 
@@ -1269,12 +1271,14 @@ colors: {
   - [x] Compact design with centered content
 - [x] LoginPage
   - [x] Header redesign: close button only (no title)
-  - [x] App icon instead of key icon
+  - [x] App icon instead of key icon (44x44, 16px border radius)
   - [x] Title: "Login to Mirage"
   - [x] Subtitle: "Sign in to your existing Mirage account with your 12-word recovery phrase:"
   - [x] 12-word recovery phrase input with paste support
-  - [x] "Log in" button (fully rounded, positioned in footer)
-  - [x] Error message positioned above footer border, left-aligned
+  - [x] Content vertically centered
+  - [x] Error message positioned above login button
+  - [x] "Log in" button below progress bar (fully rounded, custom disabled state styling)
+  - [x] Footer with divider and "Create a new account" link (navigates to username page)
 - [x] Protected tab navigation (auth sheet on Create/Following/Profile/Inbox tabs)
 - [x] Auth flow navigation (back to auth sheet from auth pages)
 
@@ -1312,6 +1316,6 @@ colors: {
 
 ---
 
-_Document Version: 1.7_
+_Document Version: 1.8_
 _Created: December 2024_
 _Last Updated: December 2024_
