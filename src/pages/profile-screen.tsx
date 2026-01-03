@@ -105,8 +105,8 @@ export function ProfileScreen() {
 
   // Menu sheet handlers
   const handleMenuSettings = useCallback(() => {
-    console.log("Settings pressed");
-  }, []);
+    router.push("/settings");
+  }, [router]);
 
   const handleMenuSubscription = useCallback(() => {
     console.log("Subscription pressed");

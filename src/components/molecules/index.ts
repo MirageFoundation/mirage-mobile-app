@@ -22,6 +22,7 @@ export { AdultContentPopup } from "./adult-content-popup";
 export { OnboardingProgress } from "./onboarding-progress";
 export { RecoveryPhraseGrid } from "./recovery-phrase-grid";
 export { RecoveryPhraseInput } from "./recovery-phrase-input";
+export { LogoutConfirmationPopup } from "./logout-confirmation-popup";
 
 // Profile
 export {
@@ -37,3 +38,14 @@ export {
   ProfileMenuSheet,
   type ProfileMenuSheetRef,
 } from "./profile-menu-sheet";
+
+// Settings
+export {
+  SettingRow,
+  SettingSection,
+  ThemeSelector,
+  ValuePickerSheet,
+  type SettingRowProps,
+  type ValuePickerSheetRef,
+  type ValueOption,
+} from "./settings";

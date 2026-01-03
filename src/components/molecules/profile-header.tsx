@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated as RNAnimated, Pressable, View } from "react-native";
+import { Pressable, Animated as RNAnimated, View } from "react-native";
 import Animated, {
   interpolate,
   interpolateColor,
@@ -115,18 +115,20 @@ export const ProfileHeaderBar = ({
   // Animate background from gradient color to black as user scrolls
   const headerBgStyle = useAnimatedStyle(() => {
     if (!scrollY) return { backgroundColor: gradientColor };
-    
+
     const backgroundColor = interpolateColor(
       scrollY.value,
       [0, SCROLL_THRESHOLD * 0.3, SCROLL_THRESHOLD * 0.7, SCROLL_THRESHOLD],
-      [gradientColor, gradientColor, '#000000', '#000000']
+      [gradientColor, gradientColor, "#000000", "#000000"]
     );
-    
+
     return { backgroundColor };
   });
 
   return (
-    <Animated.View style={[styles.headerBar, { paddingTop: insets.top }, headerBgStyle]}>
+    <Animated.View
+      style={[styles.headerBar, { paddingTop: insets.top }, headerBgStyle]}
+    >
       <Box direction="row" center px="md" py="sm" style={styles.headerRow}>
         {/* Left Side - Back + Username */}
         <Box direction="row" center gap="xs">
@@ -139,12 +141,7 @@ export const ProfileHeaderBar = ({
           />
 
           <Pressable onPress={onUsernamePress} hitSlop={4}>
-            <Box
-              direction="row"
-              center
-              gap="xs"
-              style={styles.usernameButton}
-            >
+            <Box direction="row" center gap="xs" style={styles.usernameButton}>
               <Text size="md" weight="semibold" style={styles.whiteText}>
                 {username}
               </Text>
@@ -251,14 +248,14 @@ export const ProfileContent = ({
   // Fade content as it scrolls
   const contentFadeStyle = useAnimatedStyle(() => {
     if (!scrollY) return { opacity: 1 };
-    
+
     const opacity = interpolate(
       scrollY.value,
       [0, SCROLL_THRESHOLD * 0.6, SCROLL_THRESHOLD],
       [1, 0.3, 0],
-      'clamp'
+      "clamp"
     );
-    
+
     return { opacity };
   });
 

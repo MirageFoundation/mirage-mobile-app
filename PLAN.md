@@ -15,6 +15,10 @@
 7. [State Management & Caching](#7-state-management--caching-strategy)
 8. [Technical Considerations](#8-technical-considerations)
 9. [Implementation Phases](#9-implementation-phases)
+10. [New Feature Layouts (ASCII)](#10-new-feature-layouts-ascii)
+11. [New Component Architecture](#11-new-component-architecture)
+12. [Updated Preferences Store](#12-updated-preferences-store)
+13. [Route Structure Updates](#13-route-structure-updates)
 
 ---
 
@@ -1306,14 +1310,440 @@ colors: {
 - [ ] ProfileHeader molecule
 - [ ] ProfileStats molecule
 - [ ] ProfilePage
+- [ ] ProfileMenuSheet molecule (settings menu options)
 
-### Phase 9: Polish (Week 5)
+### Phase 9: Settings Page (Week 5-6)
+
+- [ ] Settings page route setup (`app/(tabs)/settings.tsx` or modal route)
+- [ ] SectionList with sticky headers implementation
+- [ ] Appearance Section
+  - [ ] Theme selector (Light / Dark / System)
+  - [ ] Implement dark mode theming across app
+- [ ] Content Section
+  - [ ] Content type selection (All / SFW Only / Custom)
+  - [ ] Blur sensitive media toggle
+  - [ ] Immediately hide downvoted posts toggle
+- [ ] Comments Section
+  - [ ] Auto-collapse threshold selector (collapse comments at or below score)
+- [ ] Sidebar Section
+  - [ ] Number of topics before "show more" selector
+  - [ ] Number of people before "show more" selector
+- [ ] PreferencesStore updates for new settings
+
+### Phase 10: Subscription Page (Week 6)
+
+- [ ] Subscription page route (`app/subscription.tsx`)
+- [ ] ActivePlanCard component (displays current plan)
+- [ ] PlanCard component (displays available plans)
+- [ ] Plan comparison view
+- [ ] Purchase flow integration (placeholder)
+
+### Phase 11: Invite & Earn Page (Week 6)
+
+- [ ] Invite page route (`app/invite.tsx`)
+- [ ] ReferralLinkCard component (2 shareable links)
+- [ ] HowItWorks section with example
+- [ ] RewardsBreakdown component
+  - [ ] Pending rewards
+  - [ ] Paid rewards
+  - [ ] Number of referrals
+- [ ] Important note/disclaimer section
+- [ ] Share functionality integration
+
+### Phase 12: Logout Confirmation (Week 6)
+
+- [ ] LogoutConfirmationPopup component
+- [ ] Integrate with ProfileMenuSheet
+- [ ] Clear auth state on confirm
+- [ ] Navigate to home on logout
+
+### Phase 13: Theme System (Week 6-7)
+
+- [ ] Define dark mode color palette in `theme.ts`
+- [ ] Update Unistyles theme configuration for light/dark variants
+- [ ] Create useTheme hook for theme switching
+- [ ] Persist theme preference in PreferencesStore
+- [ ] Update all components to use theme-aware colors
+- [ ] System theme detection support
+
+### Phase 14: Network Page (Week 7+)
+
+- [ ] Network page route (`app/network.tsx`)
+- [ ] Network status display
+- [ ] (Details to be discussed later)
+
+### Phase 15: Polish (Week 7-8)
 
 - [ ] Haptic feedback refinement
 - [ ] Animation polish
 - [ ] Error states
 - [ ] Loading states
 - [ ] Empty states
+
+---
+
+## 10. New Feature Layouts (ASCII)
+
+### 10.1 Settings Page
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ ┌────────────────────────────────────────────────────────────┐ │
+│ │  ←  │              Settings               │                │ │
+│ └────────────────────────────────────────────────────────────┘ │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  APPEARANCE                              (sticky header) │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  🎨 Theme                                                │  │
+│  │  ─────────────────────────────────────────────────────   │  │
+│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐                  │  │
+│  │  │  Light  │  │  Dark   │  │ System  │                  │  │
+│  │  └─────────┘  └─────────┘  └─────────┘                  │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  CONTENT                                 (sticky header) │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  🔞 Content Type                                    ▼    │  │
+│  │  All Content / SFW Only / Custom                        │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  👁️ Blur Sensitive Media                         [  ◉ ] │  │
+│  │  Blur thumbnails of sensitive content                   │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  👎 Hide Downvoted Posts                         [  ◉ ] │  │
+│  │  Immediately hide posts you downvote                    │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  COMMENTS                                (sticky header) │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  📉 Auto-Collapse Threshold                         ▼    │  │
+│  │  Collapse comments at or below score: -5                │  │
+│  │  ─────────────────────────────────────────────────────   │  │
+│  │  Options: -10, -5, -3, -1, 0, Never                     │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  SIDEBAR                                 (sticky header) │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  📂 Topics Before "Show More"                       ▼    │  │
+│  │  Currently: 5                                           │  │
+│  │  ─────────────────────────────────────────────────────   │  │
+│  │  Options: 3, 5, 7, 10, All                              │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  👥 People Before "Show More"                       ▼    │  │
+│  │  Currently: 5                                           │  │
+│  │  ─────────────────────────────────────────────────────   │  │
+│  │  Options: 3, 5, 7, 10, All                              │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### 10.2 Subscription Page
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ ┌────────────────────────────────────────────────────────────┐ │
+│ │  ←  │            Subscription             │                │ │
+│ └────────────────────────────────────────────────────────────┘ │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                   YOUR CURRENT PLAN                      │  │
+│  │  ─────────────────────────────────────────────────────   │  │
+│  │                                                          │  │
+│  │      ┌─────────────────────────────────────────┐        │  │
+│  │      │  ⭐ Premium                              │        │  │
+│  │      │  ──────────────────────────────────     │        │  │
+│  │      │  Active until: Feb 15, 2026             │        │  │
+│  │      │  ✓ Ad-free experience                   │        │  │
+│  │      │  ✓ Custom themes                        │        │  │
+│  │      │  ✓ Priority support                     │        │  │
+│  │      └─────────────────────────────────────────┘        │  │
+│  │                                                          │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                   AVAILABLE PLANS                        │  │
+│  │  ─────────────────────────────────────────────────────   │  │
+│  │                                                          │  │
+│  │  ┌────────────────────────────────────────────────────┐  │  │
+│  │  │  🆓 Free                                           │  │  │
+│  │  │  $0/month                                          │  │  │
+│  │  │  • Basic features                                  │  │  │
+│  │  │  • Ad-supported                                    │  │  │
+│  │  │  • Standard support                                │  │  │
+│  │  │                            [ Current Plan ]        │  │  │
+│  │  └────────────────────────────────────────────────────┘  │  │
+│  │                                                          │  │
+│  │  ┌────────────────────────────────────────────────────┐  │  │
+│  │  │  ⭐ Premium                              POPULAR    │  │  │
+│  │  │  $4.99/month                                       │  │  │
+│  │  │  • Everything in Free                              │  │  │
+│  │  │  • Ad-free experience                              │  │  │
+│  │  │  • Custom themes                                   │  │  │
+│  │  │  • Priority support                                │  │  │
+│  │  │                            [ Upgrade ]             │  │  │
+│  │  └────────────────────────────────────────────────────┘  │  │
+│  │                                                          │  │
+│  │  ┌────────────────────────────────────────────────────┐  │  │
+│  │  │  💎 Pro                                            │  │  │
+│  │  │  $9.99/month                                       │  │  │
+│  │  │  • Everything in Premium                           │  │  │
+│  │  │  • Early access features                           │  │  │
+│  │  │  • Exclusive badges                                │  │  │
+│  │  │  • API access                                      │  │  │
+│  │  │                            [ Upgrade ]             │  │  │
+│  │  └────────────────────────────────────────────────────┘  │  │
+│  │                                                          │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### 10.3 Invite & Earn Page
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ ┌────────────────────────────────────────────────────────────┐ │
+│ │  ←  │            Invite & Earn            │                │ │
+│ └────────────────────────────────────────────────────────────┘ │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                  🎁 YOUR REFERRAL LINKS                  │  │
+│  │  ─────────────────────────────────────────────────────   │  │
+│  │                                                          │  │
+│  │  ┌────────────────────────────────────────────────────┐  │  │
+│  │  │  📱 Standard Link                                  │  │  │
+│  │  │  mirage.app/ref/abc123xyz                          │  │  │
+│  │  │                        [ 📋 Copy ]  [ 📤 Share ]   │  │  │
+│  │  └────────────────────────────────────────────────────┘  │  │
+│  │                                                          │  │
+│  │  ┌────────────────────────────────────────────────────┐  │  │
+│  │  │  🎯 Campaign Link                                  │  │  │
+│  │  │  mirage.app/ref/abc123xyz?c=social                 │  │  │
+│  │  │                        [ 📋 Copy ]  [ 📤 Share ]   │  │  │
+│  │  └────────────────────────────────────────────────────┘  │  │
+│  │                                                          │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                    HOW IT WORKS                          │  │
+│  │  ─────────────────────────────────────────────────────   │  │
+│  │                                                          │  │
+│  │  1️⃣  Share your referral link with friends               │  │
+│  │                                                          │  │
+│  │  2️⃣  They sign up using your link                        │  │
+│  │                                                          │  │
+│  │  3️⃣  You both earn rewards!                              │  │
+│  │                                                          │  │
+│  │  ─────────────────────────────────────────────────────   │  │
+│  │  💡 Example: If you refer 10 friends who each spend      │  │
+│  │     $10, you earn $10 (10% commission)                   │  │
+│  │                                                          │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                   YOUR REWARDS                           │  │
+│  │  ─────────────────────────────────────────────────────   │  │
+│  │                                                          │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │  │
+│  │  │   Pending    │  │     Paid     │  │  Referrals   │   │  │
+│  │  │    $12.50    │  │    $45.00    │  │      23      │   │  │
+│  │  │   ⏳ 3 days   │  │   ✓ Total    │  │   👥 Users   │   │  │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘   │  │
+│  │                                                          │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  ⚠️ IMPORTANT NOTE                                       │  │
+│  │  ─────────────────────────────────────────────────────   │  │
+│  │  Rewards are paid out monthly. Minimum payout is $10.   │  │
+│  │  Fraudulent referrals will result in account            │  │
+│  │  suspension. See Terms of Service for full details.     │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### 10.4 Logout Confirmation Popup
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│  ░░░░░░░░░░░░░░░░░░░ Blurred Background ░░░░░░░░░░░░░░░░░░░░  │
+│                                                                │
+│     ┌──────────────────────────────────────────────────┐       │
+│     │                                                  │       │
+│     │              🚪 Logout                           │       │
+│     │                                                  │       │
+│     │    Are you sure you want to log out?            │       │
+│     │                                                  │       │
+│     │    You'll need your recovery phrase to          │       │
+│     │    log back in.                                 │       │
+│     │                                                  │       │
+│     │  ┌────────────────────────────────────────────┐  │       │
+│     │  │              Cancel                        │  │       │
+│     │  └────────────────────────────────────────────┘  │       │
+│     │                                                  │       │
+│     │  ┌────────────────────────────────────────────┐  │       │
+│     │  │              Log Out                       │  │       │
+│     │  └────────────────────────────────────────────┘  │       │
+│     │                                                  │       │
+│     └──────────────────────────────────────────────────┘       │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 11. New Component Architecture
+
+### 11.1 Settings Components
+
+```
+src/components/
+├── molecules/
+│   ├── settings/
+│   │   ├── index.ts
+│   │   ├── setting-row.tsx           # Individual setting row (icon, label, control)
+│   │   ├── setting-section.tsx       # Section with sticky header
+│   │   ├── theme-selector.tsx        # Light/Dark/System toggle
+│   │   ├── value-picker.tsx          # Dropdown/picker for numeric values
+│   │   └── setting-toggle.tsx        # Row with switch toggle
+│   └── ...
+│
+├── pages/
+│   ├── settings-screen.tsx           # Settings page composition
+│   └── ...
+```
+
+### 11.2 Subscription Components
+
+```
+src/components/
+├── molecules/
+│   ├── subscription/
+│   │   ├── index.ts
+│   │   ├── active-plan-card.tsx      # Current plan display
+│   │   ├── plan-card.tsx             # Individual plan option
+│   │   └── plan-feature-list.tsx     # Feature bullet list
+│   └── ...
+│
+├── pages/
+│   ├── subscription-screen.tsx       # Subscription page composition
+│   └── ...
+```
+
+### 11.3 Invite Components
+
+```
+src/components/
+├── molecules/
+│   ├── invite/
+│   │   ├── index.ts
+│   │   ├── referral-link-card.tsx    # Shareable link with copy/share
+│   │   ├── how-it-works.tsx          # Steps explanation
+│   │   ├── rewards-breakdown.tsx     # Pending/Paid/Referrals cards
+│   │   └── important-note.tsx        # Warning/info banner
+│   └── ...
+│
+├── pages/
+│   ├── invite-screen.tsx             # Invite page composition
+│   └── ...
+```
+
+### 11.4 Logout Components
+
+```
+src/components/
+├── molecules/
+│   ├── logout-confirmation-popup.tsx # Confirmation modal
+│   └── ...
+```
+
+---
+
+## 12. Updated Preferences Store
+
+```typescript
+// src/stores/preferences-store.ts (updated)
+type PreferencesState = {
+  // Existing
+  adultContentEnabled: boolean;
+  hasSeenAdultPrompt: boolean;
+  feedType: "home" | "popular" | "news";
+
+  // Theme
+  theme: "light" | "dark" | "system";
+
+  // Content
+  contentFilter: "all" | "sfw" | "custom";
+  blurSensitiveMedia: boolean;
+  hideDownvotedPosts: boolean;
+
+  // Comments
+  autoCollapseThreshold: number; // -10, -5, -3, -1, 0, or null (never)
+
+  // Sidebar
+  topicsBeforeShowMore: number; // 3, 5, 7, 10, or -1 (all)
+  peopleBeforeShowMore: number; // 3, 5, 7, 10, or -1 (all)
+
+  // Actions
+  setTheme: (theme: "light" | "dark" | "system") => void;
+  setContentFilter: (filter: "all" | "sfw" | "custom") => void;
+  setBlurSensitiveMedia: (blur: boolean) => void;
+  setHideDownvotedPosts: (hide: boolean) => void;
+  setAutoCollapseThreshold: (threshold: number) => void;
+  setTopicsBeforeShowMore: (count: number) => void;
+  setPeopleBeforeShowMore: (count: number) => void;
+  // ... existing actions
+};
+```
+
+---
+
+## 13. Route Structure Updates
+
+```
+app/
+├── (tabs)/
+│   ├── _layout.tsx
+│   ├── index.tsx               # Home
+│   ├── following.tsx           # Following
+│   ├── create.tsx              # Create
+│   ├── inbox.tsx               # Inbox
+│   └── profile.tsx             # Profile
+├── post/
+│   └── [id].tsx                # Post detail
+├── (auth)/
+│   ├── _layout.tsx
+│   ├── username.tsx
+│   ├── recovery-phrase.tsx
+│   └── login.tsx
+├── settings.tsx                # Settings page (NEW)
+├── subscription.tsx            # Subscription page (NEW)
+├── invite.tsx                  # Invite & Earn page (NEW)
+├── network.tsx                 # Network page (NEW - later)
+└── _layout.tsx
+```
 
 ---
 
@@ -1328,6 +1758,6 @@ colors: {
 
 ---
 
-_Document Version: 1.9_
+_Document Version: 2.0_
 _Created: December 2024_
-_Last Updated: January 2025_
+_Last Updated: January 3, 2026_

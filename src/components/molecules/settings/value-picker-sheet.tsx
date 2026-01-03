@@ -1,0 +1,196 @@
+import { Ionicons } from "@expo/vector-icons";
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetView,
+} from "@gorhom/bottom-sheet";
+import {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useRef,
+} from "react";
+import { Pressable, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
+
+import { Box, Text } from "@/src/components/ui/primitives";
+import { triggerHaptic } from "@/src/components/utils/haptics";
+
+export type ValueOption<T> = {
+  value: T;
+  label: string;
+};
+
+type ValuePickerSheetProps<T> = {
+  title: string;
+  options: ValueOption<T>[];
+  value: T;
+  onChange: (value: T) => void;
+  onDismiss?: () => void;
+};
+
+export type ValuePickerSheetRef = {
+  present: () => void;
+  dismiss: () => void;
+};
+
+function ValuePickerSheetInner<T>(
+  { title, options, value, onChange, onDismiss }: ValuePickerSheetProps<T>,
+  ref: React.Ref<ValuePickerSheetRef>
+) {
+  const bottomSheetRef = useRef<BottomSheet>(null);
+  const { theme } = useUnistyles();
+  const insets = useSafeAreaInsets();
+
+  const present = useCallback(() => {
+    bottomSheetRef.current?.expand();
+  }, []);
+
+  const dismiss = useCallback(() => {
+    bottomSheetRef.current?.close();
+  }, []);
+
+  useImperativeHandle(ref, () => ({
+    present,
+    dismiss,
+  }));
+
+  const handleSheetChanges = useCallback(
+    (index: number) => {
+      if (index === -1) {
+        onDismiss?.();
+      }
+    },
+    [onDismiss]
+  );
+
+  const renderBackdrop = useCallback(
+    (props: any) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={0.5}
+      />
+    ),
+    []
+  );
+
+  const handleSelect = useCallback(
+    (newValue: T) => {
+      triggerHaptic("light");
+      onChange(newValue);
+      dismiss();
+    },
+    [onChange, dismiss]
+  );
+
+  return (
+    <BottomSheet
+      ref={bottomSheetRef}
+      index={-1}
+      enableDynamicSizing
+      enablePanDownToClose
+      onChange={handleSheetChanges}
+      backdropComponent={renderBackdrop}
+      backgroundStyle={{ backgroundColor: theme.colors.background.default }}
+      handleIndicatorStyle={{ backgroundColor: theme.colors.border.default }}
+    >
+      <BottomSheetView
+        style={[styles.content, { paddingBottom: insets.bottom + 16 }]}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Text size="lg" weight="bold">
+            {title}
+          </Text>
+          <Pressable
+            onPress={dismiss}
+            style={[
+              styles.closeButton,
+              { backgroundColor: theme.colors.background.subtle },
+            ]}
+          >
+            <Ionicons
+              name="close"
+              size={20}
+              color={theme.colors.text.default}
+            />
+          </Pressable>
+        </View>
+
+        {/* Options */}
+        <View style={styles.optionsList}>
+          {options.map((option) => {
+            const isSelected = option.value === value;
+
+            return (
+              <Pressable
+                key={String(option.value)}
+                onPress={() => handleSelect(option.value)}
+                style={({ pressed }) => [
+                  styles.optionItem,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text
+                  size="md"
+                  weight={isSelected ? "semibold" : "regular"}
+                  style={{
+                    color: isSelected
+                      ? theme.colors.brand
+                      : theme.colors.text.default,
+                  }}
+                >
+                  {option.label}
+                </Text>
+                {isSelected && (
+                  <Ionicons
+                    name="checkmark"
+                    size={22}
+                    color={theme.colors.brand}
+                  />
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+      </BottomSheetView>
+    </BottomSheet>
+  );
+}
+
+export const ValuePickerSheet = forwardRef(ValuePickerSheetInner) as <T>(
+  props: ValuePickerSheetProps<T> & { ref?: React.Ref<ValuePickerSheetRef> }
+) => React.ReactElement;
+
+const styles = StyleSheet.create((theme) => ({
+  content: {
+    paddingHorizontal: theme.spacing.lg,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: theme.spacing.md,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  optionsList: {
+    paddingTop: theme.spacing.xs,
+  },
+  optionItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.05)",
+  },
+}));
+
