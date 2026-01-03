@@ -117,8 +117,8 @@ export function ProfileScreen() {
   }, []);
 
   const handleMenuInviteAndEarn = useCallback(() => {
-    console.log("Invite and Earn pressed");
-  }, []);
+    router.push("/invite-and-earn");
+  }, [router]);
 
   const handleMenuDrafts = useCallback(() => {
     console.log("Drafts pressed");
