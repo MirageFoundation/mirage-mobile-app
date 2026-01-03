@@ -109,8 +109,8 @@ export function ProfileScreen() {
   }, [router]);
 
   const handleMenuSubscription = useCallback(() => {
-    console.log("Subscription pressed");
-  }, []);
+    router.push("/subscription");
+  }, [router]);
 
   const handleMenuNetwork = useCallback(() => {
     console.log("Network pressed");
