@@ -1354,17 +1354,17 @@ colors: {
 - [x] Footer disclaimer about daily billing and token burning
 - [x] Navigation from ProfileMenuSheet to Subscription screen
 
-### Phase 11: Invite & Earn Page (Week 6)
+### Phase 11: Invite & Earn Page (Week 6) ✅
 
-- [ ] Invite page route (`app/invite.tsx`)
-- [ ] ReferralLinkCard component (2 shareable links)
-- [ ] HowItWorks section with example
-- [ ] RewardsBreakdown component
-  - [ ] Pending rewards
-  - [ ] Paid rewards
-  - [ ] Number of referrals
-- [ ] Important note/disclaimer section
-- [ ] Share functionality integration
+- [x] Invite page route (`app/invite-and-earn.tsx`)
+- [x] ReferralLinkCard component (2 shareable links with copy functionality)
+- [x] HowItWorks section with bullet points and example calculation
+- [x] RewardsBreakdown component with gradient-styled stats cards
+  - [x] Pending rewards (amber gradient)
+  - [x] Paid rewards (green gradient)
+  - [x] Number of referrals (purple gradient)
+- [x] Important note/disclaimer section (sockpuppet warning)
+- [x] Navigation from ProfileMenuSheet to Invite & Earn screen
 
 ### Phase 12: Logout Confirmation (Week 6)
 
@@ -1382,13 +1382,21 @@ colors: {
 - [ ] Update all components to use theme-aware colors
 - [ ] System theme detection support
 
-### Phase 14: Network Page (Week 7+)
+### Phase 14: Search Functionality (Week 7)
+
+- [ ] Search screen/modal (`app/search.tsx`)
+- [ ] Search input with auto-focus
+- [ ] Recent searches display
+- [ ] Search results (posts, users, topics)
+- [ ] Navigation from FeedHeader search button
+
+### Phase 15: Network Page (Week 7+) - Deferred
 
 - [ ] Network page route (`app/network.tsx`)
 - [ ] Network status display
 - [ ] (Details to be discussed later)
 
-### Phase 15: Polish (Week 7-8)
+### Phase 16: Polish (Week 8)
 
 - [ ] Haptic feedback refinement
 - [ ] Animation polish
@@ -1754,10 +1762,11 @@ app/
 │   ├── username.tsx
 │   ├── recovery-phrase.tsx
 │   └── login.tsx
-├── settings.tsx                # Settings page (NEW)
-├── subscription.tsx            # Subscription page (NEW)
-├── invite.tsx                  # Invite & Earn page (NEW)
-├── network.tsx                 # Network page (NEW - later)
+├── settings.tsx                # Settings page
+├── subscription.tsx            # Subscription page
+├── invite-and-earn.tsx         # Invite & Earn page
+├── search.tsx                  # Search page (NEW)
+├── network.tsx                 # Network page (FUTURE)
 └── _layout.tsx
 ```
 

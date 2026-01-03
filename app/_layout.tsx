@@ -26,6 +26,12 @@ export default function RootLayout() {
             animation: "slide_from_right",
           }}
         />
+        <Stack.Screen
+          name="search"
+          options={{
+            animation: "fade",
+          }}
+        />
       </Stack>
       <AuthSheet />
     </RootProvider>

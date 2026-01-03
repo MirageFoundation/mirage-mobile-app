@@ -414,6 +414,7 @@ export function HomeScreen() {
         title={getFeedTitle()}
         feedType={feedType}
         onFeedTypeChange={setFeedType}
+        onSearchPress={() => router.push("/search")}
         animatedStyle={headerAnimatedStyle}
       />
 

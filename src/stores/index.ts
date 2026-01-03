@@ -8,3 +8,4 @@ export {
 export { useDraftStore, type PostDraft } from "./draft-store";
 export { useUIStore } from "./ui-store";
 export { storage, mmkvStorage } from "./mmkv-storage";
+export { useSearchStore, type RecentSearch } from "./search-store";
