@@ -1336,13 +1336,23 @@ colors: {
 - [x] SettingRow component (toggle, navigate, value types)
 - [x] ThemeSelector component with toggle rows
 
-### Phase 10: Subscription Page (Week 6)
+### Phase 10: Subscription Page (Week 6) ✅
 
-- [ ] Subscription page route (`app/subscription.tsx`)
-- [ ] ActivePlanCard component (displays current plan)
-- [ ] PlanCard component (displays available plans)
-- [ ] Plan comparison view
-- [ ] Purchase flow integration (placeholder)
+- [x] Subscription page route (`app/subscription.tsx`)
+- [x] ActivePlanCard component (displays current plan, balance, reserve)
+- [x] PlanCard component (displays available plans with expand/collapse)
+  - [x] Plan header with icon, title, and cost
+  - [x] Short features list (collapsed view)
+  - [x] Full features list (expanded view)
+  - [x] "See all details" / "Hide details" toggle with animated chevron
+  - [x] Action button: Active Plan / Insufficient Funds / Subscribe
+- [x] Four subscription tiers: Free, Trusted, Established, Distinguished
+  - [x] Free: 0 MIRAGE/day - PoW for transactions, 1,000 chars, basic posting
+  - [x] Trusted: 1 MIRAGE/day - Instant posting, 2,000 chars, profile customization
+  - [x] Established: 2 MIRAGE/day - 5,000 chars, moderator eligibility, more awards
+  - [x] Distinguished: 3 MIRAGE/day - 25,000 chars, max vote weight, all features
+- [x] Footer disclaimer about daily billing and token burning
+- [x] Navigation from ProfileMenuSheet to Subscription screen
 
 ### Phase 11: Invite & Earn Page (Week 6)
 
@@ -1764,6 +1774,6 @@ app/
 
 ---
 
-_Document Version: 2.0_
+_Document Version: 2.1_
 _Created: December 2024_
 _Last Updated: January 3, 2026_
