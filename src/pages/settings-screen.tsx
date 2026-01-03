@@ -6,28 +6,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import {
+  ContentTypeSheet,
   LogoutConfirmationPopup,
   SettingRow,
   ThemeSelector,
   ValuePickerSheet,
+  type ContentTypeSheetRef,
   type ValueOption,
   type ValuePickerSheetRef,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import {
-  useAuthStore,
-  usePreferencesStore,
-  type ContentFilter,
-  type ThemeMode,
-} from "@/src/stores";
-
-// Content filter options
-const contentFilterOptions: ValueOption<ContentFilter>[] = [
-  { value: "all", label: "All Content" },
-  { value: "sfw", label: "SFW Only" },
-  { value: "custom", label: "Custom" },
-];
+import { useAuthStore, usePreferencesStore, type ThemeMode } from "@/src/stores";
 
 // Auto-collapse threshold options
 const collapseThresholdOptions: ValueOption<number | null>[] = [
@@ -68,8 +58,8 @@ export function SettingsScreen() {
   const {
     theme: themeMode,
     setTheme,
-    contentFilter,
-    setContentFilter,
+    selectedContentTypes,
+    toggleContentType,
     blurSensitiveMedia,
     setBlurSensitiveMedia,
     hideDownvotedPosts,
@@ -83,7 +73,7 @@ export function SettingsScreen() {
   } = usePreferencesStore();
 
   // Sheet refs
-  const contentFilterSheetRef = useRef<ValuePickerSheetRef>(null);
+  const contentTypeSheetRef = useRef<ContentTypeSheetRef>(null);
   const collapseThresholdSheetRef = useRef<ValuePickerSheetRef>(null);
   const topicsCountSheetRef = useRef<ValuePickerSheetRef>(null);
   const peopleCountSheetRef = useRef<ValuePickerSheetRef>(null);
@@ -111,11 +101,13 @@ export function SettingsScreen() {
   }, [logout, router]);
 
   // Get display labels
-  const getContentFilterLabel = () => {
-    return (
-      contentFilterOptions.find((o) => o.value === contentFilter)?.label ||
-      "All Content"
-    );
+  const getContentTypeLabel = () => {
+    if (selectedContentTypes.includes("all")) return "All";
+    if (selectedContentTypes.includes("none")) return "None";
+    if (selectedContentTypes.length === 1) {
+      return selectedContentTypes[0].charAt(0).toUpperCase() + selectedContentTypes[0].slice(1);
+    }
+    return `${selectedContentTypes.length} selected`;
   };
 
   const getCollapseThresholdLabel = () => {
@@ -146,8 +138,8 @@ export function SettingsScreen() {
               icon="filter-outline"
               title="Content Type"
               subtitle="Content you see in your feed"
-              rightText={getContentFilterLabel()}
-              onPress={() => contentFilterSheetRef.current?.present()}
+              rightText={getContentTypeLabel()}
+              onPress={() => contentTypeSheetRef.current?.present()}
             />
           ),
         },
@@ -323,15 +315,14 @@ export function SettingsScreen() {
         showsVerticalScrollIndicator={false}
       />
 
-      {/* Value Picker Sheets */}
-      <ValuePickerSheet
-        ref={contentFilterSheetRef}
-        title="Content Type"
-        options={contentFilterOptions}
-        value={contentFilter}
-        onChange={setContentFilter}
+      {/* Content Type Multi-Select Sheet */}
+      <ContentTypeSheet
+        ref={contentTypeSheetRef}
+        selectedTypes={selectedContentTypes}
+        onToggle={toggleContentType}
       />
 
+      {/* Value Picker Sheets */}
       <ValuePickerSheet
         ref={collapseThresholdSheetRef}
         title="Auto-Collapse Threshold"

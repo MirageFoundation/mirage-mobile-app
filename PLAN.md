@@ -1312,23 +1312,29 @@ colors: {
 - [ ] ProfilePage
 - [ ] ProfileMenuSheet molecule (settings menu options)
 
-### Phase 9: Settings Page (Week 5-6)
+### Phase 9: Settings Page (Week 5-6) ✅
 
-- [ ] Settings page route setup (`app/(tabs)/settings.tsx` or modal route)
-- [ ] SectionList with sticky headers implementation
-- [ ] Appearance Section
-  - [ ] Theme selector (Light / Dark / System)
-  - [ ] Implement dark mode theming across app
-- [ ] Content Section
-  - [ ] Content type selection (All / SFW Only / Custom)
-  - [ ] Blur sensitive media toggle
-  - [ ] Immediately hide downvoted posts toggle
-- [ ] Comments Section
-  - [ ] Auto-collapse threshold selector (collapse comments at or below score)
-- [ ] Sidebar Section
-  - [ ] Number of topics before "show more" selector
-  - [ ] Number of people before "show more" selector
-- [ ] PreferencesStore updates for new settings
+- [x] Settings page route setup (`app/settings.tsx`)
+- [x] SectionList with sticky headers implementation
+- [x] Dark Mode Section
+  - [x] Automatic toggle (follow system setting)
+  - [x] Dark Mode toggle
+  - [x] Mutual exclusivity logic (only one can be on at a time)
+- [x] Content Section
+  - [x] Content type selection (All / SFW Only / Custom)
+  - [x] Blur sensitive media toggle
+  - [x] Immediately hide downvoted posts toggle
+- [x] Comments Section
+  - [x] Auto-collapse threshold selector (collapse comments at or below score)
+- [x] Sidebar Section
+  - [x] Number of topics before "show more" selector
+  - [x] Number of people before "show more" selector
+- [x] PreferencesStore updates for new settings
+- [x] LogoutConfirmationPopup component
+- [x] Navigation from ProfileMenuSheet to Settings
+- [x] ValuePickerSheet component for selection options
+- [x] SettingRow component (toggle, navigate, value types)
+- [x] ThemeSelector component with toggle rows
 
 ### Phase 10: Subscription Page (Week 6)
 

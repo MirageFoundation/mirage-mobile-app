@@ -45,7 +45,9 @@ export {
   SettingSection,
   ThemeSelector,
   ValuePickerSheet,
+  ContentTypeSheet,
   type SettingRowProps,
   type ValuePickerSheetRef,
   type ValueOption,
+  type ContentTypeSheetRef,
 } from "./settings";

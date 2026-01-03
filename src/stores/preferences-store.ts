@@ -4,7 +4,14 @@ import { mmkvStorage } from "./mmkv-storage";
 
 export type FeedType = "home" | "popular" | "news" | "watch" | "latest";
 export type ThemeMode = "light" | "dark" | "system";
-export type ContentFilter = "all" | "sfw" | "custom";
+export type ContentType =
+  | "sensitive"
+  | "porn"
+  | "violence"
+  | "gore"
+  | "death"
+  | "none"
+  | "all";
 
 type PreferencesState = {
   // Feed
@@ -16,7 +23,7 @@ type PreferencesState = {
   // Content
   adultContentEnabled: boolean;
   hasSeenAdultPrompt: boolean;
-  contentFilter: ContentFilter;
+  selectedContentTypes: ContentType[];
   blurSensitiveMedia: boolean;
   hideDownvotedPosts: boolean;
 
@@ -32,7 +39,8 @@ type PreferencesState = {
   setTheme: (theme: ThemeMode) => void;
   setAdultContent: (enabled: boolean) => void;
   setHasSeenAdultPrompt: () => void;
-  setContentFilter: (filter: ContentFilter) => void;
+  setSelectedContentTypes: (types: ContentType[]) => void;
+  toggleContentType: (type: ContentType) => void;
   setBlurSensitiveMedia: (blur: boolean) => void;
   setHideDownvotedPosts: (hide: boolean) => void;
   setAutoCollapseThreshold: (threshold: number | null) => void;
@@ -52,7 +60,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       // Content
       adultContentEnabled: false,
       hasSeenAdultPrompt: false,
-      contentFilter: "all",
+      selectedContentTypes: ["none"],
       blurSensitiveMedia: true,
       hideDownvotedPosts: false,
 
@@ -68,7 +76,37 @@ export const usePreferencesStore = create<PreferencesState>()(
       setTheme: (theme) => set({ theme }),
       setAdultContent: (enabled) => set({ adultContentEnabled: enabled }),
       setHasSeenAdultPrompt: () => set({ hasSeenAdultPrompt: true }),
-      setContentFilter: (filter) => set({ contentFilter: filter }),
+      setSelectedContentTypes: (types) => set({ selectedContentTypes: types }),
+      toggleContentType: (type) =>
+        set((state) => {
+          // If selecting "all", clear others and set only "all"
+          if (type === "all") {
+            return { selectedContentTypes: ["all"] };
+          }
+          // If selecting "none", clear others and set only "none"
+          if (type === "none") {
+            return { selectedContentTypes: ["none"] };
+          }
+
+          // Remove "all" and "none" if selecting specific types
+          let newTypes = state.selectedContentTypes.filter(
+            (t) => t !== "all" && t !== "none"
+          );
+
+          // Toggle the selected type
+          if (newTypes.includes(type)) {
+            newTypes = newTypes.filter((t) => t !== type);
+          } else {
+            newTypes = [...newTypes, type];
+          }
+
+          // If nothing selected, default to "none"
+          if (newTypes.length === 0) {
+            return { selectedContentTypes: ["none"] };
+          }
+
+          return { selectedContentTypes: newTypes };
+        }),
       setBlurSensitiveMedia: (blur) => set({ blurSensitiveMedia: blur }),
       setHideDownvotedPosts: (hide) => set({ hideDownvotedPosts: hide }),
       setAutoCollapseThreshold: (threshold) =>

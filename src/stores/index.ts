@@ -3,7 +3,7 @@ export {
   usePreferencesStore,
   type FeedType,
   type ThemeMode,
-  type ContentFilter,
+  type ContentType,
 } from "./preferences-store";
 export { useDraftStore, type PostDraft } from "./draft-store";
 export { useUIStore } from "./ui-store";

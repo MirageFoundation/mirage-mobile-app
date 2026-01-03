@@ -6,4 +6,8 @@ export {
   type ValuePickerSheetRef,
   type ValueOption,
 } from "./value-picker-sheet";
+export {
+  ContentTypeSheet,
+  type ContentTypeSheetRef,
+} from "./content-type-sheet";
 
