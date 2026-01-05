@@ -1,4 +1,8 @@
-import { useComments, transformApiComments, transformApiPost } from "@/src/api/read";
+import {
+  transformApiComments,
+  transformApiPost,
+  useComments,
+} from "@/src/api/read";
 import { Avatar } from "@/src/components/atoms";
 import {
   Comment,
@@ -17,19 +21,29 @@ import {
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   KeyboardAvoidingView,
+  LayoutChangeEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
   RefreshControl,
   View,
 } from "react-native";
+import Animated, {
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-
 
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -81,6 +95,57 @@ export default function PostDetailScreen() {
     return [...localComments, ...comments];
   }, [localComments, comments]);
 
+  // Scroll tracking for sticky header
+  const [postHeaderHeight, setPostHeaderHeight] = useState(0);
+  const stickyHeaderVisible = useSharedValue(0);
+
+  const handlePostHeaderLayout = useCallback((event: LayoutChangeEvent) => {
+    setPostHeaderHeight(event.nativeEvent.layout.height);
+  }, []);
+
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const scrollY = event.nativeEvent.contentOffset.y;
+      // Show sticky header when scrolled past post header (with some buffer)
+      const threshold = postHeaderHeight - 50;
+
+      if (scrollY > threshold && stickyHeaderVisible.value === 0) {
+        stickyHeaderVisible.value = withTiming(1, {
+          duration: 300,
+          easing: Easing.out(Easing.cubic),
+        });
+      } else if (scrollY <= threshold && stickyHeaderVisible.value === 1) {
+        stickyHeaderVisible.value = withTiming(0, {
+          duration: 250,
+          easing: Easing.in(Easing.cubic),
+        });
+      }
+    },
+    [postHeaderHeight, stickyHeaderVisible]
+  );
+
+  // Animated style for sticky header
+  const stickyHeaderAnimatedStyle = useAnimatedStyle(() => {
+    const translateY = interpolate(stickyHeaderVisible.value, [0, 1], [-60, 0]);
+    const opacity = interpolate(stickyHeaderVisible.value, [0, 1], [0, 1]);
+
+    return {
+      transform: [{ translateY }],
+      opacity,
+    };
+  });
+
+  // Format count for display
+  const formatCount = (num: number): string => {
+    if (num >= 1000000) {
+      return `${(num / 1000000).toFixed(1)}M`;
+    }
+    if (num >= 1000) {
+      return `${(num / 1000).toFixed(1)}K`;
+    }
+    return num.toString();
+  };
+
   // Handlers
   const handleBack = useCallback(() => {
     router.back();
@@ -91,13 +156,13 @@ export default function PostDetailScreen() {
       // TODO: Implement vote mutation
       const currentPost = displayPost;
       if (!currentPost) return;
-      
+
       setLocalPostUpdates((prev) => {
         const currentHasLiked = prev.hasLiked ?? currentPost.hasLiked;
         const currentHasDisliked = prev.hasDisliked ?? currentPost.hasDisliked;
         const currentLikes = prev.likes ?? currentPost.likes;
         const currentDislikes = prev.dislikes ?? currentPost.dislikes;
-        
+
         return {
           ...prev,
           hasLiked: !currentHasLiked,
@@ -114,18 +179,20 @@ export default function PostDetailScreen() {
       // TODO: Implement vote mutation
       const currentPost = displayPost;
       if (!currentPost) return;
-      
+
       setLocalPostUpdates((prev) => {
         const currentHasLiked = prev.hasLiked ?? currentPost.hasLiked;
         const currentHasDisliked = prev.hasDisliked ?? currentPost.hasDisliked;
         const currentLikes = prev.likes ?? currentPost.likes;
         const currentDislikes = prev.dislikes ?? currentPost.dislikes;
-        
+
         return {
           ...prev,
           hasDisliked: !currentHasDisliked,
           hasLiked: false,
-          dislikes: currentHasDisliked ? currentDislikes - 1 : currentDislikes + 1,
+          dislikes: currentHasDisliked
+            ? currentDislikes - 1
+            : currentDislikes + 1,
           likes: currentHasLiked ? currentLikes - 1 : currentLikes,
         };
       });
@@ -137,7 +204,7 @@ export default function PostDetailScreen() {
       // TODO: Implement follow mutation
       const currentPost = displayPost;
       if (!currentPost) return;
-      
+
       setLocalPostUpdates((prev) => ({
         ...prev,
         isFollowing: !(prev.isFollowing ?? currentPost.isFollowing),
@@ -178,15 +245,19 @@ export default function PostDetailScreen() {
         // TODO: Implement vote mutation
         // For now, update local state for optimistic UI
         setLocalComments((prev) =>
-          updateCommentInList(commentId, (comment) => ({
-            ...comment,
-            hasLiked: !comment.hasLiked,
-            hasDisliked: false,
-            likes: comment.hasLiked ? comment.likes - 1 : comment.likes + 1,
-            dislikes: comment.hasDisliked
-              ? comment.dislikes - 1
-              : comment.dislikes,
-          }), prev)
+          updateCommentInList(
+            commentId,
+            (comment) => ({
+              ...comment,
+              hasLiked: !comment.hasLiked,
+              hasDisliked: false,
+              likes: comment.hasLiked ? comment.likes - 1 : comment.likes + 1,
+              dislikes: comment.hasDisliked
+                ? comment.dislikes - 1
+                : comment.dislikes,
+            }),
+            prev
+          )
         );
       });
     },
@@ -199,15 +270,19 @@ export default function PostDetailScreen() {
         // TODO: Implement vote mutation
         // For now, update local state for optimistic UI
         setLocalComments((prev) =>
-          updateCommentInList(commentId, (comment) => ({
-            ...comment,
-            hasDisliked: !comment.hasDisliked,
-            hasLiked: false,
-            dislikes: comment.hasDisliked
-              ? comment.dislikes - 1
-              : comment.dislikes + 1,
-            likes: comment.hasLiked ? comment.likes - 1 : comment.likes,
-          }), prev)
+          updateCommentInList(
+            commentId,
+            (comment) => ({
+              ...comment,
+              hasDisliked: !comment.hasDisliked,
+              hasLiked: false,
+              dislikes: comment.hasDisliked
+                ? comment.dislikes - 1
+                : comment.dislikes + 1,
+              likes: comment.hasLiked ? comment.likes - 1 : comment.likes,
+            }),
+            prev
+          )
         );
       });
     },
@@ -262,11 +337,15 @@ export default function PostDetailScreen() {
       if (replyingTo) {
         // Add as a reply (optimistic update)
         setLocalComments((prev) =>
-          updateCommentInList(replyingTo.id, (comment) => ({
-            ...comment,
-            replyCount: (comment.replyCount ?? 0) + 1,
-            replies: [...(comment.replies ?? []), newComment],
-          }), prev.length > 0 ? prev : [newComment])
+          updateCommentInList(
+            replyingTo.id,
+            (comment) => ({
+              ...comment,
+              replyCount: (comment.replyCount ?? 0) + 1,
+              replies: [...(comment.replies ?? []), newComment],
+            }),
+            prev.length > 0 ? prev : [newComment]
+          )
         );
         // If no existing local comments, this might be a reply to an API comment
         // We'll need to refetch to see the update
@@ -278,7 +357,7 @@ export default function PostDetailScreen() {
 
       setLocalPostUpdates((prev) => ({
         ...prev,
-        comments: ((prev.comments ?? displayPost?.comments) ?? 0) + 1,
+        comments: (prev.comments ?? displayPost?.comments ?? 0) + 1,
       }));
       setReplyingTo(null);
       setIsSubmitting(false);
@@ -305,7 +384,7 @@ export default function PostDetailScreen() {
     setLocalComments((prev) => removeComment(selectedComment.id, prev));
     setLocalPostUpdates((prev) => ({
       ...prev,
-      comments: ((prev.comments ?? displayPost?.comments) ?? 0) - 1,
+      comments: (prev.comments ?? displayPost?.comments ?? 0) - 1,
     }));
     setSelectedComment(null);
     // Refetch to get updated comments
@@ -410,19 +489,70 @@ export default function PostDetailScreen() {
     // Show loading skeleton while post is loading
     if (!displayPost) {
       return (
-        <View>
+        <View onLayout={handlePostHeaderLayout}>
           <Box p="md">
             {/* Post loading skeleton */}
             <View style={styles.skeletonHeader}>
-              <View style={[styles.skeletonAvatar, { backgroundColor: theme.colors.background.subtle }]} />
+              <View
+                style={[
+                  styles.skeletonAvatar,
+                  { backgroundColor: theme.colors.background.subtle },
+                ]}
+              />
               <View style={styles.skeletonHeaderText}>
-                <View style={[styles.skeletonLine, { width: 120, backgroundColor: theme.colors.background.subtle }]} />
-                <View style={[styles.skeletonLine, { width: 80, backgroundColor: theme.colors.background.subtle }]} />
+                <View
+                  style={[
+                    styles.skeletonLine,
+                    {
+                      width: 120,
+                      backgroundColor: theme.colors.background.subtle,
+                    },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.skeletonLine,
+                    {
+                      width: 80,
+                      backgroundColor: theme.colors.background.subtle,
+                    },
+                  ]}
+                />
               </View>
             </View>
-            <View style={[styles.skeletonLine, { width: "100%", height: 20, marginTop: 12, backgroundColor: theme.colors.background.subtle }]} />
-            <View style={[styles.skeletonLine, { width: "90%", height: 20, marginTop: 8, backgroundColor: theme.colors.background.subtle }]} />
-            <View style={[styles.skeletonLine, { width: "100%", height: 100, marginTop: 12, backgroundColor: theme.colors.background.subtle }]} />
+            <View
+              style={[
+                styles.skeletonLine,
+                {
+                  width: "100%",
+                  height: 20,
+                  marginTop: 12,
+                  backgroundColor: theme.colors.background.subtle,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.skeletonLine,
+                {
+                  width: "90%",
+                  height: 20,
+                  marginTop: 8,
+                  backgroundColor: theme.colors.background.subtle,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.skeletonLine,
+                {
+                  width: "100%",
+                  height: 100,
+                  marginTop: 12,
+                  backgroundColor: theme.colors.background.subtle,
+                },
+              ]}
+            />
           </Box>
           <View style={styles.divider} />
         </View>
@@ -430,7 +560,7 @@ export default function PostDetailScreen() {
     }
 
     return (
-      <View>
+      <View onLayout={handlePostHeaderLayout}>
         {/* Full post card */}
         <PostCard
           post={displayPost}
@@ -457,6 +587,7 @@ export default function PostDetailScreen() {
     revealedContent,
     id,
     theme.colors.background.subtle,
+    handlePostHeaderLayout,
   ]);
 
   const renderComment = useCallback(
@@ -498,14 +629,22 @@ export default function PostDetailScreen() {
             <View
               style={[
                 styles.skeletonAvatar,
-                { width: 32, height: 32, backgroundColor: theme.colors.background.subtle },
+                {
+                  width: 32,
+                  height: 32,
+                  backgroundColor: theme.colors.background.subtle,
+                },
               ]}
             />
             <View style={styles.skeletonHeaderText}>
               <View
                 style={[
                   styles.skeletonLine,
-                  { width: 100, height: 10, backgroundColor: theme.colors.background.subtle },
+                  {
+                    width: 100,
+                    height: 10,
+                    backgroundColor: theme.colors.background.subtle,
+                  },
                 ]}
               />
             </View>
@@ -515,19 +654,31 @@ export default function PostDetailScreen() {
             <View
               style={[
                 styles.skeletonLine,
-                { width: "100%", height: 12, backgroundColor: theme.colors.background.subtle },
+                {
+                  width: "100%",
+                  height: 12,
+                  backgroundColor: theme.colors.background.subtle,
+                },
               ]}
             />
             <View
               style={[
                 styles.skeletonLine,
-                { width: "85%", height: 12, backgroundColor: theme.colors.background.subtle },
+                {
+                  width: "85%",
+                  height: 12,
+                  backgroundColor: theme.colors.background.subtle,
+                },
               ]}
             />
             <View
               style={[
                 styles.skeletonLine,
-                { width: "60%", height: 12, backgroundColor: theme.colors.background.subtle },
+                {
+                  width: "60%",
+                  height: 12,
+                  backgroundColor: theme.colors.background.subtle,
+                },
               ]}
             />
           </View>
@@ -536,19 +687,31 @@ export default function PostDetailScreen() {
             <View
               style={[
                 styles.skeletonLine,
-                { width: 24, height: 10, backgroundColor: theme.colors.background.subtle },
+                {
+                  width: 24,
+                  height: 10,
+                  backgroundColor: theme.colors.background.subtle,
+                },
               ]}
             />
             <View
               style={[
                 styles.skeletonLine,
-                { width: 24, height: 10, backgroundColor: theme.colors.background.subtle },
+                {
+                  width: 24,
+                  height: 10,
+                  backgroundColor: theme.colors.background.subtle,
+                },
               ]}
             />
             <View
               style={[
                 styles.skeletonLine,
-                { width: 24, height: 10, backgroundColor: theme.colors.background.subtle },
+                {
+                  width: 24,
+                  height: 10,
+                  backgroundColor: theme.colors.background.subtle,
+                },
               ]}
             />
           </View>
@@ -641,6 +804,9 @@ export default function PostDetailScreen() {
 
   const keyExtractor = useCallback((item: Comment) => item.id, []);
 
+  // Get the first media thumbnail if available
+  const postThumbnail = displayPost?.media?.[0]?.uri;
+
   return (
     <KeyboardAvoidingView
       style={styles.keyboardView}
@@ -650,6 +816,51 @@ export default function PostDetailScreen() {
       <Box flex background="base">
         {/* Header */}
         {renderHeader}
+
+        {/* Sticky Post Summary Header */}
+        <Animated.View
+          style={[
+            styles.stickyHeader,
+            {
+              backgroundColor: theme.colors.background.default,
+              top: insets.top + 40, // Position below the main header
+            },
+            stickyHeaderAnimatedStyle,
+          ]}
+          pointerEvents={stickyHeaderVisible.value > 0.5 ? "auto" : "none"}
+        >
+          <View style={styles.stickyHeaderContent}>
+            <View style={styles.stickyHeaderInfo}>
+              <Text
+                size="md"
+                weight="bold"
+                numberOfLines={1}
+                style={styles.stickyHeaderTitle}
+              >
+                {displayPost?.title}
+              </Text>
+              <View style={styles.stickyHeaderStats}>
+                <Text size="sm" mode="subtle">
+                  {formatCount(displayPost?.likes ?? 0)} upvotes
+                </Text>
+                <Text size="sm" mode="subtle" style={styles.stickyHeaderDot}>
+                  •
+                </Text>
+                <Text size="sm" mode="subtle">
+                  {formatCount(displayPost?.comments ?? 0)} comments
+                </Text>
+              </View>
+            </View>
+            {postThumbnail && (
+              <Image
+                source={{ uri: postThumbnail }}
+                style={styles.stickyHeaderThumbnail}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+              />
+            )}
+          </View>
+        </Animated.View>
 
         {/* Comments list */}
         <FlatList
@@ -662,6 +873,8 @@ export default function PostDetailScreen() {
             paddingBottom: insets.bottom + 60,
           }}
           showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           refreshControl={
             <RefreshControl
               refreshing={isRefetchingComments}
@@ -756,5 +969,43 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "flex-end",
     gap: theme.spacing.md,
     marginTop: theme.spacing.sm,
+  },
+  // Sticky header styles
+  stickyHeader: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border.subtle,
+    overflow: "hidden",
+  },
+  stickyHeaderContent: {
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  stickyHeaderInfo: {
+    flex: 1,
+    paddingLeft: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    justifyContent: "center",
+  },
+  stickyHeaderTitle: {
+    lineHeight: 18,
+  },
+  stickyHeaderStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    // marginTop: 2,
+  },
+  stickyHeaderDot: {
+    marginHorizontal: theme.spacing.xs,
+  },
+  stickyHeaderThumbnail: {
+    width: 52,
+    height: "100%",
+    minHeight: 48,
+    marginLeft: theme.spacing.sm,
   },
 }));
