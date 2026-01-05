@@ -1,5 +1,5 @@
 import { Box, Icon, ButtonText } from "@/primitives";
-import { truncatePublicKey } from "@/utils/wallet";
+import { truncateAddress } from "@/src/wallet";
 import { Feather } from "@expo/vector-icons";
 import { useState, useEffect, useMemo } from "react";
 import * as Clipboard from "expo-clipboard";
@@ -22,7 +22,7 @@ export const WalletAddressButton: React.FC<WalletAddressButtonProps> = ({
 
   const truncatedWalletAddress = useMemo(() => {
     if (!walletAddress) return "";
-    return truncatePublicKey(walletAddress);
+    return truncateAddress(walletAddress);
   }, [walletAddress]);
 
   // Reset copied state after delay
