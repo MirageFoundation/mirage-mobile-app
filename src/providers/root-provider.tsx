@@ -8,6 +8,7 @@ import { QueryClearProvider } from "./query-clear-provider";
 import { QueryProvider } from "./query-provider";
 import { ThemeContextProvider } from "./theme-context";
 import { ThemeProvider } from "./theme-provider";
+import { WalletProvider } from "./wallet-provider";
 
 const CoreProviders = memo(({ children }: { children: React.ReactNode }) => (
   <ThemeContextProvider>
@@ -18,7 +19,9 @@ CoreProviders.displayName = "CoreProviders";
 
 const AuthProviders = memo(({ children }: { children: React.ReactNode }) => (
   <QueryProvider>
-    <QueryClearProvider>{children}</QueryClearProvider>
+    <QueryClearProvider>
+      <WalletProvider>{children}</WalletProvider>
+    </QueryClearProvider>
   </QueryProvider>
 ));
 AuthProviders.displayName = "AuthProviders";

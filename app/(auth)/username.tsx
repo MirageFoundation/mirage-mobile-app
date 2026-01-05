@@ -6,10 +6,12 @@ import {
   Text,
 } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { useUIStore } from "@/src/stores";
+import { useAuthStore, useUIStore } from "@/src/stores";
+import { useAddressFromUsername } from "@/src/api/read/hooks/use-username-resolution";
+import { useConfig } from "@/src/api/read/hooks/use-parameters";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -28,17 +30,39 @@ export default function UsernameScreen() {
   const insets = useSafeAreaInsets();
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
 
+  const createNewWallet = useAuthStore((s) => s.createNewWallet);
+  const isCreatingWallet = useAuthStore((s) => s.isCreatingWallet);
+
   const [username, setUsername] = useState("");
   const [status, setStatus] = useState<UsernameStatus>("idle");
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  // Get config for username size limits
+  const { data: config } = useConfig();
+  const minUsernameSize = config?.min_username_size ?? 3;
+  const maxUsernameSize = config?.max_username_size ?? 20;
+
+  // Check username availability via API
+  const {
+    data: usernameData,
+    isLoading: isCheckingUsername,
+    isFetched,
+  } = useAddressFromUsername(username.length >= minUsernameSize ? username : null);
 
   // Validate username format
-  const validateUsername = useCallback((value: string) => {
-    // Username rules: 3-20 chars, alphanumeric + underscores, starts with letter
-    const isValid = /^[a-zA-Z][a-zA-Z0-9_]{2,19}$/.test(value);
-    return isValid;
-  }, []);
+  const validateUsername = useCallback(
+    (value: string) => {
+      // Username rules: min-max chars, alphanumeric + underscores, starts with letter
+      if (value.length < minUsernameSize || value.length > maxUsernameSize) {
+        return false;
+      }
+      const isValid = /^[a-zA-Z][a-zA-Z0-9_]*$/.test(value);
+      return isValid;
+    },
+    [minUsernameSize, maxUsernameSize]
+  );
 
-  // Simulate checking username availability
+  // Update status based on validation and API response
   useEffect(() => {
     if (username.length === 0) {
       setStatus("idle");
@@ -50,39 +74,63 @@ export default function UsernameScreen() {
       return;
     }
 
-    setStatus("checking");
+    if (isCheckingUsername) {
+      setStatus("checking");
+      return;
+    }
 
-    // Simulate API call
-    const timer = setTimeout(() => {
-      // Mock: usernames containing "taken" are unavailable
-      if (username.toLowerCase().includes("taken")) {
+    if (isFetched && usernameData) {
+      if (usernameData.exists) {
         setStatus("taken");
       } else {
         setStatus("available");
       }
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [username, validateUsername]);
+    }
+  }, [username, validateUsername, isCheckingUsername, isFetched, usernameData]);
 
   const handleUsernameChange = useCallback((text: string) => {
     // Only allow valid characters
     const sanitized = text.toLowerCase().replace(/[^a-z0-9_]/g, "");
     setUsername(sanitized);
+    setCreateError(null);
   }, []);
 
-  const handleContinue = useCallback(() => {
+  const handleContinue = useCallback(async () => {
     if (status !== "available") return;
 
-    triggerHaptic("success");
+    triggerHaptic("selection");
     Keyboard.dismiss();
 
-    // Navigate to recovery phrase screen
-    router.push({
-      pathname: "/(auth)/recovery-phrase",
-      params: { username },
-    });
-  }, [status, username, router]);
+    try {
+      // Create new wallet and get mnemonic
+      const mnemonic = await createNewWallet();
+
+      if (!mnemonic) {
+        throw new Error("Failed to generate wallet");
+      }
+
+      triggerHaptic("success");
+
+      // Navigate to recovery phrase screen with username
+      router.push({
+        pathname: "/(auth)/recovery-phrase",
+        params: { username },
+      });
+    } catch (error) {
+      console.error("[Username] Failed to create wallet:", error);
+      triggerHaptic("error");
+
+      if (error instanceof Error) {
+        if (error.message.includes("already exists")) {
+          setCreateError("A wallet already exists. Please logout first.");
+        } else {
+          setCreateError("Failed to create wallet. Please try again.");
+        }
+      } else {
+        setCreateError("An unexpected error occurred.");
+      }
+    }
+  }, [status, username, createNewWallet, router]);
 
   const handleClose = useCallback(() => {
     triggerHaptic("selection");
@@ -127,7 +175,7 @@ export default function UsernameScreen() {
     }
   };
 
-  const getStatusMessage = () => {
+  const getStatusMessage = useMemo(() => {
     switch (status) {
       case "checking":
         return "Checking availability...";
@@ -136,11 +184,11 @@ export default function UsernameScreen() {
       case "taken":
         return "This username is already taken";
       case "invalid":
-        return "3-20 characters, letters, numbers, underscores only";
+        return `${minUsernameSize}-${maxUsernameSize} characters, letters, numbers, underscores only`;
       default:
         return "";
     }
-  };
+  }, [status, minUsernameSize, maxUsernameSize]);
 
   const getStatusColor = () => {
     switch (status) {
@@ -155,7 +203,7 @@ export default function UsernameScreen() {
     }
   };
 
-  const isButtonEnabled = status === "available";
+  const isButtonEnabled = status === "available" && !isCreatingWallet;
 
   return (
     <Box flex background="base">
@@ -198,7 +246,7 @@ export default function UsernameScreen() {
             size="lg"
             variant="filled"
             style={styles.input}
-            maxLength={20}
+            maxLength={maxUsernameSize}
             rightAccessory={
               username.length > 0 ? (
                 <View style={styles.statusIcon}>{getStatusIcon()}</View>
@@ -208,11 +256,15 @@ export default function UsernameScreen() {
         </View>
 
         {/* Status message */}
-
         <View style={styles.statusContainer}>
           {status !== "idle" && (
             <Text size="sm" style={{ color: getStatusColor() }}>
-              {getStatusMessage()}
+              {getStatusMessage}
+            </Text>
+          )}
+          {createError && (
+            <Text size="sm" style={{ color: theme.colors.error[500] }}>
+              {createError}
             </Text>
           )}
         </View>
@@ -223,6 +275,7 @@ export default function UsernameScreen() {
           rounded="full"
           onPress={handleContinue}
           disabled={!isButtonEnabled}
+          loading={isCreatingWallet}
           style={[
             styles.continueButton,
             {
@@ -238,7 +291,7 @@ export default function UsernameScreen() {
               color: isButtonEnabled ? "#fff" : theme.colors.text.subtle,
             }}
           >
-            Continue
+            {isCreatingWallet ? "Creating wallet..." : "Continue"}
           </Button.Text>
         </Button>
 
@@ -335,8 +388,7 @@ const styles = StyleSheet.create((theme) => ({
   statusContainer: {
     paddingHorizontal: theme.spacing.sm,
     borderRadius: 8,
-    height: 20,
-    // backgroundColor: "red",
+    minHeight: 20,
   },
   continueButton: {
     marginTop: theme.spacing.sm,

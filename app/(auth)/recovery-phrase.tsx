@@ -4,111 +4,93 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useAuthStore } from "@/src/stores";
 import { AntDesign, Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
-import { Image, Pressable, ScrollView, View } from "react-native";
+import { useCallback, useMemo, useState, useEffect } from "react";
+import { Alert, Image, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-
-// BIP-39 word list sample (in production, use a proper library)
-const SAMPLE_WORDS = [
-  "abandon",
-  "ability",
-  "able",
-  "about",
-  "above",
-  "absent",
-  "absorb",
-  "abstract",
-  "absurd",
-  "abuse",
-  "access",
-  "accident",
-  "account",
-  "accuse",
-  "achieve",
-  "acid",
-  "acoustic",
-  "acquire",
-  "across",
-  "act",
-  "action",
-  "actor",
-  "actress",
-  "actual",
-  "adapt",
-  "add",
-  "addict",
-  "address",
-  "adjust",
-  "admit",
-  "adult",
-  "advance",
-  "advice",
-  "aerobic",
-  "affair",
-  "afford",
-  "afraid",
-  "again",
-  "age",
-  "agent",
-  "agree",
-  "ahead",
-  "aim",
-  "air",
-  "airport",
-  "aisle",
-  "alarm",
-  "album",
-];
-
-// Generate random 12-word phrase (mock - use proper crypto in production)
-const generateMockPhrase = (): string[] => {
-  const words: string[] = [];
-  for (let i = 0; i < 12; i++) {
-    const randomIndex = Math.floor(Math.random() * SAMPLE_WORDS.length);
-    words.push(SAMPLE_WORDS[randomIndex]);
-  }
-  return words;
-};
 
 export default function RecoveryPhraseScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ username?: string }>();
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
-  const setRecoveryPhrase = useAuthStore((s) => s.setRecoveryPhrase);
 
-  // Generate phrase on mount
-  const words = useMemo(() => generateMockPhrase(), []);
+  const recoveryPhrase = useAuthStore((s) => s.recoveryPhrase);
+  const confirmWalletCreation = useAuthStore((s) => s.confirmWalletCreation);
+  const clearRecoveryPhrase = useAuthStore((s) => s.clearRecoveryPhrase);
+  const walletAddress = useAuthStore((s) => s.walletAddress);
 
   const [hasSaved, setHasSaved] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  // Parse mnemonic into words array
+  const words = useMemo(() => {
+    if (!recoveryPhrase) return [];
+    return recoveryPhrase.split(" ");
+  }, [recoveryPhrase]);
+
+  // Redirect if no recovery phrase (user navigated directly)
+  useEffect(() => {
+    if (!recoveryPhrase) {
+      router.replace("/(auth)/username");
+    }
+  }, [recoveryPhrase, router]);
 
   const handleBack = useCallback(() => {
     triggerHaptic("selection");
-    router.back();
-  }, [router]);
+
+    // Warn user before going back
+    Alert.alert(
+      "Are you sure?",
+      "If you go back, you'll need to create a new wallet. Make sure you've saved your recovery phrase.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Go Back",
+          style: "destructive",
+          onPress: () => {
+            clearRecoveryPhrase();
+            router.back();
+          },
+        },
+      ]
+    );
+  }, [router, clearRecoveryPhrase]);
 
   const handleCheckboxChange = useCallback(() => {
     triggerHaptic("selection");
     setHasSaved((prev) => !prev);
   }, []);
 
-  const handleContinue = useCallback(() => {
+  const handleContinue = useCallback(async () => {
     if (!hasSaved) return;
 
-    triggerHaptic("success");
+    setIsConfirming(true);
+    triggerHaptic("selection");
 
-    // Store the recovery phrase
-    const phrase = words.join(" ");
-    setRecoveryPhrase(phrase);
+    try {
+      // Confirm wallet creation (clears mnemonic from memory, sets logged in)
+      await confirmWalletCreation();
 
-    // Dismiss all modals and navigate to home tab
-    // router.dismissAll();
-    // Navigate to home tab after a brief delay to ensure modal is dismissed
-    setTimeout(() => {
-      router.dismissTo("/(tabs)");
-    }, 100);
-  }, [hasSaved, words, setRecoveryPhrase, router]);
+      triggerHaptic("success");
+
+      // Navigate to home
+      setTimeout(() => {
+        router.dismissTo("/(tabs)");
+      }, 100);
+    } catch (error) {
+      console.error("[RecoveryPhrase] Failed to confirm wallet:", error);
+      triggerHaptic("error");
+      Alert.alert("Error", "Failed to complete wallet setup. Please try again.");
+    } finally {
+      setIsConfirming(false);
+    }
+  }, [hasSaved, confirmWalletCreation, router]);
+
+  // Don't render if no recovery phrase
+  if (words.length === 0) {
+    return null;
+  }
 
   return (
     <Box flex background="base">
@@ -156,6 +138,31 @@ export default function RecoveryPhraseScreen() {
           )}
         </View>
 
+        {/* Warning */}
+        <View style={styles.warningBox}>
+          <Ionicons
+            name="warning"
+            size={20}
+            color={theme.colors.warning[600]}
+          />
+          <Text size="sm" style={styles.warningText}>
+            Write down these 12 words in order and keep them safe. This is the
+            only way to recover your account. Never share them with anyone.
+          </Text>
+        </View>
+
+        {/* Wallet address preview */}
+        {walletAddress && (
+          <View style={styles.addressBox}>
+            <Text size="xs" mode="subtle">
+              Your wallet address:
+            </Text>
+            <Text size="sm" weight="medium" style={{ marginTop: 2 }}>
+              {walletAddress.slice(0, 20)}...{walletAddress.slice(-8)}
+            </Text>
+          </View>
+        )}
+
         {/* Recovery phrase grid */}
         <View style={styles.phraseContainer}>
           <RecoveryPhraseGrid
@@ -176,7 +183,8 @@ export default function RecoveryPhraseScreen() {
             size="sm"
             style={{ flex: 1, marginLeft: 8, color: theme.colors.text.subtle }}
           >
-            I have saved my recovery phrase securely
+            I have saved my recovery phrase securely and understand I cannot
+            recover my account without it
           </Text>
         </Pressable>
       </ScrollView>
@@ -187,19 +195,23 @@ export default function RecoveryPhraseScreen() {
           size="lg"
           rounded="full"
           onPress={handleContinue}
-          disabled={!hasSaved}
+          disabled={!hasSaved || isConfirming}
+          loading={isConfirming}
           style={{
             width: "100%",
-            backgroundColor: !hasSaved
-              ? "rgb(242, 242, 242)"
-              : theme.colors.primary[500],
+            backgroundColor:
+              !hasSaved || isConfirming
+                ? "rgb(242, 242, 242)"
+                : theme.colors.primary[500],
           }}
         >
           <Button.Text
-            style={{ color: !hasSaved ? theme.colors.text.subtle : "#fff" }}
+            style={{
+              color: !hasSaved || isConfirming ? theme.colors.text.subtle : "#fff",
+            }}
             weight="medium"
           >
-            Continue to Mirage
+            {isConfirming ? "Setting up..." : "Continue to Mirage"}
           </Button.Text>
         </Button>
       </View>
@@ -239,12 +251,12 @@ const styles = StyleSheet.create((theme) => ({
   },
   scrollContent: {
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
     paddingBottom: theme.spacing.xl,
   },
   titleSection: {
     alignItems: "center",
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
   },
   lockIcon: {
     width: 60,
@@ -255,12 +267,32 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     marginBottom: theme.spacing.md,
   },
+  warningBox: {
+    flexDirection: "row",
+    backgroundColor: `${theme.colors.warning[500]}15`,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  warningText: {
+    flex: 1,
+    color: theme.colors.warning[700],
+    lineHeight: 20,
+  },
+  addressBox: {
+    backgroundColor: theme.colors.background.subtle,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+    alignItems: "center",
+  },
   phraseContainer: {
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
   },
   checkboxRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     backgroundColor: theme.colors.background.subtle,
     borderRadius: theme.radius.md,
     padding: theme.spacing.sm,

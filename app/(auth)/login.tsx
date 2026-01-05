@@ -2,6 +2,7 @@ import { RecoveryPhraseInput } from "@/src/components/molecules";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useAuthStore, useUIStore } from "@/src/stores";
+import { isValidMnemonic } from "@/src/wallet";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -14,8 +15,7 @@ export default function LoginScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
 
-  const setUser = useAuthStore((s) => s.setUser);
-  const setRecoveryPhrase = useAuthStore((s) => s.setRecoveryPhrase);
+  const importWallet = useAuthStore((s) => s.importWallet);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
 
   const [words, setWords] = useState<string[]>(Array(12).fill(""));
@@ -46,28 +46,42 @@ export default function LoginScreen() {
   }, []);
 
   const validatePhrase = useCallback(() => {
-    // In a real app, validate against BIP-39 word list
-    // For now, just check that all words are at least 3 chars
-    const newErrors: Record<number, boolean> = {};
-    let hasError = false;
+    const phrase = words.join(" ").trim().toLowerCase();
 
-    words.forEach((word, index) => {
-      if (word.length < 3) {
-        newErrors[index] = true;
-        hasError = true;
+    // Validate using BIP39
+    if (!isValidMnemonic(phrase)) {
+      // Try to identify which words are invalid
+      const newErrors: Record<number, boolean> = {};
+
+      // Mark words that are too short as potentially invalid
+      words.forEach((word, index) => {
+        if (word.length < 3) {
+          newErrors[index] = true;
+        }
+      });
+
+      // If no specific errors found, mark all as potentially wrong
+      if (Object.keys(newErrors).length === 0) {
+        words.forEach((_, index) => {
+          newErrors[index] = true;
+        });
       }
-    });
 
-    setErrors(newErrors);
-    return !hasError;
+      setErrors(newErrors);
+      return false;
+    }
+
+    return true;
   }, [words]);
 
   const handleLogin = useCallback(async () => {
     if (!isComplete) return;
 
+    const phrase = words.join(" ").trim().toLowerCase();
+
     if (!validatePhrase()) {
       triggerHaptic("error");
-      setLoginError("Some words appear to be invalid");
+      setLoginError("Invalid recovery phrase. Please check your words.");
       return;
     }
 
@@ -75,29 +89,33 @@ export default function LoginScreen() {
     triggerHaptic("selection");
     Keyboard.dismiss();
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      // Import the wallet using the mnemonic
+      await importWallet(phrase);
 
-    // Mock: Check if phrase is "valid" (for demo, any 12 valid words work)
-    const phrase = words.join(" ");
+      triggerHaptic("success");
 
-    // Simulate successful login
-    triggerHaptic("success");
+      // Navigate to home
+      router.dismissAll();
+    } catch (error) {
+      console.error("[Login] Failed to import wallet:", error);
+      triggerHaptic("error");
 
-    // Store auth state
-    setRecoveryPhrase(phrase);
-    setUser({
-      id: "user_" + Date.now(),
-      username: "recovered_user",
-      walletAddress: "0x" + Math.random().toString(16).slice(2, 10) + "...",
-      tier: "Standard",
-    });
-
-    setIsLoading(false);
-
-    // Navigate back to app
-    router.dismissAll();
-  }, [isComplete, words, validatePhrase, setUser, setRecoveryPhrase, router]);
+      if (error instanceof Error) {
+        if (error.message.includes("Invalid mnemonic")) {
+          setLoginError("Invalid recovery phrase. Please check your words.");
+        } else if (error.message.includes("already exists")) {
+          setLoginError("A wallet already exists. Please logout first.");
+        } else {
+          setLoginError("Failed to import wallet. Please try again.");
+        }
+      } else {
+        setLoginError("An unexpected error occurred.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isComplete, words, validatePhrase, importWallet, router]);
 
   return (
     <Box flex background="base">
@@ -213,7 +231,6 @@ const styles = StyleSheet.create((theme) => ({
   scrollView: {
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
-    // marginTop: 80,
     justifyContent: "center",
   },
   titleSection: {
@@ -254,7 +271,6 @@ const styles = StyleSheet.create((theme) => ({
     height: 1,
     backgroundColor: theme.colors.border.subtle,
     width: "100%",
-    // marginBottom: theme.spacing.md,
   },
   createAccountButton: {
     paddingTop: theme.spacing.md,
