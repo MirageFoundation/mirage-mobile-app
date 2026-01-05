@@ -2,8 +2,14 @@ import { Avatar, TimeAgo } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons, Octicons } from "@expo/vector-icons";
-import { useCallback, useEffect } from "react";
-import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
+import { useCallback, useEffect, useRef } from "react";
+import {
+  Animated as RNAnimated,
+  Pressable,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import Animated, {
   Easing,
   interpolate,
@@ -13,6 +19,10 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+
+// Vote colors (same as post-actions)
+const UPVOTE_COLOR = "#FF4757"; // Red shade for upvote
+const DOWNVOTE_COLOR = "#8B5CF6"; // Purple shade for downvote
 
 export type CommentAuthor = {
   id: string;
@@ -86,6 +96,10 @@ export const CommentItem = ({
 
   const { author, content, likes, hasLiked, hasDisliked, createdAt } = comment;
 
+  // Animation values for arrow movement (using RN Animated for transform)
+  const upArrowTranslateY = useRef(new RNAnimated.Value(0)).current;
+  const downArrowTranslateY = useRef(new RNAnimated.Value(0)).current;
+
   // Animation for collapse/expand
   const animationProgress = useSharedValue(isCollapsed ? 0 : 1);
 
@@ -140,13 +154,43 @@ export const CommentItem = ({
 
   const handleLikePress = useCallback(() => {
     triggerHaptic(hasLiked ? "light" : "medium");
+    
+    // Animate arrow movement - bounce up
+    RNAnimated.sequence([
+      RNAnimated.timing(upArrowTranslateY, {
+        toValue: -3,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      RNAnimated.timing(upArrowTranslateY, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    
     onLikePress?.();
-  }, [hasLiked, onLikePress]);
+  }, [hasLiked, onLikePress, upArrowTranslateY]);
 
   const handleDislikePress = useCallback(() => {
     triggerHaptic(hasDisliked ? "light" : "medium");
+    
+    // Animate arrow movement - bounce down
+    RNAnimated.sequence([
+      RNAnimated.timing(downArrowTranslateY, {
+        toValue: 3,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      RNAnimated.timing(downArrowTranslateY, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    
     onDislikePress?.();
-  }, [hasDisliked, onDislikePress]);
+  }, [hasDisliked, onDislikePress, downArrowTranslateY]);
 
   const handleReplyPress = useCallback(() => {
     triggerHaptic("selection");
@@ -170,6 +214,10 @@ export const CommentItem = ({
   };
 
   const iconColor = theme.colors.text.subtle;
+  
+  // Vote colors persist based on state (same as post-actions)
+  const upvoteColor = hasLiked ? UPVOTE_COLOR : iconColor;
+  const downvoteColor = hasDisliked ? DOWNVOTE_COLOR : iconColor;
 
   return (
     <Pressable onPress={handlePress} style={[styles.container, style]}>
@@ -242,21 +290,21 @@ export const CommentItem = ({
 
               {/* Like */}
               <Pressable onPress={handleLikePress} style={styles.actionButton}>
-                <Ionicons
-                  name="arrow-up"
-                  size={SIZE_CONFIG.iconSize}
-                  color={hasLiked ? theme.colors.success[500] : iconColor}
-                />
+                <RNAnimated.View
+                  style={{ transform: [{ translateY: upArrowTranslateY }] }}
+                >
+                  <Ionicons
+                    name="arrow-up"
+                    size={SIZE_CONFIG.iconSize}
+                    color={upvoteColor}
+                  />
+                </RNAnimated.View>
                 {likes > 0 && (
                   <Text
                     size="xs"
                     style={[
                       styles.actionText,
-                      {
-                        color: hasLiked
-                          ? theme.colors.success[500]
-                          : theme.colors.text.subtle,
-                      },
+                      { color: upvoteColor },
                     ]}
                   >
                     {formatCount(likes)}
@@ -269,11 +317,15 @@ export const CommentItem = ({
                 onPress={handleDislikePress}
                 style={styles.actionButton}
               >
-                <Ionicons
-                  name="arrow-down"
-                  size={SIZE_CONFIG.iconSize}
-                  color={hasDisliked ? theme.colors.error[500] : iconColor}
-                />
+                <RNAnimated.View
+                  style={{ transform: [{ translateY: downArrowTranslateY }] }}
+                >
+                  <Ionicons
+                    name="arrow-down"
+                    size={SIZE_CONFIG.iconSize}
+                    color={downvoteColor}
+                  />
+                </RNAnimated.View>
               </Pressable>
             </View>
           </View>

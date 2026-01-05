@@ -80,6 +80,14 @@ export default function PostDetailScreen() {
   const [localPostUpdates, setLocalPostUpdates] = useState<Partial<Post>>({});
   const [localComments, setLocalComments] = useState<Comment[]>([]);
 
+  // Vote overrides for comments (tracks hasLiked, hasDisliked, and likeDelta)
+  const [commentVoteOverrides, setCommentVoteOverrides] = useState<
+    Record<
+      string,
+      { hasLiked?: boolean; hasDisliked?: boolean; likeDelta?: number }
+    >
+  >({});
+
   // Merge post data with local updates (for optimistic UI)
   const displayPost = useMemo(() => {
     if (!post) return null;
@@ -90,10 +98,37 @@ export default function PostDetailScreen() {
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Merge API comments with locally added comments (optimistic updates)
+  // Apply vote overrides to a single comment recursively
+  const applyVoteOverridesToComment = useCallback(
+    (comment: Comment): Comment => {
+      const override = commentVoteOverrides[comment.id];
+      const updatedComment: Comment = override
+        ? {
+            ...comment,
+            likes: comment.likes + (override.likeDelta ?? 0),
+            hasLiked: override.hasLiked ?? comment.hasLiked,
+            hasDisliked: override.hasDisliked ?? comment.hasDisliked,
+          }
+        : comment;
+
+      // Apply to replies recursively
+      if (updatedComment.replies && updatedComment.replies.length > 0) {
+        return {
+          ...updatedComment,
+          replies: updatedComment.replies.map(applyVoteOverridesToComment),
+        };
+      }
+
+      return updatedComment;
+    },
+    [commentVoteOverrides]
+  );
+
+  // Merge API comments with locally added comments and apply vote overrides
   const allComments = useMemo(() => {
-    return [...localComments, ...comments];
-  }, [localComments, comments]);
+    const merged = [...localComments, ...comments];
+    return merged.map(applyVoteOverridesToComment);
+  }, [localComments, comments, applyVoteOverridesToComment]);
 
   // Scroll tracking for sticky header
   const [postHeaderHeight, setPostHeaderHeight] = useState(0);
@@ -240,53 +275,79 @@ export default function PostDetailScreen() {
   );
 
   const handleLikeComment = useCallback(
-    (commentId: string) => {
+    (
+      commentId: string,
+      currentlyLiked: boolean,
+      currentlyDisliked: boolean
+    ) => {
       requireAuth(() => {
-        // TODO: Implement vote mutation
-        // For now, update local state for optimistic UI
-        setLocalComments((prev) =>
-          updateCommentInList(
-            commentId,
-            (comment) => ({
-              ...comment,
-              hasLiked: !comment.hasLiked,
+        // Calculate the vote delta
+        let likeDelta = 0;
+        if (currentlyLiked) {
+          // Already liked, removing like: -1
+          likeDelta = -1;
+        } else if (currentlyDisliked) {
+          // Was disliked, now liking: +2 (remove dislike + add like)
+          likeDelta = 2;
+        } else {
+          // Neutral, adding like: +1
+          likeDelta = 1;
+        }
+
+        // Optimistic update using vote overrides
+        setCommentVoteOverrides((prev) => {
+          const currentDelta = prev[commentId]?.likeDelta ?? 0;
+          return {
+            ...prev,
+            [commentId]: {
+              hasLiked: !currentlyLiked,
               hasDisliked: false,
-              likes: comment.hasLiked ? comment.likes - 1 : comment.likes + 1,
-              dislikes: comment.hasDisliked
-                ? comment.dislikes - 1
-                : comment.dislikes,
-            }),
-            prev
-          )
-        );
+              likeDelta: currentDelta + likeDelta,
+            },
+          };
+        });
+        // TODO: Call vote mutation API
       });
     },
-    [requireAuth, updateCommentInList]
+    [requireAuth]
   );
 
   const handleDislikeComment = useCallback(
-    (commentId: string) => {
+    (
+      commentId: string,
+      currentlyLiked: boolean,
+      currentlyDisliked: boolean
+    ) => {
       requireAuth(() => {
-        // TODO: Implement vote mutation
-        // For now, update local state for optimistic UI
-        setLocalComments((prev) =>
-          updateCommentInList(
-            commentId,
-            (comment) => ({
-              ...comment,
-              hasDisliked: !comment.hasDisliked,
+        // Calculate the vote delta
+        let likeDelta = 0;
+        if (currentlyDisliked) {
+          // Already disliked, removing dislike: +1
+          likeDelta = 1;
+        } else if (currentlyLiked) {
+          // Was liked, now disliking: -2 (remove like + add dislike)
+          likeDelta = -2;
+        } else {
+          // Neutral, adding dislike: -1
+          likeDelta = -1;
+        }
+
+        // Optimistic update using vote overrides
+        setCommentVoteOverrides((prev) => {
+          const currentDelta = prev[commentId]?.likeDelta ?? 0;
+          return {
+            ...prev,
+            [commentId]: {
               hasLiked: false,
-              dislikes: comment.hasDisliked
-                ? comment.dislikes - 1
-                : comment.dislikes + 1,
-              likes: comment.hasLiked ? comment.likes - 1 : comment.likes,
-            }),
-            prev
-          )
-        );
+              hasDisliked: !currentlyDisliked,
+              likeDelta: currentDelta + likeDelta,
+            },
+          };
+        });
+        // TODO: Call vote mutation API
       });
     },
-    [requireAuth, updateCommentInList]
+    [requireAuth]
   );
 
   const handleReplyToComment = useCallback(
@@ -599,8 +660,12 @@ export default function PostDetailScreen() {
           // TODO: Navigate to user profile
           console.log("Navigate to author:", authorId);
         }}
-        onLikePress={handleLikeComment}
-        onDislikePress={handleDislikeComment}
+        onLikePress={(commentId, hasLiked, hasDisliked) =>
+          handleLikeComment(commentId, hasLiked, hasDisliked)
+        }
+        onDislikePress={(commentId, hasLiked, hasDisliked) =>
+          handleDislikeComment(commentId, hasLiked, hasDisliked)
+        }
         onReplyPress={handleReplyToComment}
         onMorePress={handleMoreOptions}
         showDivider={true}

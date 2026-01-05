@@ -101,7 +101,10 @@ export function HomeScreen() {
 
   // Optimistic updates for votes (local state overlay)
   const [voteOverrides, setVoteOverrides] = useState<
-    Record<string, { hasLiked?: boolean; hasDisliked?: boolean }>
+    Record<
+      string,
+      { hasLiked?: boolean; hasDisliked?: boolean; likeDelta?: number }
+    >
   >({});
 
   const handleEnableAdultContent = useCallback(() => {
@@ -151,14 +154,31 @@ export function HomeScreen() {
   const handleLikePress = useCallback(
     (postId: string, currentlyLiked: boolean, currentlyDisliked: boolean) => {
       requireAuth(() => {
+        // Calculate the vote delta
+        let likeDelta = 0;
+        if (currentlyLiked) {
+          // Already liked, removing like: -1
+          likeDelta = -1;
+        } else if (currentlyDisliked) {
+          // Was disliked, now liking: +2 (remove dislike + add like)
+          likeDelta = 2;
+        } else {
+          // Neutral, adding like: +1
+          likeDelta = 1;
+        }
+
         // Optimistic update
-        setVoteOverrides((prev) => ({
-          ...prev,
-          [postId]: {
-            hasLiked: !currentlyLiked,
-            hasDisliked: false,
-          },
-        }));
+        setVoteOverrides((prev) => {
+          const currentDelta = prev[postId]?.likeDelta ?? 0;
+          return {
+            ...prev,
+            [postId]: {
+              hasLiked: !currentlyLiked,
+              hasDisliked: false,
+              likeDelta: currentDelta + likeDelta,
+            },
+          };
+        });
         // TODO: Call vote mutation API
       });
     },
@@ -168,14 +188,31 @@ export function HomeScreen() {
   const handleDislikePress = useCallback(
     (postId: string, currentlyLiked: boolean, currentlyDisliked: boolean) => {
       requireAuth(() => {
+        // Calculate the vote delta
+        let likeDelta = 0;
+        if (currentlyDisliked) {
+          // Already disliked, removing dislike: +1
+          likeDelta = 1;
+        } else if (currentlyLiked) {
+          // Was liked, now disliking: -2 (remove like + add dislike)
+          likeDelta = -2;
+        } else {
+          // Neutral, adding dislike: -1
+          likeDelta = -1;
+        }
+
         // Optimistic update
-        setVoteOverrides((prev) => ({
-          ...prev,
-          [postId]: {
-            hasLiked: false,
-            hasDisliked: !currentlyDisliked,
-          },
-        }));
+        setVoteOverrides((prev) => {
+          const currentDelta = prev[postId]?.likeDelta ?? 0;
+          return {
+            ...prev,
+            [postId]: {
+              hasLiked: false,
+              hasDisliked: !currentlyDisliked,
+              likeDelta: currentDelta + likeDelta,
+            },
+          };
+        });
         // TODO: Call vote mutation API
       });
     },
@@ -230,6 +267,7 @@ export function HomeScreen() {
       if (!override) return post;
       return {
         ...post,
+        likes: post.likes + (override.likeDelta ?? 0),
         hasLiked: override.hasLiked ?? post.hasLiked,
         hasDisliked: override.hasDisliked ?? post.hasDisliked,
       };
