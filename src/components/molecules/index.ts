@@ -7,6 +7,7 @@ export {
   type PostAuthor,
   type PostMedia,
 } from "./post-card";
+export { PostCardSkeleton, PostCardSkeletonList } from "./post-card-skeleton";
 
 // Comment system
 export { CommentInput } from "./comment-input";

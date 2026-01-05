@@ -1,14 +1,16 @@
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
-import { FlatList, View } from "react-native";
+import { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, FlatList, RefreshControl, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StyleSheet } from "react-native-unistyles";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+import { useInfinitePosts, transformApiPosts } from "@/src/api";
 import {
   AdultContentPopup,
   FeedHeader,
   PostCard,
+  PostCardSkeletonList,
   type Post,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
@@ -20,191 +22,10 @@ import {
 } from "@/src/providers/scroll-animation-context";
 import { useAuthStore, usePreferencesStore } from "@/src/stores";
 
-// Mock data for demonstration
-const MOCK_POSTS: Post[] = [
-  {
-    id: "1",
-    author: {
-      id: "user1",
-      username: "satoshi_fan",
-      avatarSeed: "satoshi_fan",
-    },
-    title:
-      "Bitcoin hits new all-time high as institutional adoption accelerates",
-    body: "The cryptocurrency market is experiencing unprecedented growth as major financial institutions continue to embrace digital assets. This marks a significant shift in traditional finance's approach to blockchain technology.",
-    topic: "Crypto",
-    likes: 2847,
-    dislikes: 124,
-    comments: 356,
-    hasLiked: false,
-    hasDisliked: false,
-    isFollowing: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 30), // 30 mins ago
-  },
-  {
-    id: "2",
-    author: {
-      id: "user2",
-      username: "tech_insider",
-      avatarSeed: "tech_insider",
-    },
-    title: "Apple announces revolutionary new spatial computing platform",
-    media: [
-      {
-        uri: "https://images.unsplash.com/photo-1531297484001-80022131f5a1?w=800",
-        type: "image",
-        aspectRatio: 16 / 9,
-      },
-    ],
-    topic: "Technology",
-    likes: 5621,
-    dislikes: 203,
-    comments: 892,
-    hasLiked: true,
-    hasDisliked: false,
-    isFollowing: true,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-  },
-  {
-    id: "3",
-    author: {
-      id: "user3",
-      username: "gamer_pro",
-      avatarSeed: "gamer_pro",
-    },
-    title: "GTA 6 trailer breaks YouTube records with 200M views in 24 hours",
-    body: "Rockstar Games has done it again. The highly anticipated trailer showcases stunning graphics, a return to Vice City, and introduces the franchise's first female protagonist.",
-    media: [
-      {
-        uri: "https://images.unsplash.com/photo-1612287230202-1ff1d85d1bdf?w=800",
-        type: "image",
-        aspectRatio: 16 / 10,
-      },
-    ],
-    topic: "Gaming",
-    likes: 15420,
-    dislikes: 342,
-    comments: 2103,
-    hasLiked: false,
-    hasDisliked: false,
-    isFollowing: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5), // 5 hours ago
-  },
-  {
-    id: "4",
-    author: {
-      id: "user4",
-      username: "science_daily",
-      avatarSeed: "science_daily",
-    },
-    title: "Scientists achieve breakthrough in nuclear fusion energy",
-    body: "For the first time, researchers have produced more energy from fusion than was used to initiate the reaction. This could revolutionize clean energy production within the next decade.",
-    topic: "Science",
-    likes: 8932,
-    dislikes: 56,
-    comments: 1247,
-    hasLiked: false,
-    hasDisliked: false,
-    isFollowing: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 8), // 8 hours ago
-  },
-  {
-    id: "5",
-    author: {
-      id: "user5",
-      username: "meme_lord",
-      avatarSeed: "meme_lord",
-    },
-    title: "When you realize it's only Tuesday",
-    media: [
-      {
-        uri: "https://images.unsplash.com/photo-1533738363-b7f9aef128ce?w=800",
-        type: "image",
-        aspectRatio: 1,
-      },
-    ],
-    topic: "Memes",
-    likes: 34521,
-    dislikes: 892,
-    comments: 4521,
-    hasLiked: false,
-    hasDisliked: false,
-    isFollowing: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 12), // 12 hours ago
-  },
-  {
-    id: "6",
-    author: {
-      id: "user6",
-      username: "world_news",
-      avatarSeed: "world_news",
-    },
-    title: "Historic climate agreement reached at UN summit",
-    body: "World leaders have agreed to unprecedented measures to combat climate change, including binding emissions targets and a $100 billion fund for developing nations.",
-    topic: "News",
-    likes: 6234,
-    dislikes: 1203,
-    comments: 2891,
-    hasLiked: false,
-    hasDisliked: false,
-    isFollowing: true,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 18), // 18 hours ago
-  },
-  {
-    id: "7",
-    author: {
-      id: "user7",
-      username: "indie_filmmaker",
-      avatarSeed: "indie_filmmaker",
-    },
-    title: "My first short film just got accepted into Sundance!",
-    body: "After 3 years of work and countless rejections, I can't believe this is happening. Dreams do come true if you keep pushing. Thank you to everyone who believed in me!",
-    media: [
-      {
-        uri: "https://images.unsplash.com/photo-1485846234645-a62644f84728?w=800",
-        type: "image",
-        aspectRatio: 2.35,
-      },
-    ],
-    topic: "Movies",
-    likes: 12893,
-    dislikes: 34,
-    comments: 1567,
-    hasLiked: false,
-    hasDisliked: false,
-    isFollowing: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-  },
-  {
-    id: "8",
-    author: {
-      id: "user8",
-      username: "space_enthusiast",
-      avatarSeed: "space_enthusiast",
-    },
-    title: "SpaceX Starship completes first successful orbital flight",
-    body: "The massive rocket completed a full orbit around Earth before landing back at the launch site. This marks a major milestone in humanity's quest to become a multi-planetary species.",
-    media: [
-      {
-        uri: "https://images.unsplash.com/photo-1516849841032-87cbac4d88f7?w=800",
-        type: "image",
-        aspectRatio: 16 / 9,
-      },
-    ],
-    topic: "Space",
-    likes: 28456,
-    dislikes: 167,
-    comments: 3421,
-    hasLiked: false,
-    hasDisliked: false,
-    isFollowing: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 36), // 1.5 days ago
-  },
-];
-
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Post>);
 
 export function HomeScreen() {
+  const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { scrollHandler, headerAnimatedStyle } = useScrollAnimationContext();
@@ -217,6 +38,7 @@ export function HomeScreen() {
     (s) => s.setHasSeenAdultPrompt
   );
   const setAdultContent = usePreferencesStore((s) => s.setAdultContent);
+  const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const currentUser = useAuthStore((s) => s.user);
 
   // Show adult content popup if user hasn't seen it
@@ -224,6 +46,50 @@ export function HomeScreen() {
   const [showAdultPopup, setShowAdultPopup] = useState(
     true || !hasSeenAdultPrompt
   );
+
+  // Map feed type to API sort parameter
+  const getSortBy = () => {
+    switch (feedType) {
+      case "popular":
+        return "top" as const;
+      case "latest":
+        return "new" as const;
+      default:
+        return "magic" as const;
+    }
+  };
+
+  // Fetch posts from API
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfinitePosts({
+    limit: 20,
+    by: getSortBy(),
+    topic: "all",
+    allowed_tags: adultContentEnabled ? "sensitive,adult,nsfw" : "sensitive",
+  });
+
+  // Transform API data to UI format
+  const posts = useMemo(() => {
+    if (!data?.pages) return [];
+    const allPosts = data.pages.flatMap((page) => page.posts);
+    return transformApiPosts(allPosts);
+  }, [data]);
+
+  // Revealed posts for content warnings
+  const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
+
+  // Optimistic updates for votes (local state overlay)
+  const [voteOverrides, setVoteOverrides] = useState<
+    Record<string, { hasLiked?: boolean; hasDisliked?: boolean }>
+  >({});
 
   const handleEnableAdultContent = useCallback(() => {
     setAdultContent(true);
@@ -236,10 +102,6 @@ export function HomeScreen() {
     setHasSeenAdultPrompt();
     setShowAdultPopup(false);
   }, [setAdultContent, setHasSeenAdultPrompt]);
-
-  // Local state for optimistic updates
-  const [posts, setPosts] = useState<Post[]>(MOCK_POSTS);
-  const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
   const getFeedTitle = () => {
     switch (feedType) {
@@ -274,48 +136,34 @@ export function HomeScreen() {
   }, []);
 
   const handleLikePress = useCallback(
-    (postId: string) => {
+    (postId: string, currentlyLiked: boolean, currentlyDisliked: boolean) => {
       requireAuth(() => {
-        setPosts((prev) =>
-          prev.map((post) => {
-            if (post.id !== postId) return post;
-
-            const wasLiked = post.hasLiked;
-            const wasDisliked = post.hasDisliked;
-
-            return {
-              ...post,
-              hasLiked: !wasLiked,
-              hasDisliked: false,
-              likes: wasLiked ? post.likes - 1 : post.likes + 1,
-              dislikes: wasDisliked ? post.dislikes - 1 : post.dislikes,
-            };
-          })
-        );
+        // Optimistic update
+        setVoteOverrides((prev) => ({
+          ...prev,
+          [postId]: {
+            hasLiked: !currentlyLiked,
+            hasDisliked: false,
+          },
+        }));
+        // TODO: Call vote mutation API
       });
     },
     [requireAuth]
   );
 
   const handleDislikePress = useCallback(
-    (postId: string) => {
+    (postId: string, currentlyLiked: boolean, currentlyDisliked: boolean) => {
       requireAuth(() => {
-        setPosts((prev) =>
-          prev.map((post) => {
-            if (post.id !== postId) return post;
-
-            const wasLiked = post.hasLiked;
-            const wasDisliked = post.hasDisliked;
-
-            return {
-              ...post,
-              hasDisliked: !wasDisliked,
-              hasLiked: false,
-              dislikes: wasDisliked ? post.dislikes - 1 : post.dislikes + 1,
-              likes: wasLiked ? post.likes - 1 : post.likes,
-            };
-          })
-        );
+        // Optimistic update
+        setVoteOverrides((prev) => ({
+          ...prev,
+          [postId]: {
+            hasLiked: false,
+            hasDisliked: !currentlyDisliked,
+          },
+        }));
+        // TODO: Call vote mutation API
       });
     },
     [requireAuth]
@@ -331,15 +179,8 @@ export function HomeScreen() {
   const handleFollowPress = useCallback(
     (authorId: string) => {
       requireAuth(() => {
-        setPosts((prev) =>
-          prev.map((post) => {
-            if (post.author.id !== authorId) return post;
-            return {
-              ...post,
-              isFollowing: !post.isFollowing,
-            };
-          })
-        );
+        // TODO: Call follow mutation API
+        console.log("Follow author:", authorId);
       });
     },
     [requireAuth]
@@ -353,25 +194,65 @@ export function HomeScreen() {
     });
   }, []);
 
+  const handleRefresh = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  const handleEndReached = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // Apply vote overrides to posts
+  const getPostWithOverrides = useCallback(
+    (post: Post): Post => {
+      const override = voteOverrides[post.id];
+      if (!override) return post;
+      return {
+        ...post,
+        hasLiked: override.hasLiked ?? post.hasLiked,
+        hasDisliked: override.hasDisliked ?? post.hasDisliked,
+      };
+    },
+    [voteOverrides]
+  );
+
   const renderPost = useCallback(
-    ({ item: post }: { item: Post }) => (
-      <PostCard
-        post={post}
-        isOwnPost={currentUser?.id === post.author.id}
-        onPress={() => handlePostPress(post.id)}
-        onAuthorPress={() => handleAuthorPress(post.author.id)}
-        onMorePress={() => handleMorePress(post.id)}
-        onLikePress={() => handleLikePress(post.id)}
-        onDislikePress={() => handleDislikePress(post.id)}
-        onCommentPress={() => handleCommentPress(post.id)}
-        onFollowPress={() => handleFollowPress(post.author.id)}
-        onRevealContent={() => handleRevealContent(post.id)}
-        contentRevealed={revealedPosts.has(post.id)}
-        shareUrl={`https://mirage.app/post/${post.id}`}
-      />
-    ),
+    ({ item: post }: { item: Post }) => {
+      const postWithOverrides = getPostWithOverrides(post);
+      return (
+        <PostCard
+          post={postWithOverrides}
+          isOwnPost={currentUser?.id === post.author.id}
+          onPress={() => handlePostPress(post.id)}
+          onAuthorPress={() => handleAuthorPress(post.author.id)}
+          onMorePress={() => handleMorePress(post.id)}
+          onLikePress={() =>
+            handleLikePress(
+              post.id,
+              postWithOverrides.hasLiked ?? false,
+              postWithOverrides.hasDisliked ?? false
+            )
+          }
+          onDislikePress={() =>
+            handleDislikePress(
+              post.id,
+              postWithOverrides.hasLiked ?? false,
+              postWithOverrides.hasDisliked ?? false
+            )
+          }
+          onCommentPress={() => handleCommentPress(post.id)}
+          onFollowPress={() => handleFollowPress(post.author.id)}
+          onRevealContent={() => handleRevealContent(post.id)}
+          contentRevealed={revealedPosts.has(post.id)}
+          shareUrl={`https://mirage.app/post/${post.id}`}
+        />
+      );
+    },
     [
       currentUser,
+      getPostWithOverrides,
       handlePostPress,
       handleAuthorPress,
       handleMorePress,
@@ -386,9 +267,30 @@ export function HomeScreen() {
 
   const keyExtractor = useCallback((item: Post) => item.id, []);
 
-  const ListEmptyComponent = useCallback(
-    () => (
-      <Box flex center p="lg">
+  const ListEmptyComponent = useCallback(() => {
+    if (isLoading) {
+      return <PostCardSkeletonList count={5} />;
+    }
+
+    if (isError) {
+      return (
+        <Box flex center p="lg" style={{ paddingTop: 100 }}>
+          <Text size="lg" weight="medium" mode="subtle">
+            Failed to load posts
+          </Text>
+          <Text
+            size="sm"
+            mode="subtle"
+            style={{ marginTop: 8, textAlign: "center" }}
+          >
+            {error?.message || "Something went wrong. Pull to refresh."}
+          </Text>
+        </Box>
+      );
+    }
+
+    return (
+      <Box flex center p="lg" style={{ paddingTop: 100 }}>
         <Text size="lg" weight="medium" mode="subtle">
           No posts yet
         </Text>
@@ -400,9 +302,17 @@ export function HomeScreen() {
           Be the first to share something interesting!
         </Text>
       </Box>
-    ),
-    []
-  );
+    );
+  }, [isLoading, isError, error]);
+
+  const ListFooterComponent = useCallback(() => {
+    if (!isFetchingNextPage) return null;
+    return (
+      <Box center p="md">
+        <ActivityIndicator size="small" color={theme.colors.brand[500]} />
+      </Box>
+    );
+  }, [isFetchingNextPage, theme.colors.brand]);
 
   return (
     <Box flex background="base">
@@ -429,8 +339,20 @@ export function HomeScreen() {
         contentContainerStyle={{
           paddingTop: insets.top + HEADER_HEIGHT,
           paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16,
+          flexGrow: posts.length === 0 ? 1 : undefined,
         }}
         ListEmptyComponent={ListEmptyComponent}
+        ListFooterComponent={ListFooterComponent}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading && posts.length > 0}
+            onRefresh={handleRefresh}
+            tintColor={theme.colors.brand[500]}
+            progressViewOffset={insets.top + HEADER_HEIGHT}
+          />
+        }
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.5}
         // Performance optimizations
         removeClippedSubviews={true}
         maxToRenderPerBatch={5}
