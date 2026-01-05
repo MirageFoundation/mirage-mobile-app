@@ -13,5 +13,5 @@ export interface GetInboxParams {
 export async function getInbox(
   params: GetInboxParams
 ): Promise<InboxResponse> {
-  return api.get<InboxResponse>("/core/get_inbox", params);
+  return api.get<InboxResponse>("/get_inbox", params);
 }

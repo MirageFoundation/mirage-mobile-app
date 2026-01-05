@@ -14,5 +14,5 @@ export interface SearchParams {
  * Prefix @ for users, # for topics
  */
 export async function search(params: SearchParams): Promise<SearchResponse> {
-  return api.get<SearchResponse>("/core/search", params);
+  return api.get<SearchResponse>("/search", params);
 }

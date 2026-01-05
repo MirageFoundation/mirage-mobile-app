@@ -12,5 +12,5 @@ export interface GetTxStatusParams {
 export async function getTxStatus(
   params: GetTxStatusParams
 ): Promise<TxStatusResponse> {
-  return api.get<TxStatusResponse>("/core/get_tx_status", params);
+  return api.get<TxStatusResponse>("/get_tx_status", params);
 }

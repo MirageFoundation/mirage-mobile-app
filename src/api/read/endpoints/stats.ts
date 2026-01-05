@@ -16,21 +16,21 @@ import type {
  * Get network statistics including difficulty history
  */
 export async function getNetworkStats(): Promise<NetworkStatsResponse> {
-  return api.get<NetworkStatsResponse>("/core/get_network_stats");
+  return api.get<NetworkStatsResponse>("/get_network_stats");
 }
 
 /**
  * Get circulation statistics including top accounts
  */
 export async function getCirculationStats(): Promise<CirculationStatsResponse> {
-  return api.get<CirculationStatsResponse>("/core/get_circulation_stats");
+  return api.get<CirculationStatsResponse>("/get_circulation_stats");
 }
 
 /**
  * Get app-wide statistics
  */
 export async function getAppStats(): Promise<AppStatsResponse> {
-  return api.get<AppStatsResponse>("/core/get_stats");
+  return api.get<AppStatsResponse>("/get_stats");
 }
 
 // ============================================
@@ -56,7 +56,7 @@ export interface GetLeaderboardParams {
 export async function getLeaderboard(
   params?: GetLeaderboardParams
 ): Promise<LeaderboardResponse> {
-  return api.get<LeaderboardResponse>("/core/leaderboard", params);
+  return api.get<LeaderboardResponse>("/leaderboard", params);
 }
 
 // ============================================
@@ -84,5 +84,5 @@ export async function getReferralStats(
  * Get list of network peers
  */
 export async function getPeers(): Promise<PeersResponse> {
-  return api.get<PeersResponse>("/core/get_peers");
+  return api.get<PeersResponse>("/get_peers");
 }

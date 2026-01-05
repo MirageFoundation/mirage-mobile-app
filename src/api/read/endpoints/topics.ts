@@ -11,7 +11,7 @@ export interface GetTopicsParams {
 export async function getTopics(
   params?: GetTopicsParams
 ): Promise<TopicsResponse> {
-  return api.get<TopicsResponse>("/core/get_topics", params);
+  return api.get<TopicsResponse>("/get_topics", params);
 }
 
 export interface SearchTopicsParams {
@@ -26,5 +26,5 @@ export interface SearchTopicsParams {
 export async function searchTopics(
   params: SearchTopicsParams
 ): Promise<SearchTopicsResponse> {
-  return api.get<SearchTopicsResponse>("/core/search_topics", params);
+  return api.get<SearchTopicsResponse>("/search_topics", params);
 }

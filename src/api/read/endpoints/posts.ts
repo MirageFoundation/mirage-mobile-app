@@ -28,7 +28,7 @@ export interface GetPostsParams {
 export async function getPosts(
   params?: GetPostsParams
 ): Promise<PostsResponse> {
-  return api.get<PostsResponse>("/core/get_posts", params);
+  return api.get<PostsResponse>("/get_posts", params);
 }
 
 // ============================================
@@ -49,7 +49,7 @@ export interface GetUserPostsParams {
 export async function getUserPosts(
   params: GetUserPostsParams
 ): Promise<PostsResponse> {
-  return api.get<PostsResponse>("/core/get_user_posts", params);
+  return api.get<PostsResponse>("/get_user_posts", params);
 }
 
 // ============================================
@@ -67,7 +67,7 @@ export interface GetCommentsParams {
 export async function getComments(
   params: GetCommentsParams
 ): Promise<CommentsResponse> {
-  return api.get<CommentsResponse>("/core/get_comments", params);
+  return api.get<CommentsResponse>("/get_comments", params);
 }
 
 export interface GetRootPostIdParams {
@@ -80,7 +80,7 @@ export interface GetRootPostIdParams {
 export async function getRootPostId(
   params: GetRootPostIdParams
 ): Promise<RootPostIdResponse> {
-  return api.get<RootPostIdResponse>("/core/get_root_post_id", params);
+  return api.get<RootPostIdResponse>("/get_root_post_id", params);
 }
 
 export interface GetCommentContextParams {
@@ -95,7 +95,7 @@ export interface GetCommentContextParams {
 export async function getCommentContext(
   params: GetCommentContextParams
 ): Promise<CommentContextResponse> {
-  return api.get<CommentContextResponse>("/core/get_comment_context", params);
+  return api.get<CommentContextResponse>("/get_comment_context", params);
 }
 
 // ============================================

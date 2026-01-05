@@ -25,7 +25,7 @@ export interface GetUserStatusParams {
 export async function getUserStatus(
   params: GetUserStatusParams
 ): Promise<UserStatusResponse> {
-  return api.get<UserStatusResponse>("/core/get_user_status", params);
+  return api.get<UserStatusResponse>("/get_user_status", params);
 }
 
 export interface GetProfileParams {
@@ -38,7 +38,7 @@ export interface GetProfileParams {
 export async function getProfile(
   params: GetProfileParams
 ): Promise<ProfileResponse> {
-  return api.get<ProfileResponse>("/core/get_profile", params);
+  return api.get<ProfileResponse>("/get_profile", params);
 }
 
 // ============================================
@@ -55,7 +55,7 @@ export interface GetUserFollowedParams {
 export async function getUserFollowed(
   params: GetUserFollowedParams
 ): Promise<UserFollowedResponse> {
-  return api.get<UserFollowedResponse>("/core/get_user_followed", params);
+  return api.get<UserFollowedResponse>("/get_user_followed", params);
 }
 
 export interface GetUserBlockedParams {
@@ -68,7 +68,7 @@ export interface GetUserBlockedParams {
 export async function getUserBlocked(
   params: GetUserBlockedParams
 ): Promise<UserBlockedResponse> {
-  return api.get<UserBlockedResponse>("/core/get_user_blocked", params);
+  return api.get<UserBlockedResponse>("/get_user_blocked", params);
 }
 
 // ============================================
@@ -85,7 +85,7 @@ export interface GetPreferencesParams {
 export async function getPreferences(
   params: GetPreferencesParams
 ): Promise<PreferencesResponse> {
-  return api.get<PreferencesResponse>("/core/get_preferences", params);
+  return api.get<PreferencesResponse>("/get_preferences", params);
 }
 
 export interface GetSimilarUsersParams {
@@ -98,7 +98,7 @@ export interface GetSimilarUsersParams {
 export async function getSimilarUsers(
   params: GetSimilarUsersParams
 ): Promise<SimilarUsersResponse> {
-  return api.get<SimilarUsersResponse>("/core/get_similar_users", params);
+  return api.get<SimilarUsersResponse>("/get_similar_users", params);
 }
 
 // ============================================
@@ -116,7 +116,7 @@ export async function getAddressFromUsername(
   params: GetAddressFromUsernameParams
 ): Promise<AddressFromUsernameResponse> {
   return api.get<AddressFromUsernameResponse>(
-    "/core/get_address_from_username",
+    "/get_address_from_username",
     params
   );
 }
@@ -132,7 +132,7 @@ export async function getUsernameFromAddress(
   params: GetUsernameFromAddressParams
 ): Promise<UsernameFromAddressResponse> {
   return api.get<UsernameFromAddressResponse>(
-    "/core/get_username_from_address",
+    "/get_username_from_address",
     params
   );
 }
@@ -148,7 +148,7 @@ export async function bulkGetAddressFromUsername(
   usernames: string[]
 ): Promise<AddressFromUsernameResponse[]> {
   return api.post<AddressFromUsernameResponse[]>(
-    "/core/get_address_from_username",
+    "/get_address_from_username",
     { usernames }
   );
 }
@@ -160,7 +160,7 @@ export async function bulkGetUsernameFromAddress(
   addresses: string[]
 ): Promise<UsernameFromAddressResponse[]> {
   return api.post<UsernameFromAddressResponse[]>(
-    "/core/get_username_from_address",
+    "/get_username_from_address",
     { addresses }
   );
 }
@@ -181,5 +181,5 @@ export interface GetUsersParams {
 export async function getUsers(
   params?: GetUsersParams
 ): Promise<UsersResponse> {
-  return api.get<UsersResponse>("/core/get_users", params);
+  return api.get<UsersResponse>("/get_users", params);
 }
