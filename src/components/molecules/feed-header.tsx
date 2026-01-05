@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { MenuIcon } from "@/assets/figma-icons";
 import { Pressable, View } from "react-native";
 import {
   Menu,
@@ -113,11 +114,7 @@ export const FeedHeader = ({
         {/* Left section - Menu button and Title (as feed type selector) */}
         <View style={styles.leftSection}>
           <Pressable onPress={onMenuPress} style={styles.iconButton}>
-            <Ionicons
-              name="menu-outline"
-              size={24}
-              color={theme.colors.text.default}
-            />
+            <MenuIcon size={24} color={theme.colors.text.default} />
           </Pressable>
 
           {onFeedTypeChange ? (

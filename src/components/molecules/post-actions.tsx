@@ -1,10 +1,13 @@
+import {
+  CommentIcon,
+  DownvoteFilledIcon,
+  DownvoteOutlineIcon,
+  ShareIcon,
+  UpvoteFilledIcon,
+  UpvoteOutlineIcon,
+} from "@/assets/figma-icons";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import {
-  AntDesign,
-  Ionicons,
-  MaterialCommunityIcons,
-} from "@expo/vector-icons";
 import { useRef } from "react";
 import {
   Animated,
@@ -197,15 +200,15 @@ export const PostActions = ({
               transform: [{ translateY: upArrowTranslateY }],
             }}
           >
-            <AntDesign
-              name="arrow-up"
-              size={iconSize}
-              color={upvoteColor}
-            />
+            {hasLiked ? (
+              <UpvoteFilledIcon size={iconSize} color={upvoteColor} />
+            ) : (
+              <UpvoteOutlineIcon size={iconSize} color={upvoteColor} />
+            )}
           </Animated.View>
           <Text
             size={voteTextSize}
-            weight={hasLiked ? "semibold" : "regular"}
+            weight="bold"
             style={{ marginLeft: 3, color: upvoteColor }}
           >
             {formatCount(likes)}
@@ -226,11 +229,11 @@ export const PostActions = ({
               transform: [{ translateY: downArrowTranslateY }],
             }}
           >
-            <AntDesign
-              name="arrow-down"
-              size={iconSize}
-              color={downvoteColor}
-            />
+            {hasDisliked ? (
+              <DownvoteFilledIcon size={iconSize} color={downvoteColor} />
+            ) : (
+              <DownvoteOutlineIcon size={iconSize} color={downvoteColor} />
+            )}
           </Animated.View>
         </Pressable>
       </View>
@@ -246,12 +249,12 @@ export const PostActions = ({
           disabled={disabled}
           style={[styles.voteButton, disabled && styles.disabled]}
         >
-          <MaterialCommunityIcons
-            name="comment-outline"
-            size={iconSize}
-            color={defaultColor}
-          />
-          <Text size={voteTextSize} style={{ marginLeft: 3, color: defaultColor }}>
+          <CommentIcon size={iconSize} color={defaultColor} />
+          <Text
+            size={voteTextSize}
+            weight="bold"
+            style={{ marginLeft: 3, color: defaultColor }}
+          >
             {formatCount(comments)}
           </Text>
         </Pressable>
@@ -267,7 +270,7 @@ export const PostActions = ({
           disabled={disabled}
           style={[styles.voteButton, disabled && styles.disabled]}
         >
-          <Ionicons name="share-outline" size={iconSize} color={defaultColor} />
+          <ShareIcon size={iconSize} color={defaultColor} />
         </Pressable>
       </View>
     </View>
