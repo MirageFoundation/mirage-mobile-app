@@ -1,13 +1,17 @@
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, RefreshControl, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  RefreshControl,
+  View,
+} from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { useInfinitePosts, transformApiPosts } from "@/src/api";
+import { transformApiPosts, useInfinitePosts } from "@/src/api";
 import {
-  AdultContentPopup,
   FeedHeader,
   PostCard,
   PostCardSkeletonList,
@@ -362,11 +366,11 @@ export function HomeScreen() {
       />
 
       {/* Adult Content Permission Popup */}
-      <AdultContentPopup
+      {/* <AdultContentPopup
         visible={showAdultPopup}
         onEnable={handleEnableAdultContent}
         onDecline={handleDeclineAdultContent}
-      />
+      /> */}
     </Box>
   );
 }

@@ -1,4 +1,9 @@
-import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
+import { Ionicons } from "@expo/vector-icons";
+import BottomSheet, {
+  BottomSheetBackdrop,
+  BottomSheetView,
+  type BottomSheetBackdropProps,
+} from "@gorhom/bottom-sheet";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useMemo, useRef, useState } from "react";
@@ -31,6 +36,19 @@ export const DevToolbar = () => {
   const handleSheetChange = useCallback((index: number) => {
     setIsSheetOpen(index >= 0);
   }, []);
+
+  const renderBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior="close"
+        opacity={0.7}
+      />
+    ),
+    []
+  );
 
   const clearDatabase = async () => {
     try {
@@ -86,7 +104,7 @@ export const DevToolbar = () => {
             try {
               setIsLoading(true);
               Haptics.notificationAsync(
-                Haptics.NotificationFeedbackType.Success,
+                Haptics.NotificationFeedbackType.Success
               );
               Alert.alert("Success", "All app data cleared (still logged in)");
             } catch (error) {
@@ -97,7 +115,7 @@ export const DevToolbar = () => {
             }
           },
         },
-      ],
+      ]
     );
   };
 
@@ -129,7 +147,7 @@ export const DevToolbar = () => {
 
               handleCloseSheet();
               Haptics.notificationAsync(
-                Haptics.NotificationFeedbackType.Success,
+                Haptics.NotificationFeedbackType.Success
               );
               Alert.alert("Success", "App completely reset. All data cleared.");
             } catch (error) {
@@ -140,7 +158,7 @@ export const DevToolbar = () => {
             }
           },
         },
-      ],
+      ]
     );
   };
 
@@ -168,13 +186,39 @@ export const DevToolbar = () => {
         snapPoints={snapPoints}
         enablePanDownToClose
         onChange={handleSheetChange}
-        backgroundStyle={{ backgroundColor: theme.colors.background.default }}
+        backgroundStyle={{
+          backgroundColor: theme.colors.background.default,
+          borderTopWidth: 1,
+          borderTopColor: theme.colors.border.default,
+          borderLeftWidth: 1,
+          borderRightWidth: 1,
+          borderLeftColor: theme.colors.border.default,
+          borderRightColor: theme.colors.border.default,
+        }}
         handleIndicatorStyle={{ backgroundColor: theme.colors.border.default }}
+        backdropComponent={renderBackdrop}
       >
         <BottomSheetView style={styles.content}>
-          <Text size="lg" weight="semibold" style={styles.title}>
-            Developer Tools
-          </Text>
+          <View style={styles.header}>
+            <Text size="lg" weight="semibold">
+              Developer Tools
+            </Text>
+            <Pressable
+              onPress={handleCloseSheet}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={({ pressed }) => [
+                styles.closeButton,
+                { backgroundColor: theme.colors.background.subtle },
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Ionicons
+                name="close"
+                size={20}
+                color={theme.colors.text.default}
+              />
+            </Pressable>
+          </View>
 
           <View style={styles.buttons}>
             <Button
@@ -264,11 +308,20 @@ const styles = StyleSheet.create((theme) => ({
   },
   content: {
     flex: 1,
-    padding: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.lg,
   },
-  title: {
-    textAlign: "center",
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: theme.spacing.lg,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
   },
   buttons: {
     gap: theme.spacing.md,

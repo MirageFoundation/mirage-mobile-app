@@ -180,6 +180,7 @@ export function SearchScreen() {
   const recentSearches = useSearchStore((s) => s.recentSearches);
   const addRecentSearch = useSearchStore((s) => s.addRecentSearch);
   const removeRecentSearch = useSearchStore((s) => s.removeRecentSearch);
+  const clearRecentSearches = useSearchStore((s) => s.clearRecentSearches);
 
   // API hooks - Debounced search (300ms delay)
   const {
@@ -249,6 +250,11 @@ export function SearchScreen() {
     },
     [removeRecentSearch]
   );
+
+  const handleClearAllRecentSearches = useCallback(() => {
+    triggerHaptic("light");
+    clearRecentSearches();
+  }, [clearRecentSearches]);
 
   const handleTrendingTopicPress = useCallback(
     (topic: TopicInfo) => {
@@ -340,28 +346,28 @@ export function SearchScreen() {
         <Animated.View
           entering={FadeInDown.delay(index * 50 + 100).duration(200)}
         >
-          <Pressable
-            onPress={() => handleTrendingTopicPress(item)}
-            style={({ pressed }) => [
-              styles.trendingItem,
-              pressed && { opacity: 0.7 },
-            ]}
-          >
+        <Pressable
+          onPress={() => handleTrendingTopicPress(item)}
+          style={({ pressed }) => [
+            styles.trendingItem,
+            pressed && { opacity: 0.7 },
+          ]}
+        >
             <View
               style={[styles.trendingIcon, { backgroundColor: `${color}15` }]}
             >
               <Ionicons name={icon} size={20} color={color} />
-            </View>
-            <View style={styles.trendingContent}>
-              <Text size="md" weight="medium">
+          </View>
+          <View style={styles.trendingContent}>
+            <Text size="md" weight="medium">
                 #{item.topic}
-              </Text>
-              <Text size="sm" mode="subtle">
+            </Text>
+            <Text size="sm" mode="subtle">
                 {formatPostCount(item.post_count || item.count)}
-              </Text>
-            </View>
-          </Pressable>
-        </Animated.View>
+            </Text>
+          </View>
+        </Pressable>
+      </Animated.View>
       );
     },
     [handleTrendingTopicPress]
@@ -374,14 +380,14 @@ export function SearchScreen() {
       const isLast = index === (searchResults?.topics.length ?? 0) - 1;
 
       return (
-        <Animated.View entering={FadeInDown.delay(index * 30).duration(150)}>
-          <Pressable
+      <Animated.View entering={FadeInDown.delay(index * 30).duration(150)}>
+        <Pressable
             onPress={() => handleTopicResultPress(item)}
-            style={({ pressed }) => [
+          style={({ pressed }) => [
               styles.topicResultItem,
-              pressed && { opacity: 0.7 },
-            ]}
-          >
+            pressed && { opacity: 0.7 },
+          ]}
+        >
             <View
               style={[
                 styles.topicResultIcon,
@@ -400,11 +406,11 @@ export function SearchScreen() {
                 </Text>
               )}
             </View>
-            <Ionicons
+          <Ionicons
               name="chevron-forward"
-              size={18}
-              color={theme.colors.text.subtle}
-            />
+            size={18}
+            color={theme.colors.text.subtle}
+          />
           </Pressable>
           {!isLast && (
             <View
@@ -543,7 +549,7 @@ export function SearchScreen() {
           style={{ marginTop: 4, textAlign: "center" }}
         >
           Try searching with different keywords
-        </Text>
+          </Text>
       </View>
     ),
     [theme.colors.text.subtle]
@@ -553,10 +559,10 @@ export function SearchScreen() {
   const TopicsEmptyState = useCallback(
     () => (
       <View style={styles.emptyState}>
-        <Ionicons
+          <Ionicons
           name="pricetag-outline"
           size={48}
-          color={theme.colors.text.subtle}
+            color={theme.colors.text.subtle}
           style={{ marginBottom: 12 }}
         />
         <Text size="md" mode="subtle" weight="medium">
@@ -794,15 +800,15 @@ export function SearchScreen() {
       {showResults ? (
         // Show search results based on active tab
         activeTab === "posts" ? (
-          <FlatList
+        <FlatList
             data={searchResults?.posts ?? []}
             keyExtractor={(item) => `post-${item.post_id}`}
             renderItem={renderPostResult}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={[
-              styles.listContent,
-              { paddingBottom: insets.bottom + 20 },
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: insets.bottom + 20 },
               !searchResults?.posts.length && styles.emptyListContent,
             ]}
             ListEmptyComponent={!isSearching ? PostsEmptyState : null}
@@ -812,8 +818,8 @@ export function SearchScreen() {
             data={searchResults?.topics ?? []}
             keyExtractor={(item) => `topic-${item.topic}`}
             renderItem={renderTopicResult}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
             contentContainerStyle={[
               styles.listContent,
               { paddingBottom: insets.bottom + 20 },
@@ -838,14 +844,25 @@ export function SearchScreen() {
               {/* Recent Searches Section */}
               {recentSearches.length > 0 && (
                 <View style={styles.section}>
-                  <Text
-                    size="sm"
-                    weight="semibold"
-                    mode="subtle"
-                    style={styles.sectionTitle}
-                  >
-                    RECENT
-                  </Text>
+                  <View style={styles.sectionHeader}>
+                    <Text
+                      size="sm"
+                      weight="semibold"
+                      mode="subtle"
+                      style={styles.sectionHeaderTitle}
+                    >
+                      RECENT
+                    </Text>
+                    <Pressable
+                      onPress={handleClearAllRecentSearches}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={({ pressed }) => [pressed && { opacity: 0.5 }]}
+                    >
+                      <Text size="sm" style={{ color: theme.colors.primary[500] }}>
+                        Clear all
+                      </Text>
+                    </Pressable>
+                  </View>
                   <FlatList
                     data={recentSearches}
                     keyExtractor={(item) => item.id}
@@ -873,12 +890,12 @@ export function SearchScreen() {
                     />
                   </View>
                 ) : trendingTopics.length > 0 ? (
-                  <FlatList
+                <FlatList
                     data={trendingTopics}
                     keyExtractor={(item) => `trending-${item.topic}`}
-                    renderItem={renderTrendingTopicItem}
-                    scrollEnabled={false}
-                  />
+                  renderItem={renderTrendingTopicItem}
+                  scrollEnabled={false}
+                />
                 ) : (
                   <View style={styles.emptyTrendingState}>
                     <Text size="sm" mode="subtle">
@@ -973,6 +990,16 @@ const styles = StyleSheet.create((theme) => ({
   },
   section: {
     marginBottom: theme.spacing.lg,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+  },
+  sectionHeaderTitle: {
+    letterSpacing: 0.5,
   },
   sectionTitle: {
     paddingHorizontal: theme.spacing.md,
