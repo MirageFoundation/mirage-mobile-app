@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -32,8 +32,16 @@ export function HomeScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { scrollHandler, headerAnimatedStyle } = useScrollAnimationContext();
+  const {
+    scrollHandler,
+    headerAnimatedStyle,
+    registerScrollRef,
+    registerRefreshCallback,
+  } = useScrollAnimationContext();
   const { requireAuth } = useAuthGuard();
+
+  // Ref for FlatList to enable scroll-to-top
+  const flatListRef = useRef<FlatList<Post>>(null);
 
   const feedType = usePreferencesStore((s) => s.feedType);
   const setFeedType = usePreferencesStore((s) => s.setFeedType);
@@ -67,6 +75,7 @@ export function HomeScreen() {
   const {
     data,
     isLoading,
+    isRefetching,
     isError,
     error,
     refetch,
@@ -202,6 +211,12 @@ export function HomeScreen() {
     refetch();
   }, [refetch]);
 
+  // Register scroll ref and refresh callback for tab press scroll-to-top
+  useEffect(() => {
+    registerScrollRef(flatListRef.current);
+    registerRefreshCallback(handleRefresh);
+  }, [registerScrollRef, registerRefreshCallback, handleRefresh]);
+
   const handleEndReached = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) {
       fetchNextPage();
@@ -309,6 +324,15 @@ export function HomeScreen() {
     );
   }, [isLoading, isError, error]);
 
+  const ListHeaderComponent = useCallback(() => {
+    if (!isRefetching) return null;
+    return (
+      <Box center p="md">
+        <ActivityIndicator size="small" color={"rgba(0, 0, 0, 0.5)"} />
+      </Box>
+    );
+  }, [isRefetching, theme.colors.brand]);
+
   const ListFooterComponent = useCallback(() => {
     if (!isFetchingNextPage) return null;
     return (
@@ -334,6 +358,7 @@ export function HomeScreen() {
 
       {/* Scrollable Feed */}
       <AnimatedFlatList
+        ref={flatListRef}
         data={posts}
         renderItem={renderPost}
         keyExtractor={keyExtractor}
@@ -345,13 +370,14 @@ export function HomeScreen() {
           paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16,
           flexGrow: posts.length === 0 ? 1 : undefined,
         }}
+        ListHeaderComponent={ListHeaderComponent}
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}
         refreshControl={
           <RefreshControl
-            refreshing={isLoading && posts.length > 0}
+            refreshing={false}
             onRefresh={handleRefresh}
-            tintColor={theme.colors.brand[500]}
+            tintColor="transparent"
             progressViewOffset={insets.top + HEADER_HEIGHT}
           />
         }

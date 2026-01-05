@@ -20,37 +20,42 @@ export { CommentThread } from "./comment-thread";
 
 // Authentication & Onboarding
 export { AdultContentPopup } from "./adult-content-popup";
+export { LogoutConfirmationPopup } from "./logout-confirmation-popup";
 export { OnboardingProgress } from "./onboarding-progress";
 export { RecoveryPhraseGrid } from "./recovery-phrase-grid";
 export { RecoveryPhraseInput } from "./recovery-phrase-input";
-export { LogoutConfirmationPopup } from "./logout-confirmation-popup";
 
 // Profile
 export {
-  ProfileHeader,
-  ProfileHeaderBar,
-  ProfileContent,
   getGradientColor,
   PROFILE_CONTENT_HEIGHT,
+  ProfileContent,
+  ProfileHeader,
+  ProfileHeaderBar,
   SCROLL_THRESHOLD,
 } from "./profile-header";
-export { ProfileTabs, ProfileTabBar, ProfileTabContent, type TabType } from "./profile-tabs";
 export {
   ProfileMenuSheet,
   type ProfileMenuSheetRef,
 } from "./profile-menu-sheet";
+export {
+  ProfileTabBar,
+  ProfileTabContent,
+  ProfileTabs,
+  type TabType,
+} from "./profile-tabs";
 
 // Settings
 export {
+  ContentTypeSheet,
   SettingRow,
   SettingSection,
   ThemeSelector,
   ValuePickerSheet,
-  ContentTypeSheet,
-  type SettingRowProps,
-  type ValuePickerSheetRef,
-  type ValueOption,
   type ContentTypeSheetRef,
+  type SettingRowProps,
+  type ValueOption,
+  type ValuePickerSheetRef,
 } from "./settings";
 
 // Subscription

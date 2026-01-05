@@ -10,9 +10,46 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useState } from "react";
-import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
+import {
+  Linking,
+  Pressable,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { PostActions } from "./post-actions";
+
+// URL regex pattern to detect URLs in text
+const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
+
+/**
+ * Extract the domain name from a URL
+ */
+function extractDomain(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    // Remove 'www.' prefix if present
+    return urlObj.hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Extract the first URL from text
+ */
+function extractFirstUrl(text: string): string | null {
+  const matches = text.match(URL_REGEX);
+  return matches ? matches[0] : null;
+}
+
+/**
+ * Remove URLs from text for display
+ */
+function removeUrls(text: string): string {
+  return text.replace(URL_REGEX, "").trim();
+}
 
 export type PostAuthor = {
   id: string;
@@ -118,6 +155,18 @@ export const PostCard = ({
   const shouldBlurContent = hasContentWarning && !contentRevealed;
   const primaryMedia = media?.[0];
   const hasMultipleMedia = media && media.length > 1;
+
+  // Extract URL from body
+  const extractedUrl = body ? extractFirstUrl(body) : null;
+  const bodyWithoutUrl = body ? removeUrls(body) : undefined;
+  const displayDomain = extractedUrl ? extractDomain(extractedUrl) : null;
+
+  const handlePlayNowPress = () => {
+    if (extractedUrl) {
+      triggerHaptic("selection");
+      Linking.openURL(extractedUrl);
+    }
+  };
 
   // Calculate aspect ratio for media
   const getMediaAspectRatio = () => {
@@ -264,11 +313,37 @@ export const PostCard = ({
         </View>
       )}
 
-      {/* Body text */}
-      {body && !shouldBlurContent && (
+      {/* Body text (without URL) */}
+      {bodyWithoutUrl && !shouldBlurContent && (
         <Text size="sm" mode="default" style={styles.body} numberOfLines={4}>
-          {body}
+          {bodyWithoutUrl}
         </Text>
+      )}
+
+      {/* URL Link Card */}
+      {extractedUrl && displayDomain && !shouldBlurContent && (
+        <View style={styles.urlCard}>
+          <View style={styles.urlInfo}>
+            <Ionicons
+              name="globe-outline"
+              size={16}
+              color={theme.colors.text.subtle}
+            />
+            <Text
+              size="sm"
+              mode="subtle"
+              numberOfLines={1}
+              style={styles.domainText}
+            >
+              {displayDomain}
+            </Text>
+          </View>
+          <Pressable onPress={handlePlayNowPress} style={styles.playNowButton}>
+            <Text size="sm" weight="semibold" style={styles.playNowText}>
+              Play Now
+            </Text>
+          </Pressable>
+        </View>
       )}
 
       {/* Actions */}
@@ -392,6 +467,32 @@ const styles = StyleSheet.create((theme) => ({
   body: {
     marginTop: theme.spacing.xs,
     lineHeight: 16,
+  },
+  urlCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: theme.spacing.sm,
+  },
+  urlInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+    flex: 1,
+  },
+  domainText: {
+    flex: 1,
+  },
+  playNowButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: theme.spacing.sm,
+    borderRadius: theme.radius.full,
+    backgroundColor: theme.colors.border.subtle,
+  },
+  playNowText: {
+    color: theme.colors.text.default,
   },
   actions: {
     marginTop: theme.spacing.sm,
