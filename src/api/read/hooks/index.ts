@@ -55,6 +55,13 @@ export {
   useSearchPosts,
 } from "./use-search";
 
+// Debounced Search
+export {
+  useDebouncedSearch,
+  useDebouncedSearchTopics,
+  useDebouncedSearchPosts,
+} from "./use-debounced-search";
+
 // Transaction Status
 export {
   useTxStatus,
