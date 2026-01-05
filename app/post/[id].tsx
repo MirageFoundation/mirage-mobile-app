@@ -1,3 +1,4 @@
+import { useComments, transformApiComments, transformApiPost } from "@/src/api/read";
 import { Avatar } from "@/src/components/atoms";
 import {
   Comment,
@@ -23,183 +24,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  RefreshControl,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-// Mock data for demonstration
-const MOCK_POST: Post = {
-  id: "1",
-  author: {
-    id: "user1",
-    username: "satoshi_fan",
-    avatarSeed: "satoshi_fan",
-  },
-  title: "Bitcoin hits new all-time high as institutional adoption accelerates",
-  body: "The cryptocurrency market is experiencing unprecedented growth as major financial institutions continue to embrace digital assets. This marks a significant shift in traditional finance's approach to blockchain technology.\n\nMajor banks and hedge funds have increased their Bitcoin holdings significantly, with several announcing plans to offer crypto custody services to their clients. This institutional interest is seen as a key driver behind the recent price surge.\n\nAnalysts predict this trend will continue as regulatory clarity improves globally.",
-  topic: "Crypto",
-  likes: 2847,
-  dislikes: 124,
-  comments: 356,
-  hasLiked: false,
-  hasDisliked: false,
-  isFollowing: false,
-  createdAt: new Date(Date.now() - 1000 * 60 * 30),
-};
-
-const MOCK_COMMENTS: Comment[] = [
-  {
-    id: "c1",
-    author: {
-      id: "user2",
-      username: "crypto_whale",
-      avatarSeed: "crypto_whale",
-    },
-    content:
-      "This is huge! Finally seeing mainstream adoption happening. Been waiting for this moment for years.",
-    likes: 234,
-    dislikes: 12,
-    hasLiked: false,
-    hasDisliked: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 15),
-    replyCount: 3,
-    replies: [
-      {
-        id: "c1-r1",
-        author: {
-          id: "user3",
-          username: "btc_maximalist",
-          avatarSeed: "btc_maximalist",
-        },
-        content:
-          "Same here! Been HODLing since 2017. Feels good to be validated.",
-        likes: 45,
-        dislikes: 2,
-        hasLiked: false,
-        hasDisliked: false,
-        createdAt: new Date(Date.now() - 1000 * 60 * 10),
-        replyCount: 1,
-        parentId: "c1",
-        replies: [
-          {
-            id: "c1-r1-r1",
-            author: {
-              id: "user4",
-              username: "moon_soon",
-              avatarSeed: "moon_soon",
-            },
-            content: "Diamond hands pay off! 💎🙌",
-            likes: 23,
-            dislikes: 0,
-            hasLiked: true,
-            hasDisliked: false,
-            createdAt: new Date(Date.now() - 1000 * 60 * 5),
-            replyCount: 0,
-            parentId: "c1-r1",
-          },
-        ],
-      },
-      {
-        id: "c1-r2",
-        author: {
-          id: "user5",
-          username: "trading_guru",
-          avatarSeed: "trading_guru",
-        },
-        content:
-          "The institutional money flow is just beginning. We'll see much higher levels.",
-        likes: 67,
-        dislikes: 5,
-        hasLiked: false,
-        hasDisliked: false,
-        createdAt: new Date(Date.now() - 1000 * 60 * 8),
-        replyCount: 0,
-        parentId: "c1",
-      },
-    ],
-  },
-  {
-    id: "c2",
-    author: {
-      id: "user6",
-      username: "skeptical_sam",
-      avatarSeed: "skeptical_sam",
-    },
-    content:
-      "I'm still not convinced this is sustainable. We've seen these pumps before. What makes this time different?",
-    likes: 89,
-    dislikes: 45,
-    hasLiked: false,
-    hasDisliked: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 25),
-    replyCount: 2,
-    replies: [
-      {
-        id: "c2-r1",
-        author: {
-          id: "user7",
-          username: "analyst_pro",
-          avatarSeed: "analyst_pro",
-        },
-        content:
-          "The difference is institutional involvement. This isn't retail FOMO anymore - it's calculated allocation by major funds with long-term strategies.",
-        likes: 156,
-        dislikes: 8,
-        hasLiked: false,
-        hasDisliked: false,
-        createdAt: new Date(Date.now() - 1000 * 60 * 20),
-        replyCount: 0,
-        parentId: "c2",
-      },
-      {
-        id: "c2-r2",
-        author: {
-          id: "user1",
-          username: "satoshi_fan",
-          avatarSeed: "satoshi_fan",
-        },
-        content:
-          "Fair point, but the fundamentals are much stronger now. ETF approvals, corporate treasury adoption, and improving regulatory framework all point to maturity.",
-        likes: 78,
-        dislikes: 3,
-        hasLiked: false,
-        hasDisliked: false,
-        createdAt: new Date(Date.now() - 1000 * 60 * 18),
-        replyCount: 0,
-        parentId: "c2",
-      },
-    ],
-  },
-  {
-    id: "c3",
-    author: { id: "user8", username: "defi_degen", avatarSeed: "defi_degen" },
-    content:
-      "This is just the beginning. Wait until the ETH ETF gets approved too! 🚀",
-    likes: 312,
-    dislikes: 28,
-    hasLiked: false,
-    hasDisliked: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 45),
-    replyCount: 0,
-  },
-  {
-    id: "c4",
-    author: {
-      id: "user9",
-      username: "risk_manager",
-      avatarSeed: "risk_manager",
-    },
-    content:
-      "Important to remember: position sizing is key. Don't invest more than you can afford to lose, regardless of how bullish the market looks.",
-    likes: 445,
-    dislikes: 12,
-    hasLiked: false,
-    hasDisliked: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60),
-    replyCount: 0,
-  },
-];
 
 export default function PostDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -212,13 +42,44 @@ export default function PostDetailScreen() {
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
   const optionsSheetRef = useRef<CommentOptionsSheetRef>(null);
 
-  // Local state
-  const [post, setPost] = useState<Post>(MOCK_POST);
-  const [comments, setComments] = useState<Comment[]>(MOCK_COMMENTS);
+  // Fetch comments from API
+  const {
+    data: commentsData,
+    isLoading: isLoadingComments,
+    isError: isCommentsError,
+    refetch: refetchComments,
+    isRefetching: isRefetchingComments,
+  } = useComments(id);
+
+  // Transform API post and comments to UI format
+  const post = useMemo(() => {
+    if (!commentsData?.root) return null;
+    return transformApiPost(commentsData.root);
+  }, [commentsData]);
+
+  const comments = useMemo(() => {
+    if (!commentsData?.children) return [];
+    return transformApiComments(commentsData.children);
+  }, [commentsData]);
+
+  // Local state for optimistic updates
+  const [localPostUpdates, setLocalPostUpdates] = useState<Partial<Post>>({});
+  const [localComments, setLocalComments] = useState<Comment[]>([]);
+
+  // Merge post data with local updates (for optimistic UI)
+  const displayPost = useMemo(() => {
+    if (!post) return null;
+    return { ...post, ...localPostUpdates };
+  }, [post, localPostUpdates]);
   const [revealedContent, setRevealedContent] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Merge API comments with locally added comments (optimistic updates)
+  const allComments = useMemo(() => {
+    return [...localComments, ...comments];
+  }, [localComments, comments]);
 
   // Handlers
   const handleBack = useCallback(() => {
@@ -227,36 +88,62 @@ export default function PostDetailScreen() {
 
   const handleLikePost = useCallback(() => {
     requireAuth(() => {
-      setPost((prev) => ({
-        ...prev,
-        hasLiked: !prev.hasLiked,
-        hasDisliked: false,
-        likes: prev.hasLiked ? prev.likes - 1 : prev.likes + 1,
-        dislikes: prev.hasDisliked ? prev.dislikes - 1 : prev.dislikes,
-      }));
+      // TODO: Implement vote mutation
+      const currentPost = displayPost;
+      if (!currentPost) return;
+      
+      setLocalPostUpdates((prev) => {
+        const currentHasLiked = prev.hasLiked ?? currentPost.hasLiked;
+        const currentHasDisliked = prev.hasDisliked ?? currentPost.hasDisliked;
+        const currentLikes = prev.likes ?? currentPost.likes;
+        const currentDislikes = prev.dislikes ?? currentPost.dislikes;
+        
+        return {
+          ...prev,
+          hasLiked: !currentHasLiked,
+          hasDisliked: false,
+          likes: currentHasLiked ? currentLikes - 1 : currentLikes + 1,
+          dislikes: currentHasDisliked ? currentDislikes - 1 : currentDislikes,
+        };
+      });
     });
-  }, [requireAuth]);
+  }, [requireAuth, displayPost]);
 
   const handleDislikePost = useCallback(() => {
     requireAuth(() => {
-      setPost((prev) => ({
-        ...prev,
-        hasDisliked: !prev.hasDisliked,
-        hasLiked: false,
-        dislikes: prev.hasDisliked ? prev.dislikes - 1 : prev.dislikes + 1,
-        likes: prev.hasLiked ? prev.likes - 1 : prev.likes,
-      }));
+      // TODO: Implement vote mutation
+      const currentPost = displayPost;
+      if (!currentPost) return;
+      
+      setLocalPostUpdates((prev) => {
+        const currentHasLiked = prev.hasLiked ?? currentPost.hasLiked;
+        const currentHasDisliked = prev.hasDisliked ?? currentPost.hasDisliked;
+        const currentLikes = prev.likes ?? currentPost.likes;
+        const currentDislikes = prev.dislikes ?? currentPost.dislikes;
+        
+        return {
+          ...prev,
+          hasDisliked: !currentHasDisliked,
+          hasLiked: false,
+          dislikes: currentHasDisliked ? currentDislikes - 1 : currentDislikes + 1,
+          likes: currentHasLiked ? currentLikes - 1 : currentLikes,
+        };
+      });
     });
-  }, [requireAuth]);
+  }, [requireAuth, displayPost]);
 
   const handleFollowPost = useCallback(() => {
     requireAuth(() => {
-      setPost((prev) => ({
+      // TODO: Implement follow mutation
+      const currentPost = displayPost;
+      if (!currentPost) return;
+      
+      setLocalPostUpdates((prev) => ({
         ...prev,
-        isFollowing: !prev.isFollowing,
+        isFollowing: !(prev.isFollowing ?? currentPost.isFollowing),
       }));
     });
-  }, [requireAuth]);
+  }, [requireAuth, displayPost]);
 
   const handleRevealContent = useCallback(() => {
     setRevealedContent(true);
@@ -267,7 +154,7 @@ export default function PostDetailScreen() {
     (
       commentId: string,
       updater: (comment: Comment) => Comment,
-      commentList: Comment[] = comments
+      commentList: Comment[]
     ): Comment[] => {
       return commentList.map((comment) => {
         if (comment.id === commentId) {
@@ -282,13 +169,15 @@ export default function PostDetailScreen() {
         return comment;
       });
     },
-    [comments]
+    []
   );
 
   const handleLikeComment = useCallback(
     (commentId: string) => {
       requireAuth(() => {
-        setComments((prev) =>
+        // TODO: Implement vote mutation
+        // For now, update local state for optimistic UI
+        setLocalComments((prev) =>
           updateCommentInList(commentId, (comment) => ({
             ...comment,
             hasLiked: !comment.hasLiked,
@@ -297,7 +186,7 @@ export default function PostDetailScreen() {
             dislikes: comment.hasDisliked
               ? comment.dislikes - 1
               : comment.dislikes,
-          }))
+          }), prev)
         );
       });
     },
@@ -307,7 +196,9 @@ export default function PostDetailScreen() {
   const handleDislikeComment = useCallback(
     (commentId: string) => {
       requireAuth(() => {
-        setComments((prev) =>
+        // TODO: Implement vote mutation
+        // For now, update local state for optimistic UI
+        setLocalComments((prev) =>
           updateCommentInList(commentId, (comment) => ({
             ...comment,
             hasDisliked: !comment.hasDisliked,
@@ -316,7 +207,7 @@ export default function PostDetailScreen() {
               ? comment.dislikes - 1
               : comment.dislikes + 1,
             likes: comment.hasLiked ? comment.likes - 1 : comment.likes,
-          }))
+          }), prev)
         );
       });
     },
@@ -347,6 +238,7 @@ export default function PostDetailScreen() {
 
       setIsSubmitting(true);
 
+      // TODO: Replace with actual API mutation
       // Simulate API call
       await new Promise((resolve) => setTimeout(resolve, 500));
 
@@ -368,29 +260,36 @@ export default function PostDetailScreen() {
       };
 
       if (replyingTo) {
-        // Add as a reply
-        setComments((prev) =>
+        // Add as a reply (optimistic update)
+        setLocalComments((prev) =>
           updateCommentInList(replyingTo.id, (comment) => ({
             ...comment,
             replyCount: (comment.replyCount ?? 0) + 1,
             replies: [...(comment.replies ?? []), newComment],
-          }))
+          }), prev.length > 0 ? prev : [newComment])
         );
+        // If no existing local comments, this might be a reply to an API comment
+        // We'll need to refetch to see the update
+        refetchComments();
       } else {
-        // Add as top-level comment
-        setComments((prev) => [newComment, ...prev]);
+        // Add as top-level comment (optimistic update)
+        setLocalComments((prev) => [newComment, ...prev]);
       }
 
-      setPost((prev) => ({ ...prev, comments: prev.comments + 1 }));
+      setLocalPostUpdates((prev) => ({
+        ...prev,
+        comments: ((prev.comments ?? displayPost?.comments) ?? 0) + 1,
+      }));
       setReplyingTo(null);
       setIsSubmitting(false);
     },
-    [currentUser, replyingTo, updateCommentInList]
+    [currentUser, replyingTo, updateCommentInList, refetchComments, displayPost]
   );
 
   const handleDeleteComment = useCallback(() => {
     if (!selectedComment) return;
 
+    // TODO: Implement delete mutation
     const removeComment = (
       commentId: string,
       commentList: Comment[]
@@ -403,10 +302,15 @@ export default function PostDetailScreen() {
         }));
     };
 
-    setComments((prev) => removeComment(selectedComment.id, prev));
-    setPost((prev) => ({ ...prev, comments: prev.comments - 1 }));
+    setLocalComments((prev) => removeComment(selectedComment.id, prev));
+    setLocalPostUpdates((prev) => ({
+      ...prev,
+      comments: ((prev.comments ?? displayPost?.comments) ?? 0) - 1,
+    }));
     setSelectedComment(null);
-  }, [selectedComment]);
+    // Refetch to get updated comments
+    refetchComments();
+  }, [selectedComment, refetchComments, displayPost]);
 
   // Stable header background color based on post ID
   const headerColor = useMemo(() => {
@@ -502,13 +406,35 @@ export default function PostDetailScreen() {
   );
 
   // Render list header (post + divider)
-  const renderListHeader = useCallback(
-    () => (
+  const renderListHeader = useCallback(() => {
+    // Show loading skeleton while post is loading
+    if (!displayPost) {
+      return (
+        <View>
+          <Box p="md">
+            {/* Post loading skeleton */}
+            <View style={styles.skeletonHeader}>
+              <View style={[styles.skeletonAvatar, { backgroundColor: theme.colors.background.subtle }]} />
+              <View style={styles.skeletonHeaderText}>
+                <View style={[styles.skeletonLine, { width: 120, backgroundColor: theme.colors.background.subtle }]} />
+                <View style={[styles.skeletonLine, { width: 80, backgroundColor: theme.colors.background.subtle }]} />
+              </View>
+            </View>
+            <View style={[styles.skeletonLine, { width: "100%", height: 20, marginTop: 12, backgroundColor: theme.colors.background.subtle }]} />
+            <View style={[styles.skeletonLine, { width: "90%", height: 20, marginTop: 8, backgroundColor: theme.colors.background.subtle }]} />
+            <View style={[styles.skeletonLine, { width: "100%", height: 100, marginTop: 12, backgroundColor: theme.colors.background.subtle }]} />
+          </Box>
+          <View style={styles.divider} />
+        </View>
+      );
+    }
+
+    return (
       <View>
         {/* Full post card */}
         <PostCard
-          post={post}
-          isOwnPost={currentUser?.id === post.author.id}
+          post={displayPost}
+          isOwnPost={currentUser?.id === displayPost.author.id}
           onLikePress={handleLikePost}
           onDislikePress={handleDislikePost}
           onFollowPress={handleFollowPost}
@@ -520,18 +446,18 @@ export default function PostDetailScreen() {
         {/* Divider below post */}
         <View style={styles.divider} />
       </View>
-    ),
-    [
-      post,
-      currentUser,
-      handleLikePost,
-      handleDislikePost,
-      handleFollowPost,
-      handleRevealContent,
-      revealedContent,
-      id,
-    ]
-  );
+    );
+  }, [
+    displayPost,
+    currentUser,
+    handleLikePost,
+    handleDislikePost,
+    handleFollowPost,
+    handleRevealContent,
+    revealedContent,
+    id,
+    theme.colors.background.subtle,
+  ]);
 
   const renderComment = useCallback(
     ({ item }: { item: Comment }) => (
@@ -558,8 +484,133 @@ export default function PostDetailScreen() {
     ]
   );
 
-  const renderEmptyComments = useCallback(
-    () => (
+  // Render a single comment skeleton
+  const renderCommentSkeleton = useCallback(
+    (index: number, depth: number = 0) => {
+      const indentWidth = depth * 16;
+      return (
+        <View
+          key={`skeleton-${index}-${depth}`}
+          style={[styles.commentSkeleton, { marginLeft: indentWidth }]}
+        >
+          {/* Header: Avatar + Username + Time */}
+          <View style={styles.skeletonHeader}>
+            <View
+              style={[
+                styles.skeletonAvatar,
+                { width: 32, height: 32, backgroundColor: theme.colors.background.subtle },
+              ]}
+            />
+            <View style={styles.skeletonHeaderText}>
+              <View
+                style={[
+                  styles.skeletonLine,
+                  { width: 100, height: 10, backgroundColor: theme.colors.background.subtle },
+                ]}
+              />
+            </View>
+          </View>
+          {/* Content lines */}
+          <View style={{ marginTop: 8, gap: 6 }}>
+            <View
+              style={[
+                styles.skeletonLine,
+                { width: "100%", height: 12, backgroundColor: theme.colors.background.subtle },
+              ]}
+            />
+            <View
+              style={[
+                styles.skeletonLine,
+                { width: "85%", height: 12, backgroundColor: theme.colors.background.subtle },
+              ]}
+            />
+            <View
+              style={[
+                styles.skeletonLine,
+                { width: "60%", height: 12, backgroundColor: theme.colors.background.subtle },
+              ]}
+            />
+          </View>
+          {/* Actions row */}
+          <View style={styles.skeletonActions}>
+            <View
+              style={[
+                styles.skeletonLine,
+                { width: 24, height: 10, backgroundColor: theme.colors.background.subtle },
+              ]}
+            />
+            <View
+              style={[
+                styles.skeletonLine,
+                { width: 24, height: 10, backgroundColor: theme.colors.background.subtle },
+              ]}
+            />
+            <View
+              style={[
+                styles.skeletonLine,
+                { width: 24, height: 10, backgroundColor: theme.colors.background.subtle },
+              ]}
+            />
+          </View>
+        </View>
+      );
+    },
+    [theme.colors.background.subtle]
+  );
+
+  const renderEmptyComments = useCallback(() => {
+    // Show loading skeletons
+    if (isLoadingComments) {
+      return (
+        <View>
+          {/* Render multiple skeleton comments */}
+          {renderCommentSkeleton(0)}
+          {renderCommentSkeleton(1, 1)}
+          {renderCommentSkeleton(2, 1)}
+          {renderCommentSkeleton(3)}
+          {renderCommentSkeleton(4, 1)}
+          {renderCommentSkeleton(5)}
+        </View>
+      );
+    }
+
+    // Show error state
+    if (isCommentsError) {
+      return (
+        <Box flex center p="lg">
+          <Ionicons
+            name="alert-circle-outline"
+            size={48}
+            color={theme.colors.error[500]}
+          />
+          <Text
+            size="md"
+            weight="medium"
+            mode="subtle"
+            style={{ marginTop: 12 }}
+          >
+            Failed to load comments
+          </Text>
+          <Pressable
+            onPress={() => refetchComments()}
+            style={{
+              marginTop: 12,
+              paddingHorizontal: 16,
+              paddingVertical: 8,
+              backgroundColor: theme.colors.primary[500],
+              borderRadius: 8,
+            }}
+          >
+            <Text size="sm" weight="medium" style={{ color: "#FFFFFF" }}>
+              Try again
+            </Text>
+          </Pressable>
+        </Box>
+      );
+    }
+
+    // Show empty state
+    return (
       <Box flex center p="lg">
         <Ionicons
           name="chatbubbles-outline"
@@ -577,9 +628,16 @@ export default function PostDetailScreen() {
           Be the first to share your thoughts!
         </Text>
       </Box>
-    ),
-    [theme.colors.text.subtle]
-  );
+    );
+  }, [
+    isLoadingComments,
+    isCommentsError,
+    refetchComments,
+    renderCommentSkeleton,
+    theme.colors.text.subtle,
+    theme.colors.primary,
+    theme.colors.error,
+  ]);
 
   const keyExtractor = useCallback((item: Comment) => item.id, []);
 
@@ -595,7 +653,7 @@ export default function PostDetailScreen() {
 
         {/* Comments list */}
         <FlatList
-          data={comments}
+          data={allComments}
           renderItem={renderComment}
           keyExtractor={keyExtractor}
           ListHeaderComponent={renderListHeader}
@@ -604,6 +662,13 @@ export default function PostDetailScreen() {
             paddingBottom: insets.bottom + 60,
           }}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetchingComments}
+              onRefresh={refetchComments}
+              tintColor={theme.colors.primary[500]}
+            />
+          }
         />
 
         {/* Comment input */}
@@ -662,5 +727,34 @@ const styles = StyleSheet.create((theme) => ({
   divider: {
     height: 5,
     backgroundColor: theme.colors.background.subtle,
+  },
+  // Skeleton styles
+  skeletonHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  skeletonAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  skeletonHeaderText: {
+    marginLeft: theme.spacing.sm,
+    gap: 4,
+  },
+  skeletonLine: {
+    height: 12,
+    borderRadius: 6,
+  },
+  // Comment skeleton styles
+  commentSkeleton: {
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+  },
+  skeletonActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: theme.spacing.md,
+    marginTop: theme.spacing.sm,
   },
 }));
