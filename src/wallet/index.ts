@@ -59,5 +59,5 @@ export {
 // ============================================
 // Proof of Work
 // ============================================
-export type { PoWParams, PoWResult } from "./pow";
-export { computePoW, verifyPoW, estimatePoWTime } from "./pow";
+export type { PoWInput, PoWResult, PoWParams } from "./pow";
+export { computePoW, verifyPoW, estimatePoWTime, leadingZeroBits, uvarint } from "./pow";

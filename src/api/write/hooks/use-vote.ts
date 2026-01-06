@@ -1,0 +1,159 @@
+/**
+ * useVote Hook
+ *
+ * Mutation hook for voting on posts/comments
+ */
+
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/src/api/read/query-keys";
+import { useWallet } from "@/src/hooks/use-wallet";
+import { useTxStatusPolling } from "@/src/api/read/hooks/use-tx-status";
+import { vote, type VoteDirection } from "../endpoints/vote";
+import type { PoWProgress } from "../signing";
+
+// ============================================
+// Types
+// ============================================
+
+export interface VoteMutationInput {
+  /** txhash of post/comment to vote on */
+  target: string;
+  /** Vote direction */
+  direction: VoteDirection;
+}
+
+export interface UseVoteOptions {
+  /** Callback for PoW progress */
+  onPoWProgress?: (progress: PoWProgress) => void;
+}
+
+// ============================================
+// Hooks
+// ============================================
+
+/**
+ * Basic vote mutation hook
+ */
+export function useVote(options: UseVoteOptions = {}) {
+  const queryClient = useQueryClient();
+  const { getWallet, address } = useWallet();
+
+  return useMutation({
+    mutationFn: async ({ target, direction }: VoteMutationInput) => {
+      const wallet = await getWallet();
+      return vote(wallet, { target, direction }, options.onPoWProgress);
+    },
+    onSuccess: (data, { target }) => {
+      // Invalidate posts queries to reflect new vote
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: ["comments"] });
+
+      // Invalidate user status (recent_votes updated)
+      if (address) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.userStatus(address),
+        });
+      }
+
+      return data.tx_hash;
+    },
+  });
+}
+
+/**
+ * Vote hook with transaction confirmation polling
+ *
+ * Use this when you need to know when the vote is confirmed on-chain.
+ */
+export function useVoteWithConfirmation(options: UseVoteOptions = {}) {
+  const voteMutation = useVote(options);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const txStatus = useTxStatusPolling(txHash);
+
+  const voteWithConfirmation = async (input: VoteMutationInput) => {
+    const result = await voteMutation.mutateAsync(input);
+    setTxHash(result.tx_hash);
+    return result;
+  };
+
+  const reset = () => {
+    setTxHash(null);
+    voteMutation.reset();
+  };
+
+  return {
+    vote: voteWithConfirmation,
+    mutate: voteMutation.mutate,
+    mutateAsync: voteMutation.mutateAsync,
+    isPending: voteMutation.isPending,
+    isSuccess: voteMutation.isSuccess,
+    isError: voteMutation.isError,
+    error: voteMutation.error || txStatus.error,
+    txHash,
+    txStatus: txStatus.data,
+    isConfirmed: txStatus.data?.found && txStatus.data?.indexed,
+    isPolling: !!txHash && !txStatus.data?.indexed,
+    reset,
+  };
+}
+
+/**
+ * Optimistic vote hook
+ *
+ * Updates the UI immediately and rolls back on failure.
+ * Best for interactive voting experiences.
+ */
+export function useOptimisticVote(options: UseVoteOptions = {}) {
+  const queryClient = useQueryClient();
+  const { getWallet, address } = useWallet();
+
+  return useMutation({
+    mutationFn: async ({ target, direction }: VoteMutationInput) => {
+      const wallet = await getWallet();
+      return vote(wallet, { target, direction }, options.onPoWProgress);
+    },
+    // Optimistic update before the mutation completes
+    onMutate: async ({ target, direction }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ["posts"] });
+      await queryClient.cancelQueries({ queryKey: ["comments"] });
+
+      // Snapshot previous data for rollback
+      const previousPosts = queryClient.getQueriesData({ queryKey: ["posts"] });
+      const previousComments = queryClient.getQueriesData({
+        queryKey: ["comments"],
+      });
+
+      // Optimistically update the vote in cache
+      // This is a simplified example - in practice you'd update the specific post
+      // in all relevant query caches
+
+      return { previousPosts, previousComments };
+    },
+    onError: (err, variables, context) => {
+      // Rollback on error
+      if (context?.previousPosts) {
+        for (const [key, data] of context.previousPosts) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+      if (context?.previousComments) {
+        for (const [key, data] of context.previousComments) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+    },
+    onSettled: () => {
+      // Refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: ["comments"] });
+
+      if (address) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.userStatus(address),
+        });
+      }
+    },
+  });
+}

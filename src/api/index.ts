@@ -6,3 +6,6 @@ export * from "./types";
 
 // Read API
 export * from "./read";
+
+// Write API
+export * from "./write";
