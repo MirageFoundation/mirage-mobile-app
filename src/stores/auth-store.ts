@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { mmkvStorage } from "./mmkv-storage";
 import { walletService } from "@/src/services/wallet-service";
+import { getUserStatus } from "@/src/api/read/endpoints/users";
 import type { WalletMetadata } from "@/src/wallet";
 
 // ============================================
@@ -102,6 +103,7 @@ export const useAuthStore = create<AuthState>()(
       /**
        * Initialize wallet on app startup
        * Checks for existing wallet and loads metadata
+       * Fetches user status from API to sync username and subscription level
        */
       initializeWallet: async () => {
         if (USE_MOCK_USER) {
@@ -130,6 +132,7 @@ export const useAuthStore = create<AuthState>()(
           const metadata = walletService.getWalletMetadata();
 
           if (metadata) {
+            // Set initial state from local metadata
             set({
               isLoggedIn: true,
               walletAddress: metadata.address,
@@ -138,11 +141,37 @@ export const useAuthStore = create<AuthState>()(
               hasOnboarded: true,
               user: {
                 id: metadata.address,
-                username: metadata.hasUsername ? null : null, // Will be fetched from API
+                username: null,
                 walletAddress: metadata.address,
-                tier: "Free", // Will be updated from API
+                tier: "Free",
               },
             });
+
+            // Fetch user status from API to sync username and subscription level
+            try {
+              const userStatus = await getUserStatus({ address: metadata.address });
+              
+              const tierNames = ["Free", "Basic", "Premium", "Pro"];
+              
+              set({
+                userLevel: userStatus.user_level,
+                hasUsername: !!userStatus.username,
+                user: {
+                  id: metadata.address,
+                  username: userStatus.username,
+                  walletAddress: metadata.address,
+                  tier: tierNames[userStatus.user_level] || "Free",
+                },
+              });
+
+              // Update local metadata with username status
+              if (userStatus.username) {
+                walletService.updateMetadata({ hasUsername: true });
+              }
+            } catch (apiError) {
+              // API error shouldn't block initialization - use local data
+              console.warn("[AuthStore] Failed to fetch user status from API:", apiError);
+            }
           }
         } catch (error) {
           console.error("[AuthStore] Failed to initialize wallet:", error);

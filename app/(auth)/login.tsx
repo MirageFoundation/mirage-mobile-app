@@ -1,3 +1,4 @@
+import { getUserStatus } from "@/src/api/read/endpoints/users";
 import { RecoveryPhraseInput } from "@/src/components/molecules";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
@@ -6,7 +7,13 @@ import { isValidMnemonic } from "@/src/wallet";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { Image, Keyboard, Pressable, View } from "react-native";
+import {
+  ActivityIndicator,
+  Image,
+  Keyboard,
+  Pressable,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -16,6 +23,9 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
 
   const importWallet = useAuthStore((s) => s.importWallet);
+  const setUserLevel = useAuthStore((s) => s.setUserLevel);
+  const setHasUsername = useAuthStore((s) => s.setHasUsername);
+  const setUser = useAuthStore((s) => s.setUser);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
 
   const [words, setWords] = useState<string[]>(Array(12).fill(""));
@@ -93,6 +103,35 @@ export default function LoginScreen() {
       // Import the wallet using the mnemonic
       await importWallet(phrase);
 
+      // Get the wallet address from auth store after import
+      const walletAddress = useAuthStore.getState().walletAddress;
+
+      if (walletAddress) {
+        try {
+          // Fetch user status from API to get username and subscription level
+          const userStatus = await getUserStatus({ address: walletAddress });
+
+          // Update auth store with user level
+          setUserLevel(userStatus.user_level);
+
+          // Update username info
+          if (userStatus.username) {
+            setHasUsername(true);
+            setUser({
+              id: walletAddress,
+              username: userStatus.username,
+              walletAddress,
+              tier:
+                ["Free", "Basic", "Premium", "Pro"][userStatus.user_level] ||
+                "Free",
+            });
+          }
+        } catch (apiError) {
+          // API error shouldn't block login - user can still use the app
+          console.warn("[Login] Failed to fetch user status:", apiError);
+        }
+      }
+
       triggerHaptic("success");
 
       // Navigate to home
@@ -115,7 +154,16 @@ export default function LoginScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [isComplete, words, validatePhrase, importWallet, router]);
+  }, [
+    isComplete,
+    words,
+    validatePhrase,
+    importWallet,
+    setUserLevel,
+    setHasUsername,
+    setUser,
+    router,
+  ]);
 
   return (
     <Box flex background="base">
@@ -174,7 +222,7 @@ export default function LoginScreen() {
           rounded="full"
           onPress={handleLogin}
           disabled={!isComplete || isLoading}
-          loading={isLoading}
+          gap="sm"
           style={{
             width: "100%",
             backgroundColor:
@@ -183,6 +231,9 @@ export default function LoginScreen() {
                 : theme.colors.primary[500],
           }}
         >
+          {isLoading && (
+            <ActivityIndicator size="small" color={theme.colors.text.subtle} />
+          )}
           <Button.Text
             style={{
               color:

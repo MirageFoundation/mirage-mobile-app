@@ -10,14 +10,17 @@ type LogoutConfirmationPopupProps = {
   visible: boolean;
   onCancel: () => void;
   onConfirm: () => void;
+  isLoading?: boolean;
 };
 
 export function LogoutConfirmationPopup({
   visible,
   onCancel,
   onConfirm,
+  isLoading = false,
 }: LogoutConfirmationPopupProps) {
-  const { theme } = useUnistyles();
+  const { theme, rt } = useUnistyles();
+  const isDark = rt.themeName === "dark";
 
   const handleConfirm = () => {
     triggerHaptic("medium");
@@ -37,10 +40,23 @@ export function LogoutConfirmationPopup({
       onRequestClose={onCancel}
     >
       <View style={styles.overlay}>
-        <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+        <BlurView
+          intensity={40}
+          tint={isDark ? "dark" : "light"}
+          style={StyleSheet.absoluteFill}
+        />
         <Pressable style={styles.backdrop} onPress={onCancel} />
 
-        <View style={styles.popup}>
+        <View
+          style={[
+            styles.popup,
+            {
+              backgroundColor: isDark
+                ? "rgba(30, 30, 30, 0.95)"
+                : "rgba(255, 255, 255, 0.95)",
+            },
+          ]}
+        >
           {/* Icon */}
           <Box
             style={[
@@ -80,6 +96,7 @@ export function LogoutConfirmationPopup({
               variant="outline"
               rounded="full"
               onPress={handleCancel}
+              disabled={isLoading}
               style={styles.button}
             >
               <Button.Text>Cancel</Button.Text>
@@ -90,6 +107,7 @@ export function LogoutConfirmationPopup({
               mode="error"
               rounded="full"
               onPress={handleConfirm}
+              loading={isLoading}
               style={[styles.button, styles.logoutButton]}
             >
               <Button.Text>Log Out</Button.Text>
@@ -107,7 +125,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     alignItems: "center",
     padding: theme.spacing.xl,
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -120,10 +138,9 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: theme.spacing.xxl,
     paddingBottom: theme.spacing.xl,
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.92)",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.25,
     shadowRadius: 24,
     elevation: 12,
   },
@@ -138,17 +155,14 @@ const styles = StyleSheet.create((theme) => ({
   title: {
     marginBottom: theme.spacing.sm,
     textAlign: "center",
-    color: theme.colors.text.default,
   },
   description: {
     textAlign: "center",
     marginBottom: theme.spacing.xs,
-    color: theme.colors.text.emphasis,
   },
   warning: {
     textAlign: "center",
     marginBottom: theme.spacing.xl,
-    color: theme.colors.text.subtle,
   },
   buttons: {
     width: "100%",
@@ -157,6 +171,6 @@ const styles = StyleSheet.create((theme) => ({
     width: "100%",
   },
   logoutButton: {
-    backgroundColor: "rgba(255, 59, 48, 0.9)",
+    backgroundColor: theme.colors.error[500],
   },
 }));

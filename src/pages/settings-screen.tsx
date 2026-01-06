@@ -17,7 +17,8 @@ import {
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { useAuthStore, usePreferencesStore, type ThemeMode } from "@/src/stores";
+import { useQueryClear } from "@/src/providers/query-clear-provider";
+import { useAuthStore, useDraftStore, useSearchStore, usePreferencesStore, type ThemeMode } from "@/src/stores";
 
 // Auto-collapse threshold options
 const collapseThresholdOptions: ValueOption<number | null>[] = [
@@ -55,6 +56,9 @@ export function SettingsScreen() {
 
   // Stores
   const logout = useAuthStore((s) => s.logout);
+  const clearDraft = useDraftStore((s) => s.clearDraft);
+  const clearRecentSearches = useSearchStore((s) => s.clearRecentSearches);
+  const { clearQueries } = useQueryClear();
   const {
     theme: themeMode,
     setTheme,
@@ -80,6 +84,7 @@ export function SettingsScreen() {
 
   // Logout popup state
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // Handlers
   const handleBack = useCallback(() => {
@@ -94,11 +99,24 @@ export function SettingsScreen() {
     [setTheme]
   );
 
-  const handleLogout = useCallback(() => {
-    logout();
-    setShowLogoutPopup(false);
-    router.replace("/(tabs)");
-  }, [logout, router]);
+  const handleLogout = useCallback(async () => {
+    setIsLoggingOut(true);
+    
+    try {
+      // Clear all user data
+      await logout();
+      clearDraft();
+      clearRecentSearches();
+      await clearQueries();
+      
+      setShowLogoutPopup(false);
+      router.replace("/(tabs)");
+    } catch (error) {
+      console.error("[SettingsScreen] Logout failed:", error);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }, [logout, clearDraft, clearRecentSearches, clearQueries, router]);
 
   // Get display labels
   const getContentTypeLabel = () => {
@@ -352,6 +370,7 @@ export function SettingsScreen() {
         visible={showLogoutPopup}
         onCancel={() => setShowLogoutPopup(false)}
         onConfirm={handleLogout}
+        isLoading={isLoggingOut}
       />
     </Box>
   );
