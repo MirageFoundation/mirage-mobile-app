@@ -1,10 +1,17 @@
-import { RecoveryPhraseGrid } from "@/src/components/molecules";
+import { getTxStatus } from "@/src/api/read/endpoints/tx";
+import { setUsername } from "@/src/api/write";
+import {
+  RecoveryPhraseGrid,
+  TransactionProgressModal,
+} from "@/src/components/molecules";
 import { Box, Button, Checkbox, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { executeWithProgress, useTransactionProgress } from "@/src/hooks";
+import { walletService } from "@/src/services/wallet-service";
 import { useAuthStore } from "@/src/stores";
 import { AntDesign, Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Image, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -18,10 +25,16 @@ export default function RecoveryPhraseScreen() {
   const recoveryPhrase = useAuthStore((s) => s.recoveryPhrase);
   const confirmWalletCreation = useAuthStore((s) => s.confirmWalletCreation);
   const clearRecoveryPhrase = useAuthStore((s) => s.clearRecoveryPhrase);
-  const walletAddress = useAuthStore((s) => s.walletAddress);
+  const setHasUsername = useAuthStore((s) => s.setHasUsername);
 
   const [hasSaved, setHasSaved] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+
+  // Track if wallet was successfully confirmed (to know if cleanup is needed)
+  const walletConfirmedRef = useRef(false);
+
+  // Transaction progress for username registration
+  const txProgress = useTransactionProgress();
 
   // Parse mnemonic into words array
   const words = useMemo(() => {
@@ -30,11 +43,12 @@ export default function RecoveryPhraseScreen() {
   }, [recoveryPhrase]);
 
   // Redirect if no recovery phrase (user navigated directly)
+  // But don't redirect if we're in the middle of confirming
   useEffect(() => {
-    if (!recoveryPhrase) {
+    if (!recoveryPhrase && !isConfirming) {
       router.replace("/(auth)/username");
     }
-  }, [recoveryPhrase, router]);
+  }, [recoveryPhrase, isConfirming, router]);
 
   const handleBack = useCallback(() => {
     triggerHaptic("selection");
@@ -48,7 +62,9 @@ export default function RecoveryPhraseScreen() {
         {
           text: "Go Back",
           style: "destructive",
-          onPress: () => {
+          onPress: async () => {
+            // Clear the wallet from storage since user is abandoning the flow
+            await walletService.clearWallet();
             clearRecoveryPhrase();
             router.back();
           },
@@ -68,24 +84,129 @@ export default function RecoveryPhraseScreen() {
     setIsConfirming(true);
     triggerHaptic("selection");
 
+    console.log("[RecoveryPhrase] Starting continue flow...");
+    console.log("[RecoveryPhrase] Username:", params.username);
+
     try {
-      // Confirm wallet creation (clears mnemonic from memory, sets logged in)
+      // If we have a username, register it on-chain BEFORE confirming wallet
+      if (params.username) {
+        console.log("[RecoveryPhrase] Getting wallet for signing...");
+        // Get wallet for signing
+        const wallet = await walletService.getWallet();
+
+        if (!wallet) {
+          throw new Error("Wallet not available");
+        }
+
+        console.log("[RecoveryPhrase] Wallet address:", wallet.address);
+        console.log(
+          "[RecoveryPhrase] Starting username registration with PoW..."
+        );
+
+        // Execute username registration with progress tracking
+        const result = await executeWithProgress(
+          txProgress,
+          async (onPoWProgress) => {
+            txProgress.setPhase("signing");
+            const response = await setUsername(
+              wallet,
+              { username: params.username! },
+              onPoWProgress
+            );
+            txProgress.setPhase("submitting");
+            return response;
+          },
+          {
+            pollTxStatus: true,
+            getTxStatus: async (hash) => {
+              const status = await getTxStatus({ hash });
+              return {
+                found: status.found,
+                indexed: status.indexed ?? false,
+                success: status.success,
+                error_details: status.error_details,
+              };
+            },
+          }
+        );
+
+        console.log("[RecoveryPhrase] Username registration result:", result);
+
+        if (!result.success) {
+          console.log(
+            "[RecoveryPhrase] Username registration failed, not confirming wallet"
+          );
+          // Error is already shown in modal, don't navigate
+          // Don't confirm wallet creation if username failed
+          setIsConfirming(false);
+          return;
+        }
+
+        console.log("[RecoveryPhrase] Username registration successful!");
+        // Update local state to reflect username was set
+        setHasUsername(true);
+      }
+
+      console.log("[RecoveryPhrase] Confirming wallet creation...");
+      // Now confirm wallet creation (clears mnemonic from memory, sets logged in)
+      // Only do this AFTER username is successfully set (or if no username needed)
       await confirmWalletCreation();
+      walletConfirmedRef.current = true;
+      console.log("[RecoveryPhrase] Wallet confirmed, navigating to home...");
 
       triggerHaptic("success");
 
-      // Navigate to home
+      // Navigate to home (modal will auto-dismiss on success)
       setTimeout(() => {
+        txProgress.hideModal();
         router.dismissTo("/(tabs)");
-      }, 100);
+      }, 1500);
     } catch (error) {
-      console.error("[RecoveryPhrase] Failed to confirm wallet:", error);
+      console.error("[RecoveryPhrase] Failed to complete setup:", error);
+      console.error(
+        "[RecoveryPhrase] Error details:",
+        error instanceof Error ? error.message : String(error)
+      );
       triggerHaptic("error");
-      Alert.alert("Error", "Failed to complete wallet setup. Please try again.");
+
+      if (!txProgress.isVisible) {
+        // Show error in alert if modal isn't showing
+        Alert.alert(
+          "Error",
+          "Failed to complete wallet setup. Please try again."
+        );
+      }
     } finally {
       setIsConfirming(false);
     }
-  }, [hasSaved, confirmWalletCreation, router]);
+  }, [
+    hasSaved,
+    params.username,
+    confirmWalletCreation,
+    txProgress,
+    setHasUsername,
+    router,
+  ]);
+
+  // Handle retry after error
+  const handleRetry = useCallback(() => {
+    txProgress.reset();
+    // Re-trigger the continue flow
+    setTimeout(() => {
+      handleContinue();
+    }, 100);
+  }, [txProgress, handleContinue]);
+
+  // Handle dismiss after error - clean up wallet since flow failed
+  const handleDismissError = useCallback(async () => {
+    txProgress.hideModal();
+    // If wallet wasn't confirmed, clean it up so user can start fresh
+    if (!walletConfirmedRef.current) {
+      await walletService.clearWallet();
+      clearRecoveryPhrase();
+      router.back();
+    }
+  }, [txProgress, clearRecoveryPhrase, router]);
 
   // Don't render if no recovery phrase
   if (words.length === 0) {
@@ -94,6 +215,26 @@ export default function RecoveryPhraseScreen() {
 
   return (
     <Box flex background="base">
+      {/* Transaction Progress Modal */}
+      <TransactionProgressModal
+        visible={txProgress.isVisible}
+        progress={txProgress.progress}
+        title="Setting Up Account"
+        description={`Registering @${params.username} on the blockchain`}
+        onDismiss={
+          txProgress.progress.phase === "success"
+            ? () => {
+                txProgress.hideModal();
+                router.dismissTo("/(tabs)");
+              }
+            : handleDismissError
+        }
+        onRetry={handleRetry}
+        dismissible={
+          txProgress.progress.phase === "success" ||
+          txProgress.progress.phase === "error"
+        }
+      />
       {/* Header */}
       <View style={[styles.header, { paddingTop: 20 }]}>
         <Pressable onPress={handleBack} style={styles.backButton}>
@@ -137,31 +278,6 @@ export default function RecoveryPhraseScreen() {
             </Text>
           )}
         </View>
-
-        {/* Warning */}
-        <View style={styles.warningBox}>
-          <Ionicons
-            name="warning"
-            size={20}
-            color={theme.colors.warning[600]}
-          />
-          <Text size="sm" style={styles.warningText}>
-            Write down these 12 words in order and keep them safe. This is the
-            only way to recover your account. Never share them with anyone.
-          </Text>
-        </View>
-
-        {/* Wallet address preview */}
-        {walletAddress && (
-          <View style={styles.addressBox}>
-            <Text size="xs" mode="subtle">
-              Your wallet address:
-            </Text>
-            <Text size="sm" weight="medium" style={{ marginTop: 2 }}>
-              {walletAddress.slice(0, 20)}...{walletAddress.slice(-8)}
-            </Text>
-          </View>
-        )}
 
         {/* Recovery phrase grid */}
         <View style={styles.phraseContainer}>
@@ -207,7 +323,8 @@ export default function RecoveryPhraseScreen() {
         >
           <Button.Text
             style={{
-              color: !hasSaved || isConfirming ? theme.colors.text.subtle : "#fff",
+              color:
+                !hasSaved || isConfirming ? theme.colors.text.subtle : "#fff",
             }}
             weight="medium"
           >

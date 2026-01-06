@@ -74,8 +74,10 @@ export function encU64(tag: number, value: number | bigint): Uint8Array {
  * Format: "mirage.core.v1:{msgName}\x00"
  */
 export function prefix(msgName: string): Uint8Array {
-  const str = `mirage.core.v1:${msgName}\x00`;
-  return new TextEncoder().encode(str);
+  // Build prefix as UTF-8 bytes + NUL terminator to avoid escape ambiguities
+  const head = new TextEncoder().encode(`mirage.core.v1:${msgName}`);
+  const nul = new Uint8Array([0]);
+  return concatBytes(head, nul);
 }
 
 // ============================================
@@ -111,32 +113,60 @@ function encodeHeader(params: BaseParams): Uint8Array {
  * This creates the final signed bytes from base bytes
  */
 export function canonSignedWithPow(base: Uint8Array, pow: number | bigint): Uint8Array {
-  // Find position after tag 4 (before tag 6)
-  // We need to find tag 6 in the base bytes and insert pow before it
+  // Robustly locate tag 6 by parsing TLV fields after the NUL-terminated prefix
+  let i = 0;
+  // Skip until NUL terminator of the prefix
+  while (i < base.length && base[i] !== 0) i++;
+  if (i < base.length && base[i] === 0) i++;
 
-  // Search for tag 6 byte followed by a valid uvarint (timestamp)
-  let insertPos = -1;
-  for (let i = 0; i < base.length - 1; i++) {
-    if (base[i] === 6) {
-      // Check if this looks like tag 6 (timestamp should be large number)
-      const nextByte = base[i + 1];
-      // Timestamp uvarint first byte will have high bit set (value > 127)
-      if (nextByte >= 0x80) {
-        insertPos = i;
-        break;
-      }
+  // Helper to read uvarint and return new index
+  function readUvarint(buf: Uint8Array, idx: number): [bigint, number] {
+    let n = 0n;
+    let shift = 0n;
+    while (true) {
+      if (idx >= buf.length) throw new Error("uvarint overflow");
+      const b = BigInt(buf[idx++]);
+      n |= (b & 0x7fn) << shift;
+      if ((b & 0x80n) === 0n) break;
+      shift += 7n;
+    }
+    return [n, idx];
+  }
+
+  // Expect tag 2 (pubkey bytes)
+  if (base[i] !== 2) throw new Error("expected tag 2 after prefix");
+  i++;
+  let len2: bigint; [len2, i] = readUvarint(base, i);
+  i += Number(len2);
+
+  // Expect tag 3 (block hash bytes)
+  if (base[i] !== 3) throw new Error("expected tag 3 after pubkey");
+  i++;
+  let len3: bigint; [len3, i] = readUvarint(base, i);
+  i += Number(len3);
+
+  // Expect tag 4 (difficulty uvarint)
+  if (base[i] !== 4) throw new Error("expected tag 4 after block hash");
+  i++;
+  // Skip difficulty value
+  [, i] = readUvarint(base, i);
+  const tag4End = i;
+
+  // The next field should be tag 6 (timestamp). If not, scan ahead defensively.
+  let tag6Pos = -1;
+  if (tag4End < base.length && base[tag4End] === 6) tag6Pos = tag4End;
+  else {
+    for (let j = tag4End; j < base.length; j++) {
+      if (base[j] === 6) { tag6Pos = j; break; }
     }
   }
 
-  if (insertPos === -1) {
-    throw new Error("Could not find tag 6 (timestamp) in base bytes");
+  if (tag6Pos < 0) {
+    // If we somehow cannot locate tag 6, append pow at the end to avoid breaking
+    return concatBytes(base, encU64(5, pow));
   }
 
-  const before = base.slice(0, insertPos);
-  const after = base.slice(insertPos);
-  const powTag = encU64(5, pow);
-
-  return concatBytes(before, powTag, after);
+  return concatBytes(base.slice(0, tag6Pos), encU64(5, pow), base.slice(tag6Pos));
 }
 
 // ============================================

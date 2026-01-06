@@ -113,6 +113,12 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           set({ isInitializing: true });
+          
+          // Clean up any pending wallets from incomplete signup
+          const cleanedUp = await walletService.cleanupPendingWallet();
+          if (cleanedUp) {
+            console.log("[AuthStore] Cleaned up pending wallet from incomplete signup");
+          }
 
           // Check for existing wallet
           const hasWallet = await walletService.hasWallet();
@@ -254,6 +260,7 @@ export const useAuthStore = create<AuthState>()(
 
       /**
        * Confirm wallet creation after user has backed up recovery phrase
+       * This also marks the wallet as no longer pending in storage
        */
       confirmWalletCreation: async () => {
         const { walletAddress, publicKeyBase64 } = get();
@@ -261,6 +268,9 @@ export const useAuthStore = create<AuthState>()(
         if (!walletAddress) {
           throw new Error("No wallet to confirm");
         }
+
+        // Mark wallet as confirmed (removes pending flag)
+        walletService.confirmWallet();
 
         set({
           isLoggedIn: true,

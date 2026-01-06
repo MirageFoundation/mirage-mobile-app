@@ -11,10 +11,18 @@
  * - Output length: 32 bytes
  */
 
-// @ts-expect-error - bundler resolves this correctly at runtime
-import { argon2id } from "@noble/hashes/argon2";
+import argon2 from "react-native-argon2";
+// Fallback JS implementation (works in RN too, slower than native but reliable)
+// @ts-expect-error - resolved by bundler
+import { argon2id as argon2idJs } from "@noble/hashes/argon2";
 
-import { concatBytes, hexToBytes } from "./crypto";
+import { concatBytes } from "./crypto";
+// Allow forcing JS Argon2 via env for dev/simulators
+// Set EXPO_PUBLIC_FORCE_JS_POW=1 or FORCE_JS_POW=1 to prefer JS implementation
+const FORCE_JS_POW =
+  typeof process !== "undefined" &&
+  !!(process as any).env &&
+  (((process as any).env.EXPO_PUBLIC_FORCE_JS_POW === "1") || ((process as any).env.FORCE_JS_POW === "1"));
 
 // ============================================
 // Types
@@ -56,6 +64,11 @@ const ARGON2_TIME_COST = 1;
 const ARGON2_MEMORY_COST = 4096; // 4096 KiB
 const ARGON2_PARALLELISM = 1;
 const ARGON2_OUTPUT_LENGTH = 32;
+// Optional time limit (seconds) for PoW, default 60s like web
+const POW_MAX_SECONDS_ENV =
+  (typeof process !== "undefined" && (process as any).env?.EXPO_PUBLIC_POW_MAX_SECONDS) ||
+  (typeof process !== "undefined" && (process as any).env?.POW_MAX_SECONDS);
+const POW_MAX_SECONDS_DEFAULT = 60;
 
 // ============================================
 // Uvarint Encoding
@@ -76,6 +89,47 @@ export function uvarint(n: number | bigint): Uint8Array {
 
   return new Uint8Array(result);
 }
+
+// ============================================
+// Helpers
+// ============================================
+
+/**
+ * Convert Uint8Array to hex string
+ */
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * Convert hex string to Uint8Array
+ */
+function hexToUint8Array(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  }
+  return bytes;
+}
+
+/**
+ * Convert Uint8Array to binary string (latin1)
+ * Each byte becomes a character with that code point
+ */
+function bytesToBinaryString(bytes: Uint8Array): string {
+  let result = "";
+  for (let i = 0; i < bytes.length; i++) {
+    result += String.fromCharCode(bytes[i]);
+  }
+  return result;
+}
+
+/**
+ * Convert Uint8Array to hex string
+ */
+// Note: keep only helpers that are used to avoid bundler/ts warnings
 
 // ============================================
 // PoW Computation
@@ -104,7 +158,7 @@ export function leadingZeroBits(bytes: Uint8Array): number {
 }
 
 /**
- * Compute Proof of Work using Argon2id
+ * Compute Proof of Work using Argon2id (native implementation)
  *
  * Algorithm:
  * 1. password = base + ":" + uvarint(pow)
@@ -114,7 +168,7 @@ export function leadingZeroBits(bytes: Uint8Array): number {
  * 5. Increment pow and repeat until found
  *
  * @param input - PoW input parameters
- * @param onProgress - Optional callback for progress updates (called every 10 iterations)
+ * @param onProgress - Optional callback for progress updates
  * @param maxAttempts - Maximum attempts before giving up (default: 10M)
  * @returns PoW result with valid nonce
  */
@@ -131,42 +185,97 @@ export async function computePoW(
   }
 
   const startTime = Date.now();
-  const salt = hexToBytes(lastBlockHash);
+  const saltHex = lastBlockHash.startsWith("0x") ? lastBlockHash.slice(2) : lastBlockHash;
   const colon = new TextEncoder().encode(":");
-  let pow = 0;
+  // Randomize starting nonce (matches web behavior; avoids repeated retries starting at 0)
+  let pow = Math.floor(Math.random() * 0xffffffff) >>> 0;
+  let attempts = 0;
 
-  while (pow < maxAttempts) {
+  console.log(`[PoW Native] Starting with difficulty=${requiredBits} bits`);
+
+  const maxSeconds = POW_MAX_SECONDS_ENV ? Math.max(1, Number(POW_MAX_SECONDS_ENV)) : POW_MAX_SECONDS_DEFAULT;
+  const deadline = startTime + maxSeconds * 1000;
+
+  while (attempts < maxAttempts) {
     // password = base + ":" + uvarint(pow)
-    const password = concatBytes(base, colon, uvarint(pow));
+    const passwordBytes = concatBytes(base, colon, uvarint(pow));
+    let digest: Uint8Array | null = null;
 
-    // Compute Argon2id
-    const digest = argon2id(password, salt, {
-      t: ARGON2_TIME_COST,
-      m: ARGON2_MEMORY_COST,
-      p: ARGON2_PARALLELISM,
-      dkLen: ARGON2_OUTPUT_LENGTH,
-    });
+    try {
+      if (FORCE_JS_POW) {
+        // Dev override: use JS Argon2 path unconditionally
+        const saltBytes = hexToUint8Array(saltHex);
+        digest = argon2idJs(passwordBytes, saltBytes, {
+          t: ARGON2_TIME_COST,
+          m: ARGON2_MEMORY_COST,
+          p: ARGON2_PARALLELISM,
+          dkLen: ARGON2_OUTPUT_LENGTH,
+        });
+      } else {
+      // Convert to binary string for native module (each byte -> char)
+      // Some native bridges treat JS strings as UTF-8, which can corrupt 0x80-0xff bytes.
+      // To mitigate, we try native first; if we detect an impossible output length or an error,
+      // fall back to pure JS argon2id which operates on raw bytes.
+      const passwordStr = bytesToBinaryString(passwordBytes);
+      const result = await argon2(passwordStr, saltHex, {
+        iterations: ARGON2_TIME_COST,
+        memory: ARGON2_MEMORY_COST,
+        parallelism: ARGON2_PARALLELISM,
+        hashLength: ARGON2_OUTPUT_LENGTH,
+        mode: "argon2id",
+        saltEncoding: "hex",
+      });
+      const rawHex = (result as any)?.rawHash as string | undefined;
+      if (rawHex && rawHex.length === ARGON2_OUTPUT_LENGTH * 2) {
+        digest = hexToUint8Array(rawHex);
+      } else {
+        console.log("[PoW Native] Unexpected native output shape; falling back to JS argon2");
+        // Unexpected output; use JS fallback
+        digest = argon2idJs(passwordBytes, hexToUint8Array(saltHex), {
+          t: ARGON2_TIME_COST,
+          m: ARGON2_MEMORY_COST,
+          p: ARGON2_PARALLELISM,
+          dkLen: ARGON2_OUTPUT_LENGTH,
+        });
+      }
+      }
+    } catch {
+      // Native failed; try JS fallback (slower but reliable)
+      console.log("[PoW Native] Native argon2 failed; using JS fallback");
+      digest = argon2idJs(passwordBytes, hexToUint8Array(saltHex), {
+        t: ARGON2_TIME_COST,
+        m: ARGON2_MEMORY_COST,
+        p: ARGON2_PARALLELISM,
+        dkLen: ARGON2_OUTPUT_LENGTH,
+      });
+    }
 
     // Check if we have enough leading zeros
     const zeroBits = leadingZeroBits(digest);
+    attempts++;
     if (zeroBits >= requiredBits) {
+      const computeTimeMs = Date.now() - startTime;
+      console.log(`[PoW Native] Found! nonce=${pow}, attempts=${attempts}, time=${computeTimeMs}ms`);
       return {
         pow,
         digest,
-        computeTimeMs: Date.now() - startTime,
-        attempts: pow + 1,
+        computeTimeMs,
+        attempts,
       };
     }
 
-    pow++;
+    pow = (pow + 1) >>> 0;
 
-    // Progress callback and yield to event loop
-    if (pow % 10 === 0) {
+    // Progress callback
+    if (attempts % 10 === 0) {
       if (onProgress) {
-        onProgress(pow, Date.now() - startTime);
+        onProgress(attempts, Date.now() - startTime);
       }
-      // Yield to event loop to avoid blocking UI
-      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    // Time-based stop (align with web: 60s default)
+    if (Date.now() >= deadline) {
+      throw new Error(`PoW computation failed: timed out after ${maxSeconds}s`);
     }
   }
 
@@ -176,22 +285,26 @@ export async function computePoW(
 /**
  * Verify a PoW nonce is valid for given parameters
  */
-export function verifyPoW(input: PoWInput, pow: number): boolean {
+export async function verifyPoW(input: PoWInput, pow: number): Promise<boolean> {
   const { base, lastBlockHash, requiredBits } = input;
 
   if (requiredBits === 0) return true;
 
-  const salt = hexToBytes(lastBlockHash);
+  const saltHex = lastBlockHash.startsWith("0x") ? lastBlockHash.slice(2) : lastBlockHash;
   const colon = new TextEncoder().encode(":");
-  const password = concatBytes(base, colon, uvarint(pow));
+  const passwordBytes = concatBytes(base, colon, uvarint(pow));
+  const passwordStr = bytesToBinaryString(passwordBytes);
 
-  const digest = argon2id(password, salt, {
-    t: ARGON2_TIME_COST,
-    m: ARGON2_MEMORY_COST,
-    p: ARGON2_PARALLELISM,
-    dkLen: ARGON2_OUTPUT_LENGTH,
+  const result = await argon2(passwordStr, saltHex, {
+    iterations: ARGON2_TIME_COST,
+    memory: ARGON2_MEMORY_COST,
+    parallelism: ARGON2_PARALLELISM,
+    hashLength: ARGON2_OUTPUT_LENGTH,
+    mode: "argon2id",
+    saltEncoding: "hex",
   });
 
+  const digest = hexToUint8Array(result.rawHash);
   return leadingZeroBits(digest) >= requiredBits;
 }
 
@@ -199,7 +312,7 @@ export function verifyPoW(input: PoWInput, pow: number): boolean {
  * Estimate time to compute PoW at given difficulty
  *
  * Based on expected number of attempts: 2^difficulty
- * Assumes ~10 hashes/second on mobile device (Argon2id is slow)
+ * With native Argon2id: ~50-100 hashes/second on mobile
  *
  * @param difficulty - PoW difficulty level (leading zero bits)
  * @returns Estimated time in seconds
@@ -208,53 +321,8 @@ export function estimatePoWTime(difficulty: number): number {
   if (difficulty === 0) return 0;
 
   const expectedAttempts = Math.pow(2, difficulty);
-  // Argon2id is much slower than SHA256 - ~10 hashes/sec on mobile
-  const hashesPerSecond = 10;
+  // Native Argon2id is much faster: ~50-100 hashes/sec on mobile
+  const hashesPerSecond = 50;
 
   return expectedAttempts / hashesPerSecond;
-}
-
-// ============================================
-// Legacy API (for backwards compatibility)
-// ============================================
-
-/**
- * @deprecated Use computePoW with PoWInput instead
- */
-export function computePoWLegacy(
-  params: PoWParams,
-  maxAttempts = 10_000_000
-): { nonce: number; computeTimeMs: number; attempts: number } {
-  const { difficulty, messageHash, lastBlockHash } = params;
-
-  if (difficulty === 0) {
-    return { nonce: 0, computeTimeMs: 0, attempts: 0 };
-  }
-
-  // This is a synchronous version for backwards compatibility
-  // In new code, use the async computePoW function
-  const startTime = Date.now();
-  const salt = hexToBytes(lastBlockHash);
-  const colon = new TextEncoder().encode(":");
-
-  for (let nonce = 0; nonce < maxAttempts; nonce++) {
-    const password = concatBytes(messageHash, colon, uvarint(nonce));
-
-    const digest = argon2id(password, salt, {
-      t: ARGON2_TIME_COST,
-      m: ARGON2_MEMORY_COST,
-      p: ARGON2_PARALLELISM,
-      dkLen: ARGON2_OUTPUT_LENGTH,
-    });
-
-    if (leadingZeroBits(digest) >= difficulty) {
-      return {
-        nonce,
-        computeTimeMs: Date.now() - startTime,
-        attempts: nonce + 1,
-      };
-    }
-  }
-
-  throw new Error(`PoW computation failed: exceeded ${maxAttempts} attempts`);
 }

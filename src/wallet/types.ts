@@ -29,6 +29,8 @@ export interface WalletMetadata {
   createdAt: number;
   /** Whether user has set a username */
   hasUsername: boolean;
+  /** Whether wallet creation is still pending (user hasn't confirmed recovery phrase) */
+  pending?: boolean;
 }
 
 /**

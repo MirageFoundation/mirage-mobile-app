@@ -117,10 +117,41 @@ export function signCanonical(privateKey: Uint8Array, data: Uint8Array): Uint8Ar
     const signature = secp256k1.sign(data, privateKey, { lowS: true });
 
     // Return compact format (64 bytes: r || s)
-    return signature.toCompactRawBytes();
+    // Handle different @noble/curves API versions
+    if (typeof signature.toCompactRawBytes === "function") {
+      return signature.toCompactRawBytes();
+    }
+    
+    // Fallback: manually construct from r and s
+    // Each component is 32 bytes (256 bits)
+    const r = signature.r;
+    const s = signature.s;
+    
+    // Convert bigints to 32-byte arrays
+    const rBytes = bigintToBytes(r, 32);
+    const sBytes = bigintToBytes(s, 32);
+    
+    // Concatenate r || s
+    const compact = new Uint8Array(64);
+    compact.set(rBytes, 0);
+    compact.set(sBytes, 32);
+    
+    return compact;
   } catch (error) {
     throw new WalletError(`Signing failed: ${error}`, WalletErrorCode.SIGNING_FAILED);
   }
+}
+
+/**
+ * Convert a bigint to a fixed-length byte array (big-endian)
+ */
+function bigintToBytes(num: bigint, length: number): Uint8Array {
+  const hex = num.toString(16).padStart(length * 2, "0");
+  const bytes = new Uint8Array(length);
+  for (let i = 0; i < length; i++) {
+    bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+  }
+  return bytes;
 }
 
 /**

@@ -50,14 +50,22 @@ class WalletService {
    *
    * Generates a new 12-word mnemonic, derives all keys,
    * stores mnemonic in secure store, and metadata in MMKV.
+   * The wallet is marked as "pending" until confirmWallet() is called.
    *
    * @returns Wallet metadata (address, public key, etc.)
    * @throws WalletError if wallet already exists or storage fails
    */
   async createWallet(): Promise<WalletMetadata> {
-    // Check if wallet already exists
-    if (await this.hasWallet()) {
+    // Check if wallet already exists (but allow overwriting pending wallets)
+    const existingMetadata = this.getWalletMetadata();
+    if (existingMetadata && !existingMetadata.pending) {
       throw new WalletError("Wallet already exists. Clear existing wallet first.", WalletErrorCode.WALLET_ALREADY_EXISTS);
+    }
+
+    // If there's a pending wallet, clear it first
+    if (existingMetadata?.pending) {
+      console.log("[WalletService] Clearing pending wallet before creating new one");
+      await this.clearWallet();
     }
 
     try {
@@ -70,15 +78,17 @@ class WalletService {
       // Store mnemonic securely
       await this.storeMnemonic(mnemonic);
 
-      // Create and store metadata
+      // Create and store metadata - marked as pending
       const metadata: WalletMetadata = {
         address: wallet.address,
         publicKeyBase64: getPublicKeyBase64(wallet),
         createdAt: Date.now(),
         hasUsername: false,
+        pending: true, // Wallet is pending until user confirms recovery phrase
       };
 
       this.storeMetadata(metadata);
+      console.log("[WalletService] Created pending wallet:", wallet.address);
 
       // Cache mnemonic for session
       this.cachedMnemonic = mnemonic;
@@ -88,6 +98,40 @@ class WalletService {
       if (error instanceof WalletError) throw error;
       throw new WalletError(`Failed to create wallet: ${error}`, WalletErrorCode.SECURE_STORE_ERROR);
     }
+  }
+  
+  /**
+   * Confirm wallet creation after user has backed up recovery phrase
+   * This removes the "pending" flag from the wallet metadata.
+   */
+  confirmWallet(): void {
+    const metadata = this.getWalletMetadata();
+    if (metadata) {
+      this.storeMetadata({ ...metadata, pending: false });
+      console.log("[WalletService] Wallet confirmed:", metadata.address);
+    }
+  }
+  
+  /**
+   * Check if there's a pending (incomplete) wallet
+   * Used to clean up on app startup
+   */
+  hasPendingWallet(): boolean {
+    const metadata = this.getWalletMetadata();
+    return metadata?.pending === true;
+  }
+  
+  /**
+   * Clean up pending wallets on app startup
+   * Returns true if a pending wallet was cleaned up
+   */
+  async cleanupPendingWallet(): Promise<boolean> {
+    if (this.hasPendingWallet()) {
+      console.log("[WalletService] Cleaning up pending wallet from incomplete signup");
+      await this.clearWallet();
+      return true;
+    }
+    return false;
   }
 
   /**

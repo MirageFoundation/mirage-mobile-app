@@ -14,12 +14,12 @@
 import { sha256 } from "@noble/hashes/sha2";
 
 import {
-  type MirageWallet,
-  signCanonical,
   b64encode,
-  hexToBytes,
   computePoW,
   estimatePoWTime,
+  hexToBytes,
+  type MirageWallet,
+  signCanonical,
 } from "@/src/wallet";
 
 import { getParameters } from "@/src/api/read/endpoints/parameters";
@@ -27,19 +27,18 @@ import { getUserStatus } from "@/src/api/read/endpoints/users";
 
 import { canonSignedWithPow } from "./canonical";
 import type {
-  SignedPayload,
   EnvelopeParams,
   PoWProgressCallback,
-  WriteApiError,
-  WriteErrorCode,
+  SignedPayload,
 } from "./types";
-import { WriteApiError as WriteApiErrorClass, WriteErrorCode as WriteErrorCodeEnum } from "./types";
 
 // ============================================
 // Types
 // ============================================
 
-export interface BuildEnvelopeOptions<TPayload extends Record<string, unknown>> {
+export interface BuildEnvelopeOptions<
+  TPayload extends Record<string, unknown>
+> {
   /** Wallet for signing */
   wallet: MirageWallet;
   /** Function to build canonical base bytes */
@@ -62,10 +61,16 @@ export interface BuildEnvelopeOptions<TPayload extends Record<string, unknown>> 
  * This is the main function used by all mutation hooks to create
  * signed payloads for the backend.
  */
-export async function buildSignedEnvelope<TPayload extends Record<string, unknown>>(
-  options: BuildEnvelopeOptions<TPayload>
-): Promise<SignedPayload<TPayload>> {
-  const { wallet, baseBuilder, payloadFields, skipPoW = false, onPoWProgress } = options;
+export async function buildSignedEnvelope<
+  TPayload extends Record<string, unknown>
+>(options: BuildEnvelopeOptions<TPayload>): Promise<SignedPayload<TPayload>> {
+  const {
+    wallet,
+    baseBuilder,
+    payloadFields,
+    skipPoW = false,
+    onPoWProgress,
+  } = options;
 
   // 1. Get fresh parameters from Read API
   const params = await getParameters({ address: wallet.address });
@@ -93,7 +98,8 @@ export async function buildSignedEnvelope<TPayload extends Record<string, unknow
   }
 
   // 3. Build canonical base bytes
-  const timestampMs = Date.now();
+  // Use slightly past timestamp to avoid clock-skew rejection like web client (-15s)
+  let timestampMs = Math.max(0, Date.now() - 15000);
   const lastBlockHashBytes = hexToBytes(params.last_block_hash);
 
   const envelopeParams: EnvelopeParams = {
@@ -103,15 +109,36 @@ export async function buildSignedEnvelope<TPayload extends Record<string, unknow
     timestampMs,
   };
 
-  const base = baseBuilder({ ...envelopeParams, ...payloadFields });
+  let base = baseBuilder({ ...envelopeParams, ...payloadFields });
 
   // 4. Compute PoW if needed
   let pow = 0;
   if (difficulty > 0) {
     const estimatedTime = estimatePoWTime(difficulty) * 1000; // Convert to ms
 
+    console.log(
+      `[PoW] Starting computation with difficulty=${difficulty} bits`
+    );
+    console.log(
+      `[PoW] Estimated time: ${Math.round(
+        estimatedTime / 1000
+      )}s (~${Math.round(estimatedTime / 60000)}min)`
+    );
+    console.log(
+      `[PoW] Expected attempts: ~${Math.pow(2, difficulty).toLocaleString()}`
+    );
+
     const progressCallback = onPoWProgress
       ? (attempts: number, elapsedMs: number) => {
+          // Log every 100 attempts
+          if (attempts % 100 === 0) {
+            const rate = attempts / (elapsedMs / 1000);
+            console.log(
+              `[PoW] Progress: ${attempts} attempts, ${Math.round(
+                elapsedMs / 1000
+              )}s elapsed, ${rate.toFixed(1)} hashes/sec`
+            );
+          }
           onPoWProgress({
             attempts,
             elapsedMs,
@@ -120,16 +147,69 @@ export async function buildSignedEnvelope<TPayload extends Record<string, unknow
         }
       : undefined;
 
-    const powResult = await computePoW(
-      {
-        base,
-        lastBlockHash: params.last_block_hash,
-        requiredBits: difficulty,
-      },
-      progressCallback
-    );
+    // Calculate a reasonable cap for attempts (multiple of expected attempts)
+    const attemptFactorEnv =
+      (typeof process !== "undefined" && (process as any).env?.EXPO_PUBLIC_POW_ATTEMPT_FACTOR) ||
+      (typeof process !== "undefined" && (process as any).env?.POW_ATTEMPT_FACTOR);
+    const attemptFactor = attemptFactorEnv ? Math.max(1, Number(attemptFactorEnv)) : 8; // default 8x
+    const maxAttempts = Math.max(1000, Math.floor(Math.pow(2, difficulty) * attemptFactor));
 
-    pow = powResult.pow;
+    try {
+      const powResult = await computePoW(
+        {
+          base,
+          lastBlockHash: params.last_block_hash,
+          requiredBits: difficulty,
+        },
+        progressCallback,
+        maxAttempts
+      );
+
+      pow = powResult.pow;
+      console.log(
+        `[PoW] Complete! Found nonce=${pow} after ${powResult.attempts} attempts in ${powResult.computeTimeMs}ms`
+      );
+    } catch (err) {
+      const msg = String((err as Error)?.message || err || "");
+      if (/exceeded \d+ attempts/i.test(msg)) {
+        console.log("[PoW] Attempt cap reached; refreshing parameters and retrying once...");
+
+        // Refresh parameters to get a new salt and try again once
+        const refreshed = await getParameters({ address: wallet.address });
+        timestampMs = Date.now();
+        const lastBlockHashBytes2 = hexToBytes(refreshed.last_block_hash);
+        const envelopeParams2: EnvelopeParams = {
+          pubkey33: wallet.publicKey,
+          lastBlockHashBytes: lastBlockHashBytes2,
+          difficulty,
+          timestampMs,
+        };
+        const base2 = baseBuilder({ ...envelopeParams2, ...payloadFields });
+
+        const powResult2 = await computePoW(
+          {
+            base: base2,
+            lastBlockHash: refreshed.last_block_hash,
+            requiredBits: difficulty,
+          },
+          progressCallback,
+          maxAttempts
+        );
+
+        // Use refreshed values from now on
+        pow = powResult2.pow;
+        base = base2;
+        (params as any).last_block_hash = refreshed.last_block_hash;
+        console.log(
+          `[PoW] Complete (retry)! Found nonce=${pow} after ${powResult2.attempts} attempts in ${powResult2.computeTimeMs}ms`
+        );
+      } else {
+        // Timed out or other error; rethrow so UI can show a clear error
+        throw err;
+      }
+    }
+  } else {
+    console.log(`[PoW] Skipping PoW (difficulty=0, userLevel=${userLevel})`);
   }
 
   // 5. Build signed bytes (insert tag 5 for PoW)
@@ -159,7 +239,9 @@ export async function buildSignedEnvelope<TPayload extends Record<string, unknow
  * Use this when you want to control the parameters fetching yourself,
  * or when building multiple envelopes with the same parameters.
  */
-export async function buildEnvelopeWithParams<TPayload extends Record<string, unknown>>(
+export async function buildEnvelopeWithParams<
+  TPayload extends Record<string, unknown>
+>(
   options: BuildEnvelopeOptions<TPayload> & {
     lastBlockHash: string;
     powDifficulty: number;
@@ -184,7 +266,8 @@ export async function buildEnvelopeWithParams<TPayload extends Record<string, un
   }
 
   // Build canonical base bytes
-  const timestampMs = Date.now();
+  // Use slightly past timestamp to avoid clock-skew rejection like web client (-15s)
+  const timestampMs = Math.max(0, Date.now() - 15000);
   const lastBlockHashBytes = hexToBytes(lastBlockHash);
 
   const envelopeParams: EnvelopeParams = {
@@ -211,13 +294,20 @@ export async function buildEnvelopeWithParams<TPayload extends Record<string, un
         }
       : undefined;
 
+    const attemptFactorEnv =
+      (typeof process !== "undefined" && (process as any).env?.EXPO_PUBLIC_POW_ATTEMPT_FACTOR) ||
+      (typeof process !== "undefined" && (process as any).env?.POW_ATTEMPT_FACTOR);
+    const attemptFactor = attemptFactorEnv ? Math.max(1, Number(attemptFactorEnv)) : 8;
+    const maxAttempts = Math.max(1000, Math.floor(Math.pow(2, difficulty) * attemptFactor));
+
     const powResult = await computePoW(
       {
         base,
         lastBlockHash,
         requiredBits: difficulty,
       },
-      progressCallback
+      progressCallback,
+      maxAttempts
     );
 
     pow = powResult.pow;

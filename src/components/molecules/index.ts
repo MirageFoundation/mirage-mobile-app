@@ -24,6 +24,12 @@ export { LogoutConfirmationPopup } from "./logout-confirmation-popup";
 export { OnboardingProgress } from "./onboarding-progress";
 export { RecoveryPhraseGrid } from "./recovery-phrase-grid";
 export { RecoveryPhraseInput } from "./recovery-phrase-input";
+export {
+  TransactionProgressModal,
+  type TransactionPhase,
+  type TransactionProgress,
+  type TransactionProgressModalProps,
+} from "./transaction-progress-modal";
 
 // Profile
 export {
