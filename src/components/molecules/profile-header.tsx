@@ -206,7 +206,10 @@ export const ProfileContent = ({
   const truncatedAddress = useMemo(() => {
     if (!walletAddress) return "";
     if (walletAddress.length <= 13) return walletAddress;
-    return `${walletAddress.slice(0, 6)}............${walletAddress.slice(-4)}`;
+    return `${walletAddress.slice(
+      0,
+      6
+    )}.....................${walletAddress.slice(-4)}`;
   }, [walletAddress]);
 
   // Reset copied state
@@ -267,7 +270,7 @@ export const ProfileContent = ({
       style={styles.gradientContent}
     >
       <Animated.View style={[styles.profileContentInner, contentFadeStyle]}>
-        <Box px="lg" pt="sm">
+        <Box px="md" pt="sm">
           {/* Large Avatar */}
           <Avatar
             size={80}
@@ -278,7 +281,7 @@ export const ProfileContent = ({
           />
 
           {/* Username + Edit Row */}
-          <Box direction="row" mt="md">
+          <Box direction="row" mt="sm">
             <Text size="xl" weight="bold" style={styles.whiteText}>
               {username}
             </Text>
@@ -377,7 +380,7 @@ export const ProfileContent = ({
           <Box
             direction="row"
             center
-            mt="lg"
+            mt="md"
             py="md"
             px="sm"
             rounded="lg"
