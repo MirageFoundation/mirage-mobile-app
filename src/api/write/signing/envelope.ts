@@ -146,10 +146,17 @@ export async function buildSignedEnvelope<
 
     // Calculate a reasonable cap for attempts (multiple of expected attempts)
     const attemptFactorEnv =
-      (typeof process !== "undefined" && (process as any).env?.EXPO_PUBLIC_POW_ATTEMPT_FACTOR) ||
-      (typeof process !== "undefined" && (process as any).env?.POW_ATTEMPT_FACTOR);
-    const attemptFactor = attemptFactorEnv ? Math.max(1, Number(attemptFactorEnv)) : 8; // default 8x
-    const maxAttempts = Math.max(1000, Math.floor(Math.pow(2, difficulty) * attemptFactor));
+      (typeof process !== "undefined" &&
+        (process as any).env?.EXPO_PUBLIC_POW_ATTEMPT_FACTOR) ||
+      (typeof process !== "undefined" &&
+        (process as any).env?.POW_ATTEMPT_FACTOR);
+    const attemptFactor = attemptFactorEnv
+      ? Math.max(1, Number(attemptFactorEnv))
+      : 8; // default 8x
+    const maxAttempts = Math.max(
+      1000,
+      Math.floor(Math.pow(2, difficulty) * attemptFactor)
+    );
 
     try {
       const powResult = await computePoW(
@@ -169,7 +176,9 @@ export async function buildSignedEnvelope<
     } catch (err) {
       const msg = String((err as Error)?.message || err || "");
       if (/exceeded \d+ attempts/i.test(msg)) {
-        console.log("[PoW] Attempt cap reached; refreshing parameters and retrying once...");
+        console.log(
+          "[PoW] Attempt cap reached; refreshing parameters and retrying once..."
+        );
 
         // Refresh parameters to get a new salt and try again once
         const refreshed = await getParameters({ address: wallet.address });
@@ -289,10 +298,17 @@ export async function buildEnvelopeWithParams<
       : undefined;
 
     const attemptFactorEnv =
-      (typeof process !== "undefined" && (process as any).env?.EXPO_PUBLIC_POW_ATTEMPT_FACTOR) ||
-      (typeof process !== "undefined" && (process as any).env?.POW_ATTEMPT_FACTOR);
-    const attemptFactor = attemptFactorEnv ? Math.max(1, Number(attemptFactorEnv)) : 8;
-    const maxAttempts = Math.max(1000, Math.floor(Math.pow(2, difficulty) * attemptFactor));
+      (typeof process !== "undefined" &&
+        (process as any).env?.EXPO_PUBLIC_POW_ATTEMPT_FACTOR) ||
+      (typeof process !== "undefined" &&
+        (process as any).env?.POW_ATTEMPT_FACTOR);
+    const attemptFactor = attemptFactorEnv
+      ? Math.max(1, Number(attemptFactorEnv))
+      : 8;
+    const maxAttempts = Math.max(
+      1000,
+      Math.floor(Math.pow(2, difficulty) * attemptFactor)
+    );
 
     const powResult = await computePoW(
       {

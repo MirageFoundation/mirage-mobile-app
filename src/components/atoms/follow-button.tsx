@@ -65,33 +65,46 @@ export const FollowButton = ({
     ? theme.colors.text.default 
     : theme.colors.background.default;
 
+  // When loading, just show the activity indicator without container styling
+  if (loading) {
+    return (
+      <Animated.View 
+        style={{ 
+          transform: [{ scale }],
+          height,
+          minWidth: 54,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <ActivityIndicator 
+          size="small" 
+          color={theme.colors.text.subtle} 
+        />
+      </Animated.View>
+    );
+  }
+
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
       <Pressable
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={handlePress}
-        disabled={disabled || loading}
+        disabled={disabled}
         style={[
           styles.container,
           { height, paddingHorizontal },
-          (disabled || loading) && styles.disabled,
+          disabled && styles.disabled,
         ]}
       >
-        {loading ? (
-          <ActivityIndicator 
-            size="small" 
-            color={isFollowing ? theme.colors.text.default : theme.colors.background.default} 
-          />
-        ) : (
-          <Text 
-            size={fontSize} 
-            weight="semibold"
-            style={{ color: textColor }}
-          >
-            {buttonText}
-          </Text>
-        )}
+        <Text 
+          size={fontSize} 
+          weight="semibold"
+          style={{ color: textColor }}
+        >
+          {buttonText}
+        </Text>
       </Pressable>
     </Animated.View>
   );

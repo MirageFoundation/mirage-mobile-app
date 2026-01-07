@@ -19,9 +19,24 @@ function mapTagToContentWarning(tag: string): ContentWarningType | null {
 }
 
 /**
- * Transform API Post to UI Post format
+ * Options for transforming API posts
  */
-export function transformApiPost(apiPost: ApiPost): UIPost {
+export interface TransformPostOptions {
+  /** List of user addresses that the current user is following */
+  followedUsers?: string[];
+}
+
+/**
+ * Transform API Post to UI Post format
+ * @param apiPost - The API post data
+ * @param options - Optional transform options including followed users list
+ */
+export function transformApiPost(
+  apiPost: ApiPost,
+  options: TransformPostOptions = {}
+): UIPost {
+  const { followedUsers = [] } = options;
+
   // Get content warnings from tag
   const contentWarnings: ContentWarningType[] = [];
   if (apiPost.tag) {
@@ -37,6 +52,9 @@ export function transformApiPost(apiPost: ApiPost): UIPost {
   // Determine if user has liked/disliked based on user_vote
   const hasLiked = apiPost.user_vote === 1;
   const hasDisliked = apiPost.user_vote === -1;
+
+  // Check if the post author is in the followed users list
+  const isFollowing = followedUsers.includes(apiPost.user_id);
 
   return {
     id: apiPost.post_id,
@@ -63,14 +81,19 @@ export function transformApiPost(apiPost: ApiPost): UIPost {
     comments: apiPost.comments,
     hasLiked,
     hasDisliked,
-    isFollowing: false, // TODO: Get from user's followed list
+    isFollowing,
     createdAt: apiPost.timestamp * 1000, // Convert seconds to milliseconds
   };
 }
 
 /**
  * Transform array of API Posts to UI Posts
+ * @param apiPosts - Array of API post data
+ * @param options - Optional transform options including followed users list
  */
-export function transformApiPosts(apiPosts: ApiPost[]): UIPost[] {
-  return apiPosts.map(transformApiPost);
+export function transformApiPosts(
+  apiPosts: ApiPost[],
+  options: TransformPostOptions = {}
+): UIPost[] {
+  return apiPosts.map((post) => transformApiPost(post, options));
 }

@@ -8,6 +8,7 @@ import { QueryClearProvider } from "./query-clear-provider";
 import { QueryProvider } from "./query-provider";
 import { ThemeContextProvider } from "./theme-context";
 import { ThemeProvider } from "./theme-provider";
+import { ToastProvider } from "./toast-provider";
 import { WalletProvider } from "./wallet-provider";
 
 const CoreProviders = memo(({ children }: { children: React.ReactNode }) => (
@@ -34,7 +35,9 @@ export const RootProvider = memo(
           <CoreProviders>
             <KeyboardProvider>
               <AuthProviders>
-                <BottomSheetModalProvider>{children}</BottomSheetModalProvider>
+                <ToastProvider>
+                  <BottomSheetModalProvider>{children}</BottomSheetModalProvider>
+                </ToastProvider>
               </AuthProviders>
             </KeyboardProvider>
           </CoreProviders>

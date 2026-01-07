@@ -2,7 +2,9 @@ import {
   transformApiComments,
   transformApiPost,
   useComments,
+  useUserFollowed,
 } from "@/src/api/read";
+import { useToggleFollowUser } from "@/src/api/write";
 import { Avatar } from "@/src/components/atoms";
 import {
   Comment,
@@ -15,6 +17,7 @@ import {
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useAuthGuard } from "@/src/hooks";
+import { useToast } from "@/src/providers/toast-provider";
 import { useAuthStore, useUIStore } from "@/src/stores";
 import {
   AntDesign,
@@ -65,11 +68,25 @@ export default function PostDetailScreen() {
     isRefetching: isRefetchingComments,
   } = useComments(id);
 
+  // Fetch user's followed list
+  const { data: followedData } = useUserFollowed();
+  const followedUsers = useMemo(
+    () => followedData?.followed_users ?? [],
+    [followedData]
+  );
+
+  // Follow/unfollow mutation
+  const toggleFollowMutation = useToggleFollowUser();
+  const toast = useToast();
+
+  // Track follow loading state
+  const [isFollowLoading, setIsFollowLoading] = useState(false);
+
   // Transform API post and comments to UI format
   const post = useMemo(() => {
     if (!commentsData?.root) return null;
-    return transformApiPost(commentsData.root);
-  }, [commentsData]);
+    return transformApiPost(commentsData.root, { followedUsers });
+  }, [commentsData, followedUsers]);
 
   const comments = useMemo(() => {
     if (!commentsData?.children) return [];
@@ -235,17 +252,99 @@ export default function PostDetailScreen() {
   }, [requireAuth, displayPost]);
 
   const handleFollowPost = useCallback(() => {
-    requireAuth(() => {
-      // TODO: Implement follow mutation
-      const currentPost = displayPost;
-      if (!currentPost) return;
+    const currentPost = displayPost;
+    if (!currentPost || isFollowLoading) return;
 
+    const authorId = currentPost.author.id;
+    const authorUsername = currentPost.author.username;
+    const isCurrentlyFollowing =
+      localPostUpdates.isFollowing ?? currentPost.isFollowing ?? false;
+
+    requireAuth(async () => {
+      setIsFollowLoading(true);
+
+      const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
+      const actionPast = isCurrentlyFollowing ? "Unfollowed" : "Followed";
+
+      // Show loading toast
+      const toastId = toast.loading(
+        `${action} @${authorUsername}`,
+        "Computing proof of work..."
+      );
+
+      // Optimistic update
       setLocalPostUpdates((prev) => ({
         ...prev,
-        isFollowing: !(prev.isFollowing ?? currentPost.isFollowing),
+        isFollowing: !isCurrentlyFollowing,
       }));
+
+      try {
+        await toggleFollowMutation.mutateAsync({
+          userAddress: authorId,
+          isCurrentlyFollowing,
+        });
+
+        // Update to success
+        toast.update(toastId, {
+          type: "success",
+          title: `${actionPast} @${authorUsername}`,
+          description: undefined,
+          duration: 3000,
+        });
+        setTimeout(() => toast.dismiss(toastId), 3000);
+      } catch (error: unknown) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        const isAlreadyFollowed =
+          errorMessage.includes("already followed") ||
+          errorMessage.includes("400");
+        const isNotFollowing =
+          errorMessage.includes("not following") ||
+          errorMessage.includes("not in followed");
+
+        if (isAlreadyFollowed) {
+          toast.update(toastId, {
+            type: "success",
+            title: `Already following @${authorUsername}`,
+            description: undefined,
+            duration: 3000,
+          });
+          setTimeout(() => toast.dismiss(toastId), 3000);
+        } else if (isNotFollowing) {
+          toast.update(toastId, {
+            type: "success",
+            title: `Already not following @${authorUsername}`,
+            description: undefined,
+            duration: 3000,
+          });
+          setTimeout(() => toast.dismiss(toastId), 3000);
+        } else {
+          // Actual error - revert optimistic update
+          setLocalPostUpdates((prev) => ({
+            ...prev,
+            isFollowing: isCurrentlyFollowing,
+          }));
+          console.error("Follow/unfollow failed:", error);
+          toast.update(toastId, {
+            type: "error",
+            title: `Failed to ${action.toLowerCase()} @${authorUsername}`,
+            description: "Please try again",
+            duration: 4000,
+          });
+          setTimeout(() => toast.dismiss(toastId), 4000);
+        }
+      } finally {
+        setIsFollowLoading(false);
+      }
     });
-  }, [requireAuth, displayPost]);
+  }, [
+    requireAuth,
+    displayPost,
+    localPostUpdates.isFollowing,
+    isFollowLoading,
+    toggleFollowMutation,
+    toast,
+  ]);
 
   const handleRevealContent = useCallback(() => {
     setRevealedContent(true);
@@ -631,6 +730,7 @@ export default function PostDetailScreen() {
           onFollowPress={handleFollowPost}
           onRevealContent={handleRevealContent}
           contentRevealed={revealedContent}
+          followLoading={isFollowLoading}
           shareUrl={`https://mirage.app/post/${id}`}
         />
 
@@ -646,6 +746,7 @@ export default function PostDetailScreen() {
     handleFollowPost,
     handleRevealContent,
     revealedContent,
+    isFollowLoading,
     id,
     theme.colors.background.subtle,
     handlePostHeaderLayout,

@@ -10,7 +10,12 @@ import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { transformApiPosts, useInfinitePosts } from "@/src/api";
+import {
+  transformApiPosts,
+  useInfinitePosts,
+  useToggleFollowUser,
+  useUserFollowed,
+} from "@/src/api";
 import {
   FeedHeader,
   PostCard,
@@ -24,6 +29,7 @@ import {
   TAB_BAR_HEIGHT,
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
+import { useToast } from "@/src/providers/toast-provider";
 import { useAuthStore, usePreferencesStore } from "@/src/stores";
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Post>);
@@ -52,6 +58,21 @@ export function HomeScreen() {
   const setAdultContent = usePreferencesStore((s) => s.setAdultContent);
   const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const currentUser = useAuthStore((s) => s.user);
+
+  // Fetch user's followed list (for showing "Following" status on posts)
+  const { data: followedData } = useUserFollowed();
+  const followedUsers = useMemo(
+    () => followedData?.followed_users ?? [],
+    [followedData]
+  );
+
+  // Follow/unfollow mutation
+  const toggleFollowMutation = useToggleFollowUser();
+
+  // Track which users are currently being followed/unfollowed (for loading state)
+  const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(
+    new Set()
+  );
 
   // Show adult content popup if user hasn't seen it
   // TODO: Remove `true ||` after testing
@@ -89,12 +110,12 @@ export function HomeScreen() {
     allowed_tags: adultContentEnabled ? "sensitive,adult,nsfw" : "sensitive",
   });
 
-  // Transform API data to UI format
+  // Transform API data to UI format (includes following status)
   const posts = useMemo(() => {
     if (!data?.pages) return [];
     const allPosts = data.pages.flatMap((page) => page.posts);
-    return transformApiPosts(allPosts);
-  }, [data]);
+    return transformApiPosts(allPosts, { followedUsers });
+  }, [data, followedUsers]);
 
   // Revealed posts for content warnings
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
@@ -226,14 +247,99 @@ export function HomeScreen() {
     [router]
   );
 
+  const toast = useToast();
+
   const handleFollowPress = useCallback(
-    (authorId: string) => {
-      requireAuth(() => {
-        // TODO: Call follow mutation API
-        console.log("Follow author:", authorId);
+    (
+      authorId: string,
+      authorUsername: string,
+      isCurrentlyFollowing: boolean
+    ) => {
+      // Prevent double-clicks while loading
+      if (followLoadingUsers.has(authorId)) {
+        return;
+      }
+
+      requireAuth(async () => {
+        // Add to loading state
+        setFollowLoadingUsers((prev) => new Set(prev).add(authorId));
+
+        const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
+        const actionPast = isCurrentlyFollowing ? "Unfollowed" : "Followed";
+
+        // Show initial loading toast
+        const toastId = toast.loading(
+          `${action} @${authorUsername}`,
+          "Computing proof of work..."
+        );
+
+        try {
+          await toggleFollowMutation.mutateAsync({
+            userAddress: authorId,
+            isCurrentlyFollowing,
+          });
+
+          // Update to success
+          toast.update(toastId, {
+            type: "success",
+            title: `${actionPast} @${authorUsername}`,
+            description: undefined,
+            duration: 3000,
+          });
+
+          // Auto dismiss after duration
+          setTimeout(() => toast.dismiss(toastId), 3000);
+        } catch (error: unknown) {
+          // Handle "already followed" or "not following" errors gracefully
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          const isAlreadyFollowed =
+            errorMessage.includes("already followed") ||
+            errorMessage.includes("400");
+          const isNotFollowing =
+            errorMessage.includes("not following") ||
+            errorMessage.includes("not in followed");
+
+          if (isAlreadyFollowed) {
+            // Not a real error - show success
+            toast.update(toastId, {
+              type: "success",
+              title: `Already following @${authorUsername}`,
+              description: undefined,
+              duration: 3000,
+            });
+            setTimeout(() => toast.dismiss(toastId), 3000);
+          } else if (isNotFollowing) {
+            // Not a real error - show success
+            toast.update(toastId, {
+              type: "success",
+              title: `Already not following @${authorUsername}`,
+              description: undefined,
+              duration: 3000,
+            });
+            setTimeout(() => toast.dismiss(toastId), 3000);
+          } else {
+            // Actual error
+            console.error("Follow/unfollow failed:", error);
+            toast.update(toastId, {
+              type: "error",
+              title: `Failed to ${action.toLowerCase()} @${authorUsername}`,
+              description: "Please try again",
+              duration: 4000,
+            });
+            setTimeout(() => toast.dismiss(toastId), 4000);
+          }
+        } finally {
+          // Remove from loading state
+          setFollowLoadingUsers((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(authorId);
+            return newSet;
+          });
+        }
       });
     },
-    [requireAuth]
+    [requireAuth, toggleFollowMutation, followLoadingUsers, toast]
   );
 
   const handleRevealContent = useCallback((postId: string) => {
@@ -278,9 +384,15 @@ export function HomeScreen() {
   const renderPost = useCallback(
     ({ item: post }: { item: Post }) => {
       const postWithOverrides = getPostWithOverrides(post);
+      const isFollowingAuthor = followedUsers.includes(post.author.id);
+      const isFollowLoading = followLoadingUsers.has(post.author.id);
+
       return (
         <PostCard
-          post={postWithOverrides}
+          post={{
+            ...postWithOverrides,
+            isFollowing: isFollowingAuthor,
+          }}
           isOwnPost={currentUser?.id === post.author.id}
           onPress={() => handlePostPress(post.id)}
           onAuthorPress={() => handleAuthorPress(post.author.id)}
@@ -300,9 +412,16 @@ export function HomeScreen() {
             )
           }
           onCommentPress={() => handleCommentPress(post.id)}
-          onFollowPress={() => handleFollowPress(post.author.id)}
+          onFollowPress={() =>
+            handleFollowPress(
+              post.author.id,
+              post.author.username,
+              isFollowingAuthor
+            )
+          }
           onRevealContent={() => handleRevealContent(post.id)}
           contentRevealed={revealedPosts.has(post.id)}
+          followLoading={isFollowLoading}
           shareUrl={`https://mirage.app/post/${post.id}`}
         />
       );
@@ -310,6 +429,8 @@ export function HomeScreen() {
     [
       currentUser,
       getPostWithOverrides,
+      followedUsers,
+      followLoadingUsers,
       handlePostPress,
       handleAuthorPress,
       handleMorePress,
@@ -366,7 +487,10 @@ export function HomeScreen() {
     if (!isRefetching) return null;
     return (
       <Box center p="md">
-        <ActivityIndicator size="small" color={"rgba(0, 0, 0, 0.5)"} />
+        <ActivityIndicator
+          size="small"
+          color={theme.colors.background.emphasis}
+        />
       </Box>
     );
   }, [isRefetching, theme.colors.brand]);

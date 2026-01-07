@@ -37,6 +37,7 @@ export {
   useUnfollowTopic,
   useFollowModerator,
   useUnfollowModerator,
+  useToggleFollowUser,
   // Block
   useBlockUser,
   useUnblockUser,
@@ -59,6 +60,7 @@ export type {
   UseBlockOptions,
   UseSendTokensOptions,
   UseReportOptions,
+  ToggleFollowUserParams,
 } from "./hooks";
 
 // ============================================
