@@ -8,8 +8,9 @@ import {
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
+import { ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Linking,
   Pressable,
@@ -135,6 +136,8 @@ export const PostCard = ({
 }: PostCardProps) => {
   const { theme } = useUnistyles();
   const [imageError, setImageError] = useState(false);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const videoRef = useRef<Video | null>(null);
 
   const {
     author,
@@ -155,6 +158,7 @@ export const PostCard = ({
   const shouldBlurContent = hasContentWarning && !contentRevealed;
   const primaryMedia = media?.[0];
   const hasMultipleMedia = media && media.length > 1;
+  const isVideo = primaryMedia?.type === "video";
 
   // Extract URL from body
   const extractedUrl = body ? extractFirstUrl(body) : null;
@@ -189,6 +193,41 @@ export const PostCard = ({
     primaryMedia?.height,
     primaryMedia?.uri,
   ]);
+
+  useEffect(() => {
+    if (!isVideo || shouldBlurContent) {
+      setIsVideoPlaying(false);
+    }
+  }, [isVideo, shouldBlurContent, primaryMedia?.uri]);
+
+  const handleVideoToggle = async () => {
+    if (!isVideo) return;
+    if (shouldBlurContent) {
+      onRevealContent?.();
+      return;
+    }
+
+    try {
+      const status = await videoRef.current?.getStatusAsync();
+      if (!status || !status.isLoaded) {
+        setIsVideoPlaying(true);
+        return;
+      }
+      if (status.isPlaying) {
+        await videoRef.current?.pauseAsync();
+        setIsVideoPlaying(false);
+        return;
+      }
+      if (status.didJustFinish) {
+        await videoRef.current?.replayAsync();
+      } else {
+        await videoRef.current?.playAsync();
+      }
+      setIsVideoPlaying(true);
+    } catch {
+      // Ignore transient playback errors.
+    }
+  };
 
   const handlePress = () => {
     triggerHaptic("selection");
@@ -273,32 +312,67 @@ export const PostCard = ({
           <View
             style={[styles.mediaWrapper, { aspectRatio: mediaAspectRatio }]}
           >
-            <Image
-              source={{ uri: primaryMedia.uri }}
-              style={styles.media}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              onLoad={({ source }) => {
-                if (!source?.width || !source?.height) return;
-                const ratio = source.width / source.height;
-                if (!Number.isFinite(ratio) || ratio <= 0) return;
-                setMediaAspectRatio((current) =>
-                  Math.abs(current - ratio) < 0.01 ? current : ratio,
-                );
-              }}
-              onError={() => setImageError(true)}
-              blurRadius={shouldBlurContent ? 30 : 0}
-            />
+            {isVideo ? (
+              <Video
+                ref={videoRef}
+                source={{ uri: primaryMedia.uri }}
+                style={styles.media}
+                resizeMode={ResizeMode.COVER}
+                shouldPlay={isVideoPlaying}
+                useNativeControls={false}
+                onLoad={(status) => {
+                  if (!status.isLoaded) return;
+                  const { width, height } = status.naturalSize ?? {};
+                  if (!width || !height) return;
+                  const ratio = width / height;
+                  if (!Number.isFinite(ratio) || ratio <= 0) return;
+                  setMediaAspectRatio((current) =>
+                    Math.abs(current - ratio) < 0.01 ? current : ratio,
+                  );
+                }}
+                onPlaybackStatusUpdate={(status) => {
+                  if (!status.isLoaded) return;
+                  if (status.didJustFinish) {
+                    setIsVideoPlaying(false);
+                  }
+                }}
+                onError={() => setImageError(true)}
+              />
+            ) : (
+              <Image
+                source={{ uri: primaryMedia.uri }}
+                style={styles.media}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                onLoad={({ source }) => {
+                  if (!source?.width || !source?.height) return;
+                  const ratio = source.width / source.height;
+                  if (!Number.isFinite(ratio) || ratio <= 0) return;
+                  setMediaAspectRatio((current) =>
+                    Math.abs(current - ratio) < 0.01 ? current : ratio,
+                  );
+                }}
+                onError={() => setImageError(true)}
+                blurRadius={shouldBlurContent ? 30 : 0}
+              />
+            )}
 
             {/* Play button for videos */}
-            {primaryMedia.type === "video" && (
-              <View style={styles.playOverlay}>
-                <View style={styles.playButton}>
-                  <Text size="xl" style={{ color: "#fff" }}>
-                    ▶
-                  </Text>
+            {isVideo && !shouldBlurContent && (
+              <Pressable onPress={handleVideoToggle} style={styles.playOverlay}>
+                <View
+                  style={[
+                    styles.playButton,
+                    { opacity: isVideoPlaying ? 0.6 : 1 },
+                  ]}
+                >
+                  <Ionicons
+                    name={isVideoPlaying ? "pause" : "play"}
+                    size={28}
+                    color="#fff"
+                  />
                 </View>
-              </View>
+              </Pressable>
             )}
 
             {/* GIF badge */}
