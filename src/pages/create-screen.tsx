@@ -38,11 +38,10 @@ const URL_REGEX =
   /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
 
 // Button background color
-const BUTTON_BG_COLOR = "rgb(230,236,238)";
 
 export function CreateScreen() {
-  const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
+  const insets = useSafeAreaInsets();
 
   const { draft, updateDraft, clearDraft, setAttachment, removeAttachment } =
     useDraftStore();
@@ -289,7 +288,7 @@ export function CreateScreen() {
             }}
             style={[
               styles.communitySelector,
-              { backgroundColor: BUTTON_BG_COLOR },
+              { backgroundColor: theme.colors.background.subtle },
             ]}
           >
             {selectedCommunity ? (
@@ -350,7 +349,10 @@ export function CreateScreen() {
           {/* Tags Button */}
           <Pressable
             onPress={handleOpenTags}
-            style={[styles.tagsButton, { backgroundColor: BUTTON_BG_COLOR }]}
+            style={[
+              styles.tagsButton,
+              { backgroundColor: theme.colors.background.subtle },
+            ]}
           >
             <Text
               size="sm"
@@ -388,7 +390,7 @@ export function CreateScreen() {
                   onPress={handleRemoveLink}
                   style={[
                     styles.linkClearButton,
-                    { backgroundColor: BUTTON_BG_COLOR },
+                    { backgroundColor: theme.colors.background.subtle },
                   ]}
                 >
                   <Feather

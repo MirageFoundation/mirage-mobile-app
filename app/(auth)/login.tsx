@@ -225,22 +225,12 @@ export default function LoginScreen() {
           gap="sm"
           style={{
             width: "100%",
-            backgroundColor:
-              !isComplete || isLoading
-                ? "rgb(242, 242, 242)"
-                : theme.colors.primary[500],
           }}
         >
           {isLoading && (
             <ActivityIndicator size="small" color={theme.colors.text.subtle} />
           )}
-          <Button.Text
-            style={{
-              color:
-                !isComplete || isLoading ? theme.colors.text.subtle : "#fff",
-            }}
-            weight="medium"
-          >
+          <Button.Text weight="medium">
             {isLoading ? "Logging in..." : "Log in"}
           </Button.Text>
         </Button>

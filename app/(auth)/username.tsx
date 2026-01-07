@@ -1,3 +1,5 @@
+import { useConfig } from "@/src/api/read/hooks/use-parameters";
+import { useAddressFromUsername } from "@/src/api/read/hooks/use-username-resolution";
 import {
   Box,
   Button,
@@ -7,8 +9,6 @@ import {
 } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useAuthStore, useUIStore } from "@/src/stores";
-import { useAddressFromUsername } from "@/src/api/read/hooks/use-username-resolution";
-import { useConfig } from "@/src/api/read/hooks/use-parameters";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -47,7 +47,9 @@ export default function UsernameScreen() {
     data: usernameData,
     isLoading: isCheckingUsername,
     isFetched,
-  } = useAddressFromUsername(username.length >= minUsernameSize ? username : null);
+  } = useAddressFromUsername(
+    username.length >= minUsernameSize ? username : null
+  );
 
   // Validate username format
   const validateUsername = useCallback(
@@ -276,21 +278,9 @@ export default function UsernameScreen() {
           onPress={handleContinue}
           disabled={!isButtonEnabled}
           loading={isCreatingWallet}
-          style={[
-            styles.continueButton,
-            {
-              backgroundColor: isButtonEnabled
-                ? theme.colors.primary[500]
-                : "rgb(242, 242, 242)",
-            },
-          ]}
+          style={[styles.continueButton]}
         >
-          <Button.Text
-            weight="medium"
-            style={{
-              color: isButtonEnabled ? "#fff" : theme.colors.text.subtle,
-            }}
-          >
+          <Button.Text weight="medium">
             {isCreatingWallet ? "Creating wallet..." : "Continue"}
           </Button.Text>
         </Button>
@@ -369,18 +359,17 @@ const styles = StyleSheet.create((theme) => ({
     textAlign: "center",
     marginVertical: theme.spacing.lg,
     fontSize: 16,
-    color: "rgb(100,100,100)",
+    color: theme.colors.neutral[600],
   },
   inputWrapper: {
     marginBottom: theme.spacing.xs,
   },
   input: {
-    backgroundColor: "rgb(230,236,238)",
     paddingLeft: 12,
   },
   statusIcon: {
     paddingHorizontal: theme.spacing.sm,
-    backgroundColor: "rgb(230,236,238)",
+    backgroundColor: theme.colors.background.subtle,
     height: "100%",
     justifyContent: "center",
     alignItems: "center",
