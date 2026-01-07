@@ -22,6 +22,7 @@ export {
 // Username Resolution
 export {
   useAddressFromUsername,
+  useUsernameAvailability,
   useUsernameFromAddress,
   useUsers,
 } from "./use-username-resolution";

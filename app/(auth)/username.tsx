@@ -1,5 +1,5 @@
 import { useConfig } from "@/src/api/read/hooks/use-parameters";
-import { useAddressFromUsername } from "@/src/api/read/hooks/use-username-resolution";
+import { useUsernameAvailability } from "@/src/api/read/hooks/use-username-resolution";
 import {
   Box,
   Button,
@@ -42,12 +42,12 @@ export default function UsernameScreen() {
   const minUsernameSize = config?.min_username_size ?? 3;
   const maxUsernameSize = config?.max_username_size ?? 20;
 
-  // Check username availability via API
+  // Check username availability via API (checks both username and anon-username)
   const {
     data: usernameData,
     isLoading: isCheckingUsername,
     isFetched,
-  } = useAddressFromUsername(
+  } = useUsernameAvailability(
     username.length >= minUsernameSize ? username : null
   );
 

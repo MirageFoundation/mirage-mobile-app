@@ -70,11 +70,24 @@ export function SettingRow(props: SettingRowProps) {
             name={icon as any}
             size={20}
             color={theme.colors.text.default}
-            style={[styles.icon, type === "navigate" && { marginTop: 2 }]}
+            style={[
+              styles.icon,
+              type === "navigate" && {
+                marginTop: 2,
+                color: theme.colors.error[400],
+              },
+            ]}
           />
         )}
         <Box flex gap="xxs">
-          <Text size="md" weight="regular" style={styles.title}>
+          <Text
+            size="md"
+            weight="regular"
+            style={[
+              styles.title,
+              type === "navigate" && { color: theme.colors.error[400] },
+            ]}
+          >
             {title}
           </Text>
           {subtitle && (

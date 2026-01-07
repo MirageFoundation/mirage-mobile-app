@@ -46,7 +46,7 @@ export default function RecoveryPhraseScreen() {
   // But don't redirect if we're in the middle of confirming
   useEffect(() => {
     if (!recoveryPhrase && !isConfirming) {
-      router.replace("/(auth)/username");
+      router.dismissTo("/(auth)/username");
     }
   }, [recoveryPhrase, isConfirming, router]);
 
@@ -317,14 +317,16 @@ export default function RecoveryPhraseScreen() {
             width: "100%",
             backgroundColor:
               !hasSaved || isConfirming
-                ? "rgb(242, 242, 242)"
+                ? theme.colors.background.subtle
                 : theme.colors.primary[500],
           }}
         >
           <Button.Text
             style={{
               color:
-                !hasSaved || isConfirming ? theme.colors.text.subtle : "#fff",
+                !hasSaved || isConfirming
+                  ? theme.colors.text.subtle
+                  : theme.colors.background.default,
             }}
             weight="medium"
           >
