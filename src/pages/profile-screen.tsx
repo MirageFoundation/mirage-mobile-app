@@ -12,6 +12,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+import { useUserStatus, useProfile } from "@/src/api/read";
 import {
   getGradientColor,
   PROFILE_CONTENT_HEIGHT,
@@ -30,11 +31,35 @@ const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 // Height of the header bar (approximately)
 const HEADER_BAR_HEIGHT = 56;
 
+// Helper to convert umirage to mirage (1 mirage = 1,000,000 umirage)
+const formatMirageBalance = (umirage: number): number => {
+  return Math.floor(umirage / 1_000_000);
+};
+
+// Calculate account age in days from unix timestamp (returns fractional days)
+const calculateAccountAgeDays = (createdAt: number | null | undefined): number => {
+  if (!createdAt) return 0;
+  const now = Date.now() / 1000; // Current time in seconds
+  const ageInSeconds = now - createdAt;
+  return ageInSeconds / (60 * 60 * 24); // Convert to days (fractional)
+};
+
 export function ProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
+
+  // Fetch user status and profile data
+  const { 
+    data: userStatus, 
+    isLoading: isLoadingStatus,
+  } = useUserStatus();
+  
+  const { 
+    data: profile, 
+    isLoading: isLoadingProfile,
+  } = useProfile();
 
   // Scroll tracking
   const scrollY = useSharedValue(0);
@@ -66,15 +91,37 @@ export function ProfileScreen() {
     },
   });
 
-  // Mock data for development
-  const mockProfileData = {
-    balance: 12450,
-    reserve: 5230,
-    accountAgeDays: 127,
-  };
+  // Derive profile data from API responses
+  const profileData = useMemo(() => {
+    // Use API data when available, fallback to sensible defaults
+    const balance = userStatus?.balance ?? 0;
+    const reserve = userStatus?.reserve_funds ?? 0;
+    
+    // Use profile.created_at for account age, fallback to profile_registered_at from status
+    const createdAt = profile?.created_at ?? userStatus?.profile_registered_at;
+    const accountAgeDays = calculateAccountAgeDays(createdAt);
+    
+    return {
+      balance: formatMirageBalance(balance),
+      reserve: formatMirageBalance(reserve),
+      accountAgeDays,
+    };
+  }, [userStatus, profile]);
 
-  const username = user?.username || "user";
+  // Determine username (from API or auth store)
+  const username = userStatus?.username ?? user?.username ?? "user";
+  
+  // Get avatar URL from profile if available
+  const avatarUrl = profile?.avatar || undefined;
+  
+  // Get followers count from profile (followed_users array represents who the user follows, not followers)
+  // Note: The API doesn't directly provide follower count, using user.followerCount as fallback
+  const followersCount = user?.followerCount ?? 0;
+
   const gradientColor = useMemo(() => getGradientColor(username), [username]);
+  
+  // Combined loading state
+  const isLoading = isLoadingStatus || isLoadingProfile;
 
   const handleBackPress = useCallback(() => {
     router.back();
@@ -217,17 +264,18 @@ export function ProfileScreen() {
         {/* Profile Content - Scrolls and fades */}
         <ProfileContent
           username={username}
-          avatarSeed={user?.username}
-          avatarUrl={undefined}
+          avatarSeed={username}
+          avatarUrl={avatarUrl}
           walletAddress={user?.walletAddress || "0x0000...0000"}
-          followersCount={user?.followerCount || 0}
-          balance={mockProfileData.balance}
-          reserve={mockProfileData.reserve}
-          accountAgeDays={mockProfileData.accountAgeDays}
+          followersCount={followersCount}
+          balance={profileData.balance}
+          reserve={profileData.reserve}
+          accountAgeDays={profileData.accountAgeDays}
           gradientColor={gradientColor}
           scrollY={scrollY}
           onEditPress={handleEditPress}
           onFollowersPress={handleFollowersPress}
+          isLoading={isLoading}
         />
 
         {/* Inline Tab Bar (scrolls with content) */}

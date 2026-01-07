@@ -58,25 +58,49 @@ type ProfileContentProps = {
   scrollY?: SharedValue<number>;
   onEditPress?: () => void;
   onFollowersPress?: () => void;
+  isLoading?: boolean;
 };
 
 type ProfileHeaderProps = ProfileHeaderBarProps & ProfileContentProps;
 
 // Format account age to human readable
+// Input is in days (can be fractional)
 const formatAccountAge = (days: number): string => {
+  const totalMinutes = days * 24 * 60;
+  const totalHours = days * 24;
+
+  // Less than 1 minute - show dash
+  if (totalMinutes < 1) {
+    return "-";
+  }
+
+  // Less than 1 hour - show minutes
+  if (totalHours < 1) {
+    const minutes = Math.floor(totalMinutes);
+    return `${minutes}min`;
+  }
+
+  // Less than 1 day - show hours
+  if (days < 1) {
+    const hours = Math.floor(totalHours);
+    return `${hours}hr`;
+  }
+
+  // Less than 1 month (30 days) - show days
   if (days < 30) {
-    return `${days}d`;
-  } else if (days < 365) {
+    const d = Math.floor(days);
+    return `${d}d`;
+  }
+
+  // Less than 1 year - show months
+  if (days < 365) {
     const months = Math.floor(days / 30);
     return `${months}mo`;
-  } else {
-    const years = Math.floor(days / 365);
-    const remainingMonths = Math.floor((days % 365) / 30);
-    if (remainingMonths > 0) {
-      return `${years}y ${remainingMonths}mo`;
-    }
-    return `${years}y`;
   }
+
+  // 1 year or more - show years
+  const years = Math.floor(days / 365);
+  return `${years}yr`;
 };
 
 // Format number with K/M suffix
@@ -198,6 +222,7 @@ export const ProfileContent = ({
   scrollY,
   onEditPress,
   onFollowersPress,
+  isLoading = false,
 }: ProfileContentProps) => {
   const [copied, setCopied] = useState(false);
   const walletScale = useRef(new RNAnimated.Value(1)).current;
@@ -388,9 +413,13 @@ export const ProfileContent = ({
           >
             {/* Balance */}
             <Box flex center>
-              <Text size="lg" weight="bold" style={styles.whiteText}>
-                {formatNumber(balance)}
-              </Text>
+              {isLoading ? (
+                <View style={styles.statSkeleton} />
+              ) : (
+                <Text size="lg" weight="bold" style={styles.whiteText}>
+                  {formatNumber(balance)}
+                </Text>
+              )}
               <Text size="xs" style={styles.statLabel}>
                 Balance
               </Text>
@@ -400,9 +429,13 @@ export const ProfileContent = ({
 
             {/* Reserve */}
             <Box flex center>
-              <Text size="lg" weight="bold" style={styles.whiteText}>
-                {formatNumber(reserve)}
-              </Text>
+              {isLoading ? (
+                <View style={styles.statSkeleton} />
+              ) : (
+                <Text size="lg" weight="bold" style={styles.whiteText}>
+                  {formatNumber(reserve)}
+                </Text>
+              )}
               <Text size="xs" style={styles.statLabel}>
                 Reserve
               </Text>
@@ -412,9 +445,13 @@ export const ProfileContent = ({
 
             {/* Account Age */}
             <Box flex center>
-              <Text size="lg" weight="bold" style={styles.whiteText}>
-                {formatAccountAge(accountAgeDays)}
-              </Text>
+              {isLoading ? (
+                <View style={styles.statSkeleton} />
+              ) : (
+                <Text size="lg" weight="bold" style={styles.whiteText}>
+                  {formatAccountAge(accountAgeDays)}
+                </Text>
+              )}
               <Text size="xs" style={styles.statLabel}>
                 Account Age
               </Text>
@@ -544,5 +581,11 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "rgba(255,255,255,0.15)",
     borderWidth: 0,
     width: 1,
+  },
+  statSkeleton: {
+    width: 48,
+    height: 22,
+    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.15)",
   },
 }));
