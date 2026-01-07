@@ -16,7 +16,7 @@ import {
   type Post,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
-import { useAuthGuard } from "@/src/hooks";
+import { useAuthGuard, useVoteHandler, type VoteResult } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
 import { useAuthStore, useUIStore } from "@/src/stores";
 import {
@@ -104,6 +104,66 @@ export default function PostDetailScreen() {
       { hasLiked?: boolean; hasDisliked?: boolean; likeDelta?: number }
     >
   >({});
+
+  // Vote handler for the post
+  const postVoteHandler = useVoteHandler({
+    onOptimisticUpdate: useCallback(
+      (targetId: string, result: VoteResult) => {
+        setLocalPostUpdates((prev) => {
+          const currentLikes = prev.likes ?? post?.likes ?? 0;
+          return {
+            ...prev,
+            hasLiked: result.hasLiked,
+            hasDisliked: result.hasDisliked,
+            likes: currentLikes + result.likeDelta,
+          };
+        });
+      },
+      [post?.likes]
+    ),
+    onRollback: useCallback(
+      (targetId: string, previousState: { hasLiked: boolean; hasDisliked: boolean; likes: number }) => {
+        setLocalPostUpdates((prev) => ({
+          ...prev,
+          hasLiked: previousState.hasLiked,
+          hasDisliked: previousState.hasDisliked,
+          likes: previousState.likes,
+        }));
+      },
+      []
+    ),
+  });
+
+  // Vote handler for comments
+  const commentVoteHandler = useVoteHandler({
+    onOptimisticUpdate: useCallback(
+      (targetId: string, result: VoteResult) => {
+        setCommentVoteOverrides((prev) => {
+          const currentDelta = prev[targetId]?.likeDelta ?? 0;
+          return {
+            ...prev,
+            [targetId]: {
+              hasLiked: result.hasLiked,
+              hasDisliked: result.hasDisliked,
+              likeDelta: currentDelta + result.likeDelta,
+            },
+          };
+        });
+      },
+      []
+    ),
+    onRollback: useCallback(
+      (targetId: string, previousState: { hasLiked: boolean; hasDisliked: boolean; likes: number }) => {
+        // Revert to previous state by removing the override
+        setCommentVoteOverrides((prev) => {
+          const newOverrides = { ...prev };
+          delete newOverrides[targetId];
+          return newOverrides;
+        });
+      },
+      []
+    ),
+  });
 
   // Merge post data with local updates (for optimistic UI)
   const displayPost = useMemo(() => {
@@ -204,52 +264,36 @@ export default function PostDetailScreen() {
   }, [router]);
 
   const handleLikePost = useCallback(() => {
-    requireAuth(() => {
-      // TODO: Implement vote mutation
-      const currentPost = displayPost;
-      if (!currentPost) return;
+    const currentPost = displayPost;
+    if (!currentPost) return;
 
-      setLocalPostUpdates((prev) => {
-        const currentHasLiked = prev.hasLiked ?? currentPost.hasLiked;
-        const currentHasDisliked = prev.hasDisliked ?? currentPost.hasDisliked;
-        const currentLikes = prev.likes ?? currentPost.likes;
-        const currentDislikes = prev.dislikes ?? currentPost.dislikes;
+    const currentHasLiked = localPostUpdates.hasLiked ?? currentPost.hasLiked ?? false;
+    const currentHasDisliked = localPostUpdates.hasDisliked ?? currentPost.hasDisliked ?? false;
+    const currentLikes = localPostUpdates.likes ?? currentPost.likes;
 
-        return {
-          ...prev,
-          hasLiked: !currentHasLiked,
-          hasDisliked: false,
-          likes: currentHasLiked ? currentLikes - 1 : currentLikes + 1,
-          dislikes: currentHasDisliked ? currentDislikes - 1 : currentDislikes,
-        };
-      });
-    });
-  }, [requireAuth, displayPost]);
+    postVoteHandler.handleUpvote(
+      currentPost.id,
+      currentHasLiked,
+      currentHasDisliked,
+      currentLikes
+    );
+  }, [displayPost, localPostUpdates, postVoteHandler]);
 
   const handleDislikePost = useCallback(() => {
-    requireAuth(() => {
-      // TODO: Implement vote mutation
-      const currentPost = displayPost;
-      if (!currentPost) return;
+    const currentPost = displayPost;
+    if (!currentPost) return;
 
-      setLocalPostUpdates((prev) => {
-        const currentHasLiked = prev.hasLiked ?? currentPost.hasLiked;
-        const currentHasDisliked = prev.hasDisliked ?? currentPost.hasDisliked;
-        const currentLikes = prev.likes ?? currentPost.likes;
-        const currentDislikes = prev.dislikes ?? currentPost.dislikes;
+    const currentHasLiked = localPostUpdates.hasLiked ?? currentPost.hasLiked ?? false;
+    const currentHasDisliked = localPostUpdates.hasDisliked ?? currentPost.hasDisliked ?? false;
+    const currentLikes = localPostUpdates.likes ?? currentPost.likes;
 
-        return {
-          ...prev,
-          hasDisliked: !currentHasDisliked,
-          hasLiked: false,
-          dislikes: currentHasDisliked
-            ? currentDislikes - 1
-            : currentDislikes + 1,
-          likes: currentHasLiked ? currentLikes - 1 : currentLikes,
-        };
-      });
-    });
-  }, [requireAuth, displayPost]);
+    postVoteHandler.handleDownvote(
+      currentPost.id,
+      currentHasLiked,
+      currentHasDisliked,
+      currentLikes
+    );
+  }, [displayPost, localPostUpdates, postVoteHandler]);
 
   const handleFollowPost = useCallback(() => {
     const currentPost = displayPost;
@@ -377,76 +421,34 @@ export default function PostDetailScreen() {
     (
       commentId: string,
       currentlyLiked: boolean,
-      currentlyDisliked: boolean
+      currentlyDisliked: boolean,
+      currentLikes: number = 0
     ) => {
-      requireAuth(() => {
-        // Calculate the vote delta
-        let likeDelta = 0;
-        if (currentlyLiked) {
-          // Already liked, removing like: -1
-          likeDelta = -1;
-        } else if (currentlyDisliked) {
-          // Was disliked, now liking: +2 (remove dislike + add like)
-          likeDelta = 2;
-        } else {
-          // Neutral, adding like: +1
-          likeDelta = 1;
-        }
-
-        // Optimistic update using vote overrides
-        setCommentVoteOverrides((prev) => {
-          const currentDelta = prev[commentId]?.likeDelta ?? 0;
-          return {
-            ...prev,
-            [commentId]: {
-              hasLiked: !currentlyLiked,
-              hasDisliked: false,
-              likeDelta: currentDelta + likeDelta,
-            },
-          };
-        });
-        // TODO: Call vote mutation API
-      });
+      commentVoteHandler.handleUpvote(
+        commentId,
+        currentlyLiked,
+        currentlyDisliked,
+        currentLikes
+      );
     },
-    [requireAuth]
+    [commentVoteHandler]
   );
 
   const handleDislikeComment = useCallback(
     (
       commentId: string,
       currentlyLiked: boolean,
-      currentlyDisliked: boolean
+      currentlyDisliked: boolean,
+      currentLikes: number = 0
     ) => {
-      requireAuth(() => {
-        // Calculate the vote delta
-        let likeDelta = 0;
-        if (currentlyDisliked) {
-          // Already disliked, removing dislike: +1
-          likeDelta = 1;
-        } else if (currentlyLiked) {
-          // Was liked, now disliking: -2 (remove like + add dislike)
-          likeDelta = -2;
-        } else {
-          // Neutral, adding dislike: -1
-          likeDelta = -1;
-        }
-
-        // Optimistic update using vote overrides
-        setCommentVoteOverrides((prev) => {
-          const currentDelta = prev[commentId]?.likeDelta ?? 0;
-          return {
-            ...prev,
-            [commentId]: {
-              hasLiked: false,
-              hasDisliked: !currentlyDisliked,
-              likeDelta: currentDelta + likeDelta,
-            },
-          };
-        });
-        // TODO: Call vote mutation API
-      });
+      commentVoteHandler.handleDownvote(
+        commentId,
+        currentlyLiked,
+        currentlyDisliked,
+        currentLikes
+      );
     },
-    [requireAuth]
+    [commentVoteHandler]
   );
 
   const handleReplyToComment = useCallback(
@@ -761,11 +763,11 @@ export default function PostDetailScreen() {
           // TODO: Navigate to user profile
           console.log("Navigate to author:", authorId);
         }}
-        onLikePress={(commentId, hasLiked, hasDisliked) =>
-          handleLikeComment(commentId, hasLiked, hasDisliked)
+        onLikePress={(commentId, hasLiked, hasDisliked, likes) =>
+          handleLikeComment(commentId, hasLiked, hasDisliked, likes)
         }
-        onDislikePress={(commentId, hasLiked, hasDisliked) =>
-          handleDislikeComment(commentId, hasLiked, hasDisliked)
+        onDislikePress={(commentId, hasLiked, hasDisliked, likes) =>
+          handleDislikeComment(commentId, hasLiked, hasDisliked, likes)
         }
         onReplyPress={handleReplyToComment}
         onMorePress={handleMoreOptions}

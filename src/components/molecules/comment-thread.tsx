@@ -15,9 +15,9 @@ type CommentThreadProps = {
   /** Callback when author avatar/username is pressed */
   onAuthorPress?: (authorId: string) => void;
   /** Callback when like is pressed */
-  onLikePress?: (commentId: string, hasLiked: boolean, hasDisliked: boolean) => void;
+  onLikePress?: (commentId: string, hasLiked: boolean, hasDisliked: boolean, likes: number) => void;
   /** Callback when dislike is pressed */
-  onDislikePress?: (commentId: string, hasLiked: boolean, hasDisliked: boolean) => void;
+  onDislikePress?: (commentId: string, hasLiked: boolean, hasDisliked: boolean, likes: number) => void;
   /** Callback when reply is pressed */
   onReplyPress?: (comment: Comment) => void;
   /** Callback when more options is pressed */
@@ -61,8 +61,8 @@ export const CommentThread = ({
         isCollapsed={isCollapsed}
         onPress={handleToggleCollapse}
         onAuthorPress={() => onAuthorPress?.(comment.author.id)}
-        onLikePress={() => onLikePress?.(comment.id, comment.hasLiked ?? false, comment.hasDisliked ?? false)}
-        onDislikePress={() => onDislikePress?.(comment.id, comment.hasLiked ?? false, comment.hasDisliked ?? false)}
+        onLikePress={() => onLikePress?.(comment.id, comment.hasLiked ?? false, comment.hasDisliked ?? false, comment.likes)}
+        onDislikePress={() => onDislikePress?.(comment.id, comment.hasLiked ?? false, comment.hasDisliked ?? false, comment.likes)}
         onReplyPress={() => onReplyPress?.(comment)}
         onMorePress={() => onMorePress?.(comment)}
       />

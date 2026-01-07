@@ -34,6 +34,10 @@ export interface UseVoteOptions {
 
 /**
  * Basic vote mutation hook
+ * 
+ * Uses the same pattern as follow - marks queries as stale without
+ * triggering an immediate refetch to prevent showing refresh indicator.
+ * The optimistic update in the UI handles immediate feedback.
  */
 export function useVote(options: UseVoteOptions = {}) {
   const queryClient = useQueryClient();
@@ -45,14 +49,24 @@ export function useVote(options: UseVoteOptions = {}) {
       return vote(wallet, { target, direction }, options.onPoWProgress);
     },
     onSuccess: (data, { target }) => {
-      // Invalidate posts queries to reflect new vote
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
-      queryClient.invalidateQueries({ queryKey: ["comments"] });
+      // Mark queries as stale but don't trigger an immediate refetch
+      // This prevents the refreshing indicator from showing
+      // The optimistic update already shows the correct state
+      // Posts will be refetched on next navigation or pull-to-refresh
+      queryClient.invalidateQueries({ 
+        queryKey: ["posts"],
+        refetchType: "none",
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ["comments"],
+        refetchType: "none",
+      });
 
-      // Invalidate user status (recent_votes updated)
+      // Invalidate user status (recent_votes updated) - also silent
       if (address) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.userStatus(address),
+          refetchType: "none",
         });
       }
 
@@ -145,13 +159,22 @@ export function useOptimisticVote(options: UseVoteOptions = {}) {
       }
     },
     onSettled: () => {
-      // Refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
-      queryClient.invalidateQueries({ queryKey: ["comments"] });
+      // Mark queries as stale but don't trigger an immediate refetch
+      // This prevents the refreshing indicator from showing
+      // Posts will be refetched on next navigation or pull-to-refresh
+      queryClient.invalidateQueries({ 
+        queryKey: ["posts"],
+        refetchType: "none",
+      });
+      queryClient.invalidateQueries({ 
+        queryKey: ["comments"],
+        refetchType: "none",
+      });
 
       if (address) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.userStatus(address),
+          refetchType: "none",
         });
       }
     },

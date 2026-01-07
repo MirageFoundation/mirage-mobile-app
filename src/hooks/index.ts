@@ -11,3 +11,10 @@ export {
   type UseTransactionProgressReturn,
   type TransactionExecutor,
 } from "./use-transaction-progress";
+export {
+  useVoteHandler,
+  type VoteState,
+  type VoteResult,
+  type UseVoteHandlerOptions,
+  type UseVoteHandlerReturn,
+} from "./use-vote-handler";
