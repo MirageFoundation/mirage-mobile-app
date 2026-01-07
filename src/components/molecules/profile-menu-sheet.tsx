@@ -65,8 +65,16 @@ const MenuItem = ({
       style={({ pressed }) => [styles.menuItem, pressed && { opacity: 0.7 }]}
     >
       <Box direction="row" alignItems="center" gap="md" flex>
-        <Ionicons name={iconName as any} size={20} color={"rgb(29,31,30)"} />
-        <Text style={{ color: "rgb(29,31,30)" }} size="lg" weight="light">
+        <Ionicons
+          name={iconName as any}
+          size={20}
+          color={theme.colors.text.default}
+        />
+        <Text
+          style={{ color: theme.colors.text.default }}
+          size="lg"
+          weight="light"
+        >
           {title}
         </Text>
       </Box>

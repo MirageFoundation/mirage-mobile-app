@@ -9,17 +9,18 @@ import Animated, {
   withSequence,
 } from "react-native-reanimated";
 import { useTheme } from "@/providers/theme-context";
+import { usePreferencesStore } from "@/src/stores";
 
 const ThemeSwitcher = () => {
-  const { currentTheme, changeTheme } = useTheme();
+  const { currentTheme } = useTheme();
+  const setTheme = usePreferencesStore((s) => s.setTheme);
   const rotation = useSharedValue(0);
   const scale = useSharedValue(1);
 
-  const handleChangeTheme = useCallback(async () => {
+  const handleChangeTheme = useCallback(() => {
+    // Toggle to opposite of current resolved theme
     const newTheme = currentTheme === "dark" ? "light" : "dark";
-
-    // Change theme using context
-    await changeTheme(newTheme);
+    setTheme(newTheme);
 
     // Single smooth rotation animation
     rotation.value = withTiming(rotation.value + 360, {
@@ -32,7 +33,7 @@ const ThemeSwitcher = () => {
       withTiming(1.1, { duration: 100 }),
       withTiming(1, { duration: 100 }),
     );
-  }, [currentTheme, changeTheme, rotation, scale]);
+  }, [currentTheme, setTheme, rotation, scale]);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {

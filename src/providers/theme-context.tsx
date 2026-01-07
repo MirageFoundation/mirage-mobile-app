@@ -1,11 +1,11 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useMemo } from "react";
 import { useColorScheme, Appearance } from "react-native";
-import { themeService } from "@/services/theme";
 import { UnistylesRuntime, type UnistylesThemes } from "react-native-unistyles";
+import { usePreferencesStore, type ThemeMode } from "@/src/stores";
 
 type ThemeContextType = {
   currentTheme: "light" | "dark";
-  changeTheme: (theme: "light" | "dark") => Promise<void>;
+  themeMode: ThemeMode;
   isThemeReady: boolean;
 };
 
@@ -25,62 +25,42 @@ export const ThemeContextProvider = ({
   children: React.ReactNode;
 }) => {
   const systemColorScheme = useColorScheme();
-  const [currentTheme, setCurrentTheme] = useState<"light" | "dark">("dark");
+  const [currentTheme, setCurrentTheme] = useState<"light" | "dark">("light");
   const [isThemeReady, setIsThemeReady] = useState(false);
 
-  // Initialize theme from saved preference
+  // Subscribe to preferences store for theme mode
+  const themeMode = usePreferencesStore((s) => s.theme);
+
+  // Apply theme whenever themeMode or system color scheme changes
   useEffect(() => {
-    const initializeTheme = async () => {
-      const resolvedTheme = await themeService.getResolvedTheme();
-      setCurrentTheme(resolvedTheme);
+    let resolvedTheme: "light" | "dark";
 
-      // Apply theme to Unistyles
-      UnistylesRuntime.setTheme(resolvedTheme as keyof UnistylesThemes);
-
-      setIsThemeReady(true);
-    };
-
-    initializeTheme();
-  }, []);
-
-  // Watch for system theme changes, but only if user hasn't manually set a preference
-  useEffect(() => {
-    const handleSystemThemeChange = async () => {
-      const hasManualPreference = await themeService.hasManualThemePreference();
-
-      if (!hasManualPreference) {
-        // User hasn't manually set a theme, so follow system changes
-        const systemTheme = systemColorScheme || "dark";
-        setCurrentTheme(systemTheme);
-        UnistylesRuntime.setTheme(systemTheme as keyof UnistylesThemes);
-      }
-    };
-
-    if (isThemeReady) {
-      handleSystemThemeChange();
+    if (themeMode === "system") {
+      // Reset to system default - this allows useColorScheme to return the actual system value
+      Appearance.setColorScheme(null);
+      
+      // Get the actual system color scheme
+      const actualSystemTheme = Appearance.getColorScheme();
+      resolvedTheme = actualSystemTheme === "dark" ? "dark" : "light";
+    } else {
+      // Manual override - set the color scheme explicitly
+      resolvedTheme = themeMode;
+      Appearance.setColorScheme(resolvedTheme);
     }
-  }, [systemColorScheme, isThemeReady]);
 
-  const changeTheme = async (theme: "light" | "dark") => {
-    // Apply theme changes to external systems FIRST (before React re-renders)
-    Appearance.setColorScheme(theme);
-    UnistylesRuntime.setTheme(theme);
+    // Apply theme to Unistyles
+    UnistylesRuntime.setTheme(resolvedTheme as keyof UnistylesThemes);
 
-    // Use requestAnimationFrame to ensure the runtime changes have processed
-    // before updating React state
-    requestAnimationFrame(() => {
-      setCurrentTheme(theme);
-    });
+    // Update state
+    setCurrentTheme(resolvedTheme);
+    setIsThemeReady(true);
+  }, [themeMode, systemColorScheme]);
 
-    // Persist the user's choice asynchronously
-    themeService.setThemePreference(theme);
-  };
-
-  const value: ThemeContextType = {
+  const value: ThemeContextType = useMemo(() => ({
     currentTheme,
-    changeTheme,
+    themeMode,
     isThemeReady,
-  };
+  }), [currentTheme, themeMode, isThemeReady]);
 
   return (
     <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>

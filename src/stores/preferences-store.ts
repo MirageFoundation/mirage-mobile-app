@@ -117,6 +117,18 @@ export const usePreferencesStore = create<PreferencesState>()(
     {
       name: "preferences-storage",
       storage: createJSONStorage(() => mmkvStorage),
+      version: 1,
+      migrate: (persistedState: unknown, version: number) => {
+        const state = persistedState as Partial<PreferencesState>;
+        
+        // Migration from version 0 (no version) to version 1
+        // Reset theme to "system" (automatic) as the new default
+        if (version === 0) {
+          state.theme = "system";
+        }
+        
+        return state as PreferencesState;
+      },
     }
   )
 );
