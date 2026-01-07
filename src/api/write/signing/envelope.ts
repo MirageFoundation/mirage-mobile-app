@@ -10,9 +10,6 @@
  * 6. Creating the JSON payload
  */
 
-// @ts-expect-error - bundler resolves this correctly at runtime
-import { sha256 } from "@noble/hashes/sha2";
-
 import {
   b64encode,
   computePoW,
@@ -215,13 +212,10 @@ export async function buildSignedEnvelope<
   // 5. Build signed bytes (insert tag 5 for PoW)
   const signedBytes = canonSignedWithPow(base, pow);
 
-  // 6. Hash the signed bytes
-  const messageHash = sha256(signedBytes);
+  // 6. Sign canonical bytes (secp256k1 implementation hashes internally with SHA-256)
+  const signature = signCanonical(wallet.privateKey, signedBytes);
 
-  // 7. Sign the hash
-  const signature = signCanonical(wallet.privateKey, messageHash);
-
-  // 8. Build and return the envelope
+  // 7. Build and return the envelope
   return {
     pubkey: b64encode(wallet.publicKey),
     signature: b64encode(signature),
@@ -316,9 +310,8 @@ export async function buildEnvelopeWithParams<
   // Build signed bytes
   const signedBytes = canonSignedWithPow(base, pow);
 
-  // Hash and sign
-  const messageHash = sha256(signedBytes);
-  const signature = signCanonical(wallet.privateKey, messageHash);
+  // Sign canonical bytes (secp256k1 implementation hashes internally with SHA-256)
+  const signature = signCanonical(wallet.privateKey, signedBytes);
 
   return {
     pubkey: b64encode(wallet.publicKey),

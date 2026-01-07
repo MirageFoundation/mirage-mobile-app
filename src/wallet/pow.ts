@@ -16,7 +16,7 @@ import argon2 from "react-native-argon2";
 // @ts-expect-error - resolved by bundler
 import { argon2id as argon2idJs } from "@noble/hashes/argon2";
 
-import { concatBytes } from "./crypto";
+import { bytesToHex, concatBytes } from "./crypto";
 // Allow forcing JS Argon2 via env for dev/simulators
 // Set EXPO_PUBLIC_FORCE_JS_POW=1 or FORCE_JS_POW=1 to prefer JS implementation
 const FORCE_JS_POW =
@@ -95,15 +95,6 @@ export function uvarint(n: number | bigint): Uint8Array {
 // ============================================
 
 /**
- * Convert Uint8Array to hex string
- */
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-/**
  * Convert hex string to Uint8Array
  */
 function hexToUint8Array(hex: string): Uint8Array {
@@ -113,23 +104,6 @@ function hexToUint8Array(hex: string): Uint8Array {
   }
   return bytes;
 }
-
-/**
- * Convert Uint8Array to binary string (latin1)
- * Each byte becomes a character with that code point
- */
-function bytesToBinaryString(bytes: Uint8Array): string {
-  let result = "";
-  for (let i = 0; i < bytes.length; i++) {
-    result += String.fromCharCode(bytes[i]);
-  }
-  return result;
-}
-
-/**
- * Convert Uint8Array to hex string
- */
-// Note: keep only helpers that are used to avoid bundler/ts warnings
 
 // ============================================
 // PoW Computation
@@ -199,7 +173,7 @@ export async function computePoW(
   while (attempts < maxAttempts) {
     // password = base + ":" + uvarint(pow)
     const passwordBytes = concatBytes(base, colon, uvarint(pow));
-    let digest: Uint8Array | null = null;
+    let digest: Uint8Array = new Uint8Array(ARGON2_OUTPUT_LENGTH);
 
     try {
       if (FORCE_JS_POW) {
@@ -212,32 +186,31 @@ export async function computePoW(
           dkLen: ARGON2_OUTPUT_LENGTH,
         });
       } else {
-      // Convert to binary string for native module (each byte -> char)
-      // Some native bridges treat JS strings as UTF-8, which can corrupt 0x80-0xff bytes.
-      // To mitigate, we try native first; if we detect an impossible output length or an error,
-      // fall back to pure JS argon2id which operates on raw bytes.
-      const passwordStr = bytesToBinaryString(passwordBytes);
-      const result = await argon2(passwordStr, saltHex, {
-        iterations: ARGON2_TIME_COST,
-        memory: ARGON2_MEMORY_COST,
-        parallelism: ARGON2_PARALLELISM,
-        hashLength: ARGON2_OUTPUT_LENGTH,
-        mode: "argon2id",
-        saltEncoding: "hex",
-      });
-      const rawHex = (result as any)?.rawHash as string | undefined;
-      if (rawHex && rawHex.length === ARGON2_OUTPUT_LENGTH * 2) {
-        digest = hexToUint8Array(rawHex);
-      } else {
-        console.log("[PoW Native] Unexpected native output shape; falling back to JS argon2");
-        // Unexpected output; use JS fallback
-        digest = argon2idJs(passwordBytes, hexToUint8Array(saltHex), {
-          t: ARGON2_TIME_COST,
-          m: ARGON2_MEMORY_COST,
-          p: ARGON2_PARALLELISM,
-          dkLen: ARGON2_OUTPUT_LENGTH,
+        // Use hex encoding to safely transport arbitrary bytes (including `0x00`) over the RN bridge.
+        // Native module decodes hex -> bytes before hashing, matching backend + web worker behaviour.
+        const passwordHex = bytesToHex(passwordBytes);
+        const result = await argon2(passwordHex, saltHex, {
+          iterations: ARGON2_TIME_COST,
+          memory: ARGON2_MEMORY_COST,
+          parallelism: ARGON2_PARALLELISM,
+          hashLength: ARGON2_OUTPUT_LENGTH,
+          mode: "argon2id",
+          saltEncoding: "hex",
+          passwordEncoding: "hex",
         });
-      }
+        const rawHex = (result as any)?.rawHash as string | undefined;
+        if (rawHex && rawHex.length === ARGON2_OUTPUT_LENGTH * 2) {
+          digest = hexToUint8Array(rawHex);
+        } else {
+          console.log("[PoW Native] Unexpected native output shape; falling back to JS argon2");
+          // Unexpected output; use JS fallback
+          digest = argon2idJs(passwordBytes, hexToUint8Array(saltHex), {
+            t: ARGON2_TIME_COST,
+            m: ARGON2_MEMORY_COST,
+            p: ARGON2_PARALLELISM,
+            dkLen: ARGON2_OUTPUT_LENGTH,
+          });
+        }
       }
     } catch {
       // Native failed; try JS fallback (slower but reliable)
@@ -293,15 +266,16 @@ export async function verifyPoW(input: PoWInput, pow: number): Promise<boolean> 
   const saltHex = lastBlockHash.startsWith("0x") ? lastBlockHash.slice(2) : lastBlockHash;
   const colon = new TextEncoder().encode(":");
   const passwordBytes = concatBytes(base, colon, uvarint(pow));
-  const passwordStr = bytesToBinaryString(passwordBytes);
+  const passwordHex = bytesToHex(passwordBytes);
 
-  const result = await argon2(passwordStr, saltHex, {
+  const result = await argon2(passwordHex, saltHex, {
     iterations: ARGON2_TIME_COST,
     memory: ARGON2_MEMORY_COST,
     parallelism: ARGON2_PARALLELISM,
     hashLength: ARGON2_OUTPUT_LENGTH,
     mode: "argon2id",
     saltEncoding: "hex",
+    passwordEncoding: "hex",
   });
 
   const digest = hexToUint8Array(result.rawHash);

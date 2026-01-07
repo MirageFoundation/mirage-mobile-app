@@ -52,11 +52,11 @@ export default function UsernameScreen() {
   // Validate username format
   const validateUsername = useCallback(
     (value: string) => {
-      // Username rules: min-max chars, alphanumeric + underscores, starts with letter
+      // Username rules: min-max chars, alphanumeric + hyphens (must match backend)
       if (value.length < minUsernameSize || value.length > maxUsernameSize) {
         return false;
       }
-      const isValid = /^[a-zA-Z][a-zA-Z0-9_]*$/.test(value);
+      const isValid = /^[a-z0-9-]+$/.test(value);
       return isValid;
     },
     [minUsernameSize, maxUsernameSize]
@@ -90,7 +90,7 @@ export default function UsernameScreen() {
 
   const handleUsernameChange = useCallback((text: string) => {
     // Only allow valid characters
-    const sanitized = text.toLowerCase().replace(/[^a-z0-9_]/g, "");
+    const sanitized = text.toLowerCase().replace(/[^a-z0-9-]/g, "");
     setUsername(sanitized);
     setCreateError(null);
   }, []);
@@ -184,7 +184,7 @@ export default function UsernameScreen() {
       case "taken":
         return "This username is already taken";
       case "invalid":
-        return `${minUsernameSize}-${maxUsernameSize} characters, letters, numbers, underscores only`;
+        return `${minUsernameSize}-${maxUsernameSize} characters, letters, numbers, hyphens only`;
       default:
         return "";
     }

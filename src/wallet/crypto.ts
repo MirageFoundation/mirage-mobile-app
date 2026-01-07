@@ -116,16 +116,23 @@ export function signCanonical(privateKey: Uint8Array, data: Uint8Array): Uint8Ar
     // Sign with lowS: true for canonical signature
     const signature = secp256k1.sign(data, privateKey, { lowS: true });
 
-    // Return compact format (64 bytes: r || s)
-    // Handle different @noble/curves API versions
-    if (typeof signature.toCompactRawBytes === "function") {
-      return signature.toCompactRawBytes();
+    // @noble/curves v2 returns Uint8Array by default
+    if (signature instanceof Uint8Array) {
+      return signature;
+    }
+
+    // Handle older/alternate API shapes
+    if (typeof (signature as any).toCompactRawBytes === "function") {
+      return (signature as any).toCompactRawBytes();
+    }
+    if (typeof (signature as any).toBytes === "function") {
+      return (signature as any).toBytes("compact");
     }
     
     // Fallback: manually construct from r and s
     // Each component is 32 bytes (256 bits)
-    const r = signature.r;
-    const s = signature.s;
+    const r = (signature as any).r as bigint;
+    const s = (signature as any).s as bigint;
     
     // Convert bigints to 32-byte arrays
     const rBytes = bigintToBytes(r, 32);

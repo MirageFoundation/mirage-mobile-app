@@ -26,6 +26,7 @@
  */
 
 import { useState, useCallback, useRef } from "react";
+import axios from "axios";
 import type {
   TransactionPhase,
   TransactionProgress,
@@ -292,10 +293,24 @@ export async function executeWithProgress<TResult extends string | { tx_hash: st
     setSuccess(txHash);
     return { success: true, txHash };
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : "Transaction failed";
+    let errorMessage = err instanceof Error ? err.message : "Transaction failed";
+    if (axios.isAxiosError(err)) {
+      const data = err.response?.data as unknown;
+      if (typeof data === "string" && data.trim()) {
+        errorMessage = data;
+      } else if (data && typeof data === "object") {
+        const maybeError =
+          (data as any).error ??
+          (data as any).message ??
+          (data as any).error_details ??
+          (data as any).raw_log;
+        if (maybeError) {
+          errorMessage = String(maybeError);
+        }
+      }
+    }
     setError(errorMessage);
     return { success: false, error: errorMessage };
   }
 }
-
 
