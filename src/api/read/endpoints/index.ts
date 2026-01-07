@@ -74,3 +74,19 @@ export type {
   GetLeaderboardParams,
   GetReferralStatsParams,
 } from "./stats";
+
+// Media Upload
+export {
+  getUploadUrl,
+  getImageUploadUrl,
+  getVideoUploadUrl,
+  uploadToSignedUrl,
+  uploadImage,
+  getImageUrl,
+  getContentTypeFromUri,
+} from "./media";
+export type {
+  MediaType,
+  GetUploadUrlParams,
+  UploadImageResult,
+} from "./media";

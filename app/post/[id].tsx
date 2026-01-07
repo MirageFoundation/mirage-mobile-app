@@ -3,6 +3,7 @@ import {
   transformApiPost,
   useComments,
   useUserFollowed,
+  uploadImageAndGetUrl,
 } from "@/src/api/read";
 import { useToggleFollowUser, useComment } from "@/src/api/write";
 import type { PoWProgress } from "@/src/api/write/signing";
@@ -248,11 +249,17 @@ export default function PostDetailScreen() {
   );
 
   // Merge API comments with locally added comments and apply vote overrides + optimistic replies
+  // Sort by createdAt descending (latest first)
   const allComments = useMemo(() => {
     const merged = [...localComments, ...comments];
     return merged
       .map(applyOptimisticReplies)
-      .map(applyVoteOverridesToComment);
+      .map(applyVoteOverridesToComment)
+      .sort((a, b) => {
+        const timeA = a.createdAt instanceof Date ? a.createdAt.getTime() : Number(a.createdAt);
+        const timeB = b.createdAt instanceof Date ? b.createdAt.getTime() : Number(b.createdAt);
+        return timeB - timeA; // Descending order (latest first)
+      });
   }, [localComments, comments, applyOptimisticReplies, applyVoteOverridesToComment]);
 
   // Scroll tracking for sticky header
@@ -522,19 +529,67 @@ export default function PostDetailScreen() {
   }, []);
 
   const handleSubmitComment = useCallback(
-    async (text: string) => {
-      if (!currentUser || !id) return;
+    async (text: string, imageUri?: string | null, gifUrl?: string | null) => {
+      console.log("[Comment] handleSubmitComment called", { text, imageUri, gifUrl });
+      
+      if (!currentUser || !id) {
+        console.log("[Comment] Missing currentUser or id", { currentUser, id });
+        return;
+      }
 
       // Determine the parent ID - if replying to a comment, use that comment's id, otherwise use the post id
       const parentId = replyingTo?.id ?? id;
       const replyingToUsername = replyingTo?.author.username;
+      console.log("[Comment] Parent info", { parentId, replyingToUsername });
 
       // Show loading toast
+      const hasMedia = imageUri || gifUrl;
       const toastId = toast.loading(
         replyingToUsername ? `Replying to @${replyingToUsername}` : "Posting comment",
-        "Computing proof of work..."
+        hasMedia ? "Uploading media..." : "Computing proof of work..."
       );
       setCommentToastId(toastId);
+
+      // Handle media upload if present
+      let mediaUrl: string | null = null;
+      if (imageUri) {
+        try {
+          console.log("[Comment] Uploading image...", imageUri);
+          // Upload local image and get the final URL
+          toast.update(toastId, { description: "Uploading image..." });
+          mediaUrl = await uploadImageAndGetUrl(imageUri);
+          console.log("[Comment] Image uploaded successfully", mediaUrl);
+        } catch (error) {
+          console.error("[Comment] Image upload failed:", error);
+          toast.update(toastId, {
+            type: "error",
+            title: "Image upload failed",
+            description: error instanceof Error ? error.message : "Please try again",
+            duration: 4000,
+          });
+          setTimeout(() => toast.dismiss(toastId), 4000);
+          setCommentToastId(null);
+          return;
+        }
+      } else if (gifUrl) {
+        // GIF is already a URL, use it directly
+        console.log("[Comment] Using GIF URL directly", gifUrl);
+        mediaUrl = gifUrl;
+      }
+
+      // Build the final content with media URL
+      let finalContent = text;
+      if (mediaUrl) {
+        // Append media URL on a new line if there's text, or just the URL if no text
+        finalContent = text.trim()
+          ? `${text.trim()}\n\n${mediaUrl}`
+          : mediaUrl;
+      }
+      console.log("[Comment] Final content", finalContent);
+
+      // Update toast for PoW phase
+      console.log("[Comment] Starting PoW computation...");
+      toast.update(toastId, { description: "Computing proof of work..." });
 
       // Create optimistic comment for immediate UI update
       const optimisticCommentId = `optimistic-${Date.now()}`;
@@ -545,7 +600,7 @@ export default function PostDetailScreen() {
           username: currentUser.username,
           avatarSeed: currentUser.username,
         },
-        content: text,
+        content: finalContent,
         likes: 0,
         dislikes: 0,
         hasLiked: false,
@@ -582,10 +637,12 @@ export default function PostDetailScreen() {
       // Submit to API in background (don't block UI)
       try {
         // Submit to API
-        await commentMutation.mutateAsync({
+        console.log("[Comment] Submitting to API...", { parentId, content: finalContent });
+        const result = await commentMutation.mutateAsync({
           parentId,
-          content: text,
+          content: finalContent,
         });
+        console.log("[Comment] API response", result);
 
         // Update toast to success
         toast.update(toastId, {
@@ -665,6 +722,7 @@ export default function PostDetailScreen() {
     [
       currentUser,
       id,
+      replyingTo,
       refetchComments,
       displayPost,
       toast,

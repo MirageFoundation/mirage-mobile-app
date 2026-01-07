@@ -80,3 +80,7 @@ export {
   useReferralStatsByAddress,
   usePeers,
 } from "./use-stats";
+
+// Media Upload
+export { useUploadMedia, uploadImageAndGetUrl } from "./use-upload-media";
+export type { UploadMediaInput, UseUploadMediaOptions } from "./use-upload-media";

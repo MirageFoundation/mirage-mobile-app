@@ -1,26 +1,33 @@
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useGiphy } from "@/src/hooks";
 import {
   Feather,
   FontAwesome5,
   Ionicons,
   MaterialIcons,
 } from "@expo/vector-icons";
-import BottomSheet, {
-  BottomSheetBackdrop,
-  BottomSheetTextInput,
-  BottomSheetView,
-} from "@gorhom/bottom-sheet";
-import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from "react";
+import * as ImagePicker from "expo-image-picker";
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import {
-  Alert,
+  ActivityIndicator,
+  Image,
   Keyboard,
   Pressable,
+  ScrollView,
   TextInput,
   View,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -28,7 +35,11 @@ type InputMode = "keyboard" | "link" | "gif" | "photo";
 
 type CommentInputProps = {
   /** Callback when comment is submitted */
-  onSubmit?: (text: string) => void | Promise<void>;
+  onSubmit?: (
+    text: string,
+    imageUri?: string | null,
+    gifUrl?: string | null
+  ) => void | Promise<void>;
   /** Callback when link is added */
   onAddLink?: (name: string, url: string) => void;
   /** Callback when image is selected */
@@ -56,230 +67,312 @@ export type CommentInputRef = {
   activate: () => void;
 };
 
-// Sample GIFs for demo
-const SAMPLE_GIFS = [
-  "https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif",
-  "https://media.giphy.com/media/3o7TKSjRrfIPjeiVyM/giphy.gif",
-  "https://media.giphy.com/media/l41lGvinEgARjB2HC/giphy.gif",
-  "https://media.giphy.com/media/xT9IgG50Fb7Mi0prBC/giphy.gif",
-  "https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif",
-  "https://media.giphy.com/media/l0HlBO7eyXzSZkJri/giphy.gif",
-  "https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif",
-  "https://media.giphy.com/media/l3q2K5jinAlChoCLS/giphy.gif",
-];
+// Fixed preview dimensions
+const PREVIEW_WIDTH = 120;
+const PREVIEW_HEIGHT = 90;
 
-export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(({
-  onSubmit,
-  onAddLink,
-  onAddImage,
-  onAddGif,
-  isLoggedIn = false,
-  onAuthRequired,
-  disabled = false,
-  loading = false,
-  replyingTo,
-  onCancelReply,
-  style,
-}, ref) => {
-  const insets = useSafeAreaInsets();
-  const { theme } = useUnistyles();
-  const bottomSheetRef = useRef<BottomSheet>(null);
-  const inputRef = useRef<TextInput>(null);
-
-  const [isActive, setIsActive] = useState(false);
-  const [text, setText] = useState("");
-  const [inputMode, setInputMode] = useState<InputMode>("keyboard");
-  const [linkName, setLinkName] = useState("");
-  const [linkUrl, setLinkUrl] = useState("");
-
-  const canSubmit = text.trim().length > 0 && !disabled && !loading;
-  const canAddLink = linkName.trim().length > 0 && linkUrl.trim().length > 0;
-
-  const handleActivate = useCallback(() => {
-    if (!isLoggedIn) {
-      // Trigger auth sheet for guests
-      onAuthRequired?.();
-      return;
-    }
-    setIsActive(true);
-    bottomSheetRef.current?.expand();
-  }, [isLoggedIn, onAuthRequired]);
-
-  // Expose activate method to parent via ref
-  useImperativeHandle(ref, () => ({
-    activate: () => {
-      handleActivate();
+export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
+  (
+    {
+      onSubmit,
+      onAddLink,
+      onAddImage,
+      onAddGif,
+      isLoggedIn = false,
+      onAuthRequired,
+      disabled = false,
+      loading = false,
+      replyingTo,
+      onCancelReply,
+      style,
     },
-  }), [handleActivate]);
+    ref
+  ) => {
+    const insets = useSafeAreaInsets();
+    const { theme } = useUnistyles();
+    const inputRef = useRef<TextInput>(null);
+    const gifSearchRef = useRef<TextInput>(null);
 
-  const handleDeactivate = useCallback(() => {
-    setIsActive(false);
-    setInputMode("keyboard");
-    Keyboard.dismiss();
-    bottomSheetRef.current?.close();
-  }, []);
+    const [isActive, setIsActive] = useState(false);
+    const [text, setText] = useState("");
+    const [inputMode, setInputMode] = useState<InputMode>("keyboard");
+    const inputModeRef = useRef<InputMode>("keyboard");
+    const [linkName, setLinkName] = useState("");
+    const [linkUrl, setLinkUrl] = useState("");
 
-  const handleSubmit = useCallback(async () => {
-    if (!canSubmit) return;
-    triggerHaptic("medium");
-    const trimmedText = text.trim();
-    setText("");
-    handleDeactivate();
-    await onSubmit?.(trimmedText);
-  }, [canSubmit, text, onSubmit, handleDeactivate]);
+    // Giphy integration
+    const {
+      gifs,
+      isLoading: isLoadingGifs,
+      query: gifSearch,
+      setQuery: setGifSearch,
+      isConfigured: isGiphyConfigured,
+    } = useGiphy({ debounceMs: 300, limit: 20 });
 
-  const handleModeChange = useCallback((mode: InputMode) => {
-    triggerHaptic("selection");
-    setInputMode(mode);
-    if (mode === "keyboard") {
-      inputRef.current?.focus();
-    }
-  }, []);
-
-  const handleAddLink = useCallback(() => {
-    if (!canAddLink) return;
-    triggerHaptic("medium");
-    
-    // Format the link as markdown and add it to the text input
-    const markdownLink = `[${linkName.trim()}](${linkUrl.trim()})`;
-    setText((prev) => {
-      // If there's existing text, add a space before the link
-      if (prev.trim()) {
-        return `${prev} ${markdownLink}`;
-      }
-      return markdownLink;
-    });
-    
-    onAddLink?.(linkName, linkUrl);
-    setLinkName("");
-    setLinkUrl("");
-    setInputMode("keyboard");
-  }, [canAddLink, linkName, linkUrl, onAddLink]);
-
-  const handleSelectGif = useCallback(
-    (gifUrl: string) => {
-      triggerHaptic("medium");
-      onAddGif?.(gifUrl);
-      setText((prev) => prev + ` ${gifUrl}`);
-      setInputMode("keyboard");
-    },
-    [onAddGif]
-  );
-
-  const handlePickImage = useCallback(() => {
-    triggerHaptic("selection");
-
-    Alert.alert("Add Photo", "Choose an option", [
-      {
-        text: "Camera",
-        onPress: () => {
-          console.log("Open camera");
-        },
-      },
-      {
-        text: "Photo Library",
-        onPress: () => {
-          console.log("Open photo library");
-          onAddImage?.("photo-placeholder");
-        },
-      },
-      { text: "Cancel", style: "cancel" },
-    ]);
-    setInputMode("keyboard");
-  }, [onAddImage]);
-
-  const handleCancelReply = useCallback(() => {
-    triggerHaptic("light");
-    onCancelReply?.();
-  }, [onCancelReply]);
-
-  const renderBackdrop = useCallback(
-    (props: any) => (
-      <BottomSheetBackdrop
-        {...props}
-        disappearsOnIndex={-1}
-        appearsOnIndex={0}
-        opacity={0.5}
-      />
-    ),
-    []
-  );
-
-  // Inactive state - simple input bar
-  if (!isActive) {
-    return (
-      <View
-        style={[
-          styles.inactiveContainer,
-          style,
-          { paddingBottom: insets.bottom },
-        ]}
-      >
-        <Pressable
-          onPress={handleActivate}
-          style={styles.inactiveInput}
-          disabled={disabled}
-        >
-          <Text size="sm" mode="subtle" style={styles.placeholder}>
-            {isLoggedIn ? "Share your thoughts..." : "Login to comment"}
-          </Text>
-          <View style={styles.inactiveIcons}>
-            <Pressable
-              onPress={() => {
-                if (isLoggedIn) {
-                  handleActivate();
-                  setTimeout(() => setInputMode("gif"), 100);
-                }
-              }}
-              style={styles.inactiveIconButton}
-            >
-              <MaterialIcons
-                name="gif"
-                size={24}
-                color={theme.colors.text.subtle}
-              />
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                if (isLoggedIn) {
-                  handlePickImage();
-                }
-              }}
-              style={styles.inactiveIconButton}
-            >
-              <Ionicons
-                name="image-outline"
-                size={20}
-                color={theme.colors.text.subtle}
-              />
-            </Pressable>
-          </View>
-        </Pressable>
-      </View>
+    // Image and GIF state
+    const [selectedImageUri, setSelectedImageUri] = useState<string | null>(
+      null
     );
-  }
+    const [selectedGifUrl, setSelectedGifUrl] = useState<string | null>(null);
 
-  // Active state - bottom sheet
-  return (
-    <BottomSheet
-      ref={bottomSheetRef}
-      index={0}
-      snapPoints={inputMode === "gif" ? ["50%", "80%"] : ["30%"]}
-      enablePanDownToClose
-      onClose={handleDeactivate}
-      backdropComponent={renderBackdrop}
-      backgroundStyle={[
-        styles.sheetBackground,
-        { backgroundColor: theme.colors.background.default },
-      ]}
-      handleIndicatorStyle={[
-        styles.handleIndicator,
-        { backgroundColor: theme.colors.border.default },
-      ]}
-      keyboardBehavior="extend"
-      android_keyboardInputMode="adjustResize"
-    >
-      <BottomSheetView style={styles.sheetContent}>
+    // Flag to prevent deactivation during image picking
+    const isPickingImageRef = useRef(false);
+
+    const hasAttachment = selectedImageUri !== null || selectedGifUrl !== null;
+    const canSubmit =
+      (text.trim().length > 0 || hasAttachment) && !disabled && !loading;
+    const canAddLink = linkName.trim().length > 0 && linkUrl.trim().length > 0;
+
+    const handleActivate = useCallback(() => {
+      if (!isLoggedIn) {
+        onAuthRequired?.();
+        return;
+      }
+      setIsActive(true);
+      setInputMode("keyboard");
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }, [isLoggedIn, onAuthRequired]);
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        activate: () => {
+          handleActivate();
+        },
+      }),
+      [handleActivate]
+    );
+
+    const handleDeactivate = useCallback(() => {
+      setIsActive(false);
+      setInputMode("keyboard");
+      Keyboard.dismiss();
+    }, []);
+
+    // Deactivate when keyboard is dismissed (clicking outside)
+    // Only deactivate if in keyboard mode and there's no content
+    useEffect(() => {
+      const keyboardHideListener = Keyboard.addListener(
+        "keyboardDidHide",
+        () => {
+          // Don't deactivate if we're picking an image (picker is open)
+          if (isPickingImageRef.current) {
+            return;
+          }
+          // Only deactivate if there's no content AND we're in keyboard mode
+          // Don't deactivate when in link/gif mode as those intentionally dismiss keyboard
+          // Use ref to get the latest mode value (avoids stale closure issue)
+          if (
+            inputModeRef.current === "keyboard" &&
+            !text.trim() &&
+            !selectedImageUri &&
+            !selectedGifUrl
+          ) {
+            setIsActive(false);
+            setInputMode("keyboard");
+          }
+        }
+      );
+
+      return () => {
+        keyboardHideListener.remove();
+      };
+    }, [text, selectedImageUri, selectedGifUrl]);
+
+    const handleSubmit = useCallback(async () => {
+      if (!canSubmit) return;
+      triggerHaptic("medium");
+      const trimmedText = text.trim();
+      const imageUri = selectedImageUri;
+      const gifUrl = selectedGifUrl;
+
+      setText("");
+      setSelectedImageUri(null);
+      setSelectedGifUrl(null);
+      handleDeactivate();
+
+      await onSubmit?.(trimmedText, imageUri, gifUrl);
+    }, [
+      canSubmit,
+      text,
+      selectedImageUri,
+      selectedGifUrl,
+      onSubmit,
+      handleDeactivate,
+    ]);
+
+    const handleModeChange = useCallback((mode: InputMode) => {
+      triggerHaptic("selection");
+      inputModeRef.current = mode; // Update ref immediately
+      setInputMode(mode);
+      if (mode === "keyboard") {
+        inputRef.current?.focus();
+      } else if (mode === "gif") {
+        // Keep keyboard open, focus will go to search
+        setTimeout(() => gifSearchRef.current?.focus(), 100);
+      }
+    }, []);
+
+    const handleCloseGifMode = useCallback(() => {
+      triggerHaptic("selection");
+      inputModeRef.current = "keyboard";
+      setInputMode("keyboard");
+      setGifSearch(""); // Reset search query
+      inputRef.current?.focus();
+    }, [setGifSearch]);
+
+    const handleAddLink = useCallback(() => {
+      if (!canAddLink) return;
+      triggerHaptic("medium");
+
+      const markdownLink = `[${linkName.trim()}](${linkUrl.trim()})`;
+      setText((prev) => {
+        if (prev.trim()) {
+          return `${prev} ${markdownLink}`;
+        }
+        return markdownLink;
+      });
+
+      onAddLink?.(linkName, linkUrl);
+      setLinkName("");
+      setLinkUrl("");
+      setInputMode("keyboard");
+    }, [canAddLink, linkName, linkUrl, onAddLink]);
+
+    const handleSelectGif = useCallback(
+      (gifUrl: string) => {
+        triggerHaptic("medium");
+        setSelectedImageUri(null);
+        setSelectedGifUrl(gifUrl);
+        onAddGif?.(gifUrl);
+        // Ensure we stay active and update both ref and state
+        setIsActive(true);
+        inputModeRef.current = "keyboard";
+        setInputMode("keyboard");
+        setGifSearch(""); // Reset search query
+        // Focus input after a short delay
+        setTimeout(() => inputRef.current?.focus(), 100);
+      },
+      [onAddGif, setGifSearch]
+    );
+
+    const handlePickImage = useCallback(async () => {
+      triggerHaptic("selection");
+
+      // Set flag to prevent deactivation during picking
+      isPickingImageRef.current = true;
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 0.8,
+      });
+
+      // Clear flag after picking
+      isPickingImageRef.current = false;
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        setSelectedGifUrl(null);
+        setSelectedImageUri(asset.uri);
+        onAddImage?.(asset.uri);
+        // Keep input active and in keyboard mode
+        setIsActive(true);
+        inputModeRef.current = "keyboard";
+        setInputMode("keyboard");
+        // Focus input after a short delay
+        setTimeout(() => inputRef.current?.focus(), 100);
+      } else {
+        // User cancelled - ensure we stay active if we have content
+        if (!text.trim() && !selectedGifUrl) {
+          // No content, can deactivate
+          setIsActive(false);
+        }
+      }
+    }, [onAddImage, text, selectedGifUrl]);
+
+    const handleRemoveAttachment = useCallback(() => {
+      triggerHaptic("selection");
+      setSelectedImageUri(null);
+      setSelectedGifUrl(null);
+    }, []);
+
+    const handleCancelReply = useCallback(() => {
+      triggerHaptic("light");
+      onCancelReply?.();
+    }, [onCancelReply]);
+
+    // Inactive state - simple input bar with icons inside
+    if (!isActive) {
+      return (
+        <View
+          style={[
+            styles.inactiveContainer,
+            style,
+            { paddingBottom: insets.bottom || 8 },
+          ]}
+        >
+          <View style={styles.inactiveInputWrapper}>
+            <Pressable
+              onPress={handleActivate}
+              style={styles.inactiveInput}
+              disabled={disabled}
+            >
+              <Text size="md" mode="subtle">
+                {isLoggedIn ? "Share your thoughts..." : "Login to comment"}
+              </Text>
+            </Pressable>
+            <View style={styles.inactiveIcons}>
+              <Pressable
+                onPress={() => {
+                  if (isLoggedIn) {
+                    setIsActive(true);
+                    setInputMode("gif");
+                    setTimeout(() => gifSearchRef.current?.focus(), 100);
+                  }
+                }}
+                style={styles.inactiveIconButton}
+              >
+                <MaterialIcons
+                  name="gif"
+                  size={24}
+                  color={theme.colors.text.subtle}
+                />
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  if (isLoggedIn) {
+                    handleActivate();
+                    setTimeout(() => handlePickImage(), 100);
+                  }
+                }}
+                style={styles.inactiveIconButton}
+              >
+                <Ionicons
+                  name="image-outline"
+                  size={20}
+                  color={theme.colors.text.subtle}
+                />
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    // Active state - expanded input
+    return (
+      <View style={[styles.container, style]}>
+        {/* Handle indicator */}
+        <View style={styles.handleContainer}>
+          <View
+            style={[
+              styles.handleIndicator,
+              { backgroundColor: theme.colors.border.default },
+            ]}
+          />
+        </View>
+
         {/* Reply context */}
         {replyingTo && (
           <View style={styles.replyBanner}>
@@ -303,16 +396,43 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(({
           </View>
         )}
 
-        {/* Content based on mode */}
-        {inputMode === "link" ? (
-          <View style={styles.linkContainer}>
-            <BottomSheetTextInput
+        {/* Image/GIF Preview */}
+        {(selectedImageUri || selectedGifUrl) && (
+          <Animated.View
+            entering={FadeIn.duration(200)}
+            exiting={FadeOut.duration(150)}
+            style={styles.previewContainer}
+          >
+            <View style={styles.previewWrapper}>
+              <Image
+                source={{
+                  uri: selectedImageUri || selectedGifUrl || undefined,
+                }}
+                style={styles.previewImage}
+                resizeMode="cover"
+              />
+              <Pressable
+                onPress={handleRemoveAttachment}
+                style={styles.removeButton}
+              >
+                <Feather name="x" size={14} color="#fff" />
+              </Pressable>
+            </View>
+          </Animated.View>
+        )}
+
+        {/* Link input mode */}
+        {inputMode === "link" && (
+          <Animated.View
+            entering={FadeIn.duration(200)}
+            exiting={FadeOut.duration(150)}
+            style={styles.linkContainer}
+          >
+            <TextInput
               style={[
                 styles.linkInput,
                 styles.linkNameInput,
-                {
-                  color: theme.colors.text.default,
-                },
+                { color: theme.colors.text.default },
               ]}
               placeholder="Link name"
               placeholderTextColor={theme.colors.text.subtle}
@@ -320,13 +440,8 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(({
               onChangeText={setLinkName}
               autoFocus
             />
-            <BottomSheetTextInput
-              style={[
-                styles.linkInput,
-                {
-                  color: theme.colors.text.default,
-                },
-              ]}
+            <TextInput
+              style={[styles.linkInput, { color: theme.colors.text.default }]}
               placeholder="https://"
               placeholderTextColor={theme.colors.text.subtle}
               value={linkUrl}
@@ -351,56 +466,39 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(({
                 weight="semibold"
                 style={{
                   color: canAddLink ? "#FFFFFF" : theme.colors.text.subtle,
+                  fontSize: 16,
                 }}
               >
                 Add link
               </Text>
             </Pressable>
-          </View>
-        ) : (
-          <>
-            {/* Text input */}
-            <View style={styles.inputContainer}>
-              <BottomSheetTextInput
-                ref={inputRef as any}
-                style={[
-                  styles.textInput,
-                  {
-                    color: theme.colors.text.default,
-                  },
-                ]}
-                placeholder="Share your thoughts..."
-                placeholderTextColor={theme.colors.text.subtle}
-                value={text}
-                onChangeText={setText}
-                multiline
-                maxLength={2000}
-                autoFocus={inputMode === "keyboard"}
-              />
-            </View>
-
-            {/* GIF grid */}
-            {inputMode === "gif" && (
-              <View style={styles.gifContainer}>
-                <View style={styles.gifGrid}>
-                  {SAMPLE_GIFS.map((gif, index) => (
-                    <Pressable
-                      key={index}
-                      onPress={() => handleSelectGif(gif)}
-                      style={styles.gifItem}
-                    >
-                      <View style={styles.gifPlaceholder}>
-                        <Text size="xs" mode="subtle">
-                          GIF {index + 1}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-            )}
-          </>
+          </Animated.View>
         )}
+
+        {/* Text input - always visible except in link mode */}
+        {inputMode !== "link" && (
+          <View style={styles.inputRow}>
+            <TextInput
+              ref={inputRef}
+              style={[styles.textInput, { color: theme.colors.text.default }]}
+              placeholder="Share your thoughts..."
+              placeholderTextColor={theme.colors.text.subtle}
+              value={text}
+              onChangeText={setText}
+              multiline
+              maxLength={2000}
+              autoFocus={inputMode === "keyboard"}
+            />
+          </View>
+        )}
+
+        {/* Divider */}
+        <View
+          style={[
+            styles.divider,
+            { backgroundColor: theme.colors.border.subtle },
+          ]}
+        />
 
         {/* Options bar */}
         <View style={styles.optionsBar}>
@@ -463,13 +561,7 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(({
             </Pressable>
 
             {/* Photo */}
-            <Pressable
-              onPress={handlePickImage}
-              style={[
-                styles.optionButton,
-                inputMode === "photo" && styles.optionButtonActive,
-              ]}
-            >
+            <Pressable onPress={handlePickImage} style={styles.optionButton}>
               <Ionicons
                 name="image-outline"
                 size={18}
@@ -478,57 +570,198 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(({
             </Pressable>
           </View>
 
-          {/* Reply button */}
-          <Pressable
-            onPress={handleSubmit}
-            disabled={!canSubmit}
-            style={[
-              styles.replyButton,
-              {
-                backgroundColor: canSubmit
-                  ? theme.colors.brand[500]
-                  : theme.colors.background.subtle,
-              },
-            ]}
-          >
-            <Text
-              size="sm"
-              weight="semibold"
-              style={{
-                color: canSubmit ? "#FFFFFF" : theme.colors.text.subtle,
-              }}
+          <View style={styles.optionsRight}>
+            {/* Reply button */}
+            <Pressable
+              onPress={handleSubmit}
+              disabled={!canSubmit}
+              style={[
+                styles.replyButton,
+                {
+                  backgroundColor: canSubmit
+                    ? theme.colors.brand[500]
+                    : theme.colors.background.subtle,
+                },
+              ]}
             >
-              Reply
-            </Text>
-          </Pressable>
+              <Text
+                size="sm"
+                weight="semibold"
+                style={{
+                  color: canSubmit ? "#FFFFFF" : theme.colors.text.subtle,
+                }}
+              >
+                Reply
+              </Text>
+            </Pressable>
+          </View>
         </View>
-      </BottomSheetView>
-    </BottomSheet>
-  );
-});
+
+        {/* GIF section - appears below options bar */}
+        {inputMode === "gif" && (
+          <Animated.View
+            entering={FadeIn.duration(200)}
+            exiting={FadeOut.duration(150)}
+            style={styles.gifSection}
+          >
+            {/* Full width divider */}
+            <View style={styles.gifDivider} />
+
+            {/* Search bar with close button */}
+            <View style={styles.gifSearchRow}>
+              <View style={styles.gifSearchContainer}>
+                <Feather
+                  name="search"
+                  size={16}
+                  color={theme.colors.text.subtle}
+                  style={styles.gifSearchIcon}
+                />
+                <TextInput
+                  ref={gifSearchRef}
+                  style={[
+                    styles.gifSearchInput,
+                    { color: theme.colors.text.default },
+                  ]}
+                  placeholder="Search GIFs..."
+                  placeholderTextColor={theme.colors.text.subtle}
+                  value={gifSearch}
+                  onChangeText={setGifSearch}
+                  autoFocus
+                />
+                {isLoadingGifs && (
+                  <ActivityIndicator
+                    size="small"
+                    color={theme.colors.text.subtle}
+                    style={styles.gifLoadingIndicator}
+                  />
+                )}
+              </View>
+              <Pressable
+                onPress={handleCloseGifMode}
+                style={styles.gifCloseButton}
+              >
+                <Ionicons
+                  name="close"
+                  size={22}
+                  color={theme.colors.text.subtle}
+                />
+              </Pressable>
+            </View>
+
+            {/* Giphy attribution */}
+            <View style={styles.giphyAttribution}>
+              <Text size="xs" mode="subtle">
+                Powered by GIPHY
+              </Text>
+            </View>
+
+            {/* Horizontal GIF list */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.gifScrollContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              {!isGiphyConfigured && (
+                <View style={styles.gifEmptyState}>
+                  <Text size="sm" mode="subtle" style={{ textAlign: "center" }}>
+                    Giphy API key not configured.{"\n"}
+                    Set EXPO_PUBLIC_GIPHY_API_KEY
+                  </Text>
+                </View>
+              )}
+              {isGiphyConfigured && gifs.length === 0 && !isLoadingGifs && (
+                <View style={styles.gifEmptyState}>
+                  <Text size="sm" mode="subtle">
+                    {gifSearch
+                      ? `No GIFs found for "${gifSearch}"`
+                      : "No trending GIFs"}
+                  </Text>
+                </View>
+              )}
+              {gifs.map((gif) => (
+                <Pressable
+                  key={gif.id}
+                  onPress={() => handleSelectGif(gif.fullUrl)}
+                  style={[
+                    styles.gifItem,
+                    selectedGifUrl === gif.fullUrl && styles.gifItemSelected,
+                  ]}
+                >
+                  <Image
+                    source={{ uri: gif.previewUrl }}
+                    style={styles.gifImage}
+                    resizeMode="cover"
+                  />
+                </Pressable>
+              ))}
+            </ScrollView>
+          </Animated.View>
+        )}
+      </View>
+    );
+  }
+);
 
 CommentInput.displayName = "CommentInput";
 
 const styles = StyleSheet.create((theme) => ({
-  // Inactive state
+  container: {
+    backgroundColor: theme.colors.background.default,
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing.xs,
+    paddingBottom: theme.spacing.sm,
+    // Top border radius
+    borderTopLeftRadius: theme.radius.xl,
+    borderTopRightRadius: theme.radius.xl,
+    // Borders
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    // Shadow on top
+    shadowColor: theme.colors.primary[600],
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  handleContainer: {
+    alignItems: "center",
+    paddingBottom: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
+  },
+  handleIndicator: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+  },
+  divider: {
+    height: 1,
+    marginBottom: theme.spacing.xs,
+    marginHorizontal: -theme.spacing.md, // Full width - extend to screen edges
+  },
+
+  // Inactive state - simple bar
   inactiveContainer: {
     backgroundColor: theme.colors.background.default,
+    paddingHorizontal: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
     borderTopWidth: 1,
     borderTopColor: theme.colors.border.subtle,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
   },
-  inactiveInput: {
+  inactiveInputWrapper: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: theme.colors.background.subtle,
     borderRadius: theme.radius.lg,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
-    minHeight: 44,
+    // minHeight: 48,
   },
-  placeholder: {
+  inactiveInput: {
     flex: 1,
+    justifyContent: "center",
   },
   inactiveIcons: {
     flexDirection: "row",
@@ -539,45 +772,54 @@ const styles = StyleSheet.create((theme) => ({
     padding: 4,
   },
 
-  // Bottom sheet
-  sheetBackground: {
-    borderTopLeftRadius: theme.radius.xl,
-    borderTopRightRadius: theme.radius.xl,
-  },
-  handleIndicator: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-  },
-  sheetContent: {
-    flex: 1,
-    paddingHorizontal: theme.spacing.md,
-  },
-
   // Reply banner
   replyBanner: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: theme.spacing.xs,
-    marginBottom: theme.spacing.sm,
+    paddingBottom: theme.spacing.xs,
   },
   cancelReply: {
     padding: theme.spacing.xs,
   },
 
-  // Input container
-  inputContainer: {
+  // Preview container for image/GIF
+  previewContainer: {
+    marginBottom: theme.spacing.sm,
+  },
+  previewWrapper: {
+    width: PREVIEW_WIDTH,
+    height: PREVIEW_HEIGHT,
+    borderRadius: theme.radius.md,
+    overflow: "hidden",
+    position: "relative",
+  },
+  previewImage: {
+    width: PREVIEW_WIDTH,
+    height: PREVIEW_HEIGHT,
+  },
+  removeButton: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Text input row
+  inputRow: {
     marginBottom: theme.spacing.sm,
   },
   textInput: {
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 20,
-    borderRadius: theme.radius.lg,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.sm,
-    minHeight: 80,
-    maxHeight: 150,
+    paddingVertical: theme.spacing.xs,
+    minHeight: 60, // 3 lines
+    maxHeight: 120,
     textAlignVertical: "top",
   },
 
@@ -587,45 +829,23 @@ const styles = StyleSheet.create((theme) => ({
     marginBottom: theme.spacing.sm,
   },
   linkInput: {
-    fontSize: 16,
-    borderRadius: theme.radius.lg,
-    paddingHorizontal: theme.spacing.md,
+    fontSize: 18,
     paddingVertical: theme.spacing.sm,
-    minHeight: 48,
+    minHeight: 44,
   },
   linkNameInput: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "600",
   },
   addLinkButton: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: theme.spacing.sm + 2,
-    borderRadius: theme.radius.xxl,
+    paddingVertical: theme.spacing.sm + 4,
+    borderRadius: theme.radius.full,
     marginTop: theme.spacing.xs,
   },
-
-  // GIF mode
-  gifContainer: {
-    flex: 1,
-    marginBottom: theme.spacing.sm,
-  },
-  gifGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.spacing.xs,
-  },
-  gifItem: {
-    width: "23%",
-    aspectRatio: 1,
-    borderRadius: theme.radius.md,
-    overflow: "hidden",
-  },
-  gifPlaceholder: {
-    flex: 1,
-    backgroundColor: theme.colors.background.subtle,
-    alignItems: "center",
-    justifyContent: "center",
+  addLinkButtonText: {
+    fontSize: 16,
   },
 
   // Options bar
@@ -633,19 +853,20 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: theme.spacing.xs,
-    paddingBottom: theme.spacing.xs,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border.subtle,
   },
   optionsLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing.xs,
   },
+  optionsRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
+  },
   optionButton: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: theme.radius.full,
@@ -654,8 +875,79 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.background.hover,
   },
   replyButton: {
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs + 2,
     borderRadius: theme.radius.full,
+  },
+
+  // GIF section - below options bar
+  gifSection: {
+    paddingTop: theme.spacing.sm,
+  },
+  gifDivider: {
+    height: 1,
+    backgroundColor: theme.colors.border.subtle,
+    marginHorizontal: -theme.spacing.md, // Full width - extend to screen edges
+    marginBottom: theme.spacing.sm,
+  },
+  gifSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  gifSearchContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: theme.colors.background.subtle,
+    borderRadius: theme.radius.lg,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  gifSearchIcon: {
+    marginRight: theme.spacing.xs,
+  },
+  gifSearchInput: {
+    flex: 1,
+    fontSize: 15,
+    paddingVertical: theme.spacing.sm,
+  },
+  gifLoadingIndicator: {
+    marginLeft: theme.spacing.xs,
+  },
+  gifCloseButton: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  giphyAttribution: {
+    marginBottom: theme.spacing.xs,
+  },
+  gifScrollContent: {
+    gap: theme.spacing.sm,
+    paddingBottom: theme.spacing.xs,
+    minHeight: 100,
+  },
+  gifEmptyState: {
+    width: 200,
+    height: 100,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gifItem: {
+    width: 100,
+    height: 100,
+    borderRadius: theme.radius.md,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  gifItemSelected: {
+    borderColor: theme.colors.brand[500],
+  },
+  gifImage: {
+    width: "100%",
+    height: "100%",
   },
 }));

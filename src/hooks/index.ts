@@ -18,3 +18,8 @@ export {
   type UseVoteHandlerOptions,
   type UseVoteHandlerReturn,
 } from "./use-vote-handler";
+export {
+  useGiphy,
+  type UseGiphyOptions,
+  type UseGiphyReturn,
+} from "./use-giphy";

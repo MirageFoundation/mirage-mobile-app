@@ -8,8 +8,9 @@ import { Avatar, TimeAgo } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons, Octicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import * as Linking from "expo-linking";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Pressable,
   Animated as RNAnimated,
@@ -91,53 +92,151 @@ const SIZE_CONFIG = {
 // Regex to match markdown links: [text](url)
 const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\(([^)]+)\)/g;
 
+// Regex to match image URLs (standalone URLs on their own line)
+const IMAGE_URL_REGEX = /^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp))$/i;
+
+// Regex to match Cloudflare Images URLs
+const CLOUDFLARE_IMAGE_REGEX = /^https?:\/\/imagedelivery\.net\/[^\s]+$/i;
+
+// Regex to match Giphy URLs (handles media.giphy.com, media0-4.giphy.com, i.giphy.com)
+const GIPHY_URL_REGEX = /^https?:\/\/(?:media\d?\.giphy\.com|i\.giphy\.com)\/[^\s]+$/i;
+
 type ContentPart = 
   | { type: "text"; content: string }
-  | { type: "link"; text: string; url: string };
+  | { type: "link"; text: string; url: string }
+  | { type: "image"; url: string };
 
 /**
- * Parse content and extract markdown links
+ * Check if a URL is an image URL
+ */
+function isImageUrl(url: string): boolean {
+  return (
+    IMAGE_URL_REGEX.test(url) ||
+    CLOUDFLARE_IMAGE_REGEX.test(url) ||
+    GIPHY_URL_REGEX.test(url)
+  );
+}
+
+/**
+ * Parse content and extract markdown links and images
  */
 function parseContentWithLinks(content: string): ContentPart[] {
   const parts: ContentPart[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  // Reset regex state
-  MARKDOWN_LINK_REGEX.lastIndex = 0;
-
-  while ((match = MARKDOWN_LINK_REGEX.exec(content)) !== null) {
-    // Add text before the link
-    if (match.index > lastIndex) {
-      parts.push({
-        type: "text",
-        content: content.slice(lastIndex, match.index),
-      });
+  
+  // First, split by newlines to handle standalone image URLs
+  const lines = content.split('\n');
+  
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
+    const trimmedLine = line.trim();
+    
+    // Check if this line is a standalone image URL
+    if (isImageUrl(trimmedLine)) {
+      parts.push({ type: "image", url: trimmedLine });
+      continue;
     }
-
-    // Add the link
-    parts.push({
-      type: "link",
-      text: match[1],
-      url: match[2],
-    });
-
-    lastIndex = match.index + match[0].length;
+    
+    // Otherwise, parse for markdown links
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    
+    // Reset regex state
+    MARKDOWN_LINK_REGEX.lastIndex = 0;
+    
+    let hasContent = false;
+    
+    while ((match = MARKDOWN_LINK_REGEX.exec(line)) !== null) {
+      // Add text before the link
+      if (match.index > lastIndex) {
+        const textBefore = line.slice(lastIndex, match.index);
+        if (textBefore) {
+          parts.push({ type: "text", content: textBefore });
+          hasContent = true;
+        }
+      }
+      
+      // Add the link
+      parts.push({
+        type: "link",
+        text: match[1],
+        url: match[2],
+      });
+      hasContent = true;
+      
+      lastIndex = match.index + match[0].length;
+    }
+    
+    // Add remaining text after the last link
+    if (lastIndex < line.length) {
+      const remaining = line.slice(lastIndex);
+      if (remaining) {
+        parts.push({ type: "text", content: remaining });
+        hasContent = true;
+      }
+    }
+    
+    // Add newline between lines (except for the last line)
+    if (lineIndex < lines.length - 1 && hasContent) {
+      parts.push({ type: "text", content: "\n" });
+    }
   }
-
-  // Add remaining text after the last link
-  if (lastIndex < content.length) {
-    parts.push({
-      type: "text",
-      content: content.slice(lastIndex),
-    });
-  }
-
+  
   return parts;
 }
 
 /**
- * Component to render content with clickable links
+ * Component to render an image in comment
+ */
+const CommentImage = ({ url }: { url: string }) => {
+  const { theme } = useUnistyles();
+  const [hasError, setHasError] = useState(false);
+  
+  if (hasError) {
+    return (
+      <View style={[commentImageStyles.errorContainer, { backgroundColor: theme.colors.background.subtle }]}>
+        <Text size="xs" mode="subtle">Failed to load image</Text>
+      </View>
+    );
+  }
+  
+  return (
+    <View style={commentImageStyles.container}>
+      <Image
+        source={{ uri: url }}
+        style={commentImageStyles.image}
+        contentFit="cover"
+        transition={200}
+        onError={() => setHasError(true)}
+      />
+    </View>
+  );
+};
+
+const commentImageStyles = StyleSheet.create((theme) => ({
+  container: {
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+    borderRadius: theme.radius.md,
+    overflow: "hidden",
+  },
+  image: {
+    width: "100%",
+    height: 200,
+    borderRadius: theme.radius.md,
+  },
+  errorContainer: {
+    width: "100%",
+    height: 100,
+    borderRadius: theme.radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+  },
+}));
+
+/**
+ * Component to render content with clickable links and images
  */
 const CommentContent = ({ content }: { content: string }) => {
   const parts = useMemo(() => parseContentWithLinks(content), [content]);
@@ -153,7 +252,10 @@ const CommentContent = ({ content }: { content: string }) => {
     });
   }, []);
 
-  // If no links, render simple text
+  // Check if we have any images
+  const hasImages = parts.some(part => part.type === "image");
+  
+  // If no links and no images, render simple text
   if (parts.length === 1 && parts[0].type === "text") {
     return (
       <Text size="sm" style={styles.content}>
@@ -162,24 +264,49 @@ const CommentContent = ({ content }: { content: string }) => {
     );
   }
 
+  // Separate text/link parts from image parts for proper rendering
+  const textParts: ContentPart[] = [];
+  const imageParts: ContentPart[] = [];
+  
+  for (const part of parts) {
+    if (part.type === "image") {
+      imageParts.push(part);
+    } else {
+      textParts.push(part);
+    }
+  }
+
   return (
-    <Text size="sm" style={styles.content}>
-      {parts.map((part, index) => {
-        if (part.type === "text") {
-          return part.content;
-        }
-        return (
-          <Text
-            key={index}
-            size="sm"
-            style={{ color: LINK_COLOR }}
-            onPress={() => handleLinkPress(part.url)}
-          >
-            {part.text}
-          </Text>
-        );
-      })}
-    </Text>
+    <View>
+      {/* Text content */}
+      {textParts.length > 0 && (
+        <Text size="sm" style={styles.content}>
+          {textParts.map((part, index) => {
+            if (part.type === "text") {
+              return part.content;
+            }
+            if (part.type === "link") {
+              return (
+                <Text
+                  key={index}
+                  size="sm"
+                  style={{ color: LINK_COLOR }}
+                  onPress={() => handleLinkPress(part.url)}
+                >
+                  {part.text}
+                </Text>
+              );
+            }
+            return null;
+          })}
+        </Text>
+      )}
+      
+      {/* Images */}
+      {imageParts.map((part, index) => (
+        part.type === "image" && <CommentImage key={`img-${index}`} url={part.url} />
+      ))}
+    </View>
   );
 };
 
