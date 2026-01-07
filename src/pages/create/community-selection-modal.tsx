@@ -1,6 +1,7 @@
 import { EvilIcons, Feather } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Keyboard,
   Modal,
@@ -19,80 +20,23 @@ import Animated, {
 } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+import { useSearchTopics, useTopics } from "@/src/api/read/hooks/use-topics";
+import type { TopicInfo } from "@/src/api/types";
 import { Avatar } from "@/src/components/atoms";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useAuthStore } from "@/src/stores/auth-store";
 import { type Community } from "@/src/stores/draft-store";
 
-// Mock communities data
-const MOCK_COMMUNITIES: Community[] = [
-  {
-    id: "tech",
-    name: "Technology",
-    avatar: undefined,
-    memberCount: 125000,
-    description: "Discuss the latest in tech, gadgets, and innovation",
-    isSubscribed: true,
-  },
-  {
-    id: "gaming",
-    name: "Gaming",
-    avatar: undefined,
-    memberCount: 89000,
-    description: "For gamers, by gamers. Share your plays and reviews",
-    isSubscribed: true,
-  },
-  {
-    id: "crypto",
-    name: "Cryptocurrency",
-    avatar: undefined,
-    memberCount: 56000,
-    description:
-      "Crypto news, trading strategies, and blockchain tech Crypto news, trading strategies, and blockchain tech",
-    isSubscribed: false,
-  },
-  {
-    id: "music",
-    name: "Music",
-    avatar: undefined,
-    memberCount: 78000,
-    description: "Share and discover music across all genres",
-    isSubscribed: true,
-  },
-  {
-    id: "movies",
-    name: "Movies & TV",
-    avatar: undefined,
-    memberCount: 95000,
-    description: "Reviews, discussions, and recommendations",
-    isSubscribed: false,
-  },
-  {
-    id: "art",
-    name: "Art & Design",
-    avatar: undefined,
-    memberCount: 42000,
-    description: "Showcase your creativity and get inspired",
-    isSubscribed: false,
-  },
-  {
-    id: "news",
-    name: "News",
-    avatar: undefined,
-    memberCount: 156000,
-    description: "Stay informed with the latest news from around the world",
-    isSubscribed: true,
-  },
-  {
-    id: "sports",
-    name: "Sports",
-    avatar: undefined,
-    memberCount: 112000,
-    description: "All things sports - scores, highlights, and discussions",
-    isSubscribed: false,
-  },
-];
+// Helper function to transform TopicInfo to Community format
+const topicToCommunity = (topic: TopicInfo): Community => ({
+  id: topic.topic.toLowerCase(),
+  name: topic.topic.charAt(0).toUpperCase() + topic.topic.slice(1),
+  avatar: undefined,
+  memberCount: topic.post_count ?? topic.count ?? 0,
+  description: undefined,
+  isSubscribed: false,
+});
 
 type CommunitySelectionModalProps = {
   visible: boolean;
@@ -101,8 +45,8 @@ type CommunitySelectionModalProps = {
   selectedCommunity?: Community;
 };
 
-// Format member count
-const formatMemberCount = (count: number): string => {
+// Format count (posts or members)
+const formatCount = (count: number): string => {
   if (count >= 1000000) {
     return `${(count / 1000000).toFixed(1)}M`;
   }
@@ -116,10 +60,12 @@ const formatMemberCount = (count: number): string => {
 const CommunityItem = ({
   community,
   isSelected,
+  isUserProfile,
   onPress,
 }: {
   community: Community;
   isSelected: boolean;
+  isUserProfile?: boolean;
   onPress: () => void;
 }) => {
   const { theme } = useUnistyles();
@@ -156,9 +102,12 @@ const CommunityItem = ({
               {community.name}
             </Text>
           </View>
-          <Text size="md" mode="subtle" style={{ lineHeight: 18 }}>
-            {formatMemberCount(community.memberCount)} members
-          </Text>
+          {community.memberCount > 0 && (
+            <Text size="md" mode="subtle" style={{ lineHeight: 18 }}>
+              {formatCount(community.memberCount)}{" "}
+              {isUserProfile ? "followers" : "posts"}
+            </Text>
+          )}
           {community.description && (
             <Text
               size="md"
@@ -194,6 +143,15 @@ export const CommunitySelectionModal = ({
   // Animation values
   const searchExpandProgress = useSharedValue(0);
 
+  // Fetch topics from API
+  const { data: topicsData, isLoading: isLoadingTopics } = useTopics(100);
+
+  // Search topics when user types (only if query length >= 2)
+  const { data: searchData, isLoading: isSearching } = useSearchTopics(
+    searchText.length >= 2 ? searchText : null,
+    { limit: 50 }
+  );
+
   // User's profile as first community option
   const userCommunity: Community = useMemo(
     () => ({
@@ -207,19 +165,38 @@ export const CommunitySelectionModal = ({
     [user]
   );
 
-  // Filter communities based on search
+  // Transform topics to communities and filter based on search
   const filteredCommunities = useMemo(() => {
-    const allCommunities = [userCommunity, ...MOCK_COMMUNITIES];
-    if (!searchText.trim()) {
-      return allCommunities;
+    // If searching, use search results
+    if (searchText.length >= 2 && searchData?.topics) {
+      const searchCommunities = searchData.topics.map(topicToCommunity);
+      // Also filter user profile if it matches
+      const userMatches = userCommunity.name
+        .toLowerCase()
+        .includes(searchText.toLowerCase());
+      return userMatches
+        ? [userCommunity, ...searchCommunities]
+        : searchCommunities;
     }
-    const query = searchText.toLowerCase();
-    return allCommunities.filter(
-      (c) =>
-        c.name.toLowerCase().includes(query) ||
-        c.description?.toLowerCase().includes(query)
-    );
-  }, [searchText, userCommunity]);
+
+    // If searching but query too short, filter locally
+    if (searchText.trim() && topicsData?.topics) {
+      const query = searchText.toLowerCase();
+      const apiCommunities = topicsData.topics.map(topicToCommunity);
+      const filtered = apiCommunities.filter((c) =>
+        c.name.toLowerCase().includes(query)
+      );
+      const userMatches = userCommunity.name.toLowerCase().includes(query);
+      return userMatches ? [userCommunity, ...filtered] : filtered;
+    }
+
+    // No search - show all topics
+    const apiCommunities = topicsData?.topics?.map(topicToCommunity) ?? [];
+    return [userCommunity, ...apiCommunities];
+  }, [searchText, topicsData, searchData, userCommunity]);
+
+  // Loading state
+  const isLoading = isLoadingTopics || (searchText.length >= 2 && isSearching);
 
   // Handle search focus
   const handleSearchFocus = useCallback(() => {
@@ -274,13 +251,14 @@ export const CommunitySelectionModal = ({
       <CommunityItem
         community={item}
         isSelected={selectedCommunity?.id === item.id}
+        isUserProfile={item.id === userCommunity.id}
         onPress={() => {
           triggerHaptic("selection");
           onSelect(item);
         }}
       />
     ),
-    [selectedCommunity, onSelect]
+    [selectedCommunity, onSelect, userCommunity.id]
   );
 
   return (
@@ -320,7 +298,7 @@ export const CommunitySelectionModal = ({
               style={[
                 styles.searchInputWrapper,
                 {
-                  backgroundColor: "rgb(227,229,230)",
+                  backgroundColor: theme.colors.background.subtle,
                 },
               ]}
             >
@@ -378,21 +356,34 @@ export const CommunitySelectionModal = ({
         </View>
 
         {/* Communities List */}
-        <FlatList
-          data={filteredCommunities}
-          renderItem={renderCommunityItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListEmptyComponent={
-            <Box center p="lg">
-              <Text mode="subtle">No communities found</Text>
-            </Box>
-          }
-          ListFooterComponent={() => <View style={{ height: 100 }} />}
-        />
+        {isLoading ? (
+          <Box flex center>
+            <ActivityIndicator size="large" color={theme.colors.brand[500]} />
+            <Text mode="subtle" style={{ marginTop: 12 }}>
+              Loading topics...
+            </Text>
+          </Box>
+        ) : (
+          <FlatList
+            data={filteredCommunities}
+            renderItem={renderCommunityItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            ListEmptyComponent={
+              <Box center p="lg">
+                <Text mode="subtle">
+                  {searchText.length > 0
+                    ? "No topics found matching your search"
+                    : "No topics available"}
+                </Text>
+              </Box>
+            }
+            ListFooterComponent={() => <View style={{ height: 100 }} />}
+          />
+        )}
       </Box>
     </Modal>
   );

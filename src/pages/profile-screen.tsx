@@ -12,7 +12,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { useUserStatus, useProfile } from "@/src/api/read";
+import { useProfile, useUserStatus } from "@/src/api/read";
 import {
   getGradientColor,
   PROFILE_CONTENT_HEIGHT,
@@ -37,7 +37,9 @@ const formatMirageBalance = (umirage: number): number => {
 };
 
 // Calculate account age in days from unix timestamp (returns fractional days)
-const calculateAccountAgeDays = (createdAt: number | null | undefined): number => {
+const calculateAccountAgeDays = (
+  createdAt: number | null | undefined
+): number => {
   if (!createdAt) return 0;
   const now = Date.now() / 1000; // Current time in seconds
   const ageInSeconds = now - createdAt;
@@ -51,15 +53,9 @@ export function ProfileScreen() {
   const { theme } = useUnistyles();
 
   // Fetch user status and profile data
-  const { 
-    data: userStatus, 
-    isLoading: isLoadingStatus,
-  } = useUserStatus();
-  
-  const { 
-    data: profile, 
-    isLoading: isLoadingProfile,
-  } = useProfile();
+  const { data: userStatus, isLoading: isLoadingStatus } = useUserStatus();
+
+  const { data: profile, isLoading: isLoadingProfile } = useProfile();
 
   // Scroll tracking
   const scrollY = useSharedValue(0);
@@ -96,11 +92,11 @@ export function ProfileScreen() {
     // Use API data when available, fallback to sensible defaults
     const balance = userStatus?.balance ?? 0;
     const reserve = userStatus?.reserve_funds ?? 0;
-    
+
     // Use profile.created_at for account age, fallback to profile_registered_at from status
     const createdAt = profile?.created_at ?? userStatus?.profile_registered_at;
     const accountAgeDays = calculateAccountAgeDays(createdAt);
-    
+
     return {
       balance: formatMirageBalance(balance),
       reserve: formatMirageBalance(reserve),
@@ -110,16 +106,16 @@ export function ProfileScreen() {
 
   // Determine username (from API or auth store)
   const username = userStatus?.username ?? user?.username ?? "user";
-  
+
   // Get avatar URL from profile if available
   const avatarUrl = profile?.avatar || undefined;
-  
+
   // Get followers count from profile (followed_users array represents who the user follows, not followers)
   // Note: The API doesn't directly provide follower count, using user.followerCount as fallback
   const followersCount = user?.followerCount ?? 0;
 
   const gradientColor = useMemo(() => getGradientColor(username), [username]);
-  
+
   // Combined loading state
   const isLoading = isLoadingStatus || isLoadingProfile;
 

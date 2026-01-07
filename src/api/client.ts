@@ -79,16 +79,37 @@ class ApiClient {
    * GET request
    */
   async get<T, P = unknown>(path: string, params?: P): Promise<T> {
-    const response = await this.client.get<T>(`/api${path}`, { params });
-    return response.data;
+    console.log(`[ApiClient] GET ${path}`, params ? `with params: ${JSON.stringify(params)}` : "no params");
+    try {
+      const response = await this.client.get<T>(`/api${path}`, { params });
+      console.log(`[ApiClient] GET ${path} success`);
+      return response.data;
+    } catch (error: any) {
+      const errorData = error?.response?.data;
+      const errorMessage = error?.message;
+      const status = error?.response?.status;
+      console.error(`[ApiClient] GET ${path} failed`);
+      console.error(`[ApiClient] Status:`, status);
+      console.error(`[ApiClient] Error data:`, errorData);
+      console.error(`[ApiClient] Error message:`, errorMessage);
+      console.error(`[ApiClient] Params sent:`, JSON.stringify(params, null, 2));
+      throw error;
+    }
   }
 
   /**
    * POST request
    */
   async post<T, D = unknown>(path: string, data?: D): Promise<T> {
-    const response = await this.client.post<T>(`/api${path}`, data);
-    return response.data;
+    console.log(`[ApiClient] POST ${path}`, data ? "with data" : "no data");
+    try {
+      const response = await this.client.post<T>(`/api${path}`, data);
+      console.log(`[ApiClient] POST ${path} success:`, response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error(`[ApiClient] POST ${path} failed:`, error?.response?.data || error?.message || error);
+      throw error;
+    }
   }
 
   /**

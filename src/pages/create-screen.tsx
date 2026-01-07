@@ -8,10 +8,12 @@ import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   Image,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -22,12 +24,16 @@ import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+import { usePost } from "@/src/api/write";
+import type { CreatePostInput } from "@/src/api/write/endpoints/posts";
+import { uploadImageAndGetUrl } from "@/src/api/read/hooks/use-upload-media";
 import { Avatar } from "@/src/components/atoms";
 import GorhomPopupSheet, {
   type GorhomPopupSheetRef,
 } from "@/src/components/ui/gorhom-popup-sheet";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useToast } from "@/src/providers/toast-provider";
 import { useDraftStore, type Community } from "@/src/stores/draft-store";
 
 // Community Selection Modal Component
@@ -58,10 +64,15 @@ export function CreateScreen() {
   const [linkUrl, setLinkUrl] = useState("");
   const [linkError, setLinkError] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageDimensions, setImageDimensions] = useState<{
     width: number;
     height: number;
   } | null>(null);
+
+  // API hooks
+  const postMutation = usePost();
+  const toast = useToast();
 
   // Screen width for full-width image
   const screenWidth = Dimensions.get("window").width;
@@ -101,22 +112,124 @@ export function CreateScreen() {
 
   // Handlers
   const handleClose = useCallback(() => {
+    // Block closing if submitting
+    if (isSubmitting) return;
+    
     triggerHaptic("selection");
     if (draft.title || draft.body) {
       // Could show discard confirmation here
     }
     clearDraft();
     router.back();
-  }, [clearDraft, draft.title, draft.body]);
+  }, [isSubmitting, clearDraft, draft.title, draft.body]);
 
-  const handlePost = useCallback(() => {
-    if (!canPost) return;
-    triggerHaptic("success");
-    // TODO: Submit post
-    console.log("Posting:", draft);
-    clearDraft();
-    router.back();
-  }, [canPost, draft, clearDraft]);
+  const handlePost = useCallback(async () => {
+    if (!canPost || isSubmitting) return;
+
+    // Dismiss keyboard
+    Keyboard.dismiss();
+
+    // Start submission
+    setIsSubmitting(true);
+    triggerHaptic("medium");
+
+    // Show loading toast
+    const toastId = toast.loading("Creating post...", "Please wait while we submit your post");
+
+    try {
+      // Handle image upload if present
+      let imageUrl: string | null = null;
+      if (draft.attachmentType === "image" && draft.mediaUris.length > 0) {
+        try {
+          console.log("[CreatePost] Uploading image...", draft.mediaUris[0]);
+          toast.update(toastId, { description: "Uploading image..." });
+          imageUrl = await uploadImageAndGetUrl(draft.mediaUris[0]);
+          console.log("[CreatePost] Image uploaded successfully:", imageUrl);
+        } catch (error) {
+          console.error("[CreatePost] Image upload failed:", error);
+          toast.update(toastId, {
+            type: "error",
+            title: "Image upload failed",
+            description: error instanceof Error ? error.message : "Please try again",
+            duration: 4000,
+          });
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
+      // Build content string (body + image URL + link if present)
+      let content = draft.body;
+      
+      // Add image URL to content
+      if (imageUrl) {
+        content = content ? `${content}\n\n${imageUrl}` : imageUrl;
+      }
+      
+      // Add link URL to content
+      if (draft.linkUrl) {
+        content = content ? `${content}\n\n${draft.linkUrl}` : draft.linkUrl;
+      }
+
+      // Prepare post input
+      // Use community ID for topic (which is the lowercase topic name from API)
+      // If user selected their profile or no community, default to "general"
+      const isUserProfile = draft.community?.description === "Post to your profile";
+      const topic = isUserProfile ? "general" : (draft.community?.id ?? "general");
+      
+      const postInput: CreatePostInput = {
+        topic,
+        title: draft.title.trim(),
+        content: content,
+        tag: "", // Default to no content warning for now
+      };
+
+      console.log("[CreatePost] Submitting post:", postInput);
+
+      // Submit post
+      const result = await postMutation.mutateAsync(postInput);
+
+      console.log("[CreatePost] Post created successfully:", result);
+
+      // Hide the blocking modal
+      setIsSubmitting(false);
+
+      // Update toast to success
+      toast.update(toastId, {
+        type: "success",
+        title: "Post created!",
+        description: "Your post has been published successfully",
+        duration: 3000,
+      });
+
+      triggerHaptic("success");
+
+      // Clear draft
+      clearDraft();
+
+      // Navigate to home after a short delay to allow backend indexing
+      // The query invalidation will trigger a refetch when home screen loads
+      setTimeout(() => {
+        router.replace("/(tabs)/");
+      }, 1000);
+    } catch (error) {
+      console.error("[CreatePost] Error creating post:", error);
+      
+      // Hide the blocking modal
+      setIsSubmitting(false);
+
+      // Update toast to error
+      const errorMessage = error instanceof Error ? error.message : "Failed to create post";
+      toast.update(toastId, {
+        type: "error",
+        title: "Failed to create post",
+        description: errorMessage,
+        duration: 5000,
+      });
+
+      triggerHaptic("error");
+    }
+  }, [canPost, isSubmitting, draft, clearDraft, postMutation, toast]);
 
   const handleCommunitySelect = useCallback(
     (community: Community) => {
@@ -186,26 +299,17 @@ export function CreateScreen() {
     }
   }, [hasAttachment, draft.attachmentType, setAttachment]);
 
-  const handleVideoPress = useCallback(async () => {
-    if (hasAttachment && draft.attachmentType !== "video") return;
+  const handleVideoPress = useCallback(() => {
+    if (hasAttachment) return;
     triggerHaptic("selection");
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["videos"],
-      allowsEditing: true,
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      setAttachment("video", result.assets[0].uri);
-    }
-  }, [hasAttachment, draft.attachmentType, setAttachment]);
+    toast.info("Coming soon", "Video uploads will be available soon");
+  }, [hasAttachment, toast]);
 
   const handlePollPress = useCallback(() => {
-    if (hasAttachment && draft.attachmentType !== "poll") return;
+    if (hasAttachment) return;
     triggerHaptic("selection");
-    // TODO: Open poll creation
-  }, [hasAttachment, draft.attachmentType]);
+    toast.info("Coming soon", "Polls will be available soon");
+  }, [hasAttachment, toast]);
 
   const handleRemoveMedia = useCallback(() => {
     triggerHaptic("selection");
@@ -526,47 +630,35 @@ export function CreateScreen() {
               />
             </Pressable>
 
-            {/* Video */}
+            {/* Video (coming soon) */}
             <Pressable
               onPress={handleVideoPress}
-              disabled={hasAttachment && draft.attachmentType !== "video"}
+              disabled={hasAttachment}
               style={[
                 styles.mediaButton,
-                hasAttachment &&
-                  draft.attachmentType !== "video" &&
-                  styles.mediaButtonDisabled,
+                hasAttachment && styles.mediaButtonDisabled,
               ]}
             >
               <Feather
                 name="video"
                 size={18}
-                color={
-                  hasAttachment && draft.attachmentType !== "video"
-                    ? theme.colors.text.subtle
-                    : theme.colors.text.default
-                }
+                color={hasAttachment ? theme.colors.text.subtle : theme.colors.text.default}
               />
             </Pressable>
 
-            {/* Poll */}
+            {/* Poll (coming soon) */}
             <Pressable
               onPress={handlePollPress}
-              disabled={hasAttachment && draft.attachmentType !== "poll"}
+              disabled={hasAttachment}
               style={[
                 styles.mediaButton,
-                hasAttachment &&
-                  draft.attachmentType !== "poll" &&
-                  styles.mediaButtonDisabled,
+                hasAttachment && styles.mediaButtonDisabled,
               ]}
             >
               <Entypo
                 name="list"
                 size={20}
-                color={
-                  hasAttachment && draft.attachmentType !== "poll"
-                    ? theme.colors.text.subtle
-                    : theme.colors.text.default
-                }
+                color={hasAttachment ? theme.colors.text.subtle : theme.colors.text.default}
               />
             </Pressable>
           </View>
@@ -587,6 +679,45 @@ export function CreateScreen() {
           <Text mode="subtle">Tag selection coming soon...</Text>
         </Box>
       </GorhomPopupSheet>
+
+      {/* Submission Blocking Overlay */}
+      <Modal
+        visible={isSubmitting}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: theme.colors.background.base,
+              borderRadius: theme.radius.lg,
+              padding: theme.spacing.xl,
+              alignItems: "center",
+              minWidth: 200,
+            }}
+          >
+            <ActivityIndicator
+              size="large"
+              color={theme.colors.brand[500]}
+              style={{ marginBottom: theme.spacing.md }}
+            />
+            <Text size="md" weight="medium" style={{ marginBottom: theme.spacing.xs }}>
+              Creating post...
+            </Text>
+            <Text size="sm" mode="subtle" style={{ textAlign: "center" }}>
+              Please wait while we submit your post
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </Box>
   );
 }

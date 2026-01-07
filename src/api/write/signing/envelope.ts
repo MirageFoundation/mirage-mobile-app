@@ -219,13 +219,15 @@ export async function buildSignedEnvelope<
   }
 
   // 5. Build signed bytes (insert tag 5 for PoW)
+  console.log("[Envelope] Building signed bytes...");
   const signedBytes = canonSignedWithPow(base, pow);
 
   // 6. Sign canonical bytes (secp256k1 implementation hashes internally with SHA-256)
+  console.log("[Envelope] Signing canonical bytes...");
   const signature = signCanonical(wallet.privateKey, signedBytes);
 
   // 7. Build and return the envelope
-  return {
+  const envelope = {
     pubkey: b64encode(wallet.publicKey),
     signature: b64encode(signature),
     timestamp: timestampMs,
@@ -234,6 +236,9 @@ export async function buildSignedEnvelope<
     pow,
     ...payloadFields,
   } as SignedPayload<TPayload>;
+
+  console.log("[Envelope] Envelope built successfully, ready to send to API");
+  return envelope;
 }
 
 /**

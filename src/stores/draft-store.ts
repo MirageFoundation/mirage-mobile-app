@@ -65,7 +65,8 @@ export const useDraftStore = create<DraftState>()(
           draft: {
             ...state.draft,
             attachmentType: type,
-            linkUrl: type === "link" ? uri ?? null : null,
+            // Convert empty string to null for linkUrl
+            linkUrl: type === "link" ? (uri && uri.length > 0 ? uri : null) : null,
             mediaUris:
               type === "image" || type === "video" ? (uri ? [uri] : []) : [],
           },

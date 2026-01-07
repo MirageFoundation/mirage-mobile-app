@@ -88,7 +88,8 @@ export function HomeScreen() {
       case "latest":
         return "new" as const;
       default:
-        return "magic" as const;
+        // Default to "new" to show latest posts first
+        return "new" as const;
     }
   };
 
@@ -105,8 +106,9 @@ export function HomeScreen() {
     isFetchingNextPage,
   } = useInfinitePosts({
     limit: 20,
-    by: getSortBy(),
-    topic: "all",
+    // Temporarily omit 'by' parameter to test if it's causing the 400 error
+    // by: getSortBy(),
+    // Omit topic parameter to fetch all topics (API doesn't accept "all" as a value)
     allowed_tags: adultContentEnabled ? "sensitive,adult,nsfw" : "sensitive",
   });
 
@@ -114,7 +116,17 @@ export function HomeScreen() {
   const posts = useMemo(() => {
     if (!data?.pages) return [];
     const allPosts = data.pages.flatMap((page) => page.posts);
-    return transformApiPosts(allPosts, { followedUsers });
+    
+    // Deduplicate posts by post_id (in case same post appears in multiple pages)
+    const uniquePostsMap = new Map<string, typeof allPosts[0]>();
+    for (const post of allPosts) {
+      if (!uniquePostsMap.has(post.post_id)) {
+        uniquePostsMap.set(post.post_id, post);
+      }
+    }
+    const uniquePosts = Array.from(uniquePostsMap.values());
+    
+    return transformApiPosts(uniquePosts, { followedUsers });
   }, [data, followedUsers]);
 
   // Revealed posts for content warnings
