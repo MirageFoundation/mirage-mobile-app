@@ -9,7 +9,7 @@ import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Linking,
   Pressable,
@@ -177,6 +177,19 @@ export const PostCard = ({
     return 16 / 9; // Default aspect ratio
   };
 
+  const [mediaAspectRatio, setMediaAspectRatio] = useState(
+    getMediaAspectRatio(),
+  );
+
+  useEffect(() => {
+    setMediaAspectRatio(getMediaAspectRatio());
+  }, [
+    primaryMedia?.aspectRatio,
+    primaryMedia?.width,
+    primaryMedia?.height,
+    primaryMedia?.uri,
+  ]);
+
   const handlePress = () => {
     triggerHaptic("selection");
     onPress?.();
@@ -258,16 +271,21 @@ export const PostCard = ({
       {primaryMedia && !imageError && (
         <View style={styles.mediaContainer}>
           <View
-            style={[
-              styles.mediaWrapper,
-              { aspectRatio: getMediaAspectRatio() },
-            ]}
+            style={[styles.mediaWrapper, { aspectRatio: mediaAspectRatio }]}
           >
             <Image
               source={{ uri: primaryMedia.uri }}
               style={styles.media}
               contentFit="cover"
               cachePolicy="memory-disk"
+              onLoad={({ source }) => {
+                if (!source?.width || !source?.height) return;
+                const ratio = source.width / source.height;
+                if (!Number.isFinite(ratio) || ratio <= 0) return;
+                setMediaAspectRatio((current) =>
+                  Math.abs(current - ratio) < 0.01 ? current : ratio,
+                );
+              }}
               onError={() => setImageError(true)}
               blurRadius={shouldBlurContent ? 30 : 0}
             />
