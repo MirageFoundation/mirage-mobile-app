@@ -10,7 +10,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Linking,
   Pressable,
@@ -117,6 +117,70 @@ type PostCardProps = {
   style?: StyleProp<ViewStyle>;
 };
 
+const VIDEO_EXTENSIONS = new Set([
+  "mp4",
+  "mov",
+  "m4v",
+  "webm",
+  "mkv",
+  "avi",
+  "mpeg",
+  "mpg",
+  "m3u8",
+  "mpd",
+]);
+
+const MEDIA_ASPECT_RATIO_CACHE = new Map<string, number>();
+
+function normalizeVideoUrl(url: string): string {
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.hostname.includes("videodelivery.net")) {
+      if (parsedUrl.pathname.endsWith("/iframe")) {
+        parsedUrl.pathname = parsedUrl.pathname.replace(
+          "/iframe",
+          "/manifest/video.m3u8",
+        );
+        return parsedUrl.toString();
+      }
+      if (parsedUrl.pathname.endsWith("/manifest")) {
+        parsedUrl.pathname = `${parsedUrl.pathname}/video.m3u8`;
+        return parsedUrl.toString();
+      }
+    }
+  } catch {
+    if (url.includes("videodelivery.net") && url.endsWith("/iframe")) {
+      return url.replace("/iframe", "/manifest/video.m3u8");
+    }
+    if (url.includes("videodelivery.net") && url.endsWith("/manifest")) {
+      return `${url}/video.m3u8`;
+    }
+  }
+
+  return url;
+}
+
+function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.hostname.includes("videodelivery.net")) {
+      return "video";
+    }
+    const path = parsedUrl.pathname.toLowerCase();
+    const extension = path.split(".").pop() ?? "";
+    if (extension === "gif") return "gif";
+    if (VIDEO_EXTENSIONS.has(extension)) return "video";
+  } catch {
+    const path = url.toLowerCase().split("?")[0];
+    const extension = path.split(".").pop() ?? "";
+    if (url.includes("videodelivery.net")) return "video";
+    if (extension === "gif") return "gif";
+    if (VIDEO_EXTENSIONS.has(extension)) return "video";
+  }
+
+  return "image";
+}
+
 export const PostCard = ({
   post,
   isOwnPost = false,
@@ -138,6 +202,7 @@ export const PostCard = ({
   const [imageError, setImageError] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const videoRef = useRef<Video | null>(null);
+  const aspectRatioLockedRef = useRef(false);
 
   const {
     author,
@@ -157,13 +222,31 @@ export const PostCard = ({
   const hasContentWarning = contentWarnings && contentWarnings.length > 0;
   const shouldBlurContent = hasContentWarning && !contentRevealed;
   const primaryMedia = media?.[0];
-  const hasMultipleMedia = media && media.length > 1;
-  const isVideo = primaryMedia?.type === "video";
+  const mediaCount = media?.length ?? 0;
+  const hasMultipleMedia = mediaCount > 1;
+  const extraMediaCount = mediaCount > 0 ? mediaCount - 1 : 0;
 
   // Extract URL from body
   const extractedUrl = body ? extractFirstUrl(body) : null;
   const bodyWithoutUrl = body ? removeUrls(body) : undefined;
   const displayDomain = extractedUrl ? extractDomain(extractedUrl) : null;
+  const bodyVideoUrl =
+    extractedUrl && getMediaTypeFromUrl(extractedUrl) === "video"
+      ? normalizeVideoUrl(extractedUrl)
+      : null;
+  const resolvedMedia = bodyVideoUrl
+    ? { uri: bodyVideoUrl, type: "video" as const }
+    : primaryMedia
+      ? {
+          ...primaryMedia,
+          uri:
+            primaryMedia.type === "video"
+              ? normalizeVideoUrl(primaryMedia.uri)
+              : primaryMedia.uri,
+        }
+      : undefined;
+  const resolvedMediaType = resolvedMedia?.type;
+  const isVideo = resolvedMedia?.type === "video";
 
   const handlePlayNowPress = () => {
     if (extractedUrl) {
@@ -174,33 +257,72 @@ export const PostCard = ({
 
   // Calculate aspect ratio for media
   const getMediaAspectRatio = () => {
-    if (primaryMedia?.aspectRatio) return primaryMedia.aspectRatio;
-    if (primaryMedia?.width && primaryMedia?.height) {
-      return primaryMedia.width / primaryMedia.height;
+    if (resolvedMedia?.aspectRatio) return resolvedMedia.aspectRatio;
+    if (resolvedMedia?.width && resolvedMedia?.height) {
+      return resolvedMedia.width / resolvedMedia.height;
     }
     return 16 / 9; // Default aspect ratio
   };
 
+  const resolvedMediaUri = resolvedMedia?.uri;
+  const cachedAspectRatio = resolvedMediaUri
+    ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
+    : undefined;
   const [mediaAspectRatio, setMediaAspectRatio] = useState(
-    getMediaAspectRatio(),
+    cachedAspectRatio ?? getMediaAspectRatio(),
   );
 
   useEffect(() => {
+    const cached = resolvedMediaUri
+      ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
+      : undefined;
+    if (cached) {
+      setMediaAspectRatio((current) =>
+        Math.abs(current - cached) < 0.01 ? current : cached,
+      );
+      aspectRatioLockedRef.current = true;
+      return;
+    }
+
     setMediaAspectRatio(getMediaAspectRatio());
+    aspectRatioLockedRef.current = false;
   }, [
-    primaryMedia?.aspectRatio,
-    primaryMedia?.width,
-    primaryMedia?.height,
-    primaryMedia?.uri,
+    resolvedMedia?.aspectRatio,
+    resolvedMedia?.width,
+    resolvedMedia?.height,
+    resolvedMediaUri,
+    bodyVideoUrl,
   ]);
 
   useEffect(() => {
     if (!isVideo || shouldBlurContent) {
       setIsVideoPlaying(false);
     }
-  }, [isVideo, shouldBlurContent, primaryMedia?.uri]);
+  }, [isVideo, shouldBlurContent, resolvedMedia?.uri]);
 
-  const handleVideoToggle = async () => {
+  const updateMediaAspectRatioFromSize = useCallback(
+    (width?: number, height?: number) => {
+      if (!width || !height) return;
+      if (aspectRatioLockedRef.current) return;
+      const ratio = width / height;
+      if (!Number.isFinite(ratio) || ratio <= 0) return;
+      setMediaAspectRatio((current) =>
+        Math.abs(current - ratio) < 0.01 ? current : ratio,
+      );
+      if (resolvedMediaUri) {
+        MEDIA_ASPECT_RATIO_CACHE.set(resolvedMediaUri, ratio);
+      }
+      aspectRatioLockedRef.current = true;
+    },
+    [resolvedMediaUri],
+  );
+
+  const mediaSource = useMemo(
+    () => ({ uri: resolvedMediaUri ?? "" }),
+    [resolvedMediaUri],
+  );
+
+  const handleVideoToggle = useCallback(async () => {
     if (!isVideo) return;
     if (shouldBlurContent) {
       onRevealContent?.();
@@ -227,7 +349,121 @@ export const PostCard = ({
     } catch {
       // Ignore transient playback errors.
     }
-  };
+  }, [isVideo, onRevealContent, shouldBlurContent]);
+
+  const mediaContent = useMemo(() => {
+    if (!resolvedMediaUri || imageError) return null;
+
+    return (
+      <View style={styles.mediaContainer}>
+        <View style={[styles.mediaWrapper, { aspectRatio: mediaAspectRatio }]}>
+          {isVideo ? (
+            <Video
+              ref={videoRef}
+              source={mediaSource}
+              style={styles.media}
+              resizeMode={ResizeMode.COVER}
+              shouldPlay={isVideoPlaying}
+              useNativeControls={false}
+              onLoad={(status) => {
+                if (!status.isLoaded) return;
+                const { width, height } = status.naturalSize ?? {};
+                updateMediaAspectRatioFromSize(width, height);
+              }}
+              onReadyForDisplay={(event) => {
+                const { width, height } = event.naturalSize ?? {};
+                updateMediaAspectRatioFromSize(width, height);
+              }}
+              onPlaybackStatusUpdate={(status) => {
+                if (!status.isLoaded) return;
+                if (status.didJustFinish) {
+                  setIsVideoPlaying(false);
+                }
+              }}
+              onError={() => setImageError(true)}
+            />
+          ) : (
+            <Image
+              source={mediaSource}
+              style={styles.media}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              onLoad={({ source }) => {
+                updateMediaAspectRatioFromSize(source?.width, source?.height);
+              }}
+              onError={() => setImageError(true)}
+              blurRadius={shouldBlurContent ? 30 : 0}
+            />
+          )}
+
+          {/* Play button for videos */}
+          {isVideo && !shouldBlurContent && (
+            <Pressable
+              onPress={(event) => {
+                event.stopPropagation?.();
+                handleVideoToggle();
+              }}
+              style={styles.playOverlay}
+            >
+              <View
+                style={[
+                  styles.playButton,
+                  { opacity: isVideoPlaying ? 0.6 : 1 },
+                ]}
+              >
+                <Ionicons
+                  name={isVideoPlaying ? "pause" : "play"}
+                  size={28}
+                  color="#fff"
+                />
+              </View>
+            </Pressable>
+          )}
+
+          {/* GIF badge */}
+          {resolvedMediaType === "gif" && (
+            <View style={styles.gifBadge}>
+              <Text size="xs" weight="bold" style={{ color: "#fff" }}>
+                GIF
+              </Text>
+            </View>
+          )}
+
+          {/* Multiple media indicator */}
+          {hasMultipleMedia && (
+            <View style={styles.multiMediaBadge}>
+              <Text size="xs" weight="semibold" style={{ color: "#fff" }}>
+                +{extraMediaCount}
+              </Text>
+            </View>
+          )}
+
+          {/* Blur overlay with reveal button */}
+          {shouldBlurContent && (
+            <Pressable onPress={onRevealContent} style={styles.blurOverlay}>
+              <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
+                Tap to reveal
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
+    );
+  }, [
+    resolvedMediaUri,
+    resolvedMediaType,
+    imageError,
+    mediaAspectRatio,
+    isVideo,
+    isVideoPlaying,
+    shouldBlurContent,
+    hasMultipleMedia,
+    extraMediaCount,
+    mediaSource,
+    updateMediaAspectRatioFromSize,
+    handleVideoToggle,
+    onRevealContent,
+  ]);
 
   const handlePress = () => {
     triggerHaptic("selection");
@@ -307,103 +543,7 @@ export const PostCard = ({
       </Text>
 
       {/* Media */}
-      {primaryMedia && !imageError && (
-        <View style={styles.mediaContainer}>
-          <View
-            style={[styles.mediaWrapper, { aspectRatio: mediaAspectRatio }]}
-          >
-            {isVideo ? (
-              <Video
-                ref={videoRef}
-                source={{ uri: primaryMedia.uri }}
-                style={styles.media}
-                resizeMode={ResizeMode.COVER}
-                shouldPlay={isVideoPlaying}
-                useNativeControls={false}
-                onLoad={(status) => {
-                  if (!status.isLoaded) return;
-                  const { width, height } = status.naturalSize ?? {};
-                  if (!width || !height) return;
-                  const ratio = width / height;
-                  if (!Number.isFinite(ratio) || ratio <= 0) return;
-                  setMediaAspectRatio((current) =>
-                    Math.abs(current - ratio) < 0.01 ? current : ratio,
-                  );
-                }}
-                onPlaybackStatusUpdate={(status) => {
-                  if (!status.isLoaded) return;
-                  if (status.didJustFinish) {
-                    setIsVideoPlaying(false);
-                  }
-                }}
-                onError={() => setImageError(true)}
-              />
-            ) : (
-              <Image
-                source={{ uri: primaryMedia.uri }}
-                style={styles.media}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                onLoad={({ source }) => {
-                  if (!source?.width || !source?.height) return;
-                  const ratio = source.width / source.height;
-                  if (!Number.isFinite(ratio) || ratio <= 0) return;
-                  setMediaAspectRatio((current) =>
-                    Math.abs(current - ratio) < 0.01 ? current : ratio,
-                  );
-                }}
-                onError={() => setImageError(true)}
-                blurRadius={shouldBlurContent ? 30 : 0}
-              />
-            )}
-
-            {/* Play button for videos */}
-            {isVideo && !shouldBlurContent && (
-              <Pressable onPress={handleVideoToggle} style={styles.playOverlay}>
-                <View
-                  style={[
-                    styles.playButton,
-                    { opacity: isVideoPlaying ? 0.6 : 1 },
-                  ]}
-                >
-                  <Ionicons
-                    name={isVideoPlaying ? "pause" : "play"}
-                    size={28}
-                    color="#fff"
-                  />
-                </View>
-              </Pressable>
-            )}
-
-            {/* GIF badge */}
-            {primaryMedia.type === "gif" && (
-              <View style={styles.gifBadge}>
-                <Text size="xs" weight="bold" style={{ color: "#fff" }}>
-                  GIF
-                </Text>
-              </View>
-            )}
-
-            {/* Multiple media indicator */}
-            {hasMultipleMedia && (
-              <View style={styles.multiMediaBadge}>
-                <Text size="xs" weight="semibold" style={{ color: "#fff" }}>
-                  +{media.length - 1}
-                </Text>
-              </View>
-            )}
-
-            {/* Blur overlay with reveal button */}
-            {shouldBlurContent && (
-              <Pressable onPress={onRevealContent} style={styles.blurOverlay}>
-                <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                  Tap to reveal
-                </Text>
-              </Pressable>
-            )}
-          </View>
-        </View>
-      )}
+      {mediaContent}
 
       {/* Body text (without URL) */}
       {bodyWithoutUrl && !shouldBlurContent && (
@@ -413,7 +553,10 @@ export const PostCard = ({
       )}
 
       {/* URL Link Card */}
-      {extractedUrl && displayDomain && !shouldBlurContent && (
+      {extractedUrl &&
+        displayDomain &&
+        !shouldBlurContent &&
+        !bodyVideoUrl && (
         <View style={styles.urlCard}>
           <View style={styles.urlInfo}>
             <Ionicons

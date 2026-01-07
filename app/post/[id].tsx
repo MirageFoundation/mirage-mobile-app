@@ -44,6 +44,8 @@ import {
 import Animated, {
   Easing,
   interpolate,
+  runOnJS,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -265,9 +267,13 @@ export default function PostDetailScreen() {
   // Scroll tracking for sticky header
   const [postHeaderHeight, setPostHeaderHeight] = useState(0);
   const stickyHeaderVisible = useSharedValue(0);
+  const [isStickyInteractive, setIsStickyInteractive] = useState(false);
 
   const handlePostHeaderLayout = useCallback((event: LayoutChangeEvent) => {
-    setPostHeaderHeight(event.nativeEvent.layout.height);
+    const nextHeight = event.nativeEvent.layout.height;
+    setPostHeaderHeight((current) =>
+      Math.abs(current - nextHeight) < 1 ? current : nextHeight
+    );
   }, []);
 
   const handleScroll = useCallback(
@@ -289,6 +295,14 @@ export default function PostDetailScreen() {
       }
     },
     [postHeaderHeight, stickyHeaderVisible]
+  );
+
+  useAnimatedReaction(
+    () => stickyHeaderVisible.value > 0.5,
+    (next, prev) => {
+      if (next === prev) return;
+      runOnJS(setIsStickyInteractive)(next);
+    },
   );
 
   // Animated style for sticky header
@@ -850,7 +864,7 @@ export default function PostDetailScreen() {
   );
 
   // Render list header (post + divider)
-  const renderListHeader = useCallback(() => {
+  const listHeader = useMemo(() => {
     // Show loading skeleton while post is loading
     if (!displayPost) {
       return (
@@ -1198,7 +1212,7 @@ export default function PostDetailScreen() {
             },
             stickyHeaderAnimatedStyle,
           ]}
-          pointerEvents={stickyHeaderVisible.value > 0.5 ? "auto" : "none"}
+          pointerEvents={isStickyInteractive ? "auto" : "none"}
         >
           <View style={styles.stickyHeaderContent}>
             <View style={styles.stickyHeaderInfo}>
@@ -1238,8 +1252,9 @@ export default function PostDetailScreen() {
           data={allComments}
           renderItem={renderComment}
           keyExtractor={keyExtractor}
-          ListHeaderComponent={renderListHeader}
+          ListHeaderComponent={listHeader}
           ListEmptyComponent={renderEmptyComments}
+          removeClippedSubviews={false}
           contentContainerStyle={{
             paddingBottom: insets.bottom + 60,
           }}

@@ -3,6 +3,41 @@ import type { Post as UIPost } from "@/src/components/molecules";
 import type { ContentWarningType } from "@/src/components/atoms";
 import { calculateDisplayPoints } from "../endpoints/posts";
 
+const VIDEO_EXTENSIONS = new Set([
+  "mp4",
+  "mov",
+  "m4v",
+  "webm",
+  "mkv",
+  "avi",
+  "mpeg",
+  "mpg",
+  "m3u8",
+  "mpd",
+]);
+const GIF_EXTENSIONS = new Set(["gif"]);
+
+function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.hostname.includes("videodelivery.net")) {
+      return "video";
+    }
+    const path = parsedUrl.pathname.toLowerCase();
+    const extension = path.split(".").pop() ?? "";
+    if (GIF_EXTENSIONS.has(extension)) return "gif";
+    if (VIDEO_EXTENSIONS.has(extension)) return "video";
+  } catch {
+    const path = url.toLowerCase().split("?")[0];
+    const extension = path.split(".").pop() ?? "";
+    if (url.includes("videodelivery.net")) return "video";
+    if (GIF_EXTENSIONS.has(extension)) return "gif";
+    if (VIDEO_EXTENSIONS.has(extension)) return "video";
+  }
+
+  return "image";
+}
+
 /**
  * Map API tag to UI content warning type
  */
@@ -70,7 +105,7 @@ export function transformApiPost(
       ? [
           {
             uri: apiPost.thumbnail,
-            type: "image" as const,
+            type: getMediaTypeFromUrl(apiPost.thumbnail),
             aspectRatio: 16 / 9, // Default, could be extracted from URL or metadata
           },
         ]
