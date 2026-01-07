@@ -8,7 +8,8 @@ import { Avatar, TimeAgo } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons, Octicons } from "@expo/vector-icons";
-import { useCallback, useEffect, useRef } from "react";
+import * as Linking from "expo-linking";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   Pressable,
   Animated as RNAnimated,
@@ -25,6 +26,9 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+
+// Link color for clickable links
+const LINK_COLOR = "#3B82F6"; // Blue shade
 
 // Vote colors (same as post-actions)
 const UPVOTE_COLOR = "#FF4757"; // Red shade for upvote
@@ -82,6 +86,101 @@ type CommentItemProps = {
 const SIZE_CONFIG = {
   iconSize: 16,
   avatarSize: "sm" as const,
+};
+
+// Regex to match markdown links: [text](url)
+const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\(([^)]+)\)/g;
+
+type ContentPart = 
+  | { type: "text"; content: string }
+  | { type: "link"; text: string; url: string };
+
+/**
+ * Parse content and extract markdown links
+ */
+function parseContentWithLinks(content: string): ContentPart[] {
+  const parts: ContentPart[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  // Reset regex state
+  MARKDOWN_LINK_REGEX.lastIndex = 0;
+
+  while ((match = MARKDOWN_LINK_REGEX.exec(content)) !== null) {
+    // Add text before the link
+    if (match.index > lastIndex) {
+      parts.push({
+        type: "text",
+        content: content.slice(lastIndex, match.index),
+      });
+    }
+
+    // Add the link
+    parts.push({
+      type: "link",
+      text: match[1],
+      url: match[2],
+    });
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text after the last link
+  if (lastIndex < content.length) {
+    parts.push({
+      type: "text",
+      content: content.slice(lastIndex),
+    });
+  }
+
+  return parts;
+}
+
+/**
+ * Component to render content with clickable links
+ */
+const CommentContent = ({ content }: { content: string }) => {
+  const parts = useMemo(() => parseContentWithLinks(content), [content]);
+
+  const handleLinkPress = useCallback((url: string) => {
+    triggerHaptic("light");
+    // Ensure URL has protocol
+    const fullUrl = url.startsWith("http://") || url.startsWith("https://") 
+      ? url 
+      : `https://${url}`;
+    Linking.openURL(fullUrl).catch((err) => {
+      console.error("Failed to open URL:", err);
+    });
+  }, []);
+
+  // If no links, render simple text
+  if (parts.length === 1 && parts[0].type === "text") {
+    return (
+      <Text size="sm" style={styles.content}>
+        {content}
+      </Text>
+    );
+  }
+
+  return (
+    <Text size="sm" style={styles.content}>
+      {parts.map((part, index) => {
+        if (part.type === "text") {
+          return part.content;
+        }
+        return (
+          <Text
+            key={index}
+            size="sm"
+            style={{ color: LINK_COLOR }}
+            onPress={() => handleLinkPress(part.url)}
+          >
+            {part.text}
+          </Text>
+        );
+      })}
+    </Text>
+  );
 };
 
 export const CommentItem = ({
@@ -264,9 +363,7 @@ export const CommentItem = ({
 
         {/* Comment content - collapsible */}
         <Animated.View style={animatedContentStyle}>
-          <Text size="sm" style={styles.content}>
-            {content}
-          </Text>
+          <CommentContent content={content} />
 
           {/* Actions below content on the right */}
           <View style={styles.actionsRow}>

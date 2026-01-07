@@ -11,7 +11,7 @@ import BottomSheet, {
   BottomSheetTextInput,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import { useCallback, useRef, useState } from "react";
+import React, { forwardRef, useCallback, useImperativeHandle, useRef, useState } from "react";
 import {
   Alert,
   Keyboard,
@@ -51,6 +51,11 @@ type CommentInputProps = {
   style?: StyleProp<ViewStyle>;
 };
 
+export type CommentInputRef = {
+  /** Activate the comment input and focus */
+  activate: () => void;
+};
+
 // Sample GIFs for demo
 const SAMPLE_GIFS = [
   "https://media.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif",
@@ -63,7 +68,7 @@ const SAMPLE_GIFS = [
   "https://media.giphy.com/media/l3q2K5jinAlChoCLS/giphy.gif",
 ];
 
-export const CommentInput = ({
+export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(({
   onSubmit,
   onAddLink,
   onAddImage,
@@ -75,7 +80,7 @@ export const CommentInput = ({
   replyingTo,
   onCancelReply,
   style,
-}: CommentInputProps) => {
+}, ref) => {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -99,6 +104,13 @@ export const CommentInput = ({
     setIsActive(true);
     bottomSheetRef.current?.expand();
   }, [isLoggedIn, onAuthRequired]);
+
+  // Expose activate method to parent via ref
+  useImperativeHandle(ref, () => ({
+    activate: () => {
+      handleActivate();
+    },
+  }), [handleActivate]);
 
   const handleDeactivate = useCallback(() => {
     setIsActive(false);
@@ -127,6 +139,17 @@ export const CommentInput = ({
   const handleAddLink = useCallback(() => {
     if (!canAddLink) return;
     triggerHaptic("medium");
+    
+    // Format the link as markdown and add it to the text input
+    const markdownLink = `[${linkName.trim()}](${linkUrl.trim()})`;
+    setText((prev) => {
+      // If there's existing text, add a space before the link
+      if (prev.trim()) {
+        return `${prev} ${markdownLink}`;
+      }
+      return markdownLink;
+    });
+    
     onAddLink?.(linkName, linkUrl);
     setLinkName("");
     setLinkUrl("");
@@ -482,7 +505,9 @@ export const CommentInput = ({
       </BottomSheetView>
     </BottomSheet>
   );
-};
+});
+
+CommentInput.displayName = "CommentInput";
 
 const styles = StyleSheet.create((theme) => ({
   // Inactive state

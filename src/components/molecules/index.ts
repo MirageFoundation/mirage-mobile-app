@@ -10,7 +10,7 @@ export {
 export { PostCardSkeleton, PostCardSkeletonList } from "./post-card-skeleton";
 
 // Comment system
-export { CommentInput } from "./comment-input";
+export { CommentInput, type CommentInputRef } from "./comment-input";
 export { CommentItem, type Comment, type CommentAuthor } from "./comment-item";
 export {
   CommentOptionsSheet,

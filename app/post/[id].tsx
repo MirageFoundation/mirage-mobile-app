@@ -4,11 +4,13 @@ import {
   useComments,
   useUserFollowed,
 } from "@/src/api/read";
-import { useToggleFollowUser } from "@/src/api/write";
+import { useToggleFollowUser, useComment } from "@/src/api/write";
+import type { PoWProgress } from "@/src/api/write/signing";
 import { Avatar } from "@/src/components/atoms";
 import {
   Comment,
   CommentInput,
+  CommentInputRef,
   CommentOptionsSheet,
   CommentOptionsSheetRef,
   CommentThread,
@@ -58,6 +60,7 @@ export default function PostDetailScreen() {
   const currentUser = useAuthStore((s) => s.user);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
   const optionsSheetRef = useRef<CommentOptionsSheetRef>(null);
+  const commentInputRef = useRef<CommentInputRef>(null);
 
   // Fetch comments from API
   const {
@@ -82,6 +85,26 @@ export default function PostDetailScreen() {
   // Track follow loading state
   const [isFollowLoading, setIsFollowLoading] = useState(false);
 
+  // Comment mutation with PoW progress tracking
+  const [commentToastId, setCommentToastId] = useState<string | null>(null);
+  const handlePoWProgress = useCallback(
+    (progress: PoWProgress) => {
+      if (commentToastId) {
+        const progressPercent = progress.estimatedTotalMs > 0
+          ? Math.min(99, Math.round((progress.elapsedMs / progress.estimatedTotalMs) * 100))
+          : 0;
+        toast.update(commentToastId, {
+          description: `Computing proof of work... ${progressPercent}%`,
+        });
+      }
+    },
+    [commentToastId, toast]
+  );
+
+  const commentMutation = useComment({
+    onPoWProgress: handlePoWProgress,
+  });
+
   // Transform API post and comments to UI format
   const post = useMemo(() => {
     if (!commentsData?.root) return null;
@@ -96,6 +119,8 @@ export default function PostDetailScreen() {
   // Local state for optimistic updates
   const [localPostUpdates, setLocalPostUpdates] = useState<Partial<Post>>({});
   const [localComments, setLocalComments] = useState<Comment[]>([]);
+  // Track optimistic replies to API comments (parentId -> optimistic comments)
+  const [optimisticReplies, setOptimisticReplies] = useState<Record<string, Comment[]>>({});
 
   // Vote overrides for comments (tracks hasLiked, hasDisliked, and likeDelta)
   const [commentVoteOverrides, setCommentVoteOverrides] = useState<
@@ -201,11 +226,34 @@ export default function PostDetailScreen() {
     [commentVoteOverrides]
   );
 
-  // Merge API comments with locally added comments and apply vote overrides
+  // Apply optimistic replies to a comment tree recursively
+  const applyOptimisticReplies = useCallback(
+    (comment: Comment): Comment => {
+      const pendingReplies = optimisticReplies[comment.id] ?? [];
+      const existingReplies = comment.replies ?? [];
+      
+      // Recursively apply to existing replies
+      const processedReplies = existingReplies.map(applyOptimisticReplies);
+      
+      // Add optimistic replies
+      const allReplies = [...processedReplies, ...pendingReplies];
+      
+      return {
+        ...comment,
+        replies: allReplies.length > 0 ? allReplies : comment.replies,
+        replyCount: (comment.replyCount ?? 0) + pendingReplies.length,
+      };
+    },
+    [optimisticReplies]
+  );
+
+  // Merge API comments with locally added comments and apply vote overrides + optimistic replies
   const allComments = useMemo(() => {
     const merged = [...localComments, ...comments];
-    return merged.map(applyVoteOverridesToComment);
-  }, [localComments, comments, applyVoteOverridesToComment]);
+    return merged
+      .map(applyOptimisticReplies)
+      .map(applyVoteOverridesToComment);
+  }, [localComments, comments, applyOptimisticReplies, applyVoteOverridesToComment]);
 
   // Scroll tracking for sticky header
   const [postHeaderHeight, setPostHeaderHeight] = useState(0);
@@ -455,6 +503,10 @@ export default function PostDetailScreen() {
     (comment: Comment) => {
       requireAuth(() => {
         setReplyingTo(comment);
+        // Auto-focus the comment input
+        setTimeout(() => {
+          commentInputRef.current?.activate();
+        }, 100);
       });
     },
     [requireAuth]
@@ -471,16 +523,23 @@ export default function PostDetailScreen() {
 
   const handleSubmitComment = useCallback(
     async (text: string) => {
-      if (!currentUser) return;
+      if (!currentUser || !id) return;
 
-      setIsSubmitting(true);
+      // Determine the parent ID - if replying to a comment, use that comment's id, otherwise use the post id
+      const parentId = replyingTo?.id ?? id;
+      const replyingToUsername = replyingTo?.author.username;
 
-      // TODO: Replace with actual API mutation
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Show loading toast
+      const toastId = toast.loading(
+        replyingToUsername ? `Replying to @${replyingToUsername}` : "Posting comment",
+        "Computing proof of work..."
+      );
+      setCommentToastId(toastId);
 
-      const newComment: Comment = {
-        id: `c${Date.now()}`,
+      // Create optimistic comment for immediate UI update
+      const optimisticCommentId = `optimistic-${Date.now()}`;
+      const optimisticComment: Comment = {
+        id: optimisticCommentId,
         author: {
           id: currentUser.id,
           username: currentUser.username,
@@ -496,35 +555,121 @@ export default function PostDetailScreen() {
         parentId: replyingTo?.id ?? null,
       };
 
-      if (replyingTo) {
-        // Add as a reply (optimistic update)
-        setLocalComments((prev) =>
-          updateCommentInList(
-            replyingTo.id,
-            (comment) => ({
-              ...comment,
-              replyCount: (comment.replyCount ?? 0) + 1,
-              replies: [...(comment.replies ?? []), newComment],
-            }),
-            prev.length > 0 ? prev : [newComment]
-          )
-        );
-        // If no existing local comments, this might be a reply to an API comment
-        // We'll need to refetch to see the update
-        refetchComments();
+      // Store replyingTo reference before clearing it
+      const replyTarget = replyingTo;
+
+      // Apply optimistic update immediately
+      if (replyTarget) {
+        // Add as a reply to the parent comment
+        setOptimisticReplies((prev) => ({
+          ...prev,
+          [replyTarget.id]: [...(prev[replyTarget.id] ?? []), optimisticComment],
+        }));
       } else {
-        // Add as top-level comment (optimistic update)
-        setLocalComments((prev) => [newComment, ...prev]);
+        // Add as top-level comment
+        setLocalComments((prev) => [optimisticComment, ...prev]);
       }
 
       setLocalPostUpdates((prev) => ({
         ...prev,
         comments: (prev.comments ?? displayPost?.comments ?? 0) + 1,
       }));
+      
+      // Clear reply state immediately so UI updates
       setReplyingTo(null);
       setIsSubmitting(false);
+
+      // Submit to API in background (don't block UI)
+      try {
+        // Submit to API
+        await commentMutation.mutateAsync({
+          parentId,
+          content: text,
+        });
+
+        // Update toast to success
+        toast.update(toastId, {
+          type: "success",
+          title: replyingToUsername ? `Replied to @${replyingToUsername}` : "Comment posted!",
+          description: undefined,
+          duration: 3000,
+        });
+        setTimeout(() => toast.dismiss(toastId), 3000);
+
+        // Refetch comments to get the actual comment with real ID
+        // and clean up optimistic state
+        refetchComments().then(() => {
+          // Remove optimistic comment after refetch completes
+          if (replyTarget) {
+            setOptimisticReplies((prev) => {
+              const updated = { ...prev };
+              if (updated[replyTarget.id]) {
+                updated[replyTarget.id] = updated[replyTarget.id].filter(
+                  (c) => c.id !== optimisticCommentId
+                );
+                if (updated[replyTarget.id].length === 0) {
+                  delete updated[replyTarget.id];
+                }
+              }
+              return updated;
+            });
+          } else {
+            setLocalComments((prev) =>
+              prev.filter((c) => c.id !== optimisticCommentId)
+            );
+          }
+        });
+      } catch (error: unknown) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to post comment";
+
+        // Revert optimistic update on error
+        if (replyTarget) {
+          setOptimisticReplies((prev) => {
+            const updated = { ...prev };
+            if (updated[replyTarget.id]) {
+              updated[replyTarget.id] = updated[replyTarget.id].filter(
+                (c) => c.id !== optimisticCommentId
+              );
+              if (updated[replyTarget.id].length === 0) {
+                delete updated[replyTarget.id];
+              }
+            }
+            return updated;
+          });
+        } else {
+          setLocalComments((prev) =>
+            prev.filter((c) => c.id !== optimisticCommentId)
+          );
+        }
+
+        setLocalPostUpdates((prev) => ({
+          ...prev,
+          comments: Math.max(0, (prev.comments ?? displayPost?.comments ?? 0) - 1),
+        }));
+
+        // Update toast to error
+        toast.update(toastId, {
+          type: "error",
+          title: "Failed to post comment",
+          description: errorMessage,
+          duration: 5000,
+        });
+        setTimeout(() => toast.dismiss(toastId), 5000);
+
+        console.error("Comment submission failed:", error);
+      } finally {
+        setCommentToastId(null);
+      }
     },
-    [currentUser, replyingTo, updateCommentInList, refetchComments, displayPost]
+    [
+      currentUser,
+      id,
+      refetchComments,
+      displayPost,
+      toast,
+      commentMutation,
+    ]
   );
 
   const handleDeleteComment = useCallback(() => {
@@ -1054,6 +1199,7 @@ export default function PostDetailScreen() {
 
         {/* Comment input */}
         <CommentInput
+          ref={commentInputRef}
           isLoggedIn={isLoggedIn}
           onAuthRequired={showAuthSheet}
           replyingTo={replyingTo?.author.username}
