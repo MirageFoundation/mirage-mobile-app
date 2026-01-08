@@ -24,8 +24,7 @@ import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { usePost } from "@/src/api/write";
-import type { CreatePostInput } from "@/src/api/write/endpoints/posts";
+import { usePost, type CreatePostMutationInput } from "@/src/api/write";
 import { uploadImageAndGetUrl } from "@/src/api/read/hooks/use-upload-media";
 import { Avatar } from "@/src/components/atoms";
 import GorhomPopupSheet, {
@@ -177,11 +176,12 @@ export function CreateScreen() {
       const isUserProfile = draft.community?.description === "Post to your profile";
       const topic = isUserProfile ? "general" : (draft.community?.id ?? "general");
       
-      const postInput: CreatePostInput = {
+      const postInput: CreatePostMutationInput = {
         topic,
         title: draft.title.trim(),
         content: content,
         tag: "", // Default to no content warning for now
+        optimisticMediaUrl: imageUrl ?? undefined,
       };
 
       console.log("[CreatePost] Submitting post:", postInput);

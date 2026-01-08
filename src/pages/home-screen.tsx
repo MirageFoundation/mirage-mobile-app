@@ -116,16 +116,16 @@ export function HomeScreen() {
   const posts = useMemo(() => {
     if (!data?.pages) return [];
     const allPosts = data.pages.flatMap((page) => page.posts);
-    
+
     // Deduplicate posts by post_id (in case same post appears in multiple pages)
-    const uniquePostsMap = new Map<string, typeof allPosts[0]>();
+    const uniquePostsMap = new Map<string, (typeof allPosts)[0]>();
     for (const post of allPosts) {
       if (!uniquePostsMap.has(post.post_id)) {
         uniquePostsMap.set(post.post_id, post);
       }
     }
     const uniquePosts = Array.from(uniquePostsMap.values());
-    
+
     return transformApiPosts(uniquePosts, { followedUsers });
   }, [data, followedUsers]);
 
