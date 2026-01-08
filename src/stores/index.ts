@@ -4,6 +4,7 @@ export {
   type FeedType,
   type ThemeMode,
   type ContentType,
+  getAllowedTagsFromContentTypes,
 } from "./preferences-store";
 export { useDraftStore, type PostDraft } from "./draft-store";
 export { useUIStore } from "./ui-store";

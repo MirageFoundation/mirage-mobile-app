@@ -18,6 +18,7 @@ import {
 } from "@/src/api";
 import {
   FeedHeader,
+  AdultContentPopup,
   PostCard,
   PostCardSkeletonList,
   type Post,
@@ -30,7 +31,11 @@ import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
 import { useToast } from "@/src/providers/toast-provider";
-import { useAuthStore, usePreferencesStore } from "@/src/stores";
+import {
+  getAllowedTagsFromContentTypes,
+  useAuthStore,
+  usePreferencesStore,
+} from "@/src/stores";
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Post>);
 
@@ -56,7 +61,9 @@ export function HomeScreen() {
     (s) => s.setHasSeenAdultPrompt
   );
   const setAdultContent = usePreferencesStore((s) => s.setAdultContent);
-  const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
+  const selectedContentTypes = usePreferencesStore(
+    (s) => s.selectedContentTypes
+  );
   const currentUser = useAuthStore((s) => s.user);
 
   // Fetch user's followed list (for showing "Following" status on posts)
@@ -75,9 +82,11 @@ export function HomeScreen() {
   );
 
   // Show adult content popup if user hasn't seen it
-  // TODO: Remove `true ||` after testing
-  const [showAdultPopup, setShowAdultPopup] = useState(
-    true || !hasSeenAdultPrompt
+  const showAdultPopup = !!currentUser && !hasSeenAdultPrompt;
+
+  const allowedTags = useMemo(
+    () => getAllowedTagsFromContentTypes(selectedContentTypes),
+    [selectedContentTypes]
   );
 
   // Map feed type to API sort parameter
@@ -109,7 +118,7 @@ export function HomeScreen() {
     // Temporarily omit 'by' parameter to test if it's causing the 400 error
     // by: getSortBy(),
     // Omit topic parameter to fetch all topics (API doesn't accept "all" as a value)
-    allowed_tags: adultContentEnabled ? "sensitive,adult,nsfw" : "sensitive",
+    allowed_tags: allowedTags,
   });
 
   // Transform API data to UI format (includes following status)
@@ -178,13 +187,11 @@ export function HomeScreen() {
   const handleEnableAdultContent = useCallback(() => {
     setAdultContent(true);
     setHasSeenAdultPrompt();
-    setShowAdultPopup(false);
   }, [setAdultContent, setHasSeenAdultPrompt]);
 
   const handleDeclineAdultContent = useCallback(() => {
     setAdultContent(false);
     setHasSeenAdultPrompt();
-    setShowAdultPopup(false);
   }, [setAdultContent, setHasSeenAdultPrompt]);
 
   const getFeedTitle = () => {
@@ -569,11 +576,11 @@ export function HomeScreen() {
       />
 
       {/* Adult Content Permission Popup */}
-      {/* <AdultContentPopup
+      <AdultContentPopup
         visible={showAdultPopup}
         onEnable={handleEnableAdultContent}
         onDecline={handleDeclineAdultContent}
-      /> */}
+      />
     </Box>
   );
 }
