@@ -1,6 +1,6 @@
 import { ConfigContext, ExpoConfig } from "expo/config";
 
-const env = process.env.EXPO_PUBLIC_ENV || "dev";
+const env = process.env.EXPO_PUBLIC_ENV || "";
 const bundleIdentifier = env
   ? `talk.mirage.app.${env}`
   : `talk.mirage.app`;
