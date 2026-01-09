@@ -12,10 +12,10 @@
 Update `src/providers/query-provider.tsx`:
 
 ```typescript
-import { QueryClient } from '@tanstack/react-query';
-import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
-import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
-import { storage } from '@/stores/mmkv-storage';
+import { QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
+import { storage } from "@/stores/mmkv-storage";
 
 // MMKV adapter for TanStack Query (sync because MMKV is synchronous)
 const mmkvStorage = {
@@ -26,14 +26,14 @@ const mmkvStorage = {
 
 const persister = createSyncStoragePersister({
   storage: mmkvStorage,
-  key: 'mirage-query-cache',
+  key: "mirage-query-cache",
 });
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5,        // 5 minutes
-      gcTime: 1000 * 60 * 60 * 24,     // 24 hours
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 60 * 24, // 24 hours
       retry: 2,
       refetchOnWindowFocus: false,
       refetchOnReconnect: true,
@@ -44,13 +44,13 @@ const queryClient = new QueryClient({
 
 ### Cache Strategy by Endpoint Type
 
-| Type | staleTime | gcTime | Refetch |
-|------|-----------|--------|---------|
-| Config/Params | 5 min | 24 hrs | On app focus |
-| User Status | 30 sec | 1 hr | After mutations |
-| Feed/Posts | 1 min | 4 hrs | Pull-to-refresh |
-| Comments | 30 sec | 1 hr | On navigate |
-| Static Lists | 10 min | 24 hrs | Manual |
+| Type          | staleTime | gcTime | Refetch         |
+| ------------- | --------- | ------ | --------------- |
+| Config/Params | 5 min     | 24 hrs | On app focus    |
+| User Status   | 30 sec    | 1 hr   | After mutations |
+| Feed/Posts    | 1 min     | 4 hrs  | Pull-to-refresh |
+| Comments      | 30 sec    | 1 hr   | On navigate     |
+| Static Lists  | 10 min    | 24 hrs | Manual          |
 
 ---
 
@@ -60,47 +60,47 @@ Most endpoints work without authentication. The `address` parameter enables pers
 
 ### No Address Needed (Public)
 
-| Endpoint | Notes |
-|----------|-------|
-| `GET /get_config` | Chain params, tier info |
-| `GET /get_parameters` | Block hash, difficulty (address optional for balance) |
-| `GET /get_posts` | Public feed works, no `user_vote` data |
-| `GET /get_comments` | Public comments, no `user_vote` data |
-| `GET /get_topics` | All topics |
-| `GET /search` | Works, no blocked filtering |
-| `GET /search_topics` | Topic search |
-| `GET /get_users` | User list |
-| `GET /get_address_from_username` | Username resolution |
-| `GET /get_username_from_address` | Address resolution |
-| `GET /get_network_stats` | Network info |
-| `GET /get_circulation_stats` | Supply info |
-| `GET /get_tx_status` | Transaction status |
-| `GET /leaderboard` | Leaderboard |
-| `GET /get_peers` | Peer list |
-| `GET /get_stats` | App statistics |
+| Endpoint                         | Notes                                                 |
+| -------------------------------- | ----------------------------------------------------- |
+| `GET /get_config`                | Chain params, tier info                               |
+| `GET /get_parameters`            | Block hash, difficulty (address optional for balance) |
+| `GET /get_posts`                 | Public feed works, no `user_vote` data                |
+| `GET /get_comments`              | Public comments, no `user_vote` data                  |
+| `GET /get_topics`                | All topics                                            |
+| `GET /search`                    | Works, no blocked filtering                           |
+| `GET /search_topics`             | Topic search                                          |
+| `GET /get_users`                 | User list                                             |
+| `GET /get_address_from_username` | Username resolution                                   |
+| `GET /get_username_from_address` | Address resolution                                    |
+| `GET /get_network_stats`         | Network info                                          |
+| `GET /get_circulation_stats`     | Supply info                                           |
+| `GET /get_tx_status`             | Transaction status                                    |
+| `GET /leaderboard`               | Leaderboard                                           |
+| `GET /get_peers`                 | Peer list                                             |
+| `GET /get_stats`                 | App statistics                                        |
 
 ### Address Required (Personalized)
 
-| Endpoint | What address enables |
-|----------|---------------------|
-| `GET /get_user_status` | User's tier, balance, subscription |
-| `GET /get_profile` | Full profile with follow/block lists |
-| `GET /get_inbox` | User's reply notifications |
-| `GET /get_user_followed` | Who user follows |
-| `GET /get_user_blocked` | User's block list |
-| `GET /get_preferences` | Personalized weights |
-| `GET /get_similar_users` | Similar user recommendations |
-| `GET /get_user_posts` | User's own posts (owner param) |
-| `GET /referral/stats` | Referral earnings |
+| Endpoint                 | What address enables                 |
+| ------------------------ | ------------------------------------ |
+| `GET /get_user_status`   | User's tier, balance, subscription   |
+| `GET /get_profile`       | Full profile with follow/block lists |
+| `GET /get_inbox`         | User's reply notifications           |
+| `GET /get_user_followed` | Who user follows                     |
+| `GET /get_user_blocked`  | User's block list                    |
+| `GET /get_preferences`   | Personalized weights                 |
+| `GET /get_similar_users` | Similar user recommendations         |
+| `GET /get_user_posts`    | User's own posts (owner param)       |
+| `GET /referral/stats`    | Referral earnings                    |
 
 ### Address Optional (Enhanced)
 
-| Endpoint | Without address | With address |
-|----------|-----------------|--------------|
-| `GET /get_posts` | Public feed | + `user_vote`, blocked filtering |
-| `GET /get_comments` | Comment tree | + `user_vote`, blocked filtering |
-| `GET /search` | Search results | + blocked content filtering |
-| `GET /get_parameters` | Block hash, difficulty | + balance |
+| Endpoint              | Without address        | With address                     |
+| --------------------- | ---------------------- | -------------------------------- |
+| `GET /get_posts`      | Public feed            | + `user_vote`, blocked filtering |
+| `GET /get_comments`   | Comment tree           | + `user_vote`, blocked filtering |
+| `GET /search`         | Search results         | + blocked content filtering      |
+| `GET /get_parameters` | Block hash, difficulty | + balance                        |
 
 ---
 
@@ -150,53 +150,57 @@ src/api/read/
 
 export const queryKeys = {
   // Config & Parameters
-  parameters: (address?: string) => ['parameters', address] as const,
-  config: (address?: string) => ['config', address] as const,
-  
+  parameters: (address?: string) => ["parameters", address] as const,
+  config: (address?: string) => ["config", address] as const,
+
   // User
-  userStatus: (address: string) => ['user', 'status', address] as const,
-  profile: (address: string) => ['user', 'profile', address] as const,
-  userPosts: (owner: string, type?: string) => ['user', 'posts', owner, type] as const,
-  userFollowed: (address: string) => ['user', 'followed', address] as const,
-  userBlocked: (address: string) => ['user', 'blocked', address] as const,
-  preferences: (address: string) => ['user', 'preferences', address] as const,
-  similarUsers: (address: string) => ['user', 'similar', address] as const,
-  
+  userStatus: (address: string) => ["user", "status", address] as const,
+  profile: (address: string) => ["user", "profile", address] as const,
+  userPosts: (owner: string, type?: string) =>
+    ["user", "posts", owner, type] as const,
+  userFollowed: (address: string) => ["user", "followed", address] as const,
+  userBlocked: (address: string) => ["user", "blocked", address] as const,
+  preferences: (address: string) => ["user", "preferences", address] as const,
+  similarUsers: (address: string) => ["user", "similar", address] as const,
+
   // Posts & Feed
-  posts: (filters: PostFilters) => ['posts', filters] as const,
-  comments: (postId: string, address?: string) => ['comments', postId, address] as const,
-  rootPostId: (commentId: string) => ['rootPostId', commentId] as const,
-  commentContext: (commentId: string) => ['commentContext', commentId] as const,
-  
+  posts: (filters: PostFilters) => ["posts", filters] as const,
+  comments: (postId: string, address?: string) =>
+    ["comments", postId, address] as const,
+  rootPostId: (commentId: string) => ["rootPostId", commentId] as const,
+  commentContext: (commentId: string) => ["commentContext", commentId] as const,
+
   // Inbox
-  inbox: (address: string, page?: number) => ['inbox', address, page] as const,
-  
+  inbox: (address: string, page?: number) => ["inbox", address, page] as const,
+
   // Topics
-  topics: (limit?: number) => ['topics', limit] as const,
-  searchTopics: (query: string) => ['topics', 'search', query] as const,
-  
+  topics: (limit?: number) => ["topics", limit] as const,
+  searchTopics: (query: string) => ["topics", "search", query] as const,
+
   // Search
-  search: (query: string, type?: string) => ['search', query, type] as const,
-  
+  search: (query: string, type?: string) => ["search", query, type] as const,
+
   // Username/Address Resolution
-  addressFromUsername: (username: string) => ['resolve', 'address', username] as const,
-  usernameFromAddress: (address: string) => ['resolve', 'username', address] as const,
-  users: (filters?: UserFilters) => ['users', filters] as const,
-  
+  addressFromUsername: (username: string) =>
+    ["resolve", "address", username] as const,
+  usernameFromAddress: (address: string) =>
+    ["resolve", "username", address] as const,
+  users: (filters?: UserFilters) => ["users", filters] as const,
+
   // Transaction
-  txStatus: (hash: string) => ['tx', hash] as const,
-  
+  txStatus: (hash: string) => ["tx", hash] as const,
+
   // Stats
-  networkStats: () => ['stats', 'network'] as const,
-  circulationStats: () => ['stats', 'circulation'] as const,
-  appStats: () => ['stats', 'app'] as const,
-  leaderboard: (days?: number) => ['leaderboard', days] as const,
-  
+  networkStats: () => ["stats", "network"] as const,
+  circulationStats: () => ["stats", "circulation"] as const,
+  appStats: () => ["stats", "app"] as const,
+  leaderboard: (days?: number) => ["leaderboard", days] as const,
+
   // Referral
-  referralStats: (address: string) => ['referral', address] as const,
-  
+  referralStats: (address: string) => ["referral", address] as const,
+
   // Peers
-  peers: () => ['peers'] as const,
+  peers: () => ["peers"] as const,
 } as const;
 ```
 
@@ -214,13 +218,13 @@ export const queryKeys = {
 // src/api/read/endpoints/parameters.ts
 
 interface GetParametersParams {
-  address?: string;  // Optional: also returns balance
+  address?: string; // Optional: also returns balance
 }
 
 interface ParametersResponse {
-  last_block_hash: string;  // hex
+  last_block_hash: string; // hex
   pow_difficulty: number;
-  balance?: number;         // umirage, if address provided
+  balance?: number; // umirage, if address provided
 }
 
 // Hook: useParameters
@@ -242,7 +246,7 @@ interface ConfigResponse {
   subscription_period: number;
   mint_interval: number;
   tiers: TierInfo[];
-  
+
   // Difficulty snapshot
   pow_difficulty: number;
   pow_message_count: number;
@@ -250,7 +254,7 @@ interface ConfigResponse {
   pow_last_change_height: number;
   current_height: number;
   block_time: number;
-  
+
   // Validator info
   validator_account_address: string;
   validator_operator_address: string;
@@ -272,22 +276,22 @@ interface ConfigResponse {
 
 ```typescript
 interface GetUserStatusParams {
-  address: string;  // Required
+  address: string; // Required
 }
 
 interface UserStatusResponse {
   username: string | null;
-  balance: number;           // umirage
-  user_level: number;        // 0 = free, 1-3 = paid
-  subscription_expiry: number;  // unix seconds or 0
+  balance: number; // umirage
+  user_level: number; // 0 = free, 1-3 = paid
+  subscription_expiry: number; // unix seconds or 0
   auto_renew: boolean;
-  reserve_funds: number;     // umirage
-  profile_registered_at: number | null;  // unix seconds
+  reserve_funds: number; // umirage
+  profile_registered_at: number | null; // unix seconds
   recent_votes: RecentVote[];
 }
 
 interface RecentVote {
-  target: string;    // txhash
+  target: string; // txhash
   direction: number; // -1, 0, 1
   timestamp: number;
 }
@@ -314,7 +318,7 @@ interface ProfileResponse {
   biography: string;
   avatar: string;
   banner: string;
-  
+
   // Lists
   followed_users: string[];
   followed_topics: string[];
@@ -344,8 +348,8 @@ interface UserFollowedResponse {
 
 ```typescript
 interface UserBlockedResponse {
-  blocked_posts: string[];   // txhashes
-  blocked_users: string[];   // addresses
+  blocked_posts: string[]; // txhashes
+  blocked_users: string[]; // addresses
 }
 
 // Hook: useUserBlocked
@@ -387,13 +391,13 @@ interface SimilarUsersResponse {
 
 ```typescript
 interface GetPostsParams {
-  limit?: number;          // max 100
+  limit?: number; // max 100
   page?: number;
-  topic?: string;          // topic name or 'all'
-  address?: string;        // viewer address for filtering/votes
-  allowed_tags?: string;   // comma-separated, default 'sensitive'
-  feed?: 'home' | 'following';
-  by?: 'magic' | 'new' | 'top';  // sort mode
+  topic?: string; // topic name or 'all'
+  address?: string; // viewer address for filtering/votes
+  allowed_tags?: string; // comma-separated, default 'sensitive'
+  feed?: "home" | "following";
+  by?: "magic" | "new" | "top"; // sort mode
 }
 
 interface PostsResponse {
@@ -406,8 +410,8 @@ interface PostsResponse {
 }
 
 interface Post {
-  post_id: string;        // txhash lowercase
-  user_id: string;        // owner address
+  post_id: string; // txhash lowercase
+  user_id: string; // owner address
   username: string;
   timestamp: number;
   topic: string;
@@ -416,12 +420,12 @@ interface Post {
   title: string;
   content: string;
   tag: string;
-  edited_at: number;      // 0 if never edited
+  edited_at: number; // 0 if never edited
   thumbnail: string;
   points: number;
   comments: number;
-  user_vote: number;      // -1, 0, 1
-  user_weight: number;    // viewer's weighted contribution
+  user_vote: number; // -1, 0, 1
+  user_weight: number; // viewer's weighted contribution
 }
 
 // Hook: usePosts with infinite query
@@ -430,21 +434,24 @@ interface Post {
 ```
 
 **Display Points Calculation:**
+
 ```typescript
-const displayPoints = Math.round(post.points - post.user_weight + post.user_vote);
+const displayPoints = Math.round(
+  post.points - post.user_weight + post.user_vote
+);
 ```
 
-#### `GET /get_user_posts`
+#### `GET / `
 
 **Purpose**: User's submissions or comments
 
 ```typescript
 interface GetUserPostsParams {
-  owner: string;          // Required
-  address?: string;       // Viewer address
-  type?: 'submissions' | 'comments';
+  owner: string; // Required
+  address?: string; // Viewer address
+  type?: "submissions" | "comments";
   page?: number;
-  limit?: number;         // max 50
+  limit?: number; // max 50
 }
 
 // Hook: useUserPosts
@@ -456,8 +463,8 @@ interface GetUserPostsParams {
 
 ```typescript
 interface GetCommentsParams {
-  post_id: string;        // Required root txhash
-  address?: string;       // Viewer address
+  post_id: string; // Required root txhash
+  address?: string; // Viewer address
 }
 
 interface CommentsResponse {
@@ -491,11 +498,11 @@ interface RootPostIdResponse {
 interface GetCommentContextParams {
   comment_id: string;
   address?: string;
-  max_depth?: number;  // 1-10
+  max_depth?: number; // 1-10
 }
 
 interface CommentContextResponse {
-  context: Post[];     // Array of parent posts
+  context: Post[]; // Array of parent posts
   comment_id: string;
 }
 
@@ -510,9 +517,9 @@ interface CommentContextResponse {
 
 ```typescript
 interface GetInboxParams {
-  address: string;   // Required
+  address: string; // Required
   page?: number;
-  limit?: number;    // max 100
+  limit?: number; // max 100
 }
 
 interface InboxResponse {
@@ -547,7 +554,7 @@ interface InboxReply {
 
 ```typescript
 interface GetTopicsParams {
-  limit?: number;  // max 200
+  limit?: number; // max 200
 }
 
 interface TopicsResponse {
@@ -568,8 +575,8 @@ interface TopicInfo {
 
 ```typescript
 interface SearchTopicsParams {
-  q: string;         // min 2 chars
-  limit?: number;    // max 50
+  q: string; // min 2 chars
+  limit?: number; // max 50
   offset?: number;
 }
 
@@ -596,10 +603,10 @@ interface SearchTopicsResponse {
 ```typescript
 interface SearchParams {
   q: string;
-  type?: 'topics' | 'users' | 'posts';
-  limit?: number;    // max 50
+  type?: "topics" | "users" | "posts";
+  limit?: number; // max 50
   offset?: number;
-  address?: string;  // Viewer for blocked filtering
+  address?: string; // Viewer for blocked filtering
 }
 
 interface SearchResponse {
@@ -650,7 +657,7 @@ interface UsernameFromAddressResponse {
 
 ```typescript
 interface GetUsersParams {
-  limit?: number;        // max 500
+  limit?: number; // max 500
   page?: number;
   has_username?: boolean;
 }
@@ -679,12 +686,18 @@ interface TxStatusResponse {
   found: boolean;
   tx_hash?: string;
   height?: number;
-  code?: number;           // 0 = success
+  code?: number; // 0 = success
   success?: boolean;
-  indexed?: boolean;       // Indexer processed
-  tx_type?: 'vote' | 'post' | 'profile' | 'follow_user' | 'follow_topic' | 'unknown';
-  details?: TxDetails;     // Type-specific, only when indexed & success
-  error_details?: string;  // When code != 0
+  indexed?: boolean; // Indexer processed
+  tx_type?:
+    | "vote"
+    | "post"
+    | "profile"
+    | "follow_user"
+    | "follow_topic"
+    | "unknown";
+  details?: TxDetails; // Type-specific, only when indexed & success
+  error_details?: string; // When code != 0
 }
 
 // Vote details
@@ -708,6 +721,7 @@ interface PostDetails {
 ```
 
 **Polling Hook Pattern:**
+
 ```typescript
 export function useTxStatusPolling(txHash: string | null) {
   return useQuery({
@@ -716,8 +730,8 @@ export function useTxStatusPolling(txHash: string | null) {
     enabled: !!txHash,
     refetchInterval: (data) => {
       if (!data) return 2000;
-      if (data.found && data.indexed) return false;  // Stop polling
-      return 2000;  // Continue polling
+      if (data.found && data.indexed) return false; // Stop polling
+      return 2000; // Continue polling
     },
     refetchIntervalInBackground: false,
   });
@@ -806,8 +820,8 @@ interface AppStatsResponse {
 
 ```typescript
 interface LeaderboardParams {
-  days?: number;      // 1-30
-  limit?: number;     // max 500
+  days?: number; // 1-30
+  limit?: number; // max 500
   page?: number;
   // Weight params
   comment_weight?: number;
@@ -894,7 +908,7 @@ interface PeersResponse {
 
 ```typescript
 interface GetUploadUrlParams {
-  type: 'image' | 'video';
+  type: "image" | "video";
 }
 
 interface ImageUploadResponse {
@@ -905,7 +919,7 @@ interface ImageUploadResponse {
 
 interface VideoUploadResponse {
   uploadURL: string;
-  provider: 'stream';
+  provider: "stream";
   streamCustomer: string;
   uid: string;
 }
@@ -920,31 +934,34 @@ interface VideoUploadResponse {
 ```typescript
 // src/api/read/hooks/use-posts.ts
 
-import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
-import { queryKeys } from '../query-keys';
-import { getPosts, type GetPostsParams } from '../endpoints/posts';
-import { useAuthStore } from '@/stores/auth-store';
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
+import { queryKeys } from "../query-keys";
+import { getPosts, type GetPostsParams } from "../endpoints/posts";
+import { useAuthStore } from "@/stores/auth-store";
 
-export function usePosts(params: Omit<GetPostsParams, 'address'>) {
+export function usePosts(params: Omit<GetPostsParams, "address">) {
   // Get address from auth store (may be null if not logged in)
   const address = useAuthStore((s) => s.walletAddress);
-  
+
   const fullParams = { ...params, address: address ?? undefined };
-  
+
   return useQuery({
     queryKey: queryKeys.posts(fullParams),
     queryFn: () => getPosts(fullParams),
-    staleTime: 1000 * 60,  // 1 minute
+    staleTime: 1000 * 60, // 1 minute
   });
 }
 
-export function useInfinitePosts(params: Omit<GetPostsParams, 'page' | 'address'>) {
+export function useInfinitePosts(
+  params: Omit<GetPostsParams, "page" | "address">
+) {
   const address = useAuthStore((s) => s.walletAddress);
   const fullParams = { ...params, address: address ?? undefined };
-  
+
   return useInfiniteQuery({
     queryKey: queryKeys.posts({ ...fullParams, page: undefined }),
-    queryFn: ({ pageParam = 1 }) => getPosts({ ...fullParams, page: pageParam }),
+    queryFn: ({ pageParam = 1 }) =>
+      getPosts({ ...fullParams, page: pageParam }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       if (!lastPage.has_more) return undefined;
@@ -964,11 +981,11 @@ For endpoints that require an address, the hook should be disabled when no walle
 
 export function useInbox(params?: { page?: number; limit?: number }) {
   const address = useAuthStore((s) => s.walletAddress);
-  
+
   return useQuery({
     queryKey: queryKeys.inbox(address!, params?.page),
     queryFn: () => getInbox({ address: address!, ...params }),
-    enabled: !!address,  // Only fetch when wallet exists
+    enabled: !!address, // Only fetch when wallet exists
     staleTime: 1000 * 30,
   });
 }
@@ -982,12 +999,12 @@ export function useInbox(params?: { page?: number; limit?: number }) {
 // After mutations, invalidate related queries
 
 // After vote
-queryClient.invalidateQueries({ queryKey: ['posts'] });
+queryClient.invalidateQueries({ queryKey: ["posts"] });
 queryClient.invalidateQueries({ queryKey: queryKeys.userStatus(address) });
 
 // After post/comment
-queryClient.invalidateQueries({ queryKey: ['posts'] });
-queryClient.invalidateQueries({ queryKey: ['comments'] });
+queryClient.invalidateQueries({ queryKey: ["posts"] });
+queryClient.invalidateQueries({ queryKey: ["comments"] });
 
 // After follow/unfollow
 queryClient.invalidateQueries({ queryKey: queryKeys.userFollowed(address) });

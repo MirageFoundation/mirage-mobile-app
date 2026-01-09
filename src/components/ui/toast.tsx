@@ -8,7 +8,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Pressable, View } from "react-native";
+import { ActivityIndicator, Animated, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -59,7 +59,7 @@ const TOAST_GAP = 10; // Gap between stacked toasts
 const MAX_VISIBLE_TOASTS = 4; // Maximum toasts to show at once
 
 export const Toast = ({ toast, onDismiss, index }: ToastProps) => {
-  const { theme } = useUnistyles();
+  const { theme, rt } = useUnistyles();
   const insets = useSafeAreaInsets();
   const translateY = useRef(new Animated.Value(-100)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -160,8 +160,37 @@ export const Toast = ({ toast, onDismiss, index }: ToastProps) => {
     return null;
   }
 
+  // Platform-specific wrapper for blur effect
+  const ToastWrapper = Platform.OS === "ios" ? BlurView : View;
+  const wrapperProps =
+    Platform.OS === "ios"
+      ? {
+          intensity: 80,
+          tint: "dark" as const,
+          style: [styles.blurContainer, { borderColor: getBorderColor() }],
+        }
+      : {
+          style: [
+            styles.blurContainer,
+            {
+              backgroundColor:
+                rt.themeName === "dark"
+                  ? "rgba(45, 48, 55, 0.92)"
+                  : "rgba(255, 255, 255, 0.92)",
+              borderColor: getBorderColor(),
+              // Glass effect shadow for Android
+              elevation: 8,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.15,
+              shadowRadius: 8,
+            },
+          ],
+        };
+
   return (
     <Animated.View
+      pointerEvents="box-none"
       style={[
         styles.container,
         {
@@ -173,11 +202,7 @@ export const Toast = ({ toast, onDismiss, index }: ToastProps) => {
       ]}
     >
       <Pressable onPress={toast.type !== "loading" ? handleDismiss : undefined}>
-        <BlurView
-          intensity={80}
-          tint="dark"
-          style={[styles.blurContainer, { borderColor: getBorderColor() }]}
-        >
+        <ToastWrapper {...wrapperProps}>
           <View style={styles.content}>
             {/* Icon */}
             <View style={styles.iconContainer}>
@@ -221,7 +246,7 @@ export const Toast = ({ toast, onDismiss, index }: ToastProps) => {
               </Pressable>
             )}
           </View>
-        </BlurView>
+        </ToastWrapper>
       </Pressable>
     </Animated.View>
   );
