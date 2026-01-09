@@ -24,8 +24,8 @@ import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { usePost, type CreatePostMutationInput } from "@/src/api/write";
 import { uploadImageAndGetUrl } from "@/src/api/read/hooks/use-upload-media";
+import { usePost, type CreatePostMutationInput } from "@/src/api/write";
 import { Avatar } from "@/src/components/atoms";
 import GorhomPopupSheet, {
   type GorhomPopupSheetRef,
@@ -583,7 +583,9 @@ export function CreateScreen() {
               backgroundColor: theme.colors.background.default,
               paddingBottom: keyboardVisible
                 ? 8
-                : insets.bottom + TAB_BAR_HEIGHT + 8,
+                : Platform.OS === "android"
+                  ? TAB_BAR_HEIGHT + 24
+                  : insets.bottom + TAB_BAR_HEIGHT + 8,
             },
           ]}
         >
