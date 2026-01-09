@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Image,
   Keyboard,
+  Platform,
   Pressable,
   View,
 } from "react-native";
@@ -168,7 +169,7 @@ export default function LoginScreen() {
   return (
     <Box flex background="base">
       {/* Header */}
-      <View style={[styles.header, { paddingTop: 20 }]}>
+      <View style={[styles.header, { paddingTop: Platform.OS === "ios" ? 20 : insets.top }]}>
         <Pressable onPress={handleBack} style={styles.closeButton}>
           <EvilIcons name="close" size={36} color={theme.colors.text.default} />
         </Pressable>

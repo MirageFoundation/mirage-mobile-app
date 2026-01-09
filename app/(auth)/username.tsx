@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   Image,
   Keyboard,
+  Platform,
   Pressable,
   View,
 } from "react-native";
@@ -210,7 +211,7 @@ export default function UsernameScreen() {
   return (
     <Box flex background="base">
       {/* Header with close button */}
-      <View style={[styles.header, { paddingTop: 20 }]}>
+      <View style={[styles.header, { paddingTop: Platform.OS === "ios" ? 20 : insets.top }]}>
         <Pressable onPress={handleClose} style={styles.closeButton}>
           <EvilIcons name="close" size={36} color={theme.colors.text.default} />
         </Pressable>

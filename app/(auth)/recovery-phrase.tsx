@@ -12,7 +12,7 @@ import { useAuthStore } from "@/src/stores";
 import { AntDesign, Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Image, Pressable, ScrollView, View } from "react-native";
+import { Alert, Image, Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -236,7 +236,7 @@ export default function RecoveryPhraseScreen() {
         }
       />
       {/* Header */}
-      <View style={[styles.header, { paddingTop: 20 }]}>
+      <View style={[styles.header, { paddingTop: Platform.OS === "ios" ? 20 : insets.top }]}>
         <Pressable onPress={handleBack} style={styles.backButton}>
           <AntDesign
             name="arrow-left"
