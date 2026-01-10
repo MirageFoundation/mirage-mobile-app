@@ -2,8 +2,8 @@ import { ConfigContext, ExpoConfig } from "expo/config";
 
 const env = process.env.EXPO_PUBLIC_ENV || "";
 const bundleIdentifier = env
-  ? `talk.mirage.app.${env}`
-  : `talk.mirage.app`;
+  ? `talk.mirage.mobile.${env}`
+  : `talk.mirage.mobile`;
 const scheme = env ? `shadow${env}` : `mirage`;
 
 const name = env ? `mirage (${env.toUpperCase()})` : "mirage";
