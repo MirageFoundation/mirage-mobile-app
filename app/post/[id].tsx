@@ -33,7 +33,7 @@ import {
   type VoteResult,
 } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
-import { useAuthStore, useUIStore } from "@/src/stores";
+import { useAuthStore, useContentModerationStore, useUIStore } from "@/src/stores";
 import {
   AntDesign,
   Ionicons,
@@ -79,6 +79,15 @@ export default function PostDetailScreen() {
   const reportSheetRef = useRef<ReportSheetRef>(null);
   const commentInputRef = useRef<CommentInputRef>(null);
 
+  // Track if component is still mounted (to avoid navigating back if user already left)
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Fetch comments from API
   const {
     data: commentsData,
@@ -102,54 +111,122 @@ export default function PostDetailScreen() {
   // Track follow loading state
   const [isFollowLoading, setIsFollowLoading] = useState(false);
 
+  // Global content moderation state (syncs to home screen)
+  const globalHidePost = useContentModerationStore((s) => s.hidePost);
+  const globalBlockUser = useContentModerationStore((s) => s.blockUser);
+  const globalHideComment = useContentModerationStore((s) => s.hideComment);
+
+  // Local state for filtering comments on this screen
+  const [hiddenCommentIds, setHiddenCommentIds] = useState<Set<string>>(new Set());
+  const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(new Set());
+
   // Delete, Block, and Report handlers
-  const deleteHandler = useDeleteHandler({
-    onSuccess: (targetId, targetType) => {
-      if (targetType === "post") {
-        // Navigate back after deleting the post
-        router.back();
-      } else {
-        // Remove comment from local state
-        const removeComment = (
-          commentId: string,
-          commentList: Comment[]
-        ): Comment[] => {
-          return commentList
-            .filter((c) => c.id !== commentId)
-            .map((c) => ({
-              ...c,
-              replies: c.replies ? removeComment(commentId, c.replies) : undefined,
-            }));
-        };
-        setLocalComments((prev) => removeComment(targetId, prev));
-        setLocalPostUpdates((prev) => ({
-          ...prev,
-          comments: Math.max(0, (prev.comments ?? displayPost?.comments ?? 0) - 1),
+  const deleteHandler = useDeleteHandler({});
+  const blockHandler = useBlockHandler({});
+  const reportHandler = useReportHandler({});
+
+  // Helper to remove comment from local state
+  const removeCommentFromState = useCallback((commentId: string) => {
+    const removeComment = (
+      targetId: string,
+      commentList: Comment[]
+    ): Comment[] => {
+      return commentList
+        .filter((c) => c.id !== targetId)
+        .map((c) => ({
+          ...c,
+          replies: c.replies ? removeComment(targetId, c.replies) : undefined,
         }));
-        refetchComments();
-      }
-      setSelectedComment(null);
-    },
-  });
+    };
+    setLocalComments((prev) => removeComment(commentId, prev));
+    setLocalPostUpdates((prev) => ({
+      ...prev,
+      comments: Math.max(0, (prev.comments ?? displayPost?.comments ?? 0) - 1),
+    }));
+  }, [displayPost?.comments]);
 
-  const blockHandler = useBlockHandler({
-    onSuccess: (targetId, blockType) => {
-      if (blockType === "user" || blockType === "post") {
-        // Navigate back after blocking the post or user
-        router.back();
+  // Optimistic confirm handlers - hide content/navigate immediately before API call
+  const handleConfirmDelete = useCallback(() => {
+    const pending = deleteHandler.pendingTarget;
+    if (pending) {
+      if (pending.type === "post") {
+        // Hide post in global store (syncs to home screen)
+        globalHidePost(pending.id);
+        // Navigate back immediately
+        if (isMountedRef.current) {
+          router.back();
+        }
       } else {
-        // Refresh comments after blocking a comment
-        refetchComments();
+        // Hide comment immediately (local + global)
+        globalHideComment(pending.id);
+        removeCommentFromState(pending.id);
       }
       setSelectedComment(null);
-    },
-  });
+    }
+    // Then proceed with API call
+    deleteHandler.confirmDelete();
+  }, [deleteHandler, router, removeCommentFromState, globalHidePost, globalHideComment]);
 
-  const reportHandler = useReportHandler({
-    onSuccess: () => {
+  const handleConfirmBlock = useCallback(() => {
+    const pending = blockHandler.pendingBlock;
+    if (pending) {
+      if (pending.type === "post") {
+        // Hide post in global store (syncs to home screen)
+        globalHidePost(pending.id);
+        // Navigate back immediately
+        if (isMountedRef.current) {
+          router.back();
+        }
+      } else if (pending.type === "user") {
+        // Block user in global store (syncs to home screen)
+        globalBlockUser(pending.id);
+        // Check if the blocked user is the post author
+        const isPostAuthor = displayPost?.author.id === pending.id;
+        if (isPostAuthor) {
+          // Navigate back if blocking the post author
+          if (isMountedRef.current) {
+            router.back();
+          }
+        } else {
+          // Filter out comments from blocked user (stay on screen)
+          setBlockedUserIds((prev) => new Set(prev).add(pending.id));
+        }
+      } else if (pending.type === "comment") {
+        // Hide the blocked comment (local + global)
+        globalHideComment(pending.id);
+        setHiddenCommentIds((prev) => new Set(prev).add(pending.id));
+      }
       setSelectedComment(null);
+    }
+    // Then proceed with API call
+    blockHandler.confirmBlock();
+  }, [blockHandler, displayPost?.author.id, router, globalHidePost, globalBlockUser, globalHideComment]);
+
+  const handleReportSubmitWithOptimistic = useCallback(
+    (reason: string) => {
+      const pending = reportHandler.pendingTarget;
+      if (pending) {
+        if (pending.type === "post") {
+          // Hide post in global store (syncs to home screen)
+          globalHidePost(pending.id);
+          // Navigate back immediately
+          if (isMountedRef.current) {
+            router.back();
+          }
+        } else if (pending.type === "comment") {
+          // Hide the reported comment (local + global)
+          globalHideComment(pending.id);
+          setHiddenCommentIds((prev) => new Set(prev).add(pending.id));
+        }
+        setSelectedComment(null);
+      }
+      // Close the report sheet immediately
+      reportSheetRef.current?.dismiss();
+      // Then proceed with API call
+      reportHandler.submitReport(reason);
     },
-  });
+    [reportHandler, router, globalHidePost, globalHideComment]
+  );
 
   // Present report sheet when showReportSheet is true
   useEffect(() => {
@@ -320,19 +397,37 @@ export default function PostDetailScreen() {
     [optimisticReplies]
   );
 
+  // Filter out hidden comments and comments from blocked users recursively
+  const filterComments = useCallback(
+    (commentList: Comment[]): Comment[] => {
+      return commentList
+        .filter(
+          (comment) =>
+            !hiddenCommentIds.has(comment.id) &&
+            !blockedUserIds.has(comment.author.id)
+        )
+        .map((comment) => ({
+          ...comment,
+          replies: comment.replies ? filterComments(comment.replies) : undefined,
+        }));
+    },
+    [hiddenCommentIds, blockedUserIds]
+  );
+
   // Merge API comments with locally added comments and apply vote overrides + optimistic replies
-  // Sort by createdAt descending (latest first)
+  // Filter hidden/blocked and sort by createdAt descending (latest first)
   const allComments = useMemo(() => {
     const merged = [...localComments, ...comments];
-    return merged
-      .map(applyOptimisticReplies)
-      .map(applyVoteOverridesToComment)
-      .sort((a, b) => {
-        const timeA = a.createdAt instanceof Date ? a.createdAt.getTime() : Number(a.createdAt);
-        const timeB = b.createdAt instanceof Date ? b.createdAt.getTime() : Number(b.createdAt);
-        return timeB - timeA; // Descending order (latest first)
-      });
-  }, [localComments, comments, applyOptimisticReplies, applyVoteOverridesToComment]);
+    return filterComments(
+      merged
+        .map(applyOptimisticReplies)
+        .map(applyVoteOverridesToComment)
+    ).sort((a, b) => {
+      const timeA = a.createdAt instanceof Date ? a.createdAt.getTime() : Number(a.createdAt);
+      const timeB = b.createdAt instanceof Date ? b.createdAt.getTime() : Number(b.createdAt);
+      return timeB - timeA; // Descending order (latest first)
+    });
+  }, [localComments, comments, applyOptimisticReplies, applyVoteOverridesToComment, filterComments]);
 
   // Scroll tracking for sticky header
   const [postHeaderHeight, setPostHeaderHeight] = useState(0);
@@ -1417,19 +1512,20 @@ export default function PostDetailScreen() {
           isDestructive
           isLoading={deleteHandler.isDeleting}
           confirmText="Delete"
-          onConfirm={deleteHandler.confirmDelete}
+          onConfirm={handleConfirmDelete}
           onCancel={deleteHandler.cancelDelete}
         />
 
         {/* Block confirmation popup */}
         <ConfirmationPopup
           visible={blockHandler.showConfirmation}
-          title={`Block ${blockHandler.pendingBlock?.label || "this content"}?`}
-          message="You won't see this content in your feed anymore."
+          title={`Block ${blockHandler.pendingBlock?.label || "user"}?`}
+          message="You won't see their content anymore."
+          description="You can unblock them later from settings."
           icon="ban-outline"
-          isLoading={blockHandler.isBlocking}
           confirmText="Block"
-          onConfirm={blockHandler.confirmBlock}
+          isDestructive
+          onConfirm={handleConfirmBlock}
           onCancel={blockHandler.cancelBlock}
         />
 
@@ -1437,7 +1533,7 @@ export default function PostDetailScreen() {
         <ReportSheet
           ref={reportSheetRef}
           targetType={reportHandler.pendingTarget?.type}
-          onSubmit={reportHandler.submitReport}
+          onSubmit={handleReportSubmitWithOptimistic}
           onDismiss={reportHandler.cancelReport}
           isLoading={reportHandler.isReporting}
         />

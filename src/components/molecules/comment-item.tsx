@@ -99,9 +99,10 @@ const IMAGE_URL_REGEX = /^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp))$/i;
 const CLOUDFLARE_IMAGE_REGEX = /^https?:\/\/imagedelivery\.net\/[^\s]+$/i;
 
 // Regex to match Giphy URLs (handles media.giphy.com, media0-4.giphy.com, i.giphy.com)
-const GIPHY_URL_REGEX = /^https?:\/\/(?:media\d?\.giphy\.com|i\.giphy\.com)\/[^\s]+$/i;
+const GIPHY_URL_REGEX =
+  /^https?:\/\/(?:media\d?\.giphy\.com|i\.giphy\.com)\/[^\s]+$/i;
 
-type ContentPart = 
+type ContentPart =
   | { type: "text"; content: string }
   | { type: "link"; text: string; url: string }
   | { type: "image"; url: string };
@@ -122,29 +123,29 @@ function isImageUrl(url: string): boolean {
  */
 function parseContentWithLinks(content: string): ContentPart[] {
   const parts: ContentPart[] = [];
-  
+
   // First, split by newlines to handle standalone image URLs
-  const lines = content.split('\n');
-  
+  const lines = content.split("\n");
+
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const line = lines[lineIndex];
     const trimmedLine = line.trim();
-    
+
     // Check if this line is a standalone image URL
     if (isImageUrl(trimmedLine)) {
       parts.push({ type: "image", url: trimmedLine });
       continue;
     }
-    
+
     // Otherwise, parse for markdown links
     let lastIndex = 0;
     let match: RegExpExecArray | null;
-    
+
     // Reset regex state
     MARKDOWN_LINK_REGEX.lastIndex = 0;
-    
+
     let hasContent = false;
-    
+
     while ((match = MARKDOWN_LINK_REGEX.exec(line)) !== null) {
       // Add text before the link
       if (match.index > lastIndex) {
@@ -154,7 +155,7 @@ function parseContentWithLinks(content: string): ContentPart[] {
           hasContent = true;
         }
       }
-      
+
       // Add the link
       parts.push({
         type: "link",
@@ -162,10 +163,10 @@ function parseContentWithLinks(content: string): ContentPart[] {
         url: match[2],
       });
       hasContent = true;
-      
+
       lastIndex = match.index + match[0].length;
     }
-    
+
     // Add remaining text after the last link
     if (lastIndex < line.length) {
       const remaining = line.slice(lastIndex);
@@ -174,13 +175,13 @@ function parseContentWithLinks(content: string): ContentPart[] {
         hasContent = true;
       }
     }
-    
+
     // Add newline between lines (except for the last line)
     if (lineIndex < lines.length - 1 && hasContent) {
       parts.push({ type: "text", content: "\n" });
     }
   }
-  
+
   return parts;
 }
 
@@ -190,15 +191,22 @@ function parseContentWithLinks(content: string): ContentPart[] {
 const CommentImage = ({ url }: { url: string }) => {
   const { theme } = useUnistyles();
   const [hasError, setHasError] = useState(false);
-  
+
   if (hasError) {
     return (
-      <View style={[commentImageStyles.errorContainer, { backgroundColor: theme.colors.background.subtle }]}>
-        <Text size="xs" mode="subtle">Failed to load image</Text>
+      <View
+        style={[
+          commentImageStyles.errorContainer,
+          { backgroundColor: theme.colors.background.subtle },
+        ]}
+      >
+        <Text size="xs" mode="subtle">
+          Failed to load image
+        </Text>
       </View>
     );
   }
-  
+
   return (
     <View style={commentImageStyles.container}>
       <Image
@@ -244,17 +252,18 @@ const CommentContent = ({ content }: { content: string }) => {
   const handleLinkPress = useCallback((url: string) => {
     triggerHaptic("light");
     // Ensure URL has protocol
-    const fullUrl = url.startsWith("http://") || url.startsWith("https://") 
-      ? url 
-      : `https://${url}`;
+    const fullUrl =
+      url.startsWith("http://") || url.startsWith("https://")
+        ? url
+        : `https://${url}`;
     Linking.openURL(fullUrl).catch((err) => {
       console.error("Failed to open URL:", err);
     });
   }, []);
 
   // Check if we have any images
-  const hasImages = parts.some(part => part.type === "image");
-  
+  const hasImages = parts.some((part) => part.type === "image");
+
   // If no links and no images, render simple text
   if (parts.length === 1 && parts[0].type === "text") {
     return (
@@ -267,7 +276,7 @@ const CommentContent = ({ content }: { content: string }) => {
   // Separate text/link parts from image parts for proper rendering
   const textParts: ContentPart[] = [];
   const imageParts: ContentPart[] = [];
-  
+
   for (const part of parts) {
     if (part.type === "image") {
       imageParts.push(part);
@@ -301,11 +310,14 @@ const CommentContent = ({ content }: { content: string }) => {
           })}
         </Text>
       )}
-      
+
       {/* Images */}
-      {imageParts.map((part, index) => (
-        part.type === "image" && <CommentImage key={`img-${index}`} url={part.url} />
-      ))}
+      {imageParts.map(
+        (part, index) =>
+          part.type === "image" && (
+            <CommentImage key={`img-${index}`} url={part.url} />
+          )
+      )}
     </View>
   );
 };
@@ -496,7 +508,11 @@ export const CommentItem = ({
           <View style={styles.actionsRow}>
             <View style={styles.actions}>
               {/* More options (three dots) */}
-              <Pressable onPress={handleMorePress} style={styles.actionButton}>
+              <Pressable
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                onPress={handleMorePress}
+                style={styles.actionButton}
+              >
                 <Ionicons
                   name="ellipsis-horizontal"
                   size={SIZE_CONFIG.iconSize}

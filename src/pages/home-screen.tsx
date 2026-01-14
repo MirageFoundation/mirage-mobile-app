@@ -29,7 +29,14 @@ import {
   type Post,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
-import { useAuthGuard, useVoteHandler, type VoteResult } from "@/src/hooks";
+import {
+  useAuthGuard,
+  useBlockHandler,
+  useDeleteHandler,
+  useReportHandler,
+  useVoteHandler,
+  type VoteResult,
+} from "@/src/hooks";
 import {
   HEADER_HEIGHT,
   TAB_BAR_HEIGHT,
@@ -39,6 +46,7 @@ import { useToast } from "@/src/providers/toast-provider";
 import {
   getAllowedTagsFromContentTypes,
   useAuthStore,
+  useContentModerationStore,
   usePreferencesStore,
 } from "@/src/stores";
 
@@ -65,7 +73,12 @@ export function HomeScreen() {
 
   // Selected post for options
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [showBlockConfirmation, setShowBlockConfirmation] = useState(false);
+
+  // Global content moderation state (syncs across screens)
+  const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
+  const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
+  const hidePost = useContentModerationStore((s) => s.hidePost);
+  const blockUser = useContentModerationStore((s) => s.blockUser);
 
   const feedType = usePreferencesStore((s) => s.feedType);
   const setFeedType = usePreferencesStore((s) => s.setFeedType);
@@ -147,8 +160,14 @@ export function HomeScreen() {
     }
     const uniquePosts = Array.from(uniquePostsMap.values());
 
-    return transformApiPosts(uniquePosts, { followedUsers });
-  }, [data, followedUsers]);
+    const transformedPosts = transformApiPosts(uniquePosts, { followedUsers });
+
+    // Filter out hidden posts and posts from blocked users
+    return transformedPosts.filter(
+      (post) =>
+        !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id)
+    );
+  }, [data, followedUsers, hiddenPostIds, blockedUserIds]);
 
   // Revealed posts for content warnings
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
@@ -241,37 +260,89 @@ export function HomeScreen() {
     }
   }, [posts]);
 
+  // Block handler with API integration
+  const blockHandler = useBlockHandler({});
+
+  // Report handler with API integration
+  const reportHandler = useReportHandler({});
+
+  // Delete handler with API integration
+  const deleteHandler = useDeleteHandler({});
+
+  // Optimistic confirm handlers - hide content immediately before API call
+  const handleConfirmBlock = useCallback(() => {
+    const pending = blockHandler.pendingBlock;
+    if (pending) {
+      // Hide content immediately using global store
+      if (pending.type === "user") {
+        blockUser(pending.id);
+      } else if (pending.type === "post") {
+        hidePost(pending.id);
+      }
+    }
+    // Then proceed with API call
+    blockHandler.confirmBlock();
+  }, [blockHandler, blockUser, hidePost]);
+
+  const handleConfirmDelete = useCallback(() => {
+    const pending = deleteHandler.pendingTarget;
+    if (pending) {
+      // Hide content immediately using global store
+      hidePost(pending.id);
+    }
+    // Then proceed with API call
+    deleteHandler.confirmDelete();
+  }, [deleteHandler, hidePost]);
+
+  const handleReportSubmitWithOptimistic = useCallback(
+    (reason: string) => {
+      const pending = reportHandler.pendingTarget;
+      if (pending) {
+        // Hide content immediately using global store
+        hidePost(pending.id);
+      }
+      // Close the report sheet immediately
+      reportSheetRef.current?.dismiss();
+      // Then proceed with API call
+      reportHandler.submitReport(reason);
+    },
+    [reportHandler, hidePost]
+  );
+
+  // Sync report sheet with hook state
+  useEffect(() => {
+    if (reportHandler.showReportSheet) {
+      reportSheetRef.current?.present();
+    }
+  }, [reportHandler.showReportSheet]);
+
   // Post options handlers
   const handleReport = useCallback(() => {
-    reportSheetRef.current?.present();
-  }, []);
-
-  const handleReportSubmit = useCallback((reason: string) => {
-    // TODO: Call report API
-    console.log("Report submitted:", reason, "for post:", selectedPost?.id);
-    toast.success("Report submitted", "Thank you for helping keep Mirage safe.");
-  }, [selectedPost?.id, toast]);
+    if (selectedPost) {
+      reportHandler.requestReport(selectedPost.id, "post");
+    }
+  }, [selectedPost, reportHandler]);
 
   const handleBlockUser = useCallback(() => {
-    setShowBlockConfirmation(true);
-  }, []);
-
-  const handleConfirmBlock = useCallback(() => {
-    // TODO: Call block API
-    console.log("Block user:", selectedPost?.author.username);
-    setShowBlockConfirmation(false);
-    toast.success(`Blocked @${selectedPost?.author.username}`, "You won't see their content anymore.");
-  }, [selectedPost?.author.username, toast]);
-
-  const handleCancelBlock = useCallback(() => {
-    setShowBlockConfirmation(false);
-  }, []);
+    if (selectedPost) {
+      blockHandler.requestBlockUser(
+        selectedPost.author.id,
+        selectedPost.author.username
+      );
+    }
+  }, [selectedPost, blockHandler]);
 
   const handleHidePost = useCallback(() => {
-    // TODO: Call hide/block post API
-    console.log("Hide post:", selectedPost?.id);
-    toast.success("Post hidden", "You won't see this post anymore.");
-  }, [selectedPost?.id, toast]);
+    if (selectedPost) {
+      blockHandler.requestBlockPost(selectedPost.id);
+    }
+  }, [selectedPost, blockHandler]);
+
+  const handleDeletePost = useCallback(() => {
+    if (selectedPost) {
+      deleteHandler.requestDelete(selectedPost.id, "post");
+    }
+  }, [selectedPost, deleteHandler]);
 
   const handleSavePost = useCallback(() => {
     // TODO: Call save API
@@ -664,6 +735,7 @@ export function HomeScreen() {
         onReport={handleReport}
         onBlockUser={handleBlockUser}
         onHidePost={handleHidePost}
+        onDelete={handleDeletePost}
         onDismiss={() => setSelectedPost(null)}
       />
 
@@ -671,20 +743,35 @@ export function HomeScreen() {
       <ReportSheet
         ref={reportSheetRef}
         targetType="post"
-        onSubmit={handleReportSubmit}
+        onSubmit={handleReportSubmitWithOptimistic}
+        onDismiss={reportHandler.cancelReport}
+        isLoading={reportHandler.isReporting}
       />
 
-      {/* Block Confirmation Popup */}
+      {/* Block User Confirmation Popup */}
       <ConfirmationPopup
-        visible={showBlockConfirmation}
-        title={`Block @${selectedPost?.author.username}?`}
+        visible={blockHandler.showConfirmation}
+        title={`Block ${blockHandler.pendingBlock?.label || "user"}?`}
         message="You won't see their content anymore."
         description="You can unblock them later from settings."
         icon="ban-outline"
         confirmText="Block"
         isDestructive
         onConfirm={handleConfirmBlock}
-        onCancel={handleCancelBlock}
+        onCancel={blockHandler.cancelBlock}
+      />
+
+      {/* Delete Post Confirmation Popup */}
+      <ConfirmationPopup
+        visible={deleteHandler.showConfirmation}
+        title="Delete this post?"
+        message="This action cannot be undone."
+        description="Your post will be permanently removed."
+        icon="trash-outline"
+        confirmText="Delete"
+        isDestructive
+        onConfirm={handleConfirmDelete}
+        onCancel={deleteHandler.cancelDelete}
       />
     </Box>
   );

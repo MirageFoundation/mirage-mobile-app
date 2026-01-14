@@ -63,40 +63,118 @@ export type CommentOptionsSheetRef = {
   dismiss: () => void;
 };
 
-// Regex patterns to detect image URLs
-const IMAGE_URL_REGEX = /https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp)/gi;
-const CLOUDFLARE_IMAGE_REGEX = /https?:\/\/imagedelivery\.net\/[^\s]+/gi;
-const GIPHY_URL_REGEX =
-  /https?:\/\/(?:media\d?\.giphy\.com|i\.giphy\.com)\/[^\s]+/gi;
-const MARKDOWN_IMAGE_REGEX = /!\[[^\]]*\]\(([^)]+)\)/g;
-const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\(([^)]+)\)/g;
+/**
+ * Normalize a URL for deduplication
+ * Extracts the core identifier to match same content with different URLs
+ */
+function normalizeUrlForDedup(url: string): string {
+  // For Giphy, extract the GIF ID (appears after /media/ or similar)
+  const giphyMatch = url.match(/giphy\.com\/(?:media\/)?([a-zA-Z0-9]+)/i);
+  if (giphyMatch) {
+    return `giphy:${giphyMatch[1]}`;
+  }
+
+  // For Cloudflare, extract the image ID
+  const cloudflareMatch = url.match(/imagedelivery\.net\/([^/]+\/[^/]+)/i);
+  if (cloudflareMatch) {
+    return `cf:${cloudflareMatch[1]}`;
+  }
+
+  // For other URLs, use the full URL without query params
+  return url.split("?")[0];
+}
 
 /**
  * Extract image URLs from content
+ * Returns unique URLs, avoiding duplicates from markdown and direct URLs
  */
 function extractImageUrls(content: string): string[] {
-  const urls: string[] = [];
+  const urlsMap = new Map<string, string>(); // normalized -> original URL
 
-  // Check for markdown images first
-  let match;
-  while ((match = MARKDOWN_IMAGE_REGEX.exec(content)) !== null) {
-    urls.push(match[1]);
+  // Handle clickable images: [![alt](imageUrl)](linkUrl)
+  // We only want the image URL, not the link URL
+  const clickableImageRegex = /\[!\[[^\]]*\]\(([^)]+)\)\]\([^)]+\)/g;
+  let clickableMatch;
+  while ((clickableMatch = clickableImageRegex.exec(content)) !== null) {
+    const url = clickableMatch[1].replace(/[.,;:!?]+$/, "").trim();
+    if (url) {
+      const normalized = normalizeUrlForDedup(url);
+      if (!urlsMap.has(normalized)) {
+        urlsMap.set(normalized, url);
+      }
+    }
   }
 
-  // Check for direct image URLs
-  const imageMatches = content.match(IMAGE_URL_REGEX) || [];
-  urls.push(...imageMatches);
+  // If we found clickable images, return those
+  if (urlsMap.size > 0) {
+    return [...urlsMap.values()];
+  }
 
+  // Check for regular markdown images: ![alt](url)
+  const markdownImageRegex = /!\[[^\]]*\]\(([^)]+)\)/g;
+  let match;
+  while ((match = markdownImageRegex.exec(content)) !== null) {
+    const url = match[1].replace(/[.,;:!?]+$/, "").trim();
+    if (url) {
+      const normalized = normalizeUrlForDedup(url);
+      if (!urlsMap.has(normalized)) {
+        urlsMap.set(normalized, url);
+      }
+    }
+  }
+
+  // If we found markdown images, return those (avoid double detection)
+  if (urlsMap.size > 0) {
+    return [...urlsMap.values()];
+  }
+
+  // No markdown images found, check for plain URLs
   // Check for Cloudflare Images
-  const cloudflareMatches = content.match(CLOUDFLARE_IMAGE_REGEX) || [];
-  urls.push(...cloudflareMatches);
+  const cloudflareRegex = /https?:\/\/imagedelivery\.net\/[^\s\])<>]+/gi;
+  let cloudflareMatch;
+  while ((cloudflareMatch = cloudflareRegex.exec(content)) !== null) {
+    const url = cloudflareMatch[0].replace(/[.,;:!?]+$/, "").trim();
+    if (url) {
+      const normalized = normalizeUrlForDedup(url);
+      if (!urlsMap.has(normalized)) {
+        urlsMap.set(normalized, url);
+      }
+    }
+  }
 
   // Check for Giphy URLs
-  const giphyMatches = content.match(GIPHY_URL_REGEX) || [];
-  urls.push(...giphyMatches);
+  const giphyRegex =
+    /https?:\/\/(?:media\d?\.giphy\.com|i\.giphy\.com)\/[^\s\])<>]+/gi;
+  let giphyMatch;
+  while ((giphyMatch = giphyRegex.exec(content)) !== null) {
+    const url = giphyMatch[0].replace(/[.,;:!?]+$/, "").trim();
+    if (url) {
+      const normalized = normalizeUrlForDedup(url);
+      if (!urlsMap.has(normalized)) {
+        urlsMap.set(normalized, url);
+      }
+    }
+  }
 
-  // Remove duplicates
-  return [...new Set(urls)];
+  // Check for other direct image URLs
+  const imageRegex =
+    /https?:\/\/[^\s\])<>]+\.(?:jpg|jpeg|png|gif|webp)(?:\?[^\s\])<>]*)?/gi;
+  let imageMatch;
+  while ((imageMatch = imageRegex.exec(content)) !== null) {
+    const url = imageMatch[0].replace(/[.,;:!?]+$/, "").trim();
+    if (
+      url &&
+      !url.includes("imagedelivery.net") &&
+      !url.includes("giphy.com")
+    ) {
+      const normalized = normalizeUrlForDedup(url);
+      if (!urlsMap.has(normalized)) {
+        urlsMap.set(normalized, url);
+      }
+    }
+  }
+
+  return [...urlsMap.values()];
 }
 
 /**
@@ -105,19 +183,34 @@ function extractImageUrls(content: string): string[] {
 function getCleanTextPreview(content: string): string {
   let cleaned = content;
 
-  // Remove markdown images
-  cleaned = cleaned.replace(MARKDOWN_IMAGE_REGEX, "");
+  // Remove clickable images: [![alt](imageUrl)](linkUrl)
+  cleaned = cleaned.replace(/\[!\[[^\]]*\]\([^)]+\)\]\([^)]+\)/g, "");
 
-  // Replace markdown links with just the text
-  cleaned = cleaned.replace(MARKDOWN_LINK_REGEX, "$1");
+  // Remove markdown images completely: ![alt](url)
+  cleaned = cleaned.replace(/!\[[^\]]*\]\([^)]+\)/g, "");
 
-  // Remove standalone image URLs
-  cleaned = cleaned.replace(IMAGE_URL_REGEX, "");
-  cleaned = cleaned.replace(CLOUDFLARE_IMAGE_REGEX, "");
-  cleaned = cleaned.replace(GIPHY_URL_REGEX, "");
+  // Replace markdown links with just the text: [text](url) -> text
+  cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
 
-  // Clean up extra whitespace
-  cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
+  // Remove Cloudflare image URLs (including query params with $)
+  cleaned = cleaned.replace(/https?:\/\/imagedelivery\.net\/[^\s\])<>]+/gi, "");
+
+  // Remove Giphy URLs
+  cleaned = cleaned.replace(
+    /https?:\/\/(?:media\d?\.giphy\.com|i\.giphy\.com)\/[^\s\])<>]+/gi,
+    ""
+  );
+
+  // Remove direct image URLs
+  cleaned = cleaned.replace(
+    /https?:\/\/[^\s\])<>]+\.(?:jpg|jpeg|png|gif|webp)(?:\?[^\s\])<>]*)?/gi,
+    ""
+  );
+
+  // Clean up extra whitespace and newlines
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
+  cleaned = cleaned.replace(/\s{2,}/g, " ");
+  cleaned = cleaned.trim();
 
   return cleaned;
 }
@@ -352,9 +445,15 @@ export const CommentOptionsSheet = forwardRef<
                   seed={comment.author.avatarSeed}
                   url={comment.author.avatarUrl}
                 />
-                <Text size="sm" weight="semibold" style={styles.authorUsername}>
+                <Text size="sm" weight="semibold">
                   @{comment.author.username}
                 </Text>
+                <View
+                  style={[
+                    styles.dot,
+                    { backgroundColor: theme.colors.background.emphasis },
+                  ]}
+                />
                 <TimeAgo
                   date={comment.createdAt}
                   style={{ color: theme.colors.text.subtle }}
@@ -537,7 +636,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   commentPreview: {
     borderRadius: theme.radius.lg,
-    padding: theme.spacing.md,
+    padding: theme.spacing.sm,
     marginBottom: theme.spacing.sm,
   },
   authorRow: {
@@ -546,30 +645,33 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing.sm,
     marginBottom: theme.spacing.xs,
   },
-  authorUsername: {
-    flex: 1,
+  dot: {
+    width: 3,
+    height: 3,
+    borderRadius: theme.radius.full,
   },
   imagePreviewRow: {
     flexDirection: "row",
     gap: theme.spacing.xs,
-    marginTop: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
     marginBottom: theme.spacing.xs,
+    paddingLeft: theme.spacing.xs,
   },
   imagePreview: {
-    width: 48,
-    height: 48,
+    width: 68,
+    height: 68,
     borderRadius: theme.radius.md,
   },
   moreImagesIndicator: {
-    width: 48,
-    height: 48,
+    width: 68,
+    height: 68,
     borderRadius: theme.radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
   commentText: {
     lineHeight: 20,
-    marginTop: theme.spacing.xs,
+    paddingLeft: theme.spacing.sm,
   },
   divider: {
     height: 1,
