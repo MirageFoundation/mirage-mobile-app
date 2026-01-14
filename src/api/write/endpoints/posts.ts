@@ -17,6 +17,41 @@ import {
 import type { WriteResponse, PoWProgressCallback } from "../signing";
 
 // ============================================
+// Helpers
+// ============================================
+
+/**
+ * Check if error is a stale/invalid block hash error
+ */
+function isStaleBlockHashError(error: any): boolean {
+  const errorMessage = error?.response?.data?.error || error?.message || "";
+  return (
+    errorMessage.includes("invalid last_block_hash") ||
+    errorMessage.includes("stale")
+  );
+}
+
+/**
+ * Execute a request with retry on stale block hash error
+ */
+async function withStaleHashRetry<T>(
+  makeRequest: () => Promise<T>,
+  operationName: string
+): Promise<T> {
+  try {
+    return await makeRequest();
+  } catch (error: any) {
+    if (isStaleBlockHashError(error)) {
+      console.log(
+        `[${operationName}] Got stale block hash error, retrying with fresh parameters...`
+      );
+      return await makeRequest();
+    }
+    throw error;
+  }
+}
+
+// ============================================
 // Types
 // ============================================
 
@@ -149,6 +184,7 @@ export async function editPost(
 
 /**
  * Delete a post or comment
+ * Includes retry logic for stale block hash errors
  */
 export async function deletePost(
   wallet: MirageWallet,
@@ -157,14 +193,32 @@ export async function deletePost(
 ): Promise<WriteResponse> {
   const { postId } = input;
 
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBaseDelete,
-    payloadFields: {
-      target: postId,
-    },
-    onPoWProgress,
-  });
+  const makeRequest = async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseDelete,
+      payloadFields: {
+        target: postId,
+      },
+      onPoWProgress,
+    });
+    return api.post<WriteResponse>("/core/delete_post", payload);
+  };
 
-  return api.post<WriteResponse>("/core/delete_post", payload);
+  try {
+    return await makeRequest();
+  } catch (error: any) {
+    // Retry once if we get an invalid/stale block hash error
+    const errorMessage = error?.response?.data?.error || error?.message || "";
+    if (
+      errorMessage.includes("invalid last_block_hash") ||
+      errorMessage.includes("stale")
+    ) {
+      console.log(
+        "[deletePost] Got stale block hash error, retrying with fresh parameters..."
+      );
+      return await makeRequest();
+    }
+    throw error;
+  }
 }

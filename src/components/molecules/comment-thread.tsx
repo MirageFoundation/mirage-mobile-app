@@ -12,6 +12,8 @@ type CommentThreadProps = {
   maxDepth?: number;
   /** Whether the current user ID matches author (for highlighting own comments) */
   currentUserId?: string | null;
+  /** ID of comment to highlight (from navigation) */
+  highlightedCommentId?: string | null;
   /** Callback when author avatar/username is pressed */
   onAuthorPress?: (authorId: string) => void;
   /** Callback when like is pressed */
@@ -31,6 +33,7 @@ export const CommentThread = ({
   depth = 0,
   maxDepth = 4,
   currentUserId,
+  highlightedCommentId,
   onAuthorPress,
   onLikePress,
   onDislikePress,
@@ -49,6 +52,7 @@ export const CommentThread = ({
   }, []);
 
   const isOwnComment = currentUserId === comment.author.id;
+  const isHighlighted = highlightedCommentId === comment.id;
 
   return (
     <View style={styles.container}>
@@ -56,6 +60,7 @@ export const CommentThread = ({
       <CommentItem
         comment={comment}
         isOwnComment={isOwnComment}
+        isHighlighted={isHighlighted}
         depth={depth}
         maxDepth={maxDepth}
         isCollapsed={isCollapsed}
@@ -77,6 +82,7 @@ export const CommentThread = ({
               depth={depth + 1}
               maxDepth={maxDepth}
               currentUserId={currentUserId}
+              highlightedCommentId={highlightedCommentId}
               onAuthorPress={onAuthorPress}
               onLikePress={onLikePress}
               onDislikePress={onDislikePress}

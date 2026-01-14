@@ -30,6 +30,10 @@ type ScrollAnimationContextType = {
   registerScrollRef: (ref: ScrollableRef) => void;
   registerRefreshCallback: (callback: () => void) => void;
   scrollToTopAndRefresh: () => void;
+  // Profile-specific
+  registerProfileScrollRef: (ref: ScrollableRef) => void;
+  registerProfileRefreshCallback: (callback: () => void) => void;
+  scrollToTopAndRefreshProfile: () => void;
 };
 
 const ScrollAnimationContext = createContext<ScrollAnimationContextType | null>(
@@ -46,9 +50,13 @@ export const ScrollAnimationProvider = ({
   const headerTranslateY = useSharedValue(0);
   const tabBarTranslateY = useSharedValue(0);
 
-  // Refs for scroll-to-top functionality
+  // Refs for scroll-to-top functionality (home)
   const scrollRef = useRef<ScrollableRef>(null);
   const refreshCallbackRef = useRef<(() => void) | null>(null);
+
+  // Refs for profile scroll-to-top functionality
+  const profileScrollRef = useRef<ScrollableRef>(null);
+  const profileRefreshCallbackRef = useRef<(() => void) | null>(null);
 
   // Calculate full heights including safe areas
   const fullHeaderHeight = HEADER_HEIGHT + insets.top;
@@ -118,6 +126,37 @@ export const ScrollAnimationProvider = ({
     }
   }, [headerTranslateY, tabBarTranslateY]);
 
+  // Profile-specific register and refresh functions
+  const registerProfileScrollRef = useCallback((ref: ScrollableRef) => {
+    profileScrollRef.current = ref;
+  }, []);
+
+  const registerProfileRefreshCallback = useCallback((callback: () => void) => {
+    profileRefreshCallbackRef.current = callback;
+  }, []);
+
+  const scrollToTopAndRefreshProfile = useCallback(() => {
+    // Show header and tab bar
+    headerTranslateY.value = withTiming(0, { duration: 200 });
+    tabBarTranslateY.value = withTiming(0, { duration: 200 });
+
+    // Scroll to top
+    if (profileScrollRef.current) {
+      if ("scrollToOffset" in profileScrollRef.current) {
+        // FlatList
+        profileScrollRef.current.scrollToOffset({ offset: 0, animated: true });
+      } else if ("scrollTo" in profileScrollRef.current) {
+        // ScrollView
+        profileScrollRef.current.scrollTo({ y: 0, animated: true });
+      }
+    }
+
+    // Trigger refresh
+    if (profileRefreshCallbackRef.current) {
+      profileRefreshCallbackRef.current();
+    }
+  }, [headerTranslateY, tabBarTranslateY]);
+
   const value = useMemo(
     () => ({
       scrollHandler,
@@ -128,6 +167,9 @@ export const ScrollAnimationProvider = ({
       registerScrollRef,
       registerRefreshCallback,
       scrollToTopAndRefresh,
+      registerProfileScrollRef,
+      registerProfileRefreshCallback,
+      scrollToTopAndRefreshProfile,
     }),
     [
       scrollHandler,
@@ -138,6 +180,9 @@ export const ScrollAnimationProvider = ({
       registerScrollRef,
       registerRefreshCallback,
       scrollToTopAndRefresh,
+      registerProfileScrollRef,
+      registerProfileRefreshCallback,
+      scrollToTopAndRefreshProfile,
     ]
   );
 

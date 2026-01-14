@@ -62,6 +62,8 @@ type CommentItemProps = {
   comment: Comment;
   /** Whether the current user is the author */
   isOwnComment?: boolean;
+  /** Whether this comment is highlighted (navigated to from profile) */
+  isHighlighted?: boolean;
   /** Callback when the comment row is pressed (for collapse) */
   onPress?: () => void;
   /** Callback when avatar/username is pressed */
@@ -325,6 +327,7 @@ const CommentContent = ({ content }: { content: string }) => {
 export const CommentItem = ({
   comment,
   isOwnComment = false,
+  isHighlighted = false,
   onPress,
   onAuthorPress,
   onLikePress,
@@ -339,6 +342,11 @@ export const CommentItem = ({
   const { theme } = useUnistyles();
 
   const { author, content, likes, hasLiked, hasDisliked, createdAt } = comment;
+
+  // Highlight style for navigated-to comment
+  const highlightStyle = isHighlighted
+    ? { backgroundColor: theme.colors.primary[500] + "20" } // 20% opacity
+    : undefined;
 
   // Animation values for arrow movement (using RN Animated for transform)
   const upArrowTranslateY = useRef(new RNAnimated.Value(0)).current;
@@ -464,7 +472,7 @@ export const CommentItem = ({
   const downvoteColor = hasDisliked ? DOWNVOTE_COLOR : iconColor;
 
   return (
-    <Pressable onPress={handlePress} style={[styles.container, style]}>
+    <Pressable onPress={handlePress} style={[styles.container, highlightStyle, style]}>
       {/* Thread line for nested comments */}
       {depth > 0 && (
         <View style={[styles.threadLineContainer, { width: indentWidth }]}>

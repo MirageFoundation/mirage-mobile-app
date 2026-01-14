@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, Animated as RNAnimated, View } from "react-native";
+import { ActivityIndicator, Pressable, Animated as RNAnimated, View } from "react-native";
 import Animated, {
   interpolate,
   interpolateColor,
@@ -38,6 +38,7 @@ type ProfileHeaderBarProps = {
   username: string;
   gradientColor: string;
   scrollY?: SharedValue<number>;
+  isRefreshing?: boolean;
   onBackPress?: () => void;
   onUsernamePress?: () => void;
   onSearchPress?: () => void;
@@ -128,6 +129,7 @@ export const ProfileHeaderBar = ({
   username,
   gradientColor,
   scrollY,
+  isRefreshing = false,
   onBackPress,
   onUsernamePress,
   onSearchPress,
@@ -181,6 +183,11 @@ export const ProfileHeaderBar = ({
 
         {/* Right Side - Icons */}
         <Box direction="row" center gap="xs">
+          {isRefreshing && (
+            <View style={styles.refreshIndicator}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            </View>
+          )}
           <IconButton
             name="search-outline"
             size="md"
@@ -528,6 +535,14 @@ const styles = StyleSheet.create((theme) => ({
   iconButton: {
     backgroundColor: "rgba(0,0,0,0.3)",
     borderRadius: theme.radius.full,
+  },
+  refreshIndicator: {
+    width: 32,
+    height: 32,
+    borderRadius: theme.radius.full,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   usernameButton: {
     paddingHorizontal: theme.spacing.sm + 2,

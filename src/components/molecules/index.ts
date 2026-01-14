@@ -53,11 +53,15 @@ export {
   type ProfileMenuSheetRef,
 } from "./profile-menu-sheet";
 export {
+  ProfileEmptyState,
   ProfileTabBar,
   ProfileTabContent,
   ProfileTabs,
   type TabType,
 } from "./profile-tabs";
+export { ProfileCommentItem } from "./profile-comment-item";
+export { ProfilePostsList } from "./profile-posts-list";
+export { ProfilePostsSkeleton } from "./profile-posts-skeleton";
 
 // Settings
 export {

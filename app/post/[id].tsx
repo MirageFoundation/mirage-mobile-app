@@ -66,7 +66,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 export default function PostDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, highlight } = useLocalSearchParams<{ id: string; highlight?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
@@ -78,6 +78,12 @@ export default function PostDetailScreen() {
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
   const commentInputRef = useRef<CommentInputRef>(null);
+  const flatListRef = useRef<FlatList<Comment>>(null);
+
+  // State for highlighted comment (from URL param)
+  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(
+    highlight || null
+  );
 
   // Track if component is still mounted (to avoid navigating back if user already left)
   const isMountedRef = useRef(true);
@@ -160,12 +166,17 @@ export default function PostDetailScreen() {
         // Hide comment immediately (local + global)
         globalHideComment(pending.id);
         removeCommentFromState(pending.id);
+
+        // If deleting the highlighted comment (came from profile), navigate back
+        if (highlight && pending.id === highlight && isMountedRef.current) {
+          router.back();
+        }
       }
       setSelectedComment(null);
     }
     // Then proceed with API call
     deleteHandler.confirmDelete();
-  }, [deleteHandler, router, removeCommentFromState, globalHidePost, globalHideComment]);
+  }, [deleteHandler, router, removeCommentFromState, globalHidePost, globalHideComment, highlight]);
 
   const handleConfirmBlock = useCallback(() => {
     const pending = blockHandler.pendingBlock;
@@ -428,6 +439,49 @@ export default function PostDetailScreen() {
       return timeB - timeA; // Descending order (latest first)
     });
   }, [localComments, comments, applyOptimisticReplies, applyVoteOverridesToComment, filterComments]);
+
+  // Helper to find if a comment or its nested replies contain the target ID
+  const findCommentInTree = useCallback(
+    (comment: Comment, targetId: string): boolean => {
+      if (comment.id === targetId) return true;
+      if (comment.replies) {
+        return comment.replies.some((reply) => findCommentInTree(reply, targetId));
+      }
+      return false;
+    },
+    []
+  );
+
+  // Scroll to highlighted comment when data loads
+  useEffect(() => {
+    if (highlightedCommentId && allComments.length > 0 && flatListRef.current) {
+      // First try to find the comment at top level
+      let index = allComments.findIndex((c) => c.id === highlightedCommentId);
+
+      // If not found at top level, find which top-level comment contains it as a nested reply
+      if (index === -1) {
+        index = allComments.findIndex((c) =>
+          findCommentInTree(c, highlightedCommentId)
+        );
+      }
+
+      if (index !== -1) {
+        // Small delay to ensure layout is ready
+        setTimeout(() => {
+          flatListRef.current?.scrollToIndex({
+            index,
+            animated: true,
+            viewPosition: 0.1, // Position closer to top to show more of the thread
+          });
+        }, 500);
+
+        // Clear highlight after 3 seconds
+        setTimeout(() => {
+          setHighlightedCommentId(null);
+        }, 3000);
+      }
+    }
+  }, [highlightedCommentId, allComments, findCommentInTree]);
 
   // Scroll tracking for sticky header
   const [postHeaderHeight, setPostHeaderHeight] = useState(0);
@@ -1169,6 +1223,7 @@ export default function PostDetailScreen() {
       <CommentThread
         comment={item}
         currentUserId={currentUser?.id}
+        highlightedCommentId={highlightedCommentId}
         onAuthorPress={(authorId) => {
           // TODO: Navigate to user profile
           console.log("Navigate to author:", authorId);
@@ -1186,6 +1241,7 @@ export default function PostDetailScreen() {
     ),
     [
       currentUser,
+      highlightedCommentId,
       handleLikeComment,
       handleDislikeComment,
       handleReplyToComment,
@@ -1442,6 +1498,7 @@ export default function PostDetailScreen() {
 
         {/* Comments list */}
         <FlatList
+          ref={flatListRef}
           data={allComments}
           renderItem={renderComment}
           keyExtractor={keyExtractor}
@@ -1461,6 +1518,15 @@ export default function PostDetailScreen() {
               tintColor={theme.colors.primary[500]}
             />
           }
+          onScrollToIndexFailed={(info) => {
+            // Fallback: scroll to offset if index not rendered yet
+            setTimeout(() => {
+              flatListRef.current?.scrollToOffset({
+                offset: info.averageItemLength * info.index,
+                animated: true,
+              });
+            }, 100);
+          }}
         />
 
         {/* Comment input */}

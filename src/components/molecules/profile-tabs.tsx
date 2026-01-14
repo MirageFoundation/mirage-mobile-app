@@ -16,6 +16,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { ProfilePostsList } from "./profile-posts-list";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -66,8 +67,8 @@ const EMPTY_STATE_CONFIG: Record<
   },
 };
 
-// Empty State / Tab Content Component - No nested scroll
-export const ProfileTabContent = ({
+// Empty State Component - reusable for all tabs
+export const ProfileEmptyState = ({
   tabType,
   onSettingsPress,
 }: {
@@ -112,25 +113,95 @@ export const ProfileTabContent = ({
   );
 };
 
+interface ProfileTabContentProps {
+  tabType: TabType;
+  owner?: string;
+  onSettingsPress?: () => void;
+  onPostPress?: (postId: string) => void;
+  onCommentPress?: (commentId: string, rootPostId: string) => void;
+  onAuthorPress?: (authorId: string) => void;
+  onMorePress?: (post: any) => void;
+}
+
+// Tab Content Component - renders posts list or empty state
+export const ProfileTabContent = ({
+  tabType,
+  owner,
+  onSettingsPress,
+  onPostPress,
+  onCommentPress,
+  onAuthorPress,
+  onMorePress,
+}: ProfileTabContentProps) => {
+  // About tab - show empty state (for now)
+  if (tabType === "about") {
+    return (
+      <ProfileEmptyState tabType={tabType} onSettingsPress={onSettingsPress} />
+    );
+  }
+
+  // No owner - show empty state
+  if (!owner) {
+    return (
+      <ProfileEmptyState tabType={tabType} onSettingsPress={onSettingsPress} />
+    );
+  }
+
+  // Posts and Comments tabs
+  const type = tabType === "posts" ? "submissions" : "comments";
+
+  return (
+    <ProfilePostsList
+      owner={owner}
+      type={type}
+      onPostPress={onPostPress ?? (() => {})}
+      onCommentPress={onCommentPress ?? (() => {})}
+      onAuthorPress={onAuthorPress}
+      onMorePress={onMorePress}
+      ListEmptyComponent={
+        <ProfileEmptyState tabType={tabType} onSettingsPress={onSettingsPress} />
+      }
+    />
+  );
+};
+
+// Double tap detection threshold in ms
+const DOUBLE_TAP_DELAY = 300;
+
 // Tab Bar Component - exported for use in ProfileScreen
 export const ProfileTabBar = ({
   activeTab,
   onTabChange,
+  onTabDoubleTap,
   tabWidth,
 }: {
   activeTab: number;
   onTabChange: (index: number) => void;
+  onTabDoubleTap?: (index: number) => void;
   tabWidth: number;
 }) => {
   const { theme } = useUnistyles();
   const indicatorPosition = useSharedValue(0);
+  const lastTapTimeRef = useRef<{ [key: number]: number }>({});
 
   const handleTabPress = useCallback(
     (index: number) => {
-      indicatorPosition.value = withTiming(index, { duration: 200 });
-      onTabChange(index);
+      const now = Date.now();
+      const lastTap = lastTapTimeRef.current[index] || 0;
+
+      // Check for double tap on the same tab
+      if (now - lastTap < DOUBLE_TAP_DELAY && activeTab === index) {
+        // Double tap detected on active tab - trigger refresh
+        onTabDoubleTap?.(index);
+        lastTapTimeRef.current[index] = 0; // Reset to prevent triple tap
+      } else {
+        // Single tap - switch tab
+        indicatorPosition.value = withTiming(index, { duration: 200 });
+        onTabChange(index);
+        lastTapTimeRef.current[index] = now;
+      }
     },
-    [onTabChange, indicatorPosition]
+    [onTabChange, onTabDoubleTap, indicatorPosition, activeTab]
   );
 
   // Update indicator when activeTab changes (from swipe)
