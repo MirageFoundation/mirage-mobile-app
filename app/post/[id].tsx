@@ -15,11 +15,23 @@ import {
   CommentOptionsSheet,
   CommentOptionsSheetRef,
   CommentThread,
+  ConfirmationPopup,
   PostCard,
+  PostOptionsSheet,
+  PostOptionsSheetRef,
+  ReportSheet,
+  ReportSheetRef,
   type Post,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
-import { useAuthGuard, useVoteHandler, type VoteResult } from "@/src/hooks";
+import {
+  useAuthGuard,
+  useBlockHandler,
+  useDeleteHandler,
+  useReportHandler,
+  useVoteHandler,
+  type VoteResult,
+} from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
 import { useAuthStore, useUIStore } from "@/src/stores";
 import {
@@ -29,7 +41,7 @@ import {
 } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -63,6 +75,8 @@ export default function PostDetailScreen() {
   const currentUser = useAuthStore((s) => s.user);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
   const optionsSheetRef = useRef<CommentOptionsSheetRef>(null);
+  const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
+  const reportSheetRef = useRef<ReportSheetRef>(null);
   const commentInputRef = useRef<CommentInputRef>(null);
 
   // Fetch comments from API
@@ -87,6 +101,62 @@ export default function PostDetailScreen() {
 
   // Track follow loading state
   const [isFollowLoading, setIsFollowLoading] = useState(false);
+
+  // Delete, Block, and Report handlers
+  const deleteHandler = useDeleteHandler({
+    onSuccess: (targetId, targetType) => {
+      if (targetType === "post") {
+        // Navigate back after deleting the post
+        router.back();
+      } else {
+        // Remove comment from local state
+        const removeComment = (
+          commentId: string,
+          commentList: Comment[]
+        ): Comment[] => {
+          return commentList
+            .filter((c) => c.id !== commentId)
+            .map((c) => ({
+              ...c,
+              replies: c.replies ? removeComment(commentId, c.replies) : undefined,
+            }));
+        };
+        setLocalComments((prev) => removeComment(targetId, prev));
+        setLocalPostUpdates((prev) => ({
+          ...prev,
+          comments: Math.max(0, (prev.comments ?? displayPost?.comments ?? 0) - 1),
+        }));
+        refetchComments();
+      }
+      setSelectedComment(null);
+    },
+  });
+
+  const blockHandler = useBlockHandler({
+    onSuccess: (targetId, blockType) => {
+      if (blockType === "user" || blockType === "post") {
+        // Navigate back after blocking the post or user
+        router.back();
+      } else {
+        // Refresh comments after blocking a comment
+        refetchComments();
+      }
+      setSelectedComment(null);
+    },
+  });
+
+  const reportHandler = useReportHandler({
+    onSuccess: () => {
+      setSelectedComment(null);
+    },
+  });
+
+  // Present report sheet when showReportSheet is true
+  useEffect(() => {
+    if (reportHandler.showReportSheet) {
+      reportSheetRef.current?.present();
+    }
+  }, [reportHandler.showReportSheet]);
 
   // Comment mutation with PoW progress tracking
   const [commentToastId, setCommentToastId] = useState<string | null>(null);
@@ -746,29 +816,55 @@ export default function PostDetailScreen() {
 
   const handleDeleteComment = useCallback(() => {
     if (!selectedComment) return;
+    deleteHandler.requestDelete(selectedComment.id, "comment");
+  }, [selectedComment, deleteHandler]);
 
-    // TODO: Implement delete mutation
-    const removeComment = (
-      commentId: string,
-      commentList: Comment[]
-    ): Comment[] => {
-      return commentList
-        .filter((c) => c.id !== commentId)
-        .map((c) => ({
-          ...c,
-          replies: c.replies ? removeComment(commentId, c.replies) : undefined,
-        }));
-    };
+  // Handler for deleting the post
+  const handleDeletePost = useCallback(() => {
+    if (!displayPost) return;
+    deleteHandler.requestDelete(displayPost.id, "post");
+  }, [displayPost, deleteHandler]);
 
-    setLocalComments((prev) => removeComment(selectedComment.id, prev));
-    setLocalPostUpdates((prev) => ({
-      ...prev,
-      comments: (prev.comments ?? displayPost?.comments ?? 0) - 1,
-    }));
-    setSelectedComment(null);
-    // Refetch to get updated comments
-    refetchComments();
-  }, [selectedComment, refetchComments, displayPost]);
+  // Handler for blocking the post
+  const handleBlockPost = useCallback(() => {
+    if (!displayPost) return;
+    blockHandler.requestBlockPost(displayPost.id);
+  }, [displayPost, blockHandler]);
+
+  // Handler for blocking the post author
+  const handleBlockPostAuthor = useCallback(() => {
+    if (!displayPost) return;
+    blockHandler.requestBlockUser(displayPost.author.id, displayPost.author.username);
+  }, [displayPost, blockHandler]);
+
+  // Handler for reporting the post
+  const handleReportPost = useCallback(() => {
+    if (!displayPost) return;
+    reportHandler.requestReport(displayPost.id, "post");
+  }, [displayPost, reportHandler]);
+
+  // Handler for blocking a comment
+  const handleBlockComment = useCallback(() => {
+    if (!selectedComment) return;
+    blockHandler.requestBlockComment(selectedComment.id);
+  }, [selectedComment, blockHandler]);
+
+  // Handler for blocking a comment author
+  const handleBlockCommentAuthor = useCallback(() => {
+    if (!selectedComment) return;
+    blockHandler.requestBlockUser(selectedComment.author.id, selectedComment.author.username);
+  }, [selectedComment, blockHandler]);
+
+  // Handler for reporting a comment
+  const handleReportComment = useCallback(() => {
+    if (!selectedComment) return;
+    reportHandler.requestReport(selectedComment.id, "comment");
+  }, [selectedComment, reportHandler]);
+
+  // Handler for opening post options sheet
+  const handlePostMorePress = useCallback(() => {
+    postOptionsSheetRef.current?.present();
+  }, []);
 
   // Stable header background color based on post ID
   const headerColor = useMemo(() => {
@@ -947,6 +1043,7 @@ export default function PostDetailScreen() {
           onLikePress={handleLikePost}
           onDislikePress={handleDislikePost}
           onFollowPress={handleFollowPost}
+          onMorePress={handlePostMorePress}
           onRevealContent={handleRevealContent}
           contentRevealed={revealedContent}
           followLoading={isFollowLoading}
@@ -963,6 +1060,7 @@ export default function PostDetailScreen() {
     handleLikePost,
     handleDislikePost,
     handleFollowPost,
+    handlePostMorePress,
     handleRevealContent,
     revealedContent,
     isFollowLoading,
@@ -1287,7 +1385,61 @@ export default function PostDetailScreen() {
           comment={selectedComment}
           isOwnComment={currentUser?.id === selectedComment?.author.id}
           onDelete={handleDeleteComment}
+          onBlockComment={handleBlockComment}
+          onBlockUser={handleBlockCommentAuthor}
+          onReport={handleReportComment}
           onDismiss={() => setSelectedComment(null)}
+        />
+
+        {/* Post options sheet */}
+        <PostOptionsSheet
+          ref={postOptionsSheetRef}
+          post={displayPost}
+          isOwnPost={currentUser?.id === displayPost?.author.id}
+          onDelete={handleDeletePost}
+          onBlockPost={handleBlockPost}
+          onBlockUser={handleBlockPostAuthor}
+          onReport={handleReportPost}
+          onDismiss={() => {}}
+        />
+
+        {/* Delete confirmation popup */}
+        <ConfirmationPopup
+          visible={deleteHandler.showConfirmation}
+          title={
+            deleteHandler.pendingTarget?.type === "post"
+              ? "Delete Post?"
+              : "Delete Comment?"
+          }
+          message="This action cannot be undone."
+          description="The content will be permanently removed."
+          icon="trash-outline"
+          isDestructive
+          isLoading={deleteHandler.isDeleting}
+          confirmText="Delete"
+          onConfirm={deleteHandler.confirmDelete}
+          onCancel={deleteHandler.cancelDelete}
+        />
+
+        {/* Block confirmation popup */}
+        <ConfirmationPopup
+          visible={blockHandler.showConfirmation}
+          title={`Block ${blockHandler.pendingBlock?.label || "this content"}?`}
+          message="You won't see this content in your feed anymore."
+          icon="ban-outline"
+          isLoading={blockHandler.isBlocking}
+          confirmText="Block"
+          onConfirm={blockHandler.confirmBlock}
+          onCancel={blockHandler.cancelBlock}
+        />
+
+        {/* Report sheet */}
+        <ReportSheet
+          ref={reportSheetRef}
+          targetType={reportHandler.pendingTarget?.type}
+          onSubmit={reportHandler.submitReport}
+          onDismiss={reportHandler.cancelReport}
+          isLoading={reportHandler.isReporting}
         />
       </Box>
     </KeyboardAvoidingView>

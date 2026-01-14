@@ -93,7 +93,7 @@ export function FollowingScreen() {
     limit: 20,
     feed: "following",
     by: "magic",
-    allowed_tags: allowedTags,
+    allowed_tags: allowedTags || undefined,
   });
 
   // Transform API data to UI format (includes following status)

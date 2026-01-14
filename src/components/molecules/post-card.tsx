@@ -139,7 +139,7 @@ function normalizeVideoUrl(url: string): string {
       if (parsedUrl.pathname.endsWith("/iframe")) {
         parsedUrl.pathname = parsedUrl.pathname.replace(
           "/iframe",
-          "/manifest/video.m3u8",
+          "/manifest/video.m3u8"
         );
         return parsedUrl.toString();
       }
@@ -237,14 +237,14 @@ export const PostCard = ({
   const resolvedMedia = bodyVideoUrl
     ? { uri: bodyVideoUrl, type: "video" as const }
     : primaryMedia
-      ? {
-          ...primaryMedia,
-          uri:
-            primaryMedia.type === "video"
-              ? normalizeVideoUrl(primaryMedia.uri)
-              : primaryMedia.uri,
-        }
-      : undefined;
+    ? {
+        ...primaryMedia,
+        uri:
+          primaryMedia.type === "video"
+            ? normalizeVideoUrl(primaryMedia.uri)
+            : primaryMedia.uri,
+      }
+    : undefined;
   const resolvedMediaType = resolvedMedia?.type;
   const isVideo = resolvedMedia?.type === "video";
 
@@ -269,7 +269,7 @@ export const PostCard = ({
     ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
     : undefined;
   const [mediaAspectRatio, setMediaAspectRatio] = useState(
-    cachedAspectRatio ?? getMediaAspectRatio(),
+    cachedAspectRatio ?? getMediaAspectRatio()
   );
 
   useEffect(() => {
@@ -278,7 +278,7 @@ export const PostCard = ({
       : undefined;
     if (cached) {
       setMediaAspectRatio((current) =>
-        Math.abs(current - cached) < 0.01 ? current : cached,
+        Math.abs(current - cached) < 0.01 ? current : cached
       );
       aspectRatioLockedRef.current = true;
       return;
@@ -307,19 +307,19 @@ export const PostCard = ({
       const ratio = width / height;
       if (!Number.isFinite(ratio) || ratio <= 0) return;
       setMediaAspectRatio((current) =>
-        Math.abs(current - ratio) < 0.01 ? current : ratio,
+        Math.abs(current - ratio) < 0.01 ? current : ratio
       );
       if (resolvedMediaUri) {
         MEDIA_ASPECT_RATIO_CACHE.set(resolvedMediaUri, ratio);
       }
       aspectRatioLockedRef.current = true;
     },
-    [resolvedMediaUri],
+    [resolvedMediaUri]
   );
 
   const mediaSource = useMemo(
     () => ({ uri: resolvedMediaUri ?? "" }),
-    [resolvedMediaUri],
+    [resolvedMediaUri]
   );
 
   const handleVideoToggle = useCallback(async () => {
@@ -511,11 +511,15 @@ export const PostCard = ({
               size="sm"
             />
           )}
-          <Pressable onPress={handleMorePress} style={styles.moreButton}>
+          <Pressable
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            onPress={handleMorePress}
+            style={styles.moreButton}
+          >
             <Ionicons
               name="ellipsis-horizontal"
               size={18}
-              color={theme.colors.text.subtle}
+              color={theme.colors.text.default}
             />
           </Pressable>
         </View>
@@ -553,10 +557,7 @@ export const PostCard = ({
       )}
 
       {/* URL Link Card */}
-      {extractedUrl &&
-        displayDomain &&
-        !shouldBlurContent &&
-        !bodyVideoUrl && (
+      {extractedUrl && displayDomain && !shouldBlurContent && !bodyVideoUrl && (
         <View style={styles.urlCard}>
           <View style={styles.urlInfo}>
             <Ionicons

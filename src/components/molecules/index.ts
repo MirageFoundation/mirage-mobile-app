@@ -18,6 +18,14 @@ export {
 } from "./comment-options-sheet";
 export { CommentThread } from "./comment-thread";
 
+// Moderation & Actions
+export { ConfirmationPopup } from "./confirmation-popup";
+export {
+  PostOptionsSheet,
+  type PostOptionsSheetRef,
+} from "./post-options-sheet";
+export { ReportSheet, type ReportSheetRef } from "./report-sheet";
+
 // Authentication & Onboarding
 export { AdultContentPopup } from "./adult-content-popup";
 export { LogoutConfirmationPopup } from "./logout-confirmation-popup";

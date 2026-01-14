@@ -17,10 +17,15 @@ import {
   useUserFollowed,
 } from "@/src/api";
 import {
-  FeedHeader,
   AdultContentPopup,
+  ConfirmationPopup,
+  FeedHeader,
   PostCard,
   PostCardSkeletonList,
+  PostOptionsSheet,
+  type PostOptionsSheetRef,
+  ReportSheet,
+  type ReportSheetRef,
   type Post,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
@@ -53,6 +58,14 @@ export function HomeScreen() {
 
   // Ref for FlatList to enable scroll-to-top
   const flatListRef = useRef<FlatList<Post>>(null);
+
+  // Refs for sheets
+  const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
+  const reportSheetRef = useRef<ReportSheetRef>(null);
+
+  // Selected post for options
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [showBlockConfirmation, setShowBlockConfirmation] = useState(false);
 
   const feedType = usePreferencesStore((s) => s.feedType);
   const setFeedType = usePreferencesStore((s) => s.setFeedType);
@@ -115,10 +128,9 @@ export function HomeScreen() {
     isFetchingNextPage,
   } = useInfinitePosts({
     limit: 20,
-    // Temporarily omit 'by' parameter to test if it's causing the 400 error
-    // by: getSortBy(),
-    // Omit topic parameter to fetch all topics (API doesn't accept "all" as a value)
-    allowed_tags: allowedTags,
+    feed: "home",
+    by: "magic",
+    allowed_tags: allowedTags || undefined,
   });
 
   // Transform API data to UI format (includes following status)
@@ -222,9 +234,67 @@ export function HomeScreen() {
   }, []);
 
   const handleMorePress = useCallback((postId: string) => {
-    // TODO: Show post options sheet
-    console.log("More options for post:", postId);
+    const post = posts.find((p) => p.id === postId);
+    if (post) {
+      setSelectedPost(post);
+      postOptionsSheetRef.current?.present();
+    }
+  }, [posts]);
+
+  // Post options handlers
+  const handleReport = useCallback(() => {
+    reportSheetRef.current?.present();
   }, []);
+
+  const handleReportSubmit = useCallback((reason: string) => {
+    // TODO: Call report API
+    console.log("Report submitted:", reason, "for post:", selectedPost?.id);
+    toast.success("Report submitted", "Thank you for helping keep Mirage safe.");
+  }, [selectedPost?.id, toast]);
+
+  const handleBlockUser = useCallback(() => {
+    setShowBlockConfirmation(true);
+  }, []);
+
+  const handleConfirmBlock = useCallback(() => {
+    // TODO: Call block API
+    console.log("Block user:", selectedPost?.author.username);
+    setShowBlockConfirmation(false);
+    toast.success(`Blocked @${selectedPost?.author.username}`, "You won't see their content anymore.");
+  }, [selectedPost?.author.username, toast]);
+
+  const handleCancelBlock = useCallback(() => {
+    setShowBlockConfirmation(false);
+  }, []);
+
+  const handleHidePost = useCallback(() => {
+    // TODO: Call hide/block post API
+    console.log("Hide post:", selectedPost?.id);
+    toast.success("Post hidden", "You won't see this post anymore.");
+  }, [selectedPost?.id, toast]);
+
+  const handleSavePost = useCallback(() => {
+    // TODO: Call save API
+    console.log("Save post:", selectedPost?.id);
+    toast.success("Post saved", "You can find it in your saved items.");
+  }, [selectedPost?.id, toast]);
+
+  const handleCopyText = useCallback(() => {
+    // Toast will be shown after copy (handled in sheet)
+    toast.success("Copied", "Text copied to clipboard.");
+  }, [toast]);
+
+  const handleFollowPost = useCallback(() => {
+    // TODO: Call follow post API
+    console.log("Follow post:", selectedPost?.id);
+    toast.success("Following post", "You'll be notified of new activity.");
+  }, [selectedPost?.id, toast]);
+
+  const handleShowFewer = useCallback(() => {
+    // TODO: Call show fewer API
+    console.log("Show fewer posts like:", selectedPost?.id);
+    toast.success("Got it", "We'll show fewer posts like this.");
+  }, [selectedPost?.id, toast]);
 
   const handleLikePress = useCallback(
     (
@@ -580,6 +650,41 @@ export function HomeScreen() {
         visible={showAdultPopup}
         onEnable={handleEnableAdultContent}
         onDecline={handleDeclineAdultContent}
+      />
+
+      {/* Post Options Sheet */}
+      <PostOptionsSheet
+        ref={postOptionsSheetRef}
+        post={selectedPost}
+        isOwnPost={currentUser?.id === selectedPost?.author.id}
+        onShowFewer={handleShowFewer}
+        onFollowPost={handleFollowPost}
+        onSave={handleSavePost}
+        onCopyText={handleCopyText}
+        onReport={handleReport}
+        onBlockUser={handleBlockUser}
+        onHidePost={handleHidePost}
+        onDismiss={() => setSelectedPost(null)}
+      />
+
+      {/* Report Sheet */}
+      <ReportSheet
+        ref={reportSheetRef}
+        targetType="post"
+        onSubmit={handleReportSubmit}
+      />
+
+      {/* Block Confirmation Popup */}
+      <ConfirmationPopup
+        visible={showBlockConfirmation}
+        title={`Block @${selectedPost?.author.username}?`}
+        message="You won't see their content anymore."
+        description="You can unblock them later from settings."
+        icon="ban-outline"
+        confirmText="Block"
+        isDestructive
+        onConfirm={handleConfirmBlock}
+        onCancel={handleCancelBlock}
       />
     </Box>
   );
