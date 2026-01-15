@@ -1,11 +1,6 @@
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  RefreshControl,
-  View,
-} from "react-native";
+import { ActivityIndicator, FlatList, RefreshControl, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -21,6 +16,7 @@ import {
   ConfirmationPopup,
   FeedHeader,
   PostCard,
+  PostCardSkeleton,
   PostCardSkeletonList,
   PostOptionsSheet,
   type PostOptionsSheetRef,
@@ -571,8 +567,14 @@ export function HomeScreen() {
     registerRefreshCallback(handleRefresh);
   }, [registerScrollRef, registerRefreshCallback, handleRefresh]);
 
+  // Debounce ref to prevent multiple fetches
+  const lastFetchTime = useRef(0);
+
   const handleEndReached = useCallback(() => {
-    if (hasNextPage && !isFetchingNextPage) {
+    const now = Date.now();
+    // Debounce: only fetch if 1 second has passed since last fetch
+    if (hasNextPage && !isFetchingNextPage && now - lastFetchTime.current > 1000) {
+      lastFetchTime.current = now;
       fetchNextPage();
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
@@ -708,10 +710,13 @@ export function HomeScreen() {
     );
   }, [isRefetching, theme.colors.brand]);
 
-  // No footer loading indicator - content preloads before user reaches bottom
+  // Show skeleton when loading next page
   const ListFooterComponent = useCallback(() => {
+    if (isFetchingNextPage) {
+      return <PostCardSkeleton showMedia={false} showBody={true} />;
+    }
     return <Box p="sm" />;
-  }, []);
+  }, [isFetchingNextPage]);
 
   return (
     <Box flex background="base">
@@ -754,12 +759,12 @@ export function HomeScreen() {
           />
         }
         onEndReached={handleEndReached}
-        onEndReachedThreshold={3}
+        onEndReachedThreshold={0.7}
         // Performance optimizations
         removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        windowSize={21}
-        initialNumToRender={10}
+        maxToRenderPerBatch={5}
+        windowSize={11}
+        initialNumToRender={7}
         getItemLayout={undefined} // Can't use with variable height items
       />
 
