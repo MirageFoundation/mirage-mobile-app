@@ -707,7 +707,7 @@ export function HomeScreen() {
           />
         }
         onEndReached={handleEndReached}
-        onEndReachedThreshold={0.5}
+        onEndReachedThreshold={0.8}
         // Performance optimizations
         removeClippedSubviews={true}
         maxToRenderPerBatch={5}
