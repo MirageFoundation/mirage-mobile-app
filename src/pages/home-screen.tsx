@@ -26,6 +26,8 @@ import {
   type PostOptionsSheetRef,
   ReportSheet,
   type ReportSheetRef,
+  SideMenu,
+  type SideMenuRef,
   type Post,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
@@ -70,6 +72,7 @@ export function HomeScreen() {
   // Refs for sheets
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
+  const sideMenuRef = useRef<SideMenuRef>(null);
 
   // Selected post for options
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -224,6 +227,53 @@ export function HomeScreen() {
     setAdultContent(false);
     setHasSeenAdultPrompt();
   }, [setAdultContent, setHasSeenAdultPrompt]);
+
+  // Side menu handlers
+  const handleMenuPress = useCallback(() => {
+    sideMenuRef.current?.present();
+  }, []);
+
+  const handleMenuSettings = useCallback(() => {
+    router.push("/settings");
+  }, [router]);
+
+  const handleMenuSubscription = useCallback(() => {
+    router.push("/subscription");
+  }, [router]);
+
+  const handleMenuSaved = useCallback(() => {
+    // TODO: Navigate to saved posts
+    console.log("Navigate to saved");
+  }, []);
+
+  const handleMenuHistory = useCallback(() => {
+    // TODO: Navigate to history
+    console.log("Navigate to history");
+  }, []);
+
+  const handleMenuDrafts = useCallback(() => {
+    // TODO: Navigate to drafts
+    console.log("Navigate to drafts");
+  }, []);
+
+  const handleMenuNetwork = useCallback(() => {
+    // TODO: Navigate to network
+    console.log("Navigate to network");
+  }, []);
+
+  const handleMenuInvite = useCallback(() => {
+    router.push("/invite-and-earn");
+  }, [router]);
+
+  const handleMenuHelp = useCallback(() => {
+    // TODO: Navigate to help
+    console.log("Navigate to help");
+  }, []);
+
+  const handleMenuAbout = useCallback(() => {
+    // TODO: Navigate to about
+    console.log("Navigate to about");
+  }, []);
 
   const getFeedTitle = () => {
     switch (feedType) {
@@ -677,6 +727,7 @@ export function HomeScreen() {
         title={getFeedTitle()}
         feedType={feedType}
         onFeedTypeChange={setFeedType}
+        onMenuPress={handleMenuPress}
         onSearchPress={() => router.push("/search")}
         animatedStyle={headerAnimatedStyle}
       />
@@ -772,6 +823,20 @@ export function HomeScreen() {
         isDestructive
         onConfirm={handleConfirmDelete}
         onCancel={deleteHandler.cancelDelete}
+      />
+
+      {/* Side Menu */}
+      <SideMenu
+        ref={sideMenuRef}
+        onSettings={handleMenuSettings}
+        onSubscription={handleMenuSubscription}
+        onSaved={handleMenuSaved}
+        onHistory={handleMenuHistory}
+        onDrafts={handleMenuDrafts}
+        onNetwork={handleMenuNetwork}
+        onInviteAndEarn={handleMenuInvite}
+        onHelp={handleMenuHelp}
+        onAbout={handleMenuAbout}
       />
     </Box>
   );
