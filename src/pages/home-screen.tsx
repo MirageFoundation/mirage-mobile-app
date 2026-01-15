@@ -708,14 +708,10 @@ export function HomeScreen() {
     );
   }, [isRefetching, theme.colors.brand]);
 
+  // No footer loading indicator - content preloads before user reaches bottom
   const ListFooterComponent = useCallback(() => {
-    if (!isFetchingNextPage) return null;
-    return (
-      <Box center p="md">
-        <ActivityIndicator size="small" color={theme.colors.brand[500]} />
-      </Box>
-    );
-  }, [isFetchingNextPage, theme.colors.brand]);
+    return <Box p="sm" />;
+  }, []);
 
   return (
     <Box flex background="base">
@@ -758,12 +754,12 @@ export function HomeScreen() {
           />
         }
         onEndReached={handleEndReached}
-        onEndReachedThreshold={0.8}
+        onEndReachedThreshold={3}
         // Performance optimizations
         removeClippedSubviews={true}
-        maxToRenderPerBatch={5}
-        windowSize={7}
-        initialNumToRender={5}
+        maxToRenderPerBatch={10}
+        windowSize={21}
+        initialNumToRender={10}
         getItemLayout={undefined} // Can't use with variable height items
       />
 
