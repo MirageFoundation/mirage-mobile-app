@@ -92,7 +92,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           photosPermission: "$(PRODUCT_NAME) needs access to your Photos.",
         },
       ],
-      "react-native-webassembly",
     ],
     experiments: {
       typedRoutes: true,
