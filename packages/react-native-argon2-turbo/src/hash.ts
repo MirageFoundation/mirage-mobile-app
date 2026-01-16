@@ -1,6 +1,24 @@
 import NativeArgon2Turbo from './NativeArgon2Turbo';
 import type { HashOptions, HashResult, VerifyOptions } from './types';
 
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]!);
+  }
+  // Use global btoa which is available in React Native
+  return (globalThis as { btoa?: (s: string) => string }).btoa?.(binary) ?? binary;
+}
+
+function uint8ArrayToUtf8(bytes: Uint8Array): string {
+  // Simple UTF-8 decode for ASCII-compatible strings
+  let result = '';
+  for (let i = 0; i < bytes.length; i++) {
+    result += String.fromCharCode(bytes[i]!);
+  }
+  return result;
+}
+
 function encodeInput(
   input: string | Uint8Array,
   encoding: 'utf8' | 'hex' | 'base64'
@@ -14,10 +32,9 @@ function encodeInput(
       .join('');
   }
   if (encoding === 'base64') {
-    const binary = String.fromCharCode(...input);
-    return btoa(binary);
+    return uint8ArrayToBase64(input);
   }
-  return new TextDecoder().decode(input);
+  return uint8ArrayToUtf8(input);
 }
 
 const DEFAULT_ITERATIONS = 2;
