@@ -19,15 +19,15 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { useDebouncedSearch, useTopics } from "@/src/api/read";
-import type { Post, TopicInfo } from "@/src/api/types";
+import { useDebouncedSearch, useTopics, usePosts } from "@/src/api/read";
+import type { Post, TopicInfo, UserInfo } from "@/src/api/types";
 import { Avatar } from "@/src/components/atoms/avatar";
 import { TimeAgo } from "@/src/components/atoms/time-ago";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useSearchStore, type RecentSearch } from "@/src/stores";
 
-type SearchTab = "posts" | "topics";
+type SearchTab = "posts" | "topics" | "users";
 
 // Topic icon mapping based on topic name patterns
 const getTopicIcon = (
@@ -176,6 +176,9 @@ export function SearchScreen() {
   const [isFocused, setIsFocused] = useState(false);
   const [activeTab, setActiveTab] = useState<SearchTab>("posts");
 
+  // State for viewing posts within a specific topic
+  const [selectedTopic, setSelectedTopic] = useState<TopicInfo | null>(null);
+
   // Search store for recent searches
   const recentSearches = useSearchStore((s) => s.recentSearches);
   const addRecentSearch = useSearchStore((s) => s.addRecentSearch);
@@ -189,6 +192,12 @@ export function SearchScreen() {
     debouncedQuery,
   } = useDebouncedSearch(searchQuery, 300, { limit: 30 });
 
+  // Fetch posts for selected topic
+  const { data: topicPostsData, isLoading: isLoadingTopicPosts } = usePosts({
+    topic: selectedTopic?.topic,
+    limit: 50,
+  });
+
   // Trending topics - fetch topics sorted by activity
   const { data: topicsData, isLoading: isLoadingTopics } = useTopics(20);
 
@@ -200,6 +209,12 @@ export function SearchScreen() {
       .sort((a, b) => (b.post_count || 0) - (a.post_count || 0))
       .slice(0, 10);
   }, [topicsData]);
+
+  // Posts for selected topic
+  const topicPosts = useMemo(() => {
+    if (!topicPostsData?.posts) return [];
+    return topicPostsData.posts;
+  }, [topicPostsData]);
 
   // Auto-focus the input when screen mounts
   useEffect(() => {
@@ -219,6 +234,7 @@ export function SearchScreen() {
   const handleClearInput = useCallback(() => {
     triggerHaptic("light");
     setSearchQuery("");
+    setSelectedTopic(null);
     inputRef.current?.focus();
   }, []);
 
@@ -238,6 +254,7 @@ export function SearchScreen() {
     (search: RecentSearch) => {
       triggerHaptic("light");
       setSearchQuery(search.query);
+      setSelectedTopic(null);
       handleSearch(search.query);
     },
     [handleSearch]
@@ -271,10 +288,16 @@ export function SearchScreen() {
       triggerHaptic("light");
       addRecentSearch(topic.topic);
       Keyboard.dismiss();
-      // TODO: Navigate to topic page
+      // Set selected topic to show posts within topics tab
+      setSelectedTopic(topic);
     },
     [addRecentSearch]
   );
+
+  const handleBackFromTopic = useCallback(() => {
+    triggerHaptic("light");
+    setSelectedTopic(null);
+  }, []);
 
   const handlePostResultPress = useCallback(
     (post: Post) => {
@@ -285,6 +308,16 @@ export function SearchScreen() {
     [router]
   );
 
+  const handleUserResultPress = useCallback(
+    (user: UserInfo) => {
+      triggerHaptic("light");
+      addRecentSearch(`@${user.username}`);
+      Keyboard.dismiss();
+      router.push(`/profile/${user.address}`);
+    },
+    [router, addRecentSearch]
+  );
+
   const handleSubmitEditing = useCallback(() => {
     handleSearch(searchQuery);
   }, [handleSearch, searchQuery]);
@@ -292,6 +325,10 @@ export function SearchScreen() {
   const handleTabPress = useCallback((tab: SearchTab) => {
     triggerHaptic("light");
     setActiveTab(tab);
+    // Reset selected topic when switching tabs
+    if (tab !== "topics") {
+      setSelectedTopic(null);
+    }
   }, []);
 
   // Render recent search item
@@ -434,7 +471,8 @@ export function SearchScreen() {
   // Render post search result with new design
   const renderPostResult = useCallback(
     ({ item, index }: { item: Post; index: number }) => {
-      const isLast = index === (searchResults?.posts.length ?? 0) - 1;
+      const totalPosts = selectedTopic ? topicPosts.length : (searchResults?.posts.length ?? 0);
+      const isLast = index === totalPosts - 1;
       const hasThumbnail = item.thumbnail && item.thumbnail.length > 0;
       // Convert timestamp - API returns seconds, we need milliseconds
       const timestampMs = item.timestamp * 1000;
@@ -527,6 +565,60 @@ export function SearchScreen() {
       theme.colors.border.subtle,
       handlePostResultPress,
       searchResults?.posts.length,
+      selectedTopic,
+      topicPosts.length,
+    ]
+  );
+
+  // Render user search result
+  const renderUserResult = useCallback(
+    ({ item, index }: { item: UserInfo; index: number }) => {
+      const isLast = index === (searchResults?.users.length ?? 0) - 1;
+
+      return (
+        <Animated.View entering={FadeInDown.delay(index * 30).duration(150)}>
+          <Pressable
+            onPress={() => handleUserResultPress(item)}
+            style={({ pressed }) => [
+              styles.userResultItem,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <Avatar
+              size="md"
+              seed={item.address || item.username}
+              variant="bottts"
+            />
+            <View style={styles.userResultContent}>
+              <Text size="md" weight="medium">
+                @{item.username}
+              </Text>
+              <Text size="sm" mode="subtle" numberOfLines={1}>
+                {item.address.slice(0, 8)}...{item.address.slice(-6)}
+              </Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={theme.colors.text.subtle}
+            />
+          </Pressable>
+          {!isLast && (
+            <View
+              style={[
+                styles.divider,
+                { backgroundColor: theme.colors.border.subtle },
+              ]}
+            />
+          )}
+        </Animated.View>
+      );
+    },
+    [
+      theme.colors.text.subtle,
+      theme.colors.border.subtle,
+      handleUserResultPress,
+      searchResults?.users.length,
     ]
   );
 
@@ -580,8 +672,68 @@ export function SearchScreen() {
     [theme.colors.text.subtle]
   );
 
+  // Empty state for users
+  const UsersEmptyState = useCallback(
+    () => (
+      <View style={styles.emptyState}>
+        <Ionicons
+          name="people-outline"
+          size={48}
+          color={theme.colors.text.subtle}
+          style={{ marginBottom: 12 }}
+        />
+        <Text size="md" mode="subtle" weight="medium">
+          No users found
+        </Text>
+        <Text
+          size="sm"
+          mode="subtle"
+          style={{ marginTop: 4, textAlign: "center" }}
+        >
+          Try searching for a username
+        </Text>
+      </View>
+    ),
+    [theme.colors.text.subtle]
+  );
+
   const hasSearchQuery = searchQuery.trim().length > 0;
   const showResults = hasSearchQuery && debouncedQuery;
+
+  // Get the count to show in topics tab (either topic posts or search topics count)
+  const topicsTabCount = selectedTopic
+    ? topicPosts.length
+    : (searchResults?.topics.length ?? 0);
+
+  // Render topic posts header with back button
+  const TopicPostsHeader = useCallback(() => {
+    if (!selectedTopic) return null;
+    const { icon, color } = getTopicIcon(selectedTopic.topic);
+
+    return (
+      <View style={styles.topicHeader}>
+        <Pressable
+          onPress={handleBackFromTopic}
+          style={({ pressed }) => [
+            styles.topicBackButton,
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <Ionicons
+            name="arrow-back"
+            size={20}
+            color={theme.colors.text.default}
+          />
+        </Pressable>
+        <View style={[styles.topicHeaderIcon, { backgroundColor: `${color}15` }]}>
+          <Ionicons name={icon} size={16} color={color} />
+        </View>
+        <Text size="lg" weight="semibold" numberOfLines={1} style={{ flex: 1 }}>
+          #{selectedTopic.topic}
+        </Text>
+      </View>
+    );
+  }, [selectedTopic, theme.colors.text.default, handleBackFromTopic]);
 
   return (
     <Box flex background="base">
@@ -632,11 +784,14 @@ export function SearchScreen() {
           <TextInput
             ref={inputRef}
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onChangeText={(text) => {
+              setSearchQuery(text);
+              setSelectedTopic(null);
+            }}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             onSubmitEditing={handleSubmitEditing}
-            placeholder="Search topics, posts..."
+            placeholder="Search posts, topics, users..."
             placeholderTextColor={theme.colors.text.subtle}
             returnKeyType="search"
             autoCapitalize="none"
@@ -694,6 +849,7 @@ export function SearchScreen() {
             },
           ]}
         >
+          {/* Posts Tab */}
           <Pressable
             onPress={() => handleTabPress("posts")}
             style={({ pressed }) => [
@@ -745,6 +901,7 @@ export function SearchScreen() {
             )}
           </Pressable>
 
+          {/* Topics Tab */}
           <Pressable
             onPress={() => handleTabPress("topics")}
             style={({ pressed }) => [
@@ -768,7 +925,7 @@ export function SearchScreen() {
             >
               Topics
             </Text>
-            {searchResults && searchResults.topics.length > 0 && (
+            {topicsTabCount > 0 && (
               <View
                 style={[
                   styles.tabBadge,
@@ -790,7 +947,59 @@ export function SearchScreen() {
                         : theme.colors.text.subtle,
                   }}
                 >
-                  {searchResults.topics.length}
+                  {topicsTabCount}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+
+          {/* Users Tab */}
+          <Pressable
+            onPress={() => handleTabPress("users")}
+            style={({ pressed }) => [
+              styles.tab,
+              activeTab === "users" && styles.tabActive,
+              activeTab === "users" && {
+                borderBottomColor: theme.colors.primary[500],
+              },
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <Text
+              size="md"
+              weight={activeTab === "users" ? "semibold" : "regular"}
+              style={{
+                color:
+                  activeTab === "users"
+                    ? theme.colors.primary[500]
+                    : theme.colors.text.subtle,
+              }}
+            >
+              Users
+            </Text>
+            {searchResults && searchResults.users.length > 0 && (
+              <View
+                style={[
+                  styles.tabBadge,
+                  {
+                    backgroundColor:
+                      activeTab === "users"
+                        ? theme.colors.primary[500]
+                        : theme.colors.background.subtle,
+                  },
+                ]}
+              >
+                <Text
+                  size="xs"
+                  weight="medium"
+                  style={{
+                    color:
+                      activeTab === "users"
+                        ? theme.colors.background.default
+                        : theme.colors.text.subtle,
+                  }}
+                >
+                  {searchResults.users.length}
                 </Text>
               </View>
             )}
@@ -811,23 +1020,63 @@ export function SearchScreen() {
             contentContainerStyle={[
               styles.listContent,
               { paddingBottom: insets.bottom + 20 },
-              !searchResults?.posts.length && styles.emptyListContent,
             ]}
             ListEmptyComponent={!isSearching ? PostsEmptyState : null}
           />
+        ) : activeTab === "topics" ? (
+          // Topics tab - show topic posts if selected, otherwise show topic list
+          selectedTopic ? (
+            <FlatList
+              data={topicPosts}
+              keyExtractor={(item) => `topic-post-${item.post_id}`}
+              renderItem={renderPostResult}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={[
+                styles.listContent,
+                { paddingBottom: insets.bottom + 20 },
+              ]}
+              ListHeaderComponent={TopicPostsHeader}
+              ListEmptyComponent={
+                isLoadingTopicPosts ? (
+                  <View style={styles.loadingState}>
+                    <ActivityIndicator
+                      size="small"
+                      color={theme.colors.primary[500]}
+                    />
+                  </View>
+                ) : (
+                  <PostsEmptyState />
+                )
+              }
+            />
+          ) : (
+            <FlatList
+              data={searchResults?.topics ?? []}
+              keyExtractor={(item) => `topic-${item.topic}`}
+              renderItem={renderTopicResult}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={[
+                styles.listContent,
+                { paddingBottom: insets.bottom + 20 },
+              ]}
+              ListEmptyComponent={!isSearching ? TopicsEmptyState : null}
+            />
+          )
         ) : (
+          // Users tab
           <FlatList
-            data={searchResults?.topics ?? []}
-            keyExtractor={(item) => `topic-${item.topic}`}
-            renderItem={renderTopicResult}
+            data={searchResults?.users ?? []}
+            keyExtractor={(item) => `user-${item.address}`}
+            renderItem={renderUserResult}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={[
               styles.listContent,
               { paddingBottom: insets.bottom + 20 },
-              !searchResults?.topics.length && styles.emptyListContent,
             ]}
-            ListEmptyComponent={!isSearching ? TopicsEmptyState : null}
+            ListEmptyComponent={!isSearching ? UsersEmptyState : null}
           />
         )
       ) : (
@@ -990,9 +1239,6 @@ const styles = StyleSheet.create((theme) => ({
   listContent: {
     paddingTop: theme.spacing.md,
   },
-  emptyListContent: {
-    flex: 1,
-  },
   section: {
     marginBottom: theme.spacing.lg,
   },
@@ -1071,6 +1317,40 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     gap: 2,
   },
+  // Topic header when viewing posts
+  topicHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.md,
+    paddingBottom: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  topicBackButton: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.radius.full,
+  },
+  topicHeaderIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: theme.radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // User result item
+  userResultItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    gap: theme.spacing.md,
+  },
+  userResultContent: {
+    flex: 1,
+    gap: 2,
+  },
   // Post result item - new design
   postResultItem: {
     flexDirection: "row",
@@ -1105,10 +1385,8 @@ const styles = StyleSheet.create((theme) => ({
   },
   // Empty states
   emptyState: {
-    flex: 1,
     paddingVertical: theme.spacing.xl * 2,
     alignItems: "center",
-    justifyContent: "center",
   },
   emptyTrendingState: {
     paddingVertical: theme.spacing.lg,
