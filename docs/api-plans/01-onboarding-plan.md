@@ -22,20 +22,20 @@ bun add @tanstack/query-sync-storage-persister @tanstack/react-query-persist-cli
 
 Most crypto packages are already available through `viem` and `@noble/curves`:
 
-| Package | Source | Purpose |
-|---------|--------|---------|
-| `@scure/bip39` | via `viem` | BIP39 mnemonic generation |
-| `@scure/bip32` | via `viem` | HD key derivation (Cosmos path) |
-| `@scure/base` | via `@scure/bip32` | **Includes bech32** for `mirage1...` addresses |
-| `@noble/curves/secp256k1` | direct dep | ECDSA signing, compressed pubkey |
-| `@noble/hashes` | via `@noble/curves` | sha256, ripemd160, **argon2id for PoW** |
-| `@tanstack/react-query` | direct dep | Data fetching |
-| `expo-secure-store` | direct dep | Secure mnemonic storage |
-| `react-native-mmkv` | direct dep | Fast KV storage for cache |
-| `buffer` | direct dep | Buffer polyfill |
-| `expo-crypto` | direct dep | Native crypto APIs |
-| `react-native-get-random-values` | direct dep | crypto.getRandomValues() |
-| `axios` | direct dep | HTTP client |
+| Package                          | Source              | Purpose                                        |
+| -------------------------------- | ------------------- | ---------------------------------------------- |
+| `@scure/bip39`                   | via `viem`          | BIP39 mnemonic generation                      |
+| `@scure/bip32`                   | via `viem`          | HD key derivation (Cosmos path)                |
+| `@scure/base`                    | via `@scure/bip32`  | **Includes bech32** for `mirage1...` addresses |
+| `@noble/curves/secp256k1`        | direct dep          | ECDSA signing, compressed pubkey               |
+| `@noble/hashes`                  | via `@noble/curves` | sha256, ripemd160, **argon2id for PoW**        |
+| `@tanstack/react-query`          | direct dep          | Data fetching                                  |
+| `expo-secure-store`              | direct dep          | Secure mnemonic storage                        |
+| `react-native-mmkv`              | direct dep          | Fast KV storage for cache                      |
+| `buffer`                         | direct dep          | Buffer polyfill                                |
+| `expo-crypto`                    | direct dep          | Native crypto APIs                             |
+| `react-native-get-random-values` | direct dep          | crypto.getRandomValues()                       |
+| `axios`                          | direct dep          | HTTP client                                    |
 
 ### Import Paths (Important!)
 
@@ -43,20 +43,20 @@ Use these exact import paths in the codebase:
 
 ```typescript
 // Mnemonic & HD derivation
-import { generateMnemonic, mnemonicToSeedSync } from '@scure/bip39';
-import { wordlist } from '@scure/bip39/wordlists/english';
-import { HDKey } from '@scure/bip32';
+import { generateMnemonic, mnemonicToSeedSync } from "@scure/bip39";
+import { wordlist } from "@scure/bip39/wordlists/english";
+import { HDKey } from "@scure/bip32";
 
 // Bech32 encoding (NOT a separate package!)
-import { bech32 } from '@scure/base';
+import { bech32 } from "@scure/base";
 
 // Crypto curves & signing
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { secp256k1 } from "@noble/curves/secp256k1";
 
 // Hashing (note the .js suffix for ESM)
-import { sha256 } from '@noble/hashes/sha256';
-import { ripemd160 } from '@noble/hashes/legacy';
-import { argon2id } from '@noble/hashes/argon2';
+import { sha256 } from "@noble/hashes/sha256";
+import { ripemd160 } from "@noble/hashes/legacy";
+import { argon2id } from "@noble/hashes/argon2";
 ```
 
 ---
@@ -66,11 +66,11 @@ import { argon2id } from '@noble/hashes/argon2';
 ### Already Configured (in `/index.ts`)
 
 ```typescript
-import "react-native-get-random-values";  // crypto.getRandomValues()
-import "./polyfills/crypto-subtle";        // crypto.subtle.digest()
-import "@/src/utils/buffer";               // global.Buffer
-import "fast-text-encoding";               // TextEncoder/TextDecoder
-import "react-native-url-polyfill/auto";   // URL/URLSearchParams
+import "react-native-get-random-values"; // crypto.getRandomValues()
+import "./polyfills/crypto-subtle"; // crypto.subtle.digest()
+import "@/src/utils/buffer"; // global.Buffer
+import "fast-text-encoding"; // TextEncoder/TextDecoder
+import "react-native-url-polyfill/auto"; // URL/URLSearchParams
 ```
 
 ### Additional Polyfills Needed
@@ -119,32 +119,33 @@ src/
 
 ```typescript
 export interface MirageWallet {
-  mnemonic: string;           // 12/24 words - NEVER send to backend
-  privateKey: Uint8Array;     // 32 bytes
-  publicKey: Uint8Array;      // 33 bytes compressed
-  address: string;            // mirage1...
+  mnemonic: string; // 12/24 words - NEVER send to backend
+  privateKey: Uint8Array; // 32 bytes
+  publicKey: Uint8Array; // 33 bytes compressed
+  address: string; // mirage1...
 }
 
 export interface WalletMetadata {
   address: string;
-  publicKeyBase64: string;    // For API requests
+  publicKeyBase64: string; // For API requests
   createdAt: number;
   hasUsername: boolean;
 }
 
 export interface SignedEnvelope {
-  pubkey: string;             // base64 of 33-byte compressed pubkey
-  signature: string;          // base64 of 64-byte compact signature
-  timestamp: number;          // milliseconds since epoch
-  last_block_hash: string;    // hex string
-  pow_difficulty: number;     // 0 for paid tier
-  pow: number;                // 0 for paid tier
+  pubkey: string; // base64 of 33-byte compressed pubkey
+  signature: string; // base64 of 64-byte compact signature
+  timestamp: number; // milliseconds since epoch
+  last_block_hash: string; // hex string
+  pow_difficulty: number; // 0 for paid tier
+  pow: number; // 0 for paid tier
 }
 ```
 
 ### 2. Key Derivation (`src/wallet/crypto.ts`)
 
 **Constants:**
+
 - Curve: secp256k1
 - BIP44 coin type: 118 (Cosmos)
 - Derivation path: `m/44'/118'/0'/0/0`
@@ -169,6 +170,7 @@ signCanonical(privateKey: Uint8Array, data: Uint8Array): Promise<Uint8Array>
 ### 3. Address Generation (`src/wallet/address.ts`)
 
 **Algorithm:**
+
 1. `sha256(compressed_pubkey_33)` -> 32 bytes
 2. `ripemd160(sha256_result)` -> 20 bytes
 3. `bech32.encode('mirage', bech32.toWords(20_bytes))` -> `mirage1...`
@@ -206,47 +208,49 @@ bytesToHex(bytes: Uint8Array): string
 
 ### Storage Keys
 
-| Key | Store | Purpose |
-|-----|-------|---------|
-| `mirage_mnemonic` | expo-secure-store | Encrypted seed phrase |
-| `mirage_wallet_meta` | MMKV | Non-sensitive wallet metadata |
-| `mirage_user_level` | MMKV | Cached user tier (0-3) |
-| `mirage_has_onboarded` | MMKV | Onboarding completion flag |
+| Key                    | Store             | Purpose                       |
+| ---------------------- | ----------------- | ----------------------------- |
+| `mirage_mnemonic`      | expo-secure-store | Encrypted seed phrase         |
+| `mirage_wallet_meta`   | MMKV              | Non-sensitive wallet metadata |
+| `mirage_user_level`    | MMKV              | Cached user tier (0-3)        |
+| `mirage_has_onboarded` | MMKV              | Onboarding completion flag    |
 
 ### Wallet Service (`src/services/wallet-service.ts`)
 
 ```typescript
 class WalletService {
   // Create new wallet, store mnemonic securely
-  async createWallet(): Promise<WalletMetadata>
-  
+  async createWallet(): Promise<WalletMetadata>;
+
   // Import wallet from existing mnemonic
-  async importWallet(mnemonic: string): Promise<WalletMetadata>
-  
+  async importWallet(mnemonic: string): Promise<WalletMetadata>;
+
   // Get wallet for signing (loads mnemonic from secure store)
-  async getWallet(): Promise<MirageWallet | null>
-  
+  async getWallet(): Promise<MirageWallet | null>;
+
   // Check if wallet exists
-  async hasWallet(): Promise<boolean>
-  
+  async hasWallet(): Promise<boolean>;
+
   // Get public metadata (no private key)
-  async getWalletMetadata(): Promise<WalletMetadata | null>
-  
+  async getWalletMetadata(): Promise<WalletMetadata | null>;
+
   // Clear wallet (logout)
-  async clearWallet(): Promise<void>
-  
+  async clearWallet(): Promise<void>;
+
   // Export mnemonic (for backup display)
-  async exportMnemonic(): Promise<string | null>
+  async exportMnemonic(): Promise<string | null>;
 }
 ```
 
 ### Security Considerations
 
 1. **Mnemonic Storage**: Always use `expo-secure-store` with:
+
    - `SecureStore.WHEN_UNLOCKED` accessibility
    - Biometric authentication for export
 
 2. **Private Key Handling**:
+
    - Never persist private key - derive on-demand from mnemonic
    - Clear from memory after signing operations
    - Never log or send to backend
@@ -266,16 +270,16 @@ interface AuthState {
   // Existing
   isAuthenticated: boolean;
   user: User | null;
-  
+
   // New wallet fields
   walletAddress: string | null;
   publicKeyBase64: string | null;
-  userLevel: number;  // 0 = free, 1-3 = paid tiers
+  userLevel: number; // 0 = free, 1-3 = paid tiers
   hasUsername: boolean;
-  
+
   // Actions
   initializeWallet: () => Promise<void>;
-  createNewWallet: () => Promise<string>;  // returns address
+  createNewWallet: () => Promise<string>; // returns address
   importWallet: (mnemonic: string) => Promise<string>;
   logout: () => Promise<void>;
   setUserLevel: (level: number) => void;
@@ -331,22 +335,22 @@ async function initializeApp() {
   // 1. Check for existing wallet
   const walletService = new WalletService();
   const hasWallet = await walletService.hasWallet();
-  
+
   if (!hasWallet) {
     // Navigate to onboarding
     return;
   }
-  
+
   // 2. Load wallet metadata
   const metadata = await walletService.getWalletMetadata();
   authStore.setWalletAddress(metadata.address);
   authStore.setPublicKey(metadata.publicKeyBase64);
-  
+
   // 3. Fetch user status from API (uses useUserStatus from Read API)
   const status = await api.read.getUserStatus(metadata.address);
   authStore.setUserLevel(status.user_level);
   authStore.setHasUsername(!!status.username);
-  
+
   // 4. If no username, redirect to username screen
   if (!status.username) {
     // Navigate to username setup
@@ -362,31 +366,31 @@ async function initializeApp() {
 // src/api/client.ts
 
 const DEFAULT_NODES = [
-  'https://mirage.talk',
-  'https://mirage.vote',  // fallback
+  "https://mirage.vote",
+  "https://mirage.vote", // fallback
 ];
 
 class ApiClient {
   private baseUrl: string;
   private nodeList: string[];
-  
+
   constructor() {
     this.nodeList = DEFAULT_NODES;
     this.baseUrl = this.nodeList[0];
   }
-  
+
   // Switch to next node on failure
   async failover(): Promise<void> {
     const currentIndex = this.nodeList.indexOf(this.baseUrl);
     const nextIndex = (currentIndex + 1) % this.nodeList.length;
     this.baseUrl = this.nodeList[nextIndex];
   }
-  
+
   // Allow runtime URL change
   setBaseUrl(url: string): void {
     this.baseUrl = url;
   }
-  
+
   getApiUrl(path: string): string {
     return `${this.baseUrl}/api${path}`;
   }

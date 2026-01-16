@@ -1,6 +1,11 @@
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, RefreshControl, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  RefreshControl,
+  View,
+} from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -15,6 +20,7 @@ import {
   AdultContentPopup,
   ConfirmationPopup,
   FeedHeader,
+  type Post,
   PostCard,
   PostCardSkeleton,
   PostCardSkeletonList,
@@ -24,7 +30,6 @@ import {
   type ReportSheetRef,
   SideMenu,
   type SideMenuRef,
-  type Post,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import {
@@ -115,17 +120,15 @@ export function HomeScreen() {
   );
 
   // Map feed type to API sort parameter
-  const getSortBy = () => {
+  const sortBy = useMemo(() => {
     switch (feedType) {
-      case "popular":
-        return "top" as const;
       case "latest":
-        return "new" as const;
+        return "newest" as const;
       default:
-        // Default to "new" to show latest posts first
-        return "new" as const;
+        // Default to "magic" for algorithm-based feed
+        return "magic" as const;
     }
-  };
+  }, [feedType]);
 
   // Fetch posts from API
   const {
@@ -141,7 +144,7 @@ export function HomeScreen() {
   } = useInfinitePosts({
     limit: 20,
     feed: "home",
-    by: "magic",
+    by: sortBy,
     allowed_tags: allowedTags || undefined,
   });
 
@@ -298,13 +301,16 @@ export function HomeScreen() {
     console.log("Navigate to author:", authorId);
   }, []);
 
-  const handleMorePress = useCallback((postId: string) => {
-    const post = posts.find((p) => p.id === postId);
-    if (post) {
-      setSelectedPost(post);
-      postOptionsSheetRef.current?.present();
-    }
-  }, [posts]);
+  const handleMorePress = useCallback(
+    (postId: string) => {
+      const post = posts.find((p) => p.id === postId);
+      if (post) {
+        setSelectedPost(post);
+        postOptionsSheetRef.current?.present();
+      }
+    },
+    [posts]
+  );
 
   // Block handler with API integration
   const blockHandler = useBlockHandler({});

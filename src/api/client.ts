@@ -1,7 +1,7 @@
-import axios, { type AxiosInstance, type AxiosError } from "axios";
+import axios, { type AxiosError, type AxiosInstance } from "axios";
 
 const DEFAULT_NODES = [
-  "https://mirage.talk",
+  "https://mirage.vote",
   "https://mirage.vote", // fallback
 ];
 
@@ -53,8 +53,7 @@ class ApiClient {
    * Switch to next node on failure
    */
   async failover(): Promise<void> {
-    this.currentNodeIndex =
-      (this.currentNodeIndex + 1) % this.nodeList.length;
+    this.currentNodeIndex = (this.currentNodeIndex + 1) % this.nodeList.length;
     this.client.defaults.baseURL = this.getBaseUrl();
     console.log(`[ApiClient] Failover to: ${this.getBaseUrl()}`);
   }
@@ -79,7 +78,10 @@ class ApiClient {
    * GET request
    */
   async get<T, P = unknown>(path: string, params?: P): Promise<T> {
-    console.log(`[ApiClient] GET ${path}`, params ? `with params: ${JSON.stringify(params)}` : "no params");
+    console.log(
+      `[ApiClient] GET ${path}`,
+      params ? `with params: ${JSON.stringify(params)}` : "no params"
+    );
     try {
       const response = await this.client.get<T>(`/api${path}`, { params });
       console.log(`[ApiClient] GET ${path} success`);
@@ -92,7 +94,10 @@ class ApiClient {
       console.error(`[ApiClient] Status:`, status);
       console.error(`[ApiClient] Error data:`, errorData);
       console.error(`[ApiClient] Error message:`, errorMessage);
-      console.error(`[ApiClient] Params sent:`, JSON.stringify(params, null, 2));
+      console.error(
+        `[ApiClient] Params sent:`,
+        JSON.stringify(params, null, 2)
+      );
       throw error;
     }
   }
@@ -107,7 +112,10 @@ class ApiClient {
       console.log(`[ApiClient] POST ${path} success:`, response.data);
       return response.data;
     } catch (error: any) {
-      console.error(`[ApiClient] POST ${path} failed:`, error?.response?.data || error?.message || error);
+      console.error(
+        `[ApiClient] POST ${path} failed:`,
+        error?.response?.data || error?.message || error
+      );
       throw error;
     }
   }
