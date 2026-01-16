@@ -33,8 +33,9 @@ export {
   useFollowModerator,
   useUnfollowModerator,
   useToggleFollowUser,
+  useToggleFollowTopic,
 } from "./use-follow";
-export type { UseFollowOptions, ToggleFollowUserParams } from "./use-follow";
+export type { UseFollowOptions, ToggleFollowUserParams, ToggleFollowTopicParams } from "./use-follow";
 
 // Block
 export {

@@ -182,6 +182,171 @@ export function useUnfollowModerator(options: UseFollowOptions = {}) {
 }
 
 // ============================================
+// Toggle Follow Topic Hook (Combined Follow/Unfollow)
+// ============================================
+
+export interface ToggleFollowTopicParams {
+  topic: string;
+  isCurrentlyFollowing: boolean;
+}
+
+/**
+ * Combined hook that handles both follow and unfollow topic based on current state.
+ * Includes optimistic updates for immediate UI feedback.
+ */
+export function useToggleFollowTopic(options: UseFollowOptions = {}) {
+  const queryClient = useQueryClient();
+  const { getWallet, address } = useWallet();
+
+  return useMutation({
+    mutationFn: async ({
+      topic,
+      isCurrentlyFollowing,
+    }: ToggleFollowTopicParams): Promise<WriteResponse> => {
+      const wallet = await getWallet();
+      console.log(
+        `[FollowTopic] ${
+          isCurrentlyFollowing ? "Unfollowing" : "Following"
+        } topic: ${topic}`
+      );
+      if (isCurrentlyFollowing) {
+        return unfollowTopic(wallet, topic, options.onPoWProgress);
+      } else {
+        return followTopic(wallet, topic, options.onPoWProgress);
+      }
+    },
+    onMutate: async ({ topic, isCurrentlyFollowing }) => {
+      console.log(
+        `[FollowTopic] onMutate: ${
+          isCurrentlyFollowing ? "unfollow" : "follow"
+        } ${topic}`
+      );
+
+      // Cancel any outgoing refetches
+      if (address) {
+        await queryClient.cancelQueries({
+          queryKey: queryKeys.userFollowed(address),
+        });
+      }
+
+      // Snapshot the previous value
+      const previousFollowed = address
+        ? queryClient.getQueryData<{
+            followed_users: string[];
+            followed_topics: string[];
+            followed_moderators: string[];
+          }>(queryKeys.userFollowed(address))
+        : undefined;
+
+      // Optimistically update the followed list
+      if (address) {
+        queryClient.setQueryData<{
+          followed_users: string[];
+          followed_topics: string[];
+          followed_moderators: string[];
+        }>(queryKeys.userFollowed(address), (old) => {
+          if (!old) {
+            return {
+              followed_users: [],
+              followed_topics: isCurrentlyFollowing ? [] : [topic],
+              followed_moderators: [],
+            };
+          }
+          const newFollowedTopics = isCurrentlyFollowing
+            ? old.followed_topics.filter((t) => t !== topic)
+            : [...old.followed_topics, topic];
+
+          console.log(
+            `[FollowTopic] Optimistic update: ${old.followed_topics.length} -> ${newFollowedTopics.length} topics`
+          );
+
+          return {
+            ...old,
+            followed_topics: newFollowedTopics,
+          };
+        });
+      }
+
+      return { previousFollowed, topic, isCurrentlyFollowing };
+    },
+    onSuccess: (_data, { topic, isCurrentlyFollowing }) => {
+      console.log(
+        `[FollowTopic] Success! ${
+          isCurrentlyFollowing ? "Unfollowed" : "Followed"
+        } ${topic}`
+      );
+
+      // Delay the query invalidation to give the indexer time to process
+      setTimeout(() => {
+        console.log(`[FollowTopic] Delayed refetch after successful follow`);
+        if (address) {
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.userFollowed(address),
+            refetchType: "active",
+          });
+        }
+      }, 5000);
+    },
+    onError: (err, { topic, isCurrentlyFollowing }, context) => {
+      let errorMessage = String(err);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const axiosError = err as any;
+      if (axiosError?.response?.data?.error) {
+        errorMessage = axiosError.response.data.error;
+      }
+
+      console.log(`[FollowTopic] Error received: ${errorMessage}`);
+
+      const isAlreadyFollowedError =
+        !isCurrentlyFollowing && errorMessage.includes("already followed");
+      const isNotFollowingError =
+        isCurrentlyFollowing &&
+        (errorMessage.includes("not following") ||
+          errorMessage.includes("not in followed"));
+
+      if (isAlreadyFollowedError || isNotFollowingError) {
+        console.log(
+          `[FollowTopic] State already matches desired state, no rollback needed`
+        );
+        return;
+      }
+
+      // Actual error - rollback the optimistic update
+      console.log(`[FollowTopic] Error, rolling back: ${errorMessage}`);
+      if (address && context?.previousFollowed) {
+        queryClient.setQueryData(
+          queryKeys.userFollowed(address),
+          context.previousFollowed
+        );
+      }
+    },
+    onSettled: (_data, error) => {
+      queryClient.invalidateQueries({
+        queryKey: ["posts"],
+        refetchType: "none",
+      });
+
+      if (error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const axiosError = error as any;
+        const errorMessage = axiosError?.response?.data?.error || String(error);
+        const isStateMismatch =
+          errorMessage.includes("already followed") ||
+          errorMessage.includes("not following") ||
+          errorMessage.includes("not in followed");
+
+        if (!isStateMismatch && address) {
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.userFollowed(address),
+            refetchType: "none",
+          });
+        }
+      }
+    },
+  });
+}
+
+// ============================================
 // Toggle Follow User Hook (Combined Follow/Unfollow)
 // ============================================
 

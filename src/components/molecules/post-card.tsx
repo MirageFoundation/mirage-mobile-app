@@ -93,6 +93,10 @@ type PostCardProps = {
   isOwnPost?: boolean;
   /** Whether the post is currently visible on screen (for auto-play) */
   isVisible?: boolean;
+  /** Whether to show the follow button (default: true) */
+  showFollowButton?: boolean;
+  /** Position of topic tag: "inline" (with author) or "right" (in header actions) */
+  topicPosition?: "inline" | "right";
   /** Callback when the post card is pressed */
   onPress?: () => void;
   /** Callback when author avatar/username is pressed */
@@ -189,6 +193,8 @@ export const PostCard = ({
   post,
   isOwnPost = false,
   isVisible = false,
+  showFollowButton = true,
+  topicPosition = "inline",
   onPress,
   onAuthorPress,
   onFollowPress,
@@ -554,7 +560,7 @@ export const PostCard = ({
               <Text size="sm" weight="semibold" numberOfLines={1}>
                 @{author.username}
               </Text>
-              {post.topic && (
+              {post.topic && topicPosition === "inline" && (
                 <>
                   <Text size="xs" mode="subtle">•</Text>
                   <View style={[styles.topicTag, { backgroundColor: theme.colors.primary[500] + "15" }]}>
@@ -569,9 +575,16 @@ export const PostCard = ({
           </View>
         </Pressable>
 
-        {/* Right section: Follow button + More options */}
+        {/* Right section: Topic tag (if right position), Follow button + More options */}
         <View style={styles.headerActions}>
-          {!isOwnPost && (
+          {post.topic && topicPosition === "right" && (
+            <View style={[styles.topicTag, { backgroundColor: theme.colors.primary[500] + "15" }]}>
+              <Text size="xs" weight="medium" style={{ color: theme.colors.primary[500] }} numberOfLines={1}>
+                #{post.topic}
+              </Text>
+            </View>
+          )}
+          {!isOwnPost && showFollowButton && (
             <FollowButton
               isFollowing={isFollowing ?? false}
               onPress={onFollowPress}

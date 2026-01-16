@@ -17,6 +17,7 @@ import {
   queryKeys,
   transformApiPosts,
   useInfinitePosts,
+  useToggleFollowTopic,
   useToggleFollowUser,
   useUserFollowed,
 } from "@/src/api";
@@ -128,9 +129,14 @@ export function HomeScreen() {
     () => followedData?.followed_users ?? [],
     [followedData]
   );
+  const followedTopics = useMemo(
+    () => followedData?.followed_topics ?? [],
+    [followedData]
+  );
 
   // Follow/unfollow mutation
   const toggleFollowMutation = useToggleFollowUser();
+  const toggleFollowTopicMutation = useToggleFollowTopic();
 
   // Track which users are currently being followed/unfollowed (for loading state)
   const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(
@@ -443,6 +449,84 @@ export function HomeScreen() {
     toast.success("Following post", "You'll be notified of new activity.");
   }, [selectedPost?.id, toast]);
 
+  const handleFollowTopic = useCallback(() => {
+    if (!selectedPost?.topic) return;
+
+    const topic = selectedPost.topic;
+    const isCurrentlyFollowed = followedTopics.includes(topic);
+
+    requireAuth(async () => {
+      const action = isCurrentlyFollowed ? "Unfollowing" : "Following";
+      const actionPast = isCurrentlyFollowed ? "Unfollowed" : "Now following";
+
+      // Show initial loading toast
+      const toastId = toast.loading(
+        `${action} #${topic}`,
+        "Computing proof of work..."
+      );
+
+      try {
+        await toggleFollowTopicMutation.mutateAsync({
+          topic,
+          isCurrentlyFollowing: isCurrentlyFollowed,
+        });
+
+        // Update to success
+        toast.update(toastId, {
+          type: "success",
+          title: `${actionPast} #${topic}`,
+          description: undefined,
+          duration: 3000,
+        });
+
+        // Auto dismiss after duration
+        setTimeout(() => toast.dismiss(toastId), 3000);
+      } catch (error: unknown) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        const isAlreadyFollowed =
+          errorMessage.includes("already followed") ||
+          errorMessage.includes("400");
+        const isNotFollowing =
+          errorMessage.includes("not following") ||
+          errorMessage.includes("not in followed");
+
+        if (isAlreadyFollowed) {
+          toast.update(toastId, {
+            type: "success",
+            title: `Already following #${topic}`,
+            description: undefined,
+            duration: 3000,
+          });
+          setTimeout(() => toast.dismiss(toastId), 3000);
+        } else if (isNotFollowing) {
+          toast.update(toastId, {
+            type: "success",
+            title: `Already not following #${topic}`,
+            description: undefined,
+            duration: 3000,
+          });
+          setTimeout(() => toast.dismiss(toastId), 3000);
+        } else {
+          console.error("Follow/unfollow topic failed:", error);
+          toast.update(toastId, {
+            type: "error",
+            title: `Failed to ${action.toLowerCase()} #${topic}`,
+            description: "Please try again",
+            duration: 4000,
+          });
+          setTimeout(() => toast.dismiss(toastId), 4000);
+        }
+      }
+    });
+  }, [
+    selectedPost?.topic,
+    followedTopics,
+    toggleFollowTopicMutation,
+    toast,
+    requireAuth,
+  ]);
+
   const handleShowFewer = useCallback(() => {
     // TODO: Call show fewer API
     console.log("Show fewer posts like:", selectedPost?.id);
@@ -719,6 +803,8 @@ export function HomeScreen() {
           }}
           isOwnPost={currentUser?.id === post.author.id}
           isVisible={isVisible}
+          showFollowButton={false}
+          topicPosition="right"
           onPress={() => handlePostPress(post.id)}
           onAuthorPress={() => handleAuthorPress(post.author.id)}
           onMorePress={() => handleMorePress(post.id)}
@@ -739,16 +825,8 @@ export function HomeScreen() {
             )
           }
           onCommentPress={() => handleCommentPress(post.id)}
-          onFollowPress={() =>
-            handleFollowPress(
-              post.author.id,
-              post.author.username,
-              isFollowingAuthor
-            )
-          }
           onRevealContent={() => handleRevealContent(post.id)}
           contentRevealed={revealedPosts.has(post.id)}
-          followLoading={isFollowLoading}
           shareUrl={`https://mirage.app/post/${post.id}`}
         />
       );
@@ -757,7 +835,6 @@ export function HomeScreen() {
       currentUser,
       getPostWithOverrides,
       followedUsers,
-      followLoadingUsers,
       visiblePostIds,
       handlePostPress,
       handleAuthorPress,
@@ -765,7 +842,6 @@ export function HomeScreen() {
       handleLikePress,
       handleDislikePress,
       handleCommentPress,
-      handleFollowPress,
       handleRevealContent,
       revealedPosts,
     ]
@@ -896,8 +972,14 @@ export function HomeScreen() {
         ref={postOptionsSheetRef}
         post={selectedPost}
         isOwnPost={currentUser?.id === selectedPost?.author.id}
+        isTopicFollowed={
+          selectedPost?.topic
+            ? followedTopics.includes(selectedPost.topic)
+            : false
+        }
         onShowFewer={handleShowFewer}
         onFollowPost={handleFollowPost}
+        onFollowTopic={handleFollowTopic}
         onSave={handleSavePost}
         onCopyText={handleCopyText}
         onReport={handleReport}

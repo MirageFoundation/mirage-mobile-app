@@ -25,10 +25,14 @@ type PostOptionsSheetProps = {
   post?: Post | null;
   /** Whether the current user is the author */
   isOwnPost?: boolean;
+  /** Whether the topic is currently followed */
+  isTopicFollowed?: boolean;
   /** Callback when show fewer is pressed */
   onShowFewer?: () => void;
   /** Callback when follow post is pressed */
   onFollowPost?: () => void;
+  /** Callback when follow/unfollow topic is pressed */
+  onFollowTopic?: () => void;
   /** Callback when save is pressed */
   onSave?: () => void;
   /** Callback when copy text is pressed */
@@ -149,6 +153,7 @@ const MenuItem = ({
   title,
   onPress,
   isDestructive = false,
+  disabled = false,
 }: {
   iconName: string;
   iconComponent?:
@@ -158,19 +163,24 @@ const MenuItem = ({
   title: string;
   onPress?: () => void;
   isDestructive?: boolean;
+  disabled?: boolean;
 }) => {
   const { theme } = useUnistyles();
-  const color = isDestructive
-    ? theme.colors.error[500]
-    : theme.colors.text.subtle;
+  const color = disabled
+    ? theme.colors.text.muted
+    : isDestructive
+      ? theme.colors.error[500]
+      : theme.colors.text.subtle;
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
       style={({ pressed }) => [
         styles.menuItem,
         Platform.OS === "ios" && styles.menuItemIOS,
-        pressed && { opacity: 0.7 },
+        pressed && !disabled && { opacity: 0.7 },
+        disabled && { opacity: 0.6 },
       ]}
     >
       <Box direction="row" alignItems="center" gap="md" flex>
@@ -191,8 +201,10 @@ export const PostOptionsSheet = forwardRef<
     {
       post,
       isOwnPost = false,
+      isTopicFollowed = false,
       onShowFewer,
       onFollowPost,
+      onFollowTopic,
       onSave,
       onCopyText,
       onBlockPost,
@@ -338,6 +350,12 @@ export const PostOptionsSheet = forwardRef<
       onFollowPost?.();
     }, [dismiss, onFollowPost]);
 
+    const handleFollowTopic = useCallback(() => {
+      triggerHaptic("medium");
+      dismiss();
+      onFollowTopic?.();
+    }, [dismiss, onFollowTopic]);
+
     const handleSave = useCallback(() => {
       triggerHaptic("medium");
       dismiss();
@@ -454,6 +472,16 @@ export const PostOptionsSheet = forwardRef<
               title="Follow post"
               onPress={handleFollowPost}
             />
+
+            {/* Follow/Unfollow Topic (only if post has a topic) */}
+            {post?.topic && (
+              <MenuItem
+                iconComponent={Ionicons}
+                iconName={isTopicFollowed ? "pricetag" : "pricetag-outline"}
+                title={isTopicFollowed ? `Unfollow #${post.topic}` : `Follow #${post.topic}`}
+                onPress={handleFollowTopic}
+              />
+            )}
 
             {/* Show Fewer Posts Like This (only for other users' posts) */}
             {!isOwnPost && (

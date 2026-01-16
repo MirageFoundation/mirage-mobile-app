@@ -5,7 +5,7 @@ import {
   useUserFollowed,
   uploadImageAndGetUrl,
 } from "@/src/api/read";
-import { useToggleFollowUser, useComment } from "@/src/api/write";
+import { useToggleFollowUser, useToggleFollowTopic, useComment } from "@/src/api/write";
 import type { PoWProgress } from "@/src/api/write/signing";
 import { Avatar } from "@/src/components/atoms";
 import {
@@ -109,9 +109,14 @@ export default function PostDetailScreen() {
     () => followedData?.followed_users ?? [],
     [followedData]
   );
+  const followedTopics = useMemo(
+    () => followedData?.followed_topics ?? [],
+    [followedData]
+  );
 
-  // Follow/unfollow mutation
+  // Follow/unfollow mutations
   const toggleFollowMutation = useToggleFollowUser();
+  const toggleFollowTopicMutation = useToggleFollowTopic();
   const toast = useToast();
 
   // Track follow loading state
@@ -675,6 +680,81 @@ export default function PostDetailScreen() {
     localPostUpdates.isFollowing,
     isFollowLoading,
     toggleFollowMutation,
+    toast,
+  ]);
+
+  const handleFollowTopic = useCallback(() => {
+    if (!displayPost?.topic) return;
+    const topic = displayPost.topic;
+    const isCurrentlyFollowed = followedTopics.includes(topic);
+
+    requireAuth(async () => {
+      const action = isCurrentlyFollowed ? "Unfollowing" : "Following";
+      const actionPast = isCurrentlyFollowed ? "Unfollowed" : "Now following";
+
+      // Show loading toast
+      const toastId = toast.loading(
+        `${action} #${topic}`,
+        "Computing proof of work..."
+      );
+
+      try {
+        await toggleFollowTopicMutation.mutateAsync({
+          topic,
+          isCurrentlyFollowing: isCurrentlyFollowed,
+        });
+
+        // Update to success
+        toast.update(toastId, {
+          type: "success",
+          title: `${actionPast} #${topic}`,
+          description: undefined,
+          duration: 3000,
+        });
+        setTimeout(() => toast.dismiss(toastId), 3000);
+      } catch (error: unknown) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        const isAlreadyFollowed =
+          errorMessage.includes("already followed") ||
+          errorMessage.includes("400");
+        const isNotFollowing =
+          errorMessage.includes("not following") ||
+          errorMessage.includes("not in followed");
+
+        if (isAlreadyFollowed) {
+          toast.update(toastId, {
+            type: "success",
+            title: `Already following #${topic}`,
+            description: undefined,
+            duration: 3000,
+          });
+          setTimeout(() => toast.dismiss(toastId), 3000);
+        } else if (isNotFollowing) {
+          toast.update(toastId, {
+            type: "success",
+            title: `Already not following #${topic}`,
+            description: undefined,
+            duration: 3000,
+          });
+          setTimeout(() => toast.dismiss(toastId), 3000);
+        } else {
+          console.error("Follow/unfollow topic failed:", error);
+          toast.update(toastId, {
+            type: "error",
+            title: `Failed to ${action.toLowerCase()} #${topic}`,
+            description: "Please try again",
+            duration: 4000,
+          });
+          setTimeout(() => toast.dismiss(toastId), 4000);
+        }
+      }
+    });
+  }, [
+    requireAuth,
+    displayPost?.topic,
+    followedTopics,
+    toggleFollowTopicMutation,
     toast,
   ]);
 
@@ -1560,6 +1640,8 @@ export default function PostDetailScreen() {
           ref={postOptionsSheetRef}
           post={displayPost}
           isOwnPost={currentUser?.id === displayPost?.author.id}
+          isTopicFollowed={displayPost?.topic ? followedTopics.includes(displayPost.topic) : false}
+          onFollowTopic={handleFollowTopic}
           onDelete={handleDeletePost}
           onBlockPost={handleBlockPost}
           onBlockUser={handleBlockPostAuthor}

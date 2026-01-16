@@ -412,14 +412,14 @@ export function FollowingScreen() {
       return (
         <Box flex center p="lg" style={styles.emptyContainer}>
           <Text size="xl" weight="semibold" style={{ marginTop: 16 }}>
-            Follow people to see posts
+            Follow people and topics
           </Text>
           <Text
             size="md"
             mode="subtle"
             style={{ marginTop: 8, textAlign: "center", maxWidth: 280 }}
           >
-            Sign in and follow creators to build your feed.
+            Sign in and follow creators or topics to build your feed.
           </Text>
         </Box>
       );
@@ -452,7 +452,7 @@ export function FollowingScreen() {
           mode="subtle"
           style={{ marginTop: 8, textAlign: "center", maxWidth: 280 }}
         >
-          Follow some people to see their posts here
+          Follow some people or topics to see posts here
         </Text>
       </Box>
     );
