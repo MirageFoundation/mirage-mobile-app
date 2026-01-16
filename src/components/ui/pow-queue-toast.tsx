@@ -168,7 +168,7 @@ export const PowQueueToast = () => {
     Platform.OS === "ios"
       ? {
           intensity: 80,
-          tint: "dark" as const,
+          tint: isDark ? ("dark" as const) : ("light" as const),
           style: [styles.blurContainer, { borderColor: colors.border }],
         }
       : {
@@ -201,6 +201,14 @@ export const PowQueueToast = () => {
         return currentAction?.label || lastActionLabel || "Processing...";
     }
   };
+
+  const badgeBackground = isDark
+    ? "rgba(255, 255, 255, 0.15)"
+    : "rgba(0, 0, 0, 0.08)";
+
+  const timerBackground = isDark
+    ? "rgba(255, 255, 255, 0.1)"
+    : "rgba(0, 0, 0, 0.06)";
 
   const renderIcon = () => {
     switch (toastState) {
@@ -252,7 +260,7 @@ export const PowQueueToast = () => {
 
           <View style={styles.rightSection}>
             {hasMultiple && toastState === "processing" && (
-              <View style={styles.counterBadge}>
+              <View style={[styles.counterBadge, { backgroundColor: badgeBackground }]}>
                 <Text size="xs" weight="bold" style={styles.counterText}>
                   {currentIndex}/{totalCount}
                 </Text>
@@ -260,7 +268,7 @@ export const PowQueueToast = () => {
             )}
 
             {toastState === "processing" && (
-              <View style={styles.timerContainer}>
+              <View style={[styles.timerContainer, { backgroundColor: timerBackground }]}>
                 <Text size="sm" weight="medium" style={styles.timerText}>
                   {formatElapsedTime(elapsedMs)}
                 </Text>
@@ -310,7 +318,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.15)",
   },
   counterText: {
     color: theme.colors.text.default,
@@ -321,7 +328,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.1)",
     minWidth: 48,
     alignItems: "center",
   },

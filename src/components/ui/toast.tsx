@@ -174,7 +174,7 @@ export const Toast = ({
     Platform.OS === "ios"
       ? {
           intensity: 80,
-          tint: "dark" as const,
+          tint: isDark ? ("dark" as const) : ("light" as const),
           style: [styles.blurContainer, { borderColor: getBorderColor() }],
         }
       : {
@@ -195,6 +195,14 @@ export const Toast = ({
         };
 
   const hasMultiple = totalCount > 1;
+
+  const badgeBackground = isDark
+    ? "rgba(255, 255, 255, 0.15)"
+    : "rgba(0, 0, 0, 0.08)";
+
+  const timerBackground = isDark
+    ? "rgba(255, 255, 255, 0.1)"
+    : "rgba(0, 0, 0, 0.06)";
 
   return (
     <Animated.View
@@ -238,7 +246,7 @@ export const Toast = ({
             <View style={styles.rightSection}>
               {/* Counter badge for multiple toasts */}
               {hasMultiple && (
-                <Pressable onPress={onNext} style={styles.counterBadge}>
+                <Pressable onPress={onNext} style={[styles.counterBadge, { backgroundColor: badgeBackground }]}>
                   <Text size="xs" weight="bold" style={styles.counterText}>
                     {currentIndex + 1}/{totalCount}
                   </Text>
@@ -247,7 +255,7 @@ export const Toast = ({
 
               {/* Timer for loading */}
               {toast.type === "loading" && (
-                <View style={styles.timerContainer}>
+                <View style={[styles.timerContainer, { backgroundColor: timerBackground }]}>
                   <Text size="sm" weight="medium" style={styles.timerText}>
                     {formatElapsedTime(elapsedMs)}
                   </Text>
@@ -256,7 +264,7 @@ export const Toast = ({
 
               {/* Dismiss button (only when not loading) */}
               {toast.type !== "loading" && (
-                <Pressable onPress={handleDismiss} style={styles.closeButton}>
+                <Pressable onPress={handleDismiss} style={[styles.closeButton, { backgroundColor: timerBackground }]}>
                   <Ionicons
                     name="close"
                     size={16}
@@ -342,7 +350,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.15)",
   },
   counterText: {
     color: theme.colors.text.default,
@@ -355,13 +362,11 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.1)",
   },
   timerContainer: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.1)",
     minWidth: 48,
     alignItems: "center",
   },
