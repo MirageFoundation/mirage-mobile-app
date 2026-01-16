@@ -9,6 +9,7 @@ import { QueryProvider } from "./query-provider";
 import { ThemeContextProvider } from "./theme-context";
 import { ThemeProvider } from "./theme-provider";
 import { ToastProvider } from "./toast-provider";
+import { PowQueueToast } from "@/src/components/ui/pow-queue-toast";
 import { WalletProvider } from "./wallet-provider";
 
 const CoreProviders = memo(({ children }: { children: React.ReactNode }) => (
@@ -32,13 +33,14 @@ export const RootProvider = memo(
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
         <MenuProvider>
-          <CoreProviders>
-            <KeyboardProvider>
-              <AuthProviders>
-                <ToastProvider>
-                  <BottomSheetModalProvider>{children}</BottomSheetModalProvider>
-                </ToastProvider>
-              </AuthProviders>
+        <CoreProviders>
+          <KeyboardProvider>
+            <AuthProviders>
+              <ToastProvider>
+                <PowQueueToast />
+                <BottomSheetModalProvider>{children}</BottomSheetModalProvider>
+              </ToastProvider>
+            </AuthProviders>
             </KeyboardProvider>
           </CoreProviders>
         </MenuProvider>
