@@ -38,7 +38,7 @@ import {
   useReportHandler,
 } from "@/src/hooks";
 import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
-import { useAuthStore, useContentModerationStore } from "@/src/stores";
+import { useAuthStore, useContentModerationStore, usePreferencesStore, getShareBaseUrl } from "@/src/stores";
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -63,6 +63,7 @@ const calculateAccountAgeDays = (
 export function ProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const shareServer = usePreferencesStore((s) => s.shareServer);
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const queryClient = useQueryClient();
@@ -228,12 +229,12 @@ export function ProfileScreen() {
     try {
       await Share.share({
         message: `Check out @${user?.username} on Mirage!`,
-        url: `https://mirage.app/u/${user?.username}`,
+        url: `${getShareBaseUrl(shareServer)}/u/${user?.username}`,
       });
     } catch (error) {
       console.error("Share error:", error);
     }
-  }, [user?.username]);
+  }, [user?.username, shareServer]);
 
   const handleMenuPress = useCallback(() => {
     menuSheetRef.current?.present();

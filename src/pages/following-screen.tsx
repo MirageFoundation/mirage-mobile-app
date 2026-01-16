@@ -32,6 +32,7 @@ import {
 import { useToast } from "@/src/providers/toast-provider";
 import {
   getAllowedTagsFromContentTypes,
+  getShareBaseUrl,
   useAuthStore,
   usePreferencesStore,
 } from "@/src/stores";
@@ -54,6 +55,7 @@ export function FollowingScreen() {
   const selectedContentTypes = usePreferencesStore(
     (s) => s.selectedContentTypes
   );
+  const shareServer = usePreferencesStore((s) => s.shareServer);
 
   const allowedTags = useMemo(
     () => getAllowedTagsFromContentTypes(selectedContentTypes),
@@ -380,7 +382,7 @@ export function FollowingScreen() {
           onRevealContent={() => handleRevealContent(post.id)}
           contentRevealed={revealedPosts.has(post.id)}
           followLoading={isFollowLoading}
-          shareUrl={`https://mirage.app/post/${post.id}`}
+          shareUrl={`${getShareBaseUrl(shareServer)}/post/${post.id}`}
         />
       );
     },

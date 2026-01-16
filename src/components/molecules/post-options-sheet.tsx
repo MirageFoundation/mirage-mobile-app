@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Text } from "@/src/components/ui/primitives";
+import { usePreferencesStore, getShareBaseUrl } from "@/src/stores";
 import type { Post } from "./post-card";
 
 type PostOptionsSheetProps = {
@@ -219,6 +220,7 @@ export const PostOptionsSheet = forwardRef<
     const bottomSheetRef = useRef<BottomSheetModal>(null);
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
+    const shareServer = usePreferencesStore((s) => s.shareServer);
 
     const present = useCallback(() => {
       bottomSheetRef.current?.present(0);
@@ -256,8 +258,8 @@ export const PostOptionsSheet = forwardRef<
 
     const getShareUrl = useCallback(() => {
       if (!post?.id) return "";
-      return `https://mirage.vote/post/${post.id}`;
-    }, [post?.id]);
+      return `${getShareBaseUrl(shareServer)}/post/${post.id}`;
+    }, [post?.id, shareServer]);
 
     const getShareMessage = useCallback(() => {
       const url = getShareUrl();

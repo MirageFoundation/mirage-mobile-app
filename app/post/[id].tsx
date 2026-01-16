@@ -33,7 +33,7 @@ import {
   type VoteResult,
 } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
-import { useAuthStore, useContentModerationStore, useUIStore } from "@/src/stores";
+import { useAuthStore, useContentModerationStore, useUIStore, usePreferencesStore, getShareBaseUrl } from "@/src/stores";
 import {
   AntDesign,
   Ionicons,
@@ -74,6 +74,7 @@ export default function PostDetailScreen() {
 
   const currentUser = useAuthStore((s) => s.user);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
+  const shareServer = usePreferencesStore((s) => s.shareServer);
   const optionsSheetRef = useRef<CommentOptionsSheetRef>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
@@ -1276,7 +1277,7 @@ export default function PostDetailScreen() {
           onRevealContent={handleRevealContent}
           contentRevealed={revealedContent}
           followLoading={isFollowLoading}
-          shareUrl={`https://mirage.app/post/${id}`}
+          shareUrl={`${getShareBaseUrl(shareServer)}/post/${id}`}
         />
 
         {/* Divider below post */}

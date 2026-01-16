@@ -53,6 +53,7 @@ import {
 import { useToast } from "@/src/providers/toast-provider";
 import {
   getAllowedTagsFromContentTypes,
+  getShareBaseUrl,
   useAuthStore,
   useContentModerationStore,
   usePreferencesStore,
@@ -120,6 +121,7 @@ export function HomeScreen() {
   const selectedContentTypes = usePreferencesStore(
     (s) => s.selectedContentTypes
   );
+  const shareServer = usePreferencesStore((s) => s.shareServer);
   const currentUser = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
@@ -828,7 +830,7 @@ export function HomeScreen() {
           onCommentPress={() => handleCommentPress(post.id)}
           onRevealContent={() => handleRevealContent(post.id)}
           contentRevealed={revealedPosts.has(post.id)}
-          shareUrl={`https://mirage.app/post/${post.id}`}
+          shareUrl={`${getShareBaseUrl(shareServer)}/post/${post.id}`}
         />
       );
     },

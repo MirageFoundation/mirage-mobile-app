@@ -4,6 +4,7 @@ import { mmkvStorage } from "./mmkv-storage";
 
 export type FeedType = "home" | "popular" | "news" | "watch" | "latest";
 export type ThemeMode = "light" | "dark" | "system";
+export type ShareServer = "mirage.talk" | "mirage.vote";
 export type ContentType =
   | "sensitive"
   | "porn"
@@ -48,6 +49,10 @@ export const isAdultContentEnabled = (types: ContentType[]): boolean => {
   );
 };
 
+export const getShareBaseUrl = (server: ShareServer): string => {
+  return `https://${server}`;
+};
+
 type PreferencesState = {
   // Feed
   feedType: FeedType;
@@ -69,6 +74,9 @@ type PreferencesState = {
   topicsBeforeShowMore: number; // 3, 5, 7, 10, or -1 (all)
   peopleBeforeShowMore: number; // 3, 5, 7, 10, or -1 (all)
 
+  // Sharing
+  shareServer: ShareServer;
+
   // Actions
   setFeedType: (type: FeedType) => void;
   setTheme: (theme: ThemeMode) => void;
@@ -81,6 +89,7 @@ type PreferencesState = {
   setAutoCollapseThreshold: (threshold: number | null) => void;
   setTopicsBeforeShowMore: (count: number) => void;
   setPeopleBeforeShowMore: (count: number) => void;
+  setShareServer: (server: ShareServer) => void;
 };
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -105,6 +114,9 @@ export const usePreferencesStore = create<PreferencesState>()(
       // Sidebar
       topicsBeforeShowMore: 5,
       peopleBeforeShowMore: 5,
+
+      // Sharing
+      shareServer: "mirage.talk",
 
       // Actions
       setFeedType: (type) => set({ feedType: type }),
@@ -213,6 +225,7 @@ export const usePreferencesStore = create<PreferencesState>()(
         set({ autoCollapseThreshold: threshold }),
       setTopicsBeforeShowMore: (count) => set({ topicsBeforeShowMore: count }),
       setPeopleBeforeShowMore: (count) => set({ peopleBeforeShowMore: count }),
+      setShareServer: (server) => set({ shareServer: server }),
     }),
     {
       name: "preferences-storage",

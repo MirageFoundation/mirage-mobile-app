@@ -18,7 +18,7 @@ import {
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useQueryClear } from "@/src/providers/query-clear-provider";
-import { useAuthStore, useDraftStore, useSearchStore, usePreferencesStore, type ThemeMode } from "@/src/stores";
+import { useAuthStore, useDraftStore, useSearchStore, usePreferencesStore, type ThemeMode, type ShareServer } from "@/src/stores";
 
 // Auto-collapse threshold options
 const collapseThresholdOptions: ValueOption<number | null>[] = [
@@ -37,6 +37,12 @@ const sidebarCountOptions: ValueOption<number>[] = [
   { value: 7, label: "7" },
   { value: 10, label: "10" },
   { value: -1, label: "Show All" },
+];
+
+// Share server options
+const shareServerOptions: ValueOption<ShareServer>[] = [
+  { value: "mirage.talk", label: "mirage.talk" },
+  { value: "mirage.vote", label: "mirage.vote" },
 ];
 
 type SettingItem = {
@@ -74,6 +80,8 @@ export function SettingsScreen() {
     setTopicsBeforeShowMore,
     peopleBeforeShowMore,
     setPeopleBeforeShowMore,
+    shareServer,
+    setShareServer,
   } = usePreferencesStore();
 
   // Sheet refs
@@ -81,6 +89,7 @@ export function SettingsScreen() {
   const collapseThresholdSheetRef = useRef<ValuePickerSheetRef>(null);
   const topicsCountSheetRef = useRef<ValuePickerSheetRef>(null);
   const peopleCountSheetRef = useRef<ValuePickerSheetRef>(null);
+  const shareServerSheetRef = useRef<ValuePickerSheetRef>(null);
 
   // Logout popup state
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
@@ -260,6 +269,24 @@ export function SettingsScreen() {
       ],
     },
     {
+      title: "Sharing",
+      data: [
+        {
+          id: "share-server",
+          component: (
+            <SettingRow
+              type="value"
+              icon="share-social-outline"
+              title="Share Server"
+              subtitle="Server used for sharing links"
+              rightText={shareServer}
+              onPress={() => shareServerSheetRef.current?.present()}
+            />
+          ),
+        },
+      ],
+    },
+    {
       title: "Account",
       data: [
         {
@@ -373,6 +400,14 @@ export function SettingsScreen() {
         options={sidebarCountOptions}
         value={peopleBeforeShowMore}
         onChange={setPeopleBeforeShowMore}
+      />
+
+      <ValuePickerSheet
+        ref={shareServerSheetRef}
+        title="Share Server"
+        options={shareServerOptions}
+        value={shareServer}
+        onChange={setShareServer}
       />
 
       {/* Logout Confirmation */}

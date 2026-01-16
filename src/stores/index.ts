@@ -3,8 +3,10 @@ export {
   usePreferencesStore,
   type FeedType,
   type ThemeMode,
+  type ShareServer,
   type ContentType,
   getAllowedTagsFromContentTypes,
+  getShareBaseUrl,
 } from "./preferences-store";
 export { useDraftStore, type PostDraft } from "./draft-store";
 export { useUIStore } from "./ui-store";
