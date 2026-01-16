@@ -3,7 +3,7 @@
  *
  * A persistent toast that shows when POW actions are being processed.
  * Displays queue progress (1/3), current action, and POW progress.
- * Shows brief success state before dismissing.
+ * Shows brief success/error state after each action before continuing.
  */
 
 import { Ionicons } from "@expo/vector-icons";
@@ -18,7 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { usePowQueueStore } from "@/src/services/pow-queue";
+import { usePowQueueStore, getSuccessLabel } from "@/src/services/pow-queue";
 import { Text } from "./primitives";
 
 const formatElapsedTime = (ms: number): string => {
@@ -31,8 +31,6 @@ const formatElapsedTime = (ms: number): string => {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 };
 
-type ToastState = "hidden" | "processing" | "success" | "error";
-
 export const PowQueueToast = () => {
   const { theme, rt } = useUnistyles();
   const insets = useSafeAreaInsets();
@@ -43,122 +41,153 @@ export const PowQueueToast = () => {
     completedCount,
     totalCount,
     currentProgress,
-    queue,
-    lastError,
+    lastCompletedAction,
   } = usePowQueueStore();
 
   const translateY = useRef(new Animated.Value(-100)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.95)).current;
+  
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [toastState, setToastState] = useState<ToastState>("hidden");
-  const [lastActionLabel, setLastActionLabel] = useState<string>("");
+  const [isVisible, setIsVisible] = useState(false);
+  
+  const isAnimatingOutRef = useRef(false);
   const dismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasProcessingRef = useRef(false);
 
-  const currentIndex = completedCount + 1;
+  // Determine visual state based on store state
+  // - currentAction exists → processing
+  // - currentAction is null but lastCompletedAction exists → showing result
+  // - neither → idle
+  const isShowingResult = currentAction === null && lastCompletedAction !== null;
+  const isShowingProcessing = currentAction !== null;
 
+  // Get display label
+  const displayLabel = isShowingResult
+    ? (lastCompletedAction.success 
+        ? getSuccessLabel(lastCompletedAction.type)
+        : "Failed")
+    : (currentAction?.label || "Processing...");
+
+  // Animate in
+  const animateIn = () => {
+    isAnimatingOutRef.current = false;
+    Animated.parallel([
+      Animated.spring(translateY, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 100,
+        friction: 12,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scale, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 100,
+        friction: 12,
+      }),
+    ]).start();
+  };
+
+  // Animate out
+  const animateOut = () => {
+    if (isAnimatingOutRef.current) return;
+    isAnimatingOutRef.current = true;
+    
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: -100,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scale, {
+        toValue: 0.95,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setIsVisible(false);
+      isAnimatingOutRef.current = false;
+    });
+  };
+
+  // Show toast when processing starts
   useEffect(() => {
-    if (dismissTimeoutRef.current) {
-      clearTimeout(dismissTimeoutRef.current);
-      dismissTimeoutRef.current = null;
-    }
-
-    if (isProcessing && currentAction) {
-      wasProcessingRef.current = true;
-      setLastActionLabel(currentAction.label);
-      setToastState("processing");
+    if (isProcessing && !isVisible) {
+      setIsVisible(true);
       setElapsedMs(0);
-
-      Animated.parallel([
-        Animated.spring(translateY, {
-          toValue: 0,
-          useNativeDriver: true,
-          tension: 100,
-          friction: 12,
-        }),
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 150,
-          useNativeDriver: true,
-        }),
-        Animated.spring(scale, {
-          toValue: 1,
-          useNativeDriver: true,
-          tension: 100,
-          friction: 12,
-        }),
-      ]).start();
-    } else if (!isProcessing && wasProcessingRef.current) {
-      wasProcessingRef.current = false;
-      
-      if (lastError) {
-        setToastState("error");
-      } else {
-        setToastState("success");
-      }
-
-      dismissTimeoutRef.current = setTimeout(() => {
-        Animated.parallel([
-          Animated.timing(translateY, {
-            toValue: -100,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-          Animated.timing(opacity, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-          Animated.timing(scale, {
-            toValue: 0.95,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-        ]).start(() => {
-          setToastState("hidden");
-        });
-      }, 1500);
+      animateIn();
     }
+    wasProcessingRef.current = isProcessing;
+  }, [isProcessing, isVisible]);
 
+  // Reset timer when a new action starts
+  useEffect(() => {
+    if (currentAction) {
+      setElapsedMs(0);
+    }
+  }, [currentAction?.id]);
+
+  // Dismiss when processing ends (after showing final result)
+  useEffect(() => {
+    if (!isProcessing && !currentAction && !lastCompletedAction && isVisible) {
+      // All done and result has been shown
+      if (dismissTimeoutRef.current) {
+        clearTimeout(dismissTimeoutRef.current);
+      }
+      dismissTimeoutRef.current = setTimeout(() => {
+        animateOut();
+      }, 300);
+    }
+    
     return () => {
       if (dismissTimeoutRef.current) {
         clearTimeout(dismissTimeoutRef.current);
       }
     };
-  }, [isProcessing, currentAction?.id, lastError]);
+  }, [isProcessing, currentAction, lastCompletedAction, isVisible]);
 
+  // Timer for elapsed time (only when processing)
   useEffect(() => {
-    if (toastState === "processing") {
+    if (isShowingProcessing && isVisible) {
       const interval = setInterval(() => {
         setElapsedMs((prev) => prev + 100);
       }, 100);
       return () => clearInterval(interval);
     }
-  }, [toastState]);
+  }, [isShowingProcessing, isVisible]);
 
-  if (toastState === "hidden") return null;
+  if (!isVisible) return null;
 
   const isDark = rt.themeName === "dark";
   
   const getColors = () => {
-    switch (toastState) {
-      case "success":
+    if (isShowingResult) {
+      if (lastCompletedAction.success) {
         return {
           icon: theme.colors.success[500],
           border: theme.colors.success[500] + "40",
         };
-      case "error":
+      } else {
         return {
           icon: theme.colors.error[500],
           border: theme.colors.error[500] + "40",
         };
-      default:
-        return {
-          icon: theme.colors.primary[500],
-          border: theme.colors.primary[500] + "40",
-        };
+      }
     }
+    return {
+      icon: theme.colors.primary[500],
+      border: theme.colors.primary[500] + "40",
+    };
   };
 
   const colors = getColors();
@@ -191,17 +220,6 @@ export const PowQueueToast = () => {
   const hasMultiple = totalCount > 1;
   const progressPercent = currentProgress > 0 ? `${Math.round(currentProgress)}%` : "";
 
-  const getDisplayText = () => {
-    switch (toastState) {
-      case "success":
-        return "Done!";
-      case "error":
-        return "Failed";
-      default:
-        return currentAction?.label || lastActionLabel || "Processing...";
-    }
-  };
-
   const badgeBackground = isDark
     ? "rgba(255, 255, 255, 0.15)"
     : "rgba(0, 0, 0, 0.08)";
@@ -211,8 +229,8 @@ export const PowQueueToast = () => {
     : "rgba(0, 0, 0, 0.06)";
 
   const renderIcon = () => {
-    switch (toastState) {
-      case "success":
+    if (isShowingResult) {
+      if (lastCompletedAction.success) {
         return (
           <Ionicons
             name="checkmark-circle"
@@ -220,7 +238,7 @@ export const PowQueueToast = () => {
             color={colors.icon}
           />
         );
-      case "error":
+      } else {
         return (
           <Ionicons
             name="alert-circle"
@@ -228,10 +246,14 @@ export const PowQueueToast = () => {
             color={colors.icon}
           />
         );
-      default:
-        return <ActivityIndicator size="small" color={colors.icon} />;
+      }
     }
+    return <ActivityIndicator size="small" color={colors.icon} />;
   };
+
+  const showCounter = hasMultiple && isShowingProcessing;
+  const showTimer = isShowingProcessing;
+  const currentIndex = completedCount + 1;
 
   return (
     <Animated.View
@@ -253,13 +275,13 @@ export const PowQueueToast = () => {
 
           <View style={styles.textContainer}>
             <Text size="sm" weight="semibold" numberOfLines={1}>
-              {getDisplayText()}
-              {toastState === "processing" && progressPercent ? ` ${progressPercent}` : ""}
+              {displayLabel}
+              {isShowingProcessing && progressPercent ? ` ${progressPercent}` : ""}
             </Text>
           </View>
 
           <View style={styles.rightSection}>
-            {hasMultiple && toastState === "processing" && (
+            {showCounter && (
               <View style={[styles.counterBadge, { backgroundColor: badgeBackground }]}>
                 <Text size="xs" weight="bold" style={styles.counterText}>
                   {currentIndex}/{totalCount}
@@ -267,7 +289,7 @@ export const PowQueueToast = () => {
               </View>
             )}
 
-            {toastState === "processing" && (
+            {showTimer && (
               <View style={[styles.timerContainer, { backgroundColor: timerBackground }]}>
                 <Text size="sm" weight="medium" style={styles.timerText}>
                   {formatElapsedTime(elapsedMs)}

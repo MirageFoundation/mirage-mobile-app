@@ -48,6 +48,8 @@ export interface PowQueueState {
   totalCount: number;
   currentProgress: number;
   lastError: Error | null;
+  /** Set when an action just completed - used by UI to show result */
+  lastCompletedAction: { type: PowActionType; success: boolean } | null;
 }
 
 export interface PowQueueActions {
@@ -56,9 +58,14 @@ export interface PowQueueActions {
   updateProgress: (progress: number) => void;
   clear: () => void;
   reset: () => void;
+  /** Called by UI after showing result to continue processing */
+  continueProcessing: () => void;
 }
 
 type PowQueueStore = PowQueueState & PowQueueActions;
+
+/** Delay before processing next action (to show success/error state) */
+const RESULT_DISPLAY_DELAY_MS = 1200;
 
 let actionIdCounter = 0;
 
@@ -137,6 +144,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   totalCount: 0,
   currentProgress: 0,
   lastError: null,
+  lastCompletedAction: null,
 
   enqueue: <T>(action: PowAction<T>) => {
     const state = get();
@@ -157,13 +165,25 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     const state = get();
 
     if (state.queue.length === 0) {
+      // All done - but keep lastCompletedAction so UI can show final result
       set({
         isProcessing: false,
         currentAction: null,
-        completedCount: 0,
-        totalCount: 0,
         currentProgress: 0,
       });
+      
+      // Reset counts after a delay to let UI dismiss
+      setTimeout(() => {
+        const currentState = get();
+        // Only reset if still not processing (no new items added)
+        if (!currentState.isProcessing && currentState.queue.length === 0) {
+          set({
+            completedCount: 0,
+            totalCount: 0,
+            lastCompletedAction: null,
+          });
+        }
+      }, 2000);
       return;
     }
 
@@ -174,8 +194,10 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       currentAction: nextAction,
       queue: remainingQueue,
       currentProgress: 0,
+      lastCompletedAction: null,
     });
 
+    let success = true;
     try {
       const result = await nextAction.execute();
       nextAction.onSuccess?.(result);
@@ -183,8 +205,10 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       set((s) => ({
         completedCount: s.completedCount + 1,
         lastError: null,
+        lastCompletedAction: { type: nextAction.type, success: true },
       }));
     } catch (error) {
+      success = false;
       const err = error instanceof Error ? error : new Error(String(error));
       nextAction.onRollback?.();
       nextAction.onError?.(err);
@@ -192,10 +216,21 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       set((s) => ({
         completedCount: s.completedCount + 1,
         lastError: err,
+        lastCompletedAction: { type: nextAction.type, success: false },
       }));
     }
 
+    // Clear current action to signal completion
     set({ currentAction: null, currentProgress: 0 });
+
+    // Wait before processing next to allow UI to show result
+    setTimeout(() => {
+      get().processNext();
+    }, RESULT_DISPLAY_DELAY_MS);
+  },
+
+  continueProcessing: () => {
+    // Called by UI to manually continue (not used currently but available)
     get().processNext();
   },
 
@@ -222,6 +257,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       totalCount: 0,
       currentProgress: 0,
       lastError: null,
+      lastCompletedAction: null,
     });
   },
 }));
@@ -240,5 +276,6 @@ export const usePowQueue = () => {
     totalCount: store.totalCount,
     currentProgress: store.currentProgress,
     pendingCount: store.queue.length + (store.currentAction ? 1 : 0),
+    lastCompletedAction: store.lastCompletedAction,
   };
 };
