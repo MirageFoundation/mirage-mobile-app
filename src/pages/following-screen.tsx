@@ -18,7 +18,7 @@ import {
 } from "@/src/api";
 import {
   FeedHeader,
-  PostCard,
+  PostCardItem,
   PostCardSkeletonList,
   type Post,
 } from "@/src/components/molecules";
@@ -148,6 +148,20 @@ export function FollowingScreen() {
       });
     }, []),
   });
+
+  const postsWithOverrides = useMemo(() => {
+    if (!posts.length) return posts;
+    return posts.map((post) => {
+      const override = voteOverrides[post.id];
+      if (!override) return post;
+      return {
+        ...post,
+        likes: post.likes + (override.likeDelta ?? 0),
+        hasLiked: override.hasLiked ?? post.hasLiked,
+        hasDisliked: override.hasDisliked ?? post.hasDisliked,
+      };
+    });
+  }, [posts, voteOverrides]);
 
   const handlePostPress = useCallback(
     (postId: string) => {
@@ -322,62 +336,22 @@ export function FollowingScreen() {
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  // Apply vote overrides to posts
-  const getPostWithOverrides = useCallback(
-    (post: Post): Post => {
-      const override = voteOverrides[post.id];
-      if (!override) return post;
-      return {
-        ...post,
-        likes: post.likes + (override.likeDelta ?? 0),
-        hasLiked: override.hasLiked ?? post.hasLiked,
-        hasDisliked: override.hasDisliked ?? post.hasDisliked,
-      };
-    },
-    [voteOverrides]
-  );
-
   const renderPost = useCallback(
     ({ item: post }: { item: Post }) => {
-      const postWithOverrides = getPostWithOverrides(post);
-      const isFollowingAuthor = followedUsers.includes(post.author.id);
       const isFollowLoading = followLoadingUsers.has(post.author.id);
 
       return (
-        <PostCard
-          post={{
-            ...postWithOverrides,
-            isFollowing: isFollowingAuthor,
-          }}
+        <PostCardItem
+          post={post}
           isOwnPost={currentUser?.id === post.author.id}
-          onPress={() => handlePostPress(post.id)}
-          onAuthorPress={() => handleAuthorPress(post.author.id)}
-          onMorePress={() => handleMorePress(post.id)}
-          onLikePress={() =>
-            handleLikePress(
-              post.id,
-              postWithOverrides.hasLiked ?? false,
-              postWithOverrides.hasDisliked ?? false,
-              postWithOverrides.likes
-            )
-          }
-          onDislikePress={() =>
-            handleDislikePress(
-              post.id,
-              postWithOverrides.hasLiked ?? false,
-              postWithOverrides.hasDisliked ?? false,
-              postWithOverrides.likes
-            )
-          }
-          onCommentPress={() => handleCommentPress(post.id)}
-          onFollowPress={() =>
-            handleFollowPress(
-              post.author.id,
-              post.author.username,
-              isFollowingAuthor
-            )
-          }
-          onRevealContent={() => handleRevealContent(post.id)}
+          onPostPress={handlePostPress}
+          onAuthorPress={handleAuthorPress}
+          onMorePress={handleMorePress}
+          onLikePress={handleLikePress}
+          onDislikePress={handleDislikePress}
+          onCommentPress={handleCommentPress}
+          onFollowPress={handleFollowPress}
+          onRevealContent={handleRevealContent}
           contentRevealed={revealedPosts.has(post.id)}
           followLoading={isFollowLoading}
           shareUrl={`https://mirage.app/post/${post.id}`}
@@ -386,8 +360,6 @@ export function FollowingScreen() {
     },
     [
       currentUser,
-      getPostWithOverrides,
-      followedUsers,
       followLoadingUsers,
       handlePostPress,
       handleAuthorPress,
@@ -479,6 +451,15 @@ export function FollowingScreen() {
     );
   }, [isFetchingNextPage, theme.colors.brand]);
 
+  const listContentStyle = useMemo(
+    () => ({
+      paddingTop: insets.top + HEADER_HEIGHT,
+      paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16,
+      flexGrow: postsWithOverrides.length === 0 ? 1 : undefined,
+    }),
+    [insets.bottom, insets.top, postsWithOverrides.length]
+  );
+
   return (
     <Box flex background="base">
       {/* Fixed Status Bar Background */}
@@ -490,17 +471,13 @@ export function FollowingScreen() {
       {/* Scrollable Feed */}
       <AnimatedFlatList
         ref={flatListRef}
-        data={posts}
+        data={postsWithOverrides}
         renderItem={renderPost}
         keyExtractor={keyExtractor}
         onScroll={scrollHandler}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingTop: insets.top + HEADER_HEIGHT,
-          paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16,
-          flexGrow: posts.length === 0 ? 1 : undefined,
-        }}
+        contentContainerStyle={listContentStyle}
         ListHeaderComponent={ListHeaderComponent}
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}
@@ -514,6 +491,8 @@ export function FollowingScreen() {
         }
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         // Performance optimizations
         removeClippedSubviews={true}
         maxToRenderPerBatch={5}

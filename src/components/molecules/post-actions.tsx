@@ -8,7 +8,7 @@ import {
 } from "@/assets/figma-icons";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import {
   Animated,
   Pressable,
@@ -78,7 +78,7 @@ const SIZE_CONFIG = {
   },
 };
 
-export const PostActions = ({
+export const PostActions = memo(function PostActions({
   likes,
   dislikes,
   comments,
@@ -93,7 +93,7 @@ export const PostActions = ({
   size = "md",
   disabled = false,
   style,
-}: PostActionsProps) => {
+}: PostActionsProps) {
   const { theme } = useUnistyles();
   const { iconSize, gap, pillHeight, voteTextSize } = SIZE_CONFIG[size];
 
@@ -275,7 +275,7 @@ export const PostActions = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create((theme) => ({
   container: {

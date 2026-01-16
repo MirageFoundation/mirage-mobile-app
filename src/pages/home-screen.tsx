@@ -25,7 +25,7 @@ import {
   ConfirmationPopup,
   FeedHeader,
   type Post,
-  PostCard,
+  PostCardItem,
   PostCardSkeleton,
   PostCardSkeletonList,
   PostOptionsSheet,
@@ -58,6 +58,14 @@ import {
 } from "@/src/stores";
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Post>);
+
+const areSetsEqual = (a: Set<string>, b: Set<string>) => {
+  if (a.size !== b.size) return false;
+  for (const value of a) {
+    if (!b.has(value)) return false;
+  }
+  return true;
+};
 
 export function HomeScreen() {
   const { theme } = useUnistyles();
@@ -99,7 +107,9 @@ export function HomeScreen() {
           .filter((item) => item.isViewable && item.item?.id)
           .map((item) => item.item.id)
       );
-      setVisiblePostIds(visibleIds);
+      setVisiblePostIds((prev) =>
+        areSetsEqual(prev, visibleIds) ? prev : visibleIds
+      );
     }
   ).current;
 
@@ -684,9 +694,9 @@ export function HomeScreen() {
     }
   }, [posts.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  // Apply vote overrides to posts
-  const getPostWithOverrides = useCallback(
-    (post: Post): Post => {
+  const postsWithOverrides = useMemo(() => {
+    if (!posts.length) return posts;
+    return posts.map((post) => {
       const override = voteOverrides[post.id];
       if (!override) return post;
       return {
@@ -695,53 +705,27 @@ export function HomeScreen() {
         hasLiked: override.hasLiked ?? post.hasLiked,
         hasDisliked: override.hasDisliked ?? post.hasDisliked,
       };
-    },
-    [voteOverrides]
-  );
+    });
+  }, [posts, voteOverrides]);
 
   const renderPost = useCallback(
     ({ item: post }: { item: Post }) => {
-      const postWithOverrides = getPostWithOverrides(post);
-      const isFollowingAuthor = followedUsers.includes(post.author.id);
       const isFollowLoading = followLoadingUsers.has(post.author.id);
       const isVisible = visiblePostIds.has(post.id);
 
       return (
-        <PostCard
-          post={{
-            ...postWithOverrides,
-            isFollowing: isFollowingAuthor,
-          }}
+        <PostCardItem
+          post={post}
           isOwnPost={currentUser?.id === post.author.id}
           isVisible={isVisible}
-          onPress={() => handlePostPress(post.id)}
-          onAuthorPress={() => handleAuthorPress(post.author.id)}
-          onMorePress={() => handleMorePress(post.id)}
-          onLikePress={() =>
-            handleLikePress(
-              post.id,
-              postWithOverrides.hasLiked ?? false,
-              postWithOverrides.hasDisliked ?? false,
-              postWithOverrides.likes
-            )
-          }
-          onDislikePress={() =>
-            handleDislikePress(
-              post.id,
-              postWithOverrides.hasLiked ?? false,
-              postWithOverrides.hasDisliked ?? false,
-              postWithOverrides.likes
-            )
-          }
-          onCommentPress={() => handleCommentPress(post.id)}
-          onFollowPress={() =>
-            handleFollowPress(
-              post.author.id,
-              post.author.username,
-              isFollowingAuthor
-            )
-          }
-          onRevealContent={() => handleRevealContent(post.id)}
+          onPostPress={handlePostPress}
+          onAuthorPress={handleAuthorPress}
+          onMorePress={handleMorePress}
+          onLikePress={handleLikePress}
+          onDislikePress={handleDislikePress}
+          onCommentPress={handleCommentPress}
+          onFollowPress={handleFollowPress}
+          onRevealContent={handleRevealContent}
           contentRevealed={revealedPosts.has(post.id)}
           followLoading={isFollowLoading}
           shareUrl={`https://mirage.app/post/${post.id}`}
@@ -750,8 +734,6 @@ export function HomeScreen() {
     },
     [
       currentUser,
-      getPostWithOverrides,
-      followedUsers,
       followLoadingUsers,
       visiblePostIds,
       handlePostPress,
@@ -826,6 +808,15 @@ export function HomeScreen() {
     return <Box p="sm" />;
   }, [isFetchingNextPage]);
 
+  const listContentStyle = useMemo(
+    () => ({
+      paddingTop: insets.top + HEADER_HEIGHT,
+      paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16,
+      flexGrow: postsWithOverrides.length === 0 ? 1 : undefined,
+    }),
+    [insets.bottom, insets.top, postsWithOverrides.length]
+  );
+
   return (
     <Box flex background="base">
       {/* Fixed Status Bar Background */}
@@ -844,17 +835,13 @@ export function HomeScreen() {
       {/* Scrollable Feed */}
       <AnimatedFlatList
         ref={flatListRef}
-        data={posts}
+        data={postsWithOverrides}
         renderItem={renderPost}
         keyExtractor={keyExtractor}
         onScroll={scrollHandler}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingTop: insets.top + HEADER_HEIGHT,
-          paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16,
-          flexGrow: posts.length === 0 ? 1 : undefined,
-        }}
+        contentContainerStyle={listContentStyle}
         ListHeaderComponent={ListHeaderComponent}
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}
@@ -868,6 +855,8 @@ export function HomeScreen() {
         }
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.3}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         // Viewability tracking for auto-play video
         viewabilityConfig={viewabilityConfig}
         onViewableItemsChanged={onViewableItemsChanged}
