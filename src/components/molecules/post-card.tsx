@@ -8,11 +8,13 @@ import {
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Linking,
+  Platform,
   Pressable,
   View,
   type StyleProp,
@@ -441,9 +443,27 @@ export const PostCard = ({
           {/* Blur overlay with reveal button */}
           {shouldBlurContent && (
             <Pressable onPress={onRevealContent} style={styles.blurOverlay}>
-              <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                Tap to reveal
-              </Text>
+              {Platform.OS === "ios" ? (
+                <BlurView
+                  intensity={80}
+                  tint="dark"
+                  style={styles.blurViewFill}
+                >
+                  <View style={styles.revealTextContainer}>
+                    <Ionicons name="eye-outline" size={24} color="#fff" />
+                    <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
+                      Tap to reveal
+                    </Text>
+                  </View>
+                </BlurView>
+              ) : (
+                <View style={styles.androidBlurOverlay}>
+                  <Ionicons name="eye-outline" size={24} color="#fff" />
+                  <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
+                    Tap to reveal
+                  </Text>
+                </View>
+              )}
             </Pressable>
           )}
         </View>
@@ -696,9 +716,23 @@ const styles = StyleSheet.create((theme) => ({
   },
   blurOverlay: {
     ...StyleSheet.absoluteFillObject,
+  },
+  blurViewFill: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
+  },
+  revealTextContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  androidBlurOverlay: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    gap: 8,
   },
   body: {
     marginTop: theme.spacing.xs,
