@@ -122,8 +122,18 @@ export function SettingsScreen() {
   const getContentTypeLabel = () => {
     if (selectedContentTypes.includes("all")) return "All";
     if (selectedContentTypes.includes("none")) return "None";
+    // Show "None" if only sensitive content is selected (no adult content)
+    if (
+      selectedContentTypes.length === 1 &&
+      selectedContentTypes[0] === "sensitive"
+    ) {
+      return "None";
+    }
     if (selectedContentTypes.length === 1) {
-      return selectedContentTypes[0].charAt(0).toUpperCase() + selectedContentTypes[0].slice(1);
+      return (
+        selectedContentTypes[0].charAt(0).toUpperCase() +
+        selectedContentTypes[0].slice(1)
+      );
     }
     return `${selectedContentTypes.length} selected`;
   };

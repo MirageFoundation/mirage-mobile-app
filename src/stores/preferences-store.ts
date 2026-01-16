@@ -95,7 +95,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       // Content
       adultContentEnabled: false,
       hasSeenAdultPrompt: false,
-      selectedContentTypes: ["none"],
+      selectedContentTypes: ["sensitive"],
       blurSensitiveMedia: true,
       hideDownvotedPosts: false,
 
@@ -139,7 +139,7 @@ export const usePreferencesStore = create<PreferencesState>()(
           if (state.selectedContentTypes.includes("all")) {
             return {
               adultContentEnabled: false,
-              selectedContentTypes: ["none"],
+              selectedContentTypes: ["sensitive"],
             };
           }
 
@@ -154,7 +154,7 @@ export const usePreferencesStore = create<PreferencesState>()(
             adultContentEnabled: false,
             selectedContentTypes: filteredTypes.length
               ? filteredTypes
-              : ["none"],
+              : ["sensitive"],
           };
         }),
       setHasSeenAdultPrompt: () => set({ hasSeenAdultPrompt: true }),
@@ -174,10 +174,10 @@ export const usePreferencesStore = create<PreferencesState>()(
               adultContentEnabled: true,
             };
           }
-          // If selecting "none", clear others and set only "none"
+          // If selecting "none", clear others and set only "sensitive" (safe content only)
           if (type === "none") {
             return {
-              selectedContentTypes: ["none"],
+              selectedContentTypes: ["sensitive"],
               adultContentEnabled: false,
             };
           }
@@ -194,10 +194,10 @@ export const usePreferencesStore = create<PreferencesState>()(
             newTypes = [...newTypes, type];
           }
 
-          // If nothing selected, default to "none"
+          // If nothing selected, default to "sensitive"
           if (newTypes.length === 0) {
             return {
-              selectedContentTypes: ["none"],
+              selectedContentTypes: ["sensitive"],
               adultContentEnabled: false,
             };
           }
