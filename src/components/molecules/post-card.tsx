@@ -206,6 +206,7 @@ export const PostCard = ({
   const { theme } = useUnistyles();
   const [imageError, setImageError] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const videoRef = useRef<Video | null>(null);
   const aspectRatioLockedRef = useRef(false);
 
@@ -367,6 +368,11 @@ export const PostCard = ({
     }
   }, [isVideo, onRevealContent, shouldBlurContent]);
 
+  const handleMuteToggle = useCallback(() => {
+    triggerHaptic("light");
+    setIsMuted((prev) => !prev);
+  }, []);
+
   const mediaContent = useMemo(() => {
     if (!resolvedMediaUri || imageError) return null;
 
@@ -381,7 +387,7 @@ export const PostCard = ({
               resizeMode={ResizeMode.COVER}
               shouldPlay={isVideoPlaying}
               isLooping={true}
-              isMuted={true}
+              isMuted={isMuted}
               useNativeControls={false}
               onLoad={(status) => {
                 if (!status.isLoaded) return;
@@ -426,6 +432,26 @@ export const PostCard = ({
                 <Ionicons
                   name={isVideoPlaying ? "pause" : "play"}
                   size={28}
+                  color="#fff"
+                />
+              </View>
+            </Pressable>
+          )}
+
+          {/* Mute/Unmute button for videos */}
+          {isVideo && !shouldBlurContent && (
+            <Pressable
+              onPress={(event) => {
+                event.stopPropagation?.();
+                handleMuteToggle();
+              }}
+              style={styles.muteButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <View style={styles.muteButtonInner}>
+                <Ionicons
+                  name={isMuted ? "volume-mute" : "volume-high"}
+                  size={16}
                   color="#fff"
                 />
               </View>
@@ -486,12 +512,14 @@ export const PostCard = ({
     mediaAspectRatio,
     isVideo,
     isVideoPlaying,
+    isMuted,
     shouldBlurContent,
     hasMultipleMedia,
     extraMediaCount,
     mediaSource,
     updateMediaAspectRatioFromSize,
     handleVideoToggle,
+    handleMuteToggle,
     onRevealContent,
   ]);
 
@@ -719,6 +747,19 @@ const styles = StyleSheet.create((theme) => ({
     width: 56,
     height: 56,
     borderRadius: 28,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  muteButton: {
+    position: "absolute",
+    bottom: theme.spacing.sm,
+    right: theme.spacing.sm,
+  },
+  muteButtonInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     alignItems: "center",
     justifyContent: "center",

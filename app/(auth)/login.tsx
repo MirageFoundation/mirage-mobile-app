@@ -20,7 +20,8 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { theme } = useUnistyles();
+  const { theme, rt } = useUnistyles();
+  const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
 
   const importWallet = useAuthStore((s) => s.importWallet);
@@ -180,7 +181,11 @@ export default function LoginScreen() {
         {/* Title section */}
         <View style={styles.titleSection}>
           <Image
-            source={require("@/assets/images/app-icon.png")}
+            source={
+              isDark
+                ? require("@/assets/images/app-dark-icon.png")
+                : require("@/assets/images/app-icon.png")
+            }
             style={styles.appIcon}
           />
           <Text style={styles.titleText}>Login to Mirage</Text>

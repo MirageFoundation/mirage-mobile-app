@@ -120,6 +120,7 @@ export function HomeScreen() {
     (s) => s.selectedContentTypes
   );
   const currentUser = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
 
   // Fetch user's followed list (for showing "Following" status on posts)
   const { data: followedData } = useUserFollowed();
@@ -298,6 +299,10 @@ export function HomeScreen() {
     // TODO: Navigate to about
     console.log("Navigate to about");
   }, []);
+
+  const handleMenuLogout = useCallback(async () => {
+    await logout();
+  }, [logout]);
 
   const getFeedTitle = () => {
     switch (feedType) {
@@ -949,6 +954,7 @@ export function HomeScreen() {
         onInviteAndEarn={handleMenuInvite}
         onHelp={handleMenuHelp}
         onAbout={handleMenuAbout}
+        onLogout={handleMenuLogout}
       />
     </Box>
   );

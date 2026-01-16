@@ -27,7 +27,8 @@ type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid";
 
 export default function UsernameScreen() {
   const router = useRouter();
-  const { theme } = useUnistyles();
+  const { theme, rt } = useUnistyles();
+  const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
 
@@ -222,7 +223,11 @@ export default function UsernameScreen() {
         {/* App Icon */}
         <View style={styles.iconContainer}>
           <Image
-            source={require("@/assets/images/app-icon.png")}
+            source={
+              isDark
+                ? require("@/assets/images/app-dark-icon.png")
+                : require("@/assets/images/app-icon.png")
+            }
             style={styles.appIcon}
             resizeMode="contain"
           />

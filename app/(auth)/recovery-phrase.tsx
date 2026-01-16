@@ -19,7 +19,8 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 export default function RecoveryPhraseScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ username?: string }>();
-  const { theme } = useUnistyles();
+  const { theme, rt } = useUnistyles();
+  const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
 
   const recoveryPhrase = useAuthStore((s) => s.recoveryPhrase);
@@ -246,7 +247,11 @@ export default function RecoveryPhraseScreen() {
         </Pressable>
         <View style={styles.headerCenter}>
           <Image
-            source={require("@/assets/images/app-icon.png")}
+            source={
+              isDark
+                ? require("@/assets/images/app-dark-icon.png")
+                : require("@/assets/images/app-icon.png")
+            }
             style={styles.appIcon}
             resizeMode="contain"
           />

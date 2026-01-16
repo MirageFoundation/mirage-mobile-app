@@ -22,8 +22,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Divider, Text } from "@/src/components/ui/primitives";
-import { usePreferencesStore, type ThemeMode } from "@/src/stores";
+import { usePreferencesStore, useAuthStore } from "@/src/stores";
 import { LogoutConfirmationPopup } from "./logout-confirmation-popup";
+import { useRouter } from "expo-router";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MENU_WIDTH = SCREEN_WIDTH * 0.8; // 80% of screen width
@@ -270,9 +271,13 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
   ) => {
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
+    const router = useRouter();
     const [visible, setVisible] = useState(false);
     const [showLogoutPopup, setShowLogoutPopup] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+    // Auth state
+    const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
 
     // Theme state from preferences store
     const themeMode = usePreferencesStore((s) => s.theme);
@@ -367,6 +372,23 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       setShowLogoutPopup(false);
     }, []);
 
+    // Auth handlers for logged out state
+    const handleCreateAccount = useCallback(() => {
+      triggerHaptic("light");
+      close();
+      setTimeout(() => {
+        router.push("/(auth)/username");
+      }, 300);
+    }, [close, router]);
+
+    const handleLogin = useCallback(() => {
+      triggerHaptic("light");
+      close();
+      setTimeout(() => {
+        router.push("/(auth)/login");
+      }, 300);
+    }, [close, router]);
+
     const handleLogoutConfirm = useCallback(async () => {
       setIsLoggingOut(true);
       try {
@@ -436,90 +458,111 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
               ]}
               showsVerticalScrollIndicator={false}
             >
-              {/* Content Section */}
-              <SectionHeader title="Content" />
-              <MenuItem
-                iconName="bookmark-outline"
-                title="Saved"
-                subtitle="Your bookmarked posts"
-                onPress={createHandler(onSaved)}
-              />
-              <MenuItem
-                iconName="time-outline"
-                title="History"
-                subtitle="Recently viewed"
-                onPress={createHandler(onHistory)}
-              />
-              <MenuItem
-                iconName="document-text-outline"
-                title="Drafts"
-                subtitle="Unpublished content"
-                onPress={createHandler(onDrafts)}
-              />
-              <SectionFooter />
-              {/* Social Section */}
-              <SectionHeader title="Social" />
-              <MenuItem
-                iconName="globe-outline"
-                title="Network"
-                subtitle="Your connections"
-                onPress={createHandler(onNetwork)}
-              />
-              <MenuItem
-                iconName="gift-outline"
-                title="Invite & Earn"
-                subtitle="Get rewards"
-                onPress={createHandler(onInviteAndEarn)}
-              />
-              <SectionFooter />
-              {/* App Section */}
-              <SectionHeader title="App" />
-              <MenuItem
-                iconName="settings-outline"
-                title="Settings"
-                subtitle="App preferences"
-                onPress={createHandler(onSettings)}
-              />
-              <MenuItem
-                iconName="card-outline"
-                title="Subscription"
-                subtitle="Manage your plan"
-                onPress={createHandler(onSubscription)}
-              />
-              <MenuItem
-                iconName="help-circle-outline"
-                title="Help & Support"
-                subtitle="FAQs and contact"
-                onPress={createHandler(onHelp)}
-              />
-              <MenuItem
-                iconName="information-circle-outline"
-                title="About"
-                subtitle="App info and legal"
-                onPress={createHandler(onAbout)}
-              />
-              <SectionFooter />
+              {isLoggedIn ? (
+                <>
+                  {/* Content Section */}
+                  <SectionHeader title="Content" />
+                  <MenuItem
+                    iconName="bookmark-outline"
+                    title="Saved"
+                    subtitle="Your bookmarked posts"
+                    onPress={createHandler(onSaved)}
+                  />
+                  <MenuItem
+                    iconName="time-outline"
+                    title="History"
+                    subtitle="Recently viewed"
+                    onPress={createHandler(onHistory)}
+                  />
+                  <MenuItem
+                    iconName="document-text-outline"
+                    title="Drafts"
+                    subtitle="Unpublished content"
+                    onPress={createHandler(onDrafts)}
+                  />
+                  <SectionFooter />
+                  {/* Social Section */}
+                  <SectionHeader title="Social" />
+                  <MenuItem
+                    iconName="globe-outline"
+                    title="Network"
+                    subtitle="Your connections"
+                    onPress={createHandler(onNetwork)}
+                  />
+                  <MenuItem
+                    iconName="gift-outline"
+                    title="Invite & Earn"
+                    subtitle="Get rewards"
+                    onPress={createHandler(onInviteAndEarn)}
+                  />
+                  <SectionFooter />
+                  {/* App Section */}
+                  <SectionHeader title="App" />
+                  <MenuItem
+                    iconName="settings-outline"
+                    title="Settings"
+                    subtitle="App preferences"
+                    onPress={createHandler(onSettings)}
+                  />
+                  <MenuItem
+                    iconName="card-outline"
+                    title="Subscription"
+                    subtitle="Manage your plan"
+                    onPress={createHandler(onSubscription)}
+                  />
+                  <MenuItem
+                    iconName="help-circle-outline"
+                    title="Help & Support"
+                    subtitle="FAQs and contact"
+                    onPress={createHandler(onHelp)}
+                  />
+                  <MenuItem
+                    iconName="information-circle-outline"
+                    title="About"
+                    subtitle="App info and legal"
+                    onPress={createHandler(onAbout)}
+                  />
+                  <SectionFooter />
 
-              {/* Theme Section */}
-              <SectionHeader title="Theme" />
-              <ThemeToggleItem
-                iconName="phone-portrait-outline"
-                title="Automatic"
-                subtitle="Follow system setting"
-                value={isAutomatic}
-                onValueChange={handleAutomaticToggle}
-              />
-              <ThemeToggleItem
-                iconName="moon-outline"
-                title="Dark Mode"
-                value={isDarkMode}
-                onValueChange={handleDarkModeToggle}
-              />
-              <SectionFooter />
+                  {/* Theme Section */}
+                  <SectionHeader title="Theme" />
+                  <ThemeToggleItem
+                    iconName="phone-portrait-outline"
+                    title="Automatic"
+                    subtitle="Follow system setting"
+                    value={isAutomatic}
+                    onValueChange={handleAutomaticToggle}
+                  />
+                  <ThemeToggleItem
+                    iconName="moon-outline"
+                    title="Dark Mode"
+                    value={isDarkMode}
+                    onValueChange={handleDarkModeToggle}
+                  />
+                  <SectionFooter />
 
-              {/* Account Section */}
-              <SectionHeader title="Account" />
-              <LogoutMenuItem onPress={handleLogoutPress} />
+                  {/* Account Section */}
+                  <SectionHeader title="Account" />
+                  <LogoutMenuItem onPress={handleLogoutPress} />
+                </>
+              ) : (
+                <>
+                  {/* Logged out state - only show Create Account and Login */}
+                  <SectionHeader title="Get Started" />
+                  <MenuItem
+                    iconName="person-add-outline"
+                    title="Create Account"
+                    subtitle="Set up your identity"
+                    onPress={handleCreateAccount}
+                  />
+                  <MenuItem
+                    iconName="log-in-outline"
+                    title="Login"
+                    subtitle="I already have an account"
+                    onPress={handleLogin}
+                  />
+                </>
+              )}
             </ScrollView>
           </Animated.View>
 

@@ -242,13 +242,20 @@ export const FeedHeader = ({
             </Menu>
           ) : (
             <View style={styles.titleButton}>
-              {feedType === "home" && (
-                <Image
-                  source={require("@/assets/images/app-icon.png")}
-                  style={styles.appIcon}
-                  resizeMode="contain"
-                />
-              )}
+              {feedType === "home" &&
+                (isDark ? (
+                  <Image
+                    source={require("@/assets/images/app-dark-icon.png")}
+                    style={styles.appIcon}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <Image
+                    source={require("@/assets/images/app-icon.png")}
+                    style={styles.appIcon}
+                    resizeMode="contain"
+                  />
+                ))}
               <Text
                 size="xl"
                 weight="bold"
