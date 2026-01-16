@@ -44,7 +44,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
-  KeyboardAvoidingView,
   LayoutChangeEvent,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -53,6 +52,7 @@ import {
   RefreshControl,
   View,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Animated, {
   Easing,
   interpolate,
@@ -1444,8 +1444,7 @@ export default function PostDetailScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.keyboardView}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={0}
+      behavior="padding"
     >
       <Box flex background="base">
         {/* Header */}
@@ -1504,7 +1503,6 @@ export default function PostDetailScreen() {
           keyExtractor={keyExtractor}
           ListHeaderComponent={listHeader}
           ListEmptyComponent={renderEmptyComments}
-          removeClippedSubviews={false}
           contentContainerStyle={{
             paddingBottom: insets.bottom + 60,
           }}
@@ -1527,6 +1525,11 @@ export default function PostDetailScreen() {
               });
             }, 100);
           }}
+          // Performance optimizations for Android
+          removeClippedSubviews={Platform.OS === "android"}
+          maxToRenderPerBatch={10}
+          windowSize={10}
+          initialNumToRender={5}
         />
 
         {/* Comment input */}
