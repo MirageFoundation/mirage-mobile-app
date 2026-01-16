@@ -91,6 +91,8 @@ type PostCardProps = {
   post: Post;
   /** Whether the current user is the author */
   isOwnPost?: boolean;
+  /** Whether the post is currently visible on screen (for auto-play) */
+  isVisible?: boolean;
   /** Callback when the post card is pressed */
   onPress?: () => void;
   /** Callback when author avatar/username is pressed */
@@ -186,6 +188,7 @@ function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
 export const PostCard = ({
   post,
   isOwnPost = false,
+  isVisible = false,
   onPress,
   onAuthorPress,
   onFollowPress,
@@ -296,11 +299,22 @@ export const PostCard = ({
     bodyVideoUrl,
   ]);
 
+  // Auto-play video when visible, pause when not visible
   useEffect(() => {
     if (!isVideo || shouldBlurContent) {
       setIsVideoPlaying(false);
+      return;
     }
-  }, [isVideo, shouldBlurContent, resolvedMedia?.uri]);
+
+    // Auto-play when visible, pause when scrolled away
+    if (isVisible) {
+      setIsVideoPlaying(true);
+    } else {
+      setIsVideoPlaying(false);
+      // Pause the video when scrolling away
+      videoRef.current?.pauseAsync().catch(() => {});
+    }
+  }, [isVideo, shouldBlurContent, isVisible, resolvedMedia?.uri]);
 
   const updateMediaAspectRatioFromSize = useCallback(
     (width?: number, height?: number) => {
@@ -366,6 +380,8 @@ export const PostCard = ({
               style={styles.media}
               resizeMode={ResizeMode.COVER}
               shouldPlay={isVideoPlaying}
+              isLooping={true}
+              isMuted={true}
               useNativeControls={false}
               onLoad={(status) => {
                 if (!status.isLoaded) return;
@@ -375,12 +391,6 @@ export const PostCard = ({
               onReadyForDisplay={(event) => {
                 const { width, height } = event.naturalSize ?? {};
                 updateMediaAspectRatioFromSize(width, height);
-              }}
-              onPlaybackStatusUpdate={(status) => {
-                if (!status.isLoaded) return;
-                if (status.didJustFinish) {
-                  setIsVideoPlaying(false);
-                }
               }}
               onError={() => setImageError(true)}
             />
@@ -516,6 +526,16 @@ export const PostCard = ({
               <Text size="sm" weight="semibold" numberOfLines={1}>
                 @{author.username}
               </Text>
+              {post.topic && (
+                <>
+                  <Text size="xs" mode="subtle">•</Text>
+                  <View style={[styles.topicTag, { backgroundColor: theme.colors.primary[500] + "15" }]}>
+                    <Text size="xs" weight="medium" style={{ color: theme.colors.primary[500] }} numberOfLines={1}>
+                      #{post.topic}
+                    </Text>
+                  </View>
+                </>
+              )}
               <TimeAgo timestamp={createdAt} showSuffix={false} size="xs" />
             </View>
           </View>
@@ -648,6 +668,13 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing.xs,
+    flexWrap: "wrap",
+  },
+  topicTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: theme.radius.sm,
+    maxWidth: 100,
   },
   headerActions: {
     flexDirection: "row",

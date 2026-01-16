@@ -5,6 +5,7 @@ import {
   FlatList,
   RefreshControl,
   View,
+  type ViewToken,
 } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -77,6 +78,26 @@ export function HomeScreen() {
 
   // Selected post for options
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+
+  // Track visible posts for auto-play video
+  const [visiblePostIds, setVisiblePostIds] = useState<Set<string>>(new Set());
+
+  // Viewability config for detecting visible posts
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50, // Item is "visible" when 50% is on screen
+    minimumViewTime: 100, // Must be visible for at least 100ms
+  }).current;
+
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      const visibleIds = new Set(
+        viewableItems
+          .filter((item) => item.isViewable && item.item?.id)
+          .map((item) => item.item.id)
+      );
+      setVisiblePostIds(visibleIds);
+    }
+  ).current;
 
   // Global content moderation state (syncs across screens)
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
@@ -620,6 +641,7 @@ export function HomeScreen() {
       const postWithOverrides = getPostWithOverrides(post);
       const isFollowingAuthor = followedUsers.includes(post.author.id);
       const isFollowLoading = followLoadingUsers.has(post.author.id);
+      const isVisible = visiblePostIds.has(post.id);
 
       return (
         <PostCard
@@ -628,6 +650,7 @@ export function HomeScreen() {
             isFollowing: isFollowingAuthor,
           }}
           isOwnPost={currentUser?.id === post.author.id}
+          isVisible={isVisible}
           onPress={() => handlePostPress(post.id)}
           onAuthorPress={() => handleAuthorPress(post.author.id)}
           onMorePress={() => handleMorePress(post.id)}
@@ -667,6 +690,7 @@ export function HomeScreen() {
       getPostWithOverrides,
       followedUsers,
       followLoadingUsers,
+      visiblePostIds,
       handlePostPress,
       handleAuthorPress,
       handleMorePress,
@@ -781,6 +805,9 @@ export function HomeScreen() {
         }
         onEndReached={handleEndReached}
         onEndReachedThreshold={1.5}
+        // Viewability tracking for auto-play video
+        viewabilityConfig={viewabilityConfig}
+        onViewableItemsChanged={onViewableItemsChanged}
         // Performance optimizations
         removeClippedSubviews={true}
         maxToRenderPerBatch={5}
