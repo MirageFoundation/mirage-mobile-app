@@ -190,7 +190,7 @@ export function SearchScreen() {
     data: searchResults,
     isSearching,
     debouncedQuery,
-  } = useDebouncedSearch(searchQuery, 300, { limit: 30 });
+  } = useDebouncedSearch(searchQuery, 750, { limit: 30 });
 
   // Fetch posts for selected topic
   const { data: topicPostsData, isLoading: isLoadingTopicPosts } = usePosts({
