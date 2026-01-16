@@ -258,14 +258,14 @@ export const PowQueueToast = () => {
   return (
     <Animated.View
       pointerEvents="box-none"
-     style={[
-       styles.container,
-       {
-         top: insets.top + 8,
-         transform: [{ translateY }, { scale }],
-         opacity,
-       },
-     ]}
+      style={[
+        styles.container,
+        {
+          top: insets.top + 8,
+          transform: [{ translateY }, { scale }],
+          opacity,
+        },
+      ]}
     >
       <ToastWrapper {...wrapperProps}>
         <View style={styles.content}>
@@ -304,13 +304,13 @@ export const PowQueueToast = () => {
 };
 
 const styles = StyleSheet.create((theme) => ({
- container: {
-   position: "absolute",
-   left: 38,
-   right: 38,
-   zIndex: 9999,
- },
- blurContainer: {
+  container: {
+    position: "absolute",
+    left: 38,
+    right: 38,
+    zIndex: 9999,
+  },
+  blurContainer: {
     overflow: "hidden",
     borderRadius: 9999,
     borderWidth: 1,

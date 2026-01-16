@@ -105,91 +105,86 @@ export const useAuthStore = create<AuthState>()(
        * Checks for existing wallet and loads metadata
        * Fetches user status from API to sync username and subscription level
        */
-      initializeWallet: async () => {
-        if (USE_MOCK_USER) {
-          set({ isInitializing: false });
-          return;
-        }
+     initializeWallet: async () => {
+       if (USE_MOCK_USER) {
+         set({ isInitializing: false });
+         return;
+       }
 
-        try {
-          set({ isInitializing: true });
-          
-          // Clean up any pending wallets from incomplete signup
-          const cleanedUp = await walletService.cleanupPendingWallet();
-          if (cleanedUp) {
-            console.log("[AuthStore] Cleaned up pending wallet from incomplete signup");
-          }
+       try {
+         set({ isInitializing: true });
+         
+         const cleanedUp = await walletService.cleanupPendingWallet();
+         if (cleanedUp) {
+           console.log("[AuthStore] Cleaned up pending wallet from incomplete signup");
+         }
 
-          // Check for existing wallet
-          const hasWallet = await walletService.hasWallet();
+         const hasWallet = await walletService.hasWallet();
 
-          if (!hasWallet) {
-            set({
-              isLoggedIn: false,
-              walletAddress: null,
-              publicKeyBase64: null,
-              hasOnboarded: false,
-              isInitializing: false,
-            });
-            return;
-          }
+         if (!hasWallet) {
+           set({
+             isLoggedIn: false,
+             walletAddress: null,
+             publicKeyBase64: null,
+             hasOnboarded: false,
+             isInitializing: false,
+           });
+           return;
+         }
 
-          // Load wallet metadata
-          const metadata = walletService.getWalletMetadata();
+         const metadata = walletService.getWalletMetadata();
 
-          if (metadata) {
-            // Set initial state from local metadata
+         if (metadata) {
+            let userLevel = 0;
+            let hasUsername = metadata.hasUsername;
+            let username: string | null = null;
+            let tier = "Free";
+
+           try {
+             const userStatus = await getUserStatus({ address: metadata.address });
+              const tierNames = ["Free", "Basic", "Premium", "Pro"];
+
+              userLevel = userStatus.user_level;
+              hasUsername = !!userStatus.username;
+              username = userStatus.username;
+              tier = tierNames[userStatus.user_level] || "Free";
+
+              if (userStatus.username) {
+               walletService.updateMetadata({ hasUsername: true });
+             }
+           } catch (apiError) {
+              console.warn("[AuthStore] Failed to fetch user status from API:", apiError);
+           }
+
             set({
               isLoggedIn: true,
               walletAddress: metadata.address,
               publicKeyBase64: metadata.publicKeyBase64,
-              hasUsername: metadata.hasUsername,
+              hasUsername,
               hasOnboarded: true,
+              userLevel,
               user: {
                 id: metadata.address,
-                username: null,
+                username,
                 walletAddress: metadata.address,
-                tier: "Free",
+                tier,
               },
+              isInitializing: false,
             });
-
-            // Fetch user status from API to sync username and subscription level
-            try {
-              const userStatus = await getUserStatus({ address: metadata.address });
-              
-              const tierNames = ["Free", "Basic", "Premium", "Pro"];
-              
-              set({
-                userLevel: userStatus.user_level,
-                hasUsername: !!userStatus.username,
-                user: {
-                  id: metadata.address,
-                  username: userStatus.username,
-                  walletAddress: metadata.address,
-                  tier: tierNames[userStatus.user_level] || "Free",
-                },
-              });
-
-              // Update local metadata with username status
-              if (userStatus.username) {
-                walletService.updateMetadata({ hasUsername: true });
-              }
-            } catch (apiError) {
-              // API error shouldn't block initialization - use local data
-              console.warn("[AuthStore] Failed to fetch user status from API:", apiError);
-            }
-          }
-        } catch (error) {
-          console.error("[AuthStore] Failed to initialize wallet:", error);
-          set({
-            isLoggedIn: false,
-            walletAddress: null,
-            publicKeyBase64: null,
-          });
-        } finally {
-          set({ isInitializing: false });
-        }
-      },
+            return;
+         }
+       } catch (error) {
+         console.error("[AuthStore] Failed to initialize wallet:", error);
+         set({
+           isLoggedIn: false,
+           walletAddress: null,
+           publicKeyBase64: null,
+            isInitializing: false,
+         });
+          return;
+       }
+        set({ isInitializing: false });
+     },
 
       // ============================================
       // Wallet Creation & Import

@@ -20,7 +20,7 @@ import {
 } from "@/src/wallet";
 
 import { getParameters } from "@/src/api/read/endpoints/parameters";
-import { getUserStatus } from "@/src/api/read/endpoints/users";
+import { useAuthStore } from "@/src/stores";
 
 import { canonSignedWithPow } from "./canonical";
 import type {
@@ -69,22 +69,17 @@ export async function buildSignedEnvelope<
     onPoWProgress,
   } = options;
 
-  // 1. Get fresh parameters from Read API
-  const params = await getParameters({ address: wallet.address });
+ // 1. Get fresh parameters from Read API
+ const params = await getParameters({ address: wallet.address });
 
-  // 2. Determine if PoW is needed
-  let userLevel = 0;
+ console.log(`[Envelope] Using last_block_hash: ${params.last_block_hash.substring(0, 16)}...`);
+
+ // 2. Determine if PoW is needed
+  // Use cached user level from auth store to avoid extra API call
+  const userLevel = useAuthStore.getState().userLevel;
   let difficulty = params.pow_difficulty;
 
   if (!skipPoW) {
-    try {
-      const userStatus = await getUserStatus({ address: wallet.address });
-      userLevel = userStatus.user_level;
-    } catch {
-      // If user status fetch fails, assume free tier
-      userLevel = 0;
-    }
-
     // Paid users (level > 0) don't need PoW
     if (userLevel > 0) {
       difficulty = 0;

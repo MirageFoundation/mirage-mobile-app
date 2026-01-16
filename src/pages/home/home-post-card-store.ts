@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import type { Post } from "@/src/components/molecules";
 
+type VoteOverride = {
+  hasLiked?: boolean;
+  hasDisliked?: boolean;
+  likeDelta?: number;
+};
+
 type HomePostCardHandlers = {
   onPostPress?: (postId: string) => void;
   onAuthorPress?: (authorId: string) => void;
@@ -32,14 +38,16 @@ type HomePostCardState = {
   followLoadingUsers: Set<string>;
   revealedPosts: Set<string>;
   visiblePostIds: Set<string>;
+  voteOverrides: Record<string, VoteOverride>;
   handlers: HomePostCardHandlers;
   setCurrentUserId: (id?: string) => void;
   setFollowedUsers: (users: Set<string>) => void;
   setFollowLoadingUsers: (users: Set<string>) => void;
   setRevealedPosts: (posts: Set<string>) => void;
   setVisiblePostIds: (posts: Set<string>) => void;
+  setVoteOverride: (postId: string, override: VoteOverride) => void;
+  clearVoteOverride: (postId: string) => void;
   setHandlers: (handlers: HomePostCardHandlers) => void;
-  isOwnPost: (post: Post) => boolean;
 };
 
 const emptySet = new Set<string>();
@@ -50,6 +58,7 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
   followLoadingUsers: emptySet,
   revealedPosts: emptySet,
   visiblePostIds: emptySet,
+  voteOverrides: {},
   handlers: {},
   setCurrentUserId: (id) => set({ currentUserId: id }),
   setFollowedUsers: (users) => set({ followedUsers: users }),
@@ -58,21 +67,42 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
   setVisiblePostIds: (posts) =>
     set((state) => {
       if (state.visiblePostIds.size === posts.size) {
+        let allMatch = true;
         for (const value of state.visiblePostIds) {
           if (!posts.has(value)) {
-            return { visiblePostIds: posts };
+            allMatch = false;
+            break;
           }
         }
-        return state;
+        if (allMatch) return state;
       }
       return { visiblePostIds: posts };
     }),
+  setVoteOverride: (postId, override) =>
+    set((state) => {
+      const current = state.voteOverrides[postId];
+      const currentDelta = current?.likeDelta ?? 0;
+      return {
+        voteOverrides: {
+          ...state.voteOverrides,
+          [postId]: {
+            hasLiked: override.hasLiked,
+            hasDisliked: override.hasDisliked,
+            likeDelta: currentDelta + (override.likeDelta ?? 0),
+          },
+        },
+      };
+    }),
+  clearVoteOverride: (postId) =>
+    set((state) => {
+      const { [postId]: _, ...rest } = state.voteOverrides;
+      return { voteOverrides: rest };
+    }),
   setHandlers: (handlers) => set({ handlers }),
-  isOwnPost: (post) => {
-    const currentUserId = get().currentUserId;
-    return !!currentUserId && currentUserId === post.author.id;
-  },
 }));
+
+// Primitive selectors that return stable values
+// These only trigger re-render when the specific value changes
 
 export const useIsPostVisible = (postId: string) =>
   useHomePostCardStore((state) => state.visiblePostIds.has(postId));
@@ -85,3 +115,13 @@ export const useIsFollowLoading = (authorId: string) =>
 
 export const useIsFollowing = (authorId: string) =>
   useHomePostCardStore((state) => state.followedUsers.has(authorId));
+
+export const useVoteOverride = (postId: string) =>
+  useHomePostCardStore((state) => state.voteOverrides[postId]);
+
+export const useIsOwnPost = (authorId: string) =>
+ useHomePostCardStore((state) => state.currentUserId === authorId);
+
+// Handler selectors - these return stable function references
+export const useHandlers = () =>
+  useHomePostCardStore((state) => state.handlers);

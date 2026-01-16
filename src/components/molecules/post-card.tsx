@@ -33,31 +33,31 @@ type PostCardProps = {
 };
 
 export const PostCard = memo(function PostCard({
-  post,
-  isOwnPost = false,
-  isVisible = false,
-  onPress,
-  onAuthorPress,
-  onFollowPress,
-  onMorePress,
-  onLikePress,
-  onDislikePress,
-  onCommentPress,
-  onSharePress,
-  onRevealContent,
-  contentRevealed = false,
-  followLoading = false,
-  shareUrl,
-  style,
+ post,
+ isOwnPost = false,
+ isVisible = false,
+ onPress,
+ onAuthorPress,
+ onFollowPress,
+ onMorePress,
+ onLikePress,
+ onDislikePress,
+ onCommentPress,
+ onSharePress,
+ onRevealContent,
+ contentRevealed = false,
+ followLoading = false,
+ shareUrl,
+ style,
 }: PostCardProps) {
-  if (__DEV__) {
-    console.log("[render] post_card", post.id);
-  }
-  const {
-    author,
-    title,
-    body,
-    media,
+ if (__DEV__) {
+   console.log("[render] post_card", post.id);
+ }
+ const {
+   author,
+   title,
+   body,
+   media,
     contentWarnings,
     likes,
     dislikes,

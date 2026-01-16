@@ -178,51 +178,37 @@ export function HomeScreen() {
     );
   }, [data, followedUsers, hiddenPostIds, blockedUserIds]);
 
-  // Revealed posts for content warnings
-  const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
+ // Revealed posts for content warnings
+ const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
-  // Optimistic updates for votes (local state overlay)
-  const [voteOverrides, setVoteOverrides] = useState<
-    Record<
-      string,
-      { hasLiked?: boolean; hasDisliked?: boolean; likeDelta?: number }
-    >
-  >({});
+ // Vote overrides are now stored in the home post card store
+ const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
+ const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
 
-  // Vote handler with toast notifications
-  const { handleUpvote, handleDownvote } = useVoteHandler({
-    onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
-      setVoteOverrides((prev) => {
-        const currentDelta = prev[targetId]?.likeDelta ?? 0;
-        return {
-          ...prev,
-          [targetId]: {
-            hasLiked: result.hasLiked,
-            hasDisliked: result.hasDisliked,
-            likeDelta: currentDelta + result.likeDelta,
-          },
-        };
-      });
-    }, []),
-    onRollback: useCallback(
-      (
-        targetId: string,
-        previousState: {
-          hasLiked: boolean;
-          hasDisliked: boolean;
-          likes: number;
-        }
-      ) => {
-        // Revert to previous state by removing the override
-        setVoteOverrides((prev) => {
-          const newOverrides = { ...prev };
-          delete newOverrides[targetId];
-          return newOverrides;
-        });
-      },
-      []
-    ),
-  });
+ // Vote handler with toast notifications
+ const { handleUpvote, handleDownvote } = useVoteHandler({
+   onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
+     setVoteOverride(targetId, {
+       hasLiked: result.hasLiked,
+       hasDisliked: result.hasDisliked,
+       likeDelta: result.likeDelta,
+     });
+   }, [setVoteOverride]),
+   onRollback: useCallback(
+     (
+       targetId: string,
+       previousState: {
+         hasLiked: boolean;
+         hasDisliked: boolean;
+         likes: number;
+       }
+     ) => {
+       // Revert to previous state by removing the override
+       clearVoteOverride(targetId);
+     },
+     [clearVoteOverride]
+   ),
+ });
 
   const handleEnableAdultContent = useCallback(() => {
     setAdultContent(true);
@@ -312,11 +298,11 @@ export function HomeScreen() {
 
   useEffect(() => {
     const map = new Map<string, Post>();
-    for (const post of postsWithOverrides) {
+    for (const post of posts) {
       map.set(post.id, post);
     }
     postsByIdRef.current = map;
-  }, [postsWithOverrides]);
+  }, [posts]);
 
   const handleMorePress = useCallback((postId: string) => {
     const post = postsByIdRef.current.get(postId);
@@ -641,19 +627,6 @@ export function HomeScreen() {
     }
   }, [posts.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const postsWithOverrides = useMemo(() => {
-    if (!posts.length) return posts;
-    return posts.map((post) => {
-      const override = voteOverrides[post.id];
-      if (!override) return post;
-      return {
-        ...post,
-        likes: post.likes + (override.likeDelta ?? 0),
-        hasLiked: override.hasLiked ?? post.hasLiked,
-        hasDisliked: override.hasDisliked ?? post.hasDisliked,
-      };
-    });
-  }, [posts, voteOverrides]);
 
   const ListEmptyComponent = useCallback(() => {
     if (isLoading) {
@@ -717,9 +690,9 @@ export function HomeScreen() {
     () => ({
       paddingTop: insets.top + HEADER_HEIGHT,
       paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16,
-      flexGrow: postsWithOverrides.length === 0 ? 1 : undefined,
+      flexGrow: posts.length === 0 ? 1 : undefined,
     }),
-    [insets.bottom, insets.top, postsWithOverrides.length]
+    [insets.bottom, insets.top, posts.length]
   );
 
   const refreshControl = useMemo(
@@ -764,30 +737,50 @@ export function HomeScreen() {
 
   useEffect(() => {
     setRevealedPostsStore(revealedPosts);
-  }, [revealedPosts, setRevealedPostsStore]);
+ }, [revealedPosts, setRevealedPostsStore]);
 
-  useEffect(() => {
-    setHandlers({
-      onPostPress: handlePostPress,
-      onAuthorPress: handleAuthorPress,
-      onMorePress: handleMorePress,
-      onLikePress: handleUpvote,
-      onDislikePress: handleDownvote,
-      onCommentPress: handleCommentPress,
-      onFollowPress: handleFollowPress,
-      onRevealContent: handleRevealContent,
-    });
-  }, [
-    setHandlers,
-    handlePostPress,
-    handleAuthorPress,
-    handleMorePress,
-    handleUpvote,
-    handleDownvote,
-    handleCommentPress,
-    handleFollowPress,
-    handleRevealContent,
-  ]);
+ // Store refs to latest handlers - these update without triggering re-renders
+ const handlersRef = useRef({
+   handlePostPress,
+   handleAuthorPress,
+   handleMorePress,
+   handleUpvote,
+   handleDownvote,
+   handleCommentPress,
+   handleFollowPress,
+   handleRevealContent,
+ });
+
+ // Keep refs updated
+ useEffect(() => {
+   handlersRef.current = {
+     handlePostPress,
+     handleAuthorPress,
+     handleMorePress,
+     handleUpvote,
+     handleDownvote,
+     handleCommentPress,
+     handleFollowPress,
+     handleRevealContent,
+   };
+ });
+
+ // Set handlers ONCE on mount with stable wrapper functions that delegate to refs
+ useEffect(() => {
+   setHandlers({
+     onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
+     onAuthorPress: (authorId) => handlersRef.current.handleAuthorPress(authorId),
+     onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
+     onLikePress: (postId, liked, disliked, likes) =>
+       handlersRef.current.handleUpvote(postId, liked, disliked, likes),
+     onDislikePress: (postId, liked, disliked, likes) =>
+       handlersRef.current.handleDownvote(postId, liked, disliked, likes),
+     onCommentPress: (postId) => handlersRef.current.handleCommentPress(postId),
+     onFollowPress: (authorId, username, isFollowing) =>
+       handlersRef.current.handleFollowPress(authorId, username, isFollowing),
+     onRevealContent: (postId) => handlersRef.current.handleRevealContent(postId),
+   });
+ }, [setHandlers]); // Only run once - setHandlers is stable
 
   return (
     <Box flex background="base">
@@ -807,7 +800,7 @@ export function HomeScreen() {
       {/* Scrollable Feed */}
       <HomePostList
         ref={flatListRef}
-        data={postsWithOverrides}
+        data={posts}
         contentContainerStyle={listContentStyle}
         onScroll={scrollHandler}
         ListHeaderComponent={ListHeaderComponent}
