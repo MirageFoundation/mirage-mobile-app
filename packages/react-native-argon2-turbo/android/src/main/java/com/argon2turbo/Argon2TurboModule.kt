@@ -13,19 +13,32 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.cancelChildren
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+
+data class PowWorkerResult(
+    val nonce: UInt,
+    val digest: String,
+    val attempts: Int,
+    val workerIndex: Int
+)
 
 @ReactModule(name = Argon2TurboModule.NAME)
 class Argon2TurboModule(reactContext: ReactApplicationContext) :
     NativeArgon2TurboSpec(reactContext) {
 
-    private val argon2Kt = Argon2Kt()
     private val cancelFlag = AtomicBoolean(false)
-    private val currentAttempts = AtomicInteger(0)
+    private val totalAttempts = AtomicInteger(0)
     private var powStartTime: Long = 0
     private var powJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Default)
+    
+    // Number of parallel workers for PoW
+    private val NUM_WORKERS = 4
 
     override fun getName(): String = NAME
 
@@ -43,7 +56,9 @@ class Argon2TurboModule(reactContext: ReactApplicationContext) :
     ) {
         scope.launch {
             try {
+                val argon2Kt = Argon2Kt()
                 val result = performHash(
+                    argon2Kt,
                     password.toByteArray(Charsets.UTF_8),
                     salt.toByteArray(Charsets.UTF_8),
                     iterations.toInt(),
@@ -74,7 +89,9 @@ class Argon2TurboModule(reactContext: ReactApplicationContext) :
         passwordEncoding: String,
         saltEncoding: String
     ): WritableMap {
+        val argon2Kt = Argon2Kt()
         return performHash(
+            argon2Kt,
             password.toByteArray(Charsets.UTF_8),
             salt.toByteArray(Charsets.UTF_8),
             iterations.toInt(),
@@ -86,6 +103,7 @@ class Argon2TurboModule(reactContext: ReactApplicationContext) :
     }
 
     private fun performHash(
+        argon2Kt: Argon2Kt,
         password: ByteArray,
         salt: ByteArray,
         iterations: Int,
@@ -122,6 +140,7 @@ class Argon2TurboModule(reactContext: ReactApplicationContext) :
     override fun verify(password: String, encodedHash: String, promise: Promise) {
         scope.launch {
             try {
+                val argon2Kt = Argon2Kt()
                 val isValid = argon2Kt.verify(
                     mode = Argon2Mode.ARGON2_ID,
                     encoded = encodedHash,
@@ -152,69 +171,100 @@ class Argon2TurboModule(reactContext: ReactApplicationContext) :
         promise: Promise
     ) {
         cancelFlag.set(false)
-        currentAttempts.set(0)
+        totalAttempts.set(0)
         powStartTime = System.currentTimeMillis()
+
+        val requiredBits = difficulty.toInt()
+        val maxAttemptsInt = maxAttempts.toInt()
+        val timeoutMsLong = timeoutMs.toLong()
+        val iterationsInt = iterations.toInt()
+        val memoryInt = memory.toInt()
+        val parallelismInt = parallelism.toInt()
+        val hashLengthInt = hashLength.toInt()
+
+        // Distribute nonce space across workers
+        val nonceSpacing = (0xFFFFFFFFL / NUM_WORKERS).toUInt()
+        val attemptsPerWorker = maxAttemptsInt / NUM_WORKERS
 
         powJob = scope.launch {
             try {
-                var nonce = startNonce.toLong().toUInt()
-                var attempts = 0
-                val maxAttemptCount = maxAttempts.toInt()
-                val requiredBits = difficulty.toInt()
-                val deadline = System.currentTimeMillis() + timeoutMs.toLong()
-
-                val baseBytes = hexToBytes(base)
-                val saltBytes = hexToBytes(salt)
-                val colonBytes = ":".toByteArray(Charsets.UTF_8)
-
-                while (attempts < maxAttemptCount && !cancelFlag.get()) {
-                    if (System.currentTimeMillis() > deadline) {
-                        withContext(Dispatchers.Main) {
-                            promise.reject("POW_TIMEOUT", "PoW computation timed out")
-                        }
-                        return@launch
+                // Create atomic flags for each worker to track completion
+                val workerAttempts = Array(NUM_WORKERS) { AtomicInteger(0) }
+                
+                // Launch parallel workers
+                val workers: List<Deferred<PowWorkerResult?>> = (0 until NUM_WORKERS).map { workerIndex ->
+                    async(Dispatchers.Default) {
+                        // Each worker gets its own Argon2Kt instance for thread safety
+                        val workerArgon2 = Argon2Kt()
+                        val workerStartNonce = (workerIndex.toUInt() * nonceSpacing + 
+                            (Math.random() * nonceSpacing.toLong()).toUInt())
+                        
+                        computePowWorker(
+                            workerArgon2,
+                            base,
+                            salt,
+                            requiredBits,
+                            workerStartNonce,
+                            attemptsPerWorker,
+                            timeoutMsLong,
+                            iterationsInt,
+                            memoryInt,
+                            parallelismInt,
+                            hashLengthInt,
+                            cancelFlag,
+                            workerAttempts[workerIndex],
+                            workerIndex
+                        )
                     }
-
-                    val password = baseBytes + colonBytes + uvarintEncode(nonce)
-
-                    val result = argon2Kt.hash(
-                        mode = Argon2Mode.ARGON2_ID,
-                        password = password,
-                        salt = saltBytes,
-                        tCostInIterations = iterations.toInt(),
-                        mCostInKibibyte = memory.toInt(),
-                        parallelism = parallelism.toInt(),
-                        hashLengthInBytes = hashLength.toInt()
-                    )
-
-                    val digest = result.rawHashAsByteArray()
-
-                    attempts++
-                    currentAttempts.set(attempts)
-
-                    val leadingZeros = countLeadingZeroBits(digest)
-                    if (leadingZeros >= requiredBits) {
-                        val elapsedMs = System.currentTimeMillis() - powStartTime
-
-                        withContext(Dispatchers.Main) {
-                            promise.resolve(Arguments.createMap().apply {
-                                putInt("nonce", nonce.toInt())
-                                putString("digest", bytesToHex(digest))
-                                putInt("attempts", attempts)
-                                putDouble("elapsedMs", elapsedMs.toDouble())
-                            })
-                        }
-                        return@launch
-                    }
-
-                    nonce++
                 }
 
-                withContext(Dispatchers.Main) {
-                    if (cancelFlag.get()) {
-                        promise.reject("POW_CANCELLED", "PoW computation was cancelled")
-                    } else {
-                        promise.reject("POW_MAX_ATTEMPTS", "Max attempts exceeded")
+                // Wait for first successful result using select
+                var result: PowWorkerResult? = null
+                
+                while (result == null && workers.any { !it.isCompleted }) {
+                    result = select {
+                        workers.filter { !it.isCompleted }.forEach { worker ->
+                            worker.onAwait { workerResult ->
+                                if (workerResult != null) {
+                                    // Found a result, cancel other workers
+                                    cancelFlag.set(true)
+                                    workerResult
+                                } else {
+                                    null
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Update total attempts
+                    val total = workerAttempts.sumOf { it.get() }
+                    totalAttempts.set(total)
+                }
+
+                // Cancel remaining workers
+                cancelFlag.set(true)
+                coroutineContext.cancelChildren()
+
+                val elapsedMs = System.currentTimeMillis() - powStartTime
+                val finalAttempts = workerAttempts.sumOf { it.get() }
+                totalAttempts.set(finalAttempts)
+
+                if (result != null) {
+                    withContext(Dispatchers.Main) {
+                        promise.resolve(Arguments.createMap().apply {
+                            putInt("nonce", result.nonce.toInt())
+                            putString("digest", result.digest)
+                            putInt("attempts", finalAttempts)
+                            putDouble("elapsedMs", elapsedMs.toDouble())
+                        })
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        if (cancelFlag.get()) {
+                            promise.reject("POW_CANCELLED", "PoW computation was cancelled")
+                        } else {
+                            promise.reject("POW_MAX_ATTEMPTS", "Max attempts exceeded")
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -225,13 +275,70 @@ class Argon2TurboModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    private fun computePowWorker(
+        argon2Kt: Argon2Kt,
+        base: String,
+        salt: String,
+        requiredBits: Int,
+        startNonce: UInt,
+        maxAttempts: Int,
+        timeoutMs: Long,
+        iterations: Int,
+        memory: Int,
+        parallelism: Int,
+        hashLength: Int,
+        cancelFlag: AtomicBoolean,
+        attemptsCounter: AtomicInteger,
+        workerIndex: Int
+    ): PowWorkerResult? {
+        var nonce = startNonce
+        var attempts = 0
+        val deadline = System.currentTimeMillis() + timeoutMs
+
+        val baseBytes = hexToBytes(base)
+        val saltBytes = hexToBytes(salt)
+        val colonBytes = ":".toByteArray(Charsets.UTF_8)
+
+        while (attempts < maxAttempts && !cancelFlag.get()) {
+            if (System.currentTimeMillis() > deadline) {
+                return null
+            }
+
+            val password = baseBytes + colonBytes + uvarintEncode(nonce)
+
+            val result = argon2Kt.hash(
+                mode = Argon2Mode.ARGON2_ID,
+                password = password,
+                salt = saltBytes,
+                tCostInIterations = iterations,
+                mCostInKibibyte = memory,
+                parallelism = parallelism,
+                hashLengthInBytes = hashLength
+            )
+
+            val digest = result.rawHashAsByteArray()
+
+            attempts++
+            attemptsCounter.set(attempts)
+
+            val leadingZeros = countLeadingZeroBits(digest)
+            if (leadingZeros >= requiredBits) {
+                return PowWorkerResult(nonce, bytesToHex(digest), attempts, workerIndex)
+            }
+
+            nonce++
+        }
+
+        return null
+    }
+
     override fun cancelPow() {
         cancelFlag.set(true)
         powJob?.cancel()
     }
 
     override fun getPowProgress(promise: Promise) {
-        val attempts = currentAttempts.get()
+        val attempts = totalAttempts.get()
         val elapsedMs = System.currentTimeMillis() - powStartTime
         val hashesPerSecond = if (elapsedMs > 0) {
             attempts.toDouble() / (elapsedMs.toDouble() / 1000.0)

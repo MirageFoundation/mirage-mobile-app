@@ -2,6 +2,7 @@
 #import <React/RCTConvert.h>
 #import <atomic>
 #import <chrono>
+#import <dispatch/dispatch.h>
 
 #if __has_include(<react_native_argon2_turbo/react_native_argon2_turbo-Swift.h>)
 #import <react_native_argon2_turbo/react_native_argon2_turbo-Swift.h>
@@ -14,16 +15,19 @@
 @class Argon2HashResult;
 #endif
 
+// Number of parallel workers
+static const int NUM_WORKERS = 4;
+
 @implementation Argon2Turbo {
     std::atomic<bool> _cancelFlag;
-    std::atomic<int> _currentAttempts;
+    std::atomic<int> _totalAttempts;
     std::chrono::steady_clock::time_point _powStartTime;
 }
 
 - (instancetype)init {
     if (self = [super init]) {
         _cancelFlag.store(false);
-        _currentAttempts.store(0);
+        _totalAttempts.store(0);
     }
     return self;
 }
@@ -43,7 +47,7 @@
         salt:(NSString *)salt
   iterations:(double)iterations
       memory:(double)memory
- parallelism:(double)parallelism
+parallelism:(double)parallelism
   hashLength:(double)hashLength
         mode:(NSString *)mode
 passwordEncoding:(NSString *)passwordEncoding
@@ -143,7 +147,7 @@ saltEncoding:(NSString *)saltEncoding
     });
 }
 
-#pragma mark - Proof of Work
+#pragma mark - Proof of Work (Parallel)
 
 - (void)computePow:(NSString *)base
               salt:(NSString *)salt
@@ -159,84 +163,155 @@ saltEncoding:(NSString *)saltEncoding
             reject:(RCTPromiseRejectBlock)reject {
     
     _cancelFlag.store(false);
-    _currentAttempts.store(0);
+    _totalAttempts.store(0);
     _powStartTime = std::chrono::steady_clock::now();
     
+    int requiredBits = (int)difficulty;
+    int maxAttemptCount = (int)maxAttempts;
+    int attemptsPerWorker = maxAttemptCount / NUM_WORKERS;
+    uint32_t nonceSpacing = UINT32_MAX / NUM_WORKERS;
+    int iterationsInt = (int)iterations;
+    int memoryInt = (int)memory;
+    int parallelismInt = (int)parallelism;
+    int hashLengthInt = (int)hashLength;
+    
+    NSData *baseData = [self hexToData:base];
+    NSData *saltData = [self hexToData:salt];
+    
+    // Use heap-allocated shared state to avoid block capture issues
+    __block std::atomic<bool> *foundResultPtr = new std::atomic<bool>(false);
+    __block std::atomic<int> *workerAttemptsPtr = new std::atomic<int>[NUM_WORKERS];
+    for (int i = 0; i < NUM_WORKERS; i++) {
+        workerAttemptsPtr[i].store(0);
+    }
+    
+    __block uint32_t winningNonce = 0;
+    __block NSString *winningDigest = nil;
+    
+    dispatch_group_t group = dispatch_group_create();
+    dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0);
+    
+    for (int workerIndex = 0; workerIndex < NUM_WORKERS; workerIndex++) {
+        dispatch_group_async(group, queue, ^{
+            uint32_t workerStartNonce = workerIndex * nonceSpacing + arc4random_uniform(nonceSpacing);
+            
+            NSDictionary *result = [self computePowWorker:baseData
+                                                     salt:saltData
+                                               difficulty:requiredBits
+                                               startNonce:workerStartNonce
+                                              maxAttempts:attemptsPerWorker
+                                                timeoutMs:timeoutMs
+                                               iterations:iterationsInt
+                                                   memory:memoryInt
+                                              parallelism:parallelismInt
+                                               hashLength:hashLengthInt
+                                           attemptsStore:&workerAttemptsPtr[workerIndex]];
+            
+            if (result) {
+                bool expected = false;
+                if (foundResultPtr->compare_exchange_strong(expected, true)) {
+                    // First worker to find a result wins
+                    winningNonce = [result[@"nonce"] unsignedIntValue];
+                    winningDigest = result[@"digest"];
+                    self->_cancelFlag.store(true);
+                }
+            }
+        });
+    }
+    
+    // Wait for all workers with timeout
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        @try {
-            uint32_t nonce = (uint32_t)startNonce;
-            int attempts = 0;
-            int maxAttemptCount = (int)maxAttempts;
-            int requiredBits = (int)difficulty;
-            
-            NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeoutMs / 1000.0];
-            
-            NSData *baseData = [self hexToData:base];
-            NSData *saltData = [self hexToData:salt];
-            NSData *colonData = [@":" dataUsingEncoding:NSUTF8StringEncoding];
-            
-            while (attempts < maxAttemptCount && !self->_cancelFlag.load()) {
-                if ([[NSDate date] compare:deadline] == NSOrderedDescending) {
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        reject(@"POW_TIMEOUT", @"PoW computation timed out", nil);
-                    });
-                    return;
-                }
-                
-                NSMutableData *password = [NSMutableData dataWithData:baseData];
-                [password appendData:colonData];
-                [password appendData:[self uvarintEncode:nonce]];
-                
-                NSData *digest = [Argon2Core computeArgon2BytesWithPassword:password
-                                                                       salt:saltData
-                                                                 iterations:(int)iterations
-                                                                     memory:(int)memory
-                                                                parallelism:(int)parallelism
-                                                                 hashLength:(int)hashLength];
-                
-                if (digest == nil) {
-                    digest = [NSMutableData dataWithLength:(int)hashLength];
-                }
-                
-                attempts++;
-                self->_currentAttempts.store(attempts);
-                
-                int leadingZeros = [self countLeadingZeroBits:digest];
-                if (leadingZeros >= requiredBits) {
-                    auto elapsed = std::chrono::steady_clock::now() - self->_powStartTime;
-                    double elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
-                    
-                    NSDictionary *result = @{
-                        @"nonce": @(nonce),
-                        @"digest": [self dataToHex:digest],
-                        @"attempts": @(attempts),
-                        @"elapsedMs": @(elapsedMs)
-                    };
-                    
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        resolve(result);
-                    });
-                    return;
-                }
-                
-                nonce++;
-            }
-            
-            if (self->_cancelFlag.load()) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    reject(@"POW_CANCELLED", @"PoW computation was cancelled", nil);
-                });
-            } else {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    reject(@"POW_MAX_ATTEMPTS", @"Max attempts exceeded", nil);
-                });
-            }
-        } @catch (NSException *exception) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                reject(@"POW_ERROR", exception.reason, nil);
-            });
+        dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeoutMs * NSEC_PER_MSEC));
+        long waitResult = dispatch_group_wait(group, timeout);
+        
+        // Calculate total attempts
+        int totalAttempts = 0;
+        for (int i = 0; i < NUM_WORKERS; i++) {
+            totalAttempts += workerAttemptsPtr[i].load();
         }
+        self->_totalAttempts.store(totalAttempts);
+        
+        auto elapsed = std::chrono::steady_clock::now() - self->_powStartTime;
+        double elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+        
+        bool found = foundResultPtr->load();
+        
+        // Cleanup heap-allocated state
+        delete foundResultPtr;
+        delete[] workerAttemptsPtr;
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (found && winningDigest) {
+                resolve(@{
+                    @"nonce": @(winningNonce),
+                    @"digest": winningDigest,
+                    @"attempts": @(totalAttempts),
+                    @"elapsedMs": @(elapsedMs)
+                });
+            } else if (waitResult != 0) {
+                reject(@"POW_TIMEOUT", @"PoW computation timed out", nil);
+            } else if (self->_cancelFlag.load()) {
+                reject(@"POW_CANCELLED", @"PoW computation was cancelled", nil);
+            } else {
+                reject(@"POW_MAX_ATTEMPTS", @"Max attempts exceeded", nil);
+            }
+        });
     });
+}
+
+- (NSDictionary *)computePowWorker:(NSData *)baseData
+                              salt:(NSData *)saltData
+                        difficulty:(int)requiredBits
+                        startNonce:(uint32_t)startNonce
+                       maxAttempts:(int)maxAttempts
+                         timeoutMs:(double)timeoutMs
+                        iterations:(int)iterations
+                            memory:(int)memory
+                       parallelism:(int)parallelism
+                        hashLength:(int)hashLength
+                     attemptsStore:(std::atomic<int>*)attemptsStore {
+    
+    uint32_t nonce = startNonce;
+    int attempts = 0;
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeoutMs / 1000.0];
+    NSData *colonData = [@":" dataUsingEncoding:NSUTF8StringEncoding];
+    
+    while (attempts < maxAttempts && !_cancelFlag.load()) {
+        if ([[NSDate date] compare:deadline] == NSOrderedDescending) {
+            return nil;
+        }
+        
+        NSMutableData *password = [NSMutableData dataWithData:baseData];
+        [password appendData:colonData];
+        [password appendData:[self uvarintEncode:nonce]];
+        
+        NSData *digest = [Argon2Core computeArgon2BytesWithPassword:password
+                                                               salt:saltData
+                                                         iterations:iterations
+                                                             memory:memory
+                                                        parallelism:parallelism
+                                                         hashLength:hashLength];
+        
+        if (digest == nil) {
+            digest = [NSMutableData dataWithLength:hashLength];
+        }
+        
+        attempts++;
+        attemptsStore->store(attempts);
+        
+        int leadingZeros = [self countLeadingZeroBits:digest];
+        if (leadingZeros >= requiredBits) {
+            return @{
+                @"nonce": @(nonce),
+                @"digest": [self dataToHex:digest],
+                @"attempts": @(attempts)
+            };
+        }
+        
+        nonce++;
+    }
+    
+    return nil;
 }
 
 - (void)cancelPow {
@@ -245,7 +320,7 @@ saltEncoding:(NSString *)saltEncoding
 
 - (void)getPowProgress:(RCTPromiseResolveBlock)resolve
                 reject:(RCTPromiseRejectBlock)reject {
-    int attempts = _currentAttempts.load();
+    int attempts = _totalAttempts.load();
     auto elapsed = std::chrono::steady_clock::now() - _powStartTime;
     double elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
     double hashesPerSecond = elapsedMs > 0 ? (attempts / (elapsedMs / 1000.0)) : 0;

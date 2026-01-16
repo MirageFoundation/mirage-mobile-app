@@ -1,7 +1,8 @@
 /**
  * Proof of Work computation using react-native-argon2-turbo (TurboModule)
  *
- * This version uses the native PoW loop for maximum performance (500+ h/s vs ~80 h/s)
+ * This version uses PARALLEL native PoW workers (4 concurrent threads) for 2-4x better performance.
+ * The parallelism is handled internally by the native module.
  */
 
 import {
@@ -52,13 +53,16 @@ function hexToUint8Array(hex: string): Uint8Array {
 }
 
 // ============================================
-// PoW Computation (TurboModule - Native Loop)
+// PoW Computation (TurboModule - Parallel Native Workers)
 // ============================================
 
 /**
- * Compute Proof of Work using native TurboModule loop
+ * Compute Proof of Work using native TurboModule with parallel workers
  *
- * This runs the entire PoW loop natively for 6-12x better performance
+ * The native module internally runs 4 parallel workers searching different
+ * nonce ranges. First worker to find a valid nonce wins, others are cancelled.
+ * 
+ * Expected performance: ~320-400 h/s effective rate (4x ~80-100 h/s per worker)
  */
 export async function computePoW(
   input: PoWInput,
@@ -77,7 +81,7 @@ export async function computePoW(
     : lastBlockHash;
   const startNonce = Math.floor(Math.random() * 0xffffffff);
 
-  console.log(`[PoW Turbo] Starting with difficulty=${requiredBits} bits`);
+  console.log(`[PoW Turbo] Starting with difficulty=${requiredBits} bits (4 parallel workers)`);
 
   // Set up progress polling if callback provided
   let progressInterval: ReturnType<typeof setInterval> | undefined;
@@ -106,8 +110,9 @@ export async function computePoW(
       hashLength: ARGON2_OUTPUT_LENGTH,
     });
 
+    const hashRate = Math.round(result.attempts / (result.elapsedMs / 1000));
     console.log(
-      `[PoW Turbo] Found! nonce=${result.nonce}, attempts=${result.attempts}, time=${result.elapsedMs}ms`
+      `[PoW Turbo] Found! nonce=${result.nonce}, attempts=${result.attempts}, time=${result.elapsedMs}ms, rate=${hashRate} h/s`
     );
 
     return {
@@ -124,21 +129,22 @@ export async function computePoW(
 }
 
 /**
- * Cancel ongoing PoW computation
+ * Cancel ongoing PoW computation (cancels all parallel workers)
  */
 export { cancelPow };
 
 /**
  * Estimate time to compute PoW at given difficulty
  *
- * With TurboModule native loop: ~500-1000 hashes/sec on mobile
+ * With 4 parallel workers: ~320-400 hashes/sec effective rate on mobile
+ * (4 workers * ~80-100 h/s per worker)
  */
 export function estimatePoWTime(difficulty: number): number {
   if (difficulty === 0) return 0;
 
   const expectedAttempts = Math.pow(2, difficulty);
-  // TurboModule is much faster: ~500-1000 hashes/sec
-  const hashesPerSecond = 500;
+  // With 4 parallel workers: ~320 effective h/s
+  const hashesPerSecond = 320;
 
   return expectedAttempts / hashesPerSecond;
 }
