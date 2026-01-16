@@ -22,12 +22,14 @@ static const int NUM_WORKERS = 4;
     std::atomic<bool> _cancelFlag;
     std::atomic<int> _totalAttempts;
     std::chrono::steady_clock::time_point _powStartTime;
+    std::atomic<int> *_workerAttempts;
 }
 
 - (instancetype)init {
     if (self = [super init]) {
         _cancelFlag.store(false);
         _totalAttempts.store(0);
+        _workerAttempts = nullptr;
     }
     return self;
 }
@@ -166,6 +168,15 @@ saltEncoding:(NSString *)saltEncoding
     _totalAttempts.store(0);
     _powStartTime = std::chrono::steady_clock::now();
     
+    // Clean up previous worker attempts if any
+    if (_workerAttempts != nullptr) {
+        delete[] _workerAttempts;
+    }
+    _workerAttempts = new std::atomic<int>[NUM_WORKERS];
+    for (int i = 0; i < NUM_WORKERS; i++) {
+        _workerAttempts[i].store(0);
+    }
+    
     int requiredBits = (int)difficulty;
     int maxAttemptCount = (int)maxAttempts;
     int attemptsPerWorker = maxAttemptCount / NUM_WORKERS;
@@ -178,15 +189,12 @@ saltEncoding:(NSString *)saltEncoding
     NSData *baseData = [self hexToData:base];
     NSData *saltData = [self hexToData:salt];
     
-    // Use heap-allocated shared state to avoid block capture issues
     __block std::atomic<bool> *foundResultPtr = new std::atomic<bool>(false);
-    __block std::atomic<int> *workerAttemptsPtr = new std::atomic<int>[NUM_WORKERS];
-    for (int i = 0; i < NUM_WORKERS; i++) {
-        workerAttemptsPtr[i].store(0);
-    }
-    
     __block uint32_t winningNonce = 0;
     __block NSString *winningDigest = nil;
+    
+    // Store pointer to instance's worker attempts for use in blocks
+    std::atomic<int> *workerAttemptsPtr = _workerAttempts;
     
     dispatch_group_t group = dispatch_group_create();
     dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0);
@@ -236,9 +244,8 @@ saltEncoding:(NSString *)saltEncoding
         
         bool found = foundResultPtr->load();
         
-        // Cleanup heap-allocated state
+        // Cleanup heap-allocated found flag
         delete foundResultPtr;
-        delete[] workerAttemptsPtr;
         
         dispatch_async(dispatch_get_main_queue(), ^{
             if (found && winningDigest) {
@@ -320,7 +327,14 @@ saltEncoding:(NSString *)saltEncoding
 
 - (void)getPowProgress:(RCTPromiseResolveBlock)resolve
                 reject:(RCTPromiseRejectBlock)reject {
-    int attempts = _totalAttempts.load();
+    // Sum up attempts from all workers for real-time progress
+    int attempts = 0;
+    if (_workerAttempts != nullptr) {
+        for (int i = 0; i < NUM_WORKERS; i++) {
+            attempts += _workerAttempts[i].load();
+        }
+    }
+    
     auto elapsed = std::chrono::steady_clock::now() - _powStartTime;
     double elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
     double hashesPerSecond = elapsedMs > 0 ? (attempts / (elapsedMs / 1000.0)) : 0;

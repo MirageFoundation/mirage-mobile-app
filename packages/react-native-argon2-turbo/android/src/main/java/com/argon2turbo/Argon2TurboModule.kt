@@ -37,6 +37,10 @@ class Argon2TurboModule(reactContext: ReactApplicationContext) :
     private var powJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Default)
     
+    // Store worker attempts for real-time progress tracking
+    @Volatile
+    private var workerAttemptsArray: Array<AtomicInteger>? = null
+    
     // Number of parallel workers for PoW
     private val NUM_WORKERS = 4
 
@@ -191,6 +195,9 @@ class Argon2TurboModule(reactContext: ReactApplicationContext) :
                 // Create atomic flags for each worker to track completion
                 val workerAttempts = Array(NUM_WORKERS) { AtomicInteger(0) }
                 
+                // Store for real-time progress tracking
+                workerAttemptsArray = workerAttempts
+                
                 // Launch parallel workers
                 val workers: List<Deferred<PowWorkerResult?>> = (0 until NUM_WORKERS).map { workerIndex ->
                     async(Dispatchers.Default) {
@@ -338,7 +345,8 @@ class Argon2TurboModule(reactContext: ReactApplicationContext) :
     }
 
     override fun getPowProgress(promise: Promise) {
-        val attempts = totalAttempts.get()
+        // Sum up attempts from all workers for real-time progress
+        val attempts = workerAttemptsArray?.sumOf { it.get() } ?: totalAttempts.get()
         val elapsedMs = System.currentTimeMillis() - powStartTime
         val hashesPerSecond = if (elapsedMs > 0) {
             attempts.toDouble() / (elapsedMs.toDouble() / 1000.0)
