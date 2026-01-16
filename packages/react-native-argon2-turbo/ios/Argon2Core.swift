@@ -1,7 +1,7 @@
 import Foundation
 import Argon2Swift
 
-@objc public enum Argon2Type: Int {
+@objc public enum Argon2TypeObjC: Int {
     case i = 0
     case d = 1
     case id = 2
@@ -28,9 +28,9 @@ import Argon2Swift
         memory: Int,
         parallelism: Int,
         hashLength: Int,
-        type: Argon2Type
+        type: Argon2TypeObjC
     ) throws -> Argon2HashResult {
-        let argon2Type: Argon2Type_Swift
+        let argon2Type: Argon2Type
         switch type {
         case .i:
             argon2Type = .i

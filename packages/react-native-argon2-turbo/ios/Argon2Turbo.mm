@@ -97,11 +97,11 @@ saltEncoding:(NSString *)saltEncoding
                          mode:(NSString *)mode {
     NSError *error = nil;
     
-    Argon2Type type = Argon2TypeId;
+    Argon2TypeObjC type = Argon2TypeObjCId;
     if ([mode isEqualToString:@"argon2i"]) {
-        type = Argon2TypeI;
+        type = Argon2TypeObjCI;
     } else if ([mode isEqualToString:@"argon2d"]) {
-        type = Argon2TypeD;
+        type = Argon2TypeObjCD;
     }
     
     Argon2HashResult *result = [Argon2Core hashStringWithPassword:password
