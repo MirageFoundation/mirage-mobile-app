@@ -569,15 +569,30 @@ export function HomeScreen() {
 
   // Debounce ref to prevent multiple fetches
   const lastFetchTime = useRef(0);
+  const isFetchingRef = useRef(false);
 
   const handleEndReached = useCallback(() => {
     const now = Date.now();
-    // Debounce: only fetch if 1 second has passed since last fetch
-    if (hasNextPage && !isFetchingNextPage && now - lastFetchTime.current > 1000) {
+    // Only fetch if:
+    // 1. We already have some posts loaded (prevents fetching on initial empty render)
+    // 2. There are more pages to fetch
+    // 3. Not currently fetching
+    // 4. At least 500ms has passed since last fetch (debounce)
+    // 5. Not already in a fetch cycle (extra guard)
+    if (
+      posts.length > 0 &&
+      hasNextPage &&
+      !isFetchingNextPage &&
+      !isFetchingRef.current &&
+      now - lastFetchTime.current > 500
+    ) {
       lastFetchTime.current = now;
-      fetchNextPage();
+      isFetchingRef.current = true;
+      fetchNextPage().finally(() => {
+        isFetchingRef.current = false;
+      });
     }
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  }, [posts.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // Apply vote overrides to posts
   const getPostWithOverrides = useCallback(
@@ -759,7 +774,7 @@ export function HomeScreen() {
           />
         }
         onEndReached={handleEndReached}
-        onEndReachedThreshold={0.7}
+        onEndReachedThreshold={1.5}
         // Performance optimizations
         removeClippedSubviews={true}
         maxToRenderPerBatch={5}
