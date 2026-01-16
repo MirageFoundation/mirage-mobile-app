@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -12,6 +13,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import {
+  getPosts,
+  queryKeys,
   transformApiPosts,
   useInfinitePosts,
   useToggleFollowUser,
@@ -60,6 +63,7 @@ export function HomeScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const {
     scrollHandler,
     headerAnimatedStyle,
@@ -584,9 +588,70 @@ export function HomeScreen() {
     });
   }, []);
 
-  const handleRefresh = useCallback(() => {
-    refetch();
-  }, [refetch]);
+  // Debounce ref to prevent multiple fetches
+  const lastFetchTime = useRef(0);
+  const isFetchingRef = useRef(false);
+  const initialLoadCompleteRef = useRef(false);
+
+  // Mark initial load as complete once we have posts
+  useEffect(() => {
+    if (posts.length > 0 && !isLoading) {
+      // Delay to ensure FlatList has finished initial layout
+      const timer = setTimeout(() => {
+        initialLoadCompleteRef.current = true;
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [posts.length, isLoading]);
+
+  // Reset initial load flag when feed type changes (new query)
+  useEffect(() => {
+    initialLoadCompleteRef.current = false;
+  }, [sortBy]);
+
+  const handleRefresh = useCallback(async () => {
+    // Reset initial load flag so pagination protection kicks in again
+    initialLoadCompleteRef.current = false;
+
+    try {
+      // Fetch only the first page to check for new posts
+      const newFirstPage = await getPosts({
+        limit: 20,
+        feed: "home",
+        by: sortBy,
+        allowed_tags: allowedTags || undefined,
+        address: currentUser?.walletAddress,
+        page: 1,
+      });
+
+      // Get the query key for the infinite posts query
+      const postsQueryKey = queryKeys.posts({
+        limit: 20,
+        feed: "home",
+        by: sortBy,
+        allowed_tags: allowedTags || undefined,
+        address: currentUser?.walletAddress,
+        page: undefined,
+      });
+
+      // Update the cache - replace only the first page, keep the rest
+      queryClient.setQueryData(postsQueryKey, (oldData: any) => {
+        if (!oldData) {
+          return {
+            pages: [newFirstPage],
+            pageParams: [1],
+          };
+        }
+        return {
+          ...oldData,
+          pages: [newFirstPage, ...oldData.pages.slice(1)],
+          pageParams: [1, ...oldData.pageParams.slice(1)],
+        };
+      });
+    } catch (error) {
+      console.error("Failed to refresh feed:", error);
+    }
+  }, [queryClient, sortBy, allowedTags, currentUser?.walletAddress]);
 
   // Register scroll ref and refresh callback for tab press scroll-to-top
   useEffect(() => {
@@ -594,24 +659,22 @@ export function HomeScreen() {
     registerRefreshCallback(handleRefresh);
   }, [registerScrollRef, registerRefreshCallback, handleRefresh]);
 
-  // Debounce ref to prevent multiple fetches
-  const lastFetchTime = useRef(0);
-  const isFetchingRef = useRef(false);
-
   const handleEndReached = useCallback(() => {
     const now = Date.now();
     // Only fetch if:
-    // 1. We already have some posts loaded (prevents fetching on initial empty render)
-    // 2. There are more pages to fetch
-    // 3. Not currently fetching
-    // 4. At least 500ms has passed since last fetch (debounce)
-    // 5. Not already in a fetch cycle (extra guard)
+    // 1. Initial load is complete (prevents fetching during first render)
+    // 2. We have at least 15 posts (fetch more when near 15th post of 20)
+    // 3. There are more pages to fetch
+    // 4. Not currently fetching
+    // 5. At least 1 second has passed since last fetch (debounce)
+    // 6. Not already in a fetch cycle (extra guard)
     if (
-      posts.length > 0 &&
+      initialLoadCompleteRef.current &&
+      posts.length >= 15 &&
       hasNextPage &&
       !isFetchingNextPage &&
       !isFetchingRef.current &&
-      now - lastFetchTime.current > 500
+      now - lastFetchTime.current > 1000
     ) {
       lastFetchTime.current = now;
       isFetchingRef.current = true;
@@ -804,7 +867,7 @@ export function HomeScreen() {
           />
         }
         onEndReached={handleEndReached}
-        onEndReachedThreshold={1.5}
+        onEndReachedThreshold={0.3}
         // Viewability tracking for auto-play video
         viewabilityConfig={viewabilityConfig}
         onViewableItemsChanged={onViewableItemsChanged}
