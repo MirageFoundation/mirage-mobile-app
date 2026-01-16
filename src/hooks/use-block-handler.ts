@@ -42,7 +42,7 @@ export function useBlockHandler(
   const { onSuccess, onError } = options;
 
   const { requireAuth } = useAuthGuard();
-  const { enqueue } = usePowQueueStore();
+  const enqueue = usePowQueueStore((state) => state.enqueue);
 
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [pendingBlock, setPendingBlock] = useState<BlockTarget | null>(null);

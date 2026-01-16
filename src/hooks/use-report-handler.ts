@@ -39,7 +39,7 @@ export function useReportHandler(
   const { onSuccess, onError } = options;
 
   const { requireAuth } = useAuthGuard();
-  const { enqueue } = usePowQueueStore();
+  const enqueue = usePowQueueStore((state) => state.enqueue);
 
   const [showReportSheet, setShowReportSheet] = useState(false);
   const [pendingTarget, setPendingTarget] = useState<ReportTarget | null>(null);

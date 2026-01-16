@@ -193,6 +193,7 @@ export const PostActions = memo(function PostActions({
         <Pressable
           onPress={handleLikePress}
           disabled={disabled}
+          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
           style={[styles.voteButton, disabled && styles.disabled]}
         >
           <Animated.View
@@ -222,6 +223,7 @@ export const PostActions = memo(function PostActions({
         <Pressable
           onPress={handleDislikePress}
           disabled={disabled}
+          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
           style={[styles.voteButton, disabled && styles.disabled]}
         >
           <Animated.View
@@ -247,6 +249,7 @@ export const PostActions = memo(function PostActions({
             onCommentPress?.();
           }}
           disabled={disabled}
+          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
           style={[styles.voteButton, disabled && styles.disabled]}
         >
           <CommentIcon size={iconSize} color={defaultColor} />

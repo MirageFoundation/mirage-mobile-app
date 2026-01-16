@@ -1,4 +1,5 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { logPress } from "@/src/utils/press-logger";
 import { memo, useCallback, useMemo } from "react";
 import { Linking, Pressable, type StyleProp, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -49,6 +50,9 @@ export const PostCard = memo(function PostCard({
   shareUrl,
   style,
 }: PostCardProps) {
+  if (__DEV__) {
+    console.log("[render] post_card", post.id);
+  }
   const {
     author,
     title,
@@ -74,8 +78,9 @@ export const PostCard = memo(function PostCard({
 
   const handlePress = useCallback(() => {
     triggerHaptic("selection");
+    logPress({ name: "post_card", postId: post.id });
     onPress?.();
-  }, [onPress]);
+  }, [onPress, post.id]);
 
   const handlePlayNowPress = useCallback(() => {
     if (!resolvedContent.extractedUrl) return;

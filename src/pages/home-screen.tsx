@@ -1,14 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  RefreshControl,
-  View,
-  type ViewToken,
-} from "react-native";
-import Animated from "react-native-reanimated";
+import type { FlatList } from "react-native";
+import { ActivityIndicator, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -25,7 +19,6 @@ import {
   ConfirmationPopup,
   FeedHeader,
   type Post,
-  PostCardItem,
   PostCardSkeleton,
   PostCardSkeletonList,
   PostOptionsSheet,
@@ -50,22 +43,14 @@ import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
 import { useToast } from "@/src/providers/toast-provider";
+import { HomePostList } from "./home/home-post-list";
+import { useHomePostCardStore } from "./home/home-post-card-store";
 import {
   getAllowedTagsFromContentTypes,
   useAuthStore,
   useContentModerationStore,
   usePreferencesStore,
 } from "@/src/stores";
-
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Post>);
-
-const areSetsEqual = (a: Set<string>, b: Set<string>) => {
-  if (a.size !== b.size) return false;
-  for (const value of a) {
-    if (!b.has(value)) return false;
-  }
-  return true;
-};
 
 export function HomeScreen() {
   const { theme } = useUnistyles();
@@ -79,9 +64,10 @@ export function HomeScreen() {
     registerRefreshCallback,
   } = useScrollAnimationContext();
   const { requireAuth } = useAuthGuard();
+  const toast = useToast();
 
   // Ref for FlatList to enable scroll-to-top
-  const flatListRef = useRef<FlatList<Post>>(null);
+  const flatListRef = useRef<FlatList<Post> | null>(null);
 
   // Refs for sheets
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
@@ -91,27 +77,7 @@ export function HomeScreen() {
   // Selected post for options
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
-  // Track visible posts for auto-play video
-  const [visiblePostIds, setVisiblePostIds] = useState<Set<string>>(new Set());
-
-  // Viewability config for detecting visible posts
-  const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 50, // Item is "visible" when 50% is on screen
-    minimumViewTime: 100, // Must be visible for at least 100ms
-  }).current;
-
-  const onViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      const visibleIds = new Set(
-        viewableItems
-          .filter((item) => item.isViewable && item.item?.id)
-          .map((item) => item.item.id)
-      );
-      setVisiblePostIds((prev) =>
-        areSetsEqual(prev, visibleIds) ? prev : visibleIds
-      );
-    }
-  ).current;
+  // Track visible posts inside list component to avoid HomeScreen rerenders.
 
   // Global content moderation state (syncs across screens)
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
@@ -140,11 +106,17 @@ export function HomeScreen() {
 
   // Follow/unfollow mutation
   const toggleFollowMutation = useToggleFollowUser();
+  const toggleFollowAsyncRef = useRef(toggleFollowMutation.mutateAsync);
+
+  useEffect(() => {
+    toggleFollowAsyncRef.current = toggleFollowMutation.mutateAsync;
+  }, [toggleFollowMutation.mutateAsync]);
 
   // Track which users are currently being followed/unfollowed (for loading state)
   const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(
     new Set()
   );
+  const followLoadingUsersRef = useRef<Set<string>>(new Set());
 
   // Show adult content popup if user hasn't seen it
   const showAdultPopup = !!currentUser && !hasSeenAdultPrompt;
@@ -218,7 +190,7 @@ export function HomeScreen() {
   >({});
 
   // Vote handler with toast notifications
-  const voteHandler = useVoteHandler({
+  const { handleUpvote, handleDownvote } = useVoteHandler({
     onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
       setVoteOverrides((prev) => {
         const currentDelta = prev[targetId]?.likeDelta ?? 0;
@@ -336,16 +308,23 @@ export function HomeScreen() {
     console.log("Navigate to author:", authorId);
   }, []);
 
-  const handleMorePress = useCallback(
-    (postId: string) => {
-      const post = posts.find((p) => p.id === postId);
-      if (post) {
-        setSelectedPost(post);
-        postOptionsSheetRef.current?.present();
-      }
-    },
-    [posts]
-  );
+  const postsByIdRef = useRef<Map<string, Post>>(new Map());
+
+  useEffect(() => {
+    const map = new Map<string, Post>();
+    for (const post of postsWithOverrides) {
+      map.set(post.id, post);
+    }
+    postsByIdRef.current = map;
+  }, [postsWithOverrides]);
+
+  const handleMorePress = useCallback((postId: string) => {
+    const post = postsByIdRef.current.get(postId);
+    if (post) {
+      setSelectedPost(post);
+      postOptionsSheetRef.current?.present();
+    }
+  }, []);
 
   // Block handler with API integration
   const blockHandler = useBlockHandler({});
@@ -454,48 +433,12 @@ export function HomeScreen() {
     toast.success("Got it", "We'll show fewer posts like this.");
   }, [selectedPost?.id, toast]);
 
-  const handleLikePress = useCallback(
-    (
-      postId: string,
-      currentlyLiked: boolean,
-      currentlyDisliked: boolean,
-      currentLikes: number
-    ) => {
-      voteHandler.handleUpvote(
-        postId,
-        currentlyLiked,
-        currentlyDisliked,
-        currentLikes
-      );
-    },
-    [voteHandler]
-  );
-
-  const handleDislikePress = useCallback(
-    (
-      postId: string,
-      currentlyLiked: boolean,
-      currentlyDisliked: boolean,
-      currentLikes: number
-    ) => {
-      voteHandler.handleDownvote(
-        postId,
-        currentlyLiked,
-        currentlyDisliked,
-        currentLikes
-      );
-    },
-    [voteHandler]
-  );
-
   const handleCommentPress = useCallback(
     (postId: string) => {
       router.push(`/post/${postId}`);
     },
     [router]
   );
-
-  const toast = useToast();
 
   const handleFollowPress = useCallback(
     (
@@ -504,7 +447,7 @@ export function HomeScreen() {
       isCurrentlyFollowing: boolean
     ) => {
       // Prevent double-clicks while loading
-      if (followLoadingUsers.has(authorId)) {
+      if (followLoadingUsersRef.current.has(authorId)) {
         return;
       }
 
@@ -522,7 +465,7 @@ export function HomeScreen() {
         );
 
         try {
-          await toggleFollowMutation.mutateAsync({
+          await toggleFollowAsyncRef.current({
             userAddress: authorId,
             isCurrentlyFollowing,
           });
@@ -587,7 +530,7 @@ export function HomeScreen() {
         }
       });
     },
-    [requireAuth, toggleFollowMutation, followLoadingUsers, toast]
+    [requireAuth, toast]
   );
 
   const handleRevealContent = useCallback((postId: string) => {
@@ -669,6 +612,10 @@ export function HomeScreen() {
     registerRefreshCallback(handleRefresh);
   }, [registerScrollRef, registerRefreshCallback, handleRefresh]);
 
+  useEffect(() => {
+    followLoadingUsersRef.current = followLoadingUsers;
+  }, [followLoadingUsers]);
+
   const handleEndReached = useCallback(() => {
     const now = Date.now();
     // Only fetch if:
@@ -707,48 +654,6 @@ export function HomeScreen() {
       };
     });
   }, [posts, voteOverrides]);
-
-  const renderPost = useCallback(
-    ({ item: post }: { item: Post }) => {
-      const isFollowLoading = followLoadingUsers.has(post.author.id);
-      const isVisible = visiblePostIds.has(post.id);
-
-      return (
-        <PostCardItem
-          post={post}
-          isOwnPost={currentUser?.id === post.author.id}
-          isVisible={isVisible}
-          onPostPress={handlePostPress}
-          onAuthorPress={handleAuthorPress}
-          onMorePress={handleMorePress}
-          onLikePress={handleLikePress}
-          onDislikePress={handleDislikePress}
-          onCommentPress={handleCommentPress}
-          onFollowPress={handleFollowPress}
-          onRevealContent={handleRevealContent}
-          contentRevealed={revealedPosts.has(post.id)}
-          followLoading={isFollowLoading}
-          shareUrl={`https://mirage.app/post/${post.id}`}
-        />
-      );
-    },
-    [
-      currentUser,
-      followLoadingUsers,
-      visiblePostIds,
-      handlePostPress,
-      handleAuthorPress,
-      handleMorePress,
-      handleLikePress,
-      handleDislikePress,
-      handleCommentPress,
-      handleFollowPress,
-      handleRevealContent,
-      revealedPosts,
-    ]
-  );
-
-  const keyExtractor = useCallback((item: Post) => item.id, []);
 
   const ListEmptyComponent = useCallback(() => {
     if (isLoading) {
@@ -817,6 +722,73 @@ export function HomeScreen() {
     [insets.bottom, insets.top, postsWithOverrides.length]
   );
 
+  const refreshControl = useMemo(
+    () => (
+      <RefreshControl
+        refreshing={false}
+        onRefresh={handleRefresh}
+        tintColor="transparent"
+        progressViewOffset={insets.top + HEADER_HEIGHT}
+      />
+    ),
+    [handleRefresh, insets.top]
+  );
+
+  const setCurrentUserId = useHomePostCardStore(
+    (state) => state.setCurrentUserId
+  );
+  const setFollowedUsers = useHomePostCardStore(
+    (state) => state.setFollowedUsers
+  );
+  const setFollowLoadingUsersStore = useHomePostCardStore(
+    (state) => state.setFollowLoadingUsers
+  );
+  const setRevealedPostsStore = useHomePostCardStore(
+    (state) => state.setRevealedPosts
+  );
+  const setHandlers = useHomePostCardStore((state) => state.setHandlers);
+
+  const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
+
+  useEffect(() => {
+    setCurrentUserId(currentUser?.id);
+  }, [currentUser?.id, setCurrentUserId]);
+
+  useEffect(() => {
+    setFollowedUsers(followedUsersSet);
+  }, [followedUsersSet, setFollowedUsers]);
+
+  useEffect(() => {
+    setFollowLoadingUsersStore(followLoadingUsers);
+  }, [followLoadingUsers, setFollowLoadingUsersStore]);
+
+  useEffect(() => {
+    setRevealedPostsStore(revealedPosts);
+  }, [revealedPosts, setRevealedPostsStore]);
+
+  useEffect(() => {
+    setHandlers({
+      onPostPress: handlePostPress,
+      onAuthorPress: handleAuthorPress,
+      onMorePress: handleMorePress,
+      onLikePress: handleUpvote,
+      onDislikePress: handleDownvote,
+      onCommentPress: handleCommentPress,
+      onFollowPress: handleFollowPress,
+      onRevealContent: handleRevealContent,
+    });
+  }, [
+    setHandlers,
+    handlePostPress,
+    handleAuthorPress,
+    handleMorePress,
+    handleUpvote,
+    handleDownvote,
+    handleCommentPress,
+    handleFollowPress,
+    handleRevealContent,
+  ]);
+
   return (
     <Box flex background="base">
       {/* Fixed Status Bar Background */}
@@ -833,39 +805,17 @@ export function HomeScreen() {
       />
 
       {/* Scrollable Feed */}
-      <AnimatedFlatList
+      <HomePostList
         ref={flatListRef}
         data={postsWithOverrides}
-        renderItem={renderPost}
-        keyExtractor={keyExtractor}
-        onScroll={scrollHandler}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}
         contentContainerStyle={listContentStyle}
+        onScroll={scrollHandler}
         ListHeaderComponent={ListHeaderComponent}
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}
-        refreshControl={
-          <RefreshControl
-            refreshing={false}
-            onRefresh={handleRefresh}
-            tintColor="transparent"
-            progressViewOffset={insets.top + HEADER_HEIGHT}
-          />
-        }
+        refreshControl={refreshControl}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.3}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        // Viewability tracking for auto-play video
-        viewabilityConfig={viewabilityConfig}
-        onViewableItemsChanged={onViewableItemsChanged}
-        // Performance optimizations
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={5}
-        windowSize={11}
-        initialNumToRender={7}
-        getItemLayout={undefined} // Can't use with variable height items
       />
 
       {/* Adult Content Permission Popup */}

@@ -40,7 +40,7 @@ export function useDeleteHandler(
   const { onSuccess, onError } = options;
 
   const { requireAuth } = useAuthGuard();
-  const { enqueue } = usePowQueueStore();
+  const enqueue = usePowQueueStore((state) => state.enqueue);
 
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [pendingTarget, setPendingTarget] = useState<DeleteTarget | null>(null);

@@ -1,0 +1,105 @@
+import {
+  memo,
+  useCallback,
+  useMemo,
+  useRef,
+  forwardRef,
+  type Ref,
+  type ReactElement,
+  type ComponentType,
+} from "react";
+import {
+  FlatList,
+  type ListRenderItem,
+  type ViewToken,
+} from "react-native";
+import Animated from "react-native-reanimated";
+import type { Post } from "@/src/components/molecules";
+import { HomePostCardItem } from "./home-post-card-item";
+import { useHomePostCardStore } from "./home-post-card-store";
+
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Post>);
+
+type HomePostListProps = {
+  data: Post[];
+  contentContainerStyle: object;
+  onScroll: (event: any) => void;
+  ListHeaderComponent?: ComponentType<any> | ReactElement | null;
+  ListEmptyComponent?: ComponentType<any> | ReactElement | null;
+  ListFooterComponent?: ComponentType<any> | ReactElement | null;
+  refreshControl?: ReactElement | null;
+  onEndReached?: () => void;
+  onEndReachedThreshold?: number;
+};
+
+const HomePostListInner = function HomePostListInner(
+  {
+    data,
+    contentContainerStyle,
+    onScroll,
+    ListHeaderComponent,
+    ListEmptyComponent,
+    ListFooterComponent,
+    refreshControl,
+    onEndReached,
+    onEndReachedThreshold,
+  }: HomePostListProps,
+  ref: Ref<FlatList<Post>>
+) {
+  const setVisiblePostIds = useHomePostCardStore(
+    (state) => state.setVisiblePostIds
+  );
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50,
+    minimumViewTime: 100,
+  }).current;
+
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      const visibleIds = new Set(
+        viewableItems
+          .filter((item) => item.isViewable && item.item?.id)
+          .map((item) => item.item.id)
+      );
+      setVisiblePostIds(visibleIds);
+    }
+  ).current;
+
+  const renderItem = useCallback<ListRenderItem<Post>>(
+    ({ item }) => <HomePostCardItem post={item} />,
+    []
+  );
+
+  const keyExtractor = useMemo(() => (item: Post) => item.id, []);
+
+  return (
+    <AnimatedFlatList
+      ref={ref}
+      data={data}
+      renderItem={renderItem}
+      keyExtractor={keyExtractor}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={contentContainerStyle}
+      ListHeaderComponent={ListHeaderComponent}
+      ListEmptyComponent={ListEmptyComponent}
+      ListFooterComponent={ListFooterComponent}
+      refreshControl={refreshControl}
+      onEndReached={onEndReached}
+      onEndReachedThreshold={onEndReachedThreshold}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      viewabilityConfig={viewabilityConfig}
+      onViewableItemsChanged={onViewableItemsChanged}
+      removeClippedSubviews={true}
+      maxToRenderPerBatch={5}
+      windowSize={11}
+      initialNumToRender={7}
+      getItemLayout={undefined}
+    />
+  );
+};
+
+export const HomePostList = memo(forwardRef(HomePostListInner));

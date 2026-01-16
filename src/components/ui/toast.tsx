@@ -207,14 +207,14 @@ export const Toast = ({
   return (
     <Animated.View
       pointerEvents="box-none"
-      style={[
-        styles.container,
-        {
-          top: insets.top + 8,
-          transform: [{ translateY }, { scale }],
-          opacity,
-        },
-      ]}
+     style={[
+       styles.container,
+       {
+         top: insets.top + 8,
+         transform: [{ translateY }, { scale }],
+         opacity,
+       },
+     ]}
     >
       <Pressable
         onPress={toast.type !== "loading" ? handleDismiss : undefined}
@@ -315,12 +315,12 @@ export const ToastContainer = ({ toasts, onDismiss }: ToastContainerProps) => {
 
 const styles = StyleSheet.create((theme) => ({
   container: {
-    position: "absolute",
-    left: 38,
-    right: 38,
-    zIndex: 9999,
-  },
-  blurContainer: {
+   position: "absolute",
+   left: 38,
+   right: 38,
+   zIndex: 9999,
+ },
+ blurContainer: {
     overflow: "hidden",
     borderRadius: 9999,
     borderWidth: 1,

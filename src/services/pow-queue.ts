@@ -157,12 +157,20 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     });
 
     if (!state.isProcessing) {
-      get().processNext();
+      // Defer processing to allow optimistic UI updates to render first.
+      setTimeout(() => {
+        get().processNext();
+      }, 0);
     }
   },
 
   processNext: async () => {
     const state = get();
+
+    // Prevent concurrent processing; we only ever want one active action at a time.
+    if (state.currentAction) {
+      return;
+    }
 
     if (state.queue.length === 0) {
       // All done - but keep lastCompletedAction so UI can show final result
