@@ -209,7 +209,7 @@ export const PostActions = ({
           <Text
             size={voteTextSize}
             weight="bold"
-            style={{ marginLeft: 3, color: upvoteColor }}
+            style={{ marginLeft: 10, color: upvoteColor }}
           >
             {formatCount(likes)}
           </Text>
@@ -253,7 +253,7 @@ export const PostActions = ({
           <Text
             size={voteTextSize}
             weight="bold"
-            style={{ marginLeft: 3, color: defaultColor }}
+            style={{ marginLeft: 10, color: defaultColor }}
           >
             {formatCount(comments)}
           </Text>
@@ -294,8 +294,8 @@ const styles = StyleSheet.create((theme) => ({
   voteButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   voteDivider: {
     width: 1,

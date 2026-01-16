@@ -805,6 +805,7 @@ export function HomeScreen() {
           isVisible={isVisible}
           showFollowButton={false}
           topicPosition="right"
+          showUrlCard={false}
           onPress={() => handlePostPress(post.id)}
           onAuthorPress={() => handleAuthorPress(post.author.id)}
           onMorePress={() => handleMorePress(post.id)}

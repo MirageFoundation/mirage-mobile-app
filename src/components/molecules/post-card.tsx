@@ -8,8 +8,8 @@ import {
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
-import { BlurView } from "expo-blur";
 import { ResizeMode, Video } from "expo-av";
+import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -121,6 +121,8 @@ type PostCardProps = {
   followLoading?: boolean;
   /** URL for sharing */
   shareUrl?: string;
+  /** Whether to show the URL card/Play Now row (default: true) */
+  showUrlCard?: boolean;
   /** Custom style */
   style?: StyleProp<ViewStyle>;
 };
@@ -207,6 +209,7 @@ export const PostCard = ({
   contentRevealed = false,
   followLoading = false,
   shareUrl,
+  showUrlCard = true,
   style,
 }: PostCardProps) => {
   const { theme } = useUnistyles();
@@ -562,9 +565,21 @@ export const PostCard = ({
               </Text>
               {post.topic && topicPosition === "inline" && (
                 <>
-                  <Text size="xs" mode="subtle">•</Text>
-                  <View style={[styles.topicTag, { backgroundColor: theme.colors.primary[500] + "15" }]}>
-                    <Text size="xs" weight="medium" style={{ color: theme.colors.primary[500] }} numberOfLines={1}>
+                  <Text size="xs" mode="subtle">
+                    •
+                  </Text>
+                  <View
+                    style={[
+                      styles.topicTag,
+                      { backgroundColor: theme.colors.primary[500] + "15" },
+                    ]}
+                  >
+                    <Text
+                      size="xs"
+                      weight="medium"
+                      style={{ color: theme.colors.primary[500] }}
+                      numberOfLines={1}
+                    >
                       #{post.topic}
                     </Text>
                   </View>
@@ -578,8 +593,18 @@ export const PostCard = ({
         {/* Right section: Topic tag (if right position), Follow button + More options */}
         <View style={styles.headerActions}>
           {post.topic && topicPosition === "right" && (
-            <View style={[styles.topicTag, { backgroundColor: theme.colors.primary[500] + "15" }]}>
-              <Text size="xs" weight="medium" style={{ color: theme.colors.primary[500] }} numberOfLines={1}>
+            <View
+              style={[
+                styles.topicTag,
+                { backgroundColor: theme.colors.primary[500] + "15" },
+              ]}
+            >
+              <Text
+                size="xs"
+                weight="medium"
+                style={{ color: theme.colors.primary[500] }}
+                numberOfLines={1}
+              >
                 #{post.topic}
               </Text>
             </View>
@@ -618,12 +643,7 @@ export const PostCard = ({
       )}
 
       {/* Title */}
-      <Text
-        size="lg"
-        weight="semibold"
-        style={styles.title}
-        numberOfLines={shouldBlurContent ? 1 : 3}
-      >
+      <Text size="xl" weight="bold" style={styles.title}>
         {title}
       </Text>
 
@@ -632,13 +652,13 @@ export const PostCard = ({
 
       {/* Body text (without URL) */}
       {bodyWithoutUrl && !shouldBlurContent && (
-        <Text size="sm" mode="default" style={styles.body} numberOfLines={4}>
+        <Text size="md" mode="default" style={styles.body}>
           {bodyWithoutUrl}
         </Text>
       )}
 
       {/* URL Link Card */}
-      {extractedUrl && displayDomain && !shouldBlurContent && !bodyVideoUrl && (
+      {showUrlCard && extractedUrl && displayDomain && !shouldBlurContent && !bodyVideoUrl && (
         <View style={styles.urlCard}>
           <View style={styles.urlInfo}>
             <Ionicons
@@ -817,7 +837,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   body: {
     marginTop: theme.spacing.xs,
-    lineHeight: 16,
+    lineHeight: 18,
   },
   urlCard: {
     flexDirection: "row",
