@@ -169,8 +169,8 @@ const MenuItem = ({
   const color = disabled
     ? theme.colors.text.muted
     : isDestructive
-      ? theme.colors.error[500]
-      : theme.colors.text.subtle;
+    ? theme.colors.error[500]
+    : theme.colors.text.subtle;
 
   return (
     <Pressable
@@ -256,7 +256,7 @@ export const PostOptionsSheet = forwardRef<
 
     const getShareUrl = useCallback(() => {
       if (!post?.id) return "";
-      return `https://mirage.app/post/${post.id}`;
+      return `https://mirage.vote/post/${post.id}`;
     }, [post?.id]);
 
     const getShareMessage = useCallback(() => {
@@ -478,7 +478,11 @@ export const PostOptionsSheet = forwardRef<
               <MenuItem
                 iconComponent={Ionicons}
                 iconName={isTopicFollowed ? "pricetag" : "pricetag-outline"}
-                title={isTopicFollowed ? `Unfollow #${post.topic}` : `Follow #${post.topic}`}
+                title={
+                  isTopicFollowed
+                    ? `Unfollow #${post.topic}`
+                    : `Follow #${post.topic}`
+                }
                 onPress={handleFollowTopic}
               />
             )}
