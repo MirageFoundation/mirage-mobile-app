@@ -7,7 +7,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { memo, useCallback, useMemo } from "react";
 import { ActivityIndicator, FlatList, Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { PostCard, type Post as UIPost } from "./post-card";
+import { type Post as UIPost } from "./post-card";
+import { PostCardItem } from "./post-card-item";
 import { PostCardSkeletonList } from "./post-card-skeleton";
 import { ProfileCommentItem } from "./profile-comment-item";
 import { ProfilePostsSkeleton } from "./profile-posts-skeleton";
@@ -79,6 +80,24 @@ export const ProfilePostsList = memo(function ProfilePostsList({
     [apiPosts, followedUsers]
   );
 
+  const postsById = useMemo(() => {
+    const map = new Map<string, UIPost>();
+    for (const post of uiPosts) {
+      map.set(post.id, post);
+    }
+    return map;
+  }, [uiPosts]);
+
+  const handleMorePress = useCallback(
+    (postId: string) => {
+      const post = postsById.get(postId);
+      if (post) {
+        onMorePress?.(post);
+      }
+    },
+    [postsById, onMorePress]
+  );
+
   const handleEndReached = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) {
       fetchNextPage();
@@ -92,17 +111,17 @@ export const ProfilePostsList = memo(function ProfilePostsList({
   const renderPostItem = useCallback(
     ({ item }: { item: UIPost }) => {
       return (
-        <PostCard
+        <PostCardItem
           post={item}
           isOwnPost={true}
-          onPress={() => onPostPress(item.id)}
-          onAuthorPress={() => onAuthorPress?.(item.author.id)}
-          onCommentPress={() => onPostPress(item.id)}
-          onMorePress={() => onMorePress?.(item)}
+          onPostPress={onPostPress}
+          onAuthorPress={onAuthorPress}
+          onCommentPress={onPostPress}
+          onMorePress={handleMorePress}
         />
       );
     },
-    [onPostPress, onAuthorPress, onMorePress]
+    [onPostPress, onAuthorPress, handleMorePress]
   );
 
   const renderCommentItem = useCallback(

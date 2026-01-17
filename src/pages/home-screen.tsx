@@ -1,14 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  RefreshControl,
-  View,
-  type ViewToken,
-} from "react-native";
-import Animated from "react-native-reanimated";
+import type { FlatList } from "react-native";
+import { ActivityIndicator, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -26,7 +20,6 @@ import {
   ConfirmationPopup,
   FeedHeader,
   type Post,
-  PostCard,
   PostCardSkeleton,
   PostCardSkeletonList,
   PostOptionsSheet,
@@ -51,6 +44,8 @@ import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
 import { useToast } from "@/src/providers/toast-provider";
+import { HomePostList } from "./home/home-post-list";
+import { useHomePostCardStore } from "./home/home-post-card-store";
 import {
   getAllowedTagsFromContentTypes,
   getShareBaseUrl,
@@ -58,8 +53,6 @@ import {
   useContentModerationStore,
   usePreferencesStore,
 } from "@/src/stores";
-
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Post>);
 
 export function HomeScreen() {
   const { theme } = useUnistyles();
@@ -73,9 +66,10 @@ export function HomeScreen() {
     registerRefreshCallback,
   } = useScrollAnimationContext();
   const { requireAuth } = useAuthGuard();
+  const toast = useToast();
 
   // Ref for FlatList to enable scroll-to-top
-  const flatListRef = useRef<FlatList<Post>>(null);
+  const flatListRef = useRef<FlatList<Post> | null>(null);
 
   // Refs for sheets
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
@@ -85,25 +79,7 @@ export function HomeScreen() {
   // Selected post for options
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
-  // Track visible posts for auto-play video
-  const [visiblePostIds, setVisiblePostIds] = useState<Set<string>>(new Set());
-
-  // Viewability config for detecting visible posts
-  const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 50, // Item is "visible" when 50% is on screen
-    minimumViewTime: 100, // Must be visible for at least 100ms
-  }).current;
-
-  const onViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      const visibleIds = new Set(
-        viewableItems
-          .filter((item) => item.isViewable && item.item?.id)
-          .map((item) => item.item.id)
-      );
-      setVisiblePostIds(visibleIds);
-    }
-  ).current;
+  // Track visible posts inside list component to avoid HomeScreen rerenders.
 
   // Global content moderation state (syncs across screens)
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
@@ -139,11 +115,17 @@ export function HomeScreen() {
   // Follow/unfollow mutation
   const toggleFollowMutation = useToggleFollowUser();
   const toggleFollowTopicMutation = useToggleFollowTopic();
+  const toggleFollowAsyncRef = useRef(toggleFollowMutation.mutateAsync);
+
+  useEffect(() => {
+    toggleFollowAsyncRef.current = toggleFollowMutation.mutateAsync;
+  }, [toggleFollowMutation.mutateAsync]);
 
   // Track which users are currently being followed/unfollowed (for loading state)
   const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(
     new Set()
   );
+  const followLoadingUsersRef = useRef<Set<string>>(new Set());
 
   // Show adult content popup if user hasn't seen it
   const showAdultPopup = !!currentUser && !hasSeenAdultPrompt;
@@ -205,51 +187,37 @@ export function HomeScreen() {
     );
   }, [data, followedUsers, hiddenPostIds, blockedUserIds]);
 
-  // Revealed posts for content warnings
-  const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
+ // Revealed posts for content warnings
+ const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
-  // Optimistic updates for votes (local state overlay)
-  const [voteOverrides, setVoteOverrides] = useState<
-    Record<
-      string,
-      { hasLiked?: boolean; hasDisliked?: boolean; likeDelta?: number }
-    >
-  >({});
+ // Vote overrides are now stored in the home post card store
+ const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
+ const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
 
-  // Vote handler with toast notifications
-  const voteHandler = useVoteHandler({
-    onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
-      setVoteOverrides((prev) => {
-        const currentDelta = prev[targetId]?.likeDelta ?? 0;
-        return {
-          ...prev,
-          [targetId]: {
-            hasLiked: result.hasLiked,
-            hasDisliked: result.hasDisliked,
-            likeDelta: currentDelta + result.likeDelta,
-          },
-        };
-      });
-    }, []),
-    onRollback: useCallback(
-      (
-        targetId: string,
-        previousState: {
-          hasLiked: boolean;
-          hasDisliked: boolean;
-          likes: number;
-        }
-      ) => {
-        // Revert to previous state by removing the override
-        setVoteOverrides((prev) => {
-          const newOverrides = { ...prev };
-          delete newOverrides[targetId];
-          return newOverrides;
-        });
-      },
-      []
-    ),
-  });
+ // Vote handler with toast notifications
+ const { handleUpvote, handleDownvote } = useVoteHandler({
+   onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
+     setVoteOverride(targetId, {
+       hasLiked: result.hasLiked,
+       hasDisliked: result.hasDisliked,
+       likeDelta: result.likeDelta,
+     });
+   }, [setVoteOverride]),
+   onRollback: useCallback(
+     (
+       targetId: string,
+       previousState: {
+         hasLiked: boolean;
+         hasDisliked: boolean;
+         likes: number;
+       }
+     ) => {
+       // Revert to previous state by removing the override
+       clearVoteOverride(targetId);
+     },
+     [clearVoteOverride]
+   ),
+ });
 
   const handleEnableAdultContent = useCallback(() => {
     setAdultContent(true);
@@ -339,16 +307,23 @@ export function HomeScreen() {
     console.log("Navigate to author:", authorId);
   }, []);
 
-  const handleMorePress = useCallback(
-    (postId: string) => {
-      const post = posts.find((p) => p.id === postId);
-      if (post) {
-        setSelectedPost(post);
-        postOptionsSheetRef.current?.present();
-      }
-    },
-    [posts]
-  );
+  const postsByIdRef = useRef<Map<string, Post>>(new Map());
+
+  useEffect(() => {
+    const map = new Map<string, Post>();
+    for (const post of posts) {
+      map.set(post.id, post);
+    }
+    postsByIdRef.current = map;
+  }, [posts]);
+
+  const handleMorePress = useCallback((postId: string) => {
+    const post = postsByIdRef.current.get(postId);
+    if (post) {
+      setSelectedPost(post);
+      postOptionsSheetRef.current?.present();
+    }
+  }, []);
 
   // Block handler with API integration
   const blockHandler = useBlockHandler({});
@@ -535,48 +510,12 @@ export function HomeScreen() {
     toast.success("Got it", "We'll show fewer posts like this.");
   }, [selectedPost?.id, toast]);
 
-  const handleLikePress = useCallback(
-    (
-      postId: string,
-      currentlyLiked: boolean,
-      currentlyDisliked: boolean,
-      currentLikes: number
-    ) => {
-      voteHandler.handleUpvote(
-        postId,
-        currentlyLiked,
-        currentlyDisliked,
-        currentLikes
-      );
-    },
-    [voteHandler]
-  );
-
-  const handleDislikePress = useCallback(
-    (
-      postId: string,
-      currentlyLiked: boolean,
-      currentlyDisliked: boolean,
-      currentLikes: number
-    ) => {
-      voteHandler.handleDownvote(
-        postId,
-        currentlyLiked,
-        currentlyDisliked,
-        currentLikes
-      );
-    },
-    [voteHandler]
-  );
-
   const handleCommentPress = useCallback(
     (postId: string) => {
       router.push(`/post/${postId}`);
     },
     [router]
   );
-
-  const toast = useToast();
 
   const handleFollowPress = useCallback(
     (
@@ -585,7 +524,7 @@ export function HomeScreen() {
       isCurrentlyFollowing: boolean
     ) => {
       // Prevent double-clicks while loading
-      if (followLoadingUsers.has(authorId)) {
+      if (followLoadingUsersRef.current.has(authorId)) {
         return;
       }
 
@@ -603,7 +542,7 @@ export function HomeScreen() {
         );
 
         try {
-          await toggleFollowMutation.mutateAsync({
+          await toggleFollowAsyncRef.current({
             userAddress: authorId,
             isCurrentlyFollowing,
           });
@@ -668,7 +607,7 @@ export function HomeScreen() {
         }
       });
     },
-    [requireAuth, toggleFollowMutation, followLoadingUsers, toast]
+    [requireAuth, toast]
   );
 
   const handleRevealContent = useCallback((postId: string) => {
@@ -750,6 +689,10 @@ export function HomeScreen() {
     registerRefreshCallback(handleRefresh);
   }, [registerScrollRef, registerRefreshCallback, handleRefresh]);
 
+  useEffect(() => {
+    followLoadingUsersRef.current = followLoadingUsers;
+  }, [followLoadingUsers]);
+
   const handleEndReached = useCallback(() => {
     const now = Date.now();
     // Only fetch if:
@@ -774,83 +717,6 @@ export function HomeScreen() {
       });
     }
   }, [posts.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
-
-  // Apply vote overrides to posts
-  const getPostWithOverrides = useCallback(
-    (post: Post): Post => {
-      const override = voteOverrides[post.id];
-      if (!override) return post;
-      return {
-        ...post,
-        likes: post.likes + (override.likeDelta ?? 0),
-        hasLiked: override.hasLiked ?? post.hasLiked,
-        hasDisliked: override.hasDisliked ?? post.hasDisliked,
-      };
-    },
-    [voteOverrides]
-  );
-
-  const renderPost = useCallback(
-    ({ item: post }: { item: Post }) => {
-      const postWithOverrides = getPostWithOverrides(post);
-      const isFollowingAuthor = followedUsers.includes(post.author.id);
-      const isFollowLoading = followLoadingUsers.has(post.author.id);
-      const isVisible = visiblePostIds.has(post.id);
-
-      return (
-        <PostCard
-          post={{
-            ...postWithOverrides,
-            isFollowing: isFollowingAuthor,
-          }}
-          isOwnPost={currentUser?.id === post.author.id}
-          isVisible={isVisible}
-          showFollowButton={false}
-          topicPosition="right"
-          showUrlCard={false}
-          onPress={() => handlePostPress(post.id)}
-          onAuthorPress={() => handleAuthorPress(post.author.id)}
-          onMorePress={() => handleMorePress(post.id)}
-          onLikePress={() =>
-            handleLikePress(
-              post.id,
-              postWithOverrides.hasLiked ?? false,
-              postWithOverrides.hasDisliked ?? false,
-              postWithOverrides.likes
-            )
-          }
-          onDislikePress={() =>
-            handleDislikePress(
-              post.id,
-              postWithOverrides.hasLiked ?? false,
-              postWithOverrides.hasDisliked ?? false,
-              postWithOverrides.likes
-            )
-          }
-          onCommentPress={() => handleCommentPress(post.id)}
-          onRevealContent={() => handleRevealContent(post.id)}
-          contentRevealed={revealedPosts.has(post.id)}
-          shareUrl={`${getShareBaseUrl(shareServer)}/post/${post.id}`}
-        />
-      );
-    },
-    [
-      currentUser,
-      getPostWithOverrides,
-      followedUsers,
-      visiblePostIds,
-      handlePostPress,
-      handleAuthorPress,
-      handleMorePress,
-      handleLikePress,
-      handleDislikePress,
-      handleCommentPress,
-      handleRevealContent,
-      revealedPosts,
-    ]
-  );
-
-  const keyExtractor = useCallback((item: Post) => item.id, []);
 
   const ListEmptyComponent = useCallback(() => {
     if (isLoading) {
@@ -910,6 +776,107 @@ export function HomeScreen() {
     return <Box p="sm" />;
   }, [isFetchingNextPage]);
 
+  const listContentStyle = useMemo(
+    () => ({
+      paddingTop: insets.top + HEADER_HEIGHT,
+      paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16,
+      flexGrow: posts.length === 0 ? 1 : undefined,
+    }),
+    [insets.bottom, insets.top, posts.length]
+  );
+
+  const refreshControl = useMemo(
+    () => (
+      <RefreshControl
+        refreshing={false}
+        onRefresh={handleRefresh}
+        tintColor="transparent"
+        progressViewOffset={insets.top + HEADER_HEIGHT}
+      />
+    ),
+    [handleRefresh, insets.top]
+  );
+
+  const setCurrentUserId = useHomePostCardStore(
+    (state) => state.setCurrentUserId
+  );
+  const setFollowedUsers = useHomePostCardStore(
+    (state) => state.setFollowedUsers
+  );
+  const setFollowLoadingUsersStore = useHomePostCardStore(
+    (state) => state.setFollowLoadingUsers
+  );
+  const setRevealedPostsStore = useHomePostCardStore(
+    (state) => state.setRevealedPosts
+  );
+  const setHandlers = useHomePostCardStore((state) => state.setHandlers);
+  const setShareServer = useHomePostCardStore((state) => state.setShareServer);
+
+  const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
+
+  useEffect(() => {
+    setCurrentUserId(currentUser?.id);
+  }, [currentUser?.id, setCurrentUserId]);
+
+  useEffect(() => {
+    setFollowedUsers(followedUsersSet);
+  }, [followedUsersSet, setFollowedUsers]);
+
+  useEffect(() => {
+    setFollowLoadingUsersStore(followLoadingUsers);
+  }, [followLoadingUsers, setFollowLoadingUsersStore]);
+
+  useEffect(() => {
+    setRevealedPostsStore(revealedPosts);
+ }, [revealedPosts, setRevealedPostsStore]);
+
+ useEffect(() => {
+   setShareServer(shareServer);
+ }, [shareServer, setShareServer]);
+
+ // Store refs to latest handlers - these update without triggering re-renders
+ const handlersRef = useRef({
+   handlePostPress,
+   handleAuthorPress,
+   handleMorePress,
+   handleUpvote,
+   handleDownvote,
+   handleCommentPress,
+   handleFollowPress,
+   handleRevealContent,
+ });
+
+ // Keep refs updated
+ useEffect(() => {
+   handlersRef.current = {
+     handlePostPress,
+     handleAuthorPress,
+     handleMorePress,
+     handleUpvote,
+     handleDownvote,
+     handleCommentPress,
+     handleFollowPress,
+     handleRevealContent,
+   };
+ });
+
+ // Set handlers ONCE on mount with stable wrapper functions that delegate to refs
+ useEffect(() => {
+   setHandlers({
+     onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
+     onAuthorPress: (authorId) => handlersRef.current.handleAuthorPress(authorId),
+     onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
+     onLikePress: (postId, liked, disliked, likes) =>
+       handlersRef.current.handleUpvote(postId, liked, disliked, likes),
+     onDislikePress: (postId, liked, disliked, likes) =>
+       handlersRef.current.handleDownvote(postId, liked, disliked, likes),
+     onCommentPress: (postId) => handlersRef.current.handleCommentPress(postId),
+     onFollowPress: (authorId, username, isFollowing) =>
+       handlersRef.current.handleFollowPress(authorId, username, isFollowing),
+     onRevealContent: (postId) => handlersRef.current.handleRevealContent(postId),
+   });
+ }, [setHandlers]); // Only run once - setHandlers is stable
+
   return (
     <Box flex background="base">
       {/* Fixed Status Bar Background */}
@@ -926,41 +893,17 @@ export function HomeScreen() {
       />
 
       {/* Scrollable Feed */}
-      <AnimatedFlatList
+      <HomePostList
         ref={flatListRef}
         data={posts}
-        renderItem={renderPost}
-        keyExtractor={keyExtractor}
+        contentContainerStyle={listContentStyle}
         onScroll={scrollHandler}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingTop: insets.top + HEADER_HEIGHT,
-          paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16,
-          flexGrow: posts.length === 0 ? 1 : undefined,
-        }}
         ListHeaderComponent={ListHeaderComponent}
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}
-        refreshControl={
-          <RefreshControl
-            refreshing={false}
-            onRefresh={handleRefresh}
-            tintColor="transparent"
-            progressViewOffset={insets.top + HEADER_HEIGHT}
-          />
-        }
+        refreshControl={refreshControl}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.3}
-        // Viewability tracking for auto-play video
-        viewabilityConfig={viewabilityConfig}
-        onViewableItemsChanged={onViewableItemsChanged}
-        // Performance optimizations
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={5}
-        windowSize={11}
-        initialNumToRender={7}
-        getItemLayout={undefined} // Can't use with variable height items
       />
 
       {/* Adult Content Permission Popup */}

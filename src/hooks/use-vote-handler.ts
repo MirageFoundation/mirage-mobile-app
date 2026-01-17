@@ -5,7 +5,7 @@
  * Shows immediate UI feedback and queues POW actions in the background.
  */
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useVote, type VoteDirection } from "@/src/api/write";
 import {
   usePowQueueStore,
@@ -116,10 +116,15 @@ export function useVoteHandler(
   const { onOptimisticUpdate, onRollback, onSuccess } = options;
 
   const { requireAuth } = useAuthGuard();
-  const { enqueue } = usePowQueueStore();
+  const enqueue = usePowQueueStore((state) => state.enqueue);
 
   const pendingVotes = useRef<Set<string>>(new Set());
   const voteMutation = useVote();
+  const voteAsyncRef = useRef(voteMutation.mutateAsync);
+
+  useEffect(() => {
+    voteAsyncRef.current = voteMutation.mutateAsync;
+  }, [voteMutation.mutateAsync]);
 
   const handleVote = useCallback(
     (
@@ -156,7 +161,7 @@ export function useVoteHandler(
           type: actionType,
           label: getActionLabel(actionType),
           execute: async () => {
-            return voteMutation.mutateAsync({
+            return voteAsyncRef.current({
               target: targetId,
               direction: result.direction,
             });
@@ -178,7 +183,7 @@ export function useVoteHandler(
         });
       });
     },
-    [requireAuth, onOptimisticUpdate, onRollback, onSuccess, enqueue, voteMutation]
+    [requireAuth, onOptimisticUpdate, onRollback, onSuccess, enqueue]
   );
 
   const handleUpvote = useCallback(

@@ -8,7 +8,6 @@ import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   Image,
   Keyboard,
   Platform,
@@ -228,14 +227,12 @@ export default function LoginScreen() {
           rounded="full"
           onPress={handleLogin}
           disabled={!isComplete || isLoading}
+          loading={isLoading}
           gap="sm"
           style={{
             width: "100%",
           }}
         >
-          {isLoading && (
-            <ActivityIndicator size="small" color={theme.colors.text.subtle} />
-          )}
           <Button.Text weight="medium">
             {isLoading ? "Logging in..." : "Log in"}
           </Button.Text>

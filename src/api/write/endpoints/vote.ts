@@ -34,24 +34,41 @@ export interface VoteInput {
  * @param onPoWProgress - Optional callback for PoW progress
  * @returns Write response with tx_hash
  */
+const MAX_POW_RETRIES = 2;
+
 export async function vote(
   wallet: MirageWallet,
   input: VoteInput,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
   const { target, direction } = input;
+  let lastError: Error | null = null;
 
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBaseVote,
-    payloadFields: {
-      target,
-      direction,
-    },
-    onPoWProgress,
-  });
+  for (let attempt = 0; attempt <= MAX_POW_RETRIES; attempt++) {
+    try {
+      const payload = await buildSignedEnvelope({
+        wallet,
+        baseBuilder: canonBaseVote,
+        payloadFields: {
+          target,
+          direction,
+        },
+        onPoWProgress,
+      });
 
-  return api.post<WriteResponse>("/core/vote", payload);
+      return await api.post<WriteResponse>("/core/vote", payload);
+    } catch (error: any) {
+      const errorMsg = error?.response?.data?.error || error?.message || "";
+      if (errorMsg.includes("insufficient pow") && attempt < MAX_POW_RETRIES) {
+        console.log(`[Vote] PoW rejected (attempt ${attempt + 1}/${MAX_POW_RETRIES + 1}), retrying with fresh params...`);
+        lastError = error;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw lastError || new Error("Vote failed after retries");
 }
 
 /**

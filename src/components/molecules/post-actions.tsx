@@ -8,7 +8,7 @@ import {
 } from "@/assets/figma-icons";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import {
   Animated,
   Pressable,
@@ -78,7 +78,7 @@ const SIZE_CONFIG = {
   },
 };
 
-export const PostActions = ({
+export const PostActions = memo(function PostActions({
   likes,
   dislikes,
   comments,
@@ -93,7 +93,7 @@ export const PostActions = ({
   size = "md",
   disabled = false,
   style,
-}: PostActionsProps) => {
+}: PostActionsProps) {
   const { theme } = useUnistyles();
   const { iconSize, gap, pillHeight, voteTextSize } = SIZE_CONFIG[size];
 
@@ -193,6 +193,7 @@ export const PostActions = ({
         <Pressable
           onPress={handleLikePress}
           disabled={disabled}
+          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
           style={[styles.voteButton, disabled && styles.disabled]}
         >
           <Animated.View
@@ -222,6 +223,7 @@ export const PostActions = ({
         <Pressable
           onPress={handleDislikePress}
           disabled={disabled}
+          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
           style={[styles.voteButton, disabled && styles.disabled]}
         >
           <Animated.View
@@ -247,6 +249,7 @@ export const PostActions = ({
             onCommentPress?.();
           }}
           disabled={disabled}
+          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
           style={[styles.voteButton, disabled && styles.disabled]}
         >
           <CommentIcon size={iconSize} color={defaultColor} />
@@ -275,7 +278,7 @@ export const PostActions = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create((theme) => ({
   container: {

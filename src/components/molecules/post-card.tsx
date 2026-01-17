@@ -1,229 +1,72 @@
-import {
-  Avatar,
-  ContentWarningBadge,
-  FollowButton,
-  TimeAgo,
-  type ContentWarningType,
-} from "@/src/components/atoms";
-import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { Ionicons } from "@expo/vector-icons";
-import { ResizeMode, Video } from "expo-av";
-import { BlurView } from "expo-blur";
-import { Image } from "expo-image";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Linking,
-  Platform,
-  Pressable,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from "react-native";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { logPress } from "@/src/utils/press-logger";
+import { memo, useCallback, useMemo } from "react";
+import { Linking, Pressable, type StyleProp, type ViewStyle } from "react-native";
+import { StyleSheet } from "react-native-unistyles";
+
 import { PostActions } from "./post-actions";
+import { PostCardContent } from "./post-card-content";
+import { PostCardHeader } from "./post-card-header";
+import { PostCardMedia } from "./post-card-media";
+import type { Post } from "./post-card-types";
+import { resolvePostContent } from "./post-card-utils";
 
-// URL regex pattern to detect URLs in text
-const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
-
-/**
- * Extract the domain name from a URL
- */
-function extractDomain(url: string): string {
-  try {
-    const urlObj = new URL(url);
-    // Remove 'www.' prefix if present
-    return urlObj.hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
-
-/**
- * Extract the first URL from text
- */
-function extractFirstUrl(text: string): string | null {
-  const matches = text.match(URL_REGEX);
-  return matches ? matches[0] : null;
-}
-
-/**
- * Remove URLs from text for display
- */
-function removeUrls(text: string): string {
-  return text.replace(URL_REGEX, "").trim();
-}
-
-export type PostAuthor = {
-  id: string;
-  username: string;
-  avatarSeed?: string;
-  avatarUrl?: string;
-};
-
-export type PostMedia = {
-  uri: string;
-  type: "image" | "video" | "gif";
-  width?: number;
-  height?: number;
-  aspectRatio?: number;
-};
-
-export type Post = {
-  id: string;
-  author: PostAuthor;
-  title: string;
-  body?: string;
-  topic?: string;
-  media?: PostMedia[];
-  contentWarnings?: ContentWarningType[];
-  likes: number;
-  dislikes: number;
-  comments: number;
-  hasLiked?: boolean;
-  hasDisliked?: boolean;
-  isFollowing?: boolean;
-  createdAt: Date | string | number;
-};
+export type { Post, PostAuthor, PostMedia } from "./post-card-types";
 
 type PostCardProps = {
-  /** Post data */
   post: Post;
-  /** Whether the current user is the author */
   isOwnPost?: boolean;
-  /** Whether the post is currently visible on screen (for auto-play) */
   isVisible?: boolean;
   /** Whether to show the follow button (default: true) */
   showFollowButton?: boolean;
   /** Position of topic tag: "inline" (with author) or "right" (in header actions) */
   topicPosition?: "inline" | "right";
-  /** Callback when the post card is pressed */
   onPress?: () => void;
-  /** Callback when author avatar/username is pressed */
   onAuthorPress?: () => void;
-  /** Callback when follow button is pressed */
   onFollowPress?: () => void;
-  /** Callback when more options (three dots) is pressed */
   onMorePress?: () => void;
-  /** Callback when like is pressed */
   onLikePress?: () => void;
-  /** Callback when dislike is pressed */
   onDislikePress?: () => void;
-  /** Callback when comment is pressed */
   onCommentPress?: () => void;
-  /** Callback when share is pressed */
   onSharePress?: () => void;
-  /** Callback when content warning is pressed to reveal */
   onRevealContent?: () => void;
-  /** Whether content has been revealed (for NSFW posts) */
   contentRevealed?: boolean;
-  /** Follow button loading state */
   followLoading?: boolean;
-  /** URL for sharing */
   shareUrl?: string;
   /** Whether to show the URL card/Play Now row (default: true) */
   showUrlCard?: boolean;
-  /** Custom style */
   style?: StyleProp<ViewStyle>;
 };
 
-const VIDEO_EXTENSIONS = new Set([
-  "mp4",
-  "mov",
-  "m4v",
-  "webm",
-  "mkv",
-  "avi",
-  "mpeg",
-  "mpg",
-  "m3u8",
-  "mpd",
-]);
-
-const MEDIA_ASPECT_RATIO_CACHE = new Map<string, number>();
-
-function normalizeVideoUrl(url: string): string {
-  try {
-    const parsedUrl = new URL(url);
-    if (parsedUrl.hostname.includes("videodelivery.net")) {
-      if (parsedUrl.pathname.endsWith("/iframe")) {
-        parsedUrl.pathname = parsedUrl.pathname.replace(
-          "/iframe",
-          "/manifest/video.m3u8"
-        );
-        return parsedUrl.toString();
-      }
-      if (parsedUrl.pathname.endsWith("/manifest")) {
-        parsedUrl.pathname = `${parsedUrl.pathname}/video.m3u8`;
-        return parsedUrl.toString();
-      }
-    }
-  } catch {
-    if (url.includes("videodelivery.net") && url.endsWith("/iframe")) {
-      return url.replace("/iframe", "/manifest/video.m3u8");
-    }
-    if (url.includes("videodelivery.net") && url.endsWith("/manifest")) {
-      return `${url}/video.m3u8`;
-    }
-  }
-
-  return url;
-}
-
-function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
-  try {
-    const parsedUrl = new URL(url);
-    if (parsedUrl.hostname.includes("videodelivery.net")) {
-      return "video";
-    }
-    const path = parsedUrl.pathname.toLowerCase();
-    const extension = path.split(".").pop() ?? "";
-    if (extension === "gif") return "gif";
-    if (VIDEO_EXTENSIONS.has(extension)) return "video";
-  } catch {
-    const path = url.toLowerCase().split("?")[0];
-    const extension = path.split(".").pop() ?? "";
-    if (url.includes("videodelivery.net")) return "video";
-    if (extension === "gif") return "gif";
-    if (VIDEO_EXTENSIONS.has(extension)) return "video";
-  }
-
-  return "image";
-}
-
-export const PostCard = ({
-  post,
-  isOwnPost = false,
-  isVisible = false,
-  showFollowButton = true,
-  topicPosition = "inline",
-  onPress,
-  onAuthorPress,
-  onFollowPress,
-  onMorePress,
-  onLikePress,
-  onDislikePress,
-  onCommentPress,
-  onSharePress,
-  onRevealContent,
-  contentRevealed = false,
-  followLoading = false,
-  shareUrl,
-  showUrlCard = true,
-  style,
-}: PostCardProps) => {
-  const { theme } = useUnistyles();
-  const [imageError, setImageError] = useState(false);
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
-  const videoRef = useRef<Video | null>(null);
-  const aspectRatioLockedRef = useRef(false);
-
-  const {
-    author,
-    title,
-    body,
-    media,
+export const PostCard = memo(function PostCard({
+ post,
+ isOwnPost = false,
+ isVisible = false,
+ showFollowButton = true,
+ topicPosition = "inline",
+ onPress,
+ onAuthorPress,
+ onFollowPress,
+ onMorePress,
+ onLikePress,
+ onDislikePress,
+ onCommentPress,
+ onSharePress,
+ onRevealContent,
+ contentRevealed = false,
+ followLoading = false,
+ shareUrl,
+ showUrlCard = true,
+ style,
+}: PostCardProps) {
+ if (__DEV__) {
+   console.log("[render] post_card", post.id);
+ }
+ const {
+   author,
+   title,
+   body,
+   media,
     contentWarnings,
     likes,
     dislikes,
@@ -232,458 +75,66 @@ export const PostCard = ({
     hasDisliked,
     isFollowing,
     createdAt,
+    topic,
   } = post;
 
-  const hasContentWarning = contentWarnings && contentWarnings.length > 0;
-  const shouldBlurContent = hasContentWarning && !contentRevealed;
-  const primaryMedia = media?.[0];
-  const mediaCount = media?.length ?? 0;
-  const hasMultipleMedia = mediaCount > 1;
-  const extraMediaCount = mediaCount > 0 ? mediaCount - 1 : 0;
+  const shouldBlurContent = !!contentWarnings?.length && !contentRevealed;
 
-  // Extract URL from body
-  const extractedUrl = body ? extractFirstUrl(body) : null;
-  const bodyWithoutUrl = body ? removeUrls(body) : undefined;
-  const displayDomain = extractedUrl ? extractDomain(extractedUrl) : null;
-  const bodyVideoUrl =
-    extractedUrl && getMediaTypeFromUrl(extractedUrl) === "video"
-      ? normalizeVideoUrl(extractedUrl)
-      : null;
-  const resolvedMedia = bodyVideoUrl
-    ? { uri: bodyVideoUrl, type: "video" as const }
-    : primaryMedia
-    ? {
-        ...primaryMedia,
-        uri:
-          primaryMedia.type === "video"
-            ? normalizeVideoUrl(primaryMedia.uri)
-            : primaryMedia.uri,
-      }
-    : undefined;
-  const resolvedMediaType = resolvedMedia?.type;
-  const isVideo = resolvedMedia?.type === "video";
-
-  const handlePlayNowPress = () => {
-    if (extractedUrl) {
-      triggerHaptic("selection");
-      Linking.openURL(extractedUrl);
-    }
-  };
-
-  // Calculate aspect ratio for media
-  const getMediaAspectRatio = () => {
-    if (resolvedMedia?.aspectRatio) return resolvedMedia.aspectRatio;
-    if (resolvedMedia?.width && resolvedMedia?.height) {
-      return resolvedMedia.width / resolvedMedia.height;
-    }
-    return 16 / 9; // Default aspect ratio
-  };
-
-  const resolvedMediaUri = resolvedMedia?.uri;
-  const cachedAspectRatio = resolvedMediaUri
-    ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
-    : undefined;
-  const [mediaAspectRatio, setMediaAspectRatio] = useState(
-    cachedAspectRatio ?? getMediaAspectRatio()
+  const resolvedContent = useMemo(
+    () => resolvePostContent(body, media),
+    [body, media]
   );
 
-  useEffect(() => {
-    const cached = resolvedMediaUri
-      ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
-      : undefined;
-    if (cached) {
-      setMediaAspectRatio((current) =>
-        Math.abs(current - cached) < 0.01 ? current : cached
-      );
-      aspectRatioLockedRef.current = true;
-      return;
-    }
-
-    setMediaAspectRatio(getMediaAspectRatio());
-    aspectRatioLockedRef.current = false;
-  }, [
-    resolvedMedia?.aspectRatio,
-    resolvedMedia?.width,
-    resolvedMedia?.height,
-    resolvedMediaUri,
-    bodyVideoUrl,
-  ]);
-
-  // Auto-play video when visible, pause when not visible
-  useEffect(() => {
-    if (!isVideo || shouldBlurContent) {
-      setIsVideoPlaying(false);
-      return;
-    }
-
-    // Auto-play when visible, pause when scrolled away
-    if (isVisible) {
-      setIsVideoPlaying(true);
-    } else {
-      setIsVideoPlaying(false);
-      // Pause the video when scrolling away
-      videoRef.current?.pauseAsync().catch(() => {});
-    }
-  }, [isVideo, shouldBlurContent, isVisible, resolvedMedia?.uri]);
-
-  const updateMediaAspectRatioFromSize = useCallback(
-    (width?: number, height?: number) => {
-      if (!width || !height) return;
-      if (aspectRatioLockedRef.current) return;
-      const ratio = width / height;
-      if (!Number.isFinite(ratio) || ratio <= 0) return;
-      setMediaAspectRatio((current) =>
-        Math.abs(current - ratio) < 0.01 ? current : ratio
-      );
-      if (resolvedMediaUri) {
-        MEDIA_ASPECT_RATIO_CACHE.set(resolvedMediaUri, ratio);
-      }
-      aspectRatioLockedRef.current = true;
-    },
-    [resolvedMediaUri]
-  );
-
-  const mediaSource = useMemo(
-    () => ({ uri: resolvedMediaUri ?? "" }),
-    [resolvedMediaUri]
-  );
-
-  const handleVideoToggle = useCallback(async () => {
-    if (!isVideo) return;
-    if (shouldBlurContent) {
-      onRevealContent?.();
-      return;
-    }
-
-    try {
-      const status = await videoRef.current?.getStatusAsync();
-      if (!status || !status.isLoaded) {
-        setIsVideoPlaying(true);
-        return;
-      }
-      if (status.isPlaying) {
-        await videoRef.current?.pauseAsync();
-        setIsVideoPlaying(false);
-        return;
-      }
-      if (status.didJustFinish) {
-        await videoRef.current?.replayAsync();
-      } else {
-        await videoRef.current?.playAsync();
-      }
-      setIsVideoPlaying(true);
-    } catch {
-      // Ignore transient playback errors.
-    }
-  }, [isVideo, onRevealContent, shouldBlurContent]);
-
-  const handleMuteToggle = useCallback(() => {
-    triggerHaptic("light");
-    setIsMuted((prev) => !prev);
-  }, []);
-
-  const mediaContent = useMemo(() => {
-    if (!resolvedMediaUri || imageError) return null;
-
-    return (
-      <View style={styles.mediaContainer}>
-        <View style={[styles.mediaWrapper, { aspectRatio: mediaAspectRatio }]}>
-          {isVideo ? (
-            <Video
-              ref={videoRef}
-              source={mediaSource}
-              style={styles.media}
-              resizeMode={ResizeMode.COVER}
-              shouldPlay={isVideoPlaying}
-              isLooping={true}
-              isMuted={isMuted}
-              useNativeControls={false}
-              onLoad={(status) => {
-                if (!status.isLoaded) return;
-                const { width, height } = status.naturalSize ?? {};
-                updateMediaAspectRatioFromSize(width, height);
-              }}
-              onReadyForDisplay={(event) => {
-                const { width, height } = event.naturalSize ?? {};
-                updateMediaAspectRatioFromSize(width, height);
-              }}
-              onError={() => setImageError(true)}
-            />
-          ) : (
-            <Image
-              source={mediaSource}
-              style={styles.media}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              onLoad={({ source }) => {
-                updateMediaAspectRatioFromSize(source?.width, source?.height);
-              }}
-              onError={() => setImageError(true)}
-              blurRadius={shouldBlurContent ? 30 : 0}
-            />
-          )}
-
-          {/* Play button for videos */}
-          {isVideo && !shouldBlurContent && (
-            <Pressable
-              onPress={(event) => {
-                event.stopPropagation?.();
-                handleVideoToggle();
-              }}
-              style={styles.playOverlay}
-            >
-              <View
-                style={[
-                  styles.playButton,
-                  { opacity: isVideoPlaying ? 0.6 : 1 },
-                ]}
-              >
-                <Ionicons
-                  name={isVideoPlaying ? "pause" : "play"}
-                  size={28}
-                  color="#fff"
-                />
-              </View>
-            </Pressable>
-          )}
-
-          {/* Mute/Unmute button for videos */}
-          {isVideo && !shouldBlurContent && (
-            <Pressable
-              onPress={(event) => {
-                event.stopPropagation?.();
-                handleMuteToggle();
-              }}
-              style={styles.muteButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <View style={styles.muteButtonInner}>
-                <Ionicons
-                  name={isMuted ? "volume-mute" : "volume-high"}
-                  size={16}
-                  color="#fff"
-                />
-              </View>
-            </Pressable>
-          )}
-
-          {/* GIF badge */}
-          {resolvedMediaType === "gif" && (
-            <View style={styles.gifBadge}>
-              <Text size="xs" weight="bold" style={{ color: "#fff" }}>
-                GIF
-              </Text>
-            </View>
-          )}
-
-          {/* Multiple media indicator */}
-          {hasMultipleMedia && (
-            <View style={styles.multiMediaBadge}>
-              <Text size="xs" weight="semibold" style={{ color: "#fff" }}>
-                +{extraMediaCount}
-              </Text>
-            </View>
-          )}
-
-          {/* Blur overlay with reveal button */}
-          {shouldBlurContent && (
-            <Pressable onPress={onRevealContent} style={styles.blurOverlay}>
-              {Platform.OS === "ios" ? (
-                <BlurView
-                  intensity={80}
-                  tint="dark"
-                  style={styles.blurViewFill}
-                >
-                  <View style={styles.revealTextContainer}>
-                    <Ionicons name="eye-outline" size={24} color="#fff" />
-                    <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                      Tap to reveal
-                    </Text>
-                  </View>
-                </BlurView>
-              ) : (
-                <View style={styles.androidBlurOverlay}>
-                  <Ionicons name="eye-outline" size={24} color="#fff" />
-                  <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                    Tap to reveal
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-          )}
-        </View>
-      </View>
-    );
-  }, [
-    resolvedMediaUri,
-    resolvedMediaType,
-    imageError,
-    mediaAspectRatio,
-    isVideo,
-    isVideoPlaying,
-    isMuted,
-    shouldBlurContent,
-    hasMultipleMedia,
-    extraMediaCount,
-    mediaSource,
-    updateMediaAspectRatioFromSize,
-    handleVideoToggle,
-    handleMuteToggle,
-    onRevealContent,
-  ]);
-
-  const handlePress = () => {
+  const handlePress = useCallback(() => {
     triggerHaptic("selection");
+    logPress({ name: "post_card", postId: post.id });
     onPress?.();
-  };
+  }, [onPress, post.id]);
 
-  const handleAuthorPress = () => {
+  const handlePlayNowPress = useCallback(() => {
+    if (!resolvedContent.extractedUrl) return;
     triggerHaptic("selection");
-    onAuthorPress?.();
-  };
-
-  const handleMorePress = () => {
-    triggerHaptic("selection");
-    onMorePress?.();
-  };
+    Linking.openURL(resolvedContent.extractedUrl);
+  }, [resolvedContent.extractedUrl]);
 
   return (
     <Pressable onPress={handlePress} style={[styles.container, style]}>
-      {/* Header: Avatar, Username, Time, Follow, More */}
-      <View style={styles.header}>
-        <Pressable onPress={handleAuthorPress} style={styles.authorSection}>
-          <Avatar
-            size="sm"
-            seed={author.avatarSeed ?? author.username}
-            source={author.avatarUrl ? { uri: author.avatarUrl } : undefined}
-            bordered
-          />
-          <View style={styles.authorInfo}>
-            <View style={styles.authorRow}>
-              <Text size="sm" weight="semibold" numberOfLines={1}>
-                @{author.username}
-              </Text>
-              {post.topic && topicPosition === "inline" && (
-                <>
-                  <Text size="xs" mode="subtle">
-                    •
-                  </Text>
-                  <View
-                    style={[
-                      styles.topicTag,
-                      { backgroundColor: theme.colors.primary[500] + "15" },
-                    ]}
-                  >
-                    <Text
-                      size="xs"
-                      weight="medium"
-                      style={{ color: theme.colors.primary[500] }}
-                      numberOfLines={1}
-                    >
-                      #{post.topic}
-                    </Text>
-                  </View>
-                </>
-              )}
-              <TimeAgo timestamp={createdAt} showSuffix={false} size="xs" />
-            </View>
-          </View>
-        </Pressable>
+      <PostCardHeader
+        author={author}
+        topic={topic}
+        createdAt={createdAt}
+        isOwnPost={isOwnPost}
+        isFollowing={isFollowing}
+        followLoading={followLoading}
+        showFollowButton={showFollowButton}
+        topicPosition={topicPosition}
+        onAuthorPress={onAuthorPress}
+        onFollowPress={onFollowPress}
+        onMorePress={onMorePress}
+      />
 
-        {/* Right section: Topic tag (if right position), Follow button + More options */}
-        <View style={styles.headerActions}>
-          {post.topic && topicPosition === "right" && (
-            <View
-              style={[
-                styles.topicTag,
-                { backgroundColor: theme.colors.primary[500] + "15" },
-              ]}
-            >
-              <Text
-                size="xs"
-                weight="medium"
-                style={{ color: theme.colors.primary[500] }}
-                numberOfLines={1}
-              >
-                #{post.topic}
-              </Text>
-            </View>
-          )}
-          {!isOwnPost && showFollowButton && (
-            <FollowButton
-              isFollowing={isFollowing ?? false}
-              onPress={onFollowPress}
-              loading={followLoading}
-              size="sm"
-            />
-          )}
-          <Pressable
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            onPress={handleMorePress}
-            style={styles.moreButton}
-          >
-            <Ionicons
-              name="ellipsis-horizontal"
-              size={18}
-              color={theme.colors.text.default}
-            />
-          </Pressable>
-        </View>
-      </View>
+      <PostCardContent
+        title={title}
+        bodyWithoutUrl={resolvedContent.bodyWithoutUrl}
+        extractedUrl={resolvedContent.extractedUrl}
+        displayDomain={resolvedContent.displayDomain}
+        bodyVideoUrl={resolvedContent.bodyVideoUrl}
+        shouldBlurContent={shouldBlurContent}
+        contentWarnings={contentWarnings}
+        showUrlCard={showUrlCard}
+        onRevealContent={onRevealContent}
+        onPlayNowPress={handlePlayNowPress}
+      />
 
-      {/* Content Warning Badge */}
-      {hasContentWarning && (
-        <View style={styles.warningBadge}>
-          <ContentWarningBadge
-            types={contentWarnings}
-            onPress={onRevealContent}
-            compact
-          />
-        </View>
-      )}
+      <PostCardMedia
+        media={resolvedContent.resolvedMedia}
+        isVisible={isVisible}
+        shouldBlurContent={shouldBlurContent}
+        hasMultipleMedia={resolvedContent.hasMultipleMedia}
+        extraMediaCount={resolvedContent.extraMediaCount}
+        onRevealContent={onRevealContent}
+      />
 
-      {/* Title */}
-      <Text size="xl" weight="bold" style={styles.title}>
-        {title}
-      </Text>
-
-      {/* Media */}
-      {mediaContent}
-
-      {/* Body text (without URL) */}
-      {bodyWithoutUrl && !shouldBlurContent && (
-        <Text size="md" mode="default" style={styles.body}>
-          {bodyWithoutUrl}
-        </Text>
-      )}
-
-      {/* URL Link Card */}
-      {showUrlCard && extractedUrl && displayDomain && !shouldBlurContent && !bodyVideoUrl && (
-        <View style={styles.urlCard}>
-          <View style={styles.urlInfo}>
-            <Ionicons
-              name="globe-outline"
-              size={16}
-              color={theme.colors.text.subtle}
-            />
-            <Text
-              size="sm"
-              mode="subtle"
-              numberOfLines={1}
-              style={styles.domainText}
-            >
-              {displayDomain}
-            </Text>
-          </View>
-          <Pressable onPress={handlePlayNowPress} style={styles.playNowButton}>
-            <Text size="sm" weight="semibold" style={styles.playNowText}>
-              Play Now
-            </Text>
-          </Pressable>
-        </View>
-      )}
-
-      {/* Actions */}
       <PostActions
         likes={likes}
         dislikes={dislikes}
@@ -700,7 +151,7 @@ export const PostCard = ({
       />
     </Pressable>
   );
-};
+});
 
 const styles = StyleSheet.create((theme) => ({
   container: {
@@ -709,161 +160,6 @@ const styles = StyleSheet.create((theme) => ({
     borderBottomColor: theme.colors.border.subtle,
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.md,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  authorSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  authorInfo: {
-    flex: 1,
-    marginLeft: theme.spacing.xs,
-    justifyContent: "center",
-  },
-  authorRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.xs,
-    flexWrap: "wrap",
-  },
-  topicTag: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: theme.radius.sm,
-    maxWidth: 100,
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.xs,
-  },
-  moreButton: {
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: theme.radius.full,
-  },
-  warningBadge: {
-    marginTop: theme.spacing.sm,
-  },
-  title: {
-    marginTop: theme.spacing.xs,
-    lineHeight: 20,
-  },
-  mediaContainer: {
-    marginTop: theme.spacing.sm,
-    borderRadius: theme.radius.md,
-    overflow: "hidden",
-  },
-  mediaWrapper: {
-    width: "100%",
-    backgroundColor: theme.colors.background.subtle,
-    borderRadius: theme.radius.md,
-    overflow: "hidden",
-  },
-  media: {
-    width: "100%",
-    height: "100%",
-  },
-  playOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  playButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  muteButton: {
-    position: "absolute",
-    bottom: theme.spacing.sm,
-    right: theme.spacing.sm,
-  },
-  muteButtonInner: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  gifBadge: {
-    position: "absolute",
-    bottom: theme.spacing.sm,
-    left: theme.spacing.sm,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 2,
-    borderRadius: theme.radius.sm,
-  },
-  multiMediaBadge: {
-    position: "absolute",
-    top: theme.spacing.sm,
-    right: theme.spacing.sm,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
-    borderRadius: theme.radius.sm,
-  },
-  blurOverlay: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  blurViewFill: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  revealTextContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  androidBlurOverlay: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.85)",
-    gap: 8,
-  },
-  body: {
-    marginTop: theme.spacing.xs,
-    lineHeight: 18,
-  },
-  urlCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: theme.spacing.sm,
-  },
-  urlInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.xs,
-    flex: 1,
-  },
-  domainText: {
-    flex: 1,
-  },
-  playNowButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 6,
-    paddingHorizontal: theme.spacing.sm,
-    borderRadius: theme.radius.full,
-    backgroundColor: theme.colors.border.subtle,
-  },
-  playNowText: {
-    color: theme.colors.text.default,
   },
   actions: {
     marginTop: theme.spacing.sm,

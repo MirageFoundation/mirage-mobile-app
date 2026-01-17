@@ -14,6 +14,7 @@
  */
 
 import { create } from "zustand";
+import { InteractionManager } from "react-native";
 
 export type PowActionType =
   | "upvote"
@@ -65,8 +66,10 @@ export interface PowQueueActions {
 type PowQueueStore = PowQueueState & PowQueueActions;
 
 /** Delay before processing next action (to show success/error state) */
-const RESULT_DISPLAY_DELAY_MS = 1200;
+const RESULT_DISPLAY_DELAY_MS = 800;
 
+/** Additional delay after successful action to let backend sync */
+const SUCCESS_SYNC_DELAY_MS = 500;
 let actionIdCounter = 0;
 
 export const generateActionId = (): string => {
@@ -136,6 +139,9 @@ export const getSuccessLabel = (type: PowActionType): string => {
   }
 };
 
+// Flag to prevent concurrent processNext calls
+let isProcessingLock = false;
+
 export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   queue: [],
   currentAction: null,
@@ -147,35 +153,52 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   lastCompletedAction: null,
 
   enqueue: <T>(action: PowAction<T>) => {
-    const state = get();
-
+    // Call optimistic update immediately
     action.onOptimisticUpdate?.();
+
+    const state = get();
+    const wasIdle = !state.isProcessing && !state.currentAction && state.queue.length === 0;
 
     set({
       queue: [...state.queue, action as PowAction],
       totalCount: state.totalCount + 1,
+      isProcessing: true,
     });
 
-    if (!state.isProcessing) {
-      get().processNext();
+    // Only start processing if we were idle
+    if (wasIdle) {
+      // Use InteractionManager to defer processing until after UI updates complete
+      // This prevents blocking touch handlers and animations
+      InteractionManager.runAfterInteractions(() => {
+        setTimeout(() => get().processNext(), 16); // One frame delay
+      });
     }
   },
 
   processNext: async () => {
+    // Prevent concurrent execution
+    if (isProcessingLock) {
+      return;
+    }
+
     const state = get();
 
+    // Guard: already processing an action
+    if (state.currentAction) {
+      return;
+    }
+
+    // Guard: nothing in queue
     if (state.queue.length === 0) {
-      // All done - but keep lastCompletedAction so UI can show final result
       set({
         isProcessing: false,
         currentAction: null,
         currentProgress: 0,
       });
       
-      // Reset counts after a delay to let UI dismiss
+      // Reset counts after delay
       setTimeout(() => {
         const currentState = get();
-        // Only reset if still not processing (no new items added)
         if (!currentState.isProcessing && currentState.queue.length === 0) {
           set({
             completedCount: 0,
@@ -187,28 +210,32 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       return;
     }
 
+    // Lock processing
+    isProcessingLock = true;
+
+    // Get the next action from queue
     const [nextAction, ...remainingQueue] = state.queue;
 
     set({
-      isProcessing: true,
       currentAction: nextAction,
       queue: remainingQueue,
       currentProgress: 0,
       lastCompletedAction: null,
     });
 
-    let success = true;
-    try {
-      const result = await nextAction.execute();
-      nextAction.onSuccess?.(result);
+   try {
+     const result = await nextAction.execute();
+     nextAction.onSuccess?.(result);
 
-      set((s) => ({
-        completedCount: s.completedCount + 1,
-        lastError: null,
-        lastCompletedAction: { type: nextAction.type, success: true },
-      }));
-    } catch (error) {
-      success = false;
+     set((s) => ({
+       completedCount: s.completedCount + 1,
+       lastError: null,
+       lastCompletedAction: { type: nextAction.type, success: true },
+     }));
+
+     // Additional delay after success to let backend sync block hash
+     await new Promise((resolve) => setTimeout(resolve, SUCCESS_SYNC_DELAY_MS));
+   } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       nextAction.onRollback?.();
       nextAction.onError?.(err);
@@ -218,19 +245,24 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
         lastError: err,
         lastCompletedAction: { type: nextAction.type, success: false },
       }));
+    } finally {
+      // Clear current action
+      set({ currentAction: null, currentProgress: 0 });
+      
+      // Unlock processing
+      isProcessingLock = false;
+
+      // Schedule next action after delay (to show result)
+      // Use InteractionManager to not block UI during the delay
+      setTimeout(() => {
+        InteractionManager.runAfterInteractions(() => {
+          get().processNext();
+        });
+      }, RESULT_DISPLAY_DELAY_MS);
     }
-
-    // Clear current action to signal completion
-    set({ currentAction: null, currentProgress: 0 });
-
-    // Wait before processing next to allow UI to show result
-    setTimeout(() => {
-      get().processNext();
-    }, RESULT_DISPLAY_DELAY_MS);
   },
 
   continueProcessing: () => {
-    // Called by UI to manually continue (not used currently but available)
     get().processNext();
   },
 
@@ -249,6 +281,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   },
 
   reset: () => {
+    isProcessingLock = false;
     set({
       queue: [],
       currentAction: null,
