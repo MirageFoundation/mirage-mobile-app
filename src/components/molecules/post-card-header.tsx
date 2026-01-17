@@ -14,6 +14,10 @@ type PostCardHeaderProps = {
   isOwnPost: boolean;
   isFollowing?: boolean;
   followLoading?: boolean;
+  /** Whether to show the follow button (default: true) */
+  showFollowButton?: boolean;
+  /** Position of topic tag: "inline" (with author) or "right" (in header actions) */
+  topicPosition?: "inline" | "right";
   onAuthorPress?: () => void;
   onFollowPress?: () => void;
   onMorePress?: () => void;
@@ -26,6 +30,8 @@ export const PostCardHeader = memo(function PostCardHeader({
   isOwnPost,
   isFollowing,
   followLoading,
+  showFollowButton = true,
+  topicPosition = "inline",
   onAuthorPress,
   onFollowPress,
   onMorePress,
@@ -56,7 +62,7 @@ export const PostCardHeader = memo(function PostCardHeader({
             <Text size="sm" weight="semibold" numberOfLines={1}>
               @{author.username}
             </Text>
-            {topic && (
+            {topic && topicPosition === "inline" && (
               <>
                 <Text size="xs" mode="subtle">
                   •
@@ -84,7 +90,24 @@ export const PostCardHeader = memo(function PostCardHeader({
       </Pressable>
 
       <View style={styles.headerActions}>
-        {!isOwnPost && (
+        {topic && topicPosition === "right" && (
+          <View
+            style={[
+              styles.topicTag,
+              { backgroundColor: theme.colors.primary[500] + "15" },
+            ]}
+          >
+            <Text
+              size="xs"
+              weight="medium"
+              style={{ color: theme.colors.primary[500] }}
+              numberOfLines={1}
+            >
+              #{topic}
+            </Text>
+          </View>
+        )}
+        {!isOwnPost && showFollowButton && (
           <FollowButton
             isFollowing={isFollowing ?? false}
             onPress={onFollowPress}

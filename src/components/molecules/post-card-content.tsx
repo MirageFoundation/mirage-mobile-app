@@ -13,6 +13,8 @@ type PostCardContentProps = {
   bodyVideoUrl: string | null;
   shouldBlurContent: boolean;
   contentWarnings?: ContentWarningType[];
+  /** Whether to show the URL card/Play Now row (default: true) */
+  showUrlCard?: boolean;
   onRevealContent?: () => void;
   onPlayNowPress?: () => void;
 };
@@ -25,6 +27,7 @@ export const PostCardContent = memo(function PostCardContent({
   bodyVideoUrl,
   shouldBlurContent,
   contentWarnings,
+  showUrlCard = true,
   onRevealContent,
   onPlayNowPress,
 }: PostCardContentProps) {
@@ -47,18 +50,17 @@ export const PostCardContent = memo(function PostCardContent({
         size="lg"
         weight="semibold"
         style={styles.title}
-        numberOfLines={shouldBlurContent ? 1 : 3}
       >
         {title}
       </Text>
 
       {bodyWithoutUrl && !shouldBlurContent && (
-        <Text size="sm" mode="default" style={styles.body} numberOfLines={4}>
+        <Text size="sm" style={styles.body}>
           {bodyWithoutUrl}
         </Text>
       )}
 
-      {extractedUrl && displayDomain && !shouldBlurContent && !bodyVideoUrl && (
+      {showUrlCard && extractedUrl && displayDomain && !shouldBlurContent && !bodyVideoUrl && (
         <View style={styles.urlCard}>
           <View style={styles.urlInfo}>
             <Ionicons

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { Post } from "@/src/components/molecules";
+import type { ShareServer } from "@/src/stores";
 
 type VoteOverride = {
   hasLiked?: boolean;
@@ -40,6 +41,7 @@ type HomePostCardState = {
   visiblePostIds: Set<string>;
   voteOverrides: Record<string, VoteOverride>;
   handlers: HomePostCardHandlers;
+  shareServer: ShareServer;
   setCurrentUserId: (id?: string) => void;
   setFollowedUsers: (users: Set<string>) => void;
   setFollowLoadingUsers: (users: Set<string>) => void;
@@ -48,6 +50,7 @@ type HomePostCardState = {
   setVoteOverride: (postId: string, override: VoteOverride) => void;
   clearVoteOverride: (postId: string) => void;
   setHandlers: (handlers: HomePostCardHandlers) => void;
+  setShareServer: (server: ShareServer) => void;
 };
 
 const emptySet = new Set<string>();
@@ -60,6 +63,7 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
   visiblePostIds: emptySet,
   voteOverrides: {},
   handlers: {},
+  shareServer: "mirage.talk",
   setCurrentUserId: (id) => set({ currentUserId: id }),
   setFollowedUsers: (users) => set({ followedUsers: users }),
   setFollowLoadingUsers: (users) => set({ followLoadingUsers: users }),
@@ -99,6 +103,7 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
       return { voteOverrides: rest };
     }),
   setHandlers: (handlers) => set({ handlers }),
+  setShareServer: (server) => set({ shareServer: server }),
 }));
 
 // Primitive selectors that return stable values
@@ -121,6 +126,9 @@ export const useVoteOverride = (postId: string) =>
 
 export const useIsOwnPost = (authorId: string) =>
  useHomePostCardStore((state) => state.currentUserId === authorId);
+
+export const useShareServer = () =>
+  useHomePostCardStore((state) => state.shareServer);
 
 // Handler selectors - these return stable function references
 export const useHandlers = () =>

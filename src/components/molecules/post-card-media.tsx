@@ -1,9 +1,11 @@
 import { Text } from "@/src/components/ui/primitives";
+import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, View, type GestureResponderEvent } from "react-native";
+import { Platform, Pressable, View, type GestureResponderEvent } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { ResolvedMedia } from "./post-card-utils";
 
@@ -37,6 +39,7 @@ export const PostCardMedia = memo(function PostCardMedia({
 }: PostCardMediaProps) {
   const [imageError, setImageError] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const videoRef = useRef<Video | null>(null);
   const aspectRatioLockedRef = useRef(false);
 
@@ -139,6 +142,15 @@ export const PostCardMedia = memo(function PostCardMedia({
     [handleVideoToggle]
   );
 
+  const handleMuteToggle = useCallback(
+    (event: GestureResponderEvent) => {
+      event.stopPropagation?.();
+      triggerHaptic("light");
+      setIsMuted((prev) => !prev);
+    },
+    []
+  );
+
   if (!media || imageError) return null;
 
   return (
@@ -152,7 +164,7 @@ export const PostCardMedia = memo(function PostCardMedia({
             resizeMode={ResizeMode.COVER}
             shouldPlay={isVideoPlaying}
             isLooping={true}
-            isMuted={true}
+            isMuted={isMuted}
             useNativeControls={false}
             onLoad={(status) => {
               if (!status.isLoaded) return;
@@ -196,6 +208,23 @@ export const PostCardMedia = memo(function PostCardMedia({
           </Pressable>
         )}
 
+        {/* Mute/Unmute button for videos */}
+        {media.type === "video" && !shouldBlurContent && (
+          <Pressable
+            onPress={handleMuteToggle}
+            style={styles.muteButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <View style={styles.muteButtonInner}>
+              <Ionicons
+                name={isMuted ? "volume-mute" : "volume-high"}
+                size={16}
+                color="#fff"
+              />
+            </View>
+          </Pressable>
+        )}
+
         {media.type === "gif" && (
           <View style={styles.gifBadge}>
             <Text size="xs" weight="bold" style={{ color: "#fff" }}>
@@ -210,6 +239,33 @@ export const PostCardMedia = memo(function PostCardMedia({
               +{extraMediaCount}
             </Text>
           </View>
+        )}
+
+        {/* Blur overlay with reveal button */}
+        {shouldBlurContent && (
+          <Pressable onPress={onRevealContent} style={styles.blurOverlay}>
+            {Platform.OS === "ios" ? (
+              <BlurView
+                intensity={80}
+                tint="dark"
+                style={styles.blurViewFill}
+              >
+                <View style={styles.revealTextContainer}>
+                  <Ionicons name="eye-outline" size={24} color="#fff" />
+                  <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
+                    Tap to reveal
+                  </Text>
+                </View>
+              </BlurView>
+            ) : (
+              <View style={styles.androidBlurOverlay}>
+                <Ionicons name="eye-outline" size={24} color="#fff" />
+                <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
+                  Tap to reveal
+                </Text>
+              </View>
+            )}
+          </Pressable>
         )}
       </View>
     </View>
@@ -245,6 +301,19 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
+  muteButton: {
+    position: "absolute",
+    bottom: theme.spacing.sm,
+    right: theme.spacing.sm,
+  },
+  muteButtonInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   gifBadge: {
     position: "absolute",
     bottom: theme.spacing.sm,
@@ -262,5 +331,25 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 4,
     borderRadius: theme.radius.sm,
+  },
+  blurOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  blurViewFill: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  revealTextContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  androidBlurOverlay: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    gap: 8,
   },
 }));

@@ -2,6 +2,7 @@ import { memo, useCallback, useMemo, useRef, useEffect } from "react";
 import type { Post } from "@/src/components/molecules";
 import { PostCard } from "@/src/components/molecules";
 import { logPress } from "@/src/utils/press-logger";
+import { getShareBaseUrl } from "@/src/stores";
 import {
   useHomePostCardStore,
   useIsFollowLoading,
@@ -9,6 +10,7 @@ import {
   useIsOwnPost,
   useIsPostRevealed,
   useIsPostVisible,
+  useShareServer,
   useVoteOverride,
 } from "./home-post-card-store";
 
@@ -28,6 +30,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   const contentRevealed = useIsPostRevealed(post.id);
   const voteOverride = useVoteOverride(post.id);
   const isOwnPost = useIsOwnPost(post.author.id);
+  const shareServer = useShareServer();
 
   // Store post data in ref to avoid recreating callbacks
   const postRef = useRef(post);
@@ -113,6 +116,9 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       post={displayPost}
       isOwnPost={isOwnPost}
       isVisible={isVisible}
+      showFollowButton={false}
+      topicPosition="right"
+      showUrlCard={false}
       onPress={handlePostPress}
       onAuthorPress={handleAuthorPress}
       onMorePress={handleMorePress}
@@ -123,7 +129,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       onRevealContent={handleRevealContent}
       contentRevealed={contentRevealed}
       followLoading={isFollowLoading}
-      shareUrl={`https://mirage.app/post/${post.id}`}
+      shareUrl={`${getShareBaseUrl(shareServer)}/post/${post.id}`}
     />
   );
 });
