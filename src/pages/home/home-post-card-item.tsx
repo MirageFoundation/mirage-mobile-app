@@ -5,6 +5,7 @@ import { logPress } from "@/src/utils/press-logger";
 import { getShareBaseUrl } from "@/src/stores";
 import {
   useHomePostCardStore,
+  useAllowAutoplay,
   useIsFollowLoading,
   useIsFollowing,
   useIsOwnPost,
@@ -31,6 +32,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   const voteOverride = useVoteOverride(post.id);
   const isOwnPost = useIsOwnPost(post.author.id);
   const shareServer = useShareServer();
+  const allowAutoplay = useAllowAutoplay();
 
   // Store post data in ref to avoid recreating callbacks
   const postRef = useRef(post);
@@ -119,6 +121,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       showFollowButton={false}
       topicPosition="right"
       showUrlCard={false}
+      allowAutoplay={allowAutoplay}
       onPress={handlePostPress}
       onAuthorPress={handleAuthorPress}
       onMorePress={handleMorePress}

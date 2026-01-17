@@ -34,8 +34,10 @@ import {
   useAuthGuard,
   useBlockHandler,
   useDeleteHandler,
+  useNetworkState,
   useReportHandler,
   useVoteHandler,
+  shouldAutoplayVideo,
   type VoteResult,
 } from "@/src/hooks";
 import {
@@ -98,8 +100,13 @@ export function HomeScreen() {
     (s) => s.selectedContentTypes
   );
   const shareServer = usePreferencesStore((s) => s.shareServer);
+  const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
+  const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
   const currentUser = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+
+  // Network state for video autoplay
+  const { networkType } = useNetworkState();
 
   // Fetch user's followed list (for showing "Following" status on posts)
   const { data: followedData } = useUserFollowed();
@@ -811,8 +818,15 @@ export function HomeScreen() {
   );
   const setHandlers = useHomePostCardStore((state) => state.setHandlers);
   const setShareServer = useHomePostCardStore((state) => state.setShareServer);
+  const setAllowAutoplay = useHomePostCardStore((state) => state.setAllowAutoplay);
 
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
+
+  // Compute whether autoplay is allowed based on settings and network
+  const allowAutoplay = useMemo(
+    () => shouldAutoplayVideo(autoPlayVideos, videoAutoplayNetwork, networkType),
+    [autoPlayVideos, videoAutoplayNetwork, networkType]
+  );
 
   useEffect(() => {
     setCurrentUserId(currentUser?.id);
@@ -833,6 +847,10 @@ export function HomeScreen() {
  useEffect(() => {
    setShareServer(shareServer);
  }, [shareServer, setShareServer]);
+
+ useEffect(() => {
+   setAllowAutoplay(allowAutoplay);
+ }, [allowAutoplay, setAllowAutoplay]);
 
  // Store refs to latest handlers - these update without triggering re-renders
  const handlersRef = useRef({

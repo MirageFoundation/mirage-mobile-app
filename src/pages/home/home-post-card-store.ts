@@ -42,6 +42,7 @@ type HomePostCardState = {
   voteOverrides: Record<string, VoteOverride>;
   handlers: HomePostCardHandlers;
   shareServer: ShareServer;
+  allowAutoplay: boolean;
   setCurrentUserId: (id?: string) => void;
   setFollowedUsers: (users: Set<string>) => void;
   setFollowLoadingUsers: (users: Set<string>) => void;
@@ -51,6 +52,7 @@ type HomePostCardState = {
   clearVoteOverride: (postId: string) => void;
   setHandlers: (handlers: HomePostCardHandlers) => void;
   setShareServer: (server: ShareServer) => void;
+  setAllowAutoplay: (allow: boolean) => void;
 };
 
 const emptySet = new Set<string>();
@@ -64,6 +66,7 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
   voteOverrides: {},
   handlers: {},
   shareServer: "mirage.talk",
+  allowAutoplay: true,
   setCurrentUserId: (id) => set({ currentUserId: id }),
   setFollowedUsers: (users) => set({ followedUsers: users }),
   setFollowLoadingUsers: (users) => set({ followLoadingUsers: users }),
@@ -104,6 +107,7 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
     }),
   setHandlers: (handlers) => set({ handlers }),
   setShareServer: (server) => set({ shareServer: server }),
+  setAllowAutoplay: (allow) => set({ allowAutoplay: allow }),
 }));
 
 // Primitive selectors that return stable values
@@ -129,6 +133,9 @@ export const useIsOwnPost = (authorId: string) =>
 
 export const useShareServer = () =>
   useHomePostCardStore((state) => state.shareServer);
+
+export const useAllowAutoplay = () =>
+  useHomePostCardStore((state) => state.allowAutoplay);
 
 // Handler selectors - these return stable function references
 export const useHandlers = () =>

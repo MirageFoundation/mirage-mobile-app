@@ -4,6 +4,7 @@ export {
   type FeedType,
   type ThemeMode,
   type ShareServer,
+  type VideoAutoplayNetwork,
   type ContentType,
   getAllowedTagsFromContentTypes,
   getShareBaseUrl,

@@ -21,6 +21,8 @@ type PostCardProps = {
   showFollowButton?: boolean;
   /** Position of topic tag: "inline" (with author) or "right" (in header actions) */
   topicPosition?: "inline" | "right";
+  /** Whether video autoplay is allowed based on user settings and network */
+  allowAutoplay?: boolean;
   onPress?: () => void;
   onAuthorPress?: () => void;
   onFollowPress?: () => void;
@@ -44,6 +46,7 @@ export const PostCard = memo(function PostCard({
  isVisible = false,
  showFollowButton = true,
  topicPosition = "inline",
+ allowAutoplay = true,
  onPress,
  onAuthorPress,
  onFollowPress,
@@ -132,6 +135,7 @@ export const PostCard = memo(function PostCard({
         shouldBlurContent={shouldBlurContent}
         hasMultipleMedia={resolvedContent.hasMultipleMedia}
         extraMediaCount={resolvedContent.extraMediaCount}
+        allowAutoplay={allowAutoplay}
         onRevealContent={onRevealContent}
       />
 

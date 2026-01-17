@@ -18,7 +18,7 @@ import {
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useQueryClear } from "@/src/providers/query-clear-provider";
-import { useAuthStore, useDraftStore, useSearchStore, usePreferencesStore, type ThemeMode, type ShareServer } from "@/src/stores";
+import { useAuthStore, useDraftStore, useSearchStore, usePreferencesStore, type ThemeMode, type ShareServer, type VideoAutoplayNetwork } from "@/src/stores";
 
 // Auto-collapse threshold options
 const collapseThresholdOptions: ValueOption<number | null>[] = [
@@ -43,6 +43,13 @@ const sidebarCountOptions: ValueOption<number>[] = [
 const shareServerOptions: ValueOption<ShareServer>[] = [
   { value: "mirage.talk", label: "mirage.talk" },
   { value: "mirage.vote", label: "mirage.vote" },
+];
+
+// Video autoplay network options
+const videoAutoplayNetworkOptions: ValueOption<VideoAutoplayNetwork>[] = [
+  { value: "always", label: "Always" },
+  { value: "wifi_only", label: "WiFi Only" },
+  { value: "never", label: "Never" },
 ];
 
 type SettingItem = {
@@ -82,6 +89,10 @@ export function SettingsScreen() {
     setPeopleBeforeShowMore,
     shareServer,
     setShareServer,
+    autoPlayVideos,
+    setAutoPlayVideos,
+    videoAutoplayNetwork,
+    setVideoAutoplayNetwork,
   } = usePreferencesStore();
 
   // Sheet refs
@@ -90,6 +101,7 @@ export function SettingsScreen() {
   const topicsCountSheetRef = useRef<ValuePickerSheetRef>(null);
   const peopleCountSheetRef = useRef<ValuePickerSheetRef>(null);
   const shareServerSheetRef = useRef<ValuePickerSheetRef>(null);
+  const videoAutoplayNetworkSheetRef = useRef<ValuePickerSheetRef>(null);
 
   // Logout popup state
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
@@ -160,6 +172,19 @@ export function SettingsScreen() {
   const getPeopleCountLabel = () => {
     if (peopleBeforeShowMore === -1) return "All";
     return String(peopleBeforeShowMore);
+  };
+
+  const getVideoAutoplayNetworkLabel = () => {
+    switch (videoAutoplayNetwork) {
+      case "always":
+        return "Always";
+      case "wifi_only":
+        return "WiFi Only";
+      case "never":
+        return "Never";
+      default:
+        return "Always";
+    }
   };
 
   // Section data
@@ -264,6 +289,38 @@ export function SettingsScreen() {
           id: "theme",
           component: (
             <ThemeSelector value={themeMode} onChange={handleThemeChange} />
+          ),
+        },
+      ],
+    },
+    {
+      title: "Video",
+      data: [
+        {
+          id: "auto-play-videos",
+          component: (
+            <SettingRow
+              type="toggle"
+              icon="play-circle-outline"
+              title="Auto-Play Videos"
+              subtitle="Automatically play videos in feed"
+              value={autoPlayVideos}
+              onValueChange={setAutoPlayVideos}
+            />
+          ),
+        },
+        {
+          id: "video-autoplay-network",
+          component: (
+            <SettingRow
+              type="value"
+              icon="wifi-outline"
+              title="Autoplay On"
+              subtitle="Network type for video autoplay"
+              rightText={getVideoAutoplayNetworkLabel()}
+              onPress={() => videoAutoplayNetworkSheetRef.current?.present()}
+              disabled={!autoPlayVideos}
+            />
           ),
         },
       ],
@@ -408,6 +465,14 @@ export function SettingsScreen() {
         options={shareServerOptions}
         value={shareServer}
         onChange={setShareServer}
+      />
+
+      <ValuePickerSheet
+        ref={videoAutoplayNetworkSheetRef}
+        title="Video Autoplay Network"
+        options={videoAutoplayNetworkOptions}
+        value={videoAutoplayNetwork}
+        onChange={setVideoAutoplayNetwork}
       />
 
       {/* Logout Confirmation */}

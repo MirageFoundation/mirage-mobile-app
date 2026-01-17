@@ -2,10 +2,16 @@ import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { ResizeMode, Video } from "expo-av";
+import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, View, type GestureResponderEvent } from "react-native";
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  View,
+  type GestureResponderEvent,
+} from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { ResolvedMedia } from "./post-card-utils";
 
@@ -15,6 +21,8 @@ type PostCardMediaProps = {
   shouldBlurContent: boolean;
   hasMultipleMedia: boolean;
   extraMediaCount: number;
+  /** Whether video autoplay is allowed based on user settings and network */
+  allowAutoplay?: boolean;
   onRevealContent?: () => void;
 };
 
@@ -35,13 +43,17 @@ export const PostCardMedia = memo(function PostCardMedia({
   shouldBlurContent,
   hasMultipleMedia,
   extraMediaCount,
+  allowAutoplay = true,
   onRevealContent,
 }: PostCardMediaProps) {
   const [imageError, setImageError] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [isVideoLoading, setIsVideoLoading] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const videoRef = useRef<Video | null>(null);
   const aspectRatioLockedRef = useRef(false);
+  // Track if user manually initiated playback (vs autoplay)
+  const userInitiatedPlayRef = useRef(false);
 
   const resolvedMediaUri = media?.uri;
   const cachedAspectRatio = resolvedMediaUri
@@ -72,16 +84,25 @@ export const PostCardMedia = memo(function PostCardMedia({
     const isVideo = media?.type === "video";
     if (!isVideo || shouldBlurContent) {
       setIsVideoPlaying(false);
+      setIsVideoLoading(false);
+      userInitiatedPlayRef.current = false;
       return;
     }
 
-    if (isVisible) {
+    // Only auto-play if allowed by settings and visible
+    if (isVisible && allowAutoplay) {
+      // Autoplay - no loading indicator, just play silently in background
       setIsVideoPlaying(true);
-    } else {
+    } else if (!isVisible) {
+      // Pause when not visible regardless of autoplay setting
       setIsVideoPlaying(false);
+      setIsVideoLoading(false);
+      userInitiatedPlayRef.current = false;
       videoRef.current?.pauseAsync().catch(() => {});
     }
-  }, [media?.type, shouldBlurContent, isVisible, resolvedMediaUri]);
+    // Note: If allowAutoplay changes to false while playing, we don't stop
+    // the video - we just prevent future auto-plays
+  }, [media?.type, shouldBlurContent, isVisible, allowAutoplay, resolvedMediaUri]);
 
   const updateMediaAspectRatioFromSize = useCallback(
     (width?: number, height?: number) => {
@@ -115,24 +136,51 @@ export const PostCardMedia = memo(function PostCardMedia({
     try {
       const status = await videoRef.current?.getStatusAsync();
       if (!status || !status.isLoaded) {
+        // User tapped play, video not loaded yet - show loading
+        userInitiatedPlayRef.current = true;
+        setIsVideoLoading(true);
         setIsVideoPlaying(true);
         return;
       }
       if (status.isPlaying) {
         await videoRef.current?.pauseAsync();
         setIsVideoPlaying(false);
+        setIsVideoLoading(false);
+        userInitiatedPlayRef.current = false;
         return;
       }
+      // User manually starting/resuming playback
+      userInitiatedPlayRef.current = true;
       if (status.didJustFinish) {
+        setIsVideoLoading(true);
         await videoRef.current?.replayAsync();
       } else {
+        setIsVideoLoading(true);
         await videoRef.current?.playAsync();
       }
       setIsVideoPlaying(true);
     } catch {
+      setIsVideoLoading(false);
+      userInitiatedPlayRef.current = false;
       // Ignore transient playback errors.
     }
   }, [media?.type, onRevealContent, shouldBlurContent]);
+
+  const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
+    if (!status.isLoaded) {
+      // Video is still loading
+      return;
+    }
+    // Video is loaded and playing - hide loading indicator
+    if (status.isPlaying && !status.isBuffering) {
+      setIsVideoLoading(false);
+      // Reset user initiated flag once video is playing smoothly
+      userInitiatedPlayRef.current = false;
+    } else if (status.isBuffering && userInitiatedPlayRef.current) {
+      // Only show loading while buffering if user initiated playback
+      setIsVideoLoading(true);
+    }
+  }, []);
 
   const handleVideoPress = useCallback(
     (event: GestureResponderEvent) => {
@@ -174,8 +222,17 @@ export const PostCardMedia = memo(function PostCardMedia({
             onReadyForDisplay={(event) => {
               const { width, height } = event.naturalSize ?? {};
               updateMediaAspectRatioFromSize(width, height);
+              // Video is ready to display - hide loading if user initiated
+              if (userInitiatedPlayRef.current) {
+                setIsVideoLoading(false);
+                userInitiatedPlayRef.current = false;
+              }
             }}
-            onError={() => setImageError(true)}
+            onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+            onError={() => {
+              setImageError(true);
+              setIsVideoLoading(false);
+            }}
           />
         ) : (
           <Image
@@ -193,18 +250,24 @@ export const PostCardMedia = memo(function PostCardMedia({
 
         {media.type === "video" && !shouldBlurContent && (
           <Pressable onPress={handleVideoPress} style={styles.playOverlay}>
-            <View
-              style={[
-                styles.playButton,
-                { opacity: isVideoPlaying ? 0.6 : 1 },
-              ]}
-            >
-              <Ionicons
-                name={isVideoPlaying ? "pause" : "play"}
-                size={28}
-                color="#fff"
-              />
-            </View>
+            {isVideoLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#fff" />
+              </View>
+            ) : (
+              <View
+                style={[
+                  styles.playButton,
+                  { opacity: isVideoPlaying ? 0.6 : 1 },
+                ]}
+              >
+                <Ionicons
+                  name={isVideoPlaying ? "pause" : "play"}
+                  size={28}
+                  color="#fff"
+                />
+              </View>
+            )}
           </Pressable>
         )}
 
@@ -294,6 +357,14 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   playButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingContainer: {
     width: 56,
     height: 56,
     borderRadius: 28,
