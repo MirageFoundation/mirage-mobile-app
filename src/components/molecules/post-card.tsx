@@ -1,9 +1,10 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { logPress } from "@/src/utils/press-logger";
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Linking, Pressable, type StyleProp, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
+import { MediaPreviewModal } from "./media-preview-modal";
 import { PostActions } from "./post-actions";
 import { PostCardContent } from "./post-card-content";
 import { PostCardHeader } from "./post-card-header";
@@ -100,6 +101,16 @@ export const PostCard = memo(function PostCard({
     Linking.openURL(resolvedContent.extractedUrl);
   }, [resolvedContent.extractedUrl]);
 
+  const [showMediaPreview, setShowMediaPreview] = useState(false);
+
+  const handleMediaPress = useCallback(() => {
+    setShowMediaPreview(true);
+  }, []);
+
+  const handleCloseMediaPreview = useCallback(() => {
+    setShowMediaPreview(false);
+  }, []);
+
   return (
     <Pressable onPress={handlePress} style={[styles.container, style]}>
       <PostCardHeader
@@ -137,6 +148,7 @@ export const PostCard = memo(function PostCard({
         extraMediaCount={resolvedContent.extraMediaCount}
         allowAutoplay={allowAutoplay}
         onRevealContent={onRevealContent}
+        onMediaPress={handleMediaPress}
       />
 
       <PostActions
@@ -152,6 +164,12 @@ export const PostCard = memo(function PostCard({
         shareUrl={shareUrl}
         shareTitle={title}
         style={styles.actions}
+      />
+
+      <MediaPreviewModal
+        visible={showMediaPreview}
+        media={resolvedContent.resolvedMedia ?? null}
+        onClose={handleCloseMediaPreview}
       />
     </Pressable>
   );

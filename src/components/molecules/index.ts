@@ -7,6 +7,7 @@ export {
   type PostAuthor,
   type PostMedia,
 } from "./post-card";
+export { MediaPreviewModal } from "./media-preview-modal";
 export { PostCardItem } from "./post-card-item";
 export { PostCardSkeleton, PostCardSkeletonList } from "./post-card-skeleton";
 

@@ -1267,18 +1267,19 @@ export default function PostDetailScreen() {
     return (
       <View onLayout={handlePostHeaderLayout}>
         {/* Full post card */}
-        <PostCard
-          post={displayPost}
-          isOwnPost={currentUser?.id === displayPost.author.id}
-          onLikePress={handleLikePost}
-          onDislikePress={handleDislikePost}
-          onFollowPress={handleFollowPost}
-          onMorePress={handlePostMorePress}
-          onRevealContent={handleRevealContent}
-          contentRevealed={revealedContent}
-          followLoading={isFollowLoading}
-          shareUrl={`${getShareBaseUrl(shareServer)}/post/${id}`}
-        />
+       <PostCard
+         post={displayPost}
+         isOwnPost={currentUser?.id === displayPost.author.id}
+         onLikePress={handleLikePost}
+         onDislikePress={handleDislikePost}
+         onFollowPress={handleFollowPost}
+         onMorePress={handlePostMorePress}
+         onRevealContent={handleRevealContent}
+         contentRevealed={revealedContent}
+         followLoading={isFollowLoading}
+         shareUrl={`${getShareBaseUrl(shareServer)}/post/${id}`}
+          showUrlCard={false}
+       />
 
         {/* Divider below post */}
         <View style={styles.divider} />

@@ -24,6 +24,8 @@ type PostCardMediaProps = {
   /** Whether video autoplay is allowed based on user settings and network */
   allowAutoplay?: boolean;
   onRevealContent?: () => void;
+  /** Called when media is pressed (for opening preview) */
+  onMediaPress?: () => void;
 };
 
 const MEDIA_ASPECT_RATIO_CACHE = new Map<string, number>();
@@ -45,6 +47,7 @@ export const PostCardMedia = memo(function PostCardMedia({
   extraMediaCount,
   allowAutoplay = true,
   onRevealContent,
+  onMediaPress,
 }: PostCardMediaProps) {
   const [imageError, setImageError] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
@@ -199,6 +202,19 @@ export const PostCardMedia = memo(function PostCardMedia({
     []
   );
 
+  const handleMediaPress = useCallback(
+    (event: GestureResponderEvent) => {
+      event.stopPropagation?.();
+      if (shouldBlurContent) {
+        onRevealContent?.();
+        return;
+      }
+      triggerHaptic("selection");
+      onMediaPress?.();
+    },
+    [shouldBlurContent, onRevealContent, onMediaPress]
+  );
+
   if (!media || imageError) return null;
 
   return (
@@ -235,6 +251,7 @@ export const PostCardMedia = memo(function PostCardMedia({
             }}
           />
         ) : (
+          <Pressable onPress={handleMediaPress} style={styles.media}>
           <Image
             source={mediaSource}
             style={styles.media}
@@ -246,16 +263,19 @@ export const PostCardMedia = memo(function PostCardMedia({
             onError={() => setImageError(true)}
             blurRadius={shouldBlurContent ? 30 : 0}
           />
+          </Pressable>
         )}
 
-        {media.type === "video" && !shouldBlurContent && (
-          <Pressable onPress={handleVideoPress} style={styles.playOverlay}>
+       {media.type === "video" && !shouldBlurContent && (
+          <View style={styles.playOverlay}>
+            <Pressable onPress={handleMediaPress} style={styles.videoTapArea} />
             {isVideoLoading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#fff" />
               </View>
             ) : (
-              <View
+              <Pressable
+                onPress={handleVideoPress}
                 style={[
                   styles.playButton,
                   { opacity: isVideoPlaying ? 0.6 : 1 },
@@ -266,9 +286,9 @@ export const PostCardMedia = memo(function PostCardMedia({
                   size={28}
                   color="#fff"
                 />
-              </View>
+              </Pressable>
             )}
-          </Pressable>
+          </View>
         )}
 
         {/* Mute/Unmute button for videos */}
@@ -355,6 +375,9 @@ const styles = StyleSheet.create((theme) => ({
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
     justifyContent: "center",
+  },
+  videoTapArea: {
+    ...StyleSheet.absoluteFillObject,
   },
   playButton: {
     width: 56,

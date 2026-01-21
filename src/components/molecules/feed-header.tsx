@@ -34,28 +34,10 @@ type FeedOption = {
 const FEED_OPTIONS: FeedOption[] = [
   { value: "home", label: "Home", icon: "home-outline", iconFilled: "home" },
   {
-    value: "popular",
-    label: "Popular",
-    icon: "flame-outline",
-    iconFilled: "flame",
-  },
-  {
     value: "latest",
     label: "Latest",
     icon: "time-outline",
     iconFilled: "time",
-  },
-  {
-    value: "news",
-    label: "News",
-    icon: "newspaper-outline",
-    iconFilled: "newspaper",
-  },
-  {
-    value: "watch",
-    label: "Watch",
-    icon: "play-circle-outline",
-    iconFilled: "play-circle",
   },
 ];
 
