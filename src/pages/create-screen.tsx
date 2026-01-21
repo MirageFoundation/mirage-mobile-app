@@ -2,7 +2,6 @@ import {
   Entypo,
   EvilIcons,
   Feather,
-  MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
@@ -26,23 +25,26 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { uploadImageAndGetUrl } from "@/src/api/read/hooks/use-upload-media";
 import { usePost, type CreatePostMutationInput } from "@/src/api/write";
+import type { ContentTag } from "@/src/api/write/endpoints/posts";
 import { Avatar } from "@/src/components/atoms";
-import GorhomPopupSheet, {
-  type GorhomPopupSheetRef,
-} from "@/src/components/ui/gorhom-popup-sheet";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useToast } from "@/src/providers/toast-provider";
 import { useDraftStore, type Community } from "@/src/stores/draft-store";
+import { useHomePostCardStore } from "./home/home-post-card-store";
 
-// Community Selection Modal Component
 import { CommunitySelectionModal } from "./create/community-selection-modal";
 
-// URL validation regex
 const URL_REGEX =
-  /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
+  /^(https?:\/\/)?([‌\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
 
-// Button background color
+const CONTENT_WARNING_OPTIONS: { value: ContentTag; label: string }[] = [
+  { value: "sensitive", label: "Sensitive" },
+  { value: "porn", label: "Porn" },
+  { value: "violence", label: "Violence" },
+  { value: "gore", label: "Gore" },
+  { value: "death", label: "Death" },
+];
 
 export function CreateScreen() {
   const { theme } = useUnistyles();
@@ -51,13 +53,10 @@ export function CreateScreen() {
   const { draft, updateDraft, clearDraft, setAttachment, removeAttachment } =
     useDraftStore();
 
-  // Refs
   const titleInputRef = useRef<TextInput>(null);
   const bodyInputRef = useRef<TextInput>(null);
   const linkInputRef = useRef<TextInput>(null);
-  const tagsSheetRef = useRef<GorhomPopupSheetRef>(null);
 
-  // Local state
   const [showCommunityModal, setShowCommunityModal] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
@@ -68,23 +67,20 @@ export function CreateScreen() {
     width: number;
     height: number;
   } | null>(null);
+  const [showContentWarningModal, setShowContentWarningModal] = useState(false);
+  const [selectedContentWarning, setSelectedContentWarning] = useState<ContentTag>("");
 
-  // API hooks
   const postMutation = usePost();
   const toast = useToast();
+  const triggerScrollToTop = useHomePostCardStore((s) => s.triggerScrollToTop);
 
-  // Screen width for full-width image
   const screenWidth = Dimensions.get("window").width;
-
-  // Selected community (null by default)
   const selectedCommunity = draft.community;
 
-  // Can post check
   const canPost = useMemo(() => {
     return draft.title.trim().length > 0;
   }, [draft.title]);
 
-  // Has attachment check - also consider showLinkInput as having an attachment
   const hasAttachment = useMemo(() => {
     return (
       showLinkInput ||
@@ -94,7 +90,6 @@ export function CreateScreen() {
     );
   }, [showLinkInput, draft.attachmentType, draft.mediaUris, draft.linkUrl]);
 
-  // Keyboard listeners
   useEffect(() => {
     const showSubscription = Keyboard.addListener("keyboardDidShow", () => {
       setKeyboardVisible(true);
@@ -109,14 +104,11 @@ export function CreateScreen() {
     };
   }, []);
 
-  // Handlers
   const handleClose = useCallback(() => {
-    // Block closing if submitting
     if (isSubmitting) return;
     
     triggerHaptic("selection");
     if (draft.title || draft.body) {
-      // Could show discard confirmation here
     }
     clearDraft();
     router.back();
@@ -125,54 +117,35 @@ export function CreateScreen() {
   const handlePost = useCallback(async () => {
     if (!canPost || isSubmitting) return;
 
-    // Dismiss keyboard
     Keyboard.dismiss();
-
-    // Start submission
     setIsSubmitting(true);
     triggerHaptic("medium");
 
-    // Show loading toast
-    const toastId = toast.loading("Creating post...", "Please wait while we submit your post");
-
     try {
-      // Handle image upload if present
       let imageUrl: string | null = null;
       if (draft.attachmentType === "image" && draft.mediaUris.length > 0) {
         try {
           console.log("[CreatePost] Uploading image...", draft.mediaUris[0]);
-          toast.update(toastId, { description: "Uploading image..." });
           imageUrl = await uploadImageAndGetUrl(draft.mediaUris[0]);
           console.log("[CreatePost] Image uploaded successfully:", imageUrl);
         } catch (error) {
           console.error("[CreatePost] Image upload failed:", error);
-          toast.update(toastId, {
-            type: "error",
-            title: "Image upload failed",
-            description: error instanceof Error ? error.message : "Please try again",
-            duration: 4000,
-          });
+          toast.error("Image upload failed", error instanceof Error ? error.message : "Please try again");
           setIsSubmitting(false);
           return;
         }
       }
 
-      // Build content string (body + image URL + link if present)
       let content = draft.body;
       
-      // Add image URL to content
       if (imageUrl) {
         content = content ? `${content}\n\n${imageUrl}` : imageUrl;
       }
       
-      // Add link URL to content
       if (draft.linkUrl) {
         content = content ? `${content}\n\n${draft.linkUrl}` : draft.linkUrl;
       }
 
-      // Prepare post input
-      // Use community ID for topic (which is the lowercase topic name from API)
-      // If user selected their profile or no community, default to "general"
       const isUserProfile = draft.community?.description === "Post to your profile";
       const topic = isUserProfile ? "general" : (draft.community?.id ?? "general");
       
@@ -180,56 +153,47 @@ export function CreateScreen() {
         topic,
         title: draft.title.trim(),
         content: content,
-        tag: "", // Default to no content warning for now
+        tag: selectedContentWarning,
         optimisticMediaUrl: imageUrl ?? undefined,
       };
 
       console.log("[CreatePost] Submitting post:", postInput);
 
-      // Submit post
       const result = await postMutation.mutateAsync(postInput);
 
       console.log("[CreatePost] Post created successfully:", result);
 
-      // Hide the blocking modal
-      setIsSubmitting(false);
-
-      // Update toast to success
-      toast.update(toastId, {
-        type: "success",
-        title: "Post created!",
-        description: "Your post has been published successfully",
-        duration: 3000,
-      });
-
       triggerHaptic("success");
 
-      // Clear draft
+      // Reset all local state
+      setSelectedContentWarning("");
+      setShowLinkInput(false);
+      setLinkUrl("");
+      setLinkError(false);
+      setImageDimensions(null);
+
+      // Clear draft store
       clearDraft();
 
-      // Navigate to home after a short delay to allow backend indexing
-      // The query invalidation will trigger a refetch when home screen loads
+      setIsSubmitting(false);
+
+      // Trigger scroll to top on home screen
+      triggerScrollToTop();
+
       setTimeout(() => {
         router.replace("/(tabs)/");
       }, 1000);
     } catch (error) {
       console.error("[CreatePost] Error creating post:", error);
       
-      // Hide the blocking modal
       setIsSubmitting(false);
 
-      // Update toast to error
       const errorMessage = error instanceof Error ? error.message : "Failed to create post";
-      toast.update(toastId, {
-        type: "error",
-        title: "Failed to create post",
-        description: errorMessage,
-        duration: 5000,
-      });
+      toast.error("Failed to create post", errorMessage);
 
       triggerHaptic("error");
     }
-  }, [canPost, isSubmitting, draft, clearDraft, postMutation, toast]);
+  }, [canPost, isSubmitting, draft, clearDraft, postMutation, toast, selectedContentWarning, router]);
 
   const handleCommunitySelect = useCallback(
     (community: Community) => {
@@ -240,12 +204,22 @@ export function CreateScreen() {
     [updateDraft]
   );
 
-  const handleOpenTags = useCallback(() => {
+  const handleOpenContentWarning = useCallback(() => {
     triggerHaptic("selection");
-    tagsSheetRef.current?.present();
+    setShowContentWarningModal(true);
   }, []);
 
-  // Link handlers
+  const handleSelectContentWarning = useCallback((warning: ContentTag) => {
+    triggerHaptic("selection");
+    setSelectedContentWarning(warning);
+    setShowContentWarningModal(false);
+  }, []);
+
+  const handleClearContentWarning = useCallback(() => {
+    triggerHaptic("selection");
+    setSelectedContentWarning("");
+  }, []);
+
   const handleLinkPress = useCallback(() => {
     if (hasAttachment && !showLinkInput) return;
     triggerHaptic("selection");
@@ -278,7 +252,6 @@ export function CreateScreen() {
     removeAttachment();
   }, [removeAttachment]);
 
-  // Image/Video handlers
   const handleImagePress = useCallback(async () => {
     if (hasAttachment && draft.attachmentType !== "image") return;
     triggerHaptic("selection");
@@ -292,7 +265,6 @@ export function CreateScreen() {
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
       setAttachment("image", asset.uri);
-      // Store image dimensions for proper aspect ratio
       if (asset.width && asset.height) {
         setImageDimensions({ width: asset.width, height: asset.height });
       }
@@ -317,12 +289,10 @@ export function CreateScreen() {
     setImageDimensions(null);
   }, [removeAttachment]);
 
-  // Tab bar height (approximate)
   const TAB_BAR_HEIGHT = 60;
 
   return (
     <Box flex background="base" style={{ paddingTop: insets.top }}>
-      {/* Header */}
       <View style={styles.header}>
         <Button
           variant="ghost"
@@ -383,7 +353,6 @@ export function CreateScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Community Selector */}
           <Pressable
             onPress={() => {
               triggerHaptic("selection");
@@ -406,18 +375,20 @@ export function CreateScreen() {
                 rounded="full"
               />
             ) : (
-              <MaterialCommunityIcons
-                name="account-group-outline"
-                size={20}
-                color={theme.colors.text.default}
-              />
+              <Text
+                size="lg"
+                weight="bold"
+                style={{ color: theme.colors.text.default }}
+              >
+                #
+              </Text>
             )}
             <Text
               size="md"
               weight="semibold"
               style={{ color: theme.colors.text.default }}
             >
-              {selectedCommunity?.name ?? "Select a community"}
+              {selectedCommunity?.name ?? "Select a topic"}
             </Text>
             <Box>
               <Entypo
@@ -434,7 +405,14 @@ export function CreateScreen() {
             </Box>
           </Pressable>
 
-          {/* Title Input */}
+          {selectedCommunity?.isNewTopic && (
+            <View style={[styles.newTopicWarning, { backgroundColor: theme.colors.warning[500] + "15" }]}>
+              <Text size="xs" mode="subtle" style={{ lineHeight: 16 }}>
+                Topics are communities centered around specific interests. Posting in the wrong topic may affect your overall trust status on Mirage. Make sure to post into the right category!
+              </Text>
+            </View>
+          )}
+
           <TextInput
             ref={titleInputRef}
             style={[styles.titleInput, { color: theme.colors.text.default }]}
@@ -449,24 +427,43 @@ export function CreateScreen() {
             blurOnSubmit={false}
           />
 
-          {/* Tags Button */}
           <Pressable
-            onPress={handleOpenTags}
+            onPress={handleOpenContentWarning}
             style={[
               styles.tagsButton,
               { backgroundColor: theme.colors.background.subtle },
             ]}
           >
-            <Text
-              size="sm"
-              weight="semibold"
-              style={{ color: theme.colors.text.default }}
-            >
-              Add tags (optional)
-            </Text>
+            {selectedContentWarning ? (
+              <View style={styles.contentWarningSelected}>
+                <Text
+                  size="sm"
+                  weight="semibold"
+                  style={{ color: theme.colors.warning[500] }}
+                >
+                  ⚠️ {selectedContentWarning.charAt(0).toUpperCase() + selectedContentWarning.slice(1)}
+                </Text>
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleClearContentWarning();
+                  }}
+                  hitSlop={8}
+                >
+                  <Feather name="x" size={14} color={theme.colors.text.subtle} />
+                </Pressable>
+              </View>
+            ) : (
+              <Text
+                size="sm"
+                weight="semibold"
+                style={{ color: theme.colors.text.default }}
+              >
+                Add content warning (optional)
+              </Text>
+            )}
           </Pressable>
 
-          {/* Link Input */}
           {showLinkInput && (
             <Animated.View
               entering={FadeIn.duration(200)}
@@ -526,7 +523,6 @@ export function CreateScreen() {
             </Animated.View>
           )}
 
-          {/* Media Preview */}
           {draft.mediaUris.length > 0 && (
             <Animated.View
               entering={FadeIn.duration(200)}
@@ -546,7 +542,7 @@ export function CreateScreen() {
                   height: imageDimensions
                     ? screenWidth *
                       (imageDimensions.height / imageDimensions.width)
-                    : screenWidth, // Default to square if dimensions unknown
+                    : screenWidth,
                 }}
               />
               <Pressable
@@ -561,7 +557,6 @@ export function CreateScreen() {
             </Animated.View>
           )}
 
-          {/* Body Input */}
           <TextInput
             ref={bodyInputRef}
             style={[styles.bodyInput, { color: theme.colors.text.default }]}
@@ -574,7 +569,6 @@ export function CreateScreen() {
           />
         </ScrollView>
 
-        {/* Media Picker Bar */}
         <Animated.View
           style={[
             styles.mediaBar,
@@ -589,7 +583,6 @@ export function CreateScreen() {
           ]}
         >
           <View style={styles.mediaBarContent}>
-            {/* Link */}
             <Pressable
               onPress={handleLinkPress}
               disabled={hasAttachment && !showLinkInput}
@@ -609,7 +602,6 @@ export function CreateScreen() {
               />
             </Pressable>
 
-            {/* Image */}
             <Pressable
               onPress={handleImagePress}
               disabled={hasAttachment && draft.attachmentType !== "image"}
@@ -631,7 +623,6 @@ export function CreateScreen() {
               />
             </Pressable>
 
-            {/* Video (coming soon) */}
             <Pressable
               onPress={handleVideoPress}
               disabled={hasAttachment}
@@ -647,7 +638,6 @@ export function CreateScreen() {
               />
             </Pressable>
 
-            {/* Poll (coming soon) */}
             <Pressable
               onPress={handlePollPress}
               disabled={hasAttachment}
@@ -666,7 +656,6 @@ export function CreateScreen() {
         </Animated.View>
       </KeyboardAvoidingView>
 
-      {/* Community Selection Modal */}
       <CommunitySelectionModal
         visible={showCommunityModal}
         onClose={() => setShowCommunityModal(false)}
@@ -674,14 +663,87 @@ export function CreateScreen() {
         selectedCommunity={selectedCommunity ?? undefined}
       />
 
-      {/* Tags Bottom Sheet */}
-      <GorhomPopupSheet ref={tagsSheetRef} title="Add Tags">
-        <Box p="lg" center>
-          <Text mode="subtle">Tag selection coming soon...</Text>
-        </Box>
-      </GorhomPopupSheet>
+      <Modal
+        visible={showContentWarningModal}
+        animationType="fade"
+        transparent
+        statusBarTranslucent
+        onRequestClose={() => setShowContentWarningModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowContentWarningModal(false)}
+        >
+          <Pressable
+            style={[
+              styles.contentWarningModalContent,
+              { backgroundColor: theme.colors.background.base },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.contentWarningHeader}>
+              <Text size="lg" weight="bold">
+                Add content warning
+              </Text>
+              <Pressable
+                onPress={() => setShowContentWarningModal(false)}
+                hitSlop={8}
+              >
+                <Feather name="x" size={20} color={theme.colors.text.subtle} />
+              </Pressable>
+            </View>
 
-      {/* Submission Blocking Overlay */}
+            <View style={styles.contentWarningOptions}>
+              {CONTENT_WARNING_OPTIONS.map((option) => (
+                <Pressable
+                  key={option.value}
+                  onPress={() => handleSelectContentWarning(option.value)}
+                  style={styles.contentWarningOption}
+                >
+                  <Text
+                    size="md"
+                    style={{ color: theme.colors.text.default }}
+                  >
+                    {option.label}
+                  </Text>
+                  <View
+                    style={[
+                      styles.checkbox,
+                      {
+                        borderColor: selectedContentWarning === option.value
+                          ? theme.colors.brand[500]
+                          : theme.colors.border.default,
+                        backgroundColor: selectedContentWarning === option.value
+                          ? theme.colors.brand[500]
+                          : "transparent",
+                      },
+                    ]}
+                  >
+                    {selectedContentWarning === option.value && (
+                      <Feather name="check" size={12} color="#fff" />
+                    )}
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+
+            {selectedContentWarning && (
+              <Pressable
+                onPress={() => {
+                  setSelectedContentWarning("");
+                  setShowContentWarningModal(false);
+                }}
+                style={styles.clearWarningButton}
+              >
+                <Text size="sm" style={{ color: theme.colors.error[500] }}>
+                  Remove warning
+                </Text>
+              </Pressable>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <Modal
         visible={isSubmitting}
         transparent
@@ -757,7 +819,12 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing.md,
     gap: theme.spacing.sm,
     borderRadius: theme.radius.full,
-    // marginBottom: theme.spacing.sm,
+  },
+  newTopicWarning: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.md,
+    marginTop: theme.spacing.sm,
   },
   titleInput: {
     fontSize: 22,
@@ -774,6 +841,11 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing.xs + 2,
     paddingHorizontal: theme.spacing.sm + 2,
     borderRadius: theme.radius.full,
+  },
+  contentWarningSelected: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
   },
   linkInputContainer: {
     paddingTop: theme.spacing.md,
@@ -810,7 +882,6 @@ const styles = StyleSheet.create((theme) => ({
     position: "relative",
   },
   mediaPreview: {
-    // Width and height are set dynamically based on image dimensions
   },
   mediaRemoveButton: {
     position: "absolute",
@@ -845,5 +916,47 @@ const styles = StyleSheet.create((theme) => ({
   },
   mediaButtonDisabled: {
     opacity: 0.4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.lg,
+  },
+  contentWarningModalContent: {
+    width: "100%",
+    maxWidth: 340,
+    borderRadius: theme.radius.xl,
+    padding: theme.spacing.md,
+  },
+  contentWarningHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: theme.spacing.sm,
+  },
+  contentWarningOptions: {
+    gap: theme.spacing.xs,
+  },
+  contentWarningOption: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xs,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  clearWarningButton: {
+    alignItems: "center",
+    marginTop: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
   },
 }));

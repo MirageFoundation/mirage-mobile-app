@@ -184,8 +184,10 @@ const styles = StyleSheet.create((theme) => ({
   badge: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
+    alignSelf: "flex-start",
+    borderRadius: theme.radius.md,
+    borderWidth: 0.5,
+    overflow: "hidden",
   },
   badgeSm: {
     paddingHorizontal: theme.spacing.xs,
@@ -216,4 +218,3 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: `${theme.colors.error[500]}10`,
   },
 }));
-

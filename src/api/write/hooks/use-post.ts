@@ -182,13 +182,23 @@ export function usePost(options: UsePostOptions = {}) {
         refetchType: "inactive",
       });
 
-      // Invalidate user posts
+     // Invalidate user posts
       if (address) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.userPosts(address),
           refetchType: "inactive",
         });
       }
+
+      // Invalidate topics cache to include newly created topics
+      queryClient.invalidateQueries({
+        queryKey: ["topics"],
+        refetchType: "inactive",
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["searchTopics"],
+        refetchType: "inactive",
+      });
     },
   });
 }

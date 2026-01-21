@@ -110,9 +110,14 @@ export const ProfilePostsList = memo(function ProfilePostsList({
 
   const renderPostItem = useCallback(
     ({ item }: { item: UIPost }) => {
+      // Remove content warnings from own posts on profile
+      const postWithoutWarnings = {
+        ...item,
+        contentWarnings: undefined,
+      };
       return (
         <PostCardItem
-          post={item}
+          post={postWithoutWarnings}
           isOwnPost={true}
           onPostPress={onPostPress}
           onAuthorPress={onAuthorPress}

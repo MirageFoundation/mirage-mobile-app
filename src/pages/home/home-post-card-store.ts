@@ -43,6 +43,7 @@ type HomePostCardState = {
   handlers: HomePostCardHandlers;
   shareServer: ShareServer;
   allowAutoplay: boolean;
+  shouldScrollToTop: boolean;
   setCurrentUserId: (id?: string) => void;
   setFollowedUsers: (users: Set<string>) => void;
   setFollowLoadingUsers: (users: Set<string>) => void;
@@ -53,6 +54,8 @@ type HomePostCardState = {
   setHandlers: (handlers: HomePostCardHandlers) => void;
   setShareServer: (server: ShareServer) => void;
   setAllowAutoplay: (allow: boolean) => void;
+  triggerScrollToTop: () => void;
+  clearScrollToTop: () => void;
 };
 
 const emptySet = new Set<string>();
@@ -67,6 +70,7 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
   handlers: {},
   shareServer: "mirage.talk",
   allowAutoplay: true,
+  shouldScrollToTop: false,
   setCurrentUserId: (id) => set({ currentUserId: id }),
   setFollowedUsers: (users) => set({ followedUsers: users }),
   setFollowLoadingUsers: (users) => set({ followLoadingUsers: users }),
@@ -108,6 +112,8 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
   setHandlers: (handlers) => set({ handlers }),
   setShareServer: (server) => set({ shareServer: server }),
   setAllowAutoplay: (allow) => set({ allowAutoplay: allow }),
+  triggerScrollToTop: () => set({ shouldScrollToTop: true }),
+  clearScrollToTop: () => set({ shouldScrollToTop: false }),
 }));
 
 // Primitive selectors that return stable values

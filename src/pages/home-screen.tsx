@@ -200,6 +200,8 @@ export function HomeScreen() {
  // Vote overrides are now stored in the home post card store
  const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
  const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
+ const shouldScrollToTop = useHomePostCardStore((state) => state.shouldScrollToTop);
+ const clearScrollToTop = useHomePostCardStore((state) => state.clearScrollToTop);
 
  // Vote handler with toast notifications
  const { handleUpvote, handleDownvote } = useVoteHandler({
@@ -695,6 +697,14 @@ export function HomeScreen() {
     registerScrollRef(flatListRef.current);
     registerRefreshCallback(handleRefresh);
   }, [registerScrollRef, registerRefreshCallback, handleRefresh]);
+
+  // Listen for scroll to top trigger (e.g., after creating a new post)
+  useEffect(() => {
+    if (shouldScrollToTop && flatListRef.current) {
+      flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+      clearScrollToTop();
+    }
+  }, [shouldScrollToTop, clearScrollToTop]);
 
   useEffect(() => {
     followLoadingUsersRef.current = followLoadingUsers;

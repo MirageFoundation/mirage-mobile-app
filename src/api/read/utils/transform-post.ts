@@ -46,6 +46,7 @@ function mapTagToContentWarning(tag: string): ContentWarningType | null {
     sensitive: "sensitive",
     adult: "adult",
     nsfw: "nsfw",
+    porn: "adult",
     violence: "violence",
     gore: "gore",
     death: "death",

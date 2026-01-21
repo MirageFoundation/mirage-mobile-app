@@ -1,3 +1,4 @@
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../query-keys";
 import { getTopics, searchTopics, type SearchTopicsParams } from "../endpoints/topics";
@@ -38,4 +39,50 @@ export function useSearchTopics(
     enabled: !!query && query.length >= 2,
     staleTime: 1000 * 60, // 1 minute
   });
+}
+
+/**
+ * Debounced search for topics
+ * @param query - Search query
+ * @param delay - Debounce delay (default 750ms)
+ * @param params - Additional params
+ */
+export function useDebouncedSearchTopics(
+  query: string | undefined | null,
+  delay = 750,
+  params?: Omit<SearchTopicsParams, "q">
+) {
+  const [debouncedQuery, setDebouncedQuery] = useState<string | null>(null);
+
+  useEffect(() => {
+    const trimmedQuery = query?.trim() || "";
+
+    if (!trimmedQuery) {
+      setDebouncedQuery(null);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setDebouncedQuery(trimmedQuery);
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [query, delay]);
+
+  const searchQuery = useSearchTopics(
+    debouncedQuery && debouncedQuery.length >= 2 ? debouncedQuery : null,
+    params
+  );
+
+  const isDebouncing = useMemo(() => {
+    const trimmedQuery = query?.trim() || "";
+    return trimmedQuery.length > 0 && trimmedQuery !== debouncedQuery;
+  }, [query, debouncedQuery]);
+
+  return {
+    ...searchQuery,
+    debouncedQuery,
+    isDebouncing,
+    isSearching: isDebouncing || searchQuery.isFetching,
+  };
 }

@@ -9,6 +9,7 @@ export type Community = {
   memberCount: number;
   description?: string;
   isSubscribed: boolean;
+  isNewTopic?: boolean;
 };
 
 export type AttachmentType = "link" | "image" | "video" | "poll" | null;
