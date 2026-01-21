@@ -82,6 +82,8 @@ export function HomeScreen() {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
   // Track visible posts inside list component to avoid HomeScreen rerenders.
+  // Track user-initiated refresh (tab press or pull-to-refresh)
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
 
   // Global content moderation state (syncs across screens)
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
@@ -648,51 +650,57 @@ export function HomeScreen() {
     initialLoadCompleteRef.current = false;
   }, [sortBy]);
 
-  const handleRefresh = useCallback(async () => {
-    // Reset initial load flag so pagination protection kicks in again
-    initialLoadCompleteRef.current = false;
+ const handleRefresh = useCallback(async () => {
+   // Reset initial load flag so pagination protection kicks in again
+   initialLoadCompleteRef.current = false;
 
-    try {
-      // Fetch only the first page to check for new posts
-      const newFirstPage = await getPosts({
-        limit: 20,
-        feed: "home",
-        by: sortBy,
-        allowed_tags: allowedTags || undefined,
-        address: currentUser?.walletAddress,
-        page: 1,
-      });
+   // Show the refresh indicator
+   setIsManualRefreshing(true);
 
-      // Get the query key for the infinite posts query
-      const postsQueryKey = queryKeys.posts({
-        limit: 20,
-        feed: "home",
-        by: sortBy,
-        allowed_tags: allowedTags || undefined,
-        address: currentUser?.walletAddress,
-        page: undefined,
-      });
+   try {
+     // Fetch only the first page to check for new posts
+     const newFirstPage = await getPosts({
+       limit: 20,
+       feed: "home",
+       by: sortBy,
+       allowed_tags: allowedTags || undefined,
+       address: currentUser?.walletAddress,
+       page: 1,
+     });
 
-      // Update the cache - replace only the first page, keep the rest
-      queryClient.setQueryData(postsQueryKey, (oldData: any) => {
-        if (!oldData) {
-          return {
-            pages: [newFirstPage],
-            pageParams: [1],
-          };
-        }
-        return {
-          ...oldData,
-          pages: [newFirstPage, ...oldData.pages.slice(1)],
-          pageParams: [1, ...oldData.pageParams.slice(1)],
-        };
-      });
-    } catch (error) {
-      console.error("Failed to refresh feed:", error);
-    }
-  }, [queryClient, sortBy, allowedTags, currentUser?.walletAddress]);
+     // Get the query key for the infinite posts query
+     const postsQueryKey = queryKeys.posts({
+       limit: 20,
+       feed: "home",
+       by: sortBy,
+       allowed_tags: allowedTags || undefined,
+       address: currentUser?.walletAddress,
+       page: undefined,
+     });
 
-  // Register scroll ref and refresh callback for tab press scroll-to-top
+     // Update the cache - replace only the first page, keep the rest
+     queryClient.setQueryData(postsQueryKey, (oldData: any) => {
+       if (!oldData) {
+         return {
+           pages: [newFirstPage],
+           pageParams: [1],
+         };
+       }
+       return {
+         ...oldData,
+         pages: [newFirstPage, ...oldData.pages.slice(1)],
+         pageParams: [1, ...oldData.pageParams.slice(1)],
+       };
+     });
+   } catch (error) {
+     console.error("Failed to refresh feed:", error);
+   } finally {
+     // Hide the refresh indicator
+     setIsManualRefreshing(false);
+   }
+ }, [queryClient, sortBy, allowedTags, currentUser?.walletAddress]);
+
+ // Register scroll ref and refresh callback for tab press scroll-to-top
   useEffect(() => {
     registerScrollRef(flatListRef.current);
     registerRefreshCallback(handleRefresh);
@@ -773,17 +781,17 @@ export function HomeScreen() {
     );
   }, [isLoading, isError, error]);
 
-  const ListHeaderComponent = useCallback(() => {
-    if (!isRefetching) return null;
-    return (
-      <Box center p="md">
-        <ActivityIndicator
-          size="small"
-          color={theme.colors.background.emphasis}
-        />
-      </Box>
-    );
-  }, [isRefetching, theme.colors.brand]);
+ const ListHeaderComponent = useCallback(() => {
+    if (!isManualRefreshing) return null;
+   return (
+     <Box center p="md">
+       <ActivityIndicator
+         size="small"
+         color={theme.colors.background.emphasis}
+       />
+     </Box>
+   );
+  }, [isManualRefreshing, theme.colors.background.emphasis]);
 
   // Show skeleton when loading next page
   const ListFooterComponent = useCallback(() => {

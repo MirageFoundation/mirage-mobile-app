@@ -48,14 +48,14 @@ export const PostCardContent = memo(function PostCardContent({
 
       <Text
         size="lg"
-        weight="semibold"
+        weight="bold"
         style={styles.title}
       >
         {title}
       </Text>
 
       {bodyWithoutUrl && !shouldBlurContent && (
-        <Text size="sm" style={styles.body}>
+        <Text size="md" style={styles.body}>
           {bodyWithoutUrl}
         </Text>
       )}
@@ -98,7 +98,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   body: {
     marginTop: theme.spacing.xs,
-    lineHeight: 16,
+    lineHeight: 18,
   },
   urlCard: {
     flexDirection: "row",

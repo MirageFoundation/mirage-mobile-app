@@ -63,11 +63,11 @@ const SIZE_CONFIG = {
     voteTextSize: "xs" as const,
   },
   md: {
-    iconSize: 14,
+    iconSize: 16,
     gap: 14,
-    textSize: "xs" as const,
-    pillHeight: 26,
-    voteTextSize: "xs" as const,
+    textSize: "sm" as const,
+    pillHeight: 30,
+    voteTextSize: "sm" as const,
   },
   lg: {
     iconSize: 18,
@@ -210,7 +210,7 @@ export const PostActions = memo(function PostActions({
           <Text
             size={voteTextSize}
             weight="bold"
-            style={{ marginLeft: 10, color: upvoteColor }}
+            style={{ marginLeft: 14, color: upvoteColor }}
           >
             {formatCount(likes)}
           </Text>

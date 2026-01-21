@@ -1,8 +1,8 @@
-import { View, Pressable } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { Ionicons } from "@expo/vector-icons";
+import { Pressable, View } from "react-native";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 export type ContentWarningType = 
   | "sensitive" 
