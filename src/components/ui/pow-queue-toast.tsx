@@ -137,19 +137,21 @@ export const PowQueueToast = () => {
     }
   }, [currentAction?.id]);
 
-  // Dismiss when processing ends (after showing final result)
-  useEffect(() => {
-    if (!isProcessing && !currentAction && !lastCompletedAction && isVisible) {
-      // All done and result has been shown
-      if (dismissTimeoutRef.current) {
-        clearTimeout(dismissTimeoutRef.current);
-      }
-      dismissTimeoutRef.current = setTimeout(() => {
-        animateOut();
-      }, 300);
-    }
-    
-    return () => {
+ // Dismiss when processing ends (after showing final result)
+ useEffect(() => {
+    // Dismiss when processing ends and we're showing the final result
+    // Don't wait for lastCompletedAction to clear - dismiss while still showing success/fail
+    if (!isProcessing && !currentAction && lastCompletedAction && isVisible) {
+      // Show the result briefly, then dismiss
+     if (dismissTimeoutRef.current) {
+       clearTimeout(dismissTimeoutRef.current);
+     }
+     dismissTimeoutRef.current = setTimeout(() => {
+       animateOut();
+      }, 1000); // Show result for 1 second before dismissing
+   }
+   
+   return () => {
       if (dismissTimeoutRef.current) {
         clearTimeout(dismissTimeoutRef.current);
       }
@@ -251,11 +253,11 @@ export const PowQueueToast = () => {
     return <ActivityIndicator size="small" color={colors.icon} />;
   };
 
-  const showCounter = hasMultiple && isShowingProcessing;
-  const showTimer = isShowingProcessing;
-  const currentIndex = completedCount + 1;
+ const showCounter = hasMultiple && isShowingProcessing;
+ const showTimer = isShowingProcessing;
+  const currentIndex = Math.min(completedCount + 1, totalCount);
 
-  return (
+ return (
     <Animated.View
       pointerEvents="box-none"
       style={[

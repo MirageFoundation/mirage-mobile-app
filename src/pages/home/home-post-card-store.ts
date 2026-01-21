@@ -89,21 +89,21 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
       }
       return { visiblePostIds: posts };
     }),
-  setVoteOverride: (postId, override) =>
-    set((state) => {
-      const current = state.voteOverrides[postId];
-      const currentDelta = current?.likeDelta ?? 0;
-      return {
-        voteOverrides: {
-          ...state.voteOverrides,
-          [postId]: {
-            hasLiked: override.hasLiked,
-            hasDisliked: override.hasDisliked,
-            likeDelta: currentDelta + (override.likeDelta ?? 0),
-          },
+setVoteOverride: (postId, override) =>
+  set((state) => {
+    const current = state.voteOverrides[postId];
+    const currentDelta = current?.likeDelta ?? 0;
+    return {
+      voteOverrides: {
+        ...state.voteOverrides,
+        [postId]: {
+          hasLiked: override.hasLiked,
+          hasDisliked: override.hasDisliked,
+          likeDelta: currentDelta + (override.likeDelta ?? 0),
         },
-      };
-    }),
+      },
+    };
+  }),
   clearVoteOverride: (postId) =>
     set((state) => {
       const { [postId]: _, ...rest } = state.voteOverrides;

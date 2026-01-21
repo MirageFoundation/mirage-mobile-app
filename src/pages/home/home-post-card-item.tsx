@@ -34,14 +34,16 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   const shareServer = useShareServer();
   const allowAutoplay = useAllowAutoplay();
 
-  // Store post data in ref to avoid recreating callbacks
-  const postRef = useRef(post);
-  const isFollowingRef = useRef(isFollowing);
-  
-  useEffect(() => {
-    postRef.current = post;
-    isFollowingRef.current = isFollowing;
-  });
+ // Store post data in ref to avoid recreating callbacks
+ const postRef = useRef(post);
+ const isFollowingRef = useRef(isFollowing);
+  const voteOverrideRef = useRef(voteOverride);
+ 
+ useEffect(() => {
+   postRef.current = post;
+   isFollowingRef.current = isFollowing;
+   voteOverrideRef.current = voteOverride;
+ });
 
   // Stable callbacks that read from refs
   const handlePostPress = useCallback(() => {
@@ -58,27 +60,35 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     getHandlers().onMorePress?.(postRef.current.id);
   }, []);
 
-  const handleLikePress = useCallback(() => {
-    const p = postRef.current;
-    logPress({ name: "post_like", postId: p.id });
-    getHandlers().onLikePress?.(
-      p.id,
-      p.hasLiked ?? false,
-      p.hasDisliked ?? false,
-      p.likes
-    );
-  }, []);
+ const handleLikePress = useCallback(() => {
+   const p = postRef.current;
+   const override = voteOverrideRef.current;
+   const currentHasLiked = override?.hasLiked ?? p.hasLiked ?? false;
+   const currentHasDisliked = override?.hasDisliked ?? p.hasDisliked ?? false;
+   const currentLikes = p.likes + (override?.likeDelta ?? 0);
+   logPress({ name: "post_like", postId: p.id });
+   getHandlers().onLikePress?.(
+     p.id,
+     currentHasLiked,
+     currentHasDisliked,
+     currentLikes
+   );
+ }, []);
 
-  const handleDislikePress = useCallback(() => {
-    const p = postRef.current;
-    logPress({ name: "post_dislike", postId: p.id });
-    getHandlers().onDislikePress?.(
-      p.id,
-      p.hasLiked ?? false,
-      p.hasDisliked ?? false,
-      p.likes
-    );
-  }, []);
+ const handleDislikePress = useCallback(() => {
+   const p = postRef.current;
+   const override = voteOverrideRef.current;
+   const currentHasLiked = override?.hasLiked ?? p.hasLiked ?? false;
+   const currentHasDisliked = override?.hasDisliked ?? p.hasDisliked ?? false;
+   const currentLikes = p.likes + (override?.likeDelta ?? 0);
+   logPress({ name: "post_dislike", postId: p.id });
+   getHandlers().onDislikePress?.(
+     p.id,
+     currentHasLiked,
+     currentHasDisliked,
+     currentLikes
+   );
+ }, []);
 
   const handleCommentPress = useCallback(() => {
     const p = postRef.current;

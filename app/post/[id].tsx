@@ -326,24 +326,24 @@ export default function PostDetailScreen() {
     ),
   });
 
-  // Vote handler for comments
-  const commentVoteHandler = useVoteHandler({
-    onOptimisticUpdate: useCallback(
-      (targetId: string, result: VoteResult) => {
-        setCommentVoteOverrides((prev) => {
-          const currentDelta = prev[targetId]?.likeDelta ?? 0;
-          return {
-            ...prev,
-            [targetId]: {
-              hasLiked: result.hasLiked,
-              hasDisliked: result.hasDisliked,
-              likeDelta: currentDelta + result.likeDelta,
-            },
-          };
-        });
-      },
-      []
-    ),
+ // Vote handler for comments
+ const commentVoteHandler = useVoteHandler({
+   onOptimisticUpdate: useCallback(
+     (targetId: string, result: VoteResult) => {
+       setCommentVoteOverrides((prev) => {
+         const currentDelta = prev[targetId]?.likeDelta ?? 0;
+         return {
+           ...prev,
+           [targetId]: {
+             hasLiked: result.hasLiked,
+             hasDisliked: result.hasDisliked,
+             likeDelta: currentDelta + result.likeDelta,
+           },
+         };
+       });
+     },
+     []
+   ),
     onRollback: useCallback(
       (targetId: string, previousState: { hasLiked: boolean; hasDisliked: boolean; likes: number }) => {
         // Revert to previous state by removing the override
