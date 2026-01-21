@@ -30,6 +30,10 @@ type ScrollAnimationContextType = {
   registerScrollRef: (ref: ScrollableRef) => void;
   registerRefreshCallback: (callback: () => void) => void;
   scrollToTopAndRefresh: () => void;
+  // Following-specific
+  registerFollowingScrollRef: (ref: ScrollableRef) => void;
+  registerFollowingRefreshCallback: (callback: () => void) => void;
+  scrollToTopAndRefreshFollowing: () => void;
   // Profile-specific
   registerProfileScrollRef: (ref: ScrollableRef) => void;
   registerProfileRefreshCallback: (callback: () => void) => void;
@@ -53,6 +57,10 @@ export const ScrollAnimationProvider = ({
   // Refs for scroll-to-top functionality (home)
   const scrollRef = useRef<ScrollableRef>(null);
   const refreshCallbackRef = useRef<(() => void) | null>(null);
+
+  // Refs for following scroll-to-top functionality
+  const followingScrollRef = useRef<ScrollableRef>(null);
+  const followingRefreshCallbackRef = useRef<(() => void) | null>(null);
 
   // Refs for profile scroll-to-top functionality
   const profileScrollRef = useRef<ScrollableRef>(null);
@@ -126,6 +134,32 @@ export const ScrollAnimationProvider = ({
     }
   }, [headerTranslateY, tabBarTranslateY]);
 
+  // Following-specific register and refresh functions
+  const registerFollowingScrollRef = useCallback((ref: ScrollableRef) => {
+    followingScrollRef.current = ref;
+  }, []);
+
+  const registerFollowingRefreshCallback = useCallback((callback: () => void) => {
+    followingRefreshCallbackRef.current = callback;
+  }, []);
+
+  const scrollToTopAndRefreshFollowing = useCallback(() => {
+    headerTranslateY.value = withTiming(0, { duration: 200 });
+    tabBarTranslateY.value = withTiming(0, { duration: 200 });
+
+    if (followingScrollRef.current) {
+      if ("scrollToOffset" in followingScrollRef.current) {
+        followingScrollRef.current.scrollToOffset({ offset: 0, animated: true });
+      } else if ("scrollTo" in followingScrollRef.current) {
+        followingScrollRef.current.scrollTo({ y: 0, animated: true });
+      }
+    }
+
+    if (followingRefreshCallbackRef.current) {
+      followingRefreshCallbackRef.current();
+    }
+  }, [headerTranslateY, tabBarTranslateY]);
+
   // Profile-specific register and refresh functions
   const registerProfileScrollRef = useCallback((ref: ScrollableRef) => {
     profileScrollRef.current = ref;
@@ -167,6 +201,9 @@ export const ScrollAnimationProvider = ({
       registerScrollRef,
       registerRefreshCallback,
       scrollToTopAndRefresh,
+      registerFollowingScrollRef,
+      registerFollowingRefreshCallback,
+      scrollToTopAndRefreshFollowing,
       registerProfileScrollRef,
       registerProfileRefreshCallback,
       scrollToTopAndRefreshProfile,
@@ -180,6 +217,9 @@ export const ScrollAnimationProvider = ({
       registerScrollRef,
       registerRefreshCallback,
       scrollToTopAndRefresh,
+      registerFollowingScrollRef,
+      registerFollowingRefreshCallback,
+      scrollToTopAndRefreshFollowing,
       registerProfileScrollRef,
       registerProfileRefreshCallback,
       scrollToTopAndRefreshProfile,

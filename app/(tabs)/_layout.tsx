@@ -30,7 +30,7 @@ const PROTECTED_TABS = ["following", "create", "inbox", "profile"];
 
 const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
   const insets = useSafeAreaInsets();
-  const { tabBarAnimatedStyle, scrollToTopAndRefresh, scrollToTopAndRefreshProfile } =
+  const { tabBarAnimatedStyle, scrollToTopAndRefresh, scrollToTopAndRefreshFollowing, scrollToTopAndRefreshProfile } =
     useScrollAnimationContext();
 
   // Auth state
@@ -67,6 +67,12 @@ const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
             // If already on home tab, scroll to top and refresh
             if (isFocused && route.name === "index") {
               scrollToTopAndRefresh();
+              return;
+            }
+
+            // If already on following tab, scroll to top and refresh
+            if (isFocused && route.name === "following") {
+              scrollToTopAndRefreshFollowing();
               return;
             }
 

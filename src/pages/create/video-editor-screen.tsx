@@ -1,18 +1,19 @@
 import { Feather } from "@expo/vector-icons";
-import { Video, ResizeMode, AVPlaybackStatus } from "expo-av";
+import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
+  Platform,
   Pressable,
   View,
 } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
   runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -38,7 +39,6 @@ export function VideoEditorScreen() {
   const videoRef = useRef<Video>(null);
   
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentPosition, setCurrentPosition] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -95,11 +95,6 @@ export function VideoEditorScreen() {
       await videoRef.current.playAsync();
     }
   }, [trimStart, trimEnd]);
-
-  const handleMuteToggle = useCallback(() => {
-    triggerHaptic("light");
-    setIsMuted(prev => !prev);
-  }, []);
 
   const updateTrimFromPosition = useCallback((position: number, isLeft: boolean) => {
     const newTime = Math.round((position / TIMELINE_WIDTH) * duration);
@@ -170,21 +165,18 @@ export function VideoEditorScreen() {
     
     // Check if we need to process the video (trim or mute)
     const needsTrim = trimStart > 100 || (duration > 0 && trimEnd < duration - 100);
-    const needsProcessing = isMuted || needsTrim;
     
-    if (needsProcessing) {
+    if (needsTrim) {
       setIsProcessing(true);
       try {
         console.log("[VideoEditor] Processing video:", {
           trimStart,
           trimEnd,
           duration,
-          isMuted,
           needsTrim,
         });
         
         const result = await processVideo(videoUri, {
-          removeAudio: isMuted,
           trimStartMs: trimStart,
           trimEndMs: trimEnd,
           totalDurationMs: duration,
@@ -206,10 +198,9 @@ export function VideoEditorScreen() {
         videoHeight: videoHeight.toString(),
         trimStart: trimStart.toString(),
         trimEnd: trimEnd.toString(),
-        isMuted: isMuted ? "1" : "0",
       },
     });
-  }, [videoUri, videoWidth, videoHeight, trimStart, trimEnd, isMuted]);
+  }, [videoUri, videoWidth, videoHeight, trimStart, trimEnd]);
 
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -230,7 +221,7 @@ export function VideoEditorScreen() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <Box flex background="base" style={{ paddingTop: insets.top }}>
+      <Box flex background="base" style={{ paddingTop: Platform.OS === 'ios' ? 0 : insets.top }}>
         {/* Header */}
         <View style={styles.header}>
           <Button
@@ -273,7 +264,6 @@ export function VideoEditorScreen() {
               resizeMode={ResizeMode.CONTAIN}
               shouldPlay={false}
               isLooping={false}
-              isMuted={isMuted}
               onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
             />
             
@@ -292,28 +282,6 @@ export function VideoEditorScreen() {
 
         {/* Controls */}
         <View style={styles.controlsContainer}>
-          {/* Mute Button */}
-          <Pressable
-            onPress={handleMuteToggle}
-            style={[
-              styles.muteButton,
-              { backgroundColor: isMuted ? theme.colors.warning[500] : theme.colors.background.subtle },
-            ]}
-          >
-            <Feather
-              name={isMuted ? "volume-x" : "volume-2"}
-              size={20}
-              color={isMuted ? "#fff" : theme.colors.text.default}
-            />
-            <Text
-              size="sm"
-              weight="medium"
-              style={{ marginLeft: 8, color: isMuted ? "#fff" : theme.colors.text.default }}
-            >
-              {isMuted ? "Audio removed" : "Keep audio"}
-            </Text>
-          </Pressable>
-
           {/* Duration info */}
           <View style={styles.durationInfo}>
             <Text size="sm" mode="subtle">
@@ -382,13 +350,7 @@ export function VideoEditorScreen() {
                 Processing video...
               </Text>
               <Text size="sm" mode="subtle" style={{ marginTop: 4 }}>
-                {(() => {
-                  const needsTrim = trimStart > 100 || (duration > 0 && trimEnd < duration - 100);
-                  if (needsTrim && isMuted) return "Trimming & removing audio";
-                  if (needsTrim) return "Trimming video";
-                  if (isMuted) return "Removing audio";
-                  return "Please wait";
-                })()}
+                Trimming video
               </Text>
             </View>
           </View>

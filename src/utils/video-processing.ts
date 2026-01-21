@@ -1,10 +1,10 @@
 /**
  * Video Processing Utilities
  * 
- * Uses ffmpeg-kit-react-native to process videos before upload.
+ * Uses react-native-video-trim for video trimming and processing.
  */
 
-import { FFmpegKit, ReturnCode } from 'ffmpeg-kit-react-native';
+import { trim, isValidFile } from 'react-native-video-trim';
 
 export interface ProcessVideoOptions {
   /** Remove audio track from video */
@@ -22,17 +22,6 @@ export interface ProcessVideoResult {
   uri: string;
   /** Whether the video was modified */
   wasProcessed: boolean;
-}
-
-/**
- * Convert milliseconds to FFmpeg time format (HH:MM:SS.mmm)
- */
-function msToFFmpegTime(ms: number): string {
-  const totalSeconds = ms / 1000;
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toFixed(3).padStart(6, '0')}`;
 }
 
 /**
@@ -82,65 +71,41 @@ export async function processVideo(
   console.log("[VideoProcessing] Will trim:", shouldTrim);
   console.log("[VideoProcessing] Will remove audio:", shouldRemoveAudio);
 
-  // Generate output path in same directory as input
-  const timestamp = Date.now();
-  const inputPath = inputUri.replace('file://', '');
-  const inputDir = inputPath.substring(0, inputPath.lastIndexOf('/'));
-  const outputPath = `${inputDir}/processed_${timestamp}.mp4`;
-  const outputUri = `file://${outputPath}`;
+  // Validate the file first
+  try {
+    const validationResult = await isValidFile(inputUri);
+    const isValid = typeof validationResult === 'boolean' ? validationResult : Boolean(validationResult);
+    if (!isValid) {
+      console.error("[VideoProcessing] Invalid video file");
+      return { uri: inputUri, wasProcessed: false };
+    }
+  } catch (e) {
+    console.warn("[VideoProcessing] Could not validate file:", e);
+  }
 
   try {
-    // Build ffmpeg command
-    let command = `-i "${inputPath}"`;
+    // Use react-native-video-trim's trim function
+    const startTime = options.trimStartMs ?? 0;
+    const endTime = options.trimEndMs ?? options.totalDurationMs ?? 0;
     
-    // Add trim options if needed
-    if (shouldTrim && options.trimStartMs !== undefined && options.trimEndMs !== undefined) {
-      const startTime = msToFFmpegTime(options.trimStartMs);
-      const duration = (options.trimEndMs - options.trimStartMs) / 1000;
-      
-      // -ss: seek to start time (placed before -i for faster seeking, but we put after for accuracy)
-      // -t: duration to capture
-      command = `-ss ${startTime} -i "${inputPath}" -t ${duration.toFixed(3)}`;
-      
-      console.log("[VideoProcessing] Trim: start=", startTime, "duration=", duration);
-    }
+    console.log("[VideoProcessing] Trimming from", startTime, "to", endTime);
     
-    // Add audio removal if needed
-    if (shouldRemoveAudio) {
-      command += " -an";
-    } else {
-      command += " -c:a copy";
-    }
+    const result = await trim(inputUri, {
+      startTime,
+      endTime,
+      // Note: react-native-video-trim doesn't have a direct "removeAudio" option
+      // Audio removal would need to be handled separately if needed
+    });
     
-    // Video codec - use copy if not trimming for speed, otherwise re-encode for accuracy
-    if (shouldTrim) {
-      // Re-encode for frame-accurate trimming
-      // Using libx264 with fast preset for reasonable speed/quality
-      command += " -c:v libx264 -preset ultrafast -crf 23";
-    } else {
-      // Just copy the video stream (fast)
-      command += " -c:v copy";
-    }
+    console.log("[VideoProcessing] Success! Output:", result);
     
-    // Output file
-    command += ` -y "${outputPath}"`;
+    // The result is the output file path
+    const outputUri = typeof result === 'string' ? result : (result as any).outputPath;
     
-    console.log("[VideoProcessing] Running ffmpeg command:", command);
-
-    const session = await FFmpegKit.execute(command);
-    const returnCode = await session.getReturnCode();
-
-    if (ReturnCode.isSuccess(returnCode)) {
-      console.log("[VideoProcessing] Success! Output:", outputUri);
-      return { uri: outputUri, wasProcessed: true };
-    } else if (ReturnCode.isCancel(returnCode)) {
-      console.log("[VideoProcessing] Cancelled");
-      throw new Error("Video processing was cancelled");
-    } else {
-      const logs = await session.getAllLogsAsString();
-      console.error("[VideoProcessing] Failed:", logs);
-      throw new Error("Failed to process video");
-    }
+    return { 
+      uri: outputUri || inputUri, 
+      wasProcessed: true 
+    };
   } catch (error) {
     console.error("[VideoProcessing] Error:", error);
     // Return original file if processing fails
@@ -150,24 +115,13 @@ export async function processVideo(
 }
 
 /**
- * Remove audio from a video file
- * 
- * @param inputUri - Local file URI of the input video
- * @returns URI of the video without audio
- */
-export async function removeAudioFromVideo(inputUri: string): Promise<string> {
-  const result = await processVideo(inputUri, { removeAudio: true });
-  return result.uri;
-}
-
-/**
- * Trim and optionally mute a video
+ * Trim a video
  * 
  * @param inputUri - Local file URI of the input video
  * @param trimStartMs - Start time in milliseconds
  * @param trimEndMs - End time in milliseconds
  * @param totalDurationMs - Total video duration in milliseconds
- * @param removeAudio - Whether to remove audio
+ * @param removeAudio - Whether to remove audio (note: may not be supported)
  * @returns URI of the processed video
  */
 export async function trimVideo(
@@ -184,4 +138,16 @@ export async function trimVideo(
     removeAudio,
   });
   return result.uri;
+}
+
+/**
+ * Check if a file is a valid video
+ */
+export async function validateVideoFile(uri: string): Promise<boolean> {
+  try {
+    const result = await isValidFile(uri);
+    return typeof result === 'boolean' ? result : Boolean(result);
+  } catch {
+    return false;
+  }
 }

@@ -256,6 +256,13 @@ export async function uploadVideoToSignedUrl(
   console.log("[VideoUpload] Upload URL:", uploadUrl);
   console.log("[VideoUpload] Local URI:", localUri);
 
+  // Ensure the URI has the file:// prefix for Android
+  let normalizedUri = localUri;
+  if (!localUri.startsWith("file://") && !localUri.startsWith("content://") && !localUri.startsWith("http")) {
+    normalizedUri = `file://${localUri}`;
+    console.log("[VideoUpload] Normalized URI:", normalizedUri);
+  }
+
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
@@ -290,11 +297,11 @@ export async function uploadVideoToSignedUrl(
     xhr.open("POST", uploadUrl);
 
     const formData = new FormData();
-    const filename = localUri.split("/").pop() || "video.mp4";
+    const filename = normalizedUri.split("/").pop() || "video.mp4";
 
     // @ts-expect-error - React Native FormData accepts this format
     formData.append("file", {
-      uri: localUri,
+      uri: normalizedUri,
       type: contentType,
       name: filename,
     });

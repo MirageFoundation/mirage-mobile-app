@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "mirage",
@@ -78,6 +77,7 @@
         "react-native-svg": "15.12.1",
         "react-native-unistyles": "^3.0.21",
         "react-native-url-polyfill": "^3.0.0",
+        "react-native-video-trim": "^6.0.13",
         "react-native-vision-camera": "^4.7.3",
         "react-native-wagmi-charts": "^2.8.3",
         "react-native-web": "~0.21.0",
@@ -1689,6 +1689,8 @@
     "react-native-unistyles": ["react-native-unistyles@3.0.21", "", { "peerDependencies": { "@react-native/normalize-colors": "*", "react": "*", "react-native": ">=0.76.0", "react-native-edge-to-edge": "*", "react-native-nitro-modules": "*", "react-native-reanimated": "*" }, "optionalPeers": ["react-native-reanimated"] }, "sha512-FyGCPkWkqaw0oV0Qqw4HJc/KLPNl0vdojvZGIrDgu1kB5mZCKHROW1/Zem/B2+MsbfdAS+MVCs7Gwr4KC3kjzg=="],
 
     "react-native-url-polyfill": ["react-native-url-polyfill@3.0.0", "", { "dependencies": { "whatwg-url-without-unicode": "8.0.0-3" }, "peerDependencies": { "react-native": "*" } }, "sha512-aA5CiuUCUb/lbrliVCJ6lZ17/RpNJzvTO/C7gC/YmDQhTUoRD5q5HlJfwLWcxz4VgAhHwXKzhxH+wUN24tAdqg=="],
+
+    "react-native-video-trim": ["react-native-video-trim@6.0.13", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-vatJM2RZ6ME4JFNDxrhO+2zPdr6nPVa0BbtxBXoAXXxjbF62o+R2GSHoi6uNihCyY77Z6K1inTD/GcDdtd//LQ=="],
 
     "react-native-vision-camera": ["react-native-vision-camera@4.7.3", "", { "peerDependencies": { "@shopify/react-native-skia": "*", "react": "*", "react-native": "*", "react-native-reanimated": "*", "react-native-worklets-core": "*" }, "optionalPeers": ["@shopify/react-native-skia", "react-native-reanimated", "react-native-worklets-core"] }, "sha512-g1/neOyjSqn1kaAa2FxI/qp5KzNvPcF0bnQw6NntfbxH6tm0+8WFZszlgb5OV+iYlB6lFUztCbDtyz5IpL47OA=="],
 

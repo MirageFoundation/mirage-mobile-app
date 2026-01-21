@@ -117,11 +117,12 @@ export function CreateScreen() {
   const screenWidth = Dimensions.get("window").width;
   const selectedCommunity = draft.community;
 
-  const canPost = useMemo(() => {
-    const hasTitleContent = draft.title.trim().length > 0;
-    const videoStillUploading = draft.attachmentType === "video" && isUploadingVideo;
-    return hasTitleContent && !videoStillUploading;
-  }, [draft.title, draft.attachmentType, isUploadingVideo]);
+ const canPost = useMemo(() => {
+   const hasTitleContent = draft.title.trim().length > 0;
+    const hasCommunity = draft.community !== null;
+   const videoStillUploading = draft.attachmentType === "video" && isUploadingVideo;
+    return hasTitleContent && hasCommunity && !videoStillUploading;
+  }, [draft.title, draft.community, draft.attachmentType, isUploadingVideo]);
 
   const hasAttachment = useMemo(() => {
     return (
@@ -495,6 +496,17 @@ export function CreateScreen() {
               <Feather name="x" size={18} color="#fff" />
             </View>
           </Pressable>
+          
+          {/* Mute/Unmute Button */}
+          <Pressable
+            onPress={() => setIsVideoMuted(prev => !prev)}
+            style={styles.videoMuteButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <View style={styles.muteButtonInner}>
+              <Feather name={isVideoMuted ? "volume-x" : "volume-2"} size={16} color="#fff" />
+            </View>
+          </Pressable>
         </View>
       </Animated.View>
     );
@@ -741,8 +753,7 @@ export function CreateScreen() {
               <View style={[styles.videoPlayerWrapper, { height: 280 }]}>
                 <Image
                   source={{ uri: draft.mediaUris[0] }}
-                  style={styles.videoPlayer}
-                  contentFit="contain"
+                  style={[styles.videoPlayer, { resizeMode: "contain" }]}
                 />
                 
                 {/* Remove Button */}
@@ -1320,5 +1331,18 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
+  },
+  videoMuteButton: {
+    position: "absolute",
+    bottom: 12,
+    right: 12,
+  },
+  muteButtonInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 }));

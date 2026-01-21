@@ -1,12 +1,11 @@
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { FlatList } from "react-native";
 import {
   ActivityIndicator,
-  FlatList,
   RefreshControl,
   View,
 } from "react-native";
-import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -14,16 +13,21 @@ import {
   transformApiPosts,
   useInfinitePosts,
   useToggleFollowUser,
+  useToggleFollowTopic,
   useUserFollowed,
 } from "@/src/api";
 import {
+  ConfirmationPopup,
   FeedHeader,
-  PostCardItem,
   PostCardSkeletonList,
+  PostOptionsSheet,
+  type PostOptionsSheetRef,
+  ReportSheet,
+  type ReportSheetRef,
   type Post,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
-import { useAuthGuard, useVoteHandler, type VoteResult } from "@/src/hooks";
+import { useAuthGuard, useBlockHandler, useReportHandler, useDeleteHandler, useVoteHandler, type VoteResult } from "@/src/hooks";
 import {
   HEADER_HEIGHT,
   TAB_BAR_HEIGHT,
@@ -32,12 +36,12 @@ import {
 import { useToast } from "@/src/providers/toast-provider";
 import {
   getAllowedTagsFromContentTypes,
-  getShareBaseUrl,
   useAuthStore,
+  useContentModerationStore,
   usePreferencesStore,
 } from "@/src/stores";
-
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Post>);
+import { HomePostList } from "./home/home-post-list";
+import { useHomePostCardStore } from "./home/home-post-card-store";
 
 export function FollowingScreen() {
   const { theme } = useUnistyles();
@@ -46,10 +50,11 @@ export function FollowingScreen() {
   const {
     scrollHandler,
     headerAnimatedStyle,
-    registerScrollRef,
-    registerRefreshCallback,
+    registerFollowingScrollRef,
+    registerFollowingRefreshCallback,
   } = useScrollAnimationContext();
   const { requireAuth, isLoggedIn } = useAuthGuard();
+  const toast = useToast();
 
   const currentUser = useAuthStore((s) => s.user);
   const selectedContentTypes = usePreferencesStore(
@@ -65,6 +70,23 @@ export function FollowingScreen() {
   // Ref for FlatList to enable scroll-to-top
   const flatListRef = useRef<FlatList<Post>>(null);
 
+  // Track user-initiated refresh (tab press or pull-to-refresh)
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+
+  // Refs for sheets
+  const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
+  const reportSheetRef = useRef<ReportSheetRef>(null);
+
+  // Selected post for options
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+
+  // Global content moderation state
+  const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
+  const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
+  const hidePost = useContentModerationStore((s) => s.hidePost);
+  const unhidePost = useContentModerationStore((s) => s.unhidePost);
+  const blockUser = useContentModerationStore((s) => s.blockUser);
+
   // Fetch user's followed list (for showing "Following" status on posts)
   const { data: followedData } = useUserFollowed();
   const followedUsers = useMemo(
@@ -72,19 +94,30 @@ export function FollowingScreen() {
     [followedData]
   );
 
+  const followedTopics = useMemo(
+    () => followedData?.followed_topics ?? [],
+    [followedData]
+  );
+
   // Follow/unfollow mutation
   const toggleFollowMutation = useToggleFollowUser();
+  const toggleFollowTopicMutation = useToggleFollowTopic();
+  const toggleFollowAsyncRef = useRef(toggleFollowMutation.mutateAsync);
+
+  useEffect(() => {
+    toggleFollowAsyncRef.current = toggleFollowMutation.mutateAsync;
+  }, [toggleFollowMutation.mutateAsync]);
 
   // Track which users are currently being followed/unfollowed (for loading state)
   const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(
     new Set()
   );
+  const followLoadingUsersRef = useRef<Set<string>>(new Set());
 
   // Fetch posts from API
   const {
     data,
     isLoading,
-    isRefetching,
     isError,
     error,
     refetch,
@@ -112,58 +145,38 @@ export function FollowingScreen() {
     }
     const uniquePosts = Array.from(uniquePostsMap.values());
 
-    return transformApiPosts(uniquePosts, { followedUsers });
-  }, [data, followedUsers]);
+    const transformedPosts = transformApiPosts(uniquePosts, { followedUsers });
+
+    // Filter out hidden posts and posts from blocked users
+    return transformedPosts.filter(
+      (post) =>
+        !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id)
+    );
+  }, [data, followedUsers, hiddenPostIds, blockedUserIds]);
 
   // Revealed posts for content warnings
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
-  // Optimistic updates for votes (local state overlay)
-  const [voteOverrides, setVoteOverrides] = useState<
-    Record<
-      string,
-      { hasLiked?: boolean; hasDisliked?: boolean; likeDelta?: number }
-    >
-  >({});
+  // Vote overrides stored in the home post card store (shared with home)
+  const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
+  const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
 
   // Vote handler with toast notifications
-  const voteHandler = useVoteHandler({
+  const { handleUpvote, handleDownvote } = useVoteHandler({
     onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
-      setVoteOverrides((prev) => {
-        const currentDelta = prev[targetId]?.likeDelta ?? 0;
-        return {
-          ...prev,
-          [targetId]: {
-            hasLiked: result.hasLiked,
-            hasDisliked: result.hasDisliked,
-            likeDelta: currentDelta + result.likeDelta,
-          },
-        };
+      setVoteOverride(targetId, {
+        hasLiked: result.hasLiked,
+        hasDisliked: result.hasDisliked,
+        likeDelta: result.likeDelta,
       });
-    }, []),
-    onRollback: useCallback((targetId: string) => {
-      // Revert to previous state by removing the override
-      setVoteOverrides((prev) => {
-        const newOverrides = { ...prev };
-        delete newOverrides[targetId];
-        return newOverrides;
-      });
-    }, []),
+    }, [setVoteOverride]),
+    onRollback: useCallback(
+      (targetId: string) => {
+        clearVoteOverride(targetId);
+      },
+      [clearVoteOverride]
+    ),
   });
-
-  const postsWithOverrides = useMemo(() => {
-    if (!posts.length) return posts;
-    return posts.map((post) => {
-      const override = voteOverrides[post.id];
-      if (!override) return post;
-      return {
-        ...post,
-        likes: post.likes + (override.likeDelta ?? 0),
-        hasLiked: override.hasLiked ?? post.hasLiked,
-        hasDisliked: override.hasDisliked ?? post.hasDisliked,
-      };
-    });
-  }, [posts, voteOverrides]);
 
   const handlePostPress = useCallback(
     (postId: string) => {
@@ -173,48 +186,27 @@ export function FollowingScreen() {
   );
 
   const handleAuthorPress = useCallback((authorId: string) => {
-    // TODO: Navigate to user profile
     console.log("Navigate to author:", authorId);
   }, []);
 
+  // Create a ref map for posts by ID for quick lookup
+  const postsByIdRef = useRef<Map<string, Post>>(new Map());
+
+  useEffect(() => {
+    const map = new Map<string, Post>();
+    for (const post of posts) {
+      map.set(post.id, post);
+    }
+    postsByIdRef.current = map;
+  }, [posts]);
+
   const handleMorePress = useCallback((postId: string) => {
-    // TODO: Show post options sheet
-    console.log("More options for post:", postId);
+    const post = postsByIdRef.current.get(postId);
+    if (post) {
+      setSelectedPost(post);
+      postOptionsSheetRef.current?.present();
+    }
   }, []);
-
-  const handleLikePress = useCallback(
-    (
-      postId: string,
-      currentlyLiked: boolean,
-      currentlyDisliked: boolean,
-      currentLikes: number
-    ) => {
-      voteHandler.handleUpvote(
-        postId,
-        currentlyLiked,
-        currentlyDisliked,
-        currentLikes
-      );
-    },
-    [voteHandler]
-  );
-
-  const handleDislikePress = useCallback(
-    (
-      postId: string,
-      currentlyLiked: boolean,
-      currentlyDisliked: boolean,
-      currentLikes: number
-    ) => {
-      voteHandler.handleDownvote(
-        postId,
-        currentlyLiked,
-        currentlyDisliked,
-        currentLikes
-      );
-    },
-    [voteHandler]
-  );
 
   const handleCommentPress = useCallback(
     (postId: string) => {
@@ -223,7 +215,60 @@ export function FollowingScreen() {
     [router]
   );
 
-  const toast = useToast();
+  // Block handler with API integration
+  const blockHandler = useBlockHandler({});
+
+  // Report handler with API integration
+  const reportHandler = useReportHandler({});
+
+  // Delete handler with API integration
+  const deleteHandler = useDeleteHandler({
+    onRollback: (targetId, targetType) => {
+      if (targetType === "post") {
+        unhidePost(targetId);
+      }
+    },
+  });
+
+  // Optimistic confirm handlers
+  const handleConfirmBlock = useCallback(() => {
+    const pending = blockHandler.pendingBlock;
+    if (pending) {
+      if (pending.type === "user") {
+        blockUser(pending.id);
+      } else if (pending.type === "post") {
+        hidePost(pending.id);
+      }
+    }
+    blockHandler.confirmBlock();
+  }, [blockHandler, blockUser, hidePost]);
+
+  const handleConfirmDelete = useCallback(() => {
+    const pending = deleteHandler.pendingTarget;
+    if (pending) {
+      hidePost(pending.id);
+    }
+    deleteHandler.confirmDelete();
+  }, [deleteHandler, hidePost]);
+
+  const handleReportSubmitWithOptimistic = useCallback(
+    (reason: string) => {
+      const pending = reportHandler.pendingTarget;
+      if (pending) {
+        hidePost(pending.id);
+      }
+      reportSheetRef.current?.dismiss();
+      reportHandler.submitReport(reason);
+    },
+    [reportHandler, hidePost]
+  );
+
+  // Sync report sheet with hook state
+  useEffect(() => {
+    if (reportHandler.showReportSheet) {
+      reportSheetRef.current?.present();
+    }
+  }, [reportHandler.showReportSheet]);
 
   const handleFollowPress = useCallback(
     (
@@ -231,88 +276,253 @@ export function FollowingScreen() {
       authorUsername: string,
       isCurrentlyFollowing: boolean
     ) => {
-      // Prevent double-clicks while loading
-      if (followLoadingUsers.has(authorId)) {
+      if (followLoadingUsersRef.current.has(authorId)) {
         return;
       }
 
       requireAuth(async () => {
-        // Add to loading state
-        setFollowLoadingUsers((prev) => new Set(prev).add(authorId));
-
         const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
         const actionPast = isCurrentlyFollowing ? "Unfollowed" : "Followed";
 
-        // Show initial loading toast
         const toastId = toast.loading(
           `${action} @${authorUsername}`,
           "Computing proof of work..."
         );
 
-        try {
-          await toggleFollowMutation.mutateAsync({
-            userAddress: authorId,
-            isCurrentlyFollowing,
-          });
+        setTimeout(async () => {
+          setFollowLoadingUsers((prev) => new Set(prev).add(authorId));
 
-          // Update to success
-          toast.update(toastId, {
-            type: "success",
-            title: `${actionPast} @${authorUsername}`,
-            description: undefined,
-            duration: 3000,
-          });
+          try {
+            await toggleFollowAsyncRef.current({
+              userAddress: authorId,
+              isCurrentlyFollowing,
+            });
 
-          // Auto dismiss after duration
-          setTimeout(() => toast.dismiss(toastId), 3000);
-        } catch (error: unknown) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          const isAlreadyFollowed =
-            errorMessage.includes("already followed") ||
-            errorMessage.includes("400");
-          const isNotFollowing =
-            errorMessage.includes("not following") ||
-            errorMessage.includes("not in followed");
-
-          if (isAlreadyFollowed) {
             toast.update(toastId, {
               type: "success",
-              title: `Already following @${authorUsername}`,
+              title: `${actionPast} @${authorUsername}`,
               description: undefined,
               duration: 3000,
             });
             setTimeout(() => toast.dismiss(toastId), 3000);
-          } else if (isNotFollowing) {
+          } catch (error: unknown) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
+            const isNotFollowing =
+              errorMessage.toLowerCase().includes("not following") ||
+              errorMessage.includes("not in followed");
+
+            if (isAlreadyFollowed) {
+              toast.update(toastId, {
+                type: "success",
+                title: `Already following @${authorUsername}`,
+                description: undefined,
+                duration: 3000,
+              });
+              setTimeout(() => toast.dismiss(toastId), 3000);
+            } else if (isNotFollowing) {
+              toast.update(toastId, {
+                type: "success",
+                title: `Already not following @${authorUsername}`,
+                description: undefined,
+                duration: 3000,
+              });
+              setTimeout(() => toast.dismiss(toastId), 3000);
+            } else {
+              console.error("Follow/unfollow failed:", error);
+              toast.update(toastId, {
+                type: "error",
+                title: `Failed to ${action.toLowerCase()} @${authorUsername}`,
+                description: "Please try again",
+                duration: 4000,
+              });
+              setTimeout(() => toast.dismiss(toastId), 4000);
+            }
+          } finally {
+            setFollowLoadingUsers((prev) => {
+              const newSet = new Set(prev);
+              newSet.delete(authorId);
+              return newSet;
+            });
+          }
+        }, 0);
+      });
+    },
+    [requireAuth, toast]
+  );
+
+  // Post options handlers
+  const handleReport = useCallback(() => {
+    if (selectedPost) {
+      reportHandler.requestReport(selectedPost.id, "post");
+    }
+  }, [selectedPost, reportHandler]);
+
+  const handleBlockUser = useCallback(() => {
+    if (selectedPost) {
+      blockHandler.requestBlockUser(
+        selectedPost.author.id,
+        selectedPost.author.username
+      );
+    }
+  }, [selectedPost, blockHandler]);
+
+  const handleHidePost = useCallback(() => {
+    if (selectedPost) {
+      blockHandler.requestBlockPost(selectedPost.id);
+    }
+  }, [selectedPost, blockHandler]);
+
+  const handleDeletePost = useCallback(() => {
+    if (selectedPost) {
+      deleteHandler.requestDelete(selectedPost.id, "post");
+    }
+  }, [selectedPost, deleteHandler]);
+
+  const handleSavePost = useCallback(() => {
+    console.log("Save post:", selectedPost?.id);
+    toast.success("Post saved", "You can find it in your saved items.");
+  }, [selectedPost?.id, toast]);
+
+  const handleCopyText = useCallback(() => {
+    toast.success("Copied", "Text copied to clipboard.");
+  }, [toast]);
+
+  const handleFollowTopic = useCallback(() => {
+    if (!selectedPost?.topic) return;
+
+    const topic = selectedPost.topic;
+    const isCurrentlyFollowed = followedTopics.includes(topic);
+
+    requireAuth(async () => {
+      const action = isCurrentlyFollowed ? "Unfollowing" : "Following";
+      const actionPast = isCurrentlyFollowed ? "Unfollowed" : "Now following";
+
+      const toastId = toast.loading(
+        `${action} #${topic}`,
+        "Computing proof of work..."
+      );
+
+      setTimeout(async () => {
+        try {
+          await toggleFollowTopicMutation.mutateAsync({
+            topic,
+            isCurrentlyFollowing: isCurrentlyFollowed,
+          });
+
+          toast.update(toastId, {
+            type: "success",
+            title: `${actionPast} #${topic}`,
+            description: undefined,
+            duration: 3000,
+          });
+          setTimeout(() => toast.dismiss(toastId), 3000);
+        } catch (error: unknown) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
+          const isNotFollowing =
+            errorMessage.toLowerCase().includes("not following") ||
+            errorMessage.includes("not in followed");
+
+          if (isAlreadyFollowed || isNotFollowing) {
             toast.update(toastId, {
               type: "success",
-              title: `Already not following @${authorUsername}`,
+              title: isAlreadyFollowed
+                ? `Already following #${topic}`
+                : `Already not following #${topic}`,
               description: undefined,
               duration: 3000,
             });
             setTimeout(() => toast.dismiss(toastId), 3000);
           } else {
-            console.error("Follow/unfollow failed:", error);
+            console.error("Follow/unfollow topic failed:", error);
             toast.update(toastId, {
               type: "error",
-              title: `Failed to ${action.toLowerCase()} @${authorUsername}`,
+              title: `Failed to ${action.toLowerCase()} #${topic}`,
               description: "Please try again",
               duration: 4000,
             });
             setTimeout(() => toast.dismiss(toastId), 4000);
           }
-        } finally {
-          // Remove from loading state
-          setFollowLoadingUsers((prev) => {
-            const newSet = new Set(prev);
-            newSet.delete(authorId);
-            return newSet;
-          });
         }
+      }, 0);
+    });
+  }, [selectedPost?.topic, followedTopics, toggleFollowTopicMutation, toast, requireAuth]);
+
+  const handleFollowUserFromSheet = useCallback(() => {
+    if (!selectedPost) return;
+    const authorId = selectedPost.author.id;
+    const authorUsername = selectedPost.author.username;
+    const isCurrentlyFollowing = followedUsers.includes(authorId);
+    handleFollowPress(authorId, authorUsername, isCurrentlyFollowing);
+  }, [selectedPost, followedUsers, handleFollowPress]);
+
+  const handleFollowTopicFromCard = useCallback(
+    (topic: string, isCurrentlyFollowed: boolean) => {
+      requireAuth(async () => {
+        const action = isCurrentlyFollowed ? "Unfollowing" : "Following";
+        const actionPast = isCurrentlyFollowed ? "Unfollowed" : "Now following";
+
+        const toastId = toast.loading(
+          `${action} #${topic}`,
+          "Computing proof of work..."
+        );
+
+        setTimeout(async () => {
+          try {
+            await toggleFollowTopicMutation.mutateAsync({
+              topic,
+              isCurrentlyFollowing: isCurrentlyFollowed,
+            });
+
+            toast.update(toastId, {
+              type: "success",
+              title: `${actionPast} #${topic}`,
+              description: undefined,
+              duration: 3000,
+            });
+            setTimeout(() => toast.dismiss(toastId), 3000);
+          } catch (error: unknown) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
+            const isNotFollowing =
+              errorMessage.toLowerCase().includes("not following") ||
+              errorMessage.includes("not in followed");
+
+            if (isAlreadyFollowed || isNotFollowing) {
+              toast.update(toastId, {
+                type: "success",
+                title: isAlreadyFollowed
+                  ? `Already following #${topic}`
+                  : `Already not following #${topic}`,
+                description: undefined,
+                duration: 3000,
+              });
+              setTimeout(() => toast.dismiss(toastId), 3000);
+            } else {
+              console.error("Follow/unfollow topic failed:", error);
+              toast.update(toastId, {
+                type: "error",
+                title: `Failed to ${action.toLowerCase()} #${topic}`,
+                description: "Please try again",
+                duration: 4000,
+              });
+              setTimeout(() => toast.dismiss(toastId), 4000);
+            }
+          }
+        }, 0);
       });
     },
-    [requireAuth, toggleFollowMutation, followLoadingUsers, toast]
+    [requireAuth, toast, toggleFollowTopicMutation]
   );
+
+  const handleShowFewer = useCallback(() => {
+    console.log("Show fewer posts like:", selectedPost?.id);
+    toast.success("Got it", "We'll show fewer posts like this.");
+  }, [selectedPost?.id, toast]);
 
   const handleRevealContent = useCallback((postId: string) => {
     setRevealedPosts((prev) => {
@@ -322,60 +532,32 @@ export function FollowingScreen() {
     });
   }, []);
 
-  const handleRefresh = useCallback(() => {
-    refetch();
+  const handleRefresh = useCallback(async () => {
+    setIsManualRefreshing(true);
+    try {
+      await refetch();
+    } catch (error) {
+      console.error("Failed to refresh following feed:", error);
+    } finally {
+      setIsManualRefreshing(false);
+    }
   }, [refetch]);
 
   // Register scroll ref and refresh callback for tab press scroll-to-top
   useEffect(() => {
-    registerScrollRef(flatListRef.current);
-    registerRefreshCallback(handleRefresh);
-  }, [registerScrollRef, registerRefreshCallback, handleRefresh]);
+    registerFollowingScrollRef(flatListRef.current);
+    registerFollowingRefreshCallback(handleRefresh);
+  }, [registerFollowingScrollRef, registerFollowingRefreshCallback, handleRefresh]);
+
+  useEffect(() => {
+    followLoadingUsersRef.current = followLoadingUsers;
+  }, [followLoadingUsers]);
 
   const handleEndReached = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) {
       fetchNextPage();
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
-
-  const renderPost = useCallback(
-    ({ item: post }: { item: Post }) => {
-      const isFollowLoading = followLoadingUsers.has(post.author.id);
-
-      return (
-        <PostCardItem
-          post={post}
-          isOwnPost={currentUser?.id === post.author.id}
-          onPostPress={handlePostPress}
-          onAuthorPress={handleAuthorPress}
-          onMorePress={handleMorePress}
-          onLikePress={handleLikePress}
-          onDislikePress={handleDislikePress}
-          onCommentPress={handleCommentPress}
-          onFollowPress={handleFollowPress}
-          onRevealContent={handleRevealContent}
-          contentRevealed={revealedPosts.has(post.id)}
-          followLoading={isFollowLoading}
-          shareUrl={`${getShareBaseUrl(shareServer)}/post/${post.id}`}
-        />
-      );
-    },
-    [
-      currentUser,
-      followLoadingUsers,
-      handlePostPress,
-      handleAuthorPress,
-      handleMorePress,
-      handleLikePress,
-      handleDislikePress,
-      handleCommentPress,
-      handleFollowPress,
-      handleRevealContent,
-      revealedPosts,
-    ]
-  );
-
-  const keyExtractor = useCallback((item: Post) => item.id, []);
 
   const ListEmptyComponent = useCallback(() => {
     if (isLoading) {
@@ -433,7 +615,7 @@ export function FollowingScreen() {
   }, [isLoading, isLoggedIn, isError, error]);
 
   const ListHeaderComponent = useCallback(() => {
-    if (!isRefetching) return null;
+    if (!isManualRefreshing) return null;
     return (
       <Box center p="md">
         <ActivityIndicator
@@ -442,7 +624,7 @@ export function FollowingScreen() {
         />
       </Box>
     );
-  }, [isRefetching, theme.colors.brand]);
+  }, [isManualRefreshing, theme.colors.background.emphasis]);
 
   const ListFooterComponent = useCallback(() => {
     if (!isFetchingNextPage) return null;
@@ -457,10 +639,104 @@ export function FollowingScreen() {
     () => ({
       paddingTop: insets.top + HEADER_HEIGHT,
       paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16,
-      flexGrow: postsWithOverrides.length === 0 ? 1 : undefined,
+      flexGrow: posts.length === 0 ? 1 : undefined,
     }),
-    [insets.bottom, insets.top, postsWithOverrides.length]
+    [insets.bottom, insets.top, posts.length]
   );
+
+  const refreshControl = useMemo(
+    () => (
+      <RefreshControl
+        refreshing={false}
+        onRefresh={handleRefresh}
+        tintColor="transparent"
+        progressViewOffset={insets.top + HEADER_HEIGHT}
+      />
+    ),
+    [handleRefresh, insets.top]
+  );
+
+  // Set up store state (same pattern as home screen)
+  const setCurrentUserId = useHomePostCardStore((state) => state.setCurrentUserId);
+  const setFollowedUsers = useHomePostCardStore((state) => state.setFollowedUsers);
+  const setFollowedTopicsStore = useHomePostCardStore((state) => state.setFollowedTopics);
+  const setFollowLoadingUsersStore = useHomePostCardStore((state) => state.setFollowLoadingUsers);
+  const setRevealedPostsStore = useHomePostCardStore((state) => state.setRevealedPosts);
+  const setHandlers = useHomePostCardStore((state) => state.setHandlers);
+  const setShareServer = useHomePostCardStore((state) => state.setShareServer);
+
+  const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
+  const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
+
+  useEffect(() => {
+    setCurrentUserId(currentUser?.id);
+  }, [currentUser?.id, setCurrentUserId]);
+
+  useEffect(() => {
+    setFollowedUsers(followedUsersSet);
+  }, [followedUsersSet, setFollowedUsers]);
+
+  useEffect(() => {
+    setFollowedTopicsStore(followedTopicsSet);
+  }, [followedTopicsSet, setFollowedTopicsStore]);
+
+  useEffect(() => {
+    setFollowLoadingUsersStore(followLoadingUsers);
+  }, [followLoadingUsers, setFollowLoadingUsersStore]);
+
+  useEffect(() => {
+    setRevealedPostsStore(revealedPosts);
+  }, [revealedPosts, setRevealedPostsStore]);
+
+  useEffect(() => {
+    setShareServer(shareServer);
+  }, [shareServer, setShareServer]);
+
+  // Store refs to latest handlers
+  const handlersRef = useRef({
+    handlePostPress,
+    handleAuthorPress,
+    handleMorePress,
+    handleUpvote,
+    handleDownvote,
+    handleCommentPress,
+    handleFollowPress,
+    handleFollowTopicFromCard,
+    handleRevealContent,
+  });
+
+  useEffect(() => {
+    handlersRef.current = {
+      handlePostPress,
+      handleAuthorPress,
+      handleMorePress,
+      handleUpvote,
+      handleDownvote,
+      handleCommentPress,
+      handleFollowPress,
+      handleFollowTopicFromCard,
+      handleRevealContent,
+    };
+  });
+
+  // Set handlers ONCE on mount with stable wrapper functions
+  useEffect(() => {
+    setHandlers({
+      onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
+      onAuthorPress: (authorId) => handlersRef.current.handleAuthorPress(authorId),
+      onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
+      onLikePress: (postId, liked, disliked, likes) =>
+        handlersRef.current.handleUpvote(postId, liked, disliked, likes),
+      onDislikePress: (postId, liked, disliked, likes) =>
+        handlersRef.current.handleDownvote(postId, liked, disliked, likes),
+      onCommentPress: (postId) => handlersRef.current.handleCommentPress(postId),
+      onFollowUser: (authorId, username, isFollowing) =>
+        handlersRef.current.handleFollowPress(authorId, username, isFollowing),
+      onFollowTopic: (topic, isFollowed) =>
+        handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
+      onRevealContent: (postId) => handlersRef.current.handleRevealContent(postId),
+    });
+  }, [setHandlers]);
 
   return (
     <Box flex background="base">
@@ -470,36 +746,80 @@ export function FollowingScreen() {
       {/* Animated Header */}
       <FeedHeader title="Following" animatedStyle={headerAnimatedStyle} />
 
-      {/* Scrollable Feed */}
-      <AnimatedFlatList
+      {/* Scrollable Feed - using HomePostList for consistency with home screen */}
+      <HomePostList
         ref={flatListRef}
-        data={postsWithOverrides}
-        renderItem={renderPost}
-        keyExtractor={keyExtractor}
-        onScroll={scrollHandler}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}
+        data={posts}
         contentContainerStyle={listContentStyle}
+        onScroll={scrollHandler}
         ListHeaderComponent={ListHeaderComponent}
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}
-        refreshControl={
-          <RefreshControl
-            refreshing={false}
-            onRefresh={handleRefresh}
-            tintColor="transparent"
-            progressViewOffset={insets.top + HEADER_HEIGHT}
-          />
-        }
+        refreshControl={refreshControl}
         onEndReached={handleEndReached}
-        onEndReachedThreshold={0.5}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        // Performance optimizations
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={5}
-        windowSize={7}
-        initialNumToRender={5}
+        onEndReachedThreshold={0.3}
+      />
+
+      {/* Post Options Sheet */}
+      <PostOptionsSheet
+        ref={postOptionsSheetRef}
+        post={selectedPost}
+        isOwnPost={currentUser?.id === selectedPost?.author.id}
+        isTopicFollowed={
+          selectedPost?.topic
+            ? followedTopics.includes(selectedPost.topic)
+            : false
+        }
+        isFollowingUser={
+          selectedPost?.author.id
+            ? followedUsers.includes(selectedPost.author.id)
+            : false
+        }
+        onShowFewer={handleShowFewer}
+        onFollowUser={handleFollowUserFromSheet}
+        onFollowTopic={handleFollowTopic}
+        onSave={handleSavePost}
+        onCopyText={handleCopyText}
+        onReport={handleReport}
+        onBlockUser={handleBlockUser}
+        onHidePost={handleHidePost}
+        onDelete={handleDeletePost}
+        onDismiss={() => setSelectedPost(null)}
+      />
+
+      {/* Report Sheet */}
+      <ReportSheet
+        ref={reportSheetRef}
+        targetType="post"
+        onSubmit={handleReportSubmitWithOptimistic}
+        onDismiss={reportHandler.cancelReport}
+        isLoading={reportHandler.isReporting}
+      />
+
+      {/* Block User Confirmation Popup */}
+      <ConfirmationPopup
+        visible={blockHandler.showConfirmation}
+        title={`Block ${blockHandler.pendingBlock?.label || "user"}?`}
+        message="You won't see their content anymore."
+        description="You can unblock them later from settings."
+        icon="ban-outline"
+        confirmText="Block"
+        isDestructive
+        onConfirm={handleConfirmBlock}
+        onCancel={blockHandler.cancelBlock}
+      />
+
+      {/* Delete Post Confirmation Popup */}
+      <ConfirmationPopup
+        visible={deleteHandler.showConfirmation}
+        title="Delete this post?"
+        message="This action cannot be undone."
+        description="Your post will be permanently removed."
+        icon="trash-outline"
+        confirmText="Delete"
+        isDestructive
+        onConfirm={handleConfirmDelete}
+        onCancel={deleteHandler.cancelDelete}
       />
     </Box>
   );

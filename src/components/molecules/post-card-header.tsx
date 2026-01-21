@@ -100,7 +100,12 @@ export const PostCardHeader = memo(function PostCardHeader({
       <View style={styles.headerActions}>
         {!isOwnPost && showFollowButton && (
           <Menu>
-            <MenuTrigger>
+            <MenuTrigger
+              customStyles={{
+                triggerOuterWrapper: { padding: 4 },
+                triggerTouchable: { hitSlop: { top: 12, bottom: 12, left: 12, right: 12 } },
+              }}
+            >
               <View
                 style={[
                   styles.followButton,
@@ -194,7 +199,7 @@ export const PostCardHeader = memo(function PostCardHeader({
           </Menu>
         )}
         <Pressable
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
           onPress={handleMorePress}
           style={styles.moreButton}
         >
@@ -228,14 +233,14 @@ const styles = StyleSheet.create((theme) => ({
   headerActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.xs,
+    gap: theme.spacing.sm,
   },
   followButton: {
     alignItems: "center",
     justifyContent: "center",
     borderRadius: theme.radius.full,
     minWidth: 54,
-    height: 26,
+    height: 28,
     paddingHorizontal: 10,
     borderWidth: 1,
   },
@@ -248,7 +253,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   moreButton: {
     width: 32,
-    height: 32,
+    height: 34,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: theme.radius.full,
