@@ -3,8 +3,10 @@ import {
   EvilIcons,
   Feather,
 } from "@expo/vector-icons";
+import { ResizeMode, Video } from "expo-av";
+import { Image as ExpoImage } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -23,7 +25,10 @@ import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { uploadImageAndGetUrl } from "@/src/api/read/hooks/use-upload-media";
+import {
+  uploadImageAndGetUrl,
+  useUploadVideo,
+} from "@/src/api/read/hooks/use-upload-media";
 import { usePost, type CreatePostMutationInput } from "@/src/api/write";
 import type { ContentTag } from "@/src/api/write/endpoints/posts";
 import { Avatar } from "@/src/components/atoms";
@@ -49,6 +54,14 @@ const CONTENT_WARNING_OPTIONS: { value: ContentTag; label: string }[] = [
 export function CreateScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
+  
+  // Get params from video editor
+  const params = useLocalSearchParams<{
+    videoUri?: string;
+    videoWidth?: string;
+    videoHeight?: string;
+    isMuted?: string;
+  }>();
 
   const { draft, updateDraft, clearDraft, setAttachment, removeAttachment } =
     useDraftStore();
@@ -56,6 +69,7 @@ export function CreateScreen() {
   const titleInputRef = useRef<TextInput>(null);
   const bodyInputRef = useRef<TextInput>(null);
   const linkInputRef = useRef<TextInput>(null);
+  const videoRef = useRef<Video>(null);
 
   const [showCommunityModal, setShowCommunityModal] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
@@ -70,6 +84,33 @@ export function CreateScreen() {
   const [showContentWarningModal, setShowContentWarningModal] = useState(false);
   const [selectedContentWarning, setSelectedContentWarning] = useState<ContentTag>("");
 
+  const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
+  const [videoDimensions, setVideoDimensions] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  const [isVideoMuted, setIsVideoMuted] = useState(false);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+
+  const {
+    uploadVideo,
+    isUploading: isUploadingVideo,
+    progress: videoUploadProgress,
+    cancelUpload: cancelVideoUpload,
+    reset: resetVideoUpload,
+  } = useUploadVideo({
+    onSuccess: (result) => {
+      console.log("[CreatePost] Video uploaded:", result.url);
+      setUploadedVideoUrl(result.url);
+      triggerHaptic("success");
+    },
+    onError: (error) => {
+      console.error("[CreatePost] Video upload failed:", error);
+      toast.error("Video upload failed", error.message);
+      triggerHaptic("error");
+    },
+  });
+
   const postMutation = usePost();
   const toast = useToast();
   const triggerScrollToTop = useHomePostCardStore((s) => s.triggerScrollToTop);
@@ -78,8 +119,10 @@ export function CreateScreen() {
   const selectedCommunity = draft.community;
 
   const canPost = useMemo(() => {
-    return draft.title.trim().length > 0;
-  }, [draft.title]);
+    const hasTitleContent = draft.title.trim().length > 0;
+    const videoStillUploading = draft.attachmentType === "video" && isUploadingVideo;
+    return hasTitleContent && !videoStillUploading;
+  }, [draft.title, draft.attachmentType, isUploadingVideo]);
 
   const hasAttachment = useMemo(() => {
     return (
@@ -104,15 +147,48 @@ export function CreateScreen() {
     };
   }, []);
 
+  // Handle video returned from editor
+  useEffect(() => {
+    if (params.videoUri && !draft.mediaUris.includes(params.videoUri)) {
+      console.log("[CreatePost] Received video from editor:", params.videoUri);
+      
+      // Set the video attachment
+      setAttachment("video", params.videoUri);
+      
+      // Set dimensions if provided
+      if (params.videoWidth && params.videoHeight) {
+        setVideoDimensions({
+          width: parseInt(params.videoWidth),
+          height: parseInt(params.videoHeight),
+        });
+      }
+      
+      // Set muted state
+      setIsVideoMuted(params.isMuted === "1");
+      
+      // Auto-start upload (video was already processed in editor if muted)
+      uploadVideo({ uri: params.videoUri });
+    }
+  }, [params.videoUri, params.videoWidth, params.videoHeight, params.isMuted]);
+
   const handleClose = useCallback(() => {
     if (isSubmitting) return;
+    
+    if (isUploadingVideo) {
+      cancelVideoUpload();
+    }
     
     triggerHaptic("selection");
     if (draft.title || draft.body) {
     }
     clearDraft();
+    setUploadedVideoUrl(null);
+    setVideoDimensions(null);
+    setIsVideoMuted(false);
+    setIsVideoPlaying(false);
+    resetVideoUpload();
     router.back();
-  }, [isSubmitting, clearDraft, draft.title, draft.body]);
+  }, [isSubmitting, isUploadingVideo, cancelVideoUpload, clearDraft, draft.title, draft.body, resetVideoUpload]);
 
   const handlePost = useCallback(async () => {
     if (!canPost || isSubmitting) return;
@@ -141,6 +217,10 @@ export function CreateScreen() {
       if (imageUrl) {
         content = content ? `${content}\n\n${imageUrl}` : imageUrl;
       }
+
+      if (uploadedVideoUrl) {
+        content = content ? `${content}\n\n${uploadedVideoUrl}` : uploadedVideoUrl;
+      }
       
       if (draft.linkUrl) {
         content = content ? `${content}\n\n${draft.linkUrl}` : draft.linkUrl;
@@ -154,7 +234,7 @@ export function CreateScreen() {
         title: draft.title.trim(),
         content: content,
         tag: selectedContentWarning,
-        optimisticMediaUrl: imageUrl ?? undefined,
+        optimisticMediaUrl: imageUrl ?? uploadedVideoUrl ?? undefined,
       };
 
       console.log("[CreatePost] Submitting post:", postInput);
@@ -165,19 +245,20 @@ export function CreateScreen() {
 
       triggerHaptic("success");
 
-      // Reset all local state
       setSelectedContentWarning("");
       setShowLinkInput(false);
       setLinkUrl("");
       setLinkError(false);
       setImageDimensions(null);
+      setUploadedVideoUrl(null);
+      setVideoDimensions(null);
+      setIsVideoMuted(false);
+      resetVideoUpload();
 
-      // Clear draft store
       clearDraft();
 
       setIsSubmitting(false);
 
-      // Trigger scroll to top on home screen
       triggerScrollToTop();
 
       setTimeout(() => {
@@ -193,7 +274,7 @@ export function CreateScreen() {
 
       triggerHaptic("error");
     }
-  }, [canPost, isSubmitting, draft, clearDraft, postMutation, toast, selectedContentWarning, router]);
+  }, [canPost, isSubmitting, draft, clearDraft, postMutation, toast, selectedContentWarning, uploadedVideoUrl, isVideoMuted, resetVideoUpload, router]);
 
   const handleCommunitySelect = useCallback(
     (community: Community) => {
@@ -271,11 +352,30 @@ export function CreateScreen() {
     }
   }, [hasAttachment, draft.attachmentType, setAttachment]);
 
-  const handleVideoPress = useCallback(() => {
-    if (hasAttachment) return;
+  const handleVideoPress = useCallback(async () => {
+    if (hasAttachment && draft.attachmentType !== "video") return;
     triggerHaptic("selection");
-    toast.info("Coming soon", "Video uploads will be available soon");
-  }, [hasAttachment, toast]);
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["videos"],
+      allowsEditing: false,
+      quality: 0.8,
+      videoMaxDuration: 300,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      // Navigate to video editor
+      router.push({
+        pathname: "/video-editor",
+        params: {
+          uri: asset.uri,
+          width: asset.width?.toString() ?? "1920",
+          height: asset.height?.toString() ?? "1080",
+        },
+      });
+    }
+  }, [hasAttachment, draft.attachmentType]);
 
   const handlePollPress = useCallback(() => {
     if (hasAttachment) return;
@@ -285,11 +385,121 @@ export function CreateScreen() {
 
   const handleRemoveMedia = useCallback(() => {
     triggerHaptic("selection");
+    
+    if (draft.attachmentType === "video" && isUploadingVideo) {
+      cancelVideoUpload();
+    }
+    
     removeAttachment();
     setImageDimensions(null);
-  }, [removeAttachment]);
+    setVideoDimensions(null);
+    setUploadedVideoUrl(null);
+    setIsVideoMuted(false);
+    setIsVideoPlaying(false);
+    resetVideoUpload();
+  }, [draft.attachmentType, isUploadingVideo, cancelVideoUpload, removeAttachment, resetVideoUpload]);
+
+  const handleCancelVideoUpload = useCallback(() => {
+    triggerHaptic("selection");
+    cancelVideoUpload();
+    removeAttachment();
+    setVideoDimensions(null);
+    setUploadedVideoUrl(null);
+    setIsVideoMuted(false);
+    setIsVideoPlaying(false);
+    resetVideoUpload();
+  }, [cancelVideoUpload, removeAttachment, resetVideoUpload]);
+
+  const handleToggleVideoMute = useCallback(() => {
+    triggerHaptic("selection");
+    setIsVideoMuted((prev) => !prev);
+  }, []);
 
   const TAB_BAR_HEIGHT = 60;
+
+  const renderVideoPreview = () => {
+    if (draft.attachmentType !== "video" || draft.mediaUris.length === 0) {
+      return null;
+    }
+
+    const VIDEO_HEIGHT = 280;
+
+    return (
+      <Animated.View
+        entering={FadeIn.duration(200)}
+        exiting={FadeOut.duration(200)}
+        style={styles.videoPreviewContainer}
+      >
+        {/* Video Player */}
+        <View style={[styles.videoPlayerWrapper, { height: VIDEO_HEIGHT }]}>
+          <Video
+            ref={videoRef}
+            source={{ uri: draft.mediaUris[0] }}
+            style={styles.videoPlayer}
+            resizeMode={ResizeMode.CONTAIN}
+            shouldPlay={isVideoPlaying}
+            isLooping
+            isMuted={isVideoMuted}
+            useNativeControls={false}
+          />
+          
+          {/* Play/Pause Overlay */}
+          <Pressable
+            style={styles.videoPlayOverlay}
+            onPress={() => setIsVideoPlaying(prev => !prev)}
+          >
+            <View style={styles.playPauseButton}>
+              <Feather
+                name={isVideoPlaying ? "pause" : "play"}
+                size={32}
+                color="#fff"
+              />
+            </View>
+          </Pressable>
+          
+          {/* Upload Status Overlay */}
+          {isUploadingVideo && (
+            <View style={styles.uploadStatusOverlay}>
+              <View style={styles.uploadStatusBadge}>
+                <Text size="xs" weight="medium" style={{ color: "#fff" }}>
+                  {videoUploadProgress >= 100 ? "Processing..." : `Uploading ${videoUploadProgress}%`}
+                </Text>
+              </View>
+              <View style={styles.uploadProgressBarOverlay}>
+                <View 
+                  style={[
+                    styles.uploadProgressFillOverlay, 
+                    { width: `${Math.min(videoUploadProgress, 100)}%` }
+                  ]} 
+                />
+              </View>
+            </View>
+          )}
+          
+          {/* Uploaded Badge */}
+          {!isUploadingVideo && uploadedVideoUrl && (
+            <View style={styles.uploadedBadge}>
+              <Feather name="check" size={12} color="#fff" />
+              <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
+                Uploaded
+              </Text>
+            </View>
+          )}
+          
+          {/* Remove Button */}
+          <Pressable
+            onPress={handleRemoveMedia}
+            style={styles.videoRemoveButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <View style={styles.removeButtonInner}>
+              <Feather name="x" size={18} color="#fff" />
+            </View>
+          </Pressable>
+        </View>
+      </Animated.View>
+    );
+  };
 
   return (
     <Box flex background="base" style={{ paddingTop: insets.top }}>
@@ -315,12 +525,12 @@ export function CreateScreen() {
           variant={"outline"}
           size="sm"
           onPress={handlePost}
-          disabled={!canPost}
+          disabled={!canPost || isSubmitting}
           style={[
             styles.postButton,
-            !canPost && styles.postButtonDisabled,
+            (!canPost || isSubmitting) && styles.postButtonDisabled,
             {
-              backgroundColor: canPost
+              backgroundColor: canPost && !isSubmitting
                 ? "rgb(29,68,150)"
                 : theme.colors.background.subtle,
               paddingHorizontal: 10,
@@ -331,7 +541,7 @@ export function CreateScreen() {
             style={[
               styles.postButtonText,
               {
-                color: canPost ? "#fff" : theme.colors.text.emphasis,
+                color: canPost && !isSubmitting ? "#fff" : theme.colors.text.emphasis,
               },
             ]}
           >
@@ -523,39 +733,34 @@ export function CreateScreen() {
             </Animated.View>
           )}
 
-          {draft.mediaUris.length > 0 && (
+          {draft.attachmentType === "image" && draft.mediaUris.length > 0 && (
             <Animated.View
               entering={FadeIn.duration(200)}
               exiting={FadeOut.duration(200)}
-              style={[
-                styles.mediaPreviewContainer,
-                {
-                  width: screenWidth,
-                  transform: [{ translateX: -16 }],
-                },
-              ]}
+              style={styles.videoPreviewContainer}
             >
-              <Image
-                source={{ uri: draft.mediaUris[0] }}
-                style={{
-                  width: screenWidth,
-                  height: imageDimensions
-                    ? screenWidth *
-                      (imageDimensions.height / imageDimensions.width)
-                    : screenWidth,
-                }}
-              />
-              <Pressable
-                onPress={handleRemoveMedia}
-                style={[
-                  styles.mediaRemoveButton,
-                  { backgroundColor: "rgba(0, 0, 0, 0.7)" },
-                ]}
-              >
-                <Feather name="x" size={18} color={"#fff"} />
-              </Pressable>
+              <View style={[styles.videoPlayerWrapper, { height: 280 }]}>
+                <ExpoImage
+                  source={{ uri: draft.mediaUris[0] }}
+                  style={styles.videoPlayer}
+                  contentFit="contain"
+                />
+                
+                {/* Remove Button */}
+                <Pressable
+                  onPress={handleRemoveMedia}
+                  style={styles.videoRemoveButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <View style={styles.removeButtonInner}>
+                    <Feather name="x" size={18} color="#fff" />
+                  </View>
+                </Pressable>
+              </View>
             </Animated.View>
           )}
+
+          {renderVideoPreview()}
 
           <TextInput
             ref={bodyInputRef}
@@ -625,16 +830,20 @@ export function CreateScreen() {
 
             <Pressable
               onPress={handleVideoPress}
-              disabled={hasAttachment}
+              disabled={hasAttachment && draft.attachmentType !== "video"}
               style={[
                 styles.mediaButton,
-                hasAttachment && styles.mediaButtonDisabled,
+                hasAttachment && draft.attachmentType !== "video" && styles.mediaButtonDisabled,
               ]}
             >
               <Feather
                 name="video"
                 size={18}
-                color={hasAttachment ? theme.colors.text.subtle : theme.colors.text.default}
+                color={
+                  hasAttachment && draft.attachmentType !== "video"
+                    ? theme.colors.text.subtle
+                    : theme.colors.text.default
+                }
               />
             </Pressable>
 
@@ -958,5 +1167,159 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     marginTop: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
+  },
+  uploadOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+  },
+  uploadProgressContainer: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    minWidth: 180,
+  },
+  uploadProgressContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  progressBar: {
+    width: "100%",
+    height: 4,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    height: "100%",
+    borderRadius: 2,
+  },
+  cancelUploadButton: {
+    marginTop: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  uploadSuccessBadge: {
+    position: "absolute",
+    bottom: 12,
+    left: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  muteToggleButton: {
+    position: "absolute",
+    bottom: 12,
+    right: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  muteToggleButtonLarge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  uploadButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  videoPreviewContainer: {
+    marginTop: 12,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  videoPlayerWrapper: {
+    width: "100%",
+    backgroundColor: "#000",
+    borderRadius: 12,
+    overflow: "hidden",
+    position: "relative",
+  },
+  videoPlayer: {
+    width: "100%",
+    height: "100%",
+  },
+  videoPlayOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playPauseButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  videoRemoveButton: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+  },
+  removeButtonInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  uploadStatusOverlay: {
+    position: "absolute",
+    bottom: 12,
+    left: 12,
+    right: 12,
+  },
+  uploadStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    alignSelf: "flex-start",
+  },
+  uploadProgressBarOverlay: {
+    height: 3,
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+    borderRadius: 2,
+    marginTop: 8,
+    overflow: "hidden",
+  },
+  uploadProgressFillOverlay: {
+    height: "100%",
+    backgroundColor: "#3b82f6",
+    borderRadius: 2,
+  },
+  uploadedBadge: {
+    position: "absolute",
+    bottom: 12,
+    left: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(16, 185, 129, 0.9)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
 }));

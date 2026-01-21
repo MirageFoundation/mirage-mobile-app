@@ -217,3 +217,144 @@ export function getContentTypeFromUri(uri: string): string {
   }
 }
 
+// ============================================
+// Video Upload Functions
+// ============================================
+
+export interface UploadProgressCallback {
+  (progress: number): void;
+}
+
+export interface UploadVideoResult {
+  url: string;
+  uid: string;
+  streamCustomer: string;
+}
+
+export function getVideoUrl(uploadResponse: VideoUploadResponse): string {
+  // Use videodelivery.net as fallback when streamCustomer is empty
+  if (!uploadResponse.streamCustomer) {
+    return `https://videodelivery.net/${uploadResponse.uid}/manifest/video.m3u8`;
+  }
+  return `https://customer-${uploadResponse.streamCustomer}.cloudflarestream.com/${uploadResponse.uid}/manifest/video.m3u8`;
+}
+
+export function getVideoThumbnailUrl(uploadResponse: VideoUploadResponse): string {
+  if (!uploadResponse.streamCustomer) {
+    return `https://videodelivery.net/${uploadResponse.uid}/thumbnails/thumbnail.jpg`;
+  }
+  return `https://customer-${uploadResponse.streamCustomer}.cloudflarestream.com/${uploadResponse.uid}/thumbnails/thumbnail.jpg`;
+}
+
+export async function uploadVideoToSignedUrl(
+  uploadUrl: string,
+  localUri: string,
+  contentType: string,
+  onProgress?: UploadProgressCallback
+): Promise<void> {
+  console.log("[VideoUpload] Starting upload to signed URL");
+  console.log("[VideoUpload] Upload URL:", uploadUrl);
+  console.log("[VideoUpload] Local URI:", localUri);
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable && onProgress) {
+        const progress = Math.min(100, Math.round((event.loaded / event.total) * 100));
+        console.log(`[VideoUpload] Progress: ${progress}%`);
+        onProgress(progress);
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        console.log("[VideoUpload] Upload complete, status:", xhr.status);
+        resolve();
+      } else {
+        console.error("[VideoUpload] Upload failed:", xhr.status, xhr.responseText);
+        reject(new Error(`Upload failed: ${xhr.status}`));
+      }
+    });
+
+    xhr.addEventListener("error", () => {
+      console.error("[VideoUpload] Network error");
+      reject(new Error("Network error during upload"));
+    });
+
+    xhr.addEventListener("abort", () => {
+      console.log("[VideoUpload] Upload aborted");
+      reject(new Error("Upload aborted"));
+    });
+
+    xhr.open("POST", uploadUrl);
+
+    const formData = new FormData();
+    const filename = localUri.split("/").pop() || "video.mp4";
+
+    // @ts-expect-error - React Native FormData accepts this format
+    formData.append("file", {
+      uri: localUri,
+      type: contentType,
+      name: filename,
+    });
+
+    xhr.send(formData);
+  });
+}
+
+export async function uploadVideo(
+  localUri: string,
+  contentType: string = "video/mp4",
+  onProgress?: UploadProgressCallback
+): Promise<UploadVideoResult> {
+  console.log("[VideoUpload] uploadVideo called with:", { localUri, contentType });
+
+  console.log("[VideoUpload] Getting upload URL from API...");
+  let uploadResponse: VideoUploadResponse;
+  try {
+    uploadResponse = await getVideoUploadUrl();
+    console.log("[VideoUpload] Got upload response:", JSON.stringify(uploadResponse, null, 2));
+    
+    // Handle snake_case field name from API (stream_customer -> streamCustomer)
+    if (!uploadResponse.streamCustomer && uploadResponse.stream_customer) {
+      uploadResponse.streamCustomer = uploadResponse.stream_customer;
+    }
+    
+    // Validate required fields
+    if (!uploadResponse.streamCustomer) {
+      console.warn("[VideoUpload] Missing streamCustomer, using videodelivery.net fallback");
+    }
+  } catch (error) {
+    console.error("[VideoUpload] Failed to get upload URL:", error);
+    throw error;
+  }
+
+  console.log("[VideoUpload] Uploading file to Cloudflare Stream...");
+  try {
+    await uploadVideoToSignedUrl(
+      uploadResponse.uploadURL,
+      localUri,
+      contentType,
+      onProgress
+    );
+    console.log("[VideoUpload] File uploaded successfully");
+  } catch (error) {
+    console.error("[VideoUpload] Failed to upload file:", error);
+    throw error;
+  }
+
+  const finalUrl = getVideoUrl(uploadResponse);
+  console.log("[VideoUpload] Final URL:", finalUrl);
+
+  return {
+    url: finalUrl,
+    uid: uploadResponse.uid,
+    streamCustomer: uploadResponse.streamCustomer,
+  };
+}
+
+export function isVideoFile(uri: string): boolean {
+  const contentType = getContentTypeFromUri(uri);
+  return contentType.startsWith("video/");
+}

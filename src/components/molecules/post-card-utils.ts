@@ -56,6 +56,9 @@ export function removeUrls(text?: string): string | undefined {
 export function normalizeVideoUrl(url: string): string {
   try {
     const parsedUrl = new URL(url);
+    if (parsedUrl.hostname.includes("cloudflarestream.com")) {
+      return url;
+    }
     if (parsedUrl.hostname.includes("videodelivery.net")) {
       if (parsedUrl.pathname.endsWith("/iframe")) {
         parsedUrl.pathname = parsedUrl.pathname.replace(
@@ -84,6 +87,9 @@ export function normalizeVideoUrl(url: string): string {
 export function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
   try {
     const parsedUrl = new URL(url);
+    if (parsedUrl.hostname.includes("cloudflarestream.com")) {
+      return "video";
+    }
     if (parsedUrl.hostname.includes("videodelivery.net")) {
       return "video";
     }
@@ -94,6 +100,7 @@ export function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
   } catch {
     const path = url.toLowerCase().split("?")[0];
     const extension = path.split(".").pop() ?? "";
+    if (url.includes("cloudflarestream.com")) return "video";
     if (url.includes("videodelivery.net")) return "video";
     if (extension === "gif") return "gif";
     if (VIDEO_EXTENSIONS.has(extension)) return "video";
@@ -107,12 +114,18 @@ export function resolvePostContent(
   media: PostMedia[] | undefined
 ): ResolvedPostContent {
   const extractedUrl = extractFirstUrl(body);
+  if (__DEV__ && body?.includes("cloudflarestream")) {
+    console.log("[resolvePostContent] body:", body, "extractedUrl:", extractedUrl);
+  }
   const bodyWithoutUrl = removeUrls(body);
   const displayDomain = extractedUrl ? extractDomain(extractedUrl) : null;
   const bodyVideoUrl =
     extractedUrl && getMediaTypeFromUrl(extractedUrl) === "video"
       ? normalizeVideoUrl(extractedUrl)
       : null;
+  if (__DEV__ && extractedUrl?.includes("cloudflarestream")) {
+    console.log("[resolvePostContent] mediaType:", getMediaTypeFromUrl(extractedUrl), "bodyVideoUrl:", bodyVideoUrl);
+  }
 
   const primaryMedia = media?.[0];
   const mediaCount = media?.length ?? 0;

@@ -52,6 +52,7 @@ export const PostCardMedia = memo(function PostCardMedia({
   const [imageError, setImageError] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isVideoLoading, setIsVideoLoading] = useState(false);
+  const [isVideoProcessing, setIsVideoProcessing] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const videoRef = useRef<Video | null>(null);
   const aspectRatioLockedRef = useRef(false);
@@ -215,7 +216,15 @@ export const PostCardMedia = memo(function PostCardMedia({
     [shouldBlurContent, onRevealContent, onMediaPress]
   );
 
-  if (!media || imageError) return null;
+  // Don't hide cloudflarestream videos on error - they might be processing
+  const isCloudflareVideo = media?.uri?.includes("cloudflarestream.com") || media?.uri?.includes("videodelivery.net");
+  const shouldHideOnError = imageError && !isCloudflareVideo && !isVideoProcessing;
+  
+  if (!media || shouldHideOnError) return null;
+
+  if (__DEV__ && (media.uri?.includes("cloudflarestream") || media.uri?.includes("videodelivery"))) {
+    console.log("[PostCardMedia] Rendering video:", media.uri, "type:", media.type, "imageError:", imageError, "isVideoProcessing:", isVideoProcessing);
+  }
 
   return (
     <View style={styles.mediaContainer}>
@@ -243,10 +252,23 @@ export const PostCardMedia = memo(function PostCardMedia({
                 setIsVideoLoading(false);
                 userInitiatedPlayRef.current = false;
               }
+              // Video loaded successfully - clear processing state
+              if (isVideoProcessing) {
+                setIsVideoProcessing(false);
+              }
             }}
             onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-            onError={() => {
-              setImageError(true);
+            onError={(error) => {
+              if (__DEV__) {
+                console.log("[PostCardMedia] Video error:", error, "uri:", mediaSource.uri);
+              }
+              // For cloudflare stream videos, show processing state instead of hiding
+              const isCloudflare = mediaSource.uri?.includes("cloudflarestream.com") || mediaSource.uri?.includes("videodelivery.net");
+              if (isCloudflare) {
+                setIsVideoProcessing(true);
+              } else {
+                setImageError(true);
+              }
               setIsVideoLoading(false);
             }}
           />
@@ -266,7 +288,7 @@ export const PostCardMedia = memo(function PostCardMedia({
           </Pressable>
         )}
 
-       {media.type === "video" && !shouldBlurContent && (
+       {media.type === "video" && !shouldBlurContent && !isVideoProcessing && (
           <View style={styles.playOverlay}>
             <Pressable onPress={handleMediaPress} style={styles.videoTapArea} />
             {isVideoLoading ? (
@@ -292,7 +314,7 @@ export const PostCardMedia = memo(function PostCardMedia({
         )}
 
         {/* Mute/Unmute button for videos */}
-        {media.type === "video" && !shouldBlurContent && (
+        {media.type === "video" && !shouldBlurContent && !isVideoProcessing && (
           <Pressable
             onPress={handleMuteToggle}
             style={styles.muteButton}
@@ -306,6 +328,19 @@ export const PostCardMedia = memo(function PostCardMedia({
               />
             </View>
           </Pressable>
+        )}
+
+        {/* Video processing overlay for Cloudflare Stream */}
+        {isVideoProcessing && isCloudflareVideo && (
+          <View style={styles.processingOverlay}>
+            <ActivityIndicator size="large" color="#fff" />
+            <Text size="sm" weight="semibold" style={{ color: "#fff", marginTop: 8 }}>
+              Video processing...
+            </Text>
+            <Text size="xs" style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}>
+              This may take a few moments
+            </Text>
+          </View>
         )}
 
         {media.type === "gif" && (
@@ -392,6 +427,12 @@ const styles = StyleSheet.create((theme) => ({
     height: 56,
     borderRadius: 28,
     backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  processingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
     alignItems: "center",
     justifyContent: "center",
   },

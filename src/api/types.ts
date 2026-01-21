@@ -455,6 +455,8 @@ export interface VideoUploadResponse {
   uploadURL: string;
   provider: "stream";
   streamCustomer: string;
+  // API may return snake_case
+  stream_customer?: string;
   uid: string;
 }
 
