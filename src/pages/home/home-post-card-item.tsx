@@ -8,6 +8,7 @@ import {
   useAllowAutoplay,
   useIsFollowLoading,
   useIsFollowing,
+  useIsTopicFollowed,
   useIsOwnPost,
   useIsPostRevealed,
   useIsPostVisible,
@@ -27,6 +28,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
 }: HomePostCardItemProps) {
   const isVisible = useIsPostVisible(post.id);
   const isFollowing = useIsFollowing(post.author.id);
+  const isTopicFollowed = useIsTopicFollowed(post.topic);
   const isFollowLoading = useIsFollowLoading(post.author.id);
   const contentRevealed = useIsPostRevealed(post.id);
   const voteOverride = useVoteOverride(post.id);
@@ -37,11 +39,13 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  // Store post data in ref to avoid recreating callbacks
  const postRef = useRef(post);
  const isFollowingRef = useRef(isFollowing);
+ const isTopicFollowedRef = useRef(isTopicFollowed);
   const voteOverrideRef = useRef(voteOverride);
  
  useEffect(() => {
    postRef.current = post;
    isFollowingRef.current = isFollowing;
+   isTopicFollowedRef.current = isTopicFollowed;
    voteOverrideRef.current = voteOverride;
  });
 
@@ -96,10 +100,17 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     getHandlers().onCommentPress?.(p.id);
   }, []);
 
-  const handleFollowPress = useCallback(() => {
+  const handleFollowUser = useCallback(() => {
     const p = postRef.current;
-    logPress({ name: "post_follow", postId: p.id });
-    getHandlers().onFollowPress?.(p.author.id, p.author.username, isFollowingRef.current);
+    logPress({ name: "post_follow_user", postId: p.id });
+    getHandlers().onFollowUser?.(p.author.id, p.author.username, isFollowingRef.current);
+  }, []);
+
+  const handleFollowTopic = useCallback(() => {
+    const p = postRef.current;
+    if (!p.topic) return;
+    logPress({ name: "post_follow_topic", postId: p.id });
+    getHandlers().onFollowTopic?.(p.topic, isTopicFollowedRef.current);
   }, []);
 
   const handleRevealContent = useCallback(() => {
@@ -128,8 +139,8 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       post={displayPost}
       isOwnPost={isOwnPost}
       isVisible={isVisible}
+      isTopicFollowed={isTopicFollowed}
       showFollowButton={false}
-      topicPosition="right"
       showUrlCard={false}
       allowAutoplay={allowAutoplay}
       onPress={handlePostPress}
@@ -138,7 +149,8 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       onLikePress={handleLikePress}
       onDislikePress={handleDislikePress}
       onCommentPress={handleCommentPress}
-      onFollowPress={handleFollowPress}
+      onFollowUser={handleFollowUser}
+      onFollowTopic={handleFollowTopic}
       onRevealContent={handleRevealContent}
       contentRevealed={contentRevealed}
       followLoading={isFollowLoading}

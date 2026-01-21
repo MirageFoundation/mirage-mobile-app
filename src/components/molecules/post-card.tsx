@@ -20,13 +20,14 @@ type PostCardProps = {
   isVisible?: boolean;
   /** Whether to show the follow button (default: true) */
   showFollowButton?: boolean;
-  /** Position of topic tag: "inline" (with author) or "right" (in header actions) */
-  topicPosition?: "inline" | "right";
+  /** Whether the topic is followed */
+  isTopicFollowed?: boolean;
   /** Whether video autoplay is allowed based on user settings and network */
   allowAutoplay?: boolean;
   onPress?: () => void;
   onAuthorPress?: () => void;
-  onFollowPress?: () => void;
+  onFollowUser?: () => void;
+  onFollowTopic?: () => void;
   onMorePress?: () => void;
   onLikePress?: () => void;
   onDislikePress?: () => void;
@@ -46,11 +47,12 @@ export const PostCard = memo(function PostCard({
  isOwnPost = false,
  isVisible = false,
  showFollowButton = true,
- topicPosition = "inline",
+ isTopicFollowed = false,
  allowAutoplay = true,
  onPress,
  onAuthorPress,
- onFollowPress,
+ onFollowUser,
+ onFollowTopic,
  onMorePress,
  onLikePress,
  onDislikePress,
@@ -119,11 +121,12 @@ export const PostCard = memo(function PostCard({
         createdAt={createdAt}
         isOwnPost={isOwnPost}
         isFollowing={isFollowing}
+        isTopicFollowed={isTopicFollowed}
         followLoading={followLoading}
         showFollowButton={showFollowButton}
-        topicPosition={topicPosition}
         onAuthorPress={onAuthorPress}
-        onFollowPress={onFollowPress}
+        onFollowUser={onFollowUser}
+        onFollowTopic={onFollowTopic}
         onMorePress={onMorePress}
       />
 

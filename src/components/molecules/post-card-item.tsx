@@ -7,6 +7,7 @@ type PostCardItemProps = {
   post: Post;
   isVisible?: boolean;
   isOwnPost?: boolean;
+  isTopicFollowed?: boolean;
   contentRevealed?: boolean;
   followLoading?: boolean;
   shareUrl?: string;
@@ -26,11 +27,12 @@ type PostCardItemProps = {
     currentLikes: number
   ) => void;
   onCommentPress?: (postId: string) => void;
-  onFollowPress?: (
+  onFollowUser?: (
     authorId: string,
     authorUsername: string,
     isCurrentlyFollowing: boolean
   ) => void;
+  onFollowTopic?: (topic: string, isCurrentlyFollowed: boolean) => void;
   onRevealContent?: (postId: string) => void;
 };
 
@@ -38,6 +40,7 @@ export const PostCardItem = memo(function PostCardItem({
   post,
   isVisible = false,
   isOwnPost = false,
+  isTopicFollowed = false,
   contentRevealed = false,
   followLoading = false,
   shareUrl,
@@ -47,7 +50,8 @@ export const PostCardItem = memo(function PostCardItem({
   onLikePress,
   onDislikePress,
   onCommentPress,
-  onFollowPress,
+  onFollowUser,
+  onFollowTopic,
   onRevealContent,
 }: PostCardItemProps) {
   const handlePostPress = useCallback(() => {
@@ -88,10 +92,16 @@ export const PostCardItem = memo(function PostCardItem({
     onCommentPress?.(post.id);
   }, [onCommentPress, post.id]);
 
-  const handleFollowPress = useCallback(() => {
-    logPress({ name: "post_follow", postId: post.id });
-    onFollowPress?.(post.author.id, post.author.username, post.isFollowing ?? false);
-  }, [onFollowPress, post.author.id, post.author.username, post.isFollowing]);
+  const handleFollowUser = useCallback(() => {
+    logPress({ name: "post_follow_user", postId: post.id });
+    onFollowUser?.(post.author.id, post.author.username, post.isFollowing ?? false);
+  }, [onFollowUser, post.author.id, post.author.username, post.isFollowing]);
+
+  const handleFollowTopic = useCallback(() => {
+    if (!post.topic) return;
+    logPress({ name: "post_follow_topic", postId: post.id });
+    onFollowTopic?.(post.topic, isTopicFollowed);
+  }, [onFollowTopic, post.topic, post.id, isTopicFollowed]);
 
   const handleRevealContent = useCallback(() => {
     logPress({ name: "post_reveal", postId: post.id });
@@ -103,13 +113,15 @@ export const PostCardItem = memo(function PostCardItem({
       post={post}
       isOwnPost={isOwnPost}
       isVisible={isVisible}
+      isTopicFollowed={isTopicFollowed}
       onPress={handlePostPress}
       onAuthorPress={handleAuthorPress}
       onMorePress={handleMorePress}
       onLikePress={handleLikePress}
       onDislikePress={handleDislikePress}
       onCommentPress={handleCommentPress}
-      onFollowPress={handleFollowPress}
+      onFollowUser={handleFollowUser}
+      onFollowTopic={handleFollowTopic}
       onRevealContent={handleRevealContent}
       contentRevealed={contentRevealed}
       followLoading={followLoading}

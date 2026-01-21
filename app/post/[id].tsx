@@ -643,11 +643,9 @@ export default function PostDetailScreen() {
       } catch (error: unknown) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        const isAlreadyFollowed =
-          errorMessage.includes("already followed") ||
-          errorMessage.includes("400");
+        const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
         const isNotFollowing =
-          errorMessage.includes("not following") ||
+          errorMessage.toLowerCase().includes("not following") ||
           errorMessage.includes("not in followed");
 
         if (isAlreadyFollowed) {
@@ -726,11 +724,9 @@ export default function PostDetailScreen() {
       } catch (error: unknown) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        const isAlreadyFollowed =
-          errorMessage.includes("already followed") ||
-          errorMessage.includes("400");
+        const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
         const isNotFollowing =
-          errorMessage.includes("not following") ||
+          errorMessage.toLowerCase().includes("not following") ||
           errorMessage.includes("not in followed");
 
         if (isAlreadyFollowed) {
@@ -1280,9 +1276,11 @@ export default function PostDetailScreen() {
        <PostCard
          post={displayPost}
          isOwnPost={currentUser?.id === displayPost.author.id}
+         isTopicFollowed={displayPost?.topic ? followedTopics.includes(displayPost.topic) : false}
          onLikePress={handleLikePost}
          onDislikePress={handleDislikePost}
-         onFollowPress={handleFollowPost}
+         onFollowUser={handleFollowPost}
+         onFollowTopic={handleFollowTopic}
          onMorePress={handlePostMorePress}
          onRevealContent={handleRevealContent}
          contentRevealed={revealedContent}
@@ -1301,6 +1299,8 @@ export default function PostDetailScreen() {
     handleLikePost,
     handleDislikePost,
     handleFollowPost,
+    handleFollowTopic,
+    followedTopics,
     handlePostMorePress,
     handleRevealContent,
     revealedContent,

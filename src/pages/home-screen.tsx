@@ -479,11 +479,9 @@ export function HomeScreen() {
       } catch (error: unknown) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
-        const isAlreadyFollowed =
-          errorMessage.includes("already followed") ||
-          errorMessage.includes("400");
+        const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
         const isNotFollowing =
-          errorMessage.includes("not following") ||
+          errorMessage.toLowerCase().includes("not following") ||
           errorMessage.includes("not in followed");
 
         if (isAlreadyFollowed) {
@@ -579,11 +577,9 @@ export function HomeScreen() {
           // Handle "already followed" or "not following" errors gracefully
           const errorMessage =
             error instanceof Error ? error.message : String(error);
-          const isAlreadyFollowed =
-            errorMessage.includes("already followed") ||
-            errorMessage.includes("400");
+          const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
           const isNotFollowing =
-            errorMessage.includes("not following") ||
+            errorMessage.toLowerCase().includes("not following") ||
             errorMessage.includes("not in followed");
 
           if (isAlreadyFollowed) {
@@ -626,6 +622,68 @@ export function HomeScreen() {
       });
     },
     [requireAuth, toast]
+  );
+
+  const handleFollowTopicFromCard = useCallback(
+    (topic: string, isCurrentlyFollowed: boolean) => {
+      requireAuth(async () => {
+        const action = isCurrentlyFollowed ? "Unfollowing" : "Following";
+        const actionPast = isCurrentlyFollowed ? "Unfollowed" : "Now following";
+
+        // Show initial loading toast
+        const toastId = toast.loading(
+          `${action} #${topic}`,
+          "Computing proof of work..."
+        );
+
+        try {
+          await toggleFollowTopicMutation.mutateAsync({
+            topic,
+            isCurrentlyFollowing: isCurrentlyFollowed,
+          });
+
+          // Update to success
+          toast.update(toastId, {
+            type: "success",
+            title: `${actionPast} #${topic}`,
+            description: undefined,
+            duration: 3000,
+          });
+
+          // Auto dismiss after duration
+          setTimeout(() => toast.dismiss(toastId), 3000);
+        } catch (error: unknown) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
+          const isNotFollowing =
+            errorMessage.toLowerCase().includes("not following") ||
+            errorMessage.includes("not in followed");
+
+          if (isAlreadyFollowed || isNotFollowing) {
+            toast.update(toastId, {
+              type: "success",
+              title: isAlreadyFollowed
+                ? `Already following #${topic}`
+                : `Already not following #${topic}`,
+              description: undefined,
+              duration: 3000,
+            });
+            setTimeout(() => toast.dismiss(toastId), 3000);
+          } else {
+            console.error("Follow/unfollow topic failed:", error);
+            toast.update(toastId, {
+              type: "error",
+              title: `Failed to ${action.toLowerCase()} #${topic}`,
+              description: "Please try again",
+              duration: 4000,
+            });
+            setTimeout(() => toast.dismiss(toastId), 4000);
+          }
+        }
+      });
+    },
+    [requireAuth, toast, toggleFollowTopicMutation]
   );
 
   const handleRevealContent = useCallback((postId: string) => {
@@ -835,6 +893,9 @@ export function HomeScreen() {
   const setFollowedUsers = useHomePostCardStore(
     (state) => state.setFollowedUsers
   );
+  const setFollowedTopicsStore = useHomePostCardStore(
+    (state) => state.setFollowedTopics
+  );
   const setFollowLoadingUsersStore = useHomePostCardStore(
     (state) => state.setFollowLoadingUsers
   );
@@ -846,6 +907,7 @@ export function HomeScreen() {
   const setAllowAutoplay = useHomePostCardStore((state) => state.setAllowAutoplay);
 
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
+  const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
 
   // Compute whether autoplay is allowed based on settings and network
   const allowAutoplay = useMemo(
@@ -860,6 +922,10 @@ export function HomeScreen() {
   useEffect(() => {
     setFollowedUsers(followedUsersSet);
   }, [followedUsersSet, setFollowedUsers]);
+
+  useEffect(() => {
+    setFollowedTopicsStore(followedTopicsSet);
+  }, [followedTopicsSet, setFollowedTopicsStore]);
 
   useEffect(() => {
     setFollowLoadingUsersStore(followLoadingUsers);
@@ -886,6 +952,7 @@ export function HomeScreen() {
    handleDownvote,
    handleCommentPress,
    handleFollowPress,
+   handleFollowTopicFromCard,
    handleRevealContent,
  });
 
@@ -899,6 +966,7 @@ export function HomeScreen() {
      handleDownvote,
      handleCommentPress,
      handleFollowPress,
+     handleFollowTopicFromCard,
      handleRevealContent,
    };
  });
@@ -912,12 +980,14 @@ export function HomeScreen() {
      onLikePress: (postId, liked, disliked, likes) =>
        handlersRef.current.handleUpvote(postId, liked, disliked, likes),
      onDislikePress: (postId, liked, disliked, likes) =>
-       handlersRef.current.handleDownvote(postId, liked, disliked, likes),
-     onCommentPress: (postId) => handlersRef.current.handleCommentPress(postId),
-     onFollowPress: (authorId, username, isFollowing) =>
-       handlersRef.current.handleFollowPress(authorId, username, isFollowing),
-     onRevealContent: (postId) => handlersRef.current.handleRevealContent(postId),
-   });
+     handlersRef.current.handleDownvote(postId, liked, disliked, likes),
+   onCommentPress: (postId) => handlersRef.current.handleCommentPress(postId),
+   onFollowUser: (authorId, username, isFollowing) =>
+     handlersRef.current.handleFollowPress(authorId, username, isFollowing),
+   onFollowTopic: (topic, isFollowed) =>
+     handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
+   onRevealContent: (postId) => handlersRef.current.handleRevealContent(postId),
+ });
  }, [setHandlers]); // Only run once - setHandlers is stable
 
   return (

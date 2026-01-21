@@ -25,17 +25,19 @@ type HomePostCardHandlers = {
     currentLikes: number
   ) => void;
   onCommentPress?: (postId: string) => void;
-  onFollowPress?: (
+  onFollowUser?: (
     authorId: string,
     authorUsername: string,
     isCurrentlyFollowing: boolean
   ) => void;
+  onFollowTopic?: (topic: string, isCurrentlyFollowed: boolean) => void;
   onRevealContent?: (postId: string) => void;
 };
 
 type HomePostCardState = {
   currentUserId?: string;
   followedUsers: Set<string>;
+  followedTopics: Set<string>;
   followLoadingUsers: Set<string>;
   revealedPosts: Set<string>;
   visiblePostIds: Set<string>;
@@ -46,6 +48,7 @@ type HomePostCardState = {
   shouldScrollToTop: boolean;
   setCurrentUserId: (id?: string) => void;
   setFollowedUsers: (users: Set<string>) => void;
+  setFollowedTopics: (topics: Set<string>) => void;
   setFollowLoadingUsers: (users: Set<string>) => void;
   setRevealedPosts: (posts: Set<string>) => void;
   setVisiblePostIds: (posts: Set<string>) => void;
@@ -63,6 +66,7 @@ const emptySet = new Set<string>();
 export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
   currentUserId: undefined,
   followedUsers: emptySet,
+  followedTopics: emptySet,
   followLoadingUsers: emptySet,
   revealedPosts: emptySet,
   visiblePostIds: emptySet,
@@ -73,6 +77,7 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
   shouldScrollToTop: false,
   setCurrentUserId: (id) => set({ currentUserId: id }),
   setFollowedUsers: (users) => set({ followedUsers: users }),
+  setFollowedTopics: (topics) => set({ followedTopics: topics }),
   setFollowLoadingUsers: (users) => set({ followLoadingUsers: users }),
   setRevealedPosts: (posts) => set({ revealedPosts: posts }),
   setVisiblePostIds: (posts) =>
@@ -130,6 +135,9 @@ export const useIsFollowLoading = (authorId: string) =>
 
 export const useIsFollowing = (authorId: string) =>
   useHomePostCardStore((state) => state.followedUsers.has(authorId));
+
+export const useIsTopicFollowed = (topic?: string) =>
+  useHomePostCardStore((state) => topic ? state.followedTopics.has(topic) : false);
 
 export const useVoteOverride = (postId: string) =>
   useHomePostCardStore((state) => state.voteOverrides[postId]);
