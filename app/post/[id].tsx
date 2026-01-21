@@ -125,15 +125,25 @@ export default function PostDetailScreen() {
 
   // Global content moderation state (syncs to home screen)
   const globalHidePost = useContentModerationStore((s) => s.hidePost);
+  const globalUnhidePost = useContentModerationStore((s) => s.unhidePost);
   const globalBlockUser = useContentModerationStore((s) => s.blockUser);
   const globalHideComment = useContentModerationStore((s) => s.hideComment);
+  const globalUnhideComment = useContentModerationStore((s) => s.unhideComment);
 
   // Local state for filtering comments on this screen
   const [hiddenCommentIds, setHiddenCommentIds] = useState<Set<string>>(new Set());
   const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(new Set());
 
   // Delete, Block, and Report handlers
-  const deleteHandler = useDeleteHandler({});
+  const deleteHandler = useDeleteHandler({
+    onRollback: (targetId, targetType) => {
+      if (targetType === "post") {
+        globalUnhidePost(targetId);
+      } else {
+        globalUnhideComment(targetId);
+      }
+    },
+  });
   const blockHandler = useBlockHandler({});
   const reportHandler = useReportHandler({});
 

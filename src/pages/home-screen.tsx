@@ -89,6 +89,7 @@ export function HomeScreen() {
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
   const hidePost = useContentModerationStore((s) => s.hidePost);
+  const unhidePost = useContentModerationStore((s) => s.unhidePost);
   const blockUser = useContentModerationStore((s) => s.blockUser);
 
   const feedType = usePreferencesStore((s) => s.feedType);
@@ -343,7 +344,13 @@ export function HomeScreen() {
   const reportHandler = useReportHandler({});
 
   // Delete handler with API integration
-  const deleteHandler = useDeleteHandler({});
+  const deleteHandler = useDeleteHandler({
+    onRollback: (targetId, targetType) => {
+      if (targetType === "post") {
+        unhidePost(targetId);
+      }
+    },
+  });
 
   // Optimistic confirm handlers - hide content immediately before API call
   const handleConfirmBlock = useCallback(() => {

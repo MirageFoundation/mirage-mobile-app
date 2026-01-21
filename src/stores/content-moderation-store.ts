@@ -17,10 +17,14 @@ interface ContentModerationState {
 
   /** Hide a post */
   hidePost: (postId: string) => void;
+  /** Unhide a post (for rollback on delete failure) */
+  unhidePost: (postId: string) => void;
   /** Block a user */
   blockUser: (userId: string) => void;
   /** Hide a comment */
   hideComment: (commentId: string) => void;
+  /** Unhide a comment (for rollback on delete failure) */
+  unhideComment: (commentId: string) => void;
   /** Check if a post is hidden */
   isPostHidden: (postId: string) => boolean;
   /** Check if a user is blocked */
@@ -43,6 +47,14 @@ export const useContentModerationStore = create<ContentModerationState>(
       }));
     },
 
+    unhidePost: (postId: string) => {
+      set((state) => {
+        const newSet = new Set(state.hiddenPostIds);
+        newSet.delete(postId);
+        return { hiddenPostIds: newSet };
+      });
+    },
+
     blockUser: (userId: string) => {
       set((state) => ({
         blockedUserIds: new Set(state.blockedUserIds).add(userId),
@@ -53,6 +65,14 @@ export const useContentModerationStore = create<ContentModerationState>(
       set((state) => ({
         hiddenCommentIds: new Set(state.hiddenCommentIds).add(commentId),
       }));
+    },
+
+    unhideComment: (commentId: string) => {
+      set((state) => {
+        const newSet = new Set(state.hiddenCommentIds);
+        newSet.delete(commentId);
+        return { hiddenCommentIds: newSet };
+      });
     },
 
     isPostHidden: (postId: string) => {

@@ -22,7 +22,8 @@ export interface DeleteTarget {
 
 export interface UseDeleteHandlerOptions {
   onSuccess?: (targetId: string, targetType: DeleteTargetType) => void;
-  onError?: (targetId: string, error: Error) => void;
+  onError?: (targetId: string, targetType: DeleteTargetType, error: Error) => void;
+  onRollback?: (targetId: string, targetType: DeleteTargetType) => void;
 }
 
 export interface UseDeleteHandlerReturn {
@@ -89,14 +90,15 @@ export function useDeleteHandler(
       onError: (error) => {
         setIsDeleting(false);
         setPendingTarget(null);
-        onError?.(targetId, error);
+        onError?.(targetId, targetType, error);
       },
       onRollback: () => {
         setIsDeleting(false);
         setPendingTarget(null);
+        options.onRollback?.(targetId, targetType);
       },
     });
-  }, [pendingTarget, enqueue, deleteMutation, onSuccess, onError]);
+  }, [pendingTarget, enqueue, deleteMutation, onSuccess, onError, options.onRollback]);
 
   return {
     requestDelete,

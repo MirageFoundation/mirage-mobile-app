@@ -155,10 +155,20 @@ export function ProfileScreen() {
 
   // Content moderation store
   const globalHidePost = useContentModerationStore((s) => s.hidePost);
+  const globalUnhidePost = useContentModerationStore((s) => s.unhidePost);
   const globalHideComment = useContentModerationStore((s) => s.hideComment);
+  const globalUnhideComment = useContentModerationStore((s) => s.unhideComment);
 
   // Delete, Block, and Report handlers
-  const deleteHandler = useDeleteHandler({});
+  const deleteHandler = useDeleteHandler({
+    onRollback: (targetId, targetType) => {
+      if (targetType === "post") {
+        globalUnhidePost(targetId);
+      } else {
+        globalUnhideComment(targetId);
+      }
+    },
+  });
   const blockHandler = useBlockHandler({});
   const reportHandler = useReportHandler({});
 
