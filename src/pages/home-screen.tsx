@@ -438,11 +438,6 @@ export function HomeScreen() {
     toast.success("Copied", "Text copied to clipboard.");
   }, [toast]);
 
-  const handleFollowPost = useCallback(() => {
-    // TODO: Call follow post API
-    console.log("Follow post:", selectedPost?.id);
-    toast.success("Following post", "You'll be notified of new activity.");
-  }, [selectedPost?.id, toast]);
 
   const handleFollowTopic = useCallback(() => {
     if (!selectedPost?.topic) return;
@@ -460,57 +455,60 @@ export function HomeScreen() {
         "Computing proof of work..."
       );
 
-      try {
-        await toggleFollowTopicMutation.mutateAsync({
-          topic,
-          isCurrentlyFollowing: isCurrentlyFollowed,
-        });
+      // Use setTimeout to allow toast to render before heavy operations
+      setTimeout(async () => {
+        try {
+          await toggleFollowTopicMutation.mutateAsync({
+            topic,
+            isCurrentlyFollowing: isCurrentlyFollowed,
+          });
 
-        // Update to success
-        toast.update(toastId, {
-          type: "success",
-          title: `${actionPast} #${topic}`,
-          description: undefined,
-          duration: 3000,
-        });
-
-        // Auto dismiss after duration
-        setTimeout(() => toast.dismiss(toastId), 3000);
-      } catch (error: unknown) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
-        const isNotFollowing =
-          errorMessage.toLowerCase().includes("not following") ||
-          errorMessage.includes("not in followed");
-
-        if (isAlreadyFollowed) {
+          // Update to success
           toast.update(toastId, {
             type: "success",
-            title: `Already following #${topic}`,
+            title: `${actionPast} #${topic}`,
             description: undefined,
             duration: 3000,
           });
+
+          // Auto dismiss after duration
           setTimeout(() => toast.dismiss(toastId), 3000);
-        } else if (isNotFollowing) {
-          toast.update(toastId, {
-            type: "success",
-            title: `Already not following #${topic}`,
-            description: undefined,
-            duration: 3000,
-          });
-          setTimeout(() => toast.dismiss(toastId), 3000);
-        } else {
-          console.error("Follow/unfollow topic failed:", error);
-          toast.update(toastId, {
-            type: "error",
-            title: `Failed to ${action.toLowerCase()} #${topic}`,
-            description: "Please try again",
-            duration: 4000,
-          });
-          setTimeout(() => toast.dismiss(toastId), 4000);
+        } catch (error: unknown) {
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
+          const isNotFollowing =
+            errorMessage.toLowerCase().includes("not following") ||
+            errorMessage.includes("not in followed");
+
+          if (isAlreadyFollowed) {
+            toast.update(toastId, {
+              type: "success",
+              title: `Already following #${topic}`,
+              description: undefined,
+              duration: 3000,
+            });
+            setTimeout(() => toast.dismiss(toastId), 3000);
+          } else if (isNotFollowing) {
+            toast.update(toastId, {
+              type: "success",
+              title: `Already not following #${topic}`,
+              description: undefined,
+              duration: 3000,
+            });
+            setTimeout(() => toast.dismiss(toastId), 3000);
+          } else {
+            console.error("Follow/unfollow topic failed:", error);
+            toast.update(toastId, {
+              type: "error",
+              title: `Failed to ${action.toLowerCase()} #${topic}`,
+              description: "Please try again",
+              duration: 4000,
+            });
+            setTimeout(() => toast.dismiss(toastId), 4000);
+          }
         }
-      }
+      }, 0);
     });
   }, [
     selectedPost?.topic,
@@ -545,9 +543,6 @@ export function HomeScreen() {
       }
 
       requireAuth(async () => {
-        // Add to loading state
-        setFollowLoadingUsers((prev) => new Set(prev).add(authorId));
-
         const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
         const actionPast = isCurrentlyFollowing ? "Unfollowed" : "Followed";
 
@@ -557,23 +552,28 @@ export function HomeScreen() {
           "Computing proof of work..."
         );
 
-        try {
-          await toggleFollowAsyncRef.current({
-            userAddress: authorId,
-            isCurrentlyFollowing,
-          });
+        // Use setTimeout to allow toast to render before heavy operations
+        setTimeout(async () => {
+          // Add to loading state
+          setFollowLoadingUsers((prev) => new Set(prev).add(authorId));
 
-          // Update to success
-          toast.update(toastId, {
-            type: "success",
-            title: `${actionPast} @${authorUsername}`,
-            description: undefined,
-            duration: 3000,
-          });
+          try {
+            await toggleFollowAsyncRef.current({
+              userAddress: authorId,
+              isCurrentlyFollowing,
+            });
 
-          // Auto dismiss after duration
-          setTimeout(() => toast.dismiss(toastId), 3000);
-        } catch (error: unknown) {
+            // Update to success
+            toast.update(toastId, {
+              type: "success",
+              title: `${actionPast} @${authorUsername}`,
+              description: undefined,
+              duration: 3000,
+            });
+
+            // Auto dismiss after duration
+            setTimeout(() => toast.dismiss(toastId), 3000);
+          } catch (error: unknown) {
           // Handle "already followed" or "not following" errors gracefully
           const errorMessage =
             error instanceof Error ? error.message : String(error);
@@ -619,10 +619,19 @@ export function HomeScreen() {
             return newSet;
           });
         }
+        }, 0);
       });
     },
     [requireAuth, toast]
   );
+
+  const handleFollowUserFromSheet = useCallback(() => {
+    if (!selectedPost) return;
+    const authorId = selectedPost.author.id;
+    const authorUsername = selectedPost.author.username;
+    const isCurrentlyFollowing = followedUsers.includes(authorId);
+    handleFollowPress(authorId, authorUsername, isCurrentlyFollowing);
+  }, [selectedPost, followedUsers, handleFollowPress]);
 
   const handleFollowTopicFromCard = useCallback(
     (topic: string, isCurrentlyFollowed: boolean) => {
@@ -636,51 +645,54 @@ export function HomeScreen() {
           "Computing proof of work..."
         );
 
-        try {
-          await toggleFollowTopicMutation.mutateAsync({
-            topic,
-            isCurrentlyFollowing: isCurrentlyFollowed,
-          });
+        // Use setTimeout to allow toast to render before heavy operations
+        setTimeout(async () => {
+          try {
+            await toggleFollowTopicMutation.mutateAsync({
+              topic,
+              isCurrentlyFollowing: isCurrentlyFollowed,
+            });
 
-          // Update to success
-          toast.update(toastId, {
-            type: "success",
-            title: `${actionPast} #${topic}`,
-            description: undefined,
-            duration: 3000,
-          });
-
-          // Auto dismiss after duration
-          setTimeout(() => toast.dismiss(toastId), 3000);
-        } catch (error: unknown) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
-          const isNotFollowing =
-            errorMessage.toLowerCase().includes("not following") ||
-            errorMessage.includes("not in followed");
-
-          if (isAlreadyFollowed || isNotFollowing) {
+            // Update to success
             toast.update(toastId, {
               type: "success",
-              title: isAlreadyFollowed
-                ? `Already following #${topic}`
-                : `Already not following #${topic}`,
+              title: `${actionPast} #${topic}`,
               description: undefined,
               duration: 3000,
             });
+
+            // Auto dismiss after duration
             setTimeout(() => toast.dismiss(toastId), 3000);
-          } else {
-            console.error("Follow/unfollow topic failed:", error);
-            toast.update(toastId, {
-              type: "error",
-              title: `Failed to ${action.toLowerCase()} #${topic}`,
-              description: "Please try again",
-              duration: 4000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 4000);
+          } catch (error: unknown) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
+            const isNotFollowing =
+              errorMessage.toLowerCase().includes("not following") ||
+              errorMessage.includes("not in followed");
+
+            if (isAlreadyFollowed || isNotFollowing) {
+              toast.update(toastId, {
+                type: "success",
+                title: isAlreadyFollowed
+                  ? `Already following #${topic}`
+                  : `Already not following #${topic}`,
+                description: undefined,
+                duration: 3000,
+              });
+              setTimeout(() => toast.dismiss(toastId), 3000);
+            } else {
+              console.error("Follow/unfollow topic failed:", error);
+              toast.update(toastId, {
+                type: "error",
+                title: `Failed to ${action.toLowerCase()} #${topic}`,
+                description: "Please try again",
+                duration: 4000,
+              });
+              setTimeout(() => toast.dismiss(toastId), 4000);
+            }
           }
-        }
+        }, 0);
       });
     },
     [requireAuth, toast, toggleFollowTopicMutation]
@@ -1036,8 +1048,13 @@ export function HomeScreen() {
             ? followedTopics.includes(selectedPost.topic)
             : false
         }
+        isFollowingUser={
+          selectedPost?.author.id
+            ? followedUsers.includes(selectedPost.author.id)
+            : false
+        }
         onShowFewer={handleShowFewer}
-        onFollowPost={handleFollowPost}
+        onFollowUser={handleFollowUserFromSheet}
         onFollowTopic={handleFollowTopic}
         onSave={handleSavePost}
         onCopyText={handleCopyText}

@@ -9,7 +9,6 @@ type PostCardItemProps = {
   isOwnPost?: boolean;
   isTopicFollowed?: boolean;
   contentRevealed?: boolean;
-  followLoading?: boolean;
   shareUrl?: string;
   onPostPress?: (postId: string) => void;
   onAuthorPress?: (authorId: string) => void;
@@ -42,7 +41,6 @@ export const PostCardItem = memo(function PostCardItem({
   isOwnPost = false,
   isTopicFollowed = false,
   contentRevealed = false,
-  followLoading = false,
   shareUrl,
   onPostPress,
   onAuthorPress,
@@ -124,7 +122,6 @@ export const PostCardItem = memo(function PostCardItem({
       onFollowTopic={handleFollowTopic}
       onRevealContent={handleRevealContent}
       contentRevealed={contentRevealed}
-      followLoading={followLoading}
       shareUrl={shareUrl}
     />
   );

@@ -35,7 +35,6 @@ type PostCardProps = {
   onSharePress?: () => void;
   onRevealContent?: () => void;
   contentRevealed?: boolean;
-  followLoading?: boolean;
   shareUrl?: string;
   /** Whether to show the URL card/Play Now row (default: true) */
   showUrlCard?: boolean;
@@ -60,7 +59,6 @@ export const PostCard = memo(function PostCard({
  onSharePress,
  onRevealContent,
  contentRevealed = false,
- followLoading = false,
  shareUrl,
  showUrlCard = true,
  style,
@@ -122,7 +120,6 @@ export const PostCard = memo(function PostCard({
         isOwnPost={isOwnPost}
         isFollowing={isFollowing}
         isTopicFollowed={isTopicFollowed}
-        followLoading={followLoading}
         showFollowButton={showFollowButton}
         onAuthorPress={onAuthorPress}
         onFollowUser={onFollowUser}

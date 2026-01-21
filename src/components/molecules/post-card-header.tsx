@@ -3,7 +3,7 @@ import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { memo, useCallback } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import {
   Menu,
   MenuOption,
@@ -20,7 +20,6 @@ type PostCardHeaderProps = {
   isOwnPost: boolean;
   isFollowing?: boolean;
   isTopicFollowed?: boolean;
-  followLoading?: boolean;
   /** Whether to show the follow button (default: true) */
   showFollowButton?: boolean;
   onAuthorPress?: () => void;
@@ -36,7 +35,6 @@ export const PostCardHeader = memo(function PostCardHeader({
   isOwnPost,
   isFollowing,
   isTopicFollowed,
-  followLoading,
   showFollowButton = true,
   onAuthorPress,
   onFollowUser,
@@ -103,32 +101,23 @@ export const PostCardHeader = memo(function PostCardHeader({
         {!isOwnPost && showFollowButton && (
           <Menu>
             <MenuTrigger>
-              {followLoading ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator
-                    size="small"
-                    color={theme.colors.text.subtle}
-                  />
-                </View>
-              ) : (
-                <View
-                  style={[
-                    styles.followButton,
-                    {
-                      backgroundColor: theme.colors.primary[500],
-                      borderColor: theme.colors.primary[500],
-                    },
-                  ]}
+              <View
+                style={[
+                  styles.followButton,
+                  {
+                    backgroundColor: theme.colors.primary[500],
+                    borderColor: theme.colors.primary[500],
+                  },
+                ]}
+              >
+                <Text
+                  size="xs"
+                  weight="semibold"
+                  style={{ color: theme.colors.background.default }}
                 >
-                  <Text
-                    size="xs"
-                    weight="semibold"
-                    style={{ color: theme.colors.background.default }}
-                  >
-                    Follow
-                  </Text>
-                </View>
-              )}
+                  Follow
+                </Text>
+              </View>
             </MenuTrigger>
             <MenuOptions
               customStyles={{
@@ -249,12 +238,6 @@ const styles = StyleSheet.create((theme) => ({
     height: 26,
     paddingHorizontal: 10,
     borderWidth: 1,
-  },
-  loadingContainer: {
-    height: 26,
-    minWidth: 54,
-    alignItems: "center",
-    justifyContent: "center",
   },
   menuOption: {
     flexDirection: "row",

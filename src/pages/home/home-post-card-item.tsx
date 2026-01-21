@@ -6,7 +6,6 @@ import { getShareBaseUrl } from "@/src/stores";
 import {
   useHomePostCardStore,
   useAllowAutoplay,
-  useIsFollowLoading,
   useIsFollowing,
   useIsTopicFollowed,
   useIsOwnPost,
@@ -29,7 +28,6 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   const isVisible = useIsPostVisible(post.id);
   const isFollowing = useIsFollowing(post.author.id);
   const isTopicFollowed = useIsTopicFollowed(post.topic);
-  const isFollowLoading = useIsFollowLoading(post.author.id);
   const contentRevealed = useIsPostRevealed(post.id);
   const voteOverride = useVoteOverride(post.id);
   const isOwnPost = useIsOwnPost(post.author.id);
@@ -153,7 +151,6 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       onFollowTopic={handleFollowTopic}
       onRevealContent={handleRevealContent}
       contentRevealed={contentRevealed}
-      followLoading={isFollowLoading}
       shareUrl={`${getShareBaseUrl(shareServer)}/post/${post.id}`}
     />
   );

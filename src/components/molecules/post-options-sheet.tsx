@@ -28,10 +28,12 @@ type PostOptionsSheetProps = {
   isOwnPost?: boolean;
   /** Whether the topic is currently followed */
   isTopicFollowed?: boolean;
+  /** Whether the user is currently followed */
+  isFollowingUser?: boolean;
   /** Callback when show fewer is pressed */
   onShowFewer?: () => void;
-  /** Callback when follow post is pressed */
-  onFollowPost?: () => void;
+  /** Callback when follow/unfollow user is pressed */
+  onFollowUser?: () => void;
   /** Callback when follow/unfollow topic is pressed */
   onFollowTopic?: () => void;
   /** Callback when save is pressed */
@@ -203,8 +205,9 @@ export const PostOptionsSheet = forwardRef<
       post,
       isOwnPost = false,
       isTopicFollowed = false,
+      isFollowingUser = false,
       onShowFewer,
-      onFollowPost,
+      onFollowUser,
       onFollowTopic,
       onSave,
       onCopyText,
@@ -346,14 +349,13 @@ export const PostOptionsSheet = forwardRef<
       onShowFewer?.();
     }, [dismiss, onShowFewer]);
 
-    const handleFollowPost = useCallback(() => {
+    const handleFollowUser = useCallback(() => {
       triggerHaptic("medium");
       dismiss();
-      onFollowPost?.();
-    }, [dismiss, onFollowPost]);
+      onFollowUser?.();
+    }, [dismiss, onFollowUser]);
 
     const handleFollowTopic = useCallback(() => {
-      triggerHaptic("medium");
       dismiss();
       onFollowTopic?.();
     }, [dismiss, onFollowTopic]);
@@ -467,13 +469,19 @@ export const PostOptionsSheet = forwardRef<
               onPress={handleCopyText}
             />
 
-            {/* Follow Post */}
-            <MenuItem
-              iconComponent={Ionicons}
-              iconName="notifications-outline"
-              title="Follow post"
-              onPress={handleFollowPost}
-            />
+            {/* Follow/Unfollow User (only for other users' posts) */}
+            {!isOwnPost && (
+              <MenuItem
+                iconComponent={Ionicons}
+                iconName={isFollowingUser ? "person" : "person-outline"}
+                title={
+                  isFollowingUser
+                    ? `Unfollow @${post?.author.username}`
+                    : `Follow @${post?.author.username}`
+                }
+                onPress={handleFollowUser}
+              />
+            )}
 
             {/* Follow/Unfollow Topic (only if post has a topic) */}
             {post?.topic && (
