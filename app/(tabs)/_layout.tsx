@@ -125,7 +125,7 @@ const TabBarItem = ({
 
   const iconColor = isFocused
     ? theme.colors.primary[500]
-    : theme.colors.text.subtle;
+    : 'rgb(144,161,171)';
 
   const renderIcon = () => {
     const iconSize = 20;
@@ -184,7 +184,7 @@ const TabBarItem = ({
           fontWeight: "500",
           color: isFocused
             ? theme.colors.primary[500]
-            : theme.colors.text.subtle,
+            : 'rgb(144,161,171)',
         }}
       >
         {label}

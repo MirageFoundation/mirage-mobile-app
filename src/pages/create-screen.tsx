@@ -4,7 +4,6 @@ import {
   Feather,
 } from "@expo/vector-icons";
 import { ResizeMode, Video } from "expo-av";
-import { Image as ExpoImage } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -627,7 +626,7 @@ export function CreateScreen() {
             ref={titleInputRef}
             style={[styles.titleInput, { color: theme.colors.text.default }]}
             placeholder="Title"
-            placeholderTextColor={theme.colors.text.subtle}
+            placeholderTextColor={'rgb(144,161,171)'}
             value={draft.title}
             onChangeText={(text) => updateDraft({ title: text })}
             multiline
@@ -740,7 +739,7 @@ export function CreateScreen() {
               style={styles.videoPreviewContainer}
             >
               <View style={[styles.videoPlayerWrapper, { height: 280 }]}>
-                <ExpoImage
+                <Image
                   source={{ uri: draft.mediaUris[0] }}
                   style={styles.videoPlayer}
                   contentFit="contain"
@@ -766,7 +765,7 @@ export function CreateScreen() {
             ref={bodyInputRef}
             style={[styles.bodyInput, { color: theme.colors.text.default }]}
             placeholder="body text (optional)"
-            placeholderTextColor={theme.colors.text.subtle}
+            placeholderTextColor={'rgb(144,161,171)'}
             value={draft.body}
             onChangeText={(text) => updateDraft({ body: text })}
             multiline
@@ -1036,8 +1035,8 @@ const styles = StyleSheet.create((theme) => ({
     marginTop: theme.spacing.sm,
   },
   titleInput: {
-    fontSize: 22,
-    fontWeight: "600",
+    fontSize: 20,
+    fontWeight: "700",
     fontFamily: theme.typography.family.mono,
     paddingBottom: theme.spacing.md,
     paddingTop: theme.spacing.md,
