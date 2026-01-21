@@ -19,7 +19,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { removeAudioFromVideo } from "@/src/utils/video-processing";
+import { processVideo } from "@/src/utils/video-processing";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const TIMELINE_PADDING = 24;
@@ -168,13 +168,30 @@ export function VideoEditorScreen() {
     
     let processedUri = videoUri;
     
-    // Process video if muted
-    if (isMuted) {
+    // Check if we need to process the video (trim or mute)
+    const needsTrim = trimStart > 100 || (duration > 0 && trimEnd < duration - 100);
+    const needsProcessing = isMuted || needsTrim;
+    
+    if (needsProcessing) {
       setIsProcessing(true);
       try {
-        processedUri = await removeAudioFromVideo(videoUri);
+        console.log("[VideoEditor] Processing video:", {
+          trimStart,
+          trimEnd,
+          duration,
+          isMuted,
+          needsTrim,
+        });
+        
+        const result = await processVideo(videoUri, {
+          removeAudio: isMuted,
+          trimStartMs: trimStart,
+          trimEndMs: trimEnd,
+          totalDurationMs: duration,
+        });
+        processedUri = result.uri;
       } catch (error) {
-        console.error("[VideoEditor] Failed to remove audio:", error);
+        console.error("[VideoEditor] Failed to process video:", error);
         // Continue with original video if processing fails
       }
       setIsProcessing(false);
@@ -365,7 +382,13 @@ export function VideoEditorScreen() {
                 Processing video...
               </Text>
               <Text size="sm" mode="subtle" style={{ marginTop: 4 }}>
-                Removing audio
+                {(() => {
+                  const needsTrim = trimStart > 100 || (duration > 0 && trimEnd < duration - 100);
+                  if (needsTrim && isMuted) return "Trimming & removing audio";
+                  if (needsTrim) return "Trimming video";
+                  if (isMuted) return "Removing audio";
+                  return "Please wait";
+                })()}
               </Text>
             </View>
           </View>
