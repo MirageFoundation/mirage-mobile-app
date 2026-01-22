@@ -64,6 +64,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { LinearGradient } from "expo-linear-gradient";
 
 export default function PostDetailScreen() {
   const { id, highlight } = useLocalSearchParams<{ id: string; highlight?: string }>();
@@ -1109,29 +1110,6 @@ export default function PostDetailScreen() {
     postOptionsSheetRef.current?.present();
   }, []);
 
-  // Stable header background color based on post ID
-  const headerColor = useMemo(() => {
-    const colors = [
-      "#FF6B6B", // Coral red
-      "#4ECDC4", // Teal
-      "#45B7D1", // Sky blue
-      "#96CEB4", // Sage green
-      "#FFEAA7", // Soft yellow
-      "#DDA0DD", // Plum
-      "#98D8C8", // Mint
-      "#F7DC6F", // Mustard
-      "#BB8FCE", // Lavender
-      "#85C1E9", // Light blue
-      "#F8B500", // Golden
-      "#FF8C00", // Dark orange
-    ];
-    // Generate a stable index based on post ID
-    const hash = (id ?? "0")
-      .split("")
-      .reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return colors[hash % colors.length];
-  }, [id]);
-
   // Header action handlers
   const handleSearch = useCallback(() => {
     // TODO: Implement search
@@ -1156,10 +1134,13 @@ export default function PostDetailScreen() {
   // Render header (close button + right icons)
   const renderHeader = useMemo(
     () => (
-      <View
+      <LinearGradient
+        colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
         style={[
           styles.header,
-          { paddingTop: insets.top, backgroundColor: headerColor },
+          { paddingTop: insets.top },
         ]}
       >
         {/* Left: Close button */}
@@ -1188,11 +1169,10 @@ export default function PostDetailScreen() {
             <Avatar size="sm" seed={currentUser?.username ?? "guest"} />
           </Pressable>
         </View>
-      </View>
+      </LinearGradient>
     ),
     [
       insets.top,
-      headerColor,
       handleBack,
       handleSearch,
       handleSort,
