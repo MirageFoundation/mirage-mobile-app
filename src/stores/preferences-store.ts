@@ -5,6 +5,7 @@ import { mmkvStorage } from "./mmkv-storage";
 export type FeedType = "home" | "popular" | "news" | "watch" | "latest";
 export type ThemeMode = "light" | "dark" | "system";
 export type ShareServer = "mirage.talk" | "mirage.vote";
+export type ApiServer = "mirage.talk" | "mirage.vote";
 export type VideoAutoplayNetwork = "always" | "wifi_only" | "never";
 export type ContentType =
   | "sensitive"
@@ -54,6 +55,10 @@ export const getShareBaseUrl = (server: ShareServer): string => {
   return `https://${server}`;
 };
 
+export const getApiBaseUrl = (server: ApiServer): string => {
+  return `https://${server}`;
+};
+
 type PreferencesState = {
   // Feed
   feedType: FeedType;
@@ -78,6 +83,9 @@ type PreferencesState = {
   // Sharing
   shareServer: ShareServer;
 
+  // API Server
+  apiServer: ApiServer;
+
   // Video
   autoPlayVideos: boolean;
   videoAutoplayNetwork: VideoAutoplayNetwork;
@@ -95,6 +103,7 @@ type PreferencesState = {
   setTopicsBeforeShowMore: (count: number) => void;
   setPeopleBeforeShowMore: (count: number) => void;
   setShareServer: (server: ShareServer) => void;
+  setApiServer: (server: ApiServer) => void;
   setAutoPlayVideos: (autoPlay: boolean) => void;
   setVideoAutoplayNetwork: (network: VideoAutoplayNetwork) => void;
 };
@@ -124,6 +133,9 @@ export const usePreferencesStore = create<PreferencesState>()(
 
       // Sharing
       shareServer: "mirage.talk",
+
+      // API Server
+      apiServer: "mirage.vote",
 
       // Video
       autoPlayVideos: true,
@@ -237,6 +249,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       setTopicsBeforeShowMore: (count) => set({ topicsBeforeShowMore: count }),
       setPeopleBeforeShowMore: (count) => set({ peopleBeforeShowMore: count }),
       setShareServer: (server) => set({ shareServer: server }),
+      setApiServer: (server) => set({ apiServer: server }),
       setAutoPlayVideos: (autoPlay) => set({ autoPlayVideos: autoPlay }),
       setVideoAutoplayNetwork: (network) => set({ videoAutoplayNetwork: network }),
     }),

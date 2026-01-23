@@ -18,7 +18,9 @@ import {
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useQueryClear } from "@/src/providers/query-clear-provider";
-import { useAuthStore, useDraftStore, useSearchStore, usePreferencesStore, type ThemeMode, type ShareServer, type VideoAutoplayNetwork } from "@/src/stores";
+import { useApiServer } from "@/src/providers/api-server-provider";
+import { useToast } from "@/src/providers/toast-provider";
+import { useAuthStore, useDraftStore, useSearchStore, usePreferencesStore, type ThemeMode, type ApiServer, type VideoAutoplayNetwork } from "@/src/stores";
 
 // Auto-collapse threshold options
 const collapseThresholdOptions: ValueOption<number | null>[] = [
@@ -39,8 +41,8 @@ const sidebarCountOptions: ValueOption<number>[] = [
   { value: -1, label: "Show All" },
 ];
 
-// Share server options
-const shareServerOptions: ValueOption<ShareServer>[] = [
+// Server options
+const apiServerOptions: ValueOption<ApiServer>[] = [
   { value: "mirage.talk", label: "mirage.talk" },
   { value: "mirage.vote", label: "mirage.vote" },
 ];
@@ -67,11 +69,13 @@ export function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
 
-  // Stores
+ // Stores
   const logout = useAuthStore((s) => s.logout);
   const clearDraft = useDraftStore((s) => s.clearDraft);
   const clearRecentSearches = useSearchStore((s) => s.clearRecentSearches);
   const { clearQueries } = useQueryClear();
+  const { switchServer } = useApiServer();
+  const toast = useToast();
   const {
     theme: themeMode,
     setTheme,
@@ -83,16 +87,16 @@ export function SettingsScreen() {
     setHideDownvotedPosts,
     autoCollapseThreshold,
     setAutoCollapseThreshold,
-    topicsBeforeShowMore,
+   topicsBeforeShowMore,
     setTopicsBeforeShowMore,
     peopleBeforeShowMore,
     setPeopleBeforeShowMore,
-    shareServer,
-    setShareServer,
     autoPlayVideos,
     setAutoPlayVideos,
     videoAutoplayNetwork,
     setVideoAutoplayNetwork,
+    apiServer,
+    setShareServer,
   } = usePreferencesStore();
 
   // Sheet refs
@@ -100,7 +104,7 @@ export function SettingsScreen() {
   const collapseThresholdSheetRef = useRef<ValuePickerSheetRef>(null);
   const topicsCountSheetRef = useRef<ValuePickerSheetRef>(null);
   const peopleCountSheetRef = useRef<ValuePickerSheetRef>(null);
-  const shareServerSheetRef = useRef<ValuePickerSheetRef>(null);
+  const apiServerSheetRef = useRef<ValuePickerSheetRef>(null);
   const videoAutoplayNetworkSheetRef = useRef<ValuePickerSheetRef>(null);
 
   // Logout popup state
@@ -113,11 +117,29 @@ export function SettingsScreen() {
     router.back();
   }, [router]);
 
-  const handleThemeChange = useCallback(
+ const handleThemeChange = useCallback(
     (value: ThemeMode) => {
       setTheme(value);
     },
     [setTheme]
+  );
+
+const handleApiServerChange = useCallback(
+    async (server: ApiServer) => {
+      if (server === apiServer) {
+        return;
+      }
+      
+      try {
+        await switchServer(server);
+        setShareServer(server);
+        toast.success(`Switched to ${server}`);
+        router.replace("/(tabs)");
+      } catch (err) {
+        toast.error("Failed to switch server");
+      }
+    },
+    [switchServer, apiServer, toast, router, setShareServer]
   );
 
   const handleLogout = useCallback(async () => {
@@ -322,22 +344,22 @@ export function SettingsScreen() {
               disabled={!autoPlayVideos}
             />
           ),
-        },
-      ],
+      },
+    ],
     },
-    {
-      title: "Sharing",
+   {
+      title: "Server",
       data: [
         {
-          id: "share-server",
+          id: "api-server",
           component: (
             <SettingRow
               type="value"
-              icon="share-social-outline"
-              title="Share Server"
-              subtitle="Server used for sharing links"
-              rightText={shareServer}
-              onPress={() => shareServerSheetRef.current?.present()}
+              icon="server-outline"
+              title="Server"
+              subtitle="Server used for API requests and sharing"
+              rightText={apiServer}
+              onPress={() => apiServerSheetRef.current?.present()}
             />
           ),
         },
@@ -451,7 +473,7 @@ export function SettingsScreen() {
         onChange={setTopicsBeforeShowMore}
       />
 
-      <ValuePickerSheet
+     <ValuePickerSheet
         ref={peopleCountSheetRef}
         title="People Before 'Show More'"
         options={sidebarCountOptions}
@@ -460,11 +482,11 @@ export function SettingsScreen() {
       />
 
       <ValuePickerSheet
-        ref={shareServerSheetRef}
-        title="Share Server"
-        options={shareServerOptions}
-        value={shareServer}
-        onChange={setShareServer}
+        ref={apiServerSheetRef}
+        title="Server"
+        options={apiServerOptions}
+        value={apiServer}
+        onChange={handleApiServerChange}
       />
 
       <ValuePickerSheet

@@ -1303,8 +1303,7 @@ export default function PostDetailScreen() {
         currentUserId={currentUser?.id}
         highlightedCommentId={highlightedCommentId}
         onAuthorPress={(authorId) => {
-          // TODO: Navigate to user profile
-          console.log("Navigate to author:", authorId);
+          router.push(`/user/${authorId}`);
         }}
         onLikePress={(commentId, hasLiked, hasDisliked, likes) =>
           handleLikeComment(commentId, hasLiked, hasDisliked, likes)

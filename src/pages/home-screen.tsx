@@ -315,9 +315,8 @@ export function HomeScreen() {
   );
 
   const handleAuthorPress = useCallback((authorId: string) => {
-    // TODO: Navigate to user profile
-    console.log("Navigate to author:", authorId);
-  }, []);
+    router.push(`/user/${authorId}`);
+  }, [router]);
 
   const postsByIdRef = useRef<Map<string, Post>>(new Map());
 

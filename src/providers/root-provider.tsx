@@ -4,6 +4,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { MenuProvider } from "react-native-popup-menu";
 
+import { ApiServerProvider } from "./api-server-provider";
 import { QueryClearProvider } from "./query-clear-provider";
 import { QueryProvider } from "./query-provider";
 import { ThemeContextProvider } from "./theme-context";
@@ -22,7 +23,9 @@ CoreProviders.displayName = "CoreProviders";
 const AuthProviders = memo(({ children }: { children: React.ReactNode }) => (
   <QueryProvider>
     <QueryClearProvider>
-      <WalletProvider>{children}</WalletProvider>
+      <ApiServerProvider>
+        <WalletProvider>{children}</WalletProvider>
+      </ApiServerProvider>
     </QueryClearProvider>
   </QueryProvider>
 ));

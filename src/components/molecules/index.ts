@@ -65,6 +65,7 @@ export {
 export { ProfileCommentItem } from "./profile-comment-item";
 export { ProfilePostsList } from "./profile-posts-list";
 export { ProfilePostsSkeleton } from "./profile-posts-skeleton";
+export { UserProfileContent } from "./user-profile-content";
 
 // Settings
 export {

@@ -186,8 +186,8 @@ export function FollowingScreen() {
   );
 
   const handleAuthorPress = useCallback((authorId: string) => {
-    console.log("Navigate to author:", authorId);
-  }, []);
+    router.push(`/user/${authorId}`);
+  }, [router]);
 
   // Create a ref map for posts by ID for quick lookup
   const postsByIdRef = useRef<Map<string, Post>>(new Map());

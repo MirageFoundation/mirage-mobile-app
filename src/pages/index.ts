@@ -8,3 +8,4 @@ export { SubscriptionScreen } from "./subscription-screen";
 export { InviteAndEarnScreen } from "./invite-and-earn-screen";
 export { SearchScreen } from "./search-screen";
 export { VideoEditorScreen } from "./create/video-editor-screen";
+export { UserProfileScreen } from "./user-profile-screen";

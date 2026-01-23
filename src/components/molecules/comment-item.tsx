@@ -483,30 +483,39 @@ export const CommentItem = ({
       )}
 
       <View style={[styles.contentWrapper, { marginLeft: indentWidth }]}>
-        {/* Header: Avatar, Username, Time */}
-        <View style={styles.header}>
-          <Pressable onPress={handleAuthorPress} style={styles.authorSection}>
-            <Avatar
-              size={SIZE_CONFIG.avatarSize}
-              seed={author.avatarSeed ?? author.username}
-              source={author.avatarUrl ? { uri: author.avatarUrl } : undefined}
-              bordered
-            />
-            <View style={styles.authorInfo}>
-              <View style={styles.authorRow}>
-                <Text size="sm" weight="semibold" numberOfLines={1}>
-                  @{author.username}
-                </Text>
-                <Text size="xs" mode="subtle">
-                  ·
-                </Text>
-                <TimeAgo timestamp={createdAt} showSuffix={false} size="xs" />
-              </View>
-            </View>
-          </Pressable>
-          {/* Tappable area to expand/collapse */}
-          <Pressable onPress={handlePress} style={styles.expandArea} />
-        </View>
+       {/* Header: Avatar, Username, Time */}
+       <View style={styles.header}>
+          <View style={styles.authorSection}>
+           <Avatar
+             size={SIZE_CONFIG.avatarSize}
+             seed={author.avatarSeed ?? author.username}
+             source={author.avatarUrl ? { uri: author.avatarUrl } : undefined}
+             bordered
+           />
+           <View style={styles.authorInfo}>
+             <View style={styles.authorRow}>
+                <Pressable
+                  onPress={handleAuthorPress}
+                  hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+                  style={({ pressed }) => [
+                    styles.usernameButton,
+                    pressed && styles.usernameButtonPressed,
+                  ]}
+                >
+                  <Text size="sm" weight="semibold" numberOfLines={1}>
+                    @{author.username}
+                  </Text>
+                </Pressable>
+               <Text size="xs" mode="subtle">
+                 ·
+               </Text>
+               <TimeAgo timestamp={createdAt} showSuffix={false} size="xs" />
+             </View>
+           </View>
+          </View>
+         {/* Tappable area to expand/collapse */}
+         <Pressable onPress={handlePress} style={styles.expandArea} />
+       </View>
 
         {/* Comment content - collapsible */}
         <Animated.View style={animatedContentStyle}>
@@ -626,14 +635,21 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
   },
-  authorSection: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  authorInfo: {
-    marginLeft: theme.spacing.xs,
-  },
-  expandArea: {
+ authorSection: {
+   flexDirection: "row",
+   alignItems: "center",
+ },
+ authorInfo: {
+   marginLeft: theme.spacing.xs,
+ },
+ usernameButton: {
+   paddingVertical: 2,
+   paddingHorizontal: 2,
+ },
+ usernameButtonPressed: {
+   opacity: 0.6,
+ },
+ expandArea: {
     flex: 1,
     height: 32,
   },

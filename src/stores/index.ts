@@ -4,10 +4,12 @@ export {
   type FeedType,
   type ThemeMode,
   type ShareServer,
+  type ApiServer,
   type VideoAutoplayNetwork,
   type ContentType,
   getAllowedTagsFromContentTypes,
   getShareBaseUrl,
+  getApiBaseUrl,
 } from "./preferences-store";
 export { useDraftStore, type PostDraft } from "./draft-store";
 export { useUIStore } from "./ui-store";

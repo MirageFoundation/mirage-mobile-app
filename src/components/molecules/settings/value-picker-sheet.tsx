@@ -76,11 +76,23 @@ function ValuePickerSheetInner<T>(
     []
   );
 
-  const handleSelect = useCallback(
+const handleSelect = useCallback(
     (newValue: T) => {
       triggerHaptic("light");
-      onChange(newValue);
-      dismiss();
+      try {
+        const result = onChange(newValue) as unknown;
+        if (result && typeof (result as Promise<void>).then === 'function') {
+          (result as Promise<void>).then(() => {
+            dismiss();
+          }).catch(() => {
+            dismiss();
+          });
+        } else {
+          dismiss();
+        }
+      } catch (err) {
+        dismiss();
+      }
     },
     [onChange, dismiss]
   );
@@ -144,11 +156,11 @@ function ValuePickerSheetInner<T>(
                 >
                   {option.label}
                 </Text>
-                {isSelected && (
+              {isSelected && (
                   <Ionicons
                     name="checkmark"
                     size={22}
-                    color={theme.colors.brand}
+                    color={typeof theme.colors.brand === 'string' ? theme.colors.brand : theme.colors.brand[500] || '#007AFF'}
                   />
                 )}
               </Pressable>
@@ -193,4 +205,3 @@ const styles = StyleSheet.create((theme) => ({
     borderBottomColor: "rgba(0,0,0,0.05)",
   },
 }));
-

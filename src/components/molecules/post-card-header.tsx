@@ -63,39 +63,48 @@ export const PostCardHeader = memo(function PostCardHeader({
     onFollowTopic?.();
   }, [onFollowTopic]);
 
-  return (
-    <View style={styles.header}>
-      <Pressable onPress={handleAuthorPress} style={styles.authorSection}>
+ return (
+   <View style={styles.header}>
+      <View style={styles.authorSection}>
         <View style={styles.authorRow}>
-          {topic && (
-            <Text size="md" weight="bold" numberOfLines={1}>
-              #{topic}
+         {topic && (
+           <Text size="md" weight="bold" numberOfLines={1}>
+             #{topic}
+           </Text>
+         )}
+         {topic && (
+           <Text size="sm" style={{ color: "rgb(144,161,171)" }}>
+             •
+           </Text>
+         )}
+         <TimeAgo
+           timestamp={createdAt}
+           showSuffix={false}
+           size="sm"
+           style={{ color: "rgb(144,161,171)" }}
+         />
+         <Text size="sm" style={{ color: "rgb(144,161,171)" }}>
+           •
+         </Text>
+          <Pressable
+            onPress={handleAuthorPress}
+            hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+            style={({ pressed }) => [
+              styles.usernameButton,
+              pressed && styles.usernameButtonPressed,
+            ]}
+         >
+            <Text
+              size="md"
+              weight="medium"
+              numberOfLines={1}
+              style={{ color: "rgb(144,161,171)" }}
+            >
+              @{author.username.toLowerCase()}
             </Text>
-          )}
-          {topic && (
-            <Text size="sm" style={{ color: "rgb(144,161,171)" }}>
-              •
-            </Text>
-          )}
-          <TimeAgo
-            timestamp={createdAt}
-            showSuffix={false}
-            size="sm"
-            style={{ color: "rgb(144,161,171)" }}
-          />
-          <Text size="sm" style={{ color: "rgb(144,161,171)" }}>
-            •
-          </Text>
-          <Text
-            size="md"
-            weight="medium"
-            numberOfLines={1}
-            style={{ color: "rgb(144,161,171)" }}
-          >
-            @{author.username.toLowerCase()}
-          </Text>
-        </View>
-      </Pressable>
+          </Pressable>
+       </View>
+      </View>
 
       <View style={styles.headerActions}>
         {!isOwnPost && showFollowButton && (
@@ -220,17 +229,24 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  authorSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  authorRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.xs,
-  },
-  headerActions: {
+authorSection: {
+  flexDirection: "row",
+  alignItems: "center",
+  flex: 1,
+},
+ authorRow: {
+   flexDirection: "row",
+   alignItems: "center",
+   gap: theme.spacing.xs,
+ },
+ usernameButton: {
+   paddingVertical: 4,
+   paddingHorizontal: 2,
+ },
+ usernameButtonPressed: {
+   opacity: 0.6,
+ },
+ headerActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing.sm,
