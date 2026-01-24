@@ -118,6 +118,7 @@ export function UserProfileScreen() {
 
   const [showBlockUserConfirmation, setShowBlockUserConfirmation] = useState(false);
   const [isBlockingUser, setIsBlockingUser] = useState(false);
+  const [optimisticBlocked, setOptimisticBlocked] = useState<boolean | null>(null);
 
   const globalHidePost = useContentModerationStore((s) => s.hidePost);
   const globalUnhidePost = useContentModerationStore((s) => s.unhidePost);
@@ -146,9 +147,10 @@ export function UserProfileScreen() {
   }, [userAddress, followedData?.followed_users]);
 
   const isBlocked = useMemo(() => {
+    if (optimisticBlocked !== null) return optimisticBlocked;
     if (!userAddress || !blockedData?.blocked_users) return false;
     return blockedData.blocked_users.includes(userAddress);
-  }, [userAddress, blockedData?.blocked_users]);
+  }, [userAddress, blockedData?.blocked_users, optimisticBlocked]);
 
   const headerHeight = insets.top + HEADER_BAR_HEIGHT;
   const stickyThreshold = PROFILE_CONTENT_HEIGHT;
@@ -211,38 +213,32 @@ export function UserProfileScreen() {
   const handleFollowersPress = useCallback(() => {
   }, []);
 
- const handleFollow = useCallback(() => {
-   if (!userAddress) return;
-   toggleFollowMutation.mutate(
-     {
+const handleFollow = useCallback(() => {
+  if (!userAddress) return;
+   toast.promise(
+     toggleFollowMutation.mutateAsync({
        userAddress,
        isCurrentlyFollowing: false,
-     },
+     }),
      {
-       onSuccess: () => {
-          toast.success(`Followed @${displayUsername || "user"}`);
-       },
-       onError: () => {
-          toast.error("Failed to follow user");
-       },
+       loading: `Following @${displayUsername || "user"}...`,
+       success: `Followed @${displayUsername || "user"}`,
+       error: "Failed to follow user",
      }
    );
  }, [userAddress, displayUsername, toggleFollowMutation, toast]);
 
- const handleUnfollow = useCallback(() => {
-   if (!userAddress) return;
-   toggleFollowMutation.mutate(
-     {
+const handleUnfollow = useCallback(() => {
+  if (!userAddress) return;
+   toast.promise(
+     toggleFollowMutation.mutateAsync({
        userAddress,
        isCurrentlyFollowing: true,
-     },
+     }),
      {
-       onSuccess: () => {
-          toast.success(`Unfollowed @${displayUsername || "user"}`);
-       },
-       onError: () => {
-          toast.error("Failed to unfollow user");
-       },
+       loading: `Unfollowing @${displayUsername || "user"}...`,
+       success: `Unfollowed @${displayUsername || "user"}`,
+       error: "Failed to unfollow user",
      }
    );
  }, [userAddress, displayUsername, toggleFollowMutation, toast]);
@@ -251,39 +247,41 @@ export function UserProfileScreen() {
     setShowBlockUserConfirmation(true);
   }, []);
 
- const handleConfirmBlockUser = useCallback(() => {
-   if (!userAddress) return;
-   setIsBlockingUser(true);
-   blockUserMutation.mutate(userAddress, {
-     onSuccess: () => {
-       setShowBlockUserConfirmation(false);
-       setIsBlockingUser(false);
-        toast.success(
-          `Blocked @${displayUsername || "user"}`,
-          "You won't see their content anymore"
-        );
-     },
-     onError: () => {
-       setShowBlockUserConfirmation(false);
-       setIsBlockingUser(false);
-        toast.error("Failed to block user");
-     },
-   });
+const handleConfirmBlockUser = useCallback(() => {
+ if (!userAddress) return;
+  setOptimisticBlocked(true);
+ setIsBlockingUser(true);
+  setShowBlockUserConfirmation(false);
+  toast.promise(
+    blockUserMutation.mutateAsync(userAddress),
+    {
+      loading: `Blocking @${displayUsername || "user"}...`,
+      success: `Blocked @${displayUsername || "user"}`,
+      error: "Failed to block user",
+    }
+   ).catch(() => {
+     setOptimisticBlocked(null);
+   }).finally(() => {
+    setIsBlockingUser(false);
+  });
  }, [userAddress, displayUsername, blockUserMutation, toast]);
 
   const handleCancelBlockUser = useCallback(() => {
     setShowBlockUserConfirmation(false);
   }, []);
 
- const handleUnblockUser = useCallback(() => {
-   if (!userAddress) return;
-   unblockUserMutation.mutate(userAddress, {
-     onSuccess: () => {
-        toast.success(`Unblocked @${displayUsername || "user"}`);
-     },
-     onError: () => {
-        toast.error("Failed to unblock user");
-     },
+const handleUnblockUser = useCallback(() => {
+ if (!userAddress) return;
+  setOptimisticBlocked(false);
+  toast.promise(
+    unblockUserMutation.mutateAsync(userAddress),
+    {
+      loading: `Unblocking @${displayUsername || "user"}...`,
+      success: `Unblocked @${displayUsername || "user"}`,
+      error: "Failed to unblock user",
+    }
+   ).catch(() => {
+     setOptimisticBlocked(null);
    });
  }, [userAddress, displayUsername, unblockUserMutation, toast]);
 
@@ -299,18 +297,24 @@ export function UserProfileScreen() {
     toast.success("Profile link copied");
  }, [shareServer, username, toast]);
 
- const handleReportUserSubmit = useCallback(
-   (reason: string) => {
-     if (!userAddress) return;
-     reportSheetRef.current?.dismiss();
-     setShowReportUserSheet(false);
-      toast.success(
-        "Report submitted",
-        "Thank you for helping keep Mirage safe"
-      );
-   },
-   [userAddress, toast]
- );
+const handleReportUserSubmit = useCallback(
+  (reason: string) => {
+    if (!userAddress) return;
+     const loadingId = toast.loading("Submitting report...");
+    reportSheetRef.current?.dismiss();
+    setShowReportUserSheet(false);
+     setTimeout(() => {
+       toast.update(loadingId, {
+         type: "success",
+         title: "Report submitted",
+         description: "Thank you for helping keep Mirage safe",
+         duration: 4000,
+       });
+       setTimeout(() => toast.dismiss(loadingId), 4000);
+     }, 800);
+  },
+  [userAddress, toast]
+);
 
   const handlePostPress = useCallback(
     (postId: string) => {
@@ -440,35 +444,11 @@ export function UserProfileScreen() {
         return "about";
       default:
         return "posts";
-    }
-  };
+   }
+ };
 
-  const BlockedUserOverlay = () => (
-    <View style={[styles.blockedOverlay, { backgroundColor: theme.colors.background.default }]}>
-      <View style={styles.blockedContent}>
-        <View style={[styles.blockedIconContainer, { backgroundColor: theme.colors.background.subtle }]}>
-          <Ionicons name="ban-outline" size={48} color={theme.colors.text.subtle} />
-        </View>
-        <Text size="lg" weight="bold" style={styles.blockedTitle}>
-          User Blocked
-        </Text>
-        <Text size="sm" mode="subtle" style={styles.blockedDescription}>
-          You have blocked @{displayUsername || "this user"}. Unblock to see their profile and content.
-        </Text>
-        <Pressable
-          onPress={handleUnblockUser}
-          style={[styles.unblockButton, { backgroundColor: theme.colors.primary[500] }]}
-        >
-          <Text size="sm" weight="semibold" style={styles.unblockButtonText}>
-            Unblock User
-          </Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-
-  return (
-    <Box flex background="base">
+ return (
+   <Box flex background="base">
       <ProfileHeaderBar
         username={username}
         userLevel={userStatus?.user_level ?? 0}
@@ -479,34 +459,29 @@ export function UserProfileScreen() {
         onBackPress={handleBackPress}
         onSharePress={handleSharePress}
         onMenuPress={handleMenuPress}
-      />
+     />
 
-      {shouldShowStickyTabs && !isBlocked && (
-        <Animated.View
-          style={[
-            styles.stickyTabBar,
-            {
-              top: headerHeight,
-              backgroundColor: theme.colors.background.default,
-            },
-            stickyTabsAnimatedStyle,
-          ]}
-        >
-          <ProfileTabBar
-            activeTab={activeTab}
-            onTabChange={handleTabChange}
-            onTabDoubleTap={handleTabDoubleTap}
-            tabWidth={SCREEN_WIDTH}
-          />
-        </Animated.View>
-      )}
+      {shouldShowStickyTabs && (
+      <Animated.View
+        style={[
+          styles.stickyTabBar,
+           {
+             top: headerHeight,
+             backgroundColor: theme.colors.background.default,
+           },
+           stickyTabsAnimatedStyle,
+         ]}
+       >
+         <ProfileTabBar
+           activeTab={activeTab}
+           onTabChange={handleTabChange}
+           onTabDoubleTap={handleTabDoubleTap}
+           tabWidth={SCREEN_WIDTH}
+         />
+       </Animated.View>
+     )}
 
-      {isBlocked ? (
-        <View style={[styles.blockedContainer, { paddingTop: headerHeight }]}>
-          <BlockedUserOverlay />
-        </View>
-      ) : (
-        <Animated.ScrollView
+      <Animated.ScrollView
           ref={scrollViewRef as any}
           style={styles.scrollView}
           contentContainerStyle={[
@@ -544,20 +519,22 @@ export function UserProfileScreen() {
             />
           </View>
 
-          <View style={styles.tabContent}>
-            <ProfileTabContent
-              tabType={getTabType()}
-              owner={userAddress ?? undefined}
-              onPostPress={handlePostPress}
-              onCommentPress={handleCommentPress}
-              onAuthorPress={handleAuthorPress}
-              onMorePress={handlePostMorePress}
-            />
-          </View>
-        </Animated.ScrollView>
-      )}
+        <View style={styles.tabContent}>
+          <ProfileTabContent
+            tabType={getTabType()}
+            owner={userAddress ?? undefined}
+            onPostPress={handlePostPress}
+            onCommentPress={handleCommentPress}
+            onAuthorPress={handleAuthorPress}
+            onMorePress={handlePostMorePress}
+             isOwnProfile={isOwnProfile}
+              isBlocked={isBlocked}
+              onUnblock={handleUnblockUser}
+          />
+       </View>
+      </Animated.ScrollView>
 
-      {!isOwnProfile && (
+     {!isOwnProfile && (
         <UserProfileMenuSheet
           ref={userMenuSheetRef}
           username={displayUsername ?? undefined}
@@ -650,46 +627,8 @@ const styles = StyleSheet.create((theme) => ({
     right: 0,
     zIndex: 99,
   },
-  tabContent: {
-    flex: 1,
-    minHeight: 400,
-  },
-  blockedContainer: {
-    flex: 1,
-  },
-  blockedOverlay: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: theme.spacing.xl,
-  },
-  blockedContent: {
-    alignItems: "center",
-    maxWidth: 300,
-  },
-  blockedIconContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: theme.spacing.lg,
-  },
-  blockedTitle: {
-    textAlign: "center",
-    marginBottom: theme.spacing.sm,
-  },
-  blockedDescription: {
-    textAlign: "center",
-    lineHeight: 20,
-    marginBottom: theme.spacing.lg,
-  },
-  unblockButton: {
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.xl,
-    borderRadius: theme.radius.full,
-  },
-  unblockButtonText: {
-    color: "#FFFFFF",
-  },
+ tabContent: {
+   flex: 1,
+   minHeight: 400,
+ },
 }));
