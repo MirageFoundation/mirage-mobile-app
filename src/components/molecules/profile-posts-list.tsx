@@ -147,14 +147,18 @@ export const ProfilePostsList = memo(function ProfilePostsList({
     [borderColor]
   );
 
-  const ListFooterComponent = useCallback(() => {
-    if (!isFetchingNextPage) return null;
-    return (
-      <View style={styles.footer}>
-        <ActivityIndicator size="small" color={theme.colors.text.subtle} />
+ const ListFooterComponent = useCallback(() => {
+   return (
+      <View style={styles.footerContainer}>
+        {isFetchingNextPage && (
+          <View style={styles.loadingFooter}>
+            <ActivityIndicator size="small" color={theme.colors.text.subtle} />
+          </View>
+        )}
+        <View style={styles.bottomSpacer} />
       </View>
-    );
-  }, [isFetchingNextPage, theme.colors.text.subtle]);
+   );
+ }, [isFetchingNextPage, theme.colors.text.subtle]);
 
   // Loading state
   if (isLoading) {
@@ -233,14 +237,18 @@ export const ProfilePostsList = memo(function ProfilePostsList({
 });
 
 const styles = StyleSheet.create((theme) => ({
-  separator: {
-    height: 1,
+ separator: {
+   height: 1,
+ },
+  footerContainer: {},
+  loadingFooter: {
+   paddingVertical: theme.spacing.lg,
+   alignItems: "center",
+ },
+  bottomSpacer: {
+    height: 80,
   },
-  footer: {
-    paddingVertical: theme.spacing.lg,
-    alignItems: "center",
-  },
-  errorContainer: {
+ errorContainer: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: theme.spacing.xxl,

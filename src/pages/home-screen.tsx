@@ -174,7 +174,8 @@ export function HomeScreen() {
     allowed_tags: allowedTags || undefined,
   });
 
-  // Transform API data to UI format (includes following status)
+  // Transform API data to UI format
+  // Note: isFollowing is handled by HomePostCardItem via the store, not here
   const posts = useMemo(() => {
     if (!data?.pages) return [];
     const allPosts = data.pages.flatMap((page) => page.posts);
@@ -188,14 +189,14 @@ export function HomeScreen() {
     }
     const uniquePosts = Array.from(uniquePostsMap.values());
 
-    const transformedPosts = transformApiPosts(uniquePosts, { followedUsers });
+    const transformedPosts = transformApiPosts(uniquePosts);
 
     // Filter out hidden posts and posts from blocked users
     return transformedPosts.filter(
       (post) =>
         !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id)
     );
-  }, [data, followedUsers, hiddenPostIds, blockedUserIds]);
+  }, [data, hiddenPostIds, blockedUserIds]);
 
  // Revealed posts for content warnings
  const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());

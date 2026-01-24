@@ -51,9 +51,13 @@ export {
   SCROLL_THRESHOLD,
 } from "./profile-header";
 export {
-  ProfileMenuSheet,
-  type ProfileMenuSheetRef,
+ ProfileMenuSheet,
+ type ProfileMenuSheetRef,
 } from "./profile-menu-sheet";
+export {
+  UserProfileMenuSheet,
+  type UserProfileMenuSheetRef,
+} from "./user-profile-menu-sheet";
 export { SideMenu, type SideMenuRef } from "./side-menu";
 export {
   ProfileEmptyState,

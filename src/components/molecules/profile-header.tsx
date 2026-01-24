@@ -2,7 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, Animated as RNAnimated, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  Animated as RNAnimated,
+  View,
+} from "react-native";
 import Animated, {
   interpolate,
   interpolateColor,
@@ -12,99 +17,100 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 
+import { ShareIcon } from "@/assets/figma-icons";
 import { Avatar, IconButton } from "@/src/components/atoms";
 import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
-// Random gradient colors for profile backgrounds
 const GRADIENT_COLORS = [
-  "#E85429", // Orange (Mirage brand)
-  "#8B5CF6", // Purple
-  "#3B82F6", // Blue
-  "#10B981", // Emerald
-  "#F59E0B", // Amber
-  "#EF4444", // Red
-  "#EC4899", // Pink
-  "#6366F1", // Indigo
-  "#14B8A6", // Teal
-  "#F97316", // Orange
+  "#E85429",
+  "#8B5CF6",
+  "#3B82F6",
+  "#10B981",
+  "#F59E0B",
+  "#EF4444",
+  "#EC4899",
+  "#6366F1",
+  "#14B8A6",
+  "#F97316",
 ];
 
-// Header dimensions - exported for use in ProfileScreen
-export const PROFILE_CONTENT_HEIGHT = 280; // Approximate height of profile content
+export const PROFILE_CONTENT_HEIGHT = 280;
 export const SCROLL_THRESHOLD = PROFILE_CONTENT_HEIGHT;
+
+const TIER_NAMES: Record<number, string> = {
+  0: "Free",
+  1: "Basic",
+  2: "Pro",
+  3: "Premium",
+};
+
+const getTierName = (level: number): string => {
+  return TIER_NAMES[level] ?? "Free";
+};
 
 type ProfileHeaderBarProps = {
   username: string;
+  userLevel?: number;
   gradientColor: string;
   scrollY?: SharedValue<number>;
   isRefreshing?: boolean;
+  isLoading?: boolean;
   onBackPress?: () => void;
-  onUsernamePress?: () => void;
-  onSearchPress?: () => void;
   onSharePress?: () => void;
   onMenuPress?: () => void;
 };
 
 type ProfileContentProps = {
-  username: string;
-  avatarSeed?: string;
-  avatarUrl?: string;
-  walletAddress: string;
-  followersCount: number;
-  balance: number;
-  reserve: number;
-  accountAgeDays: number;
-  gradientColor: string;
-  scrollY?: SharedValue<number>;
-  onEditPress?: () => void;
-  onFollowersPress?: () => void;
-  isLoading?: boolean;
+ username: string;
+ avatarSeed?: string;
+ avatarUrl?: string;
+ walletAddress: string;
+ followersCount: number;
+ balance: number;
+ reserve: number;
+ accountAgeDays: number;
+  userLevel?: number;
+ gradientColor: string;
+ scrollY?: SharedValue<number>;
+ onFollowersPress?: () => void;
+ isLoading?: boolean;
 };
 
 type ProfileHeaderProps = ProfileHeaderBarProps & ProfileContentProps;
 
-// Format account age to human readable
-// Input is in days (can be fractional)
 const formatAccountAge = (days: number): string => {
   const totalMinutes = days * 24 * 60;
   const totalHours = days * 24;
 
-  // Less than 1 minute - show dash
   if (totalMinutes < 1) {
     return "-";
   }
 
-  // Less than 1 hour - show minutes
   if (totalHours < 1) {
     const minutes = Math.floor(totalMinutes);
     return `${minutes}min`;
   }
 
-  // Less than 1 day - show hours
   if (days < 1) {
     const hours = Math.floor(totalHours);
     return `${hours}hr`;
   }
 
-  // Less than 1 month (30 days) - show days
   if (days < 30) {
     const d = Math.floor(days);
     return `${d}d`;
   }
 
-  // Less than 1 year - show months
   if (days < 365) {
     const months = Math.floor(days / 30);
     return `${months}mo`;
   }
 
-  // 1 year or more - show years
   const years = Math.floor(days / 365);
   return `${years}yr`;
 };
 
-// Format number with K/M suffix
 const formatNumber = (num: number): string => {
   if (num >= 1000000) {
     return `${(num / 1000000).toFixed(1)}M`;
@@ -114,7 +120,6 @@ const formatNumber = (num: number): string => {
   return num.toString();
 };
 
-// Generate gradient color from username
 export const getGradientColor = (username: string): string => {
   if (!username) return GRADIENT_COLORS[0];
   let hash = 0;
@@ -124,28 +129,26 @@ export const getGradientColor = (username: string): string => {
   return GRADIENT_COLORS[Math.abs(hash) % GRADIENT_COLORS.length];
 };
 
-// Fixed Header Bar Component - Always visible at top
 export const ProfileHeaderBar = ({
   username,
+  userLevel = 0,
   gradientColor,
   scrollY,
   isRefreshing = false,
+  isLoading = false,
   onBackPress,
-  onUsernamePress,
-  onSearchPress,
   onSharePress,
   onMenuPress,
 }: ProfileHeaderBarProps) => {
   const insets = useSafeAreaInsets();
 
-  // Animate background from gradient color to black as user scrolls
   const headerBgStyle = useAnimatedStyle(() => {
     if (!scrollY) return { backgroundColor: gradientColor };
 
     const backgroundColor = interpolateColor(
       scrollY.value,
       [0, SCROLL_THRESHOLD * 0.3, SCROLL_THRESHOLD * 0.7, SCROLL_THRESHOLD],
-      [gradientColor, gradientColor, "#000000", "#000000"]
+      [gradientColor, gradientColor, "#000000", "#000000"],
     );
 
     return { backgroundColor };
@@ -156,7 +159,6 @@ export const ProfileHeaderBar = ({
       style={[styles.headerBar, { paddingTop: insets.top }, headerBgStyle]}
     >
       <Box direction="row" center px="md" py="sm" style={styles.headerRow}>
-        {/* Left Side - Back + Username */}
         <Box direction="row" center gap="xs">
           <IconButton
             name="arrow-back"
@@ -166,42 +168,44 @@ export const ProfileHeaderBar = ({
             style={styles.iconButton}
           />
 
-          <Pressable onPress={onUsernamePress} hitSlop={4}>
-            <Box direction="row" center gap="xs" style={styles.usernameButton}>
-              <Text size="md" weight="semibold" style={styles.whiteText}>
-                {username}
-              </Text>
-              <Icon
-                icon={Ionicons}
-                name="chevron-down"
-                size={16}
-                color="rgba(255,255,255,0.9)"
-              />
-            </Box>
-          </Pressable>
+          <Box gap="xs" style={styles.usernameContainer}>
+            {isLoading ? (
+              <View style={styles.usernameSkeleton} />
+            ) : (
+              <>
+                <Text
+                  size="md"
+                  weight="semibold"
+                  style={[styles.whiteText, { marginBottom: -5 }]}
+                  numberOfLines={1}
+                >
+                  {username}
+                </Text>
+                <Box direction="row" center gap="xs">
+                  <Text size="xs" style={styles.subtleWhiteText}>
+                    {getTierName(userLevel)} Tier
+                  </Text>
+                  <Icon
+                    icon={Ionicons}
+                    name="shield-checkmark"
+                    size={10}
+                    color="rgba(255,255,255,0.7)"
+                  />
+                </Box>
+              </>
+            )}
+          </Box>
         </Box>
 
-        {/* Right Side - Icons */}
         <Box direction="row" center gap="xs">
           {isRefreshing && (
             <View style={styles.refreshIndicator}>
               <ActivityIndicator size="small" color="#FFFFFF" />
             </View>
           )}
-          <IconButton
-            name="search-outline"
-            size="md"
-            color="#FFFFFF"
-            onPress={onSearchPress}
-            style={styles.iconButton}
-          />
-          <IconButton
-            name="share-outline"
-            size="md"
-            color="#FFFFFF"
-            onPress={onSharePress}
-            style={styles.iconButton}
-          />
+          <Pressable onPress={onSharePress} style={styles.shareButton}>
+            <ShareIcon size={18} color="#FFFFFF" />
+          </Pressable>
           <IconButton
             name="ellipsis-horizontal"
             size="md"
@@ -215,36 +219,33 @@ export const ProfileHeaderBar = ({
   );
 };
 
-// Profile Content Component - Scrolls and fades
 export const ProfileContent = ({
-  username,
-  avatarSeed,
-  avatarUrl,
-  walletAddress,
-  followersCount,
-  balance,
-  reserve,
-  accountAgeDays,
-  gradientColor,
-  scrollY,
-  onEditPress,
-  onFollowersPress,
-  isLoading = false,
+ username,
+ avatarSeed,
+ avatarUrl,
+ walletAddress,
+ followersCount,
+ balance,
+ reserve,
+ accountAgeDays,
+  userLevel = 0,
+ gradientColor,
+ scrollY,
+ onFollowersPress,
+ isLoading = false,
 }: ProfileContentProps) => {
   const [copied, setCopied] = useState(false);
   const walletScale = useRef(new RNAnimated.Value(1)).current;
 
-  // Truncate wallet address
   const truncatedAddress = useMemo(() => {
     if (!walletAddress) return "";
     if (walletAddress.length <= 13) return walletAddress;
     return `${walletAddress.slice(
       0,
-      6
+      6,
     )}.....................${walletAddress.slice(-4)}`;
   }, [walletAddress]);
 
-  // Reset copied state
   useEffect(() => {
     if (copied) {
       const timeout = setTimeout(() => setCopied(false), 2000);
@@ -280,7 +281,6 @@ export const ProfileContent = ({
     }).start();
   }, [walletScale]);
 
-  // Fade content as it scrolls
   const contentFadeStyle = useAnimatedStyle(() => {
     if (!scrollY) return { opacity: 1 };
 
@@ -288,7 +288,7 @@ export const ProfileContent = ({
       scrollY.value,
       [0, SCROLL_THRESHOLD * 0.6, SCROLL_THRESHOLD],
       [1, 0.3, 0],
-      "clamp"
+      "clamp",
     );
 
     return { opacity };
@@ -303,7 +303,6 @@ export const ProfileContent = ({
     >
       <Animated.View style={[styles.profileContentInner, contentFadeStyle]}>
         <Box px="md" pt="sm">
-          {/* Large Avatar */}
           <Avatar
             size={80}
             seed={avatarSeed || username}
@@ -312,57 +311,48 @@ export const ProfileContent = ({
             bordered
           />
 
-          {/* Username + Edit Row */}
-          <Box direction="row" mt="sm">
-            <Text size="xl" weight="bold" style={styles.whiteText}>
-              {username}
-            </Text>
-            <Pressable onPress={onEditPress}>
+          <Box mt="sm">
+            {isLoading ? (
+              <View style={styles.usernameContentSkeleton} />
+            ) : (
+              <Text size="xl" weight="bold" style={styles.whiteText}>
+                {username}
+              </Text>
+            )}
+          </Box>
+
+         <Pressable onPress={onFollowersPress}>
+           <Box direction="row" alignItems="center" mt="xs">
               <Box
                 direction="row"
                 center
                 gap="xs"
                 py="xs"
-                style={styles.editButton}
+                px="sm"
+                rounded="full"
+                style={styles.tierBadge}
               >
                 <Icon
                   icon={Ionicons}
-                  name="pencil-outline"
-                  size={14}
+                  name="shield-checkmark"
+                  size={12}
                   color="#FFFFFF"
                 />
-                <Text size="sm" weight="medium" style={styles.whiteText}>
-                  Edit
+                <Text size="xs" weight="medium" style={styles.whiteText}>
+                  {getTierName(userLevel)} Tier
                 </Text>
               </Box>
-            </Pressable>
-          </Box>
+             <Box style={styles.dot} />
+             <Text size="sm" weight="bold" style={styles.whiteText}>
+               {formatNumber(followersCount)}
+             </Text>
+             <Text size="sm" style={styles.whiteText}>
+               {" "}
+               followers
+             </Text>
+           </Box>
+         </Pressable>
 
-          {/* @username • Followers Row */}
-          <Pressable onPress={onFollowersPress}>
-            <Box direction="row" alignItems="center" mt="xs">
-              <Text size="sm" style={styles.subtleWhiteText}>
-                @{username}
-              </Text>
-              <Box style={styles.dot} />
-              <Text size="sm" weight="bold" style={styles.whiteText}>
-                {formatNumber(followersCount)}
-              </Text>
-              <Text size="sm" style={styles.whiteText}>
-                {" "}
-                followers
-              </Text>
-              <Icon
-                icon={Ionicons}
-                name="chevron-forward"
-                size={14}
-                color="#fff"
-                style={{ marginLeft: 2 }}
-              />
-            </Box>
-          </Pressable>
-
-          {/* Wallet Address + Copy */}
           <RNAnimated.View
             style={[
               styles.walletAnimatedContainer,
@@ -408,7 +398,6 @@ export const ProfileContent = ({
             </Pressable>
           </RNAnimated.View>
 
-          {/* Stats Row */}
           <Box
             direction="row"
             center
@@ -418,7 +407,6 @@ export const ProfileContent = ({
             rounded="lg"
             style={styles.statsContainer}
           >
-            {/* Balance */}
             <Box flex center>
               {isLoading ? (
                 <View style={styles.statSkeleton} />
@@ -434,7 +422,6 @@ export const ProfileContent = ({
 
             <Divider direction="vertical" style={styles.statDivider} />
 
-            {/* Reserve */}
             <Box flex center>
               {isLoading ? (
                 <View style={styles.statSkeleton} />
@@ -450,7 +437,6 @@ export const ProfileContent = ({
 
             <Divider direction="vertical" style={styles.statDivider} />
 
-            {/* Account Age */}
             <Box flex center>
               {isLoading ? (
                 <View style={styles.statSkeleton} />
@@ -470,7 +456,6 @@ export const ProfileContent = ({
   );
 };
 
-// Combined ProfileHeader for backward compatibility
 export const ProfileHeader = ({
   username,
   avatarSeed,
@@ -480,13 +465,11 @@ export const ProfileHeader = ({
   balance,
   reserve,
   accountAgeDays,
+  userLevel,
   scrollY,
   onBackPress,
-  onUsernamePress,
-  onSearchPress,
   onSharePress,
   onMenuPress,
-  onEditPress,
   onFollowersPress,
 }: ProfileHeaderProps) => {
   const gradientColor = useMemo(() => getGradientColor(username), [username]);
@@ -504,7 +487,6 @@ export const ProfileHeader = ({
         accountAgeDays={accountAgeDays}
         gradientColor={gradientColor}
         scrollY={scrollY}
-        onEditPress={onEditPress}
         onFollowersPress={onFollowersPress}
       />
     </View>
@@ -529,12 +511,18 @@ const styles = StyleSheet.create((theme) => ({
     width: "100%",
     paddingBottom: theme.spacing.lg,
   },
-  profileContentInner: {
-    // Container for fade animation
-  },
+  profileContentInner: {},
   iconButton: {
     backgroundColor: "rgba(0,0,0,0.3)",
     borderRadius: theme.radius.full,
+  },
+  shareButton: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.radius.full,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   refreshIndicator: {
     width: 32,
@@ -544,19 +532,29 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  usernameButton: {
-    paddingHorizontal: theme.spacing.sm + 2,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.radius.full,
-    backgroundColor: "rgba(0,0,0,0.3)",
+  usernameContainer: {
+    paddingHorizontal: theme.spacing.sm,
+    alignItems: "flex-start",
   },
-  whiteText: {
-    color: "#FFFFFF",
+  usernameSkeleton: {
+    width: 80,
+    height: 18,
+    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.2)",
   },
-  editButton: {
-    marginLeft: theme.spacing.md,
+  usernameContentSkeleton: {
+    width: 120,
+    height: 24,
+    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.2)",
   },
-  subtleWhiteText: {
+ whiteText: {
+   color: "#FFFFFF",
+ },
+  tierBadge: {
+    backgroundColor: "rgba(255,255,255,0.15)",
+  },
+ subtleWhiteText: {
     color: "rgba(255,255,255,0.7)",
   },
   dot: {

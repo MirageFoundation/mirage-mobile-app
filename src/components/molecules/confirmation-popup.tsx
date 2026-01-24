@@ -105,13 +105,13 @@ export function ConfirmationPopup({
           </Box>
 
           {/* Title */}
-          <Text size="xxl" weight="bold" style={styles.title}>
+          <Text size="lg" weight="bold" style={styles.title}>
             {title}
           </Text>
 
           {/* Message */}
           <Text
-            size="lg"
+            size="md"
             mode="subtle"
             weight="semibold"
             style={styles.message}
@@ -204,7 +204,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   description: {
     textAlign: "center",
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.sm,
   },
   buttons: {
     width: "100%",

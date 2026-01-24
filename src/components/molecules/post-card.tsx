@@ -41,6 +41,33 @@ type PostCardProps = {
   style?: StyleProp<ViewStyle>;
 };
 
+function arePostCardPropsEqual(
+  prevProps: PostCardProps,
+  nextProps: PostCardProps
+): boolean {
+  const prevPost = prevProps.post;
+  const nextPost = nextProps.post;
+
+  if (prevPost.id !== nextPost.id) return false;
+  if (prevPost.likes !== nextPost.likes) return false;
+  if (prevPost.dislikes !== nextPost.dislikes) return false;
+  if (prevPost.comments !== nextPost.comments) return false;
+  if (prevPost.hasLiked !== nextPost.hasLiked) return false;
+  if (prevPost.hasDisliked !== nextPost.hasDisliked) return false;
+  if (prevPost.isFollowing !== nextPost.isFollowing) return false;
+
+  if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
+  if (prevProps.isVisible !== nextProps.isVisible) return false;
+  if (prevProps.showFollowButton !== nextProps.showFollowButton) return false;
+  if (prevProps.isTopicFollowed !== nextProps.isTopicFollowed) return false;
+  if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
+  if (prevProps.contentRevealed !== nextProps.contentRevealed) return false;
+  if (prevProps.shareUrl !== nextProps.shareUrl) return false;
+  if (prevProps.showUrlCard !== nextProps.showUrlCard) return false;
+
+  return true;
+}
+
 export const PostCard = memo(function PostCard({
  post,
  isOwnPost = false,
@@ -169,11 +196,11 @@ export const PostCard = memo(function PostCard({
       <MediaPreviewModal
         visible={showMediaPreview}
         media={resolvedContent.resolvedMedia ?? null}
-        onClose={handleCloseMediaPreview}
+      onClose={handleCloseMediaPreview}
       />
     </Pressable>
   );
-});
+}, arePostCardPropsEqual);
 
 const styles = StyleSheet.create((theme) => ({
   container: {

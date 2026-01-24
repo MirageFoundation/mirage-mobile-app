@@ -38,6 +38,7 @@ export function useInfinitePosts(
   params?: Omit<GetPostsParams, "page" | "address">
 ) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const isInitializing = useAuthStore((s) => s.isInitializing);
 
   const baseParams = {
     ...params,
@@ -55,6 +56,7 @@ export function useInfinitePosts(
     },
     staleTime: 1000 * 60, // 1 minute
     gcTime: 1000 * 60 * 60 * 4, // 4 hours
+    enabled: !isInitializing,
   });
 }
 

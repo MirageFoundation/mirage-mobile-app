@@ -19,6 +19,22 @@ type HomePostCardItemProps = {
   post: Post;
 };
 
+function areHomePostCardItemPropsEqual(
+  prevProps: HomePostCardItemProps,
+  nextProps: HomePostCardItemProps
+): boolean {
+  const prev = prevProps.post;
+  const next = nextProps.post;
+  
+  if (prev.id !== next.id) return false;
+  if (prev.likes !== next.likes) return false;
+  if (prev.dislikes !== next.dislikes) return false;
+  if (prev.comments !== next.comments) return false;
+  if (prev.hasLiked !== next.hasLiked) return false;
+  if (prev.hasDisliked !== next.hasDisliked) return false;
+  return true;
+}
+
 // Get handlers from store without subscribing to changes
 const getHandlers = () => useHomePostCardStore.getState().handlers;
 
@@ -154,4 +170,4 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       shareUrl={`${getShareBaseUrl(shareServer)}/post/${post.id}`}
     />
   );
-});
+}, areHomePostCardItemPropsEqual);

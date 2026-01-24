@@ -16,6 +16,17 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 
 import { SCROLL_THRESHOLD } from "./profile-header";
 
+const TIER_NAMES: Record<number, string> = {
+  0: "Free",
+  1: "Basic",
+  2: "Pro",
+  3: "Premium",
+};
+
+const getTierName = (level: number): string => {
+  return TIER_NAMES[level] ?? "Free";
+};
+
 const formatAccountAge = (days: number): string => {
   const totalMinutes = days * 24 * 60;
   const totalHours = days * 24;
@@ -58,33 +69,35 @@ const formatNumber = (num: number): string => {
 };
 
 type UserProfileContentProps = {
-  username: string;
-  avatarSeed?: string;
-  avatarUrl?: string;
-  walletAddress: string;
-  followersCount: number;
-  balance: number;
-  reserve: number;
-  accountAgeDays: number;
-  gradientColor: string;
-  scrollY?: SharedValue<number>;
-  onFollowersPress?: () => void;
-  isLoading?: boolean;
+ username: string;
+ avatarSeed?: string;
+ avatarUrl?: string;
+ walletAddress: string;
+ followersCount: number;
+ balance: number;
+ reserve: number;
+ accountAgeDays: number;
+  userLevel?: number;
+ gradientColor: string;
+ scrollY?: SharedValue<number>;
+ onFollowersPress?: () => void;
+ isLoading?: boolean;
 };
 
 export const UserProfileContent = ({
-  username,
-  avatarSeed,
-  avatarUrl,
-  walletAddress,
-  followersCount,
-  balance,
-  reserve,
-  accountAgeDays,
-  gradientColor,
-  scrollY,
-  onFollowersPress,
-  isLoading = false,
+ username,
+ avatarSeed,
+ avatarUrl,
+ walletAddress,
+ followersCount,
+ balance,
+ reserve,
+ accountAgeDays,
+  userLevel = 0,
+ gradientColor,
+ scrollY,
+ onFollowersPress,
+ isLoading = false,
 }: UserProfileContentProps) => {
   const [copied, setCopied] = useState(false);
   const walletScale = useRef(new RNAnimated.Value(1)).current;
@@ -163,34 +176,47 @@ export const UserProfileContent = ({
             bordered
           />
 
-          <Box direction="row" mt="sm">
-            <Text size="xl" weight="bold" style={styles.whiteText}>
-              {username}
-            </Text>
+          <Box mt="sm">
+            {isLoading ? (
+              <View style={styles.usernameContentSkeleton} />
+            ) : (
+              <Text size="xl" weight="bold" style={styles.whiteText}>
+                {username}
+              </Text>
+            )}
           </Box>
 
-          <Pressable onPress={onFollowersPress}>
-            <Box direction="row" alignItems="center" mt="xs">
-              <Text size="sm" style={styles.subtleWhiteText}>
-                @{username}
-              </Text>
-              <Box style={styles.dot} />
-              <Text size="sm" weight="bold" style={styles.whiteText}>
-                {formatNumber(followersCount)}
-              </Text>
-              <Text size="sm" style={styles.whiteText}>
-                {" "}
-                followers
-              </Text>
-              <Icon
-                icon={Ionicons}
-                name="chevron-forward"
-                size={14}
-                color="#fff"
-                style={{ marginLeft: 2 }}
-              />
-            </Box>
-          </Pressable>
+         <Pressable onPress={onFollowersPress}>
+           <Box direction="row" alignItems="center" mt="xs">
+              <Box
+                direction="row"
+                center
+                gap="xs"
+                py="xs"
+                px="sm"
+                rounded="full"
+                style={styles.tierBadge}
+              >
+                <Icon
+                  icon={Ionicons}
+                  name="shield-checkmark"
+                  size={12}
+                  color="#FFFFFF"
+                />
+                <Text size="xs" weight="medium" style={styles.whiteText}>
+                  {getTierName(userLevel)} Tier
+                </Text>
+              </Box>
+             <Box style={styles.dot} />
+             <Text size="sm" weight="bold" style={styles.whiteText}>
+               {formatNumber(followersCount)}
+             </Text>
+             <Text size="sm" style={styles.whiteText}>
+               {" "}
+               followers
+             </Text>
+           </Box>
+         </Pressable>
 
           <RNAnimated.View
             style={[
@@ -301,8 +327,17 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: theme.spacing.lg,
   },
   profileContentInner: {},
-  whiteText: {
-    color: "#FFFFFF",
+ whiteText: {
+   color: "#FFFFFF",
+ },
+  tierBadge: {
+    backgroundColor: "rgba(255,255,255,0.15)",
+  },
+ usernameContentSkeleton: {
+    width: 120,
+    height: 24,
+    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.2)",
   },
   subtleWhiteText: {
     color: "rgba(255,255,255,0.7)",
