@@ -130,16 +130,17 @@ export const ProfilePostsList = memo(function ProfilePostsList({
         ...item,
         contentWarnings: undefined,
       };
-      return (
-        <PostCardItem
-          post={postWithoutWarnings}
-          isOwnPost={true}
-          onPostPress={onPostPress}
-          onAuthorPress={onAuthorPress}
-          onCommentPress={onPostPress}
-          onMorePress={handleMorePress}
-        />
-      );
+     return (
+       <PostCardItem
+         post={postWithoutWarnings}
+         isOwnPost={true}
+          showUrlCard={false}
+         onPostPress={onPostPress}
+         onAuthorPress={onAuthorPress}
+         onCommentPress={onPostPress}
+         onMorePress={handleMorePress}
+       />
+     );
     },
     [onPostPress, onAuthorPress, handleMorePress]
   );

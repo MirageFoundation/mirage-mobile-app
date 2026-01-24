@@ -5,12 +5,13 @@ import { logPress } from "@/src/utils/press-logger";
 
 type PostCardItemProps = {
   post: Post;
-  isVisible?: boolean;
-  isOwnPost?: boolean;
-  isTopicFollowed?: boolean;
-  contentRevealed?: boolean;
-  shareUrl?: string;
-  onPostPress?: (postId: string) => void;
+ isVisible?: boolean;
+ isOwnPost?: boolean;
+ isTopicFollowed?: boolean;
+ contentRevealed?: boolean;
+ shareUrl?: string;
+  showUrlCard?: boolean;
+ onPostPress?: (postId: string) => void;
   onAuthorPress?: (authorId: string) => void;
   onMorePress?: (postId: string) => void;
   onLikePress?: (
@@ -51,13 +52,14 @@ function arePostCardItemPropsEqual(
 }
 
 export const PostCardItem = memo(function PostCardItem({
-  post,
-  isVisible = false,
-  isOwnPost = false,
-  isTopicFollowed = false,
-  contentRevealed = false,
-  shareUrl,
-  onPostPress,
+ post,
+ isVisible = false,
+ isOwnPost = false,
+ isTopicFollowed = false,
+ contentRevealed = false,
+ shareUrl,
+  showUrlCard,
+ onPostPress,
   onAuthorPress,
   onMorePress,
   onLikePress,
@@ -134,10 +136,11 @@ export const PostCardItem = memo(function PostCardItem({
       onDislikePress={handleDislikePress}
       onCommentPress={handleCommentPress}
       onFollowUser={handleFollowUser}
-      onFollowTopic={handleFollowTopic}
-      onRevealContent={handleRevealContent}
-      contentRevealed={contentRevealed}
-      shareUrl={shareUrl}
-    />
+     onFollowTopic={handleFollowTopic}
+     onRevealContent={handleRevealContent}
+     contentRevealed={contentRevealed}
+     shareUrl={shareUrl}
+      showUrlCard={showUrlCard}
+   />
   );
 }, arePostCardItemPropsEqual);
