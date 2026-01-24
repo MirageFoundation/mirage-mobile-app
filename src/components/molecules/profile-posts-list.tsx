@@ -4,7 +4,7 @@ import type { Post as ApiPost } from "@/src/api/types";
 import { Text } from "@/src/components/ui/primitives";
 import { useContentModerationStore } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useRef } from "react";
 import { ActivityIndicator, FlatList, Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { type Post as UIPost } from "./post-card";
@@ -74,10 +74,11 @@ export const ProfilePostsList = memo(function ProfilePostsList({
     }
   }, [data, type, hiddenPostIds, hiddenCommentIds]);
 
-  // Transform API posts to UI posts for PostCard (only for submissions)
+  // Transform API posts to UI posts for PostCard
+  // Note: isFollowing is computed per-post, not from followedUsers dependency
   const uiPosts = useMemo(
-    () => apiPosts.map((post) => transformApiPost(post, { followedUsers })),
-    [apiPosts, followedUsers]
+    () => apiPosts.map((post) => transformApiPost(post)),
+    [apiPosts]
   );
 
   const postsById = useMemo(() => {
@@ -98,9 +99,23 @@ export const ProfilePostsList = memo(function ProfilePostsList({
     [postsById, onMorePress]
   );
 
+  // Debounce ref to prevent multiple fetches
+  const lastFetchTime = useRef(0);
+  const isFetchingRef = useRef(false);
+
   const handleEndReached = useCallback(() => {
-    if (hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
+    const now = Date.now();
+    if (
+      hasNextPage &&
+      !isFetchingNextPage &&
+      !isFetchingRef.current &&
+      now - lastFetchTime.current > 1000
+    ) {
+      lastFetchTime.current = now;
+      isFetchingRef.current = true;
+      fetchNextPage().finally(() => {
+        isFetchingRef.current = false;
+      });
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 

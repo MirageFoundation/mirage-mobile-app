@@ -145,14 +145,15 @@ export function FollowingScreen() {
     }
     const uniquePosts = Array.from(uniquePostsMap.values());
 
-    const transformedPosts = transformApiPosts(uniquePosts, { followedUsers });
+    // Note: isFollowing is handled by HomePostCardItem via the store, not here
+    const transformedPosts = transformApiPosts(uniquePosts);
 
     // Filter out hidden posts and posts from blocked users
     return transformedPosts.filter(
       (post) =>
         !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id)
     );
-  }, [data, followedUsers, hiddenPostIds, blockedUserIds]);
+  }, [data, hiddenPostIds, blockedUserIds]);
 
   // Revealed posts for content warnings
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());

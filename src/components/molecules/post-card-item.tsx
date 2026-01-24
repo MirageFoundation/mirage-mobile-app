@@ -35,6 +35,21 @@ type PostCardItemProps = {
   onRevealContent?: (postId: string) => void;
 };
 
+function arePostCardItemPropsEqual(
+  prevProps: PostCardItemProps,
+  nextProps: PostCardItemProps
+): boolean {
+  const prev = prevProps.post;
+  const next = nextProps.post;
+  if (prev.id !== next.id) return false;
+  if (prev.likes !== next.likes) return false;
+  if (prev.comments !== next.comments) return false;
+  if (prev.hasLiked !== next.hasLiked) return false;
+  if (prev.hasDisliked !== next.hasDisliked) return false;
+  if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
+  return true;
+}
+
 export const PostCardItem = memo(function PostCardItem({
   post,
   isVisible = false,
@@ -125,4 +140,4 @@ export const PostCardItem = memo(function PostCardItem({
       shareUrl={shareUrl}
     />
   );
-});
+}, arePostCardItemPropsEqual);
