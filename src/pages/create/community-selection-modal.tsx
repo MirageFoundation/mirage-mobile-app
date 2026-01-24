@@ -22,9 +22,11 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { useDebouncedSearchTopics, useTopics } from "@/src/api/read/hooks/use-topics";
+import {
+  useDebouncedSearchTopics,
+  useTopics,
+} from "@/src/api/read/hooks/use-topics";
 import type { TopicInfo } from "@/src/api/types";
-import { Avatar } from "@/src/components/atoms";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { type Community } from "@/src/stores/draft-store";
@@ -111,16 +113,13 @@ const CommunityItem = ({
       onPressOut={handlePressOut}
     >
       <Animated.View style={[styles.communityItem, animatedStyle]}>
-        <Avatar
-          size={44}
-          seed={community.id}
-          source={community.avatar ? { uri: community.avatar } : undefined}
-          rounded="full"
-        />
         <View style={styles.communityInfo}>
           <View style={styles.communityHeader}>
-            <Text size="lg" weight="semibold" numberOfLines={1}>
-              {community.name}
+            <Text size="xl" weight="bold" numberOfLines={1}>
+              #{" "}
+              <Text size="lg" weight="semibold" numberOfLines={1}>
+                {community.name}
+              </Text>
             </Text>
           </View>
           {community.memberCount > 0 && (
@@ -170,7 +169,7 @@ export const CommunitySelectionModal = ({
   } = useDebouncedSearchTopics(
     searchText.length >= 2 ? searchText : null,
     750,
-    { limit: 50 }
+    { limit: 50 },
   );
 
   const filteredCommunities = useMemo(() => {
@@ -181,9 +180,7 @@ export const CommunitySelectionModal = ({
     if (searchText.trim() && topicsData?.topics) {
       const query = searchText.toLowerCase();
       const apiCommunities = topicsData.topics.map(topicToCommunity);
-      return apiCommunities.filter((c) =>
-        c.name.toLowerCase().includes(query)
-      );
+      return apiCommunities.filter((c) => c.name.toLowerCase().includes(query));
     }
 
     return topicsData?.topics?.map(topicToCommunity) ?? [];
@@ -194,13 +191,13 @@ export const CommunitySelectionModal = ({
     const normalizedSearch = searchText.toLowerCase().trim();
     return filteredCommunities.some(
       (c) =>
-        c.id === normalizedSearch ||
-        c.name.toLowerCase() === normalizedSearch
+        c.id === normalizedSearch || c.name.toLowerCase() === normalizedSearch,
     );
   }, [searchText, filteredCommunities]);
 
   const createTopicOption: Community | null = useMemo(() => {
-    if (!searchText.trim() || exactTopicExists || isDebouncing || isSearching) return null;
+    if (!searchText.trim() || exactTopicExists || isDebouncing || isSearching)
+      return null;
     const cleanName = searchText
       .trim()
       .toLowerCase()
@@ -280,7 +277,7 @@ export const CommunitySelectionModal = ({
         }}
       />
     ),
-    [selectedCommunity, onSelect]
+    [selectedCommunity, onSelect],
   );
 
   const ListHeaderComponent = useMemo(() => {
@@ -320,13 +317,15 @@ export const CommunitySelectionModal = ({
               color={theme.colors.text.default}
             />
           </Pressable>
-          <Text size="md" weight="semibold" style={styles.headerTitle}>
+          <Text size="lg" weight="semibold" style={styles.headerTitle}>
             Select a topic
           </Text>
           <View style={styles.closeButton} />
         </Animated.View>
 
-        <Animated.View style={[styles.searchContainer, searchContainerAnimatedStyle]}>
+        <Animated.View
+          style={[styles.searchContainer, searchContainerAnimatedStyle]}
+        >
           <View style={styles.searchInputContainer}>
             <View
               style={[
@@ -346,7 +345,9 @@ export const CommunitySelectionModal = ({
                 ref={searchInputRef}
                 style={[
                   styles.searchInput,
-                  { color: theme.colors.text.default },
+                  {
+                    color: theme.colors.text.default,
+                  },
                 ]}
                 placeholder="Search for a topic"
                 placeholderTextColor={theme.colors.text.subtle}

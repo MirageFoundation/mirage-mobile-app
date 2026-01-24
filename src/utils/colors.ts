@@ -242,7 +242,10 @@ export function generateColorTheme(colors: {
     };
   }
 
-  function generateBackgroundColors(baseColor: string, inverseBaseColor?: string): SurfaceColors {
+  function generateBackgroundColors(
+    baseColor: string,
+    inverseBaseColor?: string,
+  ): SurfaceColors {
     const color = Color(baseColor);
     const luminance = color.luminosity();
 
@@ -255,7 +258,7 @@ export function generateColorTheme(colors: {
         plain: "#000000", // Black
         default: baseColor,
         dim: "#0A0A0A", // Very dark gray
-        subtle: "#171717", // Dark gray
+        subtle: "rgb(24,24,24)", // Dark gray
         hover: "#262626", // Medium dark gray
         pressed: "#404040", // Lighter dark gray
         emphasis: "#525252", // Even lighter gray
@@ -329,10 +332,13 @@ export function generateColorTheme(colors: {
             ...acc,
             [key]: generateBaseVariations(value),
           }),
-          {} as Record<keyof BaseColors, ColorVariations>
+          {} as Record<keyof BaseColors, ColorVariations>,
         ),
         // Surface colors
-        background: generateBackgroundColors(colors.surfaces.light.background, colors.surfaces.dark.background),
+        background: generateBackgroundColors(
+          colors.surfaces.light.background,
+          colors.surfaces.dark.background,
+        ),
         border: generateBorderColors(colors.surfaces.light.border),
         // Text colors
         text: generateTextColors(colors.text.light.default),
@@ -348,10 +354,13 @@ export function generateColorTheme(colors: {
             ...acc,
             [key]: generateBaseVariations(value),
           }),
-          {} as Record<keyof BaseColors, ColorVariations>
+          {} as Record<keyof BaseColors, ColorVariations>,
         ),
         // Surface colors
-        background: generateBackgroundColors(colors.surfaces.dark.background, colors.surfaces.light.background),
+        background: generateBackgroundColors(
+          colors.surfaces.dark.background,
+          colors.surfaces.light.background,
+        ),
         border: generateBorderColors(colors.surfaces.dark.border),
         // Text colors
         text: generateTextColors(colors.text.dark.default),

@@ -22,9 +22,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Divider, Text } from "@/src/components/ui/primitives";
-import { usePreferencesStore, useAuthStore } from "@/src/stores";
-import { LogoutConfirmationPopup } from "./logout-confirmation-popup";
+import { useAuthStore, usePreferencesStore } from "@/src/stores";
 import { useRouter } from "expo-router";
+import { LogoutConfirmationPopup } from "./logout-confirmation-popup";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MENU_WIDTH = SCREEN_WIDTH * 0.8; // 80% of screen width
@@ -267,7 +267,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       onLogout,
       onDismiss,
     },
-    ref
+    ref,
   ) => {
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
@@ -333,7 +333,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
           handler?.();
         }, 300);
       },
-      [close]
+      [close],
     );
 
     // Theme handlers
@@ -348,7 +348,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
           setTheme("light");
         }
       },
-      [setTheme]
+      [setTheme],
     );
 
     const handleDarkModeToggle = useCallback(
@@ -359,7 +359,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
           setTheme("light");
         }
       },
-      [setTheme]
+      [setTheme],
     );
 
     // Logout handlers
@@ -576,7 +576,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
         </View>
       </Modal>
     );
-  }
+  },
 );
 
 SideMenu.displayName = "SideMenu";

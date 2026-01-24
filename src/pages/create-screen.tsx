@@ -1,8 +1,4 @@
-import {
-  Entypo,
-  EvilIcons,
-  Feather,
-} from "@expo/vector-icons";
+import { Entypo, EvilIcons, Feather } from "@expo/vector-icons";
 import { ResizeMode, Video } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -53,7 +49,7 @@ const CONTENT_WARNING_OPTIONS: { value: ContentTag; label: string }[] = [
 export function CreateScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
-  
+
   // Get params from video editor
   const params = useLocalSearchParams<{
     videoUri?: string;
@@ -81,7 +77,8 @@ export function CreateScreen() {
     height: number;
   } | null>(null);
   const [showContentWarningModal, setShowContentWarningModal] = useState(false);
-  const [selectedContentWarning, setSelectedContentWarning] = useState<ContentTag>("");
+  const [selectedContentWarning, setSelectedContentWarning] =
+    useState<ContentTag>("");
 
   const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
   const [videoDimensions, setVideoDimensions] = useState<{
@@ -117,10 +114,11 @@ export function CreateScreen() {
   const screenWidth = Dimensions.get("window").width;
   const selectedCommunity = draft.community;
 
- const canPost = useMemo(() => {
-   const hasTitleContent = draft.title.trim().length > 0;
+  const canPost = useMemo(() => {
+    const hasTitleContent = draft.title.trim().length > 0;
     const hasCommunity = draft.community !== null;
-   const videoStillUploading = draft.attachmentType === "video" && isUploadingVideo;
+    const videoStillUploading =
+      draft.attachmentType === "video" && isUploadingVideo;
     return hasTitleContent && hasCommunity && !videoStillUploading;
   }, [draft.title, draft.community, draft.attachmentType, isUploadingVideo]);
 
@@ -151,10 +149,10 @@ export function CreateScreen() {
   useEffect(() => {
     if (params.videoUri && !draft.mediaUris.includes(params.videoUri)) {
       console.log("[CreatePost] Received video from editor:", params.videoUri);
-      
+
       // Set the video attachment
       setAttachment("video", params.videoUri);
-      
+
       // Set dimensions if provided
       if (params.videoWidth && params.videoHeight) {
         setVideoDimensions({
@@ -162,10 +160,10 @@ export function CreateScreen() {
           height: parseInt(params.videoHeight),
         });
       }
-      
+
       // Set muted state
       setIsVideoMuted(params.isMuted === "1");
-      
+
       // Auto-start upload (video was already processed in editor if muted)
       uploadVideo({ uri: params.videoUri });
     }
@@ -173,11 +171,11 @@ export function CreateScreen() {
 
   const handleClose = useCallback(() => {
     if (isSubmitting) return;
-    
+
     if (isUploadingVideo) {
       cancelVideoUpload();
     }
-    
+
     triggerHaptic("selection");
     if (draft.title || draft.body) {
     }
@@ -188,7 +186,15 @@ export function CreateScreen() {
     setIsVideoPlaying(false);
     resetVideoUpload();
     router.back();
-  }, [isSubmitting, isUploadingVideo, cancelVideoUpload, clearDraft, draft.title, draft.body, resetVideoUpload]);
+  }, [
+    isSubmitting,
+    isUploadingVideo,
+    cancelVideoUpload,
+    clearDraft,
+    draft.title,
+    draft.body,
+    resetVideoUpload,
+  ]);
 
   const handlePost = useCallback(async () => {
     if (!canPost || isSubmitting) return;
@@ -206,29 +212,37 @@ export function CreateScreen() {
           console.log("[CreatePost] Image uploaded successfully:", imageUrl);
         } catch (error) {
           console.error("[CreatePost] Image upload failed:", error);
-          toast.error("Image upload failed", error instanceof Error ? error.message : "Please try again");
+          toast.error(
+            "Image upload failed",
+            error instanceof Error ? error.message : "Please try again",
+          );
           setIsSubmitting(false);
           return;
         }
       }
 
       let content = draft.body;
-      
+
       if (imageUrl) {
         content = content ? `${content}\n\n${imageUrl}` : imageUrl;
       }
 
       if (uploadedVideoUrl) {
-        content = content ? `${content}\n\n${uploadedVideoUrl}` : uploadedVideoUrl;
+        content = content
+          ? `${content}\n\n${uploadedVideoUrl}`
+          : uploadedVideoUrl;
       }
-      
+
       if (draft.linkUrl) {
         content = content ? `${content}\n\n${draft.linkUrl}` : draft.linkUrl;
       }
 
-      const isUserProfile = draft.community?.description === "Post to your profile";
-      const topic = isUserProfile ? "general" : (draft.community?.id ?? "general");
-      
+      const isUserProfile =
+        draft.community?.description === "Post to your profile";
+      const topic = isUserProfile
+        ? "general"
+        : (draft.community?.id ?? "general");
+
       const postInput: CreatePostMutationInput = {
         topic,
         title: draft.title.trim(),
@@ -266,15 +280,28 @@ export function CreateScreen() {
       }, 1000);
     } catch (error) {
       console.error("[CreatePost] Error creating post:", error);
-      
+
       setIsSubmitting(false);
 
-      const errorMessage = error instanceof Error ? error.message : "Failed to create post";
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to create post";
       toast.error("Failed to create post", errorMessage);
 
       triggerHaptic("error");
     }
-  }, [canPost, isSubmitting, draft, clearDraft, postMutation, toast, selectedContentWarning, uploadedVideoUrl, isVideoMuted, resetVideoUpload, router]);
+  }, [
+    canPost,
+    isSubmitting,
+    draft,
+    clearDraft,
+    postMutation,
+    toast,
+    selectedContentWarning,
+    uploadedVideoUrl,
+    isVideoMuted,
+    resetVideoUpload,
+    router,
+  ]);
 
   const handleCommunitySelect = useCallback(
     (community: Community) => {
@@ -282,7 +309,7 @@ export function CreateScreen() {
       setShowCommunityModal(false);
       triggerHaptic("selection");
     },
-    [updateDraft]
+    [updateDraft],
   );
 
   const handleOpenContentWarning = useCallback(() => {
@@ -385,11 +412,11 @@ export function CreateScreen() {
 
   const handleRemoveMedia = useCallback(() => {
     triggerHaptic("selection");
-    
+
     if (draft.attachmentType === "video" && isUploadingVideo) {
       cancelVideoUpload();
     }
-    
+
     removeAttachment();
     setImageDimensions(null);
     setVideoDimensions(null);
@@ -397,7 +424,13 @@ export function CreateScreen() {
     setIsVideoMuted(false);
     setIsVideoPlaying(false);
     resetVideoUpload();
-  }, [draft.attachmentType, isUploadingVideo, cancelVideoUpload, removeAttachment, resetVideoUpload]);
+  }, [
+    draft.attachmentType,
+    isUploadingVideo,
+    cancelVideoUpload,
+    removeAttachment,
+    resetVideoUpload,
+  ]);
 
   const handleCancelVideoUpload = useCallback(() => {
     triggerHaptic("selection");
@@ -442,11 +475,11 @@ export function CreateScreen() {
             isMuted={isVideoMuted}
             useNativeControls={false}
           />
-          
+
           {/* Play/Pause Overlay */}
           <Pressable
             style={styles.videoPlayOverlay}
-            onPress={() => setIsVideoPlaying(prev => !prev)}
+            onPress={() => setIsVideoPlaying((prev) => !prev)}
           >
             <View style={styles.playPauseButton}>
               <Feather
@@ -456,36 +489,42 @@ export function CreateScreen() {
               />
             </View>
           </Pressable>
-          
+
           {/* Upload Status Overlay */}
           {isUploadingVideo && (
             <View style={styles.uploadStatusOverlay}>
               <View style={styles.uploadStatusBadge}>
                 <Text size="xs" weight="medium" style={{ color: "#fff" }}>
-                  {videoUploadProgress >= 100 ? "Processing..." : `Uploading ${videoUploadProgress}%`}
+                  {videoUploadProgress >= 100
+                    ? "Processing..."
+                    : `Uploading ${videoUploadProgress}%`}
                 </Text>
               </View>
               <View style={styles.uploadProgressBarOverlay}>
-                <View 
+                <View
                   style={[
-                    styles.uploadProgressFillOverlay, 
-                    { width: `${Math.min(videoUploadProgress, 100)}%` }
-                  ]} 
+                    styles.uploadProgressFillOverlay,
+                    { width: `${Math.min(videoUploadProgress, 100)}%` },
+                  ]}
                 />
               </View>
             </View>
           )}
-          
+
           {/* Uploaded Badge */}
           {!isUploadingVideo && uploadedVideoUrl && (
             <View style={styles.uploadedBadge}>
               <Feather name="check" size={12} color="#fff" />
-              <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
+              <Text
+                size="xs"
+                weight="medium"
+                style={{ color: "#fff", marginLeft: 4 }}
+              >
                 Uploaded
               </Text>
             </View>
           )}
-          
+
           {/* Remove Button */}
           <Pressable
             onPress={handleRemoveMedia}
@@ -496,15 +535,19 @@ export function CreateScreen() {
               <Feather name="x" size={18} color="#fff" />
             </View>
           </Pressable>
-          
+
           {/* Mute/Unmute Button */}
           <Pressable
-            onPress={() => setIsVideoMuted(prev => !prev)}
+            onPress={() => setIsVideoMuted((prev) => !prev)}
             style={styles.videoMuteButton}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <View style={styles.muteButtonInner}>
-              <Feather name={isVideoMuted ? "volume-x" : "volume-2"} size={16} color="#fff" />
+              <Feather
+                name={isVideoMuted ? "volume-x" : "volume-2"}
+                size={16}
+                color="#fff"
+              />
             </View>
           </Pressable>
         </View>
@@ -541,9 +584,10 @@ export function CreateScreen() {
             styles.postButton,
             (!canPost || isSubmitting) && styles.postButtonDisabled,
             {
-              backgroundColor: canPost && !isSubmitting
-                ? "rgb(29,68,150)"
-                : theme.colors.background.subtle,
+              backgroundColor:
+                canPost && !isSubmitting
+                  ? "rgb(29,68,150)"
+                  : theme.colors.background.subtle,
               paddingHorizontal: 10,
             },
           ]}
@@ -552,7 +596,10 @@ export function CreateScreen() {
             style={[
               styles.postButtonText,
               {
-                color: canPost && !isSubmitting ? "#fff" : theme.colors.text.emphasis,
+                color:
+                  canPost && !isSubmitting
+                    ? "#fff"
+                    : theme.colors.text.emphasis,
               },
             ]}
           >
@@ -561,10 +608,7 @@ export function CreateScreen() {
         </Button>
       </View>
 
-      <KeyboardAvoidingView
-        behavior="padding"
-        style={{ flex: 1 }}
-      >
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={[
@@ -597,7 +641,7 @@ export function CreateScreen() {
               />
             ) : (
               <Text
-                size="lg"
+                size="xl"
                 weight="bold"
                 style={{ color: theme.colors.text.default }}
               >
@@ -605,7 +649,7 @@ export function CreateScreen() {
               </Text>
             )}
             <Text
-              size="md"
+              size="lg"
               weight="semibold"
               style={{ color: theme.colors.text.default }}
             >
@@ -627,9 +671,16 @@ export function CreateScreen() {
           </Pressable>
 
           {selectedCommunity?.isNewTopic && (
-            <View style={[styles.newTopicWarning, { backgroundColor: theme.colors.warning[500] + "15" }]}>
+            <View
+              style={[
+                styles.newTopicWarning,
+                { backgroundColor: theme.colors.warning[500] + "15" },
+              ]}
+            >
               <Text size="xs" mode="subtle" style={{ lineHeight: 16 }}>
-                Topics are communities centered around specific interests. Posting in the wrong topic may affect your overall trust status on Mirage. Make sure to post into the right category!
+                Topics are communities centered around specific interests.
+                Posting in the wrong topic may affect your overall trust status
+                on Mirage. Make sure to post into the right category!
               </Text>
             </View>
           )}
@@ -638,7 +689,7 @@ export function CreateScreen() {
             ref={titleInputRef}
             style={[styles.titleInput, { color: theme.colors.text.default }]}
             placeholder="Title"
-            placeholderTextColor={'rgb(144,161,171)'}
+            placeholderTextColor={"rgb(144,161,171)"}
             value={draft.title}
             onChangeText={(text) => updateDraft({ title: text })}
             multiline
@@ -662,7 +713,9 @@ export function CreateScreen() {
                   weight="semibold"
                   style={{ color: theme.colors.warning[500] }}
                 >
-                  ⚠️ {selectedContentWarning.charAt(0).toUpperCase() + selectedContentWarning.slice(1)}
+                  ⚠️{" "}
+                  {selectedContentWarning.charAt(0).toUpperCase() +
+                    selectedContentWarning.slice(1)}
                 </Text>
                 <Pressable
                   onPress={(e) => {
@@ -671,12 +724,16 @@ export function CreateScreen() {
                   }}
                   hitSlop={8}
                 >
-                  <Feather name="x" size={14} color={theme.colors.text.subtle} />
+                  <Feather
+                    name="x"
+                    size={14}
+                    color={theme.colors.text.subtle}
+                  />
                 </Pressable>
               </View>
             ) : (
               <Text
-                size="sm"
+                size="md"
                 weight="semibold"
                 style={{ color: theme.colors.text.default }}
               >
@@ -755,7 +812,7 @@ export function CreateScreen() {
                   source={{ uri: draft.mediaUris[0] }}
                   style={[styles.videoPlayer, { resizeMode: "contain" }]}
                 />
-                
+
                 {/* Remove Button */}
                 <Pressable
                   onPress={handleRemoveMedia}
@@ -776,7 +833,7 @@ export function CreateScreen() {
             ref={bodyInputRef}
             style={[styles.bodyInput, { color: theme.colors.text.default }]}
             placeholder="body text (optional)"
-            placeholderTextColor={'rgb(144,161,171)'}
+            placeholderTextColor={"rgb(144,161,171)"}
             value={draft.body}
             onChangeText={(text) => updateDraft({ body: text })}
             multiline
@@ -808,7 +865,7 @@ export function CreateScreen() {
             >
               <Feather
                 name="link"
-                size={18}
+                size={22}
                 color={
                   hasAttachment && !showLinkInput
                     ? theme.colors.text.subtle
@@ -829,7 +886,7 @@ export function CreateScreen() {
             >
               <Feather
                 name="image"
-                size={18}
+                size={22}
                 color={
                   hasAttachment && draft.attachmentType !== "image"
                     ? theme.colors.text.subtle
@@ -843,12 +900,14 @@ export function CreateScreen() {
               disabled={hasAttachment && draft.attachmentType !== "video"}
               style={[
                 styles.mediaButton,
-                hasAttachment && draft.attachmentType !== "video" && styles.mediaButtonDisabled,
+                hasAttachment &&
+                  draft.attachmentType !== "video" &&
+                  styles.mediaButtonDisabled,
               ]}
             >
               <Feather
                 name="video"
-                size={18}
+                size={22}
                 color={
                   hasAttachment && draft.attachmentType !== "video"
                     ? theme.colors.text.subtle
@@ -867,8 +926,12 @@ export function CreateScreen() {
             >
               <Entypo
                 name="list"
-                size={20}
-                color={hasAttachment ? theme.colors.text.subtle : theme.colors.text.default}
+                size={24}
+                color={
+                  hasAttachment
+                    ? theme.colors.text.subtle
+                    : theme.colors.text.default
+                }
               />
             </Pressable>
           </View>
@@ -919,22 +982,21 @@ export function CreateScreen() {
                   onPress={() => handleSelectContentWarning(option.value)}
                   style={styles.contentWarningOption}
                 >
-                  <Text
-                    size="md"
-                    style={{ color: theme.colors.text.default }}
-                  >
+                  <Text size="md" style={{ color: theme.colors.text.default }}>
                     {option.label}
                   </Text>
                   <View
                     style={[
                       styles.checkbox,
                       {
-                        borderColor: selectedContentWarning === option.value
-                          ? theme.colors.brand[500]
-                          : theme.colors.border.default,
-                        backgroundColor: selectedContentWarning === option.value
-                          ? theme.colors.brand[500]
-                          : "transparent",
+                        borderColor:
+                          selectedContentWarning === option.value
+                            ? theme.colors.brand[500]
+                            : theme.colors.border.default,
+                        backgroundColor:
+                          selectedContentWarning === option.value
+                            ? theme.colors.brand[500]
+                            : "transparent",
                       },
                     ]}
                   >
@@ -991,7 +1053,11 @@ export function CreateScreen() {
               color={theme.colors.brand[500]}
               style={{ marginBottom: theme.spacing.md }}
             />
-            <Text size="md" weight="medium" style={{ marginBottom: theme.spacing.xs }}>
+            <Text
+              size="md"
+              weight="medium"
+              style={{ marginBottom: theme.spacing.xs }}
+            >
               Creating post...
             </Text>
             <Text size="sm" mode="subtle" style={{ textAlign: "center" }}>
@@ -1034,7 +1100,7 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
-    paddingVertical: theme.spacing.xs + 2,
+    paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
     gap: theme.spacing.sm,
     borderRadius: theme.radius.full,
@@ -1046,19 +1112,19 @@ const styles = StyleSheet.create((theme) => ({
     marginTop: theme.spacing.sm,
   },
   titleInput: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: "700",
     fontFamily: theme.typography.family.mono,
     paddingBottom: theme.spacing.md,
-    paddingTop: theme.spacing.md,
-    minHeight: 40,
+    paddingTop: theme.spacing.lg,
+    minHeight: 50,
   },
   tagsButton: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
-    paddingVertical: theme.spacing.xs + 2,
-    paddingHorizontal: theme.spacing.sm + 2,
+    paddingVertical: theme.spacing.sm + 2,
+    paddingHorizontal: theme.spacing.md + 2,
     borderRadius: theme.radius.full,
   },
   contentWarningSelected: {
@@ -1100,8 +1166,7 @@ const styles = StyleSheet.create((theme) => ({
     overflow: "hidden",
     position: "relative",
   },
-  mediaPreview: {
-  },
+  mediaPreview: {},
   mediaRemoveButton: {
     position: "absolute",
     top: theme.spacing.sm,
@@ -1113,10 +1178,10 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   bodyInput: {
-    fontSize: 16,
+    fontSize: 18,
     fontFamily: theme.typography.family.mono,
     paddingVertical: theme.spacing.md,
-    minHeight: 120,
+    minHeight: 150,
     textAlignVertical: "top",
   },
   mediaBar: {
@@ -1128,8 +1193,8 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing.sm,
   },
   mediaButton: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     alignItems: "center",
     justifyContent: "center",
   },
