@@ -246,17 +246,25 @@ export function useComment(options: UsePostOptions = {}) {
       const wallet = await getWallet();
       return createComment(wallet, input, options.onPoWProgress);
     },
-    onSuccess: (data, { parentId }) => {
-      // Invalidate comments for the post
-      queryClient.invalidateQueries({ queryKey: ["comments"] });
+   onSuccess: (data, { parentId }) => {
+      // Mark comments as stale without refetching active feeds
+      // This prevents the optimistic update from being overwritten by stale server data
+      queryClient.invalidateQueries({
+        queryKey: ["comments"],
+        refetchType: "inactive",
+      });
 
       // Also invalidate posts to update comment count
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({
+        queryKey: ["posts"],
+        refetchType: "inactive",
+      });
 
       // Invalidate user posts
       if (address) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.userPosts(address),
+          refetchType: "inactive",
         });
       }
     },

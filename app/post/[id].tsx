@@ -301,6 +301,72 @@ export default function PostDetailScreen() {
   const [optimisticReplies, setOptimisticReplies] = useState<Record<string, Comment[]>>({});
 
   // Vote overrides for comments (tracks hasLiked, hasDisliked, and likeDelta)
+
+  // Track if initial comments have loaded (to avoid clearing optimistic on first load)
+  const hasInitialCommentsLoaded = useRef(false);
+
+  // Clean up optimistic comments when server data is refreshed
+  // This prevents duplicates when user pulls to refresh after posting
+  useEffect(() => {
+    if (!commentsData?.children) return;
+    
+    // Skip initial load - only clean up on subsequent refreshes
+    if (!hasInitialCommentsLoaded.current) {
+      hasInitialCommentsLoaded.current = true;
+      return;
+    }
+
+    // Helper to check if server comments contain a matching comment
+    const findMatchingServerComment = (
+      optimisticComment: Comment,
+      serverComments: Comment[]
+    ): boolean => {
+      for (const serverComment of serverComments) {
+        // Match by content and author (since optimistic IDs are different)
+        if (
+          serverComment.content === optimisticComment.content &&
+          serverComment.author.id === optimisticComment.author.id
+        ) {
+          return true;
+        }
+        // Check nested replies
+        if (serverComment.replies && serverComment.replies.length > 0) {
+          if (findMatchingServerComment(optimisticComment, serverComment.replies)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    // Clean up localComments - remove optimistic comments that now exist on server
+    setLocalComments((prev) => {
+      const filtered = prev.filter(
+        (c) => !c.id.startsWith("optimistic-") || !findMatchingServerComment(c, comments)
+      );
+      return filtered.length === prev.length ? prev : filtered;
+    });
+
+    // Clean up optimisticReplies - remove replies that now exist on server
+    setOptimisticReplies((prev) => {
+      const updated: Record<string, Comment[]> = {};
+      let hasChanges = false;
+
+      for (const [parentId, replies] of Object.entries(prev)) {
+        const filtered = replies.filter(
+          (c) => !c.id.startsWith("optimistic-") || !findMatchingServerComment(c, comments)
+        );
+        if (filtered.length > 0) {
+          updated[parentId] = filtered;
+        }
+        if (filtered.length !== replies.length) {
+          hasChanges = true;
+        }
+      }
+
+      return hasChanges ? updated : prev;
+    });
+  }, [commentsData?.children, comments]);
   const [commentVoteOverrides, setCommentVoteOverrides] = useState<
     Record<
       string,
@@ -981,29 +1047,9 @@ export default function PostDetailScreen() {
         });
         setTimeout(() => toast.dismiss(toastId), 3000);
 
-        // Refetch comments to get the actual comment with real ID
-        // and clean up optimistic state
-        refetchComments().then(() => {
-          // Remove optimistic comment after refetch completes
-          if (replyTarget) {
-            setOptimisticReplies((prev) => {
-              const updated = { ...prev };
-              if (updated[replyTarget.id]) {
-                updated[replyTarget.id] = updated[replyTarget.id].filter(
-                  (c) => c.id !== optimisticCommentId
-                );
-                if (updated[replyTarget.id].length === 0) {
-                  delete updated[replyTarget.id];
-                }
-              }
-              return updated;
-            });
-          } else {
-            setLocalComments((prev) =>
-              prev.filter((c) => c.id !== optimisticCommentId)
-            );
-          }
-        });
+        // Don't refetch immediately - the server may not have indexed the comment yet
+        // The optimistic comment will persist until the user manually refreshes
+        // This prevents the comment from disappearing after successful submission
       } catch (error: unknown) {
         const errorMessage =
           error instanceof Error ? error.message : "Failed to post comment";
