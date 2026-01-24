@@ -26,7 +26,6 @@ import {
 } from "@/src/api/read/hooks/use-upload-media";
 import { usePost, type CreatePostMutationInput } from "@/src/api/write";
 import type { ContentTag } from "@/src/api/write/endpoints/posts";
-import { Avatar } from "@/src/components/atoms";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useToast } from "@/src/providers/toast-provider";
@@ -628,26 +627,14 @@ export function CreateScreen() {
               { backgroundColor: theme.colors.background.subtle },
             ]}
           >
-            {selectedCommunity ? (
-              <Avatar
-                size={24}
-                seed={selectedCommunity.id}
-                source={
-                  selectedCommunity.avatar
-                    ? { uri: selectedCommunity.avatar }
-                    : undefined
-                }
-                rounded="full"
-              />
-            ) : (
-              <Text
-                size="xl"
-                weight="bold"
-                style={{ color: theme.colors.text.default }}
-              >
-                #
-              </Text>
-            )}
+            <Text
+              size="xl"
+              weight="bold"
+              style={{ color: theme.colors.text.default }}
+            >
+              #
+            </Text>
+
             <Text
               size="lg"
               weight="semibold"
