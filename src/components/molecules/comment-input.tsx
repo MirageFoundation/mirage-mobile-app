@@ -179,22 +179,22 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
       };
     }, [text, selectedImageUri, selectedGifUrl]);
 
-   const handleSubmit = useCallback(() => {
-     if (!canSubmit) return;
-     Keyboard.dismiss();
-     const trimmedText = text.trim();
-     const imageUri = selectedImageUri;
-     const gifUrl = selectedGifUrl;
+    const handleSubmit = useCallback(() => {
+      if (!canSubmit) return;
+      Keyboard.dismiss();
+      const trimmedText = text.trim();
+      const imageUri = selectedImageUri;
+      const gifUrl = selectedGifUrl;
 
-     setText("");
-     setSelectedImageUri(null);
-     setSelectedGifUrl(null);
-     triggerHaptic("medium");
-     setIsActive(false);
-     setInputMode("keyboard");
+      setText("");
+      setSelectedImageUri(null);
+      setSelectedGifUrl(null);
+      triggerHaptic("medium");
+      setIsActive(false);
+      setInputMode("keyboard");
 
-     setTimeout(() => onSubmit?.(trimmedText, imageUri, gifUrl), 0);
-   }, [canSubmit, text, selectedImageUri, selectedGifUrl, onSubmit]);
+      setTimeout(() => onSubmit?.(trimmedText, imageUri, gifUrl), 0);
+    }, [canSubmit, text, selectedImageUri, selectedGifUrl, onSubmit]);
 
     const handleModeChange = useCallback((mode: InputMode) => {
       triggerHaptic("selection");
@@ -313,7 +313,7 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
               style={styles.inactiveInput}
               disabled={disabled}
             >
-              <Text size="md" mode="subtle">
+              <Text size="md">
                 {isLoggedIn ? "Share your thoughts..." : "Login to comment"}
               </Text>
             </Pressable>
@@ -331,7 +331,7 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
                 <MaterialIcons
                   name="gif"
                   size={24}
-                  color={theme.colors.text.subtle}
+                  color={theme.colors.text.default}
                 />
               </Pressable>
               <Pressable
@@ -346,7 +346,7 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
                 <Ionicons
                   name="image-outline"
                   size={20}
-                  color={theme.colors.text.subtle}
+                  color={theme.colors.text.default}
                 />
               </Pressable>
             </View>
@@ -748,7 +748,7 @@ const styles = StyleSheet.create((theme) => ({
   inactiveInputWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: theme.colors.background.subtle,
+    backgroundColor: theme.colors.background.lighter,
     borderRadius: theme.radius.lg,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
