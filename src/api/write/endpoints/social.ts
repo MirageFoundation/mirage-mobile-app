@@ -21,6 +21,7 @@ import {
   canonBaseUnblockPost,
 } from "../signing";
 import type { WriteResponse, PoWProgressCallback } from "../signing";
+import { withPowRetry } from "../utils/retry-pow";
 
 // ============================================
 // Follow User
@@ -34,17 +35,19 @@ export async function followUser(
   userAddress: string,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBaseFollowUser,
-    payloadFields: {
-      target: wallet.address,
-      user: userAddress,
-    },
-    onPoWProgress,
-  });
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseFollowUser,
+      payloadFields: {
+        target: wallet.address,
+        user: userAddress,
+      },
+      onPoWProgress,
+    });
 
-  return api.post<WriteResponse>("/core/follow_user", payload);
+    return api.post<WriteResponse>("/core/follow_user", payload);
+  }, "followUser");
 }
 
 /**
@@ -55,17 +58,19 @@ export async function unfollowUser(
   userAddress: string,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBaseUnfollowUser,
-    payloadFields: {
-      target: wallet.address,
-      user: userAddress,
-    },
-    onPoWProgress,
-  });
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseUnfollowUser,
+      payloadFields: {
+        target: wallet.address,
+        user: userAddress,
+      },
+      onPoWProgress,
+    });
 
-  return api.post<WriteResponse>("/core/unfollow_user", payload);
+    return api.post<WriteResponse>("/core/unfollow_user", payload);
+  }, "unfollowUser");
 }
 
 // ============================================
@@ -80,17 +85,19 @@ export async function followTopic(
   topic: string,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBaseFollowTopic,
-    payloadFields: {
-      target: wallet.address,
-      topic: topic.toLowerCase(),
-    },
-    onPoWProgress,
-  });
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseFollowTopic,
+      payloadFields: {
+        target: wallet.address,
+        topic: topic.toLowerCase(),
+      },
+      onPoWProgress,
+    });
 
-  return api.post<WriteResponse>("/core/follow_topic", payload);
+    return api.post<WriteResponse>("/core/follow_topic", payload);
+  }, "followTopic");
 }
 
 /**
@@ -101,17 +108,19 @@ export async function unfollowTopic(
   topic: string,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBaseUnfollowTopic,
-    payloadFields: {
-      target: wallet.address,
-      topic: topic.toLowerCase(),
-    },
-    onPoWProgress,
-  });
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseUnfollowTopic,
+      payloadFields: {
+        target: wallet.address,
+        topic: topic.toLowerCase(),
+      },
+      onPoWProgress,
+    });
 
-  return api.post<WriteResponse>("/core/unfollow_topic", payload);
+    return api.post<WriteResponse>("/core/unfollow_topic", payload);
+  }, "unfollowTopic");
 }
 
 // ============================================
@@ -126,17 +135,19 @@ export async function followModerator(
   moderatorAddress: string,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBaseFollowModerator,
-    payloadFields: {
-      target: wallet.address,
-      moderator: moderatorAddress,
-    },
-    onPoWProgress,
-  });
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseFollowModerator,
+      payloadFields: {
+        target: wallet.address,
+        moderator: moderatorAddress,
+      },
+      onPoWProgress,
+    });
 
-  return api.post<WriteResponse>("/core/follow_moderator", payload);
+    return api.post<WriteResponse>("/core/follow_moderator", payload);
+  }, "followModerator");
 }
 
 /**
@@ -147,17 +158,19 @@ export async function unfollowModerator(
   moderatorAddress: string,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBaseUnfollowModerator,
-    payloadFields: {
-      target: wallet.address,
-      moderator: moderatorAddress,
-    },
-    onPoWProgress,
-  });
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseUnfollowModerator,
+      payloadFields: {
+        target: wallet.address,
+        moderator: moderatorAddress,
+      },
+      onPoWProgress,
+    });
 
-  return api.post<WriteResponse>("/core/unfollow_moderator", payload);
+    return api.post<WriteResponse>("/core/unfollow_moderator", payload);
+  }, "unfollowModerator");
 }
 
 // ============================================
@@ -172,16 +185,18 @@ export async function blockUser(
   userAddress: string,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBaseBlockUser,
-    payloadFields: {
-      target: userAddress,
-    },
-    onPoWProgress,
-  });
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseBlockUser,
+      payloadFields: {
+        target: userAddress,
+      },
+      onPoWProgress,
+    });
 
-  return api.post<WriteResponse>("/core/block_user", payload);
+    return api.post<WriteResponse>("/core/block_user", payload);
+  }, "blockUser");
 }
 
 /**
@@ -192,16 +207,18 @@ export async function unblockUser(
   userAddress: string,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBaseUnblockUser,
-    payloadFields: {
-      target: userAddress,
-    },
-    onPoWProgress,
-  });
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseUnblockUser,
+      payloadFields: {
+        target: userAddress,
+      },
+      onPoWProgress,
+    });
 
-  return api.post<WriteResponse>("/core/unblock_user", payload);
+    return api.post<WriteResponse>("/core/unblock_user", payload);
+  }, "unblockUser");
 }
 
 // ============================================
@@ -216,16 +233,18 @@ export async function blockPost(
   postId: string,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBaseBlockPost,
-    payloadFields: {
-      target: postId,
-    },
-    onPoWProgress,
-  });
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseBlockPost,
+      payloadFields: {
+        target: postId,
+      },
+      onPoWProgress,
+    });
 
-  return api.post<WriteResponse>("/core/block_post", payload);
+    return api.post<WriteResponse>("/core/block_post", payload);
+  }, "blockPost");
 }
 
 /**
@@ -236,14 +255,16 @@ export async function unblockPost(
   postId: string,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBaseUnblockPost,
-    payloadFields: {
-      target: postId,
-    },
-    onPoWProgress,
-  });
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseUnblockPost,
+      payloadFields: {
+        target: postId,
+      },
+      onPoWProgress,
+    });
 
-  return api.post<WriteResponse>("/core/unblock_post", payload);
+    return api.post<WriteResponse>("/core/unblock_post", payload);
+  }, "unblockPost");
 }

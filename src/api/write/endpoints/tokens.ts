@@ -15,6 +15,7 @@ import {
   canonBaseSetAutoRenewal,
 } from "../signing";
 import type { WriteResponse, PoWProgressCallback } from "../signing";
+import { withPowRetry } from "../utils/retry-pow";
 
 // ============================================
 // Types
@@ -43,18 +44,20 @@ export async function sendTokens(
 ): Promise<WriteResponse> {
   const { recipient, amount } = input;
 
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBaseSendTokens,
-    payloadFields: {
-      sender: wallet.address,
-      target: recipient,
-      amount,
-    },
-    onPoWProgress,
-  });
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseSendTokens,
+      payloadFields: {
+        sender: wallet.address,
+        target: recipient,
+        amount,
+      },
+      onPoWProgress,
+    });
 
-  return api.post<WriteResponse>("/core/send_tokens", payload);
+    return api.post<WriteResponse>("/core/send_tokens", payload);
+  }, "sendTokens");
 }
 
 // ============================================

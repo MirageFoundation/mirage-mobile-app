@@ -6,7 +6,7 @@
  * and submitting the signed envelope.
  */
 
-const MAX_POW_RETRIES = 2;
+const MAX_POW_RETRIES = 3;
 
 /**
  * Execute a function that may fail with "insufficient pow" and retry with fresh parameters
@@ -22,7 +22,11 @@ export async function withPowRetry<T>(
       return await operation();
     } catch (error: any) {
       const errorMsg = error?.response?.data?.error || error?.message || "";
-      if (errorMsg.includes("insufficient pow") && attempt < MAX_POW_RETRIES) {
+      const isRetryable =
+        errorMsg.includes("insufficient pow") ||
+        errorMsg.includes("invalid last_block_hash") ||
+        errorMsg.includes("stale");
+      if (isRetryable && attempt < MAX_POW_RETRIES) {
         console.log(
           `[${operationName}] PoW rejected (attempt ${attempt + 1}/${MAX_POW_RETRIES + 1}), retrying with fresh params...`
         );
