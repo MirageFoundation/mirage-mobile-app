@@ -19,7 +19,6 @@ import React, {
 import {
   ActivityIndicator,
   Image,
-  InteractionManager,
   Keyboard,
   Pressable,
   ScrollView,
@@ -145,9 +144,9 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
     );
 
     const handleDeactivate = useCallback(() => {
+      Keyboard.dismiss();
       setIsActive(false);
       setInputMode("keyboard");
-      Keyboard.dismiss();
     }, []);
 
     // Deactivate when keyboard is dismissed (clicking outside)
@@ -180,29 +179,22 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
       };
     }, [text, selectedImageUri, selectedGifUrl]);
 
-    const handleSubmit = useCallback(async () => {
-      if (!canSubmit) return;
-      const trimmedText = text.trim();
-      const imageUri = selectedImageUri;
-      const gifUrl = selectedGifUrl;
+   const handleSubmit = useCallback(() => {
+     if (!canSubmit) return;
+     Keyboard.dismiss();
+     const trimmedText = text.trim();
+     const imageUri = selectedImageUri;
+     const gifUrl = selectedGifUrl;
 
-      setText("");
-      setSelectedImageUri(null);
-      setSelectedGifUrl(null);
-      handleDeactivate();
-      triggerHaptic("medium");
+     setText("");
+     setSelectedImageUri(null);
+     setSelectedGifUrl(null);
+     triggerHaptic("medium");
+     setIsActive(false);
+     setInputMode("keyboard");
 
-      InteractionManager.runAfterInteractions(() => {
-        onSubmit?.(trimmedText, imageUri, gifUrl);
-      });
-    }, [
-      canSubmit,
-      text,
-      selectedImageUri,
-      selectedGifUrl,
-      onSubmit,
-      handleDeactivate,
-    ]);
+     setTimeout(() => onSubmit?.(trimmedText, imageUri, gifUrl), 0);
+   }, [canSubmit, text, selectedImageUri, selectedGifUrl, onSubmit]);
 
     const handleModeChange = useCallback((mode: InputMode) => {
       triggerHaptic("selection");
@@ -576,7 +568,7 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
           <View style={styles.optionsRight}>
             {/* Reply button */}
             <Pressable
-              onPress={handleSubmit}
+              onPressIn={handleSubmit}
               disabled={!canSubmit}
               style={[
                 styles.replyButton,
