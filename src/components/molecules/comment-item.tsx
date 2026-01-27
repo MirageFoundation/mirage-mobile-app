@@ -531,7 +531,7 @@ export const CommentItem = ({
               >
                 <Ionicons
                   name="ellipsis-horizontal"
-                  size={SIZE_CONFIG.iconSize}
+                  size={SIZE_CONFIG.iconSize + 5}
                   color={iconColor}
                 />
               </Pressable>
@@ -540,15 +540,24 @@ export const CommentItem = ({
               <Pressable
                 onPress={handleReplyPress}
                 style={styles.actionButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                hitSlop={{ top: 20, bottom: 20, left: 10, right: 10 }}
               >
                 <Octicons
                   name="reply"
-                  size={SIZE_CONFIG.iconSize - 1}
+                  size={
+                    depth === 0
+                      ? SIZE_CONFIG.iconSize
+                      : SIZE_CONFIG.iconSize + 4
+                  }
                   color={iconColor}
                 />
                 {depth === 0 && (
-                  <Text size="xs" mode="subtle" style={styles.actionText}>
+                  <Text
+                    size={theme.typography.size.xs}
+                    mode="subtle"
+                    weight="semibold"
+                    style={styles.actionText}
+                  >
                     Reply
                   </Text>
                 )}
@@ -684,6 +693,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: 4,
   },
   actionText: {
-    marginLeft: 3,
+    marginLeft: 8,
   },
 }));

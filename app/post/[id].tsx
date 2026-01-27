@@ -1159,55 +1159,31 @@ export default function PostDetailScreen() {
   }, []);
 
   // Render header (close button + right icons)
-  const renderHeader = useMemo(
-    () => (
-      <LinearGradient
-        colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[
-          styles.header,
-          { paddingTop: insets.top },
-        ]}
-      >
-        {/* Left: Close button */}
-        <Pressable onPress={handleBack} style={styles.headerButton}>
-          <AntDesign name="close" size={22} color="#FFFFFF" />
-        </Pressable>
+ const renderHeader = useMemo(
+   () => (
+     <LinearGradient
+       colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
+       start={{ x: 0, y: 0 }}
+       end={{ x: 1, y: 1 }}
+       style={[
+         styles.header,
+         { paddingTop: insets.top },
+       ]}
+     >
+       {/* Left: Close button */}
+       <Pressable onPress={handleBack} style={styles.headerButton}>
+         <AntDesign name="close" size={22} color="#FFFFFF" />
+       </Pressable>
 
-        {/* Spacer */}
-        <View style={styles.headerSpacer} />
-
-        {/* Right: Action icons + Avatar */}
-        <View style={styles.headerActions}>
-          <Pressable onPress={handleSearch} style={styles.headerButton}>
-            <Ionicons name="search-outline" size={22} color="#FFFFFF" />
-          </Pressable>
-
-          <Pressable onPress={handleSort} style={styles.headerButton}>
-            <MaterialCommunityIcons name="sort" size={22} color="#FFFFFF" />
-          </Pressable>
-
-          <Pressable onPress={handleHeaderMore} style={styles.headerButton}>
-            <Ionicons name="ellipsis-horizontal" size={22} color="#FFFFFF" />
-          </Pressable>
-
-          <Pressable onPress={handleProfilePress} style={styles.avatarButton}>
-            <Avatar size="sm" seed={currentUser?.username ?? "guest"} />
-          </Pressable>
-        </View>
-      </LinearGradient>
-    ),
-    [
-      insets.top,
-      handleBack,
-      handleSearch,
-      handleSort,
-      handleHeaderMore,
-      handleProfilePress,
-      currentUser,
-    ]
-  );
+       {/* Spacer */}
+       <View style={styles.headerSpacer} />
+     </LinearGradient>
+   ),
+   [
+     insets.top,
+     handleBack,
+   ]
+ );
 
   // Render list header (post + divider)
   const listHeader = useMemo(() => {
