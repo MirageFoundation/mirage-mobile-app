@@ -625,10 +625,7 @@ export function CreateScreen() {
             style={[
               styles.communitySelector,
               {
-                backgroundColor:
-                  Platform.OS === "ios"
-                    ? theme.colors.background.subtle
-                    : theme.colors.background.lighter,
+                backgroundColor: theme.colors.background.lighter,
               },
             ]}
           >
@@ -696,10 +693,7 @@ export function CreateScreen() {
             style={[
               styles.tagsButton,
               {
-                backgroundColor:
-                  Platform.OS === "ios"
-                    ? theme.colors.background.subtle
-                    : theme.colors.background.lighter,
+                backgroundColor: theme.colors.background.lighter,
               },
             ]}
           >
