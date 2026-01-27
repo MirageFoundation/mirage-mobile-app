@@ -4,7 +4,7 @@ import {
   UpvoteFilledIcon,
   UpvoteOutlineIcon,
 } from "@/assets/figma-icons";
-import { Avatar, TimeAgo } from "@/src/components/atoms";
+import { TimeAgo } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons, Octicons } from "@expo/vector-icons";
@@ -269,7 +269,7 @@ const CommentContent = ({ content }: { content: string }) => {
   // If no links and no images, render simple text
   if (parts.length === 1 && parts[0].type === "text") {
     return (
-      <Text size="sm" style={styles.content}>
+      <Text size="md" style={styles.content}>
         {content}
       </Text>
     );
@@ -291,7 +291,7 @@ const CommentContent = ({ content }: { content: string }) => {
     <View>
       {/* Text content */}
       {textParts.length > 0 && (
-        <Text size="sm" style={styles.content}>
+        <Text size="md" style={styles.content}>
           {textParts.map((part, index) => {
             if (part.type === "text") {
               return part.content;
@@ -300,7 +300,7 @@ const CommentContent = ({ content }: { content: string }) => {
               return (
                 <Text
                   key={index}
-                  size="sm"
+                  size="md"
                   style={{ color: LINK_COLOR }}
                   onPress={() => handleLinkPress(part.url)}
                 >
@@ -318,7 +318,7 @@ const CommentContent = ({ content }: { content: string }) => {
         (part, index) =>
           part.type === "image" && (
             <CommentImage key={`img-${index}`} url={part.url} />
-          )
+          ),
       )}
     </View>
   );
@@ -376,7 +376,7 @@ export const CommentItem = ({
     const opacity = interpolate(
       animationProgress.value,
       [0, 0.5, 1],
-      [0, 0.5, 1]
+      [0, 0.5, 1],
     );
     const translateY = interpolate(animationProgress.value, [0, 1], [-8, 0]);
     const scale = interpolate(animationProgress.value, [0, 1], [0.97, 1]);
@@ -472,7 +472,10 @@ export const CommentItem = ({
   const downvoteColor = hasDisliked ? DOWNVOTE_COLOR : iconColor;
 
   return (
-    <Pressable onPress={handlePress} style={[styles.container, highlightStyle, style]}>
+    <Pressable
+      onPress={handlePress}
+      style={[styles.container, highlightStyle, style]}
+    >
       {/* Thread line for nested comments */}
       {depth > 0 && (
         <View style={[styles.threadLineContainer, { width: indentWidth }]}>
@@ -483,17 +486,11 @@ export const CommentItem = ({
       )}
 
       <View style={[styles.contentWrapper, { marginLeft: indentWidth }]}>
-       {/* Header: Avatar, Username, Time */}
-       <View style={styles.header}>
+        {/* Header: Avatar, Username, Time */}
+        <View style={styles.header}>
           <View style={styles.authorSection}>
-           <Avatar
-             size={SIZE_CONFIG.avatarSize}
-             seed={author.avatarSeed ?? author.username}
-             source={author.avatarUrl ? { uri: author.avatarUrl } : undefined}
-             bordered
-           />
-           <View style={styles.authorInfo}>
-             <View style={styles.authorRow}>
+            <View style={styles.authorInfo}>
+              <View style={styles.authorRow}>
                 <Pressable
                   onPress={handleAuthorPress}
                   hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
@@ -502,20 +499,22 @@ export const CommentItem = ({
                     pressed && styles.usernameButtonPressed,
                   ]}
                 >
-                  <Text size="sm" weight="semibold" numberOfLines={1}>
+                  <Text size="sm" weight="bold" numberOfLines={1} mode="subtle">
                     @{author.username}
                   </Text>
                 </Pressable>
-               <Text size="xs" mode="subtle">
-                 ·
-               </Text>
-               <TimeAgo timestamp={createdAt} showSuffix={false} size="xs" />
-             </View>
-           </View>
+
+                <Text size="sm" mode="subtle">
+                  ·
+                </Text>
+
+                <TimeAgo timestamp={createdAt} showSuffix={false} size="xs" />
+              </View>
+            </View>
           </View>
-         {/* Tappable area to expand/collapse */}
-         <Pressable onPress={handlePress} style={styles.expandArea} />
-       </View>
+          {/* Tappable area to expand/collapse */}
+          <Pressable onPress={handlePress} style={styles.expandArea} />
+        </View>
 
         {/* Comment content - collapsible */}
         <Animated.View style={animatedContentStyle}>
@@ -538,7 +537,11 @@ export const CommentItem = ({
               </Pressable>
 
               {/* Reply */}
-              <Pressable onPress={handleReplyPress} style={styles.actionButton}>
+              <Pressable
+                onPress={handleReplyPress}
+                style={styles.actionButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
                 <Octicons
                   name="reply"
                   size={SIZE_CONFIG.iconSize - 1}
@@ -552,7 +555,11 @@ export const CommentItem = ({
               </Pressable>
 
               {/* Like */}
-              <Pressable onPress={handleLikePress} style={styles.actionButton}>
+              <Pressable
+                onPress={handleLikePress}
+                style={styles.actionButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
                 <RNAnimated.View
                   style={{ transform: [{ translateY: upArrowTranslateY }] }}
                 >
@@ -583,6 +590,7 @@ export const CommentItem = ({
               <Pressable
                 onPress={handleDislikePress}
                 style={styles.actionButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <RNAnimated.View
                   style={{ transform: [{ translateY: downArrowTranslateY }] }}
@@ -635,21 +643,19 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
   },
- authorSection: {
-   flexDirection: "row",
-   alignItems: "center",
- },
- authorInfo: {
-   marginLeft: theme.spacing.xs,
- },
- usernameButton: {
-   paddingVertical: 2,
-   paddingHorizontal: 2,
- },
- usernameButtonPressed: {
-   opacity: 0.6,
- },
- expandArea: {
+  authorSection: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  authorInfo: {},
+  usernameButton: {
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+  },
+  usernameButtonPressed: {
+    opacity: 0.6,
+  },
+  expandArea: {
     flex: 1,
     height: 32,
   },
@@ -670,7 +676,7 @@ const styles = StyleSheet.create((theme) => ({
   actions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.md,
+    gap: theme.spacing.lg,
   },
   actionButton: {
     flexDirection: "row",

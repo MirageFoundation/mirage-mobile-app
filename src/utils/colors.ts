@@ -79,7 +79,7 @@ function generateTextColors(baseColor: string): TextColors {
   const color = Color(baseColor);
   return {
     default: baseColor,
-    subtle: color.alpha(0.65).toString(),
+    subtle: "rgb(144,161,171)",
     emphasis: color.isDark()
       ? color.lighten(0.2).hex()
       : color.darken(0.2).hex(),

@@ -39,7 +39,7 @@ type CommentInputProps = {
   onSubmit?: (
     text: string,
     imageUri?: string | null,
-    gifUrl?: string | null
+    gifUrl?: string | null,
   ) => void | Promise<void>;
   /** Callback when link is added */
   onAddLink?: (name: string, url: string) => void;
@@ -87,7 +87,7 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
       onCancelReply,
       style,
     },
-    ref
+    ref,
   ) => {
     const insets = useSafeAreaInsets();
     const { theme } = useUnistyles();
@@ -112,7 +112,7 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
 
     // Image and GIF state
     const [selectedImageUri, setSelectedImageUri] = useState<string | null>(
-      null
+      null,
     );
     const [selectedGifUrl, setSelectedGifUrl] = useState<string | null>(null);
 
@@ -141,7 +141,7 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
           handleActivate();
         },
       }),
-      [handleActivate]
+      [handleActivate],
     );
 
     const handleDeactivate = useCallback(() => {
@@ -172,7 +172,7 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
             setIsActive(false);
             setInputMode("keyboard");
           }
-        }
+        },
       );
 
       return () => {
@@ -180,29 +180,29 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
       };
     }, [text, selectedImageUri, selectedGifUrl]);
 
-  const handleSubmit = useCallback(async () => {
-    if (!canSubmit) return;
-    const trimmedText = text.trim();
-    const imageUri = selectedImageUri;
-    const gifUrl = selectedGifUrl;
+    const handleSubmit = useCallback(async () => {
+      if (!canSubmit) return;
+      const trimmedText = text.trim();
+      const imageUri = selectedImageUri;
+      const gifUrl = selectedGifUrl;
 
-    setText("");
-    setSelectedImageUri(null);
-    setSelectedGifUrl(null);
-    handleDeactivate();
-    triggerHaptic("medium");
+      setText("");
+      setSelectedImageUri(null);
+      setSelectedGifUrl(null);
+      handleDeactivate();
+      triggerHaptic("medium");
 
-    InteractionManager.runAfterInteractions(() => {
-      onSubmit?.(trimmedText, imageUri, gifUrl);
-    });
-  }, [
-    canSubmit,
-    text,
-    selectedImageUri,
-    selectedGifUrl,
-    onSubmit,
-    handleDeactivate,
-  ]);
+      InteractionManager.runAfterInteractions(() => {
+        onSubmit?.(trimmedText, imageUri, gifUrl);
+      });
+    }, [
+      canSubmit,
+      text,
+      selectedImageUri,
+      selectedGifUrl,
+      onSubmit,
+      handleDeactivate,
+    ]);
 
     const handleModeChange = useCallback((mode: InputMode) => {
       triggerHaptic("selection");
@@ -256,7 +256,7 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
         // Focus input after a short delay
         setTimeout(() => inputRef.current?.focus(), 100);
       },
-      [onAddGif, setGifSearch]
+      [onAddGif, setGifSearch],
     );
 
     const handlePickImage = useCallback(async () => {
@@ -703,7 +703,7 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
         )}
       </View>
     );
-  }
+  },
 );
 
 CommentInput.displayName = "CommentInput";
