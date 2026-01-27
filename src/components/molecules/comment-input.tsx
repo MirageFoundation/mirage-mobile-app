@@ -19,6 +19,7 @@ import React, {
 import {
   ActivityIndicator,
   Image,
+  InteractionManager,
   Keyboard,
   Pressable,
   ScrollView,
@@ -179,27 +180,29 @@ export const CommentInput = forwardRef<CommentInputRef, CommentInputProps>(
       };
     }, [text, selectedImageUri, selectedGifUrl]);
 
-    const handleSubmit = useCallback(async () => {
-      if (!canSubmit) return;
-      triggerHaptic("medium");
-      const trimmedText = text.trim();
-      const imageUri = selectedImageUri;
-      const gifUrl = selectedGifUrl;
+  const handleSubmit = useCallback(async () => {
+    if (!canSubmit) return;
+    const trimmedText = text.trim();
+    const imageUri = selectedImageUri;
+    const gifUrl = selectedGifUrl;
 
-      setText("");
-      setSelectedImageUri(null);
-      setSelectedGifUrl(null);
-      handleDeactivate();
+    setText("");
+    setSelectedImageUri(null);
+    setSelectedGifUrl(null);
+    handleDeactivate();
+    triggerHaptic("medium");
 
-      await onSubmit?.(trimmedText, imageUri, gifUrl);
-    }, [
-      canSubmit,
-      text,
-      selectedImageUri,
-      selectedGifUrl,
-      onSubmit,
-      handleDeactivate,
-    ]);
+    InteractionManager.runAfterInteractions(() => {
+      onSubmit?.(trimmedText, imageUri, gifUrl);
+    });
+  }, [
+    canSubmit,
+    text,
+    selectedImageUri,
+    selectedGifUrl,
+    onSubmit,
+    handleDeactivate,
+  ]);
 
     const handleModeChange = useCallback((mode: InputMode) => {
       triggerHaptic("selection");
