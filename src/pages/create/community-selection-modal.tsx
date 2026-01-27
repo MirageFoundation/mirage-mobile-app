@@ -33,7 +33,7 @@ import { type Community } from "@/src/stores/draft-store";
 
 const topicToCommunity = (topic: TopicInfo): Community => ({
   id: topic.topic.toLowerCase(),
-  name: topic.topic.charAt(0).toUpperCase() + topic.topic.slice(1),
+  name: topic.topic.toLowerCase(),
   avatar: undefined,
   memberCount: topic.post_count ?? topic.count ?? 0,
   description: undefined,
@@ -75,7 +75,7 @@ const CreateTopicItem = ({
           weight="semibold"
           style={{ color: theme.colors.brand[500] }}
         >
-          Create #{topicName}
+          Create #{topicName.toLowerCase()}
         </Text>
       </Box>
     </Pressable>
@@ -115,11 +115,8 @@ const CommunityItem = ({
       <Animated.View style={[styles.communityItem, animatedStyle]}>
         <View style={styles.communityInfo}>
           <View style={styles.communityHeader}>
-            <Text size="xl" weight="bold" numberOfLines={1}>
-              #{" "}
-              <Text size="lg" weight="semibold" numberOfLines={1}>
-                {community.name}
-              </Text>
+            <Text size="lg" weight="semibold" numberOfLines={1}>
+              #{community.name.toLowerCase()}
             </Text>
           </View>
           {community.memberCount > 0 && (
@@ -331,13 +328,13 @@ export const CommunitySelectionModal = ({
               style={[
                 styles.searchInputWrapper,
                 {
-                  backgroundColor: theme.colors.background.subtle,
+                  backgroundColor: theme.colors.background.light,
                 },
               ]}
             >
               <Feather
                 name="search"
-                size={16}
+                size={20}
                 color={theme.colors.text.subtle}
                 style={{ marginRight: 6 }}
               />
@@ -347,6 +344,8 @@ export const CommunitySelectionModal = ({
                   styles.searchInput,
                   {
                     color: theme.colors.text.default,
+                    fontWeight: theme.typography.weight.semibold,
+                    fontSize: theme.typography.size.lg,
                   },
                 ]}
                 placeholder="Search for a topic"
@@ -462,7 +461,7 @@ const styles = StyleSheet.create((theme) => ({
   searchInputWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    height: 42,
+    height: 46,
     borderRadius: theme.radius.lg,
     paddingHorizontal: theme.spacing.sm,
   },

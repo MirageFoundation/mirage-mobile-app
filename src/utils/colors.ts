@@ -75,11 +75,14 @@ interface ThemeColors {
   dark: BaseColors;
 }
 
-function generateTextColors(baseColor: string): TextColors {
+function generateTextColors(
+  baseColor: string,
+  subtleColor: string,
+): TextColors {
   const color = Color(baseColor);
   return {
     default: baseColor,
-    subtle: "rgb(144,161,171)",
+    subtle: subtleColor,
     emphasis: color.isDark()
       ? color.lighten(0.2).hex()
       : color.darken(0.2).hex(),
@@ -264,8 +267,8 @@ export function generateColorTheme(colors: {
         emphasis: "#525252", // Even lighter gray
         // Semantic shades based on the base background color
         lightest: color.lighten(0.5).hex(),
-        lighter: color.lighten(0.3).hex(),
-        light: color.lighten(0.15).hex(),
+        lighter: "rgb(42,50,54)",
+        light: "rgb(26,29,31)",
         base: baseColor,
         dark: color.darken(0.15).hex(),
         darker: color.darken(0.3).hex(),
@@ -284,8 +287,8 @@ export function generateColorTheme(colors: {
         emphasis: "#D4D4D4", // Even darker gray
         // Semantic shades based on the base background color
         lightest: color.lighten(0.5).hex(),
-        lighter: color.lighten(0.3).hex(),
-        light: color.lighten(0.15).hex(),
+        lighter: "rgb(229,235,238)",
+        light: "rgb(242,242,242)",
         base: baseColor,
         dark: color.darken(0.15).hex(),
         darker: color.darken(0.3).hex(),
@@ -341,7 +344,7 @@ export function generateColorTheme(colors: {
         ),
         border: generateBorderColors(colors.surfaces.light.border),
         // Text colors
-        text: generateTextColors(colors.text.light.default),
+        text: generateTextColors(colors.text.light.default, "rgb(92,108,116)"),
       },
     },
     dark: {
@@ -363,7 +366,7 @@ export function generateColorTheme(colors: {
         ),
         border: generateBorderColors(colors.surfaces.dark.border),
         // Text colors
-        text: generateTextColors(colors.text.dark.default),
+        text: generateTextColors(colors.text.dark.default, "rgb(92,108,116)"),
       },
     },
   };

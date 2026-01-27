@@ -30,8 +30,12 @@ const PROTECTED_TABS = ["following", "create", "inbox", "profile"];
 
 const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
   const insets = useSafeAreaInsets();
-  const { tabBarAnimatedStyle, scrollToTopAndRefresh, scrollToTopAndRefreshFollowing, scrollToTopAndRefreshProfile } =
-    useScrollAnimationContext();
+  const {
+    tabBarAnimatedStyle,
+    scrollToTopAndRefresh,
+    scrollToTopAndRefreshFollowing,
+    scrollToTopAndRefreshProfile,
+  } = useScrollAnimationContext();
 
   // Auth state
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
@@ -131,7 +135,7 @@ const TabBarItem = ({
 
   const iconColor = isFocused
     ? theme.colors.primary[500]
-    : 'rgb(144,161,171)';
+    : theme.colors.text.subtle;
 
   const renderIcon = () => {
     const iconSize = 20;
@@ -190,7 +194,7 @@ const TabBarItem = ({
           fontWeight: "500",
           color: isFocused
             ? theme.colors.primary[500]
-            : 'rgb(144,161,171)',
+            : theme.colors.text.subtle,
         }}
       >
         {label}

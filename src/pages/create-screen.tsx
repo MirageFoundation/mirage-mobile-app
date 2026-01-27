@@ -624,7 +624,12 @@ export function CreateScreen() {
             }}
             style={[
               styles.communitySelector,
-              { backgroundColor: theme.colors.background.subtle },
+              {
+                backgroundColor:
+                  Platform.OS === "ios"
+                    ? theme.colors.background.subtle
+                    : theme.colors.background.lighter,
+              },
             ]}
           >
             <Text
@@ -640,9 +645,9 @@ export function CreateScreen() {
               weight="semibold"
               style={{ color: theme.colors.text.default }}
             >
-              {selectedCommunity?.name ?? "Select a topic"}
+              {selectedCommunity?.name?.toLowerCase() ?? "Select a topic"}
             </Text>
-            <Box>
+            <Box style={{ marginLeft: 5 }}>
               <Entypo
                 name="chevron-up"
                 size={12}
@@ -676,7 +681,7 @@ export function CreateScreen() {
             ref={titleInputRef}
             style={[styles.titleInput, { color: theme.colors.text.default }]}
             placeholder="Title"
-            placeholderTextColor={"rgb(144,161,171)"}
+            placeholderTextColor={theme.colors.text.subtle}
             value={draft.title}
             onChangeText={(text) => updateDraft({ title: text })}
             multiline
@@ -690,7 +695,12 @@ export function CreateScreen() {
             onPress={handleOpenContentWarning}
             style={[
               styles.tagsButton,
-              { backgroundColor: theme.colors.background.subtle },
+              {
+                backgroundColor:
+                  Platform.OS === "ios"
+                    ? theme.colors.background.subtle
+                    : theme.colors.background.lighter,
+              },
             ]}
           >
             {selectedContentWarning ? (
@@ -820,7 +830,7 @@ export function CreateScreen() {
             ref={bodyInputRef}
             style={[styles.bodyInput, { color: theme.colors.text.default }]}
             placeholder="body text (optional)"
-            placeholderTextColor={"rgb(144,161,171)"}
+            placeholderTextColor={theme.colors.text.subtle}
             value={draft.body}
             onChangeText={(text) => updateDraft({ body: text })}
             multiline
@@ -988,7 +998,14 @@ export function CreateScreen() {
                     ]}
                   >
                     {selectedContentWarning === option.value && (
-                      <Feather name="check" size={12} color="#fff" />
+                      <View
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: 5,
+                          backgroundColor: "#fff",
+                        }}
+                      />
                     )}
                   </View>
                 </Pressable>
@@ -1087,9 +1104,9 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
     paddingHorizontal: theme.spacing.md,
-    gap: theme.spacing.sm,
+    gap: 0,
     borderRadius: theme.radius.full,
   },
   newTopicWarning: {
@@ -1103,14 +1120,14 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: "700",
     fontFamily: theme.typography.family.mono,
     paddingBottom: theme.spacing.md,
-    paddingTop: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
     minHeight: 50,
   },
   tagsButton: {
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "flex-start",
-    paddingVertical: theme.spacing.sm + 2,
+    paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md + 2,
     borderRadius: theme.radius.full,
   },
@@ -1177,7 +1194,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   mediaBarContent: {
     flexDirection: "row",
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
   },
   mediaButton: {
     width: 44,
@@ -1220,7 +1237,7 @@ const styles = StyleSheet.create((theme) => ({
   checkbox: {
     width: 20,
     height: 20,
-    borderRadius: 4,
+    borderRadius: 10,
     borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",

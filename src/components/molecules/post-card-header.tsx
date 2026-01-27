@@ -63,29 +63,29 @@ export const PostCardHeader = memo(function PostCardHeader({
     onFollowTopic?.();
   }, [onFollowTopic]);
 
- return (
-   <View style={styles.header}>
+  return (
+    <View style={styles.header}>
       <View style={styles.authorSection}>
         <View style={styles.authorRow}>
-         {topic && (
-           <Text size="md" weight="bold" numberOfLines={1}>
-             #{topic}
-           </Text>
-         )}
-         {topic && (
-           <Text size="sm" style={{ color: "rgb(144,161,171)" }}>
-             •
-           </Text>
-         )}
-         <TimeAgo
-           timestamp={createdAt}
-           showSuffix={false}
-           size="sm"
-           style={{ color: "rgb(144,161,171)" }}
-         />
-         <Text size="sm" style={{ color: "rgb(144,161,171)" }}>
-           •
-         </Text>
+          {topic && (
+            <Text size="md" weight="bold" numberOfLines={1}>
+              #{topic}
+            </Text>
+          )}
+          {topic && (
+            <Text size="sm" style={{ color: theme.colors.text.subtle }}>
+              •
+            </Text>
+          )}
+          <TimeAgo
+            timestamp={createdAt}
+            showSuffix={false}
+            size="sm"
+            style={{ color: theme.colors.text.subtle }}
+          />
+          <Text size="sm" style={{ color: theme.colors.text.subtle }}>
+            •
+          </Text>
           <Pressable
             onPress={handleAuthorPress}
             hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
@@ -93,17 +93,17 @@ export const PostCardHeader = memo(function PostCardHeader({
               styles.usernameButton,
               pressed && styles.usernameButtonPressed,
             ]}
-         >
+          >
             <Text
               size="md"
               weight="medium"
               numberOfLines={1}
-              style={{ color: "rgb(144,161,171)" }}
+              style={{ color: theme.colors.text.subtle }}
             >
               @{author.username.toLowerCase()}
             </Text>
           </Pressable>
-       </View>
+        </View>
       </View>
 
       <View style={styles.headerActions}>
@@ -112,7 +112,9 @@ export const PostCardHeader = memo(function PostCardHeader({
             <MenuTrigger
               customStyles={{
                 triggerOuterWrapper: { padding: 4 },
-                triggerTouchable: { hitSlop: { top: 12, bottom: 12, left: 12, right: 12 } },
+                triggerTouchable: {
+                  hitSlop: { top: 12, bottom: 12, left: 12, right: 12 },
+                },
               }}
             >
               <View
@@ -147,7 +149,7 @@ export const PostCardHeader = memo(function PostCardHeader({
                   borderWidth: 1,
                   borderColor: theme.colors.border.subtle,
                   marginTop: 4,
-                  paddingVertical:8
+                  paddingVertical: 8,
                 },
               }}
             >
@@ -229,24 +231,24 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "space-between",
   },
-authorSection: {
-  flexDirection: "row",
-  alignItems: "center",
-  flex: 1,
-},
- authorRow: {
-   flexDirection: "row",
-   alignItems: "center",
-   gap: theme.spacing.xs,
- },
- usernameButton: {
-   paddingVertical: 4,
-   paddingHorizontal: 2,
- },
- usernameButtonPressed: {
-   opacity: 0.6,
- },
- headerActions: {
+  authorSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  authorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+  },
+  usernameButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  usernameButtonPressed: {
+    opacity: 0.6,
+  },
+  headerActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing.sm,

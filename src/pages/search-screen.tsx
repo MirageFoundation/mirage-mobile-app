@@ -19,9 +19,8 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { useDebouncedSearch, useTopics, usePosts } from "@/src/api/read";
+import { useDebouncedSearch, usePosts, useTopics } from "@/src/api/read";
 import type { Post, TopicInfo, UserInfo } from "@/src/api/types";
-import { Avatar } from "@/src/components/atoms/avatar";
 import { TimeAgo } from "@/src/components/atoms/time-ago";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
@@ -31,7 +30,7 @@ type SearchTab = "posts" | "topics" | "users";
 
 // Topic icon mapping based on topic name patterns
 const getTopicIcon = (
-  topic: string
+  topic: string,
 ): { icon: keyof typeof Ionicons.glyphMap; color: string } => {
   const lowerTopic = topic.toLowerCase();
 
@@ -157,7 +156,7 @@ const formatPostCount = (count?: number): string => {
 const formatCount = (
   count: number,
   singular: string,
-  plural: string
+  plural: string,
 ): string => {
   if (count === 1) {
     return `${count} ${singular}`;
@@ -247,7 +246,7 @@ export function SearchScreen() {
       addRecentSearch(trimmedQuery);
       Keyboard.dismiss();
     },
-    [addRecentSearch]
+    [addRecentSearch],
   );
 
   const handleRecentSearchPress = useCallback(
@@ -257,7 +256,7 @@ export function SearchScreen() {
       setSelectedTopic(null);
       handleSearch(search.query);
     },
-    [handleSearch]
+    [handleSearch],
   );
 
   const handleRemoveRecentSearch = useCallback(
@@ -265,7 +264,7 @@ export function SearchScreen() {
       triggerHaptic("light");
       removeRecentSearch(id);
     },
-    [removeRecentSearch]
+    [removeRecentSearch],
   );
 
   const handleClearAllRecentSearches = useCallback(() => {
@@ -280,7 +279,7 @@ export function SearchScreen() {
       addRecentSearch(topic.topic);
       Keyboard.dismiss();
     },
-    [addRecentSearch]
+    [addRecentSearch],
   );
 
   const handleTopicResultPress = useCallback(
@@ -291,7 +290,7 @@ export function SearchScreen() {
       // Set selected topic to show posts within topics tab
       setSelectedTopic(topic);
     },
-    [addRecentSearch]
+    [addRecentSearch],
   );
 
   const handleBackFromTopic = useCallback(() => {
@@ -305,7 +304,7 @@ export function SearchScreen() {
       Keyboard.dismiss();
       router.push(`/post/${post.post_id}`);
     },
-    [router]
+    [router],
   );
 
   const handleUserResultPress = useCallback(
@@ -315,7 +314,7 @@ export function SearchScreen() {
       Keyboard.dismiss();
       router.push(`/profile/${user.address}`);
     },
-    [router, addRecentSearch]
+    [router, addRecentSearch],
   );
 
   const handleSubmitEditing = useCallback(() => {
@@ -372,7 +371,7 @@ export function SearchScreen() {
       theme.colors.text.subtle,
       handleRecentSearchPress,
       handleRemoveRecentSearch,
-    ]
+    ],
   );
 
   // Render trending topic item
@@ -407,7 +406,7 @@ export function SearchScreen() {
         </Animated.View>
       );
     },
-    [handleTrendingTopicPress]
+    [handleTrendingTopicPress],
   );
 
   // Render topic search result with divider
@@ -465,13 +464,15 @@ export function SearchScreen() {
       theme.colors.border.subtle,
       handleTopicResultPress,
       searchResults?.topics.length,
-    ]
+    ],
   );
 
   // Render post search result with new design
   const renderPostResult = useCallback(
     ({ item, index }: { item: Post; index: number }) => {
-      const totalPosts = selectedTopic ? topicPosts.length : (searchResults?.posts.length ?? 0);
+      const totalPosts = selectedTopic
+        ? topicPosts.length
+        : (searchResults?.posts.length ?? 0);
       const isLast = index === totalPosts - 1;
       const hasThumbnail = item.thumbnail && item.thumbnail.length > 0;
       // Convert timestamp - API returns seconds, we need milliseconds
@@ -490,11 +491,6 @@ export function SearchScreen() {
             <View style={styles.postResultContent}>
               {/* Avatar + Username + dot + time ago - all in one row */}
               <View style={styles.postResultHeader}>
-                <Avatar
-                  size="xs"
-                  seed={item.user_id || item.username}
-                  variant="bottts"
-                />
                 <Text size="sm" mode="subtle" weight="medium" numberOfLines={1}>
                   @{item.username || "anonymous"}
                 </Text>
@@ -567,7 +563,7 @@ export function SearchScreen() {
       searchResults?.posts.length,
       selectedTopic,
       topicPosts.length,
-    ]
+    ],
   );
 
   // Render user search result
@@ -584,11 +580,6 @@ export function SearchScreen() {
               pressed && { opacity: 0.7 },
             ]}
           >
-            <Avatar
-              size="md"
-              seed={item.address || item.username}
-              variant="bottts"
-            />
             <View style={styles.userResultContent}>
               <Text size="md" weight="medium">
                 @{item.username}
@@ -619,7 +610,7 @@ export function SearchScreen() {
       theme.colors.border.subtle,
       handleUserResultPress,
       searchResults?.users.length,
-    ]
+    ],
   );
 
   // Empty state for posts
@@ -644,7 +635,7 @@ export function SearchScreen() {
         </Text>
       </View>
     ),
-    [theme.colors.text.subtle]
+    [theme.colors.text.subtle],
   );
 
   // Empty state for topics
@@ -669,7 +660,7 @@ export function SearchScreen() {
         </Text>
       </View>
     ),
-    [theme.colors.text.subtle]
+    [theme.colors.text.subtle],
   );
 
   // Empty state for users
@@ -694,7 +685,7 @@ export function SearchScreen() {
         </Text>
       </View>
     ),
-    [theme.colors.text.subtle]
+    [theme.colors.text.subtle],
   );
 
   const hasSearchQuery = searchQuery.trim().length > 0;
@@ -725,7 +716,9 @@ export function SearchScreen() {
             color={theme.colors.text.default}
           />
         </Pressable>
-        <View style={[styles.topicHeaderIcon, { backgroundColor: `${color}15` }]}>
+        <View
+          style={[styles.topicHeaderIcon, { backgroundColor: `${color}15` }]}
+        >
           <Ionicons name={icon} size={16} color={color} />
         </View>
         <Text size="lg" weight="semibold" numberOfLines={1} style={{ flex: 1 }}>
@@ -768,7 +761,7 @@ export function SearchScreen() {
           style={[
             styles.inputContainer,
             {
-              backgroundColor: theme.colors.background.subtle,
+              backgroundColor: theme.colors.background.lighter,
               borderColor: isFocused
                 ? theme.colors.primary[500]
                 : theme.colors.border.subtle,
@@ -777,7 +770,7 @@ export function SearchScreen() {
         >
           <Ionicons
             name="search-outline"
-            size={18}
+            size={20}
             color={theme.colors.text.subtle}
             style={styles.searchIcon}
           />
@@ -1186,8 +1179,8 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    height: 40,
-    borderRadius: theme.radius.lg,
+    height: 44,
+    borderRadius: theme.radius.xxl + 10,
     borderWidth: 1,
     paddingHorizontal: theme.spacing.sm,
   },
@@ -1196,9 +1189,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   input: {
     flex: 1,
-    fontSize: theme.typography.size.md,
+    fontSize: theme.typography.size.lg,
     fontFamily: theme.typography.family.mono,
     height: "100%",
+    backgroundColor: theme.colors.background.lighter,
+    borderRadius: theme.radius.xxl + 10,
   },
   clearInputButton: {
     padding: 4,
