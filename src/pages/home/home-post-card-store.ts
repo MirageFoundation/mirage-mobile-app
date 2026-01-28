@@ -32,6 +32,9 @@ type HomePostCardHandlers = {
   ) => void;
   onFollowTopic?: (topic: string, isCurrentlyFollowed: boolean) => void;
   onRevealContent?: (postId: string) => void;
+  onBlockUser?: (postId: string, authorId: string, authorUsername: string) => void;
+  onBlockPost?: (postId: string) => void;
+  onReport?: (postId: string) => void;
 };
 
 type HomePostCardState = {

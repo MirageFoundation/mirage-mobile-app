@@ -491,6 +491,27 @@ const handleUnfollow = useCallback(() => {
     blockHandler.requestBlockPost(selectedPost.id);
   }, [selectedPost, blockHandler]);
 
+  const handleBlockUserFromCard = useCallback(
+    (postId: string, authorId: string, authorUsername: string) => {
+      blockHandler.requestBlockUser(authorId, authorUsername);
+    },
+    [blockHandler]
+  );
+
+  const handleBlockPostFromCard = useCallback(
+    (postId: string) => {
+      blockHandler.requestBlockPost(postId);
+    },
+    [blockHandler]
+  );
+
+  const handleReportFromCard = useCallback(
+    (postId: string) => {
+      reportHandler.requestReport(postId, "post");
+    },
+    [reportHandler]
+  );
+
   const handleReportPost = useCallback(() => {
     if (!selectedPost) return;
     reportHandler.requestReport(selectedPost.id, "post");
@@ -660,6 +681,9 @@ const handleUnfollow = useCallback(() => {
               onDislikePress={(postId, liked, disliked, likes) =>
                 handleDownvote(postId, liked, disliked, likes)
               }
+              onBlockUser={handleBlockUserFromCard}
+              onBlockPost={handleBlockPostFromCard}
+              onReport={handleReportFromCard}
            />
          );
        }
@@ -674,32 +698,35 @@ const handleUnfollow = useCallback(() => {
         }
 
         return null;
-      },
-     [
-       username,
-       userAddress,
-       avatarUrl,
-       followersCount,
-       profileData,
-       gradientColors,
-       scrollY,
-       handleFollowersPress,
-        isLoading,
-        theme.colors.background.default,
-        activeTab,
-        handleTabChange,
-        handleTabDoubleTap,
-        isOwnProfile,
-       handlePostPress,
-       handleAuthorPress,
-       handlePostMorePress,
-       handleCommentPress,
-        voteOverrides,
-        handleUpvote,
-        handleDownvote,
-        shareServer,
-     ]
-   );
+     },
+    [
+      username,
+      userAddress,
+      avatarUrl,
+      followersCount,
+      profileData,
+      gradientColors,
+      scrollY,
+      handleFollowersPress,
+       isLoading,
+       theme.colors.background.default,
+       activeTab,
+       handleTabChange,
+       handleTabDoubleTap,
+       isOwnProfile,
+      handlePostPress,
+      handleAuthorPress,
+      handlePostMorePress,
+      handleCommentPress,
+       voteOverrides,
+       handleUpvote,
+       handleDownvote,
+       shareServer,
+       handleBlockUserFromCard,
+       handleBlockPostFromCard,
+       handleReportFromCard,
+    ]
+  );
 
   const ListFooterComponent = useCallback(() => {
     if (isBlocked) {

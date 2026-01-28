@@ -35,6 +35,9 @@ type PostCardItemProps = {
   ) => void;
   onFollowTopic?: (topic: string, isCurrentlyFollowed: boolean) => void;
   onRevealContent?: (postId: string) => void;
+  onBlockUser?: (postId: string, authorId: string, authorUsername: string) => void;
+  onBlockPost?: (postId: string) => void;
+  onReport?: (postId: string) => void;
 };
 
 function arePostCardItemPropsEqual(
@@ -70,6 +73,9 @@ onPostPress,
   onFollowUser,
   onFollowTopic,
   onRevealContent,
+  onBlockUser,
+  onBlockPost,
+  onReport,
 }: PostCardItemProps) {
   const handlePostPress = useCallback(() => {
     logPress({ name: "post_card_item", postId: post.id });
@@ -125,6 +131,21 @@ onPostPress,
     onRevealContent?.(post.id);
   }, [onRevealContent, post.id]);
 
+  const handleBlockUser = useCallback(() => {
+    logPress({ name: "post_block_user", postId: post.id });
+    onBlockUser?.(post.id, post.author.id, post.author.username);
+  }, [onBlockUser, post.id, post.author.id, post.author.username]);
+
+  const handleBlockPost = useCallback(() => {
+    logPress({ name: "post_block_post", postId: post.id });
+    onBlockPost?.(post.id);
+  }, [onBlockPost, post.id]);
+
+  const handleReport = useCallback(() => {
+    logPress({ name: "post_report", postId: post.id });
+    onReport?.(post.id);
+  }, [onReport, post.id]);
+
  return (
    <PostCard
      post={post}
@@ -141,6 +162,9 @@ onPostPress,
       onFollowUser={handleFollowUser}
      onFollowTopic={handleFollowTopic}
      onRevealContent={handleRevealContent}
+     onBlockUser={handleBlockUser}
+     onBlockPost={handleBlockPost}
+     onReport={handleReport}
      contentRevealed={contentRevealed}
      shareUrl={shareUrl}
       showUrlCard={showUrlCard}

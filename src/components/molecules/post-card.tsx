@@ -41,6 +41,9 @@ type PostCardProps = {
   onDislikePress?: () => void;
   onCommentPress?: () => void;
   onSharePress?: () => void;
+  onBlockUser?: () => void;
+  onBlockPost?: () => void;
+  onReport?: () => void;
   onRevealContent?: () => void;
   contentRevealed?: boolean;
   shareUrl?: string;
@@ -94,6 +97,9 @@ export const PostCard = memo(function PostCard({
   onDislikePress,
   onCommentPress,
   onSharePress,
+  onBlockUser,
+  onBlockPost,
+  onReport,
   onRevealContent,
   contentRevealed = false,
   shareUrl,
@@ -206,6 +212,11 @@ export const PostCard = memo(function PostCard({
         onSharePress={onSharePress}
         shareUrl={shareUrl}
         shareTitle={title}
+        isOwnPost={isOwnPost}
+        authorUsername={author.username}
+        onBlockUser={onBlockUser}
+        onBlockPost={onBlockPost}
+        onReport={onReport}
         style={styles.actions}
       />
 

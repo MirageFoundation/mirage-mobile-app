@@ -376,6 +376,27 @@ export function FollowingScreen() {
     }
   }, [selectedPost, blockHandler]);
 
+  const handleBlockUserFromCard = useCallback(
+    (postId: string, authorId: string, authorUsername: string) => {
+      blockHandler.requestBlockUser(authorId, authorUsername);
+    },
+    [blockHandler]
+  );
+
+  const handleBlockPostFromCard = useCallback(
+    (postId: string) => {
+      blockHandler.requestBlockPost(postId);
+    },
+    [blockHandler]
+  );
+
+  const handleReportFromCard = useCallback(
+    (postId: string) => {
+      reportHandler.requestReport(postId, "post");
+    },
+    [reportHandler]
+  );
+
   const handleDeletePost = useCallback(() => {
     if (selectedPost) {
       deleteHandler.requestDelete(selectedPost.id, "post");
@@ -715,6 +736,9 @@ export function FollowingScreen() {
     handleFollowPress,
     handleFollowTopicFromCard,
     handleRevealContent,
+    handleBlockUserFromCard,
+    handleBlockPostFromCard,
+    handleReportFromCard,
   });
 
   useEffect(() => {
@@ -728,6 +752,9 @@ export function FollowingScreen() {
       handleFollowPress,
       handleFollowTopicFromCard,
       handleRevealContent,
+      handleBlockUserFromCard,
+      handleBlockPostFromCard,
+      handleReportFromCard,
     };
   });
 
@@ -747,6 +774,10 @@ export function FollowingScreen() {
       onFollowTopic: (topic, isFollowed) =>
         handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
       onRevealContent: (postId) => handlersRef.current.handleRevealContent(postId),
+      onBlockUser: (postId, authorId, authorUsername) =>
+        handlersRef.current.handleBlockUserFromCard(postId, authorId, authorUsername),
+      onBlockPost: (postId) => handlersRef.current.handleBlockPostFromCard(postId),
+      onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
     });
   }, [setHandlers]);
 

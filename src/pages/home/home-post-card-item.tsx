@@ -135,6 +135,24 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     getHandlers().onRevealContent?.(p.id);
   }, []);
 
+  const handleBlockUser = useCallback(() => {
+    const p = postRef.current;
+    logPress({ name: "post_block_user", postId: p.id });
+    getHandlers().onBlockUser?.(p.id, p.author.id, p.author.username);
+  }, []);
+
+  const handleBlockPost = useCallback(() => {
+    const p = postRef.current;
+    logPress({ name: "post_block_post", postId: p.id });
+    getHandlers().onBlockPost?.(p.id);
+  }, []);
+
+  const handleReport = useCallback(() => {
+    const p = postRef.current;
+    logPress({ name: "post_report", postId: p.id });
+    getHandlers().onReport?.(p.id);
+  }, []);
+
   const displayPost = useMemo(() => {
     const needsFollowingUpdate = (post.isFollowing ?? false) !== isFollowing;
     const needsVoteUpdate = !!voteOverride;
@@ -169,6 +187,9 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       onFollowUser={handleFollowUser}
       onFollowTopic={handleFollowTopic}
       onRevealContent={handleRevealContent}
+      onBlockUser={handleBlockUser}
+      onBlockPost={handleBlockPost}
+      onReport={handleReport}
       contentRevealed={contentRevealed}
       shareUrl={`${getShareBaseUrl(shareServer)}/post/${post.id}`}
     />
