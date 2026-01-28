@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FlatList } from "react-native";
@@ -917,6 +918,7 @@ export function HomeScreen() {
   const setHandlers = useHomePostCardStore((state) => state.setHandlers);
   const setShareServer = useHomePostCardStore((state) => state.setShareServer);
   const setAllowAutoplay = useHomePostCardStore((state) => state.setAllowAutoplay);
+  const setFeedActive = useHomePostCardStore((state) => state.setFeedActive);
 
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
   const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
@@ -954,6 +956,15 @@ export function HomeScreen() {
  useEffect(() => {
    setAllowAutoplay(allowAutoplay);
  }, [allowAutoplay, setAllowAutoplay]);
+
+  useFocusEffect(
+    useCallback(() => {
+      setFeedActive(true);
+      return () => {
+        setFeedActive(false);
+      };
+    }, [setFeedActive])
+  );
 
  // Store refs to latest handlers - these update without triggering re-renders
  const handlersRef = useRef({

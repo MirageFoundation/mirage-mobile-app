@@ -29,6 +29,8 @@ type PostCardProps = {
   isTopicFollowed?: boolean;
   /** Whether video autoplay is allowed based on user settings and network */
   allowAutoplay?: boolean;
+  /** Whether the screen/feed is active (for pausing videos) */
+  screenActive?: boolean;
   onPress?: () => void;
   onAuthorPress?: () => void;
   onFollowUser?: () => void;
@@ -66,6 +68,7 @@ function arePostCardPropsEqual(
   if (prevProps.showFollowButton !== nextProps.showFollowButton) return false;
   if (prevProps.isTopicFollowed !== nextProps.isTopicFollowed) return false;
   if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
+  if (prevProps.screenActive !== nextProps.screenActive) return false;
   if (prevProps.contentRevealed !== nextProps.contentRevealed) return false;
   if (prevProps.shareUrl !== nextProps.shareUrl) return false;
   if (prevProps.showUrlCard !== nextProps.showUrlCard) return false;
@@ -80,6 +83,7 @@ export const PostCard = memo(function PostCard({
   showFollowButton = true,
   isTopicFollowed = false,
   allowAutoplay = true,
+  screenActive = true,
   onPress,
   onAuthorPress,
   onFollowUser,
@@ -179,6 +183,7 @@ export const PostCard = memo(function PostCard({
         hasMultipleMedia={resolvedContent.hasMultipleMedia}
         extraMediaCount={resolvedContent.extraMediaCount}
         allowAutoplay={allowAutoplay}
+        screenActive={screenActive && !showMediaPreview}
         onRevealContent={onRevealContent}
         onMediaPress={handleMediaPress}
       />

@@ -6,6 +6,7 @@ import { getShareBaseUrl } from "@/src/stores";
 import {
   useHomePostCardStore,
   useAllowAutoplay,
+  useFeedActive,
   useIsFollowing,
   useIsTopicFollowed,
   useIsOwnPost,
@@ -49,6 +50,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   const isOwnPost = useIsOwnPost(post.author.id);
   const shareServer = useShareServer();
   const allowAutoplay = useAllowAutoplay();
+  const feedActive = useFeedActive();
 
  // Store post data in ref to avoid recreating callbacks
  const postRef = useRef(post);
@@ -157,6 +159,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       showFollowButton={false}
       showUrlCard={false}
       allowAutoplay={allowAutoplay}
+      screenActive={feedActive}
       onPress={handlePostPress}
       onAuthorPress={handleAuthorPress}
       onMorePress={handleMorePress}

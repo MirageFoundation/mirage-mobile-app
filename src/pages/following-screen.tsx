@@ -1,3 +1,4 @@
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FlatList } from "react-native";
@@ -665,6 +666,7 @@ export function FollowingScreen() {
   const setRevealedPostsStore = useHomePostCardStore((state) => state.setRevealedPosts);
   const setHandlers = useHomePostCardStore((state) => state.setHandlers);
   const setShareServer = useHomePostCardStore((state) => state.setShareServer);
+  const setFeedActive = useHomePostCardStore((state) => state.setFeedActive);
 
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
   const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
@@ -692,6 +694,15 @@ export function FollowingScreen() {
   useEffect(() => {
     setShareServer(shareServer);
   }, [shareServer, setShareServer]);
+
+  useFocusEffect(
+    useCallback(() => {
+      setFeedActive(true);
+      return () => {
+        setFeedActive(false);
+      };
+    }, [setFeedActive])
+  );
 
   // Store refs to latest handlers
   const handlersRef = useRef({
