@@ -417,10 +417,10 @@ export function ProfileScreen() {
         bounces={true}
         nestedScrollEnabled
       >
-       <ProfileContent
-         username={username}
-         avatarSeed={username}
-         avatarUrl={avatarUrl}
+      <ProfileContent
+        username={username}
+         avatarSeed={user?.walletAddress || username}
+        avatarUrl={avatarUrl}
          walletAddress={user?.walletAddress || "0x0000...0000"}
          followersCount={followersCount}
          balance={profileData.balance}

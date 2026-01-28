@@ -494,10 +494,10 @@ const handleReportUserSubmit = useCallback(
           bounces={true}
           nestedScrollEnabled
         >
-          <UserProfileContent
-            username={username}
-            avatarSeed={username}
-            avatarUrl={avatarUrl}
+         <UserProfileContent
+           username={username}
+            avatarSeed={userAddress || username}
+           avatarUrl={avatarUrl}
             walletAddress={userAddress || "0x0000...0000"}
             followersCount={followersCount}
             balance={profileData.balance}

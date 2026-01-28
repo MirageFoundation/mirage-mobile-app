@@ -1,4 +1,5 @@
 import { Image, type ImageProps } from "expo-image";
+import { useMemo } from "react";
 import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
@@ -34,17 +35,21 @@ export const Avatar = ({
   source,
   rounded = "full",
   bordered = false,
-  variant = "bottts",
+  variant = "identicon",
   style,
   ...imageProps
 }: AvatarProps) => {
   const resolvedSize = typeof size === "number" ? size : AVATAR_SIZES[size];
 
-  const imageSource = source ?? {
-    uri: `https://api.dicebear.com/7.x/${variant}/png?seed=${
-      seed ?? "default"
-    }&size=${resolvedSize * 2}`,
-  };
+  const stableSeed = seed ?? "default";
+
+  const imageSource = useMemo(
+    () =>
+      source ?? {
+        uri: `https://api.dicebear.com/9.x/${variant}/png?seed=${stableSeed}&size=${resolvedSize * 2}`,
+      },
+    [source, variant, stableSeed, resolvedSize],
+  );
 
   styles.useVariants({ rounded, bordered });
 
@@ -88,8 +93,7 @@ const styles = StyleSheet.create((theme) => ({
     },
   },
   image: {
-    width: "85%",
-    height: "85%",
-    alignSelf: "center",
+    width: "100%",
+    height: "100%",
   },
 }));

@@ -1,4 +1,5 @@
 import type { ImageProps } from "expo-image";
+import { useMemo } from "react";
 import Avatar from "./avatar";
 
 interface DicebearAvatarProps extends Omit<ImageProps, "source"> {
@@ -12,19 +13,18 @@ interface DicebearAvatarProps extends Omit<ImageProps, "source"> {
 
 export default function DicebearAvatar({
   seed,
-  variant = "bottts",
+  variant = "identicon",
   size = 42,
   rounded = "full",
   border = "thin",
   fallback,
   ...props
 }: DicebearAvatarProps) {
-  const getDicebearUrl = (seed?: string) => {
-    if (!seed && !fallback) return undefined;
-    return `https://api.dicebear.com/7.x/${variant}/png?seed=${
-      seed || fallback
-    }`;
-  };
+  const dicebearUrl = useMemo(() => {
+    const s = seed || fallback;
+    if (!s) return undefined;
+    return `https://api.dicebear.com/9.x/${variant}/png?seed=${s}`;
+  }, [seed, fallback, variant]);
 
   return (
     <Avatar
@@ -32,7 +32,7 @@ export default function DicebearAvatar({
       rounded={rounded}
       border={border}
       cachePolicy={"memory-disk"}
-      source={{ uri: getDicebearUrl(seed) }}
+      source={{ uri: dicebearUrl }}
       {...props}
     />
   );
