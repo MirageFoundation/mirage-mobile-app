@@ -147,11 +147,14 @@ export function UserProfileScreen() {
   const [showBlockUserConfirmation, setShowBlockUserConfirmation] =
     useState(false);
   const [isBlockingUser, setIsBlockingUser] = useState(false);
-  const [optimisticBlocked, setOptimisticBlocked] = useState<boolean | null>(
-    null
-  );
+const [optimisticBlocked, setOptimisticBlocked] = useState<boolean | null>(
+  null
+);
+ const [optimisticFollowing, setOptimisticFollowing] = useState<boolean | null>(
+   null
+ );
 
-  const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
+const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const hiddenCommentIds = useContentModerationStore((s) => s.hiddenCommentIds);
   const globalHidePost = useContentModerationStore((s) => s.hidePost);
   const globalUnhidePost = useContentModerationStore((s) => s.unhidePost);
@@ -195,10 +198,11 @@ export function UserProfileScreen() {
   const blockUserMutation = useBlockUser();
   const unblockUserMutation = useUnblockUser();
 
-  const isFollowing = useMemo(() => {
-    if (!userAddress || !followedData?.followed_users) return false;
-    return followedData.followed_users.includes(userAddress);
-  }, [userAddress, followedData?.followed_users]);
+ const isFollowing = useMemo(() => {
+    if (optimisticFollowing !== null) return optimisticFollowing;
+   if (!userAddress || !followedData?.followed_users) return false;
+   return followedData.followed_users.includes(userAddress);
+  }, [userAddress, followedData?.followed_users, optimisticFollowing]);
 
   const isBlocked = useMemo(() => {
     if (optimisticBlocked !== null) return optimisticBlocked;
@@ -306,8 +310,9 @@ export function UserProfileScreen() {
 
   const handleFollowersPress = useCallback(() => {}, []);
 
-  const handleFollow = useCallback(() => {
-    if (!userAddress) return;
+const handleFollow = useCallback(() => {
+  if (!userAddress) return;
+   setOptimisticFollowing(true);
     toast.promise(
       toggleFollowMutation.mutateAsync({
         userAddress,
@@ -316,13 +321,20 @@ export function UserProfileScreen() {
       {
         loading: `Following @${displayUsername || "user"}...`,
         success: `Followed @${displayUsername || "user"}`,
-        error: "Failed to follow user",
+        error: () => {
+          setOptimisticFollowing(null);
+          return "Failed to follow user";
+        },
       }
-    );
-  }, [userAddress, displayUsername, toggleFollowMutation, toast]);
+    ).catch(() => {
+      // Error already handled by toast.promise
+        setOptimisticFollowing(null);
+    });
+ }, [userAddress, displayUsername, toggleFollowMutation, toast]);
 
-  const handleUnfollow = useCallback(() => {
-    if (!userAddress) return;
+const handleUnfollow = useCallback(() => {
+  if (!userAddress) return;
+   setOptimisticFollowing(false);
     toast.promise(
       toggleFollowMutation.mutateAsync({
         userAddress,
@@ -331,10 +343,16 @@ export function UserProfileScreen() {
       {
         loading: `Unfollowing @${displayUsername || "user"}...`,
         success: `Unfollowed @${displayUsername || "user"}`,
-        error: "Failed to unfollow user",
+        error: () => {
+          setOptimisticFollowing(null);
+          return "Failed to unfollow user";
+        },
       }
-    );
-  }, [userAddress, displayUsername, toggleFollowMutation, toast]);
+    ).catch(() => {
+      // Error already handled by toast.promise
+        setOptimisticFollowing(null);
+    });
+ }, [userAddress, displayUsername, toggleFollowMutation, toast]);
 
   const handleRequestBlockUser = useCallback(() => {
     setShowBlockUserConfirmation(true);
@@ -770,17 +788,20 @@ export function UserProfileScreen() {
 
   return (
     <Box flex background="base">
-      <ProfileHeaderBar
-        username={username}
-        userLevel={userStatus?.user_level ?? 0}
-        gradientColors={gradientColors}
-        scrollY={scrollY}
-        isRefreshing={isRefreshing}
-        isLoading={isLoading}
-        onBackPress={handleBackPress}
-        onSharePress={handleSharePress}
-        onMenuPress={handleMenuPress}
-      />
+    <ProfileHeaderBar
+      username={username}
+      userLevel={userStatus?.user_level ?? 0}
+      gradientColors={gradientColors}
+      scrollY={scrollY}
+      isRefreshing={isRefreshing}
+      isLoading={isLoading}
+       isOwnProfile={isOwnProfile}
+       isFollowing={isFollowing}
+      onBackPress={handleBackPress}
+       onFollowPress={handleFollow}
+       onUnfollowPress={handleUnfollow}
+      onMenuPress={handleMenuPress}
+    />
 
       <Animated.View
         style={[

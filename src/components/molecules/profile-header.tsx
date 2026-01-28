@@ -39,15 +39,18 @@ const getTierName = (level: number): string => {
 };
 
 type ProfileHeaderBarProps = {
-  username: string;
-  userLevel?: number;
-  gradientColors: readonly string[];
-  scrollY?: SharedValue<number>;
-  isRefreshing?: boolean;
-  isLoading?: boolean;
-  onBackPress?: () => void;
-  onSharePress?: () => void;
-  onMenuPress?: () => void;
+username: string;
+userLevel?: number;
+gradientColors: readonly string[];
+scrollY?: SharedValue<number>;
+isRefreshing?: boolean;
+isLoading?: boolean;
+ isOwnProfile?: boolean;
+ isFollowing?: boolean;
+onBackPress?: () => void;
+ onFollowPress?: () => void;
+ onUnfollowPress?: () => void;
+onMenuPress?: () => void;
 };
 
 type ProfileContentProps = {
@@ -114,15 +117,18 @@ export const getGradientColor = (_username?: string): readonly string[] => {
 };
 
 export const ProfileHeaderBar = ({
-  username,
-  userLevel = 0,
-  gradientColors,
-  scrollY,
-  isRefreshing = false,
-  isLoading = false,
-  onBackPress,
-  onSharePress,
-  onMenuPress,
+username,
+userLevel = 0,
+gradientColors,
+scrollY,
+isRefreshing = false,
+isLoading = false,
+ isOwnProfile = false,
+ isFollowing = false,
+onBackPress,
+ onFollowPress,
+  onUnfollowPress,
+ onMenuPress,
 }: ProfileHeaderBarProps) => {
   const insets = useSafeAreaInsets();
 
@@ -181,18 +187,36 @@ export const ProfileHeaderBar = ({
           </Box>
         </Box>
 
-        <Box direction="row" center gap="xs">
-          {isRefreshing && (
-            <View style={styles.refreshIndicator}>
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            </View>
-          )}
-          <Pressable onPress={onSharePress} style={styles.shareButton}>
-            <ShareIcon size={18} color="#FFFFFF" />
-          </Pressable>
-          <IconButton
-            name="ellipsis-horizontal"
-            size="md"
+       <Box direction="row" center gap="xs">
+         {isRefreshing && (
+           <View style={styles.refreshIndicator}>
+             <ActivityIndicator size="small" color="#FFFFFF" />
+           </View>
+         )}
+       {!isOwnProfile && (
+          <Pressable
+             onPress={() => {
+               triggerHaptic("selection");
+               if (isFollowing) {
+                 onUnfollowPress?.();
+               } else {
+                 onFollowPress?.();
+               }
+             }}
+             style={styles.followButton}
+           >
+              <Text
+                size="sm"
+                weight="semibold"
+                style={styles.followButtonText}
+              >
+                {isFollowing ? "Following" : "Follow"}
+              </Text>
+           </Pressable>
+         )}
+         <IconButton
+           name="ellipsis-horizontal"
+           size="md"
             color="#FFFFFF"
             onPress={onMenuPress}
             style={styles.iconButton}
@@ -441,20 +465,17 @@ export const ProfileContent = ({
 };
 
 export const ProfileHeader = ({
-  username,
-  avatarSeed,
-  avatarUrl,
-  walletAddress,
-  followersCount,
-  balance,
-  reserve,
-  accountAgeDays,
-  userLevel,
-  scrollY,
-  onBackPress,
-  onSharePress,
-  onMenuPress,
-  onFollowersPress,
+ username,
+ avatarSeed,
+ avatarUrl,
+ walletAddress,
+ followersCount,
+ balance,
+ reserve,
+ accountAgeDays,
+ userLevel,
+ scrollY,
+ onFollowersPress,
 }: ProfileHeaderProps) => {
   const gradientColors = useMemo(() => getGradientColor(username), [username]);
 
@@ -500,15 +521,27 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "rgba(0,0,0,0.3)",
     borderRadius: theme.radius.full,
   },
-  shareButton: {
-    width: 40,
-    height: 40,
-    borderRadius: theme.radius.full,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  refreshIndicator: {
+ shareButton: {
+   width: 40,
+   height: 40,
+   borderRadius: theme.radius.full,
+   backgroundColor: "rgba(0,0,0,0.3)",
+   alignItems: "center",
+   justifyContent: "center",
+ },
+followButton: {
+  height: 32,
+  paddingHorizontal: 16,
+  borderRadius: theme.radius.full,
+   backgroundColor: "rgba(0,0,0,0.3)",
+  alignItems: "center",
+  justifyContent: "center",
+  minWidth: 80,
+},
+followButtonText: {
+ color: "#FFFFFF",
+},
+refreshIndicator: {
     width: 32,
     height: 32,
     borderRadius: theme.radius.full,
