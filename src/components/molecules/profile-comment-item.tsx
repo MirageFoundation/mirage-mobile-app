@@ -1,8 +1,8 @@
 import { useRootPostId } from "@/src/api/read";
+import type { Post } from "@/src/api/types";
 import { TimeAgo } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import type { Post } from "@/src/api/types";
 import { Ionicons } from "@expo/vector-icons";
 import { memo, useCallback, useMemo } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
@@ -36,7 +36,7 @@ export const ProfileCommentItem = memo(function ProfileCommentItem({
 
   // Only fetch root post ID if not available in comment data
   const { data: rootPostData, isLoading: isLoadingRootPostId } = useRootPostId(
-    !hasValidRootPostId ? comment.post_id : null
+    !hasValidRootPostId ? comment.post_id : null,
   );
 
   // Determine the final root post ID to use
@@ -55,7 +55,7 @@ export const ProfileCommentItem = memo(function ProfileCommentItem({
     if (!resolvedRootPostId) {
       console.warn(
         "Cannot navigate: root post ID not yet resolved for comment",
-        comment.post_id
+        comment.post_id,
       );
       return;
     }
@@ -65,7 +65,7 @@ export const ProfileCommentItem = memo(function ProfileCommentItem({
 
   // Calculate display points (adjusting for user's own vote weight)
   const displayPoints = Math.round(
-    comment.points - comment.user_weight + comment.user_vote
+    comment.points - comment.user_weight + comment.user_vote,
   );
 
   const commentContent = comment.content;
@@ -131,6 +131,8 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.background.default,
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border.subtle,
   },
   containerLoading: {
     opacity: 0.6,
