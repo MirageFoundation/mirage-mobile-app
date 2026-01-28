@@ -1,7 +1,12 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { logPress } from "@/src/utils/press-logger";
 import { memo, useCallback, useMemo, useState } from "react";
-import { Linking, Pressable, type StyleProp, type ViewStyle } from "react-native";
+import {
+  Linking,
+  Pressable,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
 import { MediaPreviewModal } from "./media-preview-modal";
@@ -43,7 +48,7 @@ type PostCardProps = {
 
 function arePostCardPropsEqual(
   prevProps: PostCardProps,
-  nextProps: PostCardProps
+  nextProps: PostCardProps,
 ): boolean {
   const prevPost = prevProps.post;
   const nextPost = nextProps.post;
@@ -69,35 +74,35 @@ function arePostCardPropsEqual(
 }
 
 export const PostCard = memo(function PostCard({
- post,
- isOwnPost = false,
- isVisible = false,
- showFollowButton = true,
- isTopicFollowed = false,
- allowAutoplay = true,
- onPress,
- onAuthorPress,
- onFollowUser,
- onFollowTopic,
- onMorePress,
- onLikePress,
- onDislikePress,
- onCommentPress,
- onSharePress,
- onRevealContent,
- contentRevealed = false,
- shareUrl,
- showUrlCard = true,
- style,
+  post,
+  isOwnPost = false,
+  isVisible = false,
+  showFollowButton = true,
+  isTopicFollowed = false,
+  allowAutoplay = true,
+  onPress,
+  onAuthorPress,
+  onFollowUser,
+  onFollowTopic,
+  onMorePress,
+  onLikePress,
+  onDislikePress,
+  onCommentPress,
+  onSharePress,
+  onRevealContent,
+  contentRevealed = false,
+  shareUrl,
+  showUrlCard = true,
+  style,
 }: PostCardProps) {
- if (__DEV__) {
-   console.log("[render] post_card", post.id);
- }
- const {
-   author,
-   title,
-   body,
-   media,
+  if (__DEV__) {
+    //  console.log("[render] post_card", post.id);
+  }
+  const {
+    author,
+    title,
+    body,
+    media,
     contentWarnings,
     likes,
     dislikes,
@@ -113,7 +118,7 @@ export const PostCard = memo(function PostCard({
 
   const resolvedContent = useMemo(
     () => resolvePostContent(body, media),
-    [body, media]
+    [body, media],
   );
 
   const handlePress = useCallback(() => {
@@ -196,7 +201,7 @@ export const PostCard = memo(function PostCard({
       <MediaPreviewModal
         visible={showMediaPreview}
         media={resolvedContent.resolvedMedia ?? null}
-      onClose={handleCloseMediaPreview}
+        onClose={handleCloseMediaPreview}
       />
     </Pressable>
   );

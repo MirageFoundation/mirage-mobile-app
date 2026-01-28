@@ -1,11 +1,19 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Dimensions, ScrollView, Share, View } from "react-native";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Dimensions,
+  FlatList,
+  ListRenderItem,
+  Share,
+  View,
+  ViewToken,
+} from "react-native";
 import Animated, {
   interpolate,
-  runOnJS,
+  interpolateColor,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
@@ -13,7 +21,13 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { useProfile, useUserStatus } from "@/src/api/read";
+import {
+  useInfiniteUserPosts,
+  useProfile,
+  useUserStatus,
+} from "@/src/api/read";
+import { transformApiPost } from "@/src/api/read/utils";
+import type { Post as ApiPost } from "@/src/api/types";
 import {
   ConfirmationPopup,
   getGradientColor,
@@ -21,15 +35,19 @@ import {
   PostOptionsSheet,
   PostOptionsSheetRef,
   PROFILE_CONTENT_HEIGHT,
-  ProfileContent,
   ProfileHeaderBar,
   ProfileMenuSheet,
   ProfileMenuSheetRef,
   ProfileTabBar,
-  ProfileTabContent,
+  ProfileEmptyState,
   ReportSheet,
   ReportSheetRef,
 } from "@/src/components/molecules";
+import { PostCardItem } from "@/src/components/molecules/post-card-item";
+import { PostCardSkeletonList } from "@/src/components/molecules/post-card-skeleton";
+import { ProfileCommentItem } from "@/src/components/molecules/profile-comment-item";
+import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
+import { ProfileContentAnimated } from "@/src/components/molecules/profile-content-animated";
 import { Box } from "@/src/components/ui/primitives";
 import {
   useBlockHandler,
@@ -37,11 +55,20 @@ import {
   useReportHandler,
 } from "@/src/hooks";
 import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
-import { useAuthStore, useContentModerationStore, usePreferencesStore, getShareBaseUrl } from "@/src/stores";
+import {
+  useAuthStore,
+  useContentModerationStore,
+  usePreferencesStore,
+  getShareBaseUrl,
+} from "@/src/stores";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const AnimatedFlatList = Animated.createAnimatedComponent(
+  FlatList<Post | ApiPost | "header" | "tabs">
+);
 
 const HEADER_BAR_HEIGHT = 56;
+const TAB_BAR_INDEX = 1;
 
 const formatMirageBalance = (umirage: number): number => {
   return Math.floor(umirage / 1_000_000);
@@ -56,6 +83,11 @@ const calculateAccountAgeDays = (
   return ageInSeconds / (60 * 60 * 24);
 };
 
+type TabType = "posts" | "comments" | "about";
+
+const MemoizedPostCardItem = memo(PostCardItem);
+const MemoizedProfileCommentItem = memo(ProfileCommentItem);
+
 export function ProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -67,7 +99,7 @@ export function ProfileScreen() {
   const { registerProfileScrollRef, registerProfileRefreshCallback } =
     useScrollAnimationContext();
 
-  const scrollViewRef = useRef<ScrollView>(null);
+  const flatListRef = useRef<FlatList<any>>(null);
 
   const {
     data: userStatus,
@@ -82,44 +114,10 @@ export function ProfileScreen() {
   } = useProfile();
 
   useEffect(() => {
-    registerProfileScrollRef(scrollViewRef.current);
+    registerProfileScrollRef(flatListRef.current);
   }, [registerProfileScrollRef]);
 
-  useEffect(() => {
-    const handleRefresh = async () => {
-      setIsRefreshing(true);
-      try {
-        await Promise.all([refetchUserStatus(), refetchProfile()]);
-        if (user?.walletAddress) {
-          queryClient.invalidateQueries({
-            queryKey: ["user", "posts", user.walletAddress],
-          });
-        }
-      } finally {
-        setIsRefreshing(false);
-      }
-    };
-    registerProfileRefreshCallback(handleRefresh);
-  }, [
-    registerProfileRefreshCallback,
-    refetchUserStatus,
-    refetchProfile,
-    queryClient,
-    user?.walletAddress,
-  ]);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (user?.walletAddress) {
-        queryClient.invalidateQueries({
-          queryKey: ["user", "posts", user.walletAddress],
-        });
-      }
-    }, [queryClient, user?.walletAddress])
-  );
-
   const scrollY = useSharedValue(0);
-  const [shouldShowStickyTabs, setShouldShowStickyTabs] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
 
@@ -128,10 +126,14 @@ export function ProfileScreen() {
   const reportSheetRef = useRef<ReportSheetRef>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
+  const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
+  const hiddenCommentIds = useContentModerationStore((s) => s.hiddenCommentIds);
   const globalHidePost = useContentModerationStore((s) => s.hidePost);
   const globalUnhidePost = useContentModerationStore((s) => s.unhidePost);
   const globalHideComment = useContentModerationStore((s) => s.hideComment);
-  const globalUnhideComment = useContentModerationStore((s) => s.unhideComment);
+  const globalUnhideComment = useContentModerationStore(
+    (s) => s.unhideComment
+  );
 
   const deleteHandler = useDeleteHandler({
     onRollback: (targetId, targetType) => {
@@ -148,15 +150,73 @@ export function ProfileScreen() {
   const headerHeight = insets.top + HEADER_BAR_HEIGHT;
   const stickyThreshold = PROFILE_CONTENT_HEIGHT;
 
-  const updateStickyState = useCallback((shouldStick: boolean) => {
-    setShouldShowStickyTabs(shouldStick);
-  }, []);
+  const getTabType = useCallback((): "submissions" | "comments" => {
+    return activeTab === 0 ? "submissions" : "comments";
+  }, [activeTab]);
+
+  const {
+    data: postsData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: isLoadingPosts,
+    refetch: refetchPosts,
+  } = useInfiniteUserPosts(user?.walletAddress ?? null, {
+    type: getTabType(),
+    limit: 20,
+  });
+
+  const apiPosts = useMemo(() => {
+    const allPosts = postsData?.pages.flatMap((page) => page.posts) ?? [];
+    if (getTabType() === "submissions") {
+      return allPosts.filter((post) => !hiddenPostIds.has(post.post_id));
+    }
+    return allPosts.filter((post) => !hiddenCommentIds.has(post.post_id));
+  }, [postsData, getTabType, hiddenPostIds, hiddenCommentIds]);
+
+  const uiPosts = useMemo(
+    () => apiPosts.map((post) => transformApiPost(post)),
+    [apiPosts]
+  );
+
+  const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
+    if (activeTab === 2) {
+      return ["header", "tabs"];
+    }
+    const posts = activeTab === 0 ? uiPosts : apiPosts;
+    return ["header", "tabs", ...posts];
+  }, [activeTab, uiPosts, apiPosts]);
+
+  useEffect(() => {
+    const handleRefresh = async () => {
+      setIsRefreshing(true);
+      try {
+        await Promise.all([refetchUserStatus(), refetchProfile(), refetchPosts()]);
+      } finally {
+        setIsRefreshing(false);
+      }
+    };
+    registerProfileRefreshCallback(handleRefresh);
+  }, [
+    registerProfileRefreshCallback,
+    refetchUserStatus,
+    refetchProfile,
+    refetchPosts,
+  ]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.walletAddress) {
+        queryClient.invalidateQueries({
+          queryKey: ["user", "posts", user.walletAddress],
+        });
+      }
+    }, [queryClient, user?.walletAddress])
+  );
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       scrollY.value = event.contentOffset.y;
-      const shouldStick = event.contentOffset.y >= stickyThreshold;
-      runOnJS(updateStickyState)(shouldStick);
     },
   });
 
@@ -177,7 +237,7 @@ export function ProfileScreen() {
   const avatarUrl = profile?.avatar || undefined;
   const followersCount = user?.followerCount ?? 0;
 
-  const gradientColor = useMemo(() => getGradientColor(username), [username]);
+  const gradientColors = useMemo(() => getGradientColor(username), [username]);
   const isLoading = isLoadingStatus || isLoadingProfile;
 
   const handleBackPress = useCallback(() => {
@@ -249,7 +309,10 @@ export function ProfileScreen() {
   const handleCommentPress = useCallback(
     (commentId: string, rootPostId: string) => {
       if (!rootPostId || rootPostId === "undefined") {
-        console.warn("Cannot navigate: missing root post ID for comment", commentId);
+        console.warn(
+          "Cannot navigate: missing root post ID for comment",
+          commentId
+        );
         return;
       }
       router.push(`/post/${rootPostId}?highlight=${commentId}`);
@@ -264,10 +327,24 @@ export function ProfileScreen() {
     [router]
   );
 
-  const handlePostMorePress = useCallback((post: Post) => {
-    setSelectedPost(post);
-    postOptionsSheetRef.current?.present();
-  }, []);
+  const postsById = useMemo(() => {
+    const map = new Map<string, Post>();
+    for (const post of uiPosts) {
+      map.set(post.id, post);
+    }
+    return map;
+  }, [uiPosts]);
+
+  const handlePostMorePress = useCallback(
+    (postId: string) => {
+      const post = postsById.get(postId);
+      if (post) {
+        setSelectedPost(post);
+        postOptionsSheetRef.current?.present();
+      }
+    },
+    [postsById]
+  );
 
   const handleDeletePost = useCallback(() => {
     if (!selectedPost) return;
@@ -347,6 +424,169 @@ export function ProfileScreen() {
     [refetchUserStatus, refetchProfile, queryClient, user?.walletAddress]
   );
 
+  const lastFetchTime = useRef(0);
+  const isFetchingRef = useRef(false);
+
+  const handleEndReached = useCallback(() => {
+    if (activeTab === 2) return;
+    const now = Date.now();
+    if (
+      hasNextPage &&
+      !isFetchingNextPage &&
+      !isFetchingRef.current &&
+      now - lastFetchTime.current > 1000
+    ) {
+      lastFetchTime.current = now;
+      isFetchingRef.current = true;
+      fetchNextPage().finally(() => {
+        isFetchingRef.current = false;
+      });
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, activeTab]);
+
+  const keyExtractor = useCallback(
+    (item: Post | ApiPost | "header" | "tabs", index: number) => {
+      if (item === "header") return "header";
+      if (item === "tabs") return "tabs";
+      return "id" in item ? item.id : item.post_id;
+    },
+    []
+  );
+
+  const renderItem: ListRenderItem<Post | ApiPost | "header" | "tabs"> =
+    useCallback(
+      ({ item, index }) => {
+        if (item === "header") {
+          return (
+            <ProfileContentAnimated
+              username={username}
+              avatarSeed={user?.walletAddress || username}
+              avatarUrl={avatarUrl}
+              walletAddress={user?.walletAddress || "0x0000...0000"}
+              followersCount={followersCount}
+              balance={profileData.balance}
+              reserve={profileData.reserve}
+              accountAgeDays={profileData.accountAgeDays}
+              userLevel={userStatus?.user_level ?? 0}
+              gradientColors={gradientColors}
+              scrollY={scrollY}
+              onFollowersPress={handleFollowersPress}
+              isLoading={isLoading}
+            />
+          );
+        }
+
+        if (item === "tabs") {
+          return (
+            <View style={{ backgroundColor: theme.colors.background.default }}>
+              <ProfileTabBar
+                activeTab={activeTab}
+                onTabChange={handleTabChange}
+                onTabDoubleTap={handleTabDoubleTap}
+                tabWidth={SCREEN_WIDTH}
+              />
+            </View>
+          );
+        }
+
+        if (activeTab === 0 && "id" in item) {
+          const postWithoutWarnings = {
+            ...item,
+            contentWarnings: undefined,
+          };
+          return (
+            <MemoizedPostCardItem
+              post={postWithoutWarnings}
+              isOwnPost={true}
+              showUrlCard={false}
+              onPostPress={handlePostPress}
+              onAuthorPress={handleAuthorPress}
+              onCommentPress={handlePostPress}
+              onMorePress={handlePostMorePress}
+            />
+          );
+        }
+
+        if (activeTab === 1 && "post_id" in item) {
+          return (
+            <MemoizedProfileCommentItem
+              comment={item}
+              onPress={handleCommentPress}
+            />
+          );
+        }
+
+        return null;
+      },
+      [
+        username,
+        user?.walletAddress,
+        avatarUrl,
+        followersCount,
+        profileData,
+        userStatus?.user_level,
+        gradientColors,
+        scrollY,
+        handleFollowersPress,
+        isLoading,
+        theme.colors.background.default,
+        activeTab,
+        handleTabChange,
+        handleTabDoubleTap,
+        handlePostPress,
+        handleAuthorPress,
+        handlePostMorePress,
+        handleCommentPress,
+      ]
+    );
+
+  const ListFooterComponent = useCallback(() => {
+    if (activeTab === 2) {
+      return (
+        <ProfileEmptyState
+          tabType="about"
+          onSettingsPress={handleSettingsPress}
+          isOwnProfile={true}
+        />
+      );
+    }
+
+    if (isLoadingPosts) {
+      return activeTab === 0 ? (
+        <PostCardSkeletonList count={3} />
+      ) : (
+        <ProfilePostsSkeleton count={5} type="comments" />
+      );
+    }
+
+    if (listData.length <= 2) {
+      const tabType = activeTab === 0 ? "posts" : "comments";
+      return (
+        <ProfileEmptyState
+          tabType={tabType}
+          onSettingsPress={handleSettingsPress}
+          isOwnProfile={true}
+        />
+      );
+    }
+
+    if (isFetchingNextPage) {
+      return activeTab === 0 ? (
+        <PostCardSkeletonList count={1} />
+      ) : (
+        <ProfilePostsSkeleton count={2} type="comments" />
+      );
+    }
+
+    return <View style={styles.bottomSpacer} />;
+  }, [
+    activeTab,
+    isLoadingPosts,
+    isFetchingNextPage,
+    listData.length,
+    handleSettingsPress,
+  ]);
+
   const stickyTabsAnimatedStyle = useAnimatedStyle(() => {
     const opacity = interpolate(
       scrollY.value,
@@ -357,25 +597,23 @@ export function ProfileScreen() {
     return { opacity };
   });
 
-  const getTabType = () => {
-    switch (activeTab) {
-      case 0:
-        return "posts";
-      case 1:
-        return "comments";
-      case 2:
-        return "about";
-      default:
-        return "posts";
-    }
-  };
+  const contentContainerStyle = useMemo(
+    () => ({
+      paddingTop: headerHeight,
+      paddingBottom: insets.bottom + 20,
+      flexGrow: 1,
+    }),
+    [headerHeight, insets.bottom]
+  );
+
+  const stickyHeaderIndices = useMemo(() => [TAB_BAR_INDEX], []);
 
   return (
     <Box flex background="base">
       <ProfileHeaderBar
         username={username}
         userLevel={userStatus?.user_level ?? 0}
-        gradientColor={gradientColor}
+        gradientColors={gradientColors}
         scrollY={scrollY}
         isRefreshing={isRefreshing}
         isLoading={isLoading}
@@ -384,76 +622,45 @@ export function ProfileScreen() {
         onMenuPress={handleMenuPress}
       />
 
-      {shouldShowStickyTabs && (
-        <Animated.View
-          style={[
-            styles.stickyTabBar,
-            {
-              top: headerHeight,
-              backgroundColor: theme.colors.background.default,
-            },
-            stickyTabsAnimatedStyle,
-          ]}
-        >
-          <ProfileTabBar
-            activeTab={activeTab}
-            onTabChange={handleTabChange}
-            onTabDoubleTap={handleTabDoubleTap}
-            tabWidth={SCREEN_WIDTH}
-          />
-        </Animated.View>
-      )}
-
-      <Animated.ScrollView
-        ref={scrollViewRef as any}
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingTop: headerHeight },
+      <Animated.View
+        style={[
+          styles.stickyTabBar,
+          {
+            top: headerHeight,
+            backgroundColor: theme.colors.background.default,
+          },
+          stickyTabsAnimatedStyle,
         ]}
-        showsVerticalScrollIndicator={false}
+        pointerEvents={scrollY.value >= stickyThreshold ? "auto" : "none"}
+      >
+        <ProfileTabBar
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          onTabDoubleTap={handleTabDoubleTap}
+          tabWidth={SCREEN_WIDTH}
+        />
+      </Animated.View>
+
+      <AnimatedFlatList
+        ref={flatListRef as any}
+        data={listData}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        stickyHeaderIndices={stickyHeaderIndices}
         onScroll={scrollHandler}
         scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={contentContainerStyle}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.5}
+        ListFooterComponent={ListFooterComponent}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+        initialNumToRender={5}
+        updateCellsBatchingPeriod={50}
         bounces={true}
-        nestedScrollEnabled
-      >
-      <ProfileContent
-        username={username}
-         avatarSeed={user?.walletAddress || username}
-        avatarUrl={avatarUrl}
-         walletAddress={user?.walletAddress || "0x0000...0000"}
-         followersCount={followersCount}
-         balance={profileData.balance}
-         reserve={profileData.reserve}
-         accountAgeDays={profileData.accountAgeDays}
-          userLevel={userStatus?.user_level ?? 0}
-         gradientColor={gradientColor}
-         scrollY={scrollY}
-         onFollowersPress={handleFollowersPress}
-         isLoading={isLoading}
-       />
-
-        <View style={{ backgroundColor: theme.colors.background.default }}>
-          <ProfileTabBar
-            activeTab={activeTab}
-            onTabChange={handleTabChange}
-            onTabDoubleTap={handleTabDoubleTap}
-            tabWidth={SCREEN_WIDTH}
-          />
-        </View>
-
-        <View style={styles.tabContent}>
-          <ProfileTabContent
-            tabType={getTabType()}
-            owner={user?.walletAddress}
-            onSettingsPress={handleSettingsPress}
-            onPostPress={handlePostPress}
-            onCommentPress={handleCommentPress}
-            onAuthorPress={handleAuthorPress}
-            onMorePress={handlePostMorePress}
-          />
-        </View>
-      </Animated.ScrollView>
+      />
 
       <ProfileMenuSheet
         ref={menuSheetRef}
@@ -515,20 +722,13 @@ export function ProfileScreen() {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
   stickyTabBar: {
     position: "absolute",
     left: 0,
     right: 0,
     zIndex: 99,
   },
-  tabContent: {
-    flex: 1,
-    minHeight: 400,
+  bottomSpacer: {
+    height: 80,
   },
 }));

@@ -43,16 +43,17 @@ export {
 
 // Profile
 export {
-  getGradientColor,
-  PROFILE_CONTENT_HEIGHT,
-  ProfileContent,
-  ProfileHeader,
-  ProfileHeaderBar,
-  SCROLL_THRESHOLD,
+ getGradientColor,
+ PROFILE_CONTENT_HEIGHT,
+ ProfileContent,
+ ProfileHeader,
+ ProfileHeaderBar,
+ SCROLL_THRESHOLD,
 } from "./profile-header";
+export { ProfileContentAnimated } from "./profile-content-animated";
 export {
- ProfileMenuSheet,
- type ProfileMenuSheetRef,
+ProfileMenuSheet,
+type ProfileMenuSheetRef,
 } from "./profile-menu-sheet";
 export {
   UserProfileMenuSheet,
@@ -70,6 +71,7 @@ export { ProfileCommentItem } from "./profile-comment-item";
 export { ProfilePostsList } from "./profile-posts-list";
 export { ProfilePostsSkeleton } from "./profile-posts-skeleton";
 export { UserProfileContent } from "./user-profile-content";
+export { UserProfileContentAnimated } from "./user-profile-content-animated";
 
 // Settings
 export {

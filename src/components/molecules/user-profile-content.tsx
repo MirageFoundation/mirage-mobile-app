@@ -78,7 +78,7 @@ type UserProfileContentProps = {
  reserve: number;
  accountAgeDays: number;
   userLevel?: number;
- gradientColor: string;
+ gradientColors: readonly string[];
  scrollY?: SharedValue<number>;
  onFollowersPress?: () => void;
  isLoading?: boolean;
@@ -94,8 +94,8 @@ export const UserProfileContent = ({
  reserve,
  accountAgeDays,
   userLevel = 0,
- gradientColor,
- scrollY,
+  gradientColors,
+  scrollY,
  onFollowersPress,
  isLoading = false,
 }: UserProfileContentProps) => {
@@ -161,7 +161,7 @@ export const UserProfileContent = ({
 
   return (
     <LinearGradient
-      colors={[gradientColor, "#000000"]}
+      colors={[...gradientColors] as [string, string, ...string[]]}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.gradientContent}

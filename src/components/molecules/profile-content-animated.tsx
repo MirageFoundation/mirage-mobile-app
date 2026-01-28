@@ -1,31 +1,26 @@
-const PROFILE_GRADIENT_COLORS: readonly string[] = ["rgb(102, 126, 234)", "rgb(118, 75, 162)", "#000000"];
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  Animated as RNAnimated,
-  View,
-} from "react-native";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, Animated as RNAnimated, View } from "react-native";
 import Animated, {
+  Easing,
   interpolate,
-  interpolateColor,
   SharedValue,
   useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
 } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet } from "react-native-unistyles";
 
-import { ShareIcon } from "@/assets/figma-icons";
-import { Avatar, IconButton } from "@/src/components/atoms";
+import { Avatar } from "@/src/components/atoms";
 import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
+import { SCROLL_THRESHOLD } from "./profile-header";
 
-export const PROFILE_CONTENT_HEIGHT = 280;
-export const SCROLL_THRESHOLD = PROFILE_CONTENT_HEIGHT;
+const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
 
 const TIER_NAMES: Record<number, string> = {
   0: "Free",
@@ -37,36 +32,6 @@ const TIER_NAMES: Record<number, string> = {
 const getTierName = (level: number): string => {
   return TIER_NAMES[level] ?? "Free";
 };
-
-type ProfileHeaderBarProps = {
-  username: string;
-  userLevel?: number;
-  gradientColors: readonly string[];
-  scrollY?: SharedValue<number>;
-  isRefreshing?: boolean;
-  isLoading?: boolean;
-  onBackPress?: () => void;
-  onSharePress?: () => void;
-  onMenuPress?: () => void;
-};
-
-type ProfileContentProps = {
-  username: string;
-  avatarSeed?: string;
-  avatarUrl?: string;
-  walletAddress: string;
-  followersCount: number;
-  balance: number;
-  reserve: number;
-  accountAgeDays: number;
-  userLevel?: number;
-  gradientColors: readonly string[];
-  scrollY?: SharedValue<number>;
-  onFollowersPress?: () => void;
-  isLoading?: boolean;
-};
-
-type ProfileHeaderProps = ProfileHeaderBarProps & ProfileContentProps;
 
 const formatAccountAge = (days: number): string => {
   const totalMinutes = days * 24 * 60;
@@ -109,101 +74,23 @@ const formatNumber = (num: number): string => {
   return num.toString();
 };
 
-export const getGradientColor = (_username?: string): readonly string[] => {
-  return PROFILE_GRADIENT_COLORS;
+type ProfileContentAnimatedProps = {
+  username: string;
+  avatarSeed?: string;
+  avatarUrl?: string;
+  walletAddress: string;
+  followersCount: number;
+  balance: number;
+  reserve: number;
+  accountAgeDays: number;
+  userLevel?: number;
+  gradientColors: readonly string[];
+  scrollY?: SharedValue<number>;
+  onFollowersPress?: () => void;
+  isLoading?: boolean;
 };
 
-export const ProfileHeaderBar = ({
-  username,
-  userLevel = 0,
-  gradientColors,
-  scrollY,
-  isRefreshing = false,
-  isLoading = false,
-  onBackPress,
-  onSharePress,
-  onMenuPress,
-}: ProfileHeaderBarProps) => {
-  const insets = useSafeAreaInsets();
-
-  const headerBgStyle = useAnimatedStyle(() => {
-    if (!scrollY) return { backgroundColor: gradientColors[0] };
-
-    const backgroundColor = interpolateColor(
-      scrollY.value,
-      [0, SCROLL_THRESHOLD * 0.3, SCROLL_THRESHOLD * 0.7, SCROLL_THRESHOLD],
-      [gradientColors[0], gradientColors[0], "#000000", "#000000"],
-    );
-
-    return { backgroundColor };
-  });
-
-  return (
-    <Animated.View
-      style={[styles.headerBar, { paddingTop: insets.top }, headerBgStyle]}
-    >
-      <Box direction="row" center px="md" py="sm" style={styles.headerRow}>
-        <Box direction="row" center gap="xs">
-          <IconButton
-            name="arrow-back"
-            size="md"
-            color="#FFFFFF"
-            onPress={onBackPress}
-            style={styles.iconButton}
-          />
-
-          <Box gap="xs" style={styles.usernameContainer}>
-            {isLoading ? (
-              <View style={styles.usernameSkeleton} />
-            ) : (
-              <>
-                <Text
-                  size="md"
-                  weight="semibold"
-                  style={[styles.whiteText, { marginBottom: -5 }]}
-                  numberOfLines={1}
-                >
-                  {username}
-                </Text>
-                <Box direction="row" center gap="xs">
-                  <Text size="xs" style={styles.subtleWhiteText}>
-                    {getTierName(userLevel)} Tier
-                  </Text>
-                  <Icon
-                    icon={Ionicons}
-                    name="shield-checkmark"
-                    size={10}
-                    color="rgba(255,255,255,0.7)"
-                  />
-                </Box>
-              </>
-            )}
-          </Box>
-        </Box>
-
-        <Box direction="row" center gap="xs">
-          {isRefreshing && (
-            <View style={styles.refreshIndicator}>
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            </View>
-          )}
-          <Pressable onPress={onSharePress} style={styles.shareButton}>
-            <ShareIcon size={18} color="#FFFFFF" />
-          </Pressable>
-          <IconButton
-            name="ellipsis-horizontal"
-            size="md"
-            color="#FFFFFF"
-            onPress={onMenuPress}
-            style={styles.iconButton}
-          />
-        </Box>
-      </Box>
-    </Animated.View>
-  );
-};
-
-export const ProfileContent = ({
+export const ProfileContentAnimated = memo(function ProfileContentAnimated({
   username,
   avatarSeed,
   avatarUrl,
@@ -217,16 +104,42 @@ export const ProfileContent = ({
   scrollY,
   onFollowersPress,
   isLoading = false,
-}: ProfileContentProps) => {
+}: ProfileContentAnimatedProps) {
   const [copied, setCopied] = useState(false);
   const walletScale = useRef(new RNAnimated.Value(1)).current;
+
+  const gradientAnimation = useSharedValue(0);
+
+  useEffect(() => {
+    gradientAnimation.value = withRepeat(
+      withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true
+    );
+  }, [gradientAnimation]);
+
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    const translateY = interpolate(
+      gradientAnimation.value,
+      [0, 1],
+      [0, -20]
+    );
+    const scale = interpolate(
+      gradientAnimation.value,
+      [0, 0.5, 1],
+      [1, 1.05, 1]
+    );
+    return {
+      transform: [{ translateY }, { scale }],
+    };
+  });
 
   const truncatedAddress = useMemo(() => {
     if (!walletAddress) return "";
     if (walletAddress.length <= 13) return walletAddress;
     return `${walletAddress.slice(
       0,
-      6,
+      6
     )}.....................${walletAddress.slice(-4)}`;
   }, [walletAddress]);
 
@@ -272,19 +185,25 @@ export const ProfileContent = ({
       scrollY.value,
       [0, SCROLL_THRESHOLD * 0.6, SCROLL_THRESHOLD],
       [1, 0.3, 0],
-      "clamp",
+      "clamp"
     );
 
     return { opacity };
   });
 
+  const gradientColorsArray = useMemo(
+    () => [...gradientColors] as [string, string, ...string[]],
+    [gradientColors]
+  );
+
   return (
-    <LinearGradient
-      colors={[...gradientColors] as [string, string, ...string[]]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.gradientContent}
-    >
+    <View style={styles.container}>
+      <AnimatedLinearGradient
+        colors={gradientColorsArray}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={[styles.gradientContent, gradientAnimatedStyle]}
+      />
       <Animated.View style={[styles.profileContentInner, contentFadeStyle]}>
         <Box px="md" pt="sm">
           <Avatar
@@ -436,107 +355,34 @@ export const ProfileContent = ({
           </Box>
         </Box>
       </Animated.View>
-    </LinearGradient>
-  );
-};
-
-export const ProfileHeader = ({
-  username,
-  avatarSeed,
-  avatarUrl,
-  walletAddress,
-  followersCount,
-  balance,
-  reserve,
-  accountAgeDays,
-  userLevel,
-  scrollY,
-  onBackPress,
-  onSharePress,
-  onMenuPress,
-  onFollowersPress,
-}: ProfileHeaderProps) => {
-  const gradientColors = useMemo(() => getGradientColor(username), [username]);
-
-  return (
-    <View style={styles.container}>
-      <ProfileContent
-        username={username}
-        avatarSeed={avatarSeed}
-        avatarUrl={avatarUrl}
-        walletAddress={walletAddress}
-        followersCount={followersCount}
-        balance={balance}
-        reserve={reserve}
-        accountAgeDays={accountAgeDays}
-        gradientColors={gradientColors}
-        scrollY={scrollY}
-        onFollowersPress={onFollowersPress}
-      />
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create((theme) => ({
   container: {
     width: "100%",
-  },
-  headerBar: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-  },
-  headerRow: {
-    justifyContent: "space-between",
+    overflow: "hidden",
   },
   gradientContent: {
+    ...StyleSheet.absoluteFillObject,
     width: "100%",
+    height: "120%",
+  },
+  profileContentInner: {
     paddingBottom: theme.spacing.lg,
-  },
-  profileContentInner: {},
-  iconButton: {
-    backgroundColor: "rgba(0,0,0,0.3)",
-    borderRadius: theme.radius.full,
-  },
-  shareButton: {
-    width: 40,
-    height: 40,
-    borderRadius: theme.radius.full,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  refreshIndicator: {
-    width: 32,
-    height: 32,
-    borderRadius: theme.radius.full,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  usernameContainer: {
-    paddingHorizontal: theme.spacing.sm,
-    alignItems: "flex-start",
-  },
-  usernameSkeleton: {
-    width: 80,
-    height: 18,
-    borderRadius: 4,
-    backgroundColor: "rgba(255,255,255,0.2)",
-  },
-  usernameContentSkeleton: {
-    width: 120,
-    height: 24,
-    borderRadius: 4,
-    backgroundColor: "rgba(255,255,255,0.2)",
   },
   whiteText: {
     color: "#FFFFFF",
   },
   tierBadge: {
     backgroundColor: "rgba(255,255,255,0.15)",
+  },
+  usernameContentSkeleton: {
+    width: 120,
+    height: 24,
+    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.2)",
   },
   subtleWhiteText: {
     color: "rgba(255,255,255,0.7)",
