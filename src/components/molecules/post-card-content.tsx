@@ -7,7 +7,6 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type PostCardContentProps = {
   title: string;
-  bodyWithoutUrl?: string;
   extractedUrl: string | null;
   displayDomain: string | null;
   bodyVideoUrl: string | null;
@@ -21,7 +20,6 @@ type PostCardContentProps = {
 
 export const PostCardContent = memo(function PostCardContent({
   title,
-  bodyWithoutUrl,
   extractedUrl,
   displayDomain,
   bodyVideoUrl,
@@ -53,12 +51,6 @@ export const PostCardContent = memo(function PostCardContent({
       >
         {title}
       </Text>
-
-      {bodyWithoutUrl && !shouldBlurContent && (
-        <Text size="md" style={styles.body}>
-          {bodyWithoutUrl}
-        </Text>
-      )}
 
       {showUrlCard && extractedUrl && displayDomain && !shouldBlurContent && !bodyVideoUrl && (
         <View style={styles.urlCard}>
@@ -95,10 +87,6 @@ const styles = StyleSheet.create((theme) => ({
   title: {
     marginTop: theme.spacing.xs,
     lineHeight: 20,
-  },
-  body: {
-    marginTop: theme.spacing.xs,
-    lineHeight: 18,
   },
   urlCard: {
     flexDirection: "row",

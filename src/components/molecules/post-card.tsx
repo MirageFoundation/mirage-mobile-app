@@ -1,4 +1,5 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { Text } from "@/src/components/ui/primitives";
 import { logPress } from "@/src/utils/press-logger";
 import { memo, useCallback, useMemo, useState } from "react";
 import {
@@ -165,7 +166,6 @@ export const PostCard = memo(function PostCard({
 
       <PostCardContent
         title={title}
-        bodyWithoutUrl={resolvedContent.bodyWithoutUrl}
         extractedUrl={resolvedContent.extractedUrl}
         displayDomain={resolvedContent.displayDomain}
         bodyVideoUrl={resolvedContent.bodyVideoUrl}
@@ -187,6 +187,12 @@ export const PostCard = memo(function PostCard({
         onRevealContent={onRevealContent}
         onMediaPress={handleMediaPress}
       />
+
+      {resolvedContent.bodyWithoutUrl && !shouldBlurContent && (
+        <Text size="md" style={styles.body}>
+          {resolvedContent.bodyWithoutUrl}
+        </Text>
+      )}
 
       <PostActions
         likes={likes}
@@ -222,5 +228,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   actions: {
     marginTop: theme.spacing.sm,
+  },
+  body: {
+    marginTop: theme.spacing.sm,
+    lineHeight: 18,
   },
 }));
