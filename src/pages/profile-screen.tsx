@@ -64,7 +64,7 @@ import {
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const AnimatedFlatList = Animated.createAnimatedComponent(
-  FlatList<Post | ApiPost | "header" | "tabs">
+  FlatList<Post | ApiPost | "header" | "tabs">,
 );
 
 const HEADER_BAR_HEIGHT = 56;
@@ -75,7 +75,7 @@ const formatMirageBalance = (umirage: number): number => {
 };
 
 const calculateAccountAgeDays = (
-  createdAt: number | null | undefined
+  createdAt: number | null | undefined,
 ): number => {
   if (!createdAt) return 0;
   const now = Date.now() / 1000;
@@ -131,9 +131,7 @@ export function ProfileScreen() {
   const globalHidePost = useContentModerationStore((s) => s.hidePost);
   const globalUnhidePost = useContentModerationStore((s) => s.unhidePost);
   const globalHideComment = useContentModerationStore((s) => s.hideComment);
-  const globalUnhideComment = useContentModerationStore(
-    (s) => s.unhideComment
-  );
+  const globalUnhideComment = useContentModerationStore((s) => s.unhideComment);
 
   const deleteHandler = useDeleteHandler({
     onRollback: (targetId, targetType) => {
@@ -176,14 +174,14 @@ export function ProfileScreen() {
 
   const uiPosts = useMemo(
     () => apiPosts.map((post) => transformApiPost(post)),
-    [apiPosts]
+    [apiPosts],
   );
 
-  const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
-    if (activeTab === 2) {
+ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
+   if (activeTab === 2) {
       return ["header", "tabs"];
-    }
-    const posts = activeTab === 0 ? uiPosts : apiPosts;
+   }
+   const posts = activeTab === 0 ? uiPosts : apiPosts;
     return ["header", "tabs", ...posts];
   }, [activeTab, uiPosts, apiPosts]);
 
@@ -191,7 +189,11 @@ export function ProfileScreen() {
     const handleRefresh = async () => {
       setIsRefreshing(true);
       try {
-        await Promise.all([refetchUserStatus(), refetchProfile(), refetchPosts()]);
+        await Promise.all([
+          refetchUserStatus(),
+          refetchProfile(),
+          refetchPosts(),
+        ]);
       } finally {
         setIsRefreshing(false);
       }
@@ -211,7 +213,7 @@ export function ProfileScreen() {
           queryKey: ["user", "posts", user.walletAddress],
         });
       }
-    }, [queryClient, user?.walletAddress])
+    }, [queryClient, user?.walletAddress]),
   );
 
   const scrollHandler = useAnimatedScrollHandler({
@@ -303,7 +305,7 @@ export function ProfileScreen() {
     (postId: string) => {
       router.push(`/post/${postId}`);
     },
-    [router]
+    [router],
   );
 
   const handleCommentPress = useCallback(
@@ -311,20 +313,20 @@ export function ProfileScreen() {
       if (!rootPostId || rootPostId === "undefined") {
         console.warn(
           "Cannot navigate: missing root post ID for comment",
-          commentId
+          commentId,
         );
         return;
       }
       router.push(`/post/${rootPostId}?highlight=${commentId}`);
     },
-    [router]
+    [router],
   );
 
   const handleAuthorPress = useCallback(
     (authorId: string) => {
       router.push(`/user/${authorId}`);
     },
-    [router]
+    [router],
   );
 
   const postsById = useMemo(() => {
@@ -343,7 +345,7 @@ export function ProfileScreen() {
         postOptionsSheetRef.current?.present();
       }
     },
-    [postsById]
+    [postsById],
   );
 
   const handleDeletePost = useCallback(() => {
@@ -393,7 +395,7 @@ export function ProfileScreen() {
       reportSheetRef.current?.dismiss();
       reportHandler.submitReport(reason);
     },
-    [reportHandler, globalHidePost]
+    [reportHandler, globalHidePost],
   );
 
   useEffect(() => {
@@ -421,7 +423,7 @@ export function ProfileScreen() {
         setIsRefreshing(false);
       }
     },
-    [refetchUserStatus, refetchProfile, queryClient, user?.walletAddress]
+    [refetchUserStatus, refetchProfile, queryClient, user?.walletAddress],
   );
 
   const lastFetchTime = useRef(0);
@@ -450,30 +452,29 @@ export function ProfileScreen() {
       if (item === "tabs") return "tabs";
       return "id" in item ? item.id : item.post_id;
     },
-    []
+    [],
   );
 
   const renderItem: ListRenderItem<Post | ApiPost | "header" | "tabs"> =
     useCallback(
       ({ item, index }) => {
         if (item === "header") {
-          return (
-            <ProfileContentAnimated
-              username={username}
-              avatarSeed={user?.walletAddress || username}
-              avatarUrl={avatarUrl}
-              walletAddress={user?.walletAddress || "0x0000...0000"}
-              followersCount={followersCount}
-              balance={profileData.balance}
-              reserve={profileData.reserve}
-              accountAgeDays={profileData.accountAgeDays}
-              userLevel={userStatus?.user_level ?? 0}
-              gradientColors={gradientColors}
-              scrollY={scrollY}
-              onFollowersPress={handleFollowersPress}
-              isLoading={isLoading}
-            />
-          );
+         return (
+           <ProfileContentAnimated
+             username={username}
+             avatarSeed={user?.walletAddress || username}
+             avatarUrl={avatarUrl}
+             walletAddress={user?.walletAddress || "0x0000...0000"}
+             followersCount={followersCount}
+             balance={profileData.balance}
+             reserve={profileData.reserve}
+             accountAgeDays={profileData.accountAgeDays}
+             gradientColors={gradientColors}
+             scrollY={scrollY}
+             onFollowersPress={handleFollowersPress}
+             isLoading={isLoading}
+           />
+         );
         }
 
         if (item === "tabs") {
@@ -518,16 +519,15 @@ export function ProfileScreen() {
 
         return null;
       },
-      [
-        username,
-        user?.walletAddress,
-        avatarUrl,
-        followersCount,
-        profileData,
-        userStatus?.user_level,
-        gradientColors,
-        scrollY,
-        handleFollowersPress,
+     [
+       username,
+       user?.walletAddress,
+       avatarUrl,
+       followersCount,
+       profileData,
+       gradientColors,
+       scrollY,
+       handleFollowersPress,
         isLoading,
         theme.colors.background.default,
         activeTab,
@@ -537,7 +537,7 @@ export function ProfileScreen() {
         handleAuthorPress,
         handlePostMorePress,
         handleCommentPress,
-      ]
+      ],
     );
 
   const ListFooterComponent = useCallback(() => {
@@ -592,7 +592,7 @@ export function ProfileScreen() {
       scrollY.value,
       [stickyThreshold - 20, stickyThreshold],
       [0, 1],
-      "clamp"
+      "clamp",
     );
     return { opacity };
   });
@@ -603,7 +603,7 @@ export function ProfileScreen() {
       paddingBottom: insets.bottom + 20,
       flexGrow: 1,
     }),
-    [headerHeight, insets.bottom]
+    [headerHeight, insets.bottom],
   );
 
   const stickyHeaderIndices = useMemo(() => [TAB_BAR_INDEX], []);
@@ -618,7 +618,6 @@ export function ProfileScreen() {
         isRefreshing={isRefreshing}
         isLoading={isLoading}
         onBackPress={handleBackPress}
-        onSharePress={handleSharePress}
         onMenuPress={handleMenuPress}
       />
 

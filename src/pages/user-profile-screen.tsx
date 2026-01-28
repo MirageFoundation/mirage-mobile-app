@@ -602,21 +602,20 @@ const handleUnfollow = useCallback(() => {
       ({ item, index }) => {
         if (item === "header") {
           return (
-            <UserProfileContentAnimated
-              username={username}
-              avatarSeed={userAddress || username}
-              avatarUrl={avatarUrl}
-              walletAddress={userAddress || "0x0000...0000"}
-              followersCount={followersCount}
-              balance={profileData.balance}
-              reserve={profileData.reserve}
-              accountAgeDays={profileData.accountAgeDays}
-              userLevel={userStatus?.user_level ?? 0}
-              gradientColors={gradientColors}
-              scrollY={scrollY}
-              onFollowersPress={handleFollowersPress}
-              isLoading={isLoading}
-            />
+           <UserProfileContentAnimated
+             username={username}
+             avatarSeed={userAddress || username}
+             avatarUrl={avatarUrl}
+             walletAddress={userAddress || "0x0000...0000"}
+             followersCount={followersCount}
+             balance={profileData.balance}
+             reserve={profileData.reserve}
+             accountAgeDays={profileData.accountAgeDays}
+             gradientColors={gradientColors}
+             scrollY={scrollY}
+             onFollowersPress={handleFollowersPress}
+             isLoading={isLoading}
+           />
           );
         }
 
@@ -676,16 +675,15 @@ const handleUnfollow = useCallback(() => {
 
         return null;
       },
-      [
-        username,
-        userAddress,
-        avatarUrl,
-        followersCount,
-        profileData,
-        userStatus?.user_level,
-        gradientColors,
-        scrollY,
-        handleFollowersPress,
+     [
+       username,
+       userAddress,
+       avatarUrl,
+       followersCount,
+       profileData,
+       gradientColors,
+       scrollY,
+       handleFollowersPress,
         isLoading,
         theme.colors.background.default,
         activeTab,
