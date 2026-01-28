@@ -16,7 +16,7 @@ import {
 import { useAuthStore, useUIStore } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { Text, View } from "react-native";
+import { Pressable, StyleSheet as RNStyleSheet, Text, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -130,7 +130,6 @@ const TabBarItem = ({
 
   const handlePressOut = () => {
     scale.value = withTiming(1, { duration: 100 });
-    onPress();
   };
 
   const iconColor = isFocused
@@ -182,24 +181,27 @@ const TabBarItem = ({
   };
 
   return (
-    <Animated.View
-      style={[styles.tabItem, animatedStyle]}
-      onTouchStart={handlePressIn}
-      onTouchEnd={handlePressOut}
+    <Pressable
+      style={styles.tabItem}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      onPress={onPress}
     >
-      {renderIcon()}
-      <Text
-        style={{
-          fontSize: 9,
-          fontWeight: "500",
-          color: isFocused
-            ? theme.colors.primary[500]
-            : theme.colors.text.subtle,
-        }}
-      >
-        {label}
-      </Text>
-    </Animated.View>
+      <Animated.View style={[styles.tabItemInner, animatedStyle]}>
+        {renderIcon()}
+        <Text
+          style={{
+            fontSize: 9,
+            fontWeight: "500",
+            color: isFocused
+              ? theme.colors.primary[500]
+              : theme.colors.text.subtle,
+          }}
+        >
+          {label}
+        </Text>
+      </Animated.View>
+    </Pressable>
   );
 };
 
@@ -260,7 +262,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     left: 0,
     right: 0,
     backgroundColor: theme.colors.background.default,
-    borderTopWidth: 0.5,
+    borderTopWidth: RNStyleSheet.hairlineWidth,
     borderTopColor: theme.colors.border.subtle,
   },
   tabBarContent: {
@@ -272,6 +274,10 @@ const styles = StyleSheet.create((theme, rt) => ({
   },
   tabItem: {
     flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tabItemInner: {
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
