@@ -244,10 +244,22 @@ export const PostActions = memo(function PostActions({
               <UpvoteOutlineIcon size={iconSize} color={upvoteColor} />
             )}
           </Animated.View>
+        </Pressable>
+
+        {/* Divider */}
+        <View style={styles.voteDivider} />
+
+        {/* Vote count */}
+        <Pressable
+          onPress={handleLikePress}
+          disabled={disabled}
+          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+          style={[styles.voteButton, disabled && styles.disabled]}
+        >
           <Text
             size={voteTextSize}
             weight="bold"
-            style={{ marginLeft: 14, color: upvoteColor }}
+            style={{ color: upvoteColor }}
           >
             {formatCount(likes)}
           </Text>
