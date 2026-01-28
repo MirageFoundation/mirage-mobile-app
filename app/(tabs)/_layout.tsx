@@ -125,7 +125,7 @@ const TabBarItem = ({
   }));
 
   const handlePressIn = () => {
-    scale.value = withTiming(0.9, { duration: 100 });
+    scale.value = withTiming(0.85, { duration: 100 });
   };
 
   const handlePressOut = () => {
