@@ -525,7 +525,7 @@ export function SearchScreen() {
               {/* Upvotes + dot + comments */}
               <View style={styles.postResultMeta}>
                 <Text size="sm" mode="subtle">
-                  {formatCount(Math.round(item.points), "upvote", "upvotes")}
+                  {formatCount(Math.round(item.points), "point", "points")}
                 </Text>
                 <Text size="sm" mode="subtle">
                   •
