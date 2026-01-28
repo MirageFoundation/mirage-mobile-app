@@ -100,7 +100,7 @@ export const ProfileMenuSheet = forwardRef<
       onOnlineStatusChange,
       onDismiss,
     },
-    ref
+    ref,
   ) => {
     const bottomSheetRef = useRef<BottomSheet>(null);
     const { theme } = useUnistyles();
@@ -126,7 +126,7 @@ export const ProfileMenuSheet = forwardRef<
           onDismiss?.();
         }
       },
-      [onDismiss]
+      [onDismiss],
     );
 
     const renderBackdrop = useCallback(
@@ -138,7 +138,7 @@ export const ProfileMenuSheet = forwardRef<
           opacity={0.5}
         />
       ),
-      []
+      [],
     );
 
     const handleSettings = useCallback(() => {
@@ -189,7 +189,7 @@ export const ProfileMenuSheet = forwardRef<
         setOnlineStatus(value);
         onOnlineStatusChange?.(value);
       },
-      [onOnlineStatusChange]
+      [onOnlineStatusChange],
     );
 
     const activeColor = "rgb(29, 68, 150)";
@@ -292,7 +292,7 @@ export const ProfileMenuSheet = forwardRef<
         </BottomSheetView>
       </BottomSheet>
     );
-  }
+  },
 );
 
 ProfileMenuSheet.displayName = "ProfileMenuSheet";
@@ -321,6 +321,6 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm + 2,
   },
 }));

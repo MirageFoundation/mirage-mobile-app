@@ -5,7 +5,7 @@ import BottomSheet, {
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
-import { Pressable, View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -159,7 +159,13 @@ export const UserProfileMenuSheet = forwardRef<
         handleIndicatorStyle={{ backgroundColor: theme.colors.border.default }}
       >
         <BottomSheetView
-          style={[styles.content, { paddingBottom: insets.bottom + 50 }]}
+          style={[
+            styles.content,
+            {
+              paddingBottom:
+                Platform.OS === "ios" ? insets.bottom : insets.bottom + 20,
+            },
+          ]}
         >
           <View style={styles.header}>
             <Text size="lg" weight="bold">
