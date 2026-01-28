@@ -61,6 +61,8 @@ import {
   useBlockHandler,
   useDeleteHandler,
   useReportHandler,
+  useVoteHandler,
+  type VoteResult,
 } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
 import {
@@ -167,10 +169,29 @@ export function UserProfileScreen() {
       }
     },
   });
-  const blockHandler = useBlockHandler({});
-  const reportHandler = useReportHandler({});
+ const blockHandler = useBlockHandler({});
+ const reportHandler = useReportHandler({});
 
-  const toggleFollowMutation = useToggleFollowUser();
+  const [voteOverrides, setVoteOverrides] = useState<
+    Map<string, { hasLiked: boolean; hasDisliked: boolean; likeDelta: number }>
+  >(new Map());
+
+  const { handleUpvote, handleDownvote } = useVoteHandler({
+    onOptimisticUpdate: (targetId: string, result: VoteResult) => {
+      setVoteOverrides((prev) => {
+        const next = new Map(prev);
+        const existing = prev.get(targetId);
+        next.set(targetId, {
+          hasLiked: result.hasLiked,
+          hasDisliked: result.hasDisliked,
+          likeDelta: (existing?.likeDelta ?? 0) + result.likeDelta,
+        });
+        return next;
+      });
+    },
+  });
+
+ const toggleFollowMutation = useToggleFollowUser();
   const blockUserMutation = useBlockUser();
   const unblockUserMutation = useUnblockUser();
 
@@ -412,12 +433,16 @@ export function UserProfileScreen() {
     [router]
   );
 
-  const handleAuthorPress = useCallback(
-    (authorId: string) => {
-      router.push(`/user/${authorId}`);
-    },
-    [router]
-  );
+ const handleAuthorPress = useCallback(
+   (authorId: string) => {
+      if (authorId === userAddress || authorId === id || authorId === displayUsername) {
+        toast.info("You're already viewing this profile");
+        return;
+      }
+     router.push(`/user/${authorId}`);
+   },
+    [router, userAddress, id, displayUsername, toast]
+ );
 
   const postsById = useMemo(() => {
     const map = new Map<string, Post>();
@@ -590,23 +615,37 @@ export function UserProfileScreen() {
           );
         }
 
-        if (activeTab === 0 && "id" in item) {
-          const postWithoutWarnings = {
+       if (activeTab === 0 && "id" in item) {
+          const voteOverride = voteOverrides.get(item.id);
+          const postWithVotes = {
             ...item,
             contentWarnings: undefined,
+            ...(voteOverride && {
+              likes: item.likes + voteOverride.likeDelta,
+              hasLiked: voteOverride.hasLiked,
+              hasDisliked: voteOverride.hasDisliked,
+            }),
           };
-          return (
-            <MemoizedPostCardItem
-              post={postWithoutWarnings}
-              isOwnPost={isOwnProfile}
-              showUrlCard={false}
-              onPostPress={handlePostPress}
-              onAuthorPress={handleAuthorPress}
-              onCommentPress={handlePostPress}
-              onMorePress={handlePostMorePress}
-            />
-          );
-        }
+        return (
+          <MemoizedPostCardItem
+             post={postWithVotes}
+            isOwnPost={isOwnProfile}
+            showUrlCard={false}
+              showFollowButton={false}
+             shareUrl={`${getShareBaseUrl(shareServer)}/post/${item.id}`}
+            onPostPress={handlePostPress}
+             onAuthorPress={handleAuthorPress}
+             onCommentPress={handlePostPress}
+             onMorePress={handlePostMorePress}
+              onLikePress={(postId, liked, disliked, likes) =>
+                handleUpvote(postId, liked, disliked, likes)
+              }
+              onDislikePress={(postId, liked, disliked, likes) =>
+                handleDownvote(postId, liked, disliked, likes)
+              }
+           />
+         );
+       }
 
         if (activeTab === 1 && "post_id" in item) {
           return (
@@ -635,12 +674,16 @@ export function UserProfileScreen() {
         handleTabChange,
         handleTabDoubleTap,
         isOwnProfile,
-        handlePostPress,
-        handleAuthorPress,
-        handlePostMorePress,
-        handleCommentPress,
-      ]
-    );
+       handlePostPress,
+       handleAuthorPress,
+       handlePostMorePress,
+       handleCommentPress,
+        voteOverrides,
+        handleUpvote,
+        handleDownvote,
+        shareServer,
+     ]
+   );
 
   const ListFooterComponent = useCallback(() => {
     if (isBlocked) {

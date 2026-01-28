@@ -10,6 +10,7 @@ type PostCardItemProps = {
  isTopicFollowed?: boolean;
  contentRevealed?: boolean;
  shareUrl?: string;
+  showFollowButton?: boolean;
   showUrlCard?: boolean;
  onPostPress?: (postId: string) => void;
   onAuthorPress?: (authorId: string) => void;
@@ -52,14 +53,15 @@ function arePostCardItemPropsEqual(
 }
 
 export const PostCardItem = memo(function PostCardItem({
- post,
- isVisible = false,
- isOwnPost = false,
- isTopicFollowed = false,
- contentRevealed = false,
- shareUrl,
+post,
+isVisible = false,
+isOwnPost = false,
+isTopicFollowed = false,
+contentRevealed = false,
+shareUrl,
+  showFollowButton = true,
   showUrlCard,
- onPostPress,
+onPostPress,
   onAuthorPress,
   onMorePress,
   onLikePress,
@@ -123,14 +125,15 @@ export const PostCardItem = memo(function PostCardItem({
     onRevealContent?.(post.id);
   }, [onRevealContent, post.id]);
 
-  return (
-    <PostCard
-      post={post}
-      isOwnPost={isOwnPost}
-      isVisible={isVisible}
-      isTopicFollowed={isTopicFollowed}
-      onPress={handlePostPress}
-      onAuthorPress={handleAuthorPress}
+ return (
+   <PostCard
+     post={post}
+     isOwnPost={isOwnPost}
+     isVisible={isVisible}
+     isTopicFollowed={isTopicFollowed}
+      showFollowButton={showFollowButton}
+     onPress={handlePostPress}
+     onAuthorPress={handleAuthorPress}
       onMorePress={handleMorePress}
       onLikePress={handleLikePress}
       onDislikePress={handleDislikePress}
