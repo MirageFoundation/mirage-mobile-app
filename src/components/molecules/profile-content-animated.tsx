@@ -67,9 +67,8 @@ type ProfileContentAnimatedProps = {
  username: string;
  avatarSeed?: string;
  avatarUrl?: string;
- walletAddress: string;
- followersCount: number;
- balance: number;
+walletAddress: string;
+balance: number;
  reserve: number;
  accountAgeDays: number;
  gradientColors: readonly string[];
@@ -81,10 +80,9 @@ type ProfileContentAnimatedProps = {
 export const ProfileContentAnimated = memo(function ProfileContentAnimated({
  username,
  avatarSeed,
- avatarUrl,
- walletAddress,
- followersCount,
- balance,
+avatarUrl,
+walletAddress,
+balance,
  reserve,
  accountAgeDays,
  gradientColors,
@@ -211,17 +209,20 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
             )}
           </Box>
 
-         <Pressable onPress={onFollowersPress}>
-           <Box direction="row" alignItems="center" mt="xs">
-             <Text size="sm" weight="bold" style={styles.whiteText}>
-               {formatNumber(followersCount)}
-             </Text>
-              <Text size="sm" style={styles.whiteText}>
-                {" "}
-                followers
+        <Pressable onPress={onFollowersPress}>
+          <Box direction="row" alignItems="center" mt="xs">
+              <Text size="sm" weight="medium" style={styles.whiteText}>
+                following
               </Text>
-            </Box>
-          </Pressable>
+              <Icon
+                icon={Ionicons}
+                name="chevron-forward"
+                size={14}
+                color="rgba(255,255,255,0.8)"
+                style={{ marginLeft: 2 }}
+              />
+           </Box>
+         </Pressable>
 
           <RNAnimated.View
             style={[

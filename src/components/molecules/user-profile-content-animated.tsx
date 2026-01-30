@@ -12,7 +12,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
-import { StyleSheet } from "react-native-unistyles";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Avatar } from "@/src/components/atoms";
 import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
@@ -64,35 +64,34 @@ const formatNumber = (num: number): string => {
 };
 
 type UserProfileContentAnimatedProps = {
- username: string;
- avatarSeed?: string;
- avatarUrl?: string;
- walletAddress: string;
- followersCount: number;
- balance: number;
- reserve: number;
- accountAgeDays: number;
- gradientColors: readonly string[];
- scrollY?: SharedValue<number>;
- onFollowersPress?: () => void;
- isLoading?: boolean;
+  username: string;
+  avatarSeed?: string;
+  avatarUrl?: string;
+  walletAddress: string;
+  balance: number;
+  reserve: number;
+  accountAgeDays: number;
+  gradientColors: readonly string[];
+  scrollY?: SharedValue<number>;
+  onFollowersPress?: () => void;
+  isLoading?: boolean;
 };
 
 export const UserProfileContentAnimated = memo(
- function UserProfileContentAnimated({
-   username,
-   avatarSeed,
-   avatarUrl,
-   walletAddress,
-   followersCount,
-   balance,
-   reserve,
-   accountAgeDays,
-   gradientColors,
-   scrollY,
-   onFollowersPress,
-   isLoading = false,
- }: UserProfileContentAnimatedProps) {
+  function UserProfileContentAnimated({
+    username,
+    avatarSeed,
+    avatarUrl,
+    walletAddress,
+    balance,
+    reserve,
+    accountAgeDays,
+    gradientColors,
+    scrollY,
+    onFollowersPress,
+    isLoading = false,
+  }: UserProfileContentAnimatedProps) {
+    const { theme } = useUnistyles();
     const [copied, setCopied] = useState(false);
     const walletScale = useRef(new RNAnimated.Value(1)).current;
 
@@ -102,20 +101,16 @@ export const UserProfileContentAnimated = memo(
       gradientAnimation.value = withRepeat(
         withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.ease) }),
         -1,
-        true
+        true,
       );
     }, [gradientAnimation]);
 
     const gradientAnimatedStyle = useAnimatedStyle(() => {
-      const translateY = interpolate(
-        gradientAnimation.value,
-        [0, 1],
-        [0, -20]
-      );
+      const translateY = interpolate(gradientAnimation.value, [0, 1], [0, -20]);
       const scale = interpolate(
         gradientAnimation.value,
         [0, 0.5, 1],
-        [1, 1.05, 1]
+        [1, 1.05, 1],
       );
       return {
         transform: [{ translateY }, { scale }],
@@ -127,7 +122,7 @@ export const UserProfileContentAnimated = memo(
       if (walletAddress.length <= 13) return walletAddress;
       return `${walletAddress.slice(
         0,
-        6
+        6,
       )}.....................${walletAddress.slice(-4)}`;
     }, [walletAddress]);
 
@@ -173,7 +168,7 @@ export const UserProfileContentAnimated = memo(
         scrollY.value,
         [0, SCROLL_THRESHOLD * 0.6, SCROLL_THRESHOLD],
         [1, 0.3, 0],
-        "clamp"
+        "clamp",
       );
 
       return { opacity };
@@ -181,7 +176,7 @@ export const UserProfileContentAnimated = memo(
 
     const gradientColorsArray = useMemo(
       () => [...gradientColors] as [string, string, ...string[]],
-      [gradientColors]
+      [gradientColors],
     );
 
     return (
@@ -212,15 +207,18 @@ export const UserProfileContentAnimated = memo(
               )}
             </Box>
 
-           <Pressable onPress={onFollowersPress}>
-             <Box direction="row" alignItems="center" mt="xs">
-               <Text size="sm" weight="bold" style={styles.whiteText}>
-                 {formatNumber(followersCount)}
-               </Text>
-                <Text size="sm" style={styles.whiteText}>
-                  {" "}
-                  followers
+            <Pressable onPress={onFollowersPress}>
+              <Box direction="row" alignItems="center" mt="xs">
+                <Text size="md" weight="medium" style={styles.whiteText}>
+                  following
                 </Text>
+                <Icon
+                  icon={Ionicons}
+                  name="chevron-forward"
+                  size={14}
+                  color={theme.colors.text.default}
+                  style={{ marginLeft: 2 }}
+                />
               </Box>
             </Pressable>
 
@@ -325,7 +323,7 @@ export const UserProfileContentAnimated = memo(
         </Animated.View>
       </View>
     );
-  }
+  },
 );
 
 const styles = StyleSheet.create((theme) => ({
@@ -341,16 +339,16 @@ const styles = StyleSheet.create((theme) => ({
   profileContentInner: {
     paddingBottom: theme.spacing.lg,
   },
- whiteText: {
-   color: "#FFFFFF",
- },
- usernameContentSkeleton: {
-   width: 120,
-   height: 24,
-   borderRadius: 4,
-   backgroundColor: "rgba(255,255,255,0.2)",
- },
- walletAnimatedContainer: {
+  whiteText: {
+    color: "#FFFFFF",
+  },
+  usernameContentSkeleton: {
+    width: 120,
+    height: 24,
+    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.2)",
+  },
+  walletAnimatedContainer: {
     alignSelf: "flex-start",
     marginTop: theme.spacing.sm,
   },
