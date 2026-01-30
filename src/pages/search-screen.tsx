@@ -23,6 +23,7 @@ import { useDebouncedSearch, usePosts, useTopics } from "@/src/api/read";
 import type { Post, TopicInfo, UserInfo } from "@/src/api/types";
 import { TimeAgo } from "@/src/components/atoms/time-ago";
 import { Box, Text } from "@/src/components/ui/primitives";
+import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useSearchStore, type RecentSearch } from "@/src/stores";
 
@@ -520,11 +521,11 @@ export function SearchScreen() {
                 >
                   {item.title}
                 </Text>
-              ) : item.content ? (
-                <Text size="md" numberOfLines={2} style={styles.postTitle}>
-                  {item.content}
-                </Text>
-              ) : null}
+            ) : item.content ? (
+                <View>
+                 <MarkdownContent content={item.content} />
+               </View>
+             ) : null}
 
               {/* Upvotes + dot + comments */}
               <View style={styles.postResultMeta}>

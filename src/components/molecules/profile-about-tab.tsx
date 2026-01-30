@@ -33,6 +33,7 @@ import type {
 } from "@/src/api/types";
 import { Avatar } from "@/src/components/atoms";
 import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
+import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { useAuthStore } from "@/src/stores";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
@@ -462,25 +463,31 @@ function ProfileDetailsSection({
             },
           ]}
         >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
-            <Icon
-              icon={Ionicons}
-              name={detail.icon}
-              size={16}
-              color={theme.colors.text.subtle}
-            />
-            <Text size="sm" mode="subtle">
-              {detail.label}
+         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+           <Icon
+             icon={Ionicons}
+             name={detail.icon}
+             size={16}
+             color={theme.colors.text.subtle}
+           />
+           <Text size="sm" mode="subtle">
+             {detail.label}
+           </Text>
+         </View>
+          {detail.label === "Bio" ? (
+            <View style={{ maxWidth: "55%" }}>
+              <MarkdownContent content={detail.value} />
+            </View>
+          ) : (
+            <Text
+              size="sm"
+              weight="medium"
+              style={{ color: theme.colors.text.default, maxWidth: "55%", textAlign: "right" }}
+              numberOfLines={2}
+            >
+              {detail.value}
             </Text>
-          </View>
-          <Text
-            size="sm"
-            weight="medium"
-            style={{ color: theme.colors.text.default, maxWidth: "55%", textAlign: "right" }}
-            numberOfLines={2}
-          >
-            {detail.value}
-          </Text>
+          )}
         </View>
       ))}
     </View>

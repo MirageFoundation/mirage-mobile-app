@@ -2,6 +2,7 @@ import { useRootPostId } from "@/src/api/read";
 import type { Post } from "@/src/api/types";
 import { TimeAgo } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
+import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { memo, useCallback, useMemo } from "react";
@@ -118,10 +119,10 @@ export const ProfileCommentItem = memo(function ProfileCommentItem({
         )}
       </View>
 
-      {/* Comment text */}
-      <Text size="md" numberOfLines={3} style={styles.commentText}>
-        {commentContent}
-      </Text>
+    {/* Comment text */}
+      <View>
+       <MarkdownContent content={commentContent} />
+     </View>
     </Pressable>
   );
 });

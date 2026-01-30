@@ -1,10 +1,12 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Text } from "@/src/components/ui/primitives";
+import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { logPress } from "@/src/utils/press-logger";
 import { memo, useCallback, useMemo, useState } from "react";
 import {
   Linking,
   Pressable,
+  View,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
@@ -194,10 +196,10 @@ export const PostCard = memo(function PostCard({
         onMediaPress={handleMediaPress}
       />
 
-      {resolvedContent.bodyWithoutUrl && !shouldBlurContent && (
-        <Text size="md" style={styles.body}>
-          {resolvedContent.bodyWithoutUrl}
-        </Text>
+     {resolvedContent.bodyWithoutUrl && !shouldBlurContent && (
+        <View style={styles.body}>
+          <MarkdownContent content={resolvedContent.bodyWithoutUrl} />
+        </View>
       )}
 
       <PostActions
