@@ -215,8 +215,8 @@ export const PostOptionsSheet = forwardRef<
     ref
   ) => {
     const bottomSheetRef = useRef<BottomSheetModal>(null);
-    const { theme } = useUnistyles();
-    const insets = useSafeAreaInsets();
+  const { theme } = useUnistyles();
+  const insets = useSafeAreaInsets();
     const shareServer = usePreferencesStore((s) => s.shareServer);
 
     const present = useCallback(() => {
@@ -253,15 +253,15 @@ export const PostOptionsSheet = forwardRef<
       []
     );
 
-    const getShareUrl = useCallback(() => {
-      if (!post?.id) return "";
-      return `${getShareBaseUrl(shareServer)}/post/${post.id}`;
+  const getShareUrl = useCallback(() => {
+    if (!post?.id) return "";
+      return `${getShareBaseUrl(shareServer)}/view_post?post_id=${post.id}`;
     }, [post?.id, shareServer]);
 
-    const getShareMessage = useCallback(() => {
-      const url = getShareUrl();
-      return post?.title ? `${post.title}\n${url}` : url;
-    }, [post?.title, getShareUrl]);
+   const getShareMessage = useCallback(() => {
+     const url = getShareUrl();
+      return `What do you think about this? 🗳️\n${url}`;
+    }, [getShareUrl]);
 
     // Share handlers
     const handleShareApp = useCallback(
@@ -318,12 +318,12 @@ export const PostOptionsSheet = forwardRef<
             await Clipboard.setStringAsync(getShareUrl());
             break;
           }
-          case "more": {
-            try {
-              await Share.share({
+        case "more": {
+          try {
+            await Share.share({
                 message: getShareMessage(),
-                url: getShareUrl(),
-                title: post?.title,
+              url: getShareUrl(),
+              title: post?.title,
               });
             } catch {
               // User cancelled

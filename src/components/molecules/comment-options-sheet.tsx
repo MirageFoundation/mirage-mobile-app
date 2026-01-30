@@ -25,11 +25,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Text } from "@/src/components/ui/primitives";
+import { usePreferencesStore, getShareBaseUrl } from "@/src/stores";
 import type { Comment } from "./comment-item";
 
 type CommentOptionsSheetProps = {
   /** The comment to show options for */
   comment?: Comment | null;
+  /** The root post ID for building share URLs */
+  rootPostId?: string;
   /** Whether the current user is the author */
   isOwnComment?: boolean;
   /** Whether the user is following the comment author */
@@ -263,6 +266,7 @@ export const CommentOptionsSheet = forwardRef<
   (
     {
       comment,
+      rootPostId,
       isOwnComment = false,
       isFollowingAuthor = false,
       onShare,
@@ -282,6 +286,7 @@ export const CommentOptionsSheet = forwardRef<
     const bottomSheetRef = useRef<BottomSheetModal>(null);
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
+    const shareServer = usePreferencesStore((s) => s.shareServer);
 
     const present = useCallback(() => {
       bottomSheetRef.current?.present();
@@ -320,15 +325,19 @@ export const CommentOptionsSheet = forwardRef<
     const handleShare = useCallback(async () => {
       triggerHaptic("light");
       try {
-        await Share.share({
-          message: comment?.content || "",
+      const commentId = comment?.id || "";
+      const root = rootPostId || "";
+        const url = `${getShareBaseUrl(shareServer)}/view_post?post_id=${commentId}&root=${root}#comment-${commentId}`;
+     await Share.share({
+          message: `What do you think about this? 🗳️\n${url}`,
+         url,
         });
       } catch {
         // User cancelled
       }
       dismiss();
       onShare?.();
-    }, [comment?.content, dismiss, onShare]);
+    }, [comment?.id, rootPostId, shareServer, dismiss, onShare]);
 
     const handleShareAsPost = useCallback(() => {
       triggerHaptic("medium");

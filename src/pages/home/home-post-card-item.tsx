@@ -190,8 +190,8 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       onBlockUser={handleBlockUser}
       onBlockPost={handleBlockPost}
       onReport={handleReport}
-      contentRevealed={contentRevealed}
-      shareUrl={`${getShareBaseUrl(shareServer)}/post/${post.id}`}
-    />
+    contentRevealed={contentRevealed}
+      shareUrl={`${getShareBaseUrl(shareServer)}/view_post?post_id=${post.id}`}
+  />
   );
 }, areHomePostCardItemPropsEqual);

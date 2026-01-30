@@ -1287,9 +1287,9 @@ export default function PostDetailScreen() {
          onFollowTopic={handleFollowTopic}
          onMorePress={handlePostMorePress}
          onRevealContent={handleRevealContent}
-         contentRevealed={revealedContent}
-         shareUrl={`${getShareBaseUrl(shareServer)}/post/${id}`}
-          showUrlCard={false}
+      contentRevealed={revealedContent}
+         shareUrl={`${getShareBaseUrl(shareServer)}/view_post?post_id=${id}`}
+       showUrlCard={false}
        />
 
         {/* Divider below post */}
@@ -1639,10 +1639,11 @@ export default function PostDetailScreen() {
         />
 
         {/* Comment options sheet */}
-        <CommentOptionsSheet
-          ref={optionsSheetRef}
-          comment={selectedComment}
-          isOwnComment={currentUser?.id === selectedComment?.author.id}
+       <CommentOptionsSheet
+         ref={optionsSheetRef}
+         comment={selectedComment}
+          rootPostId={id}
+         isOwnComment={currentUser?.id === selectedComment?.author.id}
           onDelete={handleDeleteComment}
           onBlockComment={handleBlockComment}
           onBlockUser={handleBlockCommentAuthor}

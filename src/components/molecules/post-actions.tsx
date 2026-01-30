@@ -176,10 +176,10 @@ export const PostActions = memo(function PostActions({
     // Default native share behavior
     if (shareUrl) {
       try {
-        await Share.share({
-          message: shareTitle ? `${shareTitle}\n${shareUrl}` : shareUrl,
-          url: shareUrl,
-          title: shareTitle,
+      await Share.share({
+          message: `What do you think about this? 🗳️\n${shareUrl}`,
+        url: shareUrl,
+        title: shareTitle,
         });
       } catch {
         // User cancelled or share failed - silent fail
