@@ -49,6 +49,7 @@ import {
   ReportSheetRef,
   UserProfileMenuSheet,
   UserProfileMenuSheetRef,
+  ProfileAboutTab,
 } from "@/src/components/molecules";
 import { PostCardItem } from "@/src/components/molecules/post-card-item";
 import { PostCardSkeletonList } from "@/src/components/molecules/post-card-skeleton";
@@ -745,9 +746,8 @@ const handleUnfollow = useCallback(() => {
 
     if (activeTab === 2) {
       return (
-        <ProfileEmptyState
-          tabType="about"
-          onSettingsPress={handleSettingsPress}
+        <ProfileAboutTab
+          userAddress={userAddress}
           isOwnProfile={isOwnProfile}
         />
       );
@@ -790,6 +790,7 @@ const handleUnfollow = useCallback(() => {
     isOwnProfile,
     isBlocked,
     handleUnblockUser,
+    userAddress,
   ]);
 
   const stickyTabsAnimatedStyle = useAnimatedStyle(() => {

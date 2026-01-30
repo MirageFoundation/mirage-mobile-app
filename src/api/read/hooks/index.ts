@@ -14,7 +14,9 @@ export {
   useUserFollowed,
   useUserFollowedByAddress,
   useUserBlocked,
+  useUserBlockedByAddress,
   usePreferences,
+  usePreferencesByAddress,
   useSimilarUsers,
   useSimilarUsersByAddress,
 } from "./use-user-lists";

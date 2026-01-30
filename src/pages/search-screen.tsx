@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -169,6 +169,7 @@ export function SearchScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const inputRef = useRef<TextInput>(null);
+  const { q } = useLocalSearchParams<{ q?: string }>();
 
   // Local state
   const [searchQuery, setSearchQuery] = useState("");
@@ -217,11 +218,14 @@ export function SearchScreen() {
 
   // Auto-focus the input when screen mounts
   useEffect(() => {
+    if (q) {
+      setSearchQuery(q);
+    }
     const timer = setTimeout(() => {
       inputRef.current?.focus();
     }, 100);
     return () => clearTimeout(timer);
-  }, []);
+  }, [q]);
 
   // Handlers
   const handleBack = useCallback(() => {

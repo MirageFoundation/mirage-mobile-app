@@ -45,6 +45,12 @@ export default function RootLayout() {
             animation: "slide_from_right",
           }}
         />
+        <Stack.Screen
+          name="blocked-list"
+          options={{
+            animation: "slide_from_right",
+          }}
+        />
       </Stack>
       <AuthSheet />
     </RootProvider>

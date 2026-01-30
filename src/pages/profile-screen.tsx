@@ -42,6 +42,7 @@ import {
   ProfileEmptyState,
   ReportSheet,
   ReportSheetRef,
+  ProfileAboutTab,
 } from "@/src/components/molecules";
 import { PostCardItem } from "@/src/components/molecules/post-card-item";
 import { PostCardSkeletonList } from "@/src/components/molecules/post-card-skeleton";
@@ -303,6 +304,10 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
     router.push("/settings");
   }, [router]);
 
+  const handleBlockedPress = useCallback(() => {
+    router.push("/blocked-list");
+  }, [router]);
+
   const handlePostPress = useCallback(
     (postId: string) => {
       router.push(`/post/${postId}`);
@@ -543,10 +548,10 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
  const ListFooterComponent = useCallback(() => {
     if (activeTab === 2) {
       return (
-        <ProfileEmptyState
-          tabType="about"
-          onSettingsPress={handleSettingsPress}
+        <ProfileAboutTab
+          userAddress={user?.walletAddress}
           isOwnProfile={true}
+          onBlockedPress={handleBlockedPress}
         />
       );
     }
@@ -585,6 +590,8 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
     isFetchingNextPage,
     listData.length,
     handleSettingsPress,
+    user?.walletAddress,
+    handleBlockedPress,
   ]);
 
   const stickyTabsAnimatedStyle = useAnimatedStyle(() => {
