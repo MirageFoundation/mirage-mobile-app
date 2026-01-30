@@ -320,10 +320,10 @@ export const PostOptionsSheet = forwardRef<
           }
         case "more": {
           try {
-            await Share.share({
+          await Share.share({
                 message: getShareMessage(),
-              url: getShareUrl(),
-              title: post?.title,
+            url: getShareUrl(),
+            title: post?.title,
               });
             } catch {
               // User cancelled
