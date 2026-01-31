@@ -11,10 +11,12 @@
  * - Background processing - users can continue using the app
  * - Per-action success/failure callbacks
  * - Automatic retry support (optional)
+ * - Instant cancel via Promise.race token (no waiting for native module)
  */
 
 import { create } from "zustand";
 import { InteractionManager } from "react-native";
+import { cancelPow } from "@/src/wallet";
 
 export type PowActionType =
   | "upvote"
@@ -49,7 +51,6 @@ export interface PowQueueState {
   totalCount: number;
   currentProgress: number;
   lastError: Error | null;
-  /** Set when an action just completed - used by UI to show result */
   lastCompletedAction: { type: PowActionType; success: boolean } | null;
 }
 
@@ -59,17 +60,16 @@ export interface PowQueueActions {
   updateProgress: (progress: number) => void;
   clear: () => void;
   reset: () => void;
-  /** Called by UI after showing result to continue processing */
   continueProcessing: () => void;
+  cancelAction: (actionId: string) => boolean;
 }
 
 type PowQueueStore = PowQueueState & PowQueueActions;
 
-/** Delay before processing next action (to show success/error state) */
 const RESULT_DISPLAY_DELAY_MS = 800;
-
-/** Additional delay after successful action to let backend sync */
 const SUCCESS_SYNC_DELAY_MS = 500;
+const NATIVE_CLEANUP_TIMEOUT_MS = 500;
+
 let actionIdCounter = 0;
 
 export const generateActionId = (): string => {
@@ -139,8 +139,8 @@ export const getSuccessLabel = (type: PowActionType): string => {
   }
 };
 
-// Flag to prevent concurrent processNext calls
 let isProcessingLock = false;
+let currentCancelReject: ((reason?: unknown) => void) | null = null;
 
 export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   queue: [],
@@ -153,11 +153,13 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   lastCompletedAction: null,
 
   enqueue: <T>(action: PowAction<T>) => {
-    // Call optimistic update immediately
     action.onOptimisticUpdate?.();
 
     const state = get();
-    const wasIdle = !state.isProcessing && !state.currentAction && state.queue.length === 0;
+    const wasIdle =
+      !state.isProcessing &&
+      !state.currentAction &&
+      state.queue.length === 0;
 
     set({
       queue: [...state.queue, action as PowAction],
@@ -165,38 +167,66 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       isProcessing: true,
     });
 
-    // Only start processing if we were idle
     if (wasIdle) {
-      // Use InteractionManager to defer processing until after UI updates complete
-      // This prevents blocking touch handlers and animations
       InteractionManager.runAfterInteractions(() => {
-        setTimeout(() => get().processNext(), 16); // One frame delay
+        setTimeout(() => get().processNext(), 16);
       });
     }
   },
 
+  cancelAction: (actionId: string): boolean => {
+    const state = get();
+
+    if (state.currentAction?.id === actionId) {
+      cancelPow();
+
+      if (currentCancelReject) {
+        currentCancelReject(new Error("pow_cancelled"));
+        currentCancelReject = null;
+      }
+
+      set({
+        currentAction: null,
+        currentProgress: 0,
+        isProcessing: state.queue.length > 0,
+        totalCount: Math.max(0, state.totalCount - 1),
+        lastCompletedAction: null,
+      });
+      return true;
+    }
+
+    const idx = state.queue.findIndex((a) => a.id === actionId);
+    if (idx !== -1) {
+      const newQueue = [...state.queue];
+      newQueue.splice(idx, 1);
+      set({
+        queue: newQueue,
+        totalCount: Math.max(0, state.totalCount - 1),
+      });
+      return true;
+    }
+
+    return false;
+  },
+
   processNext: async () => {
-    // Prevent concurrent execution
     if (isProcessingLock) {
       return;
     }
 
     const state = get();
 
-    // Guard: already processing an action
     if (state.currentAction) {
       return;
     }
 
-    // Guard: nothing in queue
     if (state.queue.length === 0) {
       set({
         isProcessing: false,
         currentAction: null,
         currentProgress: 0,
       });
-      
-      // Reset counts after delay
+
       setTimeout(() => {
         const currentState = get();
         if (!currentState.isProcessing && currentState.queue.length === 0) {
@@ -210,10 +240,8 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       return;
     }
 
-    // Lock processing
     isProcessingLock = true;
 
-    // Get the next action from queue
     const [nextAction, ...remainingQueue] = state.queue;
 
     set({
@@ -223,42 +251,71 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       lastCompletedAction: null,
     });
 
-   try {
-     const result = await nextAction.execute();
-     nextAction.onSuccess?.(result);
+    let wasCancelled = false;
+    let executePromise: Promise<unknown> | null = null;
 
-     set((s) => ({
-       completedCount: s.completedCount + 1,
-       lastError: null,
-       lastCompletedAction: { type: nextAction.type, success: true },
-     }));
+    const cancelPromise = new Promise<never>((_, reject) => {
+      currentCancelReject = reject;
+    });
+    cancelPromise.catch(() => {});
 
-     // Additional delay after success to let backend sync block hash
-     await new Promise((resolve) => setTimeout(resolve, SUCCESS_SYNC_DELAY_MS));
-   } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      nextAction.onRollback?.();
-      nextAction.onError?.(err);
+    try {
+      executePromise = nextAction.execute();
+      const result = await Promise.race([executePromise, cancelPromise]);
+
+      currentCancelReject = null;
+      nextAction.onSuccess?.(result);
 
       set((s) => ({
         completedCount: s.completedCount + 1,
-        lastError: err,
-        lastCompletedAction: { type: nextAction.type, success: false },
+        lastError: null,
+        lastCompletedAction: { type: nextAction.type, success: true },
       }));
-    } finally {
-      // Clear current action
-      set({ currentAction: null, currentProgress: 0 });
-      
-      // Unlock processing
-      isProcessingLock = false;
 
-      // Schedule next action after delay (to show result)
-      // Use InteractionManager to not block UI during the delay
-      setTimeout(() => {
-        InteractionManager.runAfterInteractions(() => {
-          get().processNext();
+      await new Promise((resolve) =>
+        setTimeout(resolve, SUCCESS_SYNC_DELAY_MS)
+      );
+    } catch (error) {
+      currentCancelReject = null;
+
+      const msg = String((error as Error)?.message || "");
+      if (msg === "pow_cancelled") {
+        wasCancelled = true;
+      } else {
+        const err = error instanceof Error ? error : new Error(String(error));
+        nextAction.onRollback?.();
+        nextAction.onError?.(err);
+
+        set((s) => ({
+          completedCount: s.completedCount + 1,
+          lastError: err,
+          lastCompletedAction: { type: nextAction.type, success: false },
+        }));
+      }
+    } finally {
+      if (wasCancelled) {
+        const nativeCleanup = executePromise
+          ? executePromise.catch(() => {})
+          : Promise.resolve();
+        const maxWait = new Promise((r) =>
+          setTimeout(r, NATIVE_CLEANUP_TIMEOUT_MS)
+        );
+
+        Promise.race([nativeCleanup, maxWait]).then(() => {
+          isProcessingLock = false;
+          if (get().queue.length > 0) {
+            get().processNext();
+          }
         });
-      }, RESULT_DISPLAY_DELAY_MS);
+      } else {
+        isProcessingLock = false;
+        set({ currentAction: null, currentProgress: 0 });
+        setTimeout(() => {
+          InteractionManager.runAfterInteractions(() => {
+            get().processNext();
+          });
+        }, RESULT_DISPLAY_DELAY_MS);
+      }
     }
   },
 
@@ -282,6 +339,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
 
   reset: () => {
     isProcessingLock = false;
+    currentCancelReject = null;
     set({
       queue: [],
       currentAction: null,
@@ -300,6 +358,7 @@ export const usePowQueue = () => {
 
   return {
     enqueue: store.enqueue,
+    cancelAction: store.cancelAction,
     clear: store.clear,
     reset: store.reset,
     isProcessing: store.isProcessing,

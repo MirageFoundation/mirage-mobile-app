@@ -35,14 +35,15 @@ export const PowQueueToast = () => {
   const { theme, rt } = useUnistyles();
   const insets = useSafeAreaInsets();
 
-  const {
-    isProcessing,
-    currentAction,
-    completedCount,
-    totalCount,
-    currentProgress,
-    lastCompletedAction,
-  } = usePowQueueStore();
+ const {
+   isProcessing,
+   currentAction,
+   completedCount,
+   totalCount,
+   currentProgress,
+   lastCompletedAction,
+   queue,
+ } = usePowQueueStore();
 
   const translateY = useRef(new Animated.Value(-100)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -62,12 +63,12 @@ export const PowQueueToast = () => {
   const isShowingResult = currentAction === null && lastCompletedAction !== null;
   const isShowingProcessing = currentAction !== null;
 
-  // Get display label
-  const displayLabel = isShowingResult
-    ? (lastCompletedAction.success 
-        ? getSuccessLabel(lastCompletedAction.type)
-        : "Failed")
-    : (currentAction?.label || "Processing...");
+ // Get display label
+ const displayLabel = isShowingResult
+   ? (lastCompletedAction.success 
+       ? getSuccessLabel(lastCompletedAction.type)
+       : "Failed")
+    : (currentAction?.label || queue[0]?.label || "Processing...");
 
   // Animate in
   const animateIn = () => {
@@ -137,21 +138,22 @@ export const PowQueueToast = () => {
     }
   }, [currentAction?.id]);
 
- // Dismiss when processing ends (after showing final result)
- useEffect(() => {
-    // Dismiss when processing ends and we're showing the final result
-    // Don't wait for lastCompletedAction to clear - dismiss while still showing success/fail
-    if (!isProcessing && !currentAction && lastCompletedAction && isVisible) {
-      // Show the result briefly, then dismiss
-     if (dismissTimeoutRef.current) {
-       clearTimeout(dismissTimeoutRef.current);
-     }
-     dismissTimeoutRef.current = setTimeout(() => {
-       animateOut();
-      }, 1000); // Show result for 1 second before dismissing
-   }
-   
-   return () => {
+// Dismiss when processing ends (after showing final result)
+useEffect(() => {
+    if (!isProcessing && !currentAction && isVisible) {
+      if (dismissTimeoutRef.current) {
+        clearTimeout(dismissTimeoutRef.current);
+      }
+      if (lastCompletedAction) {
+        dismissTimeoutRef.current = setTimeout(() => {
+          animateOut();
+        }, 1000);
+      } else {
+        animateOut();
+      }
+    }
+
+    return () => {
       if (dismissTimeoutRef.current) {
         clearTimeout(dismissTimeoutRef.current);
       }
