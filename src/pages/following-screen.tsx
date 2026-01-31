@@ -78,6 +78,9 @@ export function FollowingScreen() {
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
 
+  const lastFetchTime = useRef(0);
+  const isFetchingRef = useRef(false);
+
   // Selected post for options
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
@@ -577,8 +580,18 @@ export function FollowingScreen() {
   }, [followLoadingUsers]);
 
   const handleEndReached = useCallback(() => {
-    if (hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
+    const now = Date.now();
+    if (
+      hasNextPage &&
+      !isFetchingNextPage &&
+      !isFetchingRef.current &&
+      now - lastFetchTime.current > 1000
+    ) {
+      lastFetchTime.current = now;
+      isFetchingRef.current = true;
+      fetchNextPage().finally(() => {
+        isFetchingRef.current = false;
+      });
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
@@ -799,9 +812,9 @@ export function FollowingScreen() {
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}
         refreshControl={refreshControl}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.3}
-      />
+       onEndReached={handleEndReached}
+        onEndReachedThreshold={1.5}
+     />
 
       {/* Post Options Sheet */}
       <PostOptionsSheet

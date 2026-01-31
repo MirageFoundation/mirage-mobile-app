@@ -47,6 +47,7 @@ type PostCardProps = {
   onBlockPost?: () => void;
   onReport?: () => void;
   onRevealContent?: () => void;
+  onMediaPress?: () => void;
   contentRevealed?: boolean;
   shareUrl?: string;
   /** Whether to show the URL card/Play Now row (default: true) */
@@ -103,6 +104,7 @@ export const PostCard = memo(function PostCard({
   onBlockPost,
   onReport,
   onRevealContent,
+  onMediaPress: onMediaPressProp,
   contentRevealed = false,
   shareUrl,
   showUrlCard = true,
@@ -149,8 +151,12 @@ export const PostCard = memo(function PostCard({
   const [showMediaPreview, setShowMediaPreview] = useState(false);
 
   const handleMediaPress = useCallback(() => {
-    setShowMediaPreview(true);
-  }, []);
+    if (onMediaPressProp) {
+      onMediaPressProp();
+    } else {
+      setShowMediaPreview(true);
+    }
+  }, [onMediaPressProp]);
 
   const handleCloseMediaPreview = useCallback(() => {
     setShowMediaPreview(false);

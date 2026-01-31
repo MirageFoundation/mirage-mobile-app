@@ -1069,9 +1069,9 @@ useEffect(() => {
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}
         refreshControl={refreshControl}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.3}
-      />
+       onEndReached={handleEndReached}
+        onEndReachedThreshold={1.5}
+     />
 
       {/* Adult Content Permission Popup */}
       <AdultContentPopup

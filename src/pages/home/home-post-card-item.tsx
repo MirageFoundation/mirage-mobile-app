@@ -184,12 +184,13 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       onLikePress={handleLikePress}
       onDislikePress={handleDislikePress}
       onCommentPress={handleCommentPress}
-      onFollowUser={handleFollowUser}
-      onFollowTopic={handleFollowTopic}
-      onRevealContent={handleRevealContent}
-      onBlockUser={handleBlockUser}
-      onBlockPost={handleBlockPost}
-      onReport={handleReport}
+     onFollowUser={handleFollowUser}
+     onFollowTopic={handleFollowTopic}
+     onRevealContent={handleRevealContent}
+     onBlockUser={handleBlockUser}
+     onBlockPost={handleBlockPost}
+     onReport={handleReport}
+    onMediaPress={handlePostPress}
     contentRevealed={contentRevealed}
       shareUrl={`${getShareBaseUrl(shareServer)}/view_post?post_id=${post.id}`}
   />

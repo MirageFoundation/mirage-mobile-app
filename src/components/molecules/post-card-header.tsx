@@ -77,12 +77,12 @@ export const PostCardHeader = memo(function PostCardHeader({
               •
             </Text>
           )}
-          <TimeAgo
-            timestamp={createdAt}
-            showSuffix={false}
-            size="sm"
-            style={{ color: theme.colors.text.subtle }}
-          />
+         <TimeAgo
+           timestamp={createdAt}
+           showSuffix={false}
+            size="md"
+           style={{ color: theme.colors.text.subtle }}
+         />
           <Text size="sm" style={{ color: theme.colors.text.subtle }}>
             •
           </Text>
