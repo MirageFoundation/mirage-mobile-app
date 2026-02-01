@@ -17,7 +17,8 @@ export default function RootLayout() {
         <Stack.Screen
           name="post/[id]"
           options={{
-            animation: "slide_from_right",
+            animation: "fade",
+            animationDuration: 250,
           }}
         />
         <Stack.Screen

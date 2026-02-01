@@ -56,6 +56,7 @@ import {
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Animated, {
   Easing,
+  FadeInUp,
   interpolate,
   runOnJS,
   useAnimatedReaction,
@@ -66,11 +67,34 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { LinearGradient } from "expo-linear-gradient";
+import { getLastPressedPostY } from "@/src/utils/post-transition";
 
 export default function PostDetailScreen() {
   const { id, highlight } = useLocalSearchParams<{ id: string; highlight?: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+
+  const pressedY = useMemo(() => getLastPressedPostY(), []);
+  const headerHeight = insets.top + 40;
+  const initialTranslateY = pressedY > 0 ? pressedY - headerHeight : 0;
+
+  const postTranslateY = useSharedValue(initialTranslateY);
+  const postOpacity = useSharedValue(pressedY > 0 ? 0 : 1);
+
+  useEffect(() => {
+    if (pressedY > 0) {
+      postOpacity.value = withTiming(1, { duration: 200 });
+      postTranslateY.value = withTiming(0, {
+        duration: 400,
+        easing: Easing.out(Easing.cubic),
+      });
+    }
+  }, []);
+
+  const postEnteringStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: postTranslateY.value }],
+    opacity: postOpacity.value,
+  }));
   const { theme } = useUnistyles();
   const { requireAuth, isLoggedIn } = useAuthGuard();
 
@@ -1274,27 +1298,24 @@ export default function PostDetailScreen() {
     }
 
     return (
-      <View onLayout={handlePostHeaderLayout}>
-        {/* Full post card */}
-       <PostCard
-         post={displayPost}
-         isOwnPost={currentUser?.id === displayPost.author.id}
-         isTopicFollowed={displayPost?.topic ? followedTopics.includes(displayPost.topic) : false}
-         screenActive={screenActive}
-         onLikePress={handleLikePost}
-         onDislikePress={handleDislikePost}
-         onFollowUser={handleFollowPost}
-         onFollowTopic={handleFollowTopic}
-         onMorePress={handlePostMorePress}
-         onRevealContent={handleRevealContent}
-      contentRevealed={revealedContent}
-         shareUrl={`${getShareBaseUrl(shareServer)}/view_post?post_id=${id}`}
-       showUrlCard={false}
-       />
-
-        {/* Divider below post */}
+      <Animated.View style={postEnteringStyle} onLayout={handlePostHeaderLayout}>
+        <PostCard
+          post={displayPost}
+          isOwnPost={currentUser?.id === displayPost.author.id}
+          isTopicFollowed={displayPost?.topic ? followedTopics.includes(displayPost.topic) : false}
+          screenActive={screenActive}
+          onLikePress={handleLikePost}
+          onDislikePress={handleDislikePost}
+          onFollowUser={handleFollowPost}
+          onFollowTopic={handleFollowTopic}
+          onMorePress={handlePostMorePress}
+          onRevealContent={handleRevealContent}
+          contentRevealed={revealedContent}
+          shareUrl={`${getShareBaseUrl(shareServer)}/view_post?post_id=${id}`}
+          showUrlCard={false}
+        />
         <View style={styles.divider} />
-      </View>
+      </Animated.View>
     );
   }, [
     displayPost,
@@ -1312,27 +1333,30 @@ export default function PostDetailScreen() {
     screenActive,
     theme.colors.background.subtle,
     handlePostHeaderLayout,
+    postEnteringStyle,
   ]);
 
   const renderComment = useCallback(
     ({ item }: { item: Comment }) => (
-      <CommentThread
-        comment={item}
-        currentUserId={currentUser?.id}
-        highlightedCommentId={highlightedCommentId}
-        onAuthorPress={(authorId) => {
-          router.push(`/user/${authorId}`);
-        }}
-        onLikePress={(commentId, hasLiked, hasDisliked, likes) =>
-          handleLikeComment(commentId, hasLiked, hasDisliked, likes)
-        }
-        onDislikePress={(commentId, hasLiked, hasDisliked, likes) =>
-          handleDislikeComment(commentId, hasLiked, hasDisliked, likes)
-        }
-        onReplyPress={handleReplyToComment}
-        onMorePress={handleMoreOptions}
-        showDivider={true}
-      />
+      <Animated.View entering={FadeInUp.duration(250).delay(100)}>
+        <CommentThread
+          comment={item}
+          currentUserId={currentUser?.id}
+          highlightedCommentId={highlightedCommentId}
+          onAuthorPress={(authorId) => {
+            router.push(`/user/${authorId}`);
+          }}
+          onLikePress={(commentId, hasLiked, hasDisliked, likes) =>
+            handleLikeComment(commentId, hasLiked, hasDisliked, likes)
+          }
+          onDislikePress={(commentId, hasLiked, hasDisliked, likes) =>
+            handleDislikeComment(commentId, hasLiked, hasDisliked, likes)
+          }
+          onReplyPress={handleReplyToComment}
+          onMorePress={handleMoreOptions}
+          showDivider={true}
+        />
+      </Animated.View>
     ),
     [
       currentUser,

@@ -2,7 +2,8 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { logPress } from "@/src/utils/press-logger";
-import { memo, useCallback, useMemo, useState } from "react";
+import { setLastPressedPostY } from "@/src/utils/post-transition";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   Linking,
   Pressable,
@@ -136,10 +137,19 @@ export const PostCard = memo(function PostCard({
     [body, media],
   );
 
+  const containerRef = useRef<View>(null);
+
   const handlePress = useCallback(() => {
     triggerHaptic("selection");
     logPress({ name: "post_card", postId: post.id });
-    onPress?.();
+    if (containerRef.current) {
+      containerRef.current.measureInWindow((_x, y) => {
+        setLastPressedPostY(y);
+        onPress?.();
+      });
+    } else {
+      onPress?.();
+    }
   }, [onPress, post.id]);
 
   const handlePlayNowPress = useCallback(() => {
@@ -163,7 +173,7 @@ export const PostCard = memo(function PostCard({
   }, []);
 
   return (
-    <Pressable onPress={handlePress} style={[styles.container, style]}>
+    <Pressable ref={containerRef} onPress={handlePress} style={[styles.container, style]}>
       <PostCardHeader
         author={author}
         topic={topic}
