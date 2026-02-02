@@ -174,7 +174,8 @@ export default function PostDetailScreen() {
   const toast = useToast();
 
   // Track follow loading state
-  const [isFollowLoading, setIsFollowLoading] = useState(false);
+const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Set());
+  const followLoadingRef = useRef<Set<string>>(new Set());
 
   // Global content moderation state (syncs to home screen)
   const globalHidePost = useContentModerationStore((s) => s.hidePost);
@@ -410,8 +411,9 @@ export default function PostDetailScreen() {
   }, [commentsData]);
 
   // Local state for optimistic updates
-  const [localPostUpdates, setLocalPostUpdates] = useState<Partial<Post>>({});
-  const [localComments, setLocalComments] = useState<Comment[]>([]);
+ const [localPostUpdates, setLocalPostUpdates] = useState<Partial<Post>>({});
+  const [localTopicFollowed, setLocalTopicFollowed] = useState<boolean | null>(null);
+ const [localComments, setLocalComments] = useState<Comment[]>([]);
   // Track optimistic replies to API comments (parentId -> optimistic comments)
   const [optimisticReplies, setOptimisticReplies] = useState<
     Record<string, Comment[]>
@@ -842,44 +844,39 @@ export default function PostDetailScreen() {
     );
   }, [displayPost, localPostUpdates, postVoteHandler]);
 
-  const handleFollowPost = useCallback(() => {
-    const currentPost = displayPost;
-    if (!currentPost || isFollowLoading) return;
+const handleFollowPost = useCallback(() => {
+ const currentPost = displayPost;
+    if (!currentPost || followLoadingRef.current.has(currentPost.author.id)) return;
 
     const authorId = currentPost.author.id;
     const authorUsername = currentPost.author.username;
     const isCurrentlyFollowing =
       localPostUpdates.isFollowing ?? currentPost.isFollowing ?? false;
 
+    followLoadingRef.current.add(authorId);
+
+    setLocalPostUpdates((prev) => ({
+      ...prev,
+      isFollowing: !isCurrentlyFollowing,
+    }));
+
     requireAuth(async () => {
       const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
       const actionPast = isCurrentlyFollowing ? "Unfollowed" : "Followed";
 
-      // Show loading toast
       const toastId = toast.loading(
         `${action} @${authorUsername}`,
         "Computing proof of work...",
       );
 
-      // Use setTimeout to allow toast to render before heavy operations
       setTimeout(async () => {
-        // Set loading state
-        setIsFollowLoading(true);
-
-        // Optimistic update
-        setLocalPostUpdates((prev) => ({
-          ...prev,
-          isFollowing: !isCurrentlyFollowing,
-        }));
-
         try {
-          await toggleFollowMutation.mutateAsync({
-            userAddress: authorId,
-            isCurrentlyFollowing,
-          });
+         await toggleFollowMutation.mutateAsync({
+           userAddress: authorId,
+           isCurrentlyFollowing,
+         });
 
-          // Update to success
-          toast.update(toastId, {
+         toast.update(toastId, {
             type: "success",
             title: `${actionPast} @${authorUsername}`,
             description: undefined,
@@ -913,7 +910,6 @@ export default function PostDetailScreen() {
             });
             setTimeout(() => toast.dismiss(toastId), 3000);
           } else {
-            // Actual error - revert optimistic update
             setLocalPostUpdates((prev) => ({
               ...prev,
               isFollowing: isCurrentlyFollowing,
@@ -928,26 +924,27 @@ export default function PostDetailScreen() {
             setTimeout(() => toast.dismiss(toastId), 4000);
           }
         } finally {
-          setIsFollowLoading(false);
+          followLoadingRef.current.delete(authorId);
         }
       }, 0);
     });
-  }, [
-    requireAuth,
-    displayPost,
-    localPostUpdates.isFollowing,
-    isFollowLoading,
-    toggleFollowMutation,
-    toast,
-  ]);
+}, [
+  requireAuth,
+  displayPost,
+  localPostUpdates.isFollowing,
+  toggleFollowMutation,
+  toast,
+]);
 
-  const handleFollowTopic = useCallback(() => {
-    if (!displayPost?.topic) return;
-    const topic = displayPost.topic;
-    const isCurrentlyFollowed = followedTopics.includes(topic);
+ const handleFollowTopic = useCallback(() => {
+   if (!displayPost?.topic) return;
+   const topic = displayPost.topic;
+    const isCurrentlyFollowed = localTopicFollowed ?? followedTopics.includes(topic);
 
-    requireAuth(async () => {
-      const action = isCurrentlyFollowed ? "Unfollowing" : "Following";
+    setLocalTopicFollowed(!isCurrentlyFollowed);
+
+   requireAuth(async () => {
+     const action = isCurrentlyFollowed ? "Unfollowing" : "Following";
       const actionPast = isCurrentlyFollowed ? "Unfollowed" : "Now following";
 
       // Show loading toast
@@ -998,8 +995,9 @@ export default function PostDetailScreen() {
               duration: 3000,
             });
             setTimeout(() => toast.dismiss(toastId), 3000);
-          } else {
-            console.error("Follow/unfollow topic failed:", error);
+         } else {
+            setLocalTopicFollowed(isCurrentlyFollowed);
+           console.error("Follow/unfollow topic failed:", error);
             toast.update(toastId, {
               type: "error",
               title: `Failed to ${action.toLowerCase()} #${topic}`,
@@ -1011,13 +1009,14 @@ export default function PostDetailScreen() {
         }
       }, 0);
     });
-  }, [
-    requireAuth,
-    displayPost?.topic,
-    followedTopics,
-    toggleFollowTopicMutation,
-    toast,
-  ]);
+ }, [
+   requireAuth,
+   displayPost?.topic,
+   followedTopics,
+    localTopicFollowed,
+   toggleFollowTopicMutation,
+   toast,
+ ]);
 
   const handleRevealContent = useCallback(() => {
     setRevealedContent(true);
@@ -1439,9 +1438,9 @@ useEffect(() => {
     reportHandler.requestReport(selectedComment.id, "comment");
   }, [selectedComment, reportHandler]);
 
-  const handleToggleFollowCommentAuthor = useCallback(() => {
-    if (!selectedComment || isFollowLoading) return;
-    const authorId = selectedComment.author.id;
+const handleToggleFollowCommentAuthor = useCallback(() => {
+    if (!selectedComment || followLoadingRef.current.has(selectedComment.author.id)) return;
+ const authorId = selectedComment.author.id;
     const authorUsername = selectedComment.author.username;
     const isCurrentlyFollowing = followedUsers.includes(authorId);
 
@@ -1453,41 +1452,48 @@ useEffect(() => {
         "Computing proof of work...",
       );
 
-      setTimeout(async () => {
-        setIsFollowLoading(true);
-        try {
+   setTimeout(async () => {
+        followLoadingRef.current.add(authorId);
+       setFollowLoadingUsers((prev) => new Set(prev).add(authorId));
+     try {
           await toggleFollowMutation.mutateAsync({
             userAddress: authorId,
             isCurrentlyFollowing,
           });
-          toast.update(toastId, {
+         toast.update(toastId, {
             type: "success",
             title: `${actionPast} @${authorUsername}`,
           });
+          setTimeout(() => toast.dismiss(toastId), 3000);
         } catch {
           toast.update(toastId, {
             type: "error",
             title: `Failed to ${action.toLowerCase()} @${authorUsername}`,
           });
-        } finally {
-          setIsFollowLoading(false);
-        }
-      }, 50);
-    });
-  }, [
-    selectedComment,
-    isFollowLoading,
-    followedUsers,
-    requireAuth,
-    toast,
-    toggleFollowMutation,
-  ]);
+          setTimeout(() => toast.dismiss(toastId), 4000);
+     } finally {
+          followLoadingRef.current.delete(authorId);
+         setFollowLoadingUsers((prev) => {
+           const next = new Set(prev);
+           next.delete(authorId);
+           return next;
+         });
+     }
+     }, 50);
+   });
+}, [
+ selectedComment,
+ followedUsers,
+  requireAuth,
+  toast,
+  toggleFollowMutation,
+]);
 
-  const handleFollowCommentAuthor = useCallback(
-    (authorId: string, isCurrentlyFollowing: boolean) => {
-      if (isFollowLoading) return;
+ const handleFollowCommentAuthor = useCallback(
+(authorId: string, isCurrentlyFollowing: boolean) => {
+      if (followLoadingRef.current.has(authorId)) return;
 
-      requireAuth(async () => {
+     requireAuth(async () => {
         const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
         const actionPast = isCurrentlyFollowing ? "Unfollowed" : "Followed";
         const toastId = toast.loading(
@@ -1495,30 +1501,38 @@ useEffect(() => {
           "Computing proof of work...",
         );
 
-        setTimeout(async () => {
-          setIsFollowLoading(true);
-          try {
+     setTimeout(async () => {
+          followLoadingRef.current.add(authorId);
+         setFollowLoadingUsers((prev) => new Set(prev).add(authorId));
+       try {
             await toggleFollowMutation.mutateAsync({
               userAddress: authorId,
               isCurrentlyFollowing,
             });
-            toast.update(toastId, {
+           toast.update(toastId, {
               type: "success",
               title: `${actionPast} user`,
             });
+            setTimeout(() => toast.dismiss(toastId), 3000);
           } catch {
             toast.update(toastId, {
               type: "error",
               title: `Failed to ${action.toLowerCase()} user`,
             });
-          } finally {
-            setIsFollowLoading(false);
-          }
+            setTimeout(() => toast.dismiss(toastId), 4000);
+       } finally {
+            followLoadingRef.current.delete(authorId);
+           setFollowLoadingUsers((prev) => {
+              const next = new Set(prev);
+              next.delete(authorId);
+              return next;
+            });
+        }
         }, 50);
       });
-    },
-    [isFollowLoading, requireAuth, toast, toggleFollowMutation],
-  );
+  },
+    [requireAuth, toast, toggleFollowMutation],
+ );
 
   // Handler for opening post options sheet
   const handlePostMorePress = useCallback(() => {
@@ -1650,13 +1664,13 @@ useEffect(() => {
         <PostCard
           post={displayPost}
           isOwnPost={currentUser?.id === displayPost.author.id}
-          isTopicFollowed={
-            displayPost?.topic
+         isTopicFollowed={
+            localTopicFollowed ?? (displayPost?.topic
               ? followedTopics.includes(displayPost.topic)
-              : false
-          }
-          screenActive={screenActive}
-          onLikePress={handleLikePost}
+              : false)
+         }
+        screenActive={screenActive}
+        onLikePress={handleLikePost}
           onDislikePress={handleDislikePost}
           onFollowUser={handleFollowPost}
           onFollowTopic={handleFollowTopic}
@@ -1680,12 +1694,12 @@ useEffect(() => {
     handleDislikePost,
     handleFollowPost,
     handleFollowTopic,
-    followedTopics,
-    handlePostMorePress,
-    handleRevealContent,
-    revealedContent,
-    isFollowLoading,
-    id,
+   followedTopics,
+    localTopicFollowed,
+  handlePostMorePress,
+ handleRevealContent,
+ revealedContent,
+ id,
     screenActive,
     theme.colors.background.subtle,
     handlePostHeaderLayout,
@@ -1710,9 +1724,9 @@ useEffect(() => {
           }
           onReplyPress={handleReplyToComment}
           onMorePress={handleMoreOptions}
-          followedUsers={followedUsers}
-          isFollowLoading={isFollowLoading}
-          onFollowPress={handleFollowCommentAuthor}
+       followedUsers={followedUsers}
+          followLoadingUsers={followLoadingUsers}
+        onFollowPress={handleFollowCommentAuthor}
           showDivider={true}
         />
       </Animated.View>
@@ -1724,9 +1738,9 @@ useEffect(() => {
       handleDislikeComment,
       handleReplyToComment,
       handleMoreOptions,
-      followedUsers,
-      isFollowLoading,
-      handleFollowCommentAuthor,
+    followedUsers,
+      followLoadingUsers,
+    handleFollowCommentAuthor,
     ],
   );
 

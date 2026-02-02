@@ -521,11 +521,11 @@ export function SearchScreen() {
                 >
                   {item.title}
                 </Text>
-            ) : item.content ? (
+              ) : item.content ? (
                 <View>
-                 <MarkdownContent content={item.content} />
-               </View>
-             ) : null}
+                  <MarkdownContent content={item.content} />
+                </View>
+              ) : null}
 
               {/* Upvotes + dot + comments */}
               <View style={styles.postResultMeta}>
@@ -1302,7 +1302,7 @@ const styles = StyleSheet.create((theme) => ({
   topicResultItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm + 4,
     paddingHorizontal: theme.spacing.md,
     gap: theme.spacing.sm,
   },
@@ -1343,7 +1343,7 @@ const styles = StyleSheet.create((theme) => ({
   userResultItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm + 4,
     paddingHorizontal: theme.spacing.md,
     gap: theme.spacing.md,
   },

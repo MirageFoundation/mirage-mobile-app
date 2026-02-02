@@ -418,14 +418,15 @@ export const CommentItem = ({
             </View>
           </View>
           <Pressable onPress={handlePress} style={styles.expandArea} />
-          {!isOwnComment && (
-            <FollowButton
-              isFollowing={isFollowingAuthor}
-              onPress={onFollowPress}
-              size="sm"
-              loading={isFollowLoading}
-            />
-          )}
+         {!isOwnComment && (
+           <FollowButton
+             isFollowing={isFollowingAuthor}
+             onPress={onFollowPress}
+             size="sm"
+             loading={isFollowLoading}
+              disabled={isFollowingAuthor}
+           />
+         )}
         </View>
 
         {/* Comment content - collapsible */}

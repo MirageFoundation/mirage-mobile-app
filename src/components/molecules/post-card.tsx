@@ -30,8 +30,8 @@ type PostCardProps = {
   /** Whether to show the follow button (default: true) */
   showFollowButton?: boolean;
   /** Whether the topic is followed */
-  isTopicFollowed?: boolean;
-  /** Whether video autoplay is allowed based on user settings and network */
+isTopicFollowed?: boolean;
+/** Whether video autoplay is allowed based on user settings and network */
   allowAutoplay?: boolean;
   /** Whether the screen/feed is active (for pausing videos) */
   screenActive?: boolean;
@@ -75,8 +75,8 @@ function arePostCardPropsEqual(
   if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
   if (prevProps.isVisible !== nextProps.isVisible) return false;
   if (prevProps.showFollowButton !== nextProps.showFollowButton) return false;
-  if (prevProps.isTopicFollowed !== nextProps.isTopicFollowed) return false;
-  if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
+ if (prevProps.isTopicFollowed !== nextProps.isTopicFollowed) return false;
+if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
   if (prevProps.screenActive !== nextProps.screenActive) return false;
   if (prevProps.contentRevealed !== nextProps.contentRevealed) return false;
   if (prevProps.shareUrl !== nextProps.shareUrl) return false;
@@ -90,8 +90,8 @@ export const PostCard = memo(function PostCard({
   isOwnPost = false,
   isVisible = false,
   showFollowButton = true,
-  isTopicFollowed = false,
-  allowAutoplay = true,
+isTopicFollowed = false,
+allowAutoplay = true,
   screenActive = true,
   onPress,
   onAuthorPress,
@@ -182,8 +182,8 @@ export const PostCard = memo(function PostCard({
         createdAt={createdAt}
         isOwnPost={isOwnPost}
         isFollowing={isFollowing}
-        isTopicFollowed={isTopicFollowed}
-        showFollowButton={showFollowButton}
+      isTopicFollowed={isTopicFollowed}
+      showFollowButton={showFollowButton}
         onAuthorPress={onAuthorPress}
         onFollowUser={onFollowUser}
         onFollowTopic={onFollowTopic}

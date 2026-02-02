@@ -19,9 +19,8 @@ type PostCardHeaderProps = {
   createdAt: Date | string | number;
   isOwnPost: boolean;
   isFollowing?: boolean;
-  isTopicFollowed?: boolean;
-  /** Whether to show the follow button (default: true) */
-  showFollowButton?: boolean;
+ isTopicFollowed?: boolean;
+ showFollowButton?: boolean;
   onAuthorPress?: () => void;
   onFollowUser?: () => void;
   onFollowTopic?: () => void;
@@ -34,14 +33,18 @@ export const PostCardHeader = memo(function PostCardHeader({
   createdAt,
   isOwnPost,
   isFollowing,
-  isTopicFollowed,
-  showFollowButton = true,
+ isTopicFollowed,
+ showFollowButton = true,
   onAuthorPress,
   onFollowUser,
   onFollowTopic,
   onMorePress,
 }: PostCardHeaderProps) {
   const { theme } = useUnistyles();
+
+  const isFollowingAll = topic
+    ? !!(isFollowing && isTopicFollowed)
+    : !!isFollowing;
 
   const handleAuthorPress = useCallback(() => {
     triggerHaptic("selection");
@@ -116,22 +119,30 @@ export const PostCardHeader = memo(function PostCardHeader({
                   hitSlop: { top: 12, bottom: 12, left: 12, right: 12 },
                 },
               }}
-            >
+           >
               <View
                 style={[
                   styles.followButton,
                   {
-                    backgroundColor: theme.colors.primary[500],
-                    borderColor: theme.colors.primary[500],
+                    backgroundColor: isFollowingAll
+                      ? "transparent"
+                      : theme.colors.primary[500],
+                    borderColor: isFollowingAll
+                      ? theme.colors.border.default
+                      : theme.colors.primary[500],
                   },
                 ]}
               >
                 <Text
                   size="xs"
                   weight="semibold"
-                  style={{ color: theme.colors.background.default }}
+                  style={{
+                    color: isFollowingAll
+                      ? theme.colors.text.default
+                      : theme.colors.background.default,
+                  }}
                 >
-                  Follow
+                  {isFollowingAll ? "Unfollow" : "Follow"}
                 </Text>
               </View>
             </MenuTrigger>
@@ -153,8 +164,7 @@ export const PostCardHeader = memo(function PostCardHeader({
                 },
               }}
             >
-              {/* Follow/Unfollow Topic Option */}
-              {topic && (
+             {topic && (
                 <MenuOption onSelect={handleFollowTopic}>
                   <View style={styles.menuOption}>
                     <Ionicons
@@ -181,7 +191,6 @@ export const PostCardHeader = memo(function PostCardHeader({
                 </MenuOption>
               )}
 
-              {/* Follow/Unfollow User Option */}
               <MenuOption onSelect={handleFollowUser}>
                 <View style={styles.menuOption}>
                   <Ionicons
@@ -261,8 +270,8 @@ const styles = StyleSheet.create((theme) => ({
     height: 22,
     paddingHorizontal: 10,
     borderWidth: 1,
-  },
-  menuOption: {
+ },
+ menuOption: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
