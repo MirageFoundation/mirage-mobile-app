@@ -170,12 +170,14 @@ export function SearchScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const inputRef = useRef<TextInput>(null);
-  const { q } = useLocalSearchParams<{ q?: string }>();
+  const { q, tab } = useLocalSearchParams<{ q?: string; tab?: string }>();
 
   // Local state
   const [searchQuery, setSearchQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
-  const [activeTab, setActiveTab] = useState<SearchTab>("posts");
+  const [activeTab, setActiveTab] = useState<SearchTab>(
+    tab === "topics" || tab === "users" ? tab : "posts",
+  );
 
   // State for viewing posts within a specific topic
   const [selectedTopic, setSelectedTopic] = useState<TopicInfo | null>(null);
@@ -221,6 +223,9 @@ export function SearchScreen() {
   useEffect(() => {
     if (q) {
       setSearchQuery(q);
+    }
+    if (tab === "topics" || tab === "users") {
+      setActiveTab(tab);
     }
     const timer = setTimeout(() => {
       inputRef.current?.focus();

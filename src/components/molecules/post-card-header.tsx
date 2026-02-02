@@ -22,6 +22,7 @@ type PostCardHeaderProps = {
  isTopicFollowed?: boolean;
  showFollowButton?: boolean;
   onAuthorPress?: () => void;
+  onTopicPress?: () => void;
   onFollowUser?: () => void;
   onFollowTopic?: () => void;
   onMorePress?: () => void;
@@ -36,6 +37,7 @@ export const PostCardHeader = memo(function PostCardHeader({
  isTopicFollowed,
  showFollowButton = true,
   onAuthorPress,
+  onTopicPress,
   onFollowUser,
   onFollowTopic,
   onMorePress,
@@ -50,6 +52,11 @@ export const PostCardHeader = memo(function PostCardHeader({
     triggerHaptic("selection");
     onAuthorPress?.();
   }, [onAuthorPress]);
+
+  const handleTopicPress = useCallback(() => {
+    triggerHaptic("selection");
+    onTopicPress?.();
+  }, [onTopicPress]);
 
   const handleMorePress = useCallback(() => {
     triggerHaptic("selection");
@@ -70,10 +77,16 @@ export const PostCardHeader = memo(function PostCardHeader({
     <View style={styles.header}>
       <View style={styles.authorSection}>
         <View style={styles.authorRow}>
-          {topic && (
-            <Text size="md" weight="bold" numberOfLines={1}>
-              #{topic}
-            </Text>
+         {topic && (
+            <Pressable
+              onPress={handleTopicPress}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+              style={({ pressed }) => [pressed && styles.usernameButtonPressed]}
+            >
+              <Text size="md" weight="bold" numberOfLines={1}>
+                #{topic}
+              </Text>
+            </Pressable>
           )}
           {topic && (
             <Text size="sm" style={{ color: theme.colors.text.subtle }}>

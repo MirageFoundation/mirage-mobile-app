@@ -207,6 +207,10 @@ export function FollowingScreen() {
     router.push(`/user/${authorId}`);
   }, [router]);
 
+  const handleTopicPress = useCallback((topic: string) => {
+    router.push(`/search?q=${encodeURIComponent(topic)}&tab=topics`);
+  }, [router]);
+
   // Create a ref map for posts by ID for quick lookup
   const postsByIdRef = useRef<Map<string, Post>>(new Map());
 
@@ -755,6 +759,7 @@ export function FollowingScreen() {
   const handlersRef = useRef({
     handlePostPress,
     handleAuthorPress,
+    handleTopicPress,
     handleMorePress,
     handleUpvote,
     handleDownvote,
@@ -771,6 +776,7 @@ export function FollowingScreen() {
     handlersRef.current = {
       handlePostPress,
       handleAuthorPress,
+      handleTopicPress,
       handleMorePress,
       handleUpvote,
       handleDownvote,
@@ -789,6 +795,7 @@ export function FollowingScreen() {
     setHandlers({
       onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
       onAuthorPress: (authorId) => handlersRef.current.handleAuthorPress(authorId),
+      onTopicPress: (topic) => handlersRef.current.handleTopicPress(topic),
       onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
       onLikePress: (postId, liked, disliked, likes) =>
         handlersRef.current.handleUpvote(postId, liked, disliked, likes),

@@ -76,6 +76,12 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     getHandlers().onAuthorPress?.(postRef.current.author.id);
   }, []);
 
+  const handleTopicPress = useCallback(() => {
+    const p = postRef.current;
+    if (!p.topic) return;
+    getHandlers().onTopicPress?.(p.topic);
+  }, []);
+
   const handleMorePress = useCallback(() => {
     getHandlers().onMorePress?.(postRef.current.id);
   }, []);
@@ -180,6 +186,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       screenActive={feedActive}
       onPress={handlePostPress}
       onAuthorPress={handleAuthorPress}
+      onTopicPress={handleTopicPress}
       onMorePress={handleMorePress}
       onLikePress={handleLikePress}
       onDislikePress={handleDislikePress}

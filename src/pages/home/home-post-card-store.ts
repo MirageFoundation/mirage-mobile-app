@@ -11,6 +11,7 @@ type VoteOverride = {
 type HomePostCardHandlers = {
   onPostPress?: (postId: string) => void;
   onAuthorPress?: (authorId: string) => void;
+  onTopicPress?: (topic: string) => void;
   onMorePress?: (postId: string) => void;
   onLikePress?: (
     postId: string,

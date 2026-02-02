@@ -844,6 +844,16 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
     );
   }, [displayPost, localPostUpdates, postVoteHandler]);
 
+const handleAuthorPress = useCallback(() => {
+  if (!displayPost) return;
+  router.push(`/user/${displayPost.author.id}`);
+}, [displayPost, router]);
+
+const handleTopicPress = useCallback(() => {
+  if (!displayPost?.topic) return;
+  router.push(`/search?q=${encodeURIComponent(displayPost.topic)}&tab=topics`);
+}, [displayPost, router]);
+
 const handleFollowPost = useCallback(() => {
  const currentPost = displayPost;
     if (!currentPost || followLoadingRef.current.has(currentPost.author.id)) return;
@@ -1670,6 +1680,8 @@ const handleToggleFollowCommentAuthor = useCallback(() => {
               : false)
          }
         screenActive={screenActive}
+        onAuthorPress={handleAuthorPress}
+        onTopicPress={handleTopicPress}
         onLikePress={handleLikePost}
           onDislikePress={handleDislikePost}
           onFollowUser={handleFollowPost}

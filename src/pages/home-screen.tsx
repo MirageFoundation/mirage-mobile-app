@@ -320,6 +320,10 @@ export function HomeScreen() {
     router.push(`/user/${authorId}`);
   }, [router]);
 
+  const handleTopicPress = useCallback((topic: string) => {
+    router.push(`/search?q=${encodeURIComponent(topic)}&tab=topics`);
+  }, [router]);
+
   const postsByIdRef = useRef<Map<string, Post>>(new Map());
 
   useEffect(() => {
@@ -991,6 +995,7 @@ export function HomeScreen() {
 const handlersRef = useRef({
   handlePostPress,
   handleAuthorPress,
+  handleTopicPress,
   handleMorePress,
   handleUpvote,
   handleDownvote,
@@ -1008,6 +1013,7 @@ useEffect(() => {
   handlersRef.current = {
     handlePostPress,
     handleAuthorPress,
+    handleTopicPress,
     handleMorePress,
     handleUpvote,
     handleDownvote,
@@ -1026,6 +1032,7 @@ useEffect(() => {
   setHandlers({
     onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
     onAuthorPress: (authorId) => handlersRef.current.handleAuthorPress(authorId),
+    onTopicPress: (topic) => handlersRef.current.handleTopicPress(topic),
     onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
     onLikePress: (postId, liked, disliked, likes) =>
       handlersRef.current.handleUpvote(postId, liked, disliked, likes),

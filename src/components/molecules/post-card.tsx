@@ -37,6 +37,7 @@ isTopicFollowed?: boolean;
   screenActive?: boolean;
   onPress?: () => void;
   onAuthorPress?: () => void;
+  onTopicPress?: () => void;
   onFollowUser?: () => void;
   onFollowTopic?: () => void;
   onMorePress?: () => void;
@@ -95,6 +96,7 @@ allowAutoplay = true,
   screenActive = true,
   onPress,
   onAuthorPress,
+  onTopicPress,
   onFollowUser,
   onFollowTopic,
   onMorePress,
@@ -184,7 +186,8 @@ allowAutoplay = true,
         isFollowing={isFollowing}
       isTopicFollowed={isTopicFollowed}
       showFollowButton={showFollowButton}
-        onAuthorPress={onAuthorPress}
+       onAuthorPress={onAuthorPress}
+        onTopicPress={onTopicPress}
         onFollowUser={onFollowUser}
         onFollowTopic={onFollowTopic}
         onMorePress={onMorePress}
