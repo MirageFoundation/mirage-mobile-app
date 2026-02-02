@@ -22,24 +22,24 @@ const ADULT_CONTENT_TAGS = ["porn", "violence", "gore", "death"] as const;
 type ContentTag = (typeof CONTENT_TAGS)[number];
 
 const normalizeContentTypes = (types: ContentType[]): ContentType[] => {
-  if (!types || types.length === 0) return ["none"];
-  if (types.includes("all")) return ["all"];
-  if (types.includes("none")) return ["none"];
+  if (!types || types.length === 0) return [];
+ if (types.includes("all")) return ["all"];
+  if (types.includes("none")) return [];
 
-  const unique = Array.from(new Set(types));
-  const filtered = unique.filter((type) => type !== "all" && type !== "none");
+ const unique = Array.from(new Set(types));
+ const filtered = unique.filter((type) => type !== "all" && type !== "none");
 
-  return filtered.length === 0 ? ["none"] : filtered;
+  return filtered.length === 0 ? [] : filtered;
 };
 
 export const getAllowedTagsFromContentTypes = (
   types: ContentType[]
 ): string => {
-  const normalized = normalizeContentTypes(types);
-  if (normalized.includes("all")) return CONTENT_TAGS.join(",");
-  if (normalized.includes("none")) return "";
+ const normalized = normalizeContentTypes(types);
+ if (normalized.includes("all")) return CONTENT_TAGS.join(",");
+  if (normalized.length === 0) return "";
 
-  const selected = new Set(normalized);
+ const selected = new Set(normalized);
   return CONTENT_TAGS.filter((tag) => selected.has(tag)).join(",");
 };
 
@@ -204,41 +204,40 @@ export const usePreferencesStore = create<PreferencesState>()(
           adultContentEnabled: isAdultContentEnabled(normalized),
         });
       },
-      toggleContentType: (type) =>
-        set((state) => {
-          // If selecting "all", clear others and set only "all"
-          if (type === "all") {
-            return {
-              selectedContentTypes: ["all"],
-              adultContentEnabled: true,
-            };
-          }
-          // If selecting "none", clear others and set only "sensitive" (safe content only)
-          if (type === "none") {
-            return {
-              selectedContentTypes: ["sensitive"],
-              adultContentEnabled: false,
-            };
-          }
+     toggleContentType: (type) =>
+       set((state) => {
+         if (type === "all") {
+           return {
+             selectedContentTypes: ["all"],
+             adultContentEnabled: true,
+           };
+         }
+        if (type === "none") {
+          return {
+             selectedContentTypes: [],
+            adultContentEnabled: false,
+          };
+        }
 
-          // Remove "all" and "none" if selecting specific types
-          let newTypes = state.selectedContentTypes.filter(
-            (t) => t !== "all" && t !== "none"
-          );
-
-          // Toggle the selected type
-          if (newTypes.includes(type)) {
-            newTypes = newTypes.filter((t) => t !== type);
+          let newTypes: ContentType[];
+          if (state.selectedContentTypes.includes("all")) {
+            newTypes = [...CONTENT_TAGS].filter((t) => t !== type);
           } else {
-            newTypes = [...newTypes, type];
+            newTypes = state.selectedContentTypes.filter(
+              (t) => t !== "all" && t !== "none"
+            );
+            if (newTypes.includes(type)) {
+              newTypes = newTypes.filter((t) => t !== type);
+            } else {
+              newTypes = [...newTypes, type];
+            }
           }
 
-          // If nothing selected, default to "sensitive"
-          if (newTypes.length === 0) {
-            return {
-              selectedContentTypes: ["sensitive"],
-              adultContentEnabled: false,
-            };
+        if (newTypes.length === 0) {
+          return {
+             selectedContentTypes: [],
+             adultContentEnabled: false,
+           };
           }
 
           return {

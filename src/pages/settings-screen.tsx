@@ -162,18 +162,11 @@ const handleApiServerChange = useCallback(
   }, [logout, clearDraft, clearRecentSearches, clearQueries, router]);
 
   // Get display labels
-  const getContentTypeLabel = () => {
-    if (selectedContentTypes.includes("all")) return "All";
-    if (selectedContentTypes.includes("none")) return "None";
-    // Show "None" if only sensitive content is selected (no adult content)
-    if (
-      selectedContentTypes.length === 1 &&
-      selectedContentTypes[0] === "sensitive"
-    ) {
-      return "None";
-    }
-    if (selectedContentTypes.length === 1) {
-      return (
+ const getContentTypeLabel = () => {
+   if (selectedContentTypes.includes("all")) return "All";
+    if (selectedContentTypes.length === 0) return "None";
+   if (selectedContentTypes.length === 1) {
+     return (
         selectedContentTypes[0].charAt(0).toUpperCase() +
         selectedContentTypes[0].slice(1)
       );
