@@ -65,7 +65,7 @@ Most endpoints work without authentication. The `address` parameter enables pers
 | `GET /get_config`                | Chain params, tier info                               |
 | `GET /get_parameters`            | Block hash, difficulty (address optional for balance) |
 | `GET /get_posts`                 | Public feed works, no `user_vote` data                |
-| `GET /get_comments`              | Public comments, no `user_vote` data                  |
+| `GET /p/[id]`                    | Post detail + comments, no `user_vote` data           |
 | `GET /get_topics`                | All topics                                            |
 | `GET /search`                    | Works, no blocked filtering                           |
 | `GET /search_topics`             | Topic search                                          |
@@ -84,7 +84,7 @@ Most endpoints work without authentication. The `address` parameter enables pers
 | Endpoint                 | What address enables                 |
 | ------------------------ | ------------------------------------ |
 | `GET /get_user_status`   | User's tier, balance, subscription   |
-| `GET /get_profile`       | Full profile with follow/block lists |
+| `GET /u/[id\|username]`  | Full profile with follow/block lists |
 | `GET /get_inbox`         | User's reply notifications           |
 | `GET /get_user_followed` | Who user follows                     |
 | `GET /get_user_blocked`  | User's block list                    |
@@ -98,7 +98,7 @@ Most endpoints work without authentication. The `address` parameter enables pers
 | Endpoint              | Without address        | With address                     |
 | --------------------- | ---------------------- | -------------------------------- |
 | `GET /get_posts`      | Public feed            | + `user_vote`, blocked filtering |
-| `GET /get_comments`   | Comment tree           | + `user_vote`, blocked filtering |
+| `GET /p/[id]`         | Post + comment tree    | + `user_vote`, blocked filtering |
 | `GET /search`         | Search results         | + blocked content filtering      |
 | `GET /get_parameters` | Block hash, difficulty | + balance                        |
 
@@ -117,7 +117,7 @@ src/api/read/
 │   ├── use-profile.ts
 │   ├── use-posts.ts
 │   ├── use-user-posts.ts
-│   ├── use-comments.ts
+│   ├── use-post-detail.ts
 │   ├── use-inbox.ts
 │   ├── use-topics.ts
 │   ├── use-search.ts
@@ -165,10 +165,8 @@ export const queryKeys = {
 
   // Posts & Feed
   posts: (filters: PostFilters) => ["posts", filters] as const,
-  comments: (postId: string, address?: string) =>
-    ["comments", postId, address] as const,
-  rootPostId: (commentId: string) => ["rootPostId", commentId] as const,
-  commentContext: (commentId: string) => ["commentContext", commentId] as const,
+  postDetail: (id: string, address?: string, depth?: number) =>
+    ["postDetail", id, address, depth] as const,
 
   // Inbox
   inbox: (address: string, page?: number) => ["inbox", address, page] as const,
@@ -301,11 +299,17 @@ interface RecentVote {
 // Invalidate: After any write mutation
 ```
 
-#### `GET /get_profile`
+#### `GET /u/[id|username]`
 
-**Purpose**: Full profile with all lists
+**Purpose**: Full profile with all lists. Accepts username or `mirage1...` address as the `id` parameter.
+
+**Replaces**: `GET /profile?address=...`
 
 ```typescript
+interface GetProfileParams {
+  id: string; // username OR mirage1... address
+}
+
 interface ProfileResponse {
   owner: string;
   username: string | null;
@@ -457,57 +461,38 @@ interface GetUserPostsParams {
 // Hook: useUserPosts
 ```
 
-#### `GET /get_comments`
+#### `GET /p/[id]`
 
-**Purpose**: Comment tree for a post
+**Purpose**: View a single post or comment with its full comment tree. Replaces `GET /view_post?post_id=...`.
+
+- Works for both posts and comments
+- Optional `?depth=1-5` query param to include parent context (replaces `GET /get_comment_context`)
 
 ```typescript
-interface GetCommentsParams {
-  post_id: string; // Required root txhash
+interface GetPostDetailParams {
+  id: string; // post or comment txhash
   address?: string; // Viewer address
+  depth?: number; // 1-5, optional parent context depth
 }
 
-interface CommentsResponse {
+interface PostDetailResponse {
   root: PostWithChildren;
   children: PostWithChildren[];
   latest_inbox_timestamp?: number;
+  context?: Post[]; // Parent chain when depth is specified
 }
 
 interface PostWithChildren extends Post {
   children: PostWithChildren[];
 }
 
-// Hook: useComments
+// Hook: usePostDetail
 // staleTime: 30 seconds
+// Note: When viewing a comment, depth=1-5 returns parent posts for context
 ```
 
-#### `GET /get_root_post_id`
-
-```typescript
-interface RootPostIdResponse {
-  root_post_id: string;
-  comment_id: string;
-}
-
-// Hook: useRootPostId
-```
-
-#### `GET /get_comment_context`
-
-```typescript
-interface GetCommentContextParams {
-  comment_id: string;
-  address?: string;
-  max_depth?: number; // 1-10
-}
-
-interface CommentContextResponse {
-  context: Post[]; // Array of parent posts
-  comment_id: string;
-}
-
-// Hook: useCommentContext
-```
+> **Note**: `GET /get_root_post_id` and `GET /get_comment_context` are no longer needed — their
+> functionality is now built into `/p/[id]` via the `?depth` parameter.
 
 ---
 
@@ -1004,7 +989,7 @@ queryClient.invalidateQueries({ queryKey: queryKeys.userStatus(address) });
 
 // After post/comment
 queryClient.invalidateQueries({ queryKey: ["posts"] });
-queryClient.invalidateQueries({ queryKey: ["comments"] });
+queryClient.invalidateQueries({ queryKey: ["postDetail"] });
 
 // After follow/unfollow
 queryClient.invalidateQueries({ queryKey: queryKeys.userFollowed(address) });

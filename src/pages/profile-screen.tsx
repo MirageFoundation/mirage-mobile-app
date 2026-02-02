@@ -421,14 +421,16 @@ useEffect(() => {
            description: undefined,
            duration: 3000,
          });
-       setTimeout(() => toast.dismiss(toastId), 3000);
+      setTimeout(() => toast.dismiss(toastId), 3000);
 
-        await refetchPosts();
-        setCommentEditOverrides((prev) => {
-          const next = { ...prev };
-          delete next[commentId];
-          return next;
-        });
+        setTimeout(async () => {
+          await refetchPosts();
+          setCommentEditOverrides((prev) => {
+            const next = { ...prev };
+            delete next[commentId];
+            return next;
+          });
+        }, 3000);
       } catch (error: unknown) {
           setCommentEditOverrides((prev) => {
             const next = { ...prev };
