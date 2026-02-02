@@ -32,6 +32,7 @@ type PlanCardProps = {
   plan: Plan;
   isActive: boolean;
   hasInsufficientFunds: boolean;
+  isSubscribing?: boolean;
   onSubscribe?: (planId: string) => void;
 };
 
@@ -39,6 +40,7 @@ export function PlanCard({
   plan,
   isActive,
   hasInsufficientFunds,
+  isSubscribing,
   onSubscribe,
 }: PlanCardProps) {
   const { theme } = useUnistyles();
@@ -105,6 +107,16 @@ export function PlanCard({
         disabled: true,
         variant: "ghost" as const,
         mode: "secondary" as const,
+        loading: false,
+      };
+    }
+    if (isSubscribing) {
+      return {
+        text: "Subscribing...",
+        disabled: true,
+        variant: undefined,
+        mode: "brand" as const,
+        loading: true,
       };
     }
     if (hasInsufficientFunds) {
@@ -113,6 +125,7 @@ export function PlanCard({
         disabled: true,
         variant: undefined,
         mode: "error" as const,
+        loading: false,
       };
     }
     return {
@@ -120,6 +133,7 @@ export function PlanCard({
       disabled: false,
       variant: undefined,
       mode: "brand" as const,
+      loading: false,
     };
   };
 
@@ -269,6 +283,7 @@ export function PlanCard({
           mode={buttonConfig.mode}
           rounded="lg"
           disabled={buttonConfig.disabled}
+          loading={buttonConfig.loading}
           onPress={handleSubscribe}
           style={[
             styles.actionButton,

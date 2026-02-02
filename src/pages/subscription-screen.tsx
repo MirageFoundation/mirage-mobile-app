@@ -1,6 +1,6 @@
 import { EvilIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, View } from "react-native";
 import Animated, {
   interpolate,
@@ -272,6 +272,7 @@ export function SubscriptionScreen() {
   const { data: userStatus, isLoading: isLoadingStatus, error: statusError } = useUserStatus();
   const { data: config, isLoading: isLoadingConfig, error: configError } = useConfig();
   const upgradeMutation = useUpgradeLevel();
+  const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null);
 
   if (statusError) {
     console.error("[SubscriptionScreen] Failed to fetch user status:", statusError);
@@ -313,7 +314,26 @@ export function SubscriptionScreen() {
           {
             text: "Subscribe",
             onPress: () => {
-              upgradeMutation.mutate(planIndex as SubscriptionLevel);
+              setSubscribingPlanId(planId);
+              upgradeMutation.mutate(planIndex as SubscriptionLevel, {
+                onSuccess: () => {
+                  setSubscribingPlanId(null);
+                  triggerHaptic("success");
+                  Alert.alert(
+                    "Subscription Active",
+                    `You are now subscribed to ${plans[planIndex].title}.`
+                  );
+                },
+                onError: (error) => {
+                  setSubscribingPlanId(null);
+                  console.error("[SubscriptionScreen] Failed to subscribe:", error);
+                  triggerHaptic("error");
+                  Alert.alert(
+                    "Subscription Failed",
+                    error?.message || "Something went wrong. Please try again."
+                  );
+                },
+              });
             },
           },
         ]
@@ -390,6 +410,7 @@ export function SubscriptionScreen() {
                 plan={plan}
                 isActive={plan.id === currentPlanId}
                 hasInsufficientFunds={hasInsufficientFunds(plan.costValue)}
+                isSubscribing={subscribingPlanId === plan.id}
                 onSubscribe={handleSubscribe}
               />
             ))}
