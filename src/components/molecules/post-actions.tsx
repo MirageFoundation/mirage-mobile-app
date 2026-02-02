@@ -67,8 +67,8 @@ type PostActionsProps = {
   onBlockUser?: () => void;
   /** Callback when block post is pressed */
   onBlockPost?: () => void;
-  /** Callback when report is pressed */
   onReport?: () => void;
+  hideCommentAction?: boolean;
 };
 
 const SIZE_CONFIG = {
@@ -115,6 +115,7 @@ export const PostActions = memo(function PostActions({
   onBlockUser,
   onBlockPost,
   onReport,
+  hideCommentAction = false,
 }: PostActionsProps) {
   const { theme } = useUnistyles();
   const { iconSize, gap, pillHeight, voteTextSize } = SIZE_CONFIG[size];
@@ -289,8 +290,7 @@ export const PostActions = memo(function PostActions({
         </Pressable>
       </View>
 
-      {/* Comment pill container */}
-      <View style={[styles.votePill, { height: pillHeight }]}>
+      {!hideCommentAction && <View style={[styles.votePill, { height: pillHeight }]}>
         <Pressable
           onPress={() => {
             if (disabled) return;
@@ -310,7 +310,7 @@ export const PostActions = memo(function PostActions({
             {formatCount(comments)}
           </Text>
         </Pressable>
-      </View>
+      </View>}
 
       {/* Spacer to push share to the right */}
       <View style={styles.spacer} />

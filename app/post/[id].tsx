@@ -1455,6 +1455,7 @@ export default function PostDetailScreen() {
           contentRevealed={revealedContent}
           shareUrl={`${getShareBaseUrl(shareServer)}/view_post?post_id=${id}`}
           showUrlCard={false}
+          hideCommentAction
         />
         <View style={styles.divider} />
       </Animated.View>

@@ -53,6 +53,7 @@ type PostCardProps = {
   shareUrl?: string;
   /** Whether to show the URL card/Play Now row (default: true) */
   showUrlCard?: boolean;
+  hideCommentAction?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -109,6 +110,7 @@ export const PostCard = memo(function PostCard({
   contentRevealed = false,
   shareUrl,
   showUrlCard = true,
+  hideCommentAction = false,
   style,
 }: PostCardProps) {
   if (__DEV__) {
@@ -235,6 +237,7 @@ export const PostCard = memo(function PostCard({
         onBlockUser={onBlockUser}
         onBlockPost={onBlockPost}
         onReport={onReport}
+        hideCommentAction={hideCommentAction}
         style={styles.actions}
       />
 
