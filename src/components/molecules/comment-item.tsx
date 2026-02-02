@@ -4,7 +4,7 @@ import {
   UpvoteFilledIcon,
   UpvoteOutlineIcon,
 } from "@/assets/figma-icons";
-import { TimeAgo } from "@/src/components/atoms";
+import { TimeAgo, FollowButton } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { triggerHaptic } from "@/src/components/utils/haptics";
@@ -62,6 +62,12 @@ type CommentItemProps = {
   isOwnComment?: boolean;
   /** Whether this comment is highlighted (navigated to from profile) */
   isHighlighted?: boolean;
+  /** Whether the current user is following the comment author */
+  isFollowingAuthor?: boolean;
+  /** Whether follow action is loading */
+  isFollowLoading?: boolean;
+  /** Callback when follow button is pressed */
+  onFollowPress?: () => void;
   /** Callback when the comment row is pressed (for collapse) */
   onPress?: () => void;
   /** Callback when avatar/username is pressed */
@@ -107,7 +113,10 @@ function isImageUrl(url: string): boolean {
   );
 }
 
-function extractImageUrls(content: string): { text: string; imageUrls: string[] } {
+function extractImageUrls(content: string): {
+  text: string;
+  imageUrls: string[];
+} {
   const imageUrls: string[] = [];
   const textLines: string[] = [];
   const lines = content.split("\n");
@@ -185,7 +194,10 @@ const commentImageStyles = StyleSheet.create((theme) => ({
 }));
 
 const CommentContent = ({ content }: { content: string }) => {
-  const { text, imageUrls } = useMemo(() => extractImageUrls(content), [content]);
+  const { text, imageUrls } = useMemo(
+    () => extractImageUrls(content),
+    [content],
+  );
 
   const handleLinkPress = useCallback((url: string) => {
     triggerHaptic("light");
@@ -213,6 +225,9 @@ export const CommentItem = ({
   comment,
   isOwnComment = false,
   isHighlighted = false,
+  isFollowingAuthor = false,
+  isFollowLoading = false,
+  onFollowPress,
   onPress,
   onAuthorPress,
   onLikePress,
@@ -384,21 +399,33 @@ export const CommentItem = ({
                     pressed && styles.usernameButtonPressed,
                   ]}
                 >
-                  <Text size="sm" weight="bold" numberOfLines={1} mode="subtle">
+                  <Text
+                    size="md"
+                    weight="medium"
+                    numberOfLines={1}
+                    mode="subtle"
+                  >
                     @{author.username}
                   </Text>
                 </Pressable>
 
-                <Text size="sm" mode="subtle">
+                <Text size="md" mode="subtle">
                   ·
                 </Text>
 
-                <TimeAgo timestamp={createdAt} showSuffix={false} size="xs" />
+                <TimeAgo timestamp={createdAt} showSuffix={false} size="md" />
               </View>
             </View>
           </View>
-          {/* Tappable area to expand/collapse */}
           <Pressable onPress={handlePress} style={styles.expandArea} />
+          {!isOwnComment && (
+            <FollowButton
+              isFollowing={isFollowingAuthor}
+              onPress={onFollowPress}
+              size="sm"
+              loading={isFollowLoading}
+            />
+          )}
         </View>
 
         {/* Comment content - collapsible */}
@@ -483,7 +510,7 @@ export const CommentItem = ({
               {/* Dislike */}
               <Pressable
                 onPress={handleDislikePress}
-                style={styles.actionButton}
+                style={[styles.actionButton, { marginRight: 8 }]}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <RNAnimated.View
@@ -570,7 +597,7 @@ const styles = StyleSheet.create((theme) => ({
   actions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md + 2,
   },
   actionButton: {
     flexDirection: "row",
@@ -578,6 +605,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: 4,
   },
   actionText: {
-    marginLeft: 8,
+    marginLeft: 5,
   },
 }));

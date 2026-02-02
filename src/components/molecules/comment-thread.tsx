@@ -24,6 +24,12 @@ type CommentThreadProps = {
   onReplyPress?: (comment: Comment) => void;
   /** Callback when more options is pressed */
   onMorePress?: (comment: Comment) => void;
+  /** List of followed user IDs */
+  followedUsers?: string[];
+  /** Whether follow action is loading */
+  isFollowLoading?: boolean;
+  /** Callback when follow button is pressed */
+  onFollowPress?: (authorId: string, isCurrentlyFollowing: boolean) => void;
   /** Whether to show divider below this thread */
   showDivider?: boolean;
 };
@@ -39,6 +45,9 @@ export const CommentThread = ({
   onDislikePress,
   onReplyPress,
   onMorePress,
+  followedUsers = [],
+  isFollowLoading = false,
+  onFollowPress,
   showDivider = true,
 }: CommentThreadProps) => {
   // Track collapsed state for this comment
@@ -61,6 +70,9 @@ export const CommentThread = ({
         comment={comment}
         isOwnComment={isOwnComment}
         isHighlighted={isHighlighted}
+        isFollowingAuthor={followedUsers.includes(comment.author.id)}
+        isFollowLoading={isFollowLoading}
+        onFollowPress={() => onFollowPress?.(comment.author.id, followedUsers.includes(comment.author.id))}
         depth={depth}
         maxDepth={maxDepth}
         isCollapsed={isCollapsed}
@@ -88,6 +100,9 @@ export const CommentThread = ({
               onDislikePress={onDislikePress}
               onReplyPress={onReplyPress}
               onMorePress={onMorePress}
+              followedUsers={followedUsers}
+              isFollowLoading={isFollowLoading}
+              onFollowPress={onFollowPress}
               showDivider={false}
             />
           ))}

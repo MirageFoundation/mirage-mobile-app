@@ -195,6 +195,15 @@ export default function PostDetailScreen() {
         globalUnhidePost(targetId);
       } else {
         globalUnhideComment(targetId);
+        setHiddenCommentIds((prev) => {
+          const next = new Set(prev);
+          next.delete(targetId);
+          return next;
+        });
+        setLocalPostUpdates((prev) => ({
+          ...prev,
+          comments: (prev.comments ?? 0) + 1,
+        }));
       }
     },
   });
@@ -239,8 +248,8 @@ export default function PostDetailScreen() {
           router.back();
         }
       } else {
-        // Hide comment immediately (local + global)
         globalHideComment(pending.id);
+        setHiddenCommentIds((prev) => new Set(prev).add(pending.id));
         removeCommentFromState(pending.id);
 
         // If deleting the highlighted comment (came from profile), navigate back
@@ -1337,6 +1346,43 @@ export default function PostDetailScreen() {
     toggleFollowMutation,
   ]);
 
+  const handleFollowCommentAuthor = useCallback(
+    (authorId: string, isCurrentlyFollowing: boolean) => {
+      if (isFollowLoading) return;
+
+      requireAuth(async () => {
+        const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
+        const actionPast = isCurrentlyFollowing ? "Unfollowed" : "Followed";
+        const toastId = toast.loading(
+          `${action} user`,
+          "Computing proof of work...",
+        );
+
+        setTimeout(async () => {
+          setIsFollowLoading(true);
+          try {
+            await toggleFollowMutation.mutateAsync({
+              userAddress: authorId,
+              isCurrentlyFollowing,
+            });
+            toast.update(toastId, {
+              type: "success",
+              title: `${actionPast} user`,
+            });
+          } catch {
+            toast.update(toastId, {
+              type: "error",
+              title: `Failed to ${action.toLowerCase()} user`,
+            });
+          } finally {
+            setIsFollowLoading(false);
+          }
+        }, 50);
+      });
+    },
+    [isFollowLoading, requireAuth, toast, toggleFollowMutation],
+  );
+
   // Handler for opening post options sheet
   const handlePostMorePress = useCallback(() => {
     postOptionsSheetRef.current?.present();
@@ -1478,6 +1524,9 @@ export default function PostDetailScreen() {
           onFollowUser={handleFollowPost}
           onFollowTopic={handleFollowTopic}
           onMorePress={handlePostMorePress}
+          onBlockUser={handleBlockPostAuthor}
+          onBlockPost={handleBlockPost}
+          onReport={handleReportPost}
           onRevealContent={handleRevealContent}
           contentRevealed={revealedContent}
           shareUrl={`${getShareBaseUrl(shareServer)}/view_post?post_id=${id}`}
@@ -1524,6 +1573,9 @@ export default function PostDetailScreen() {
           }
           onReplyPress={handleReplyToComment}
           onMorePress={handleMoreOptions}
+          followedUsers={followedUsers}
+          isFollowLoading={isFollowLoading}
+          onFollowPress={handleFollowCommentAuthor}
           showDivider={true}
         />
       </Animated.View>
@@ -1535,6 +1587,9 @@ export default function PostDetailScreen() {
       handleDislikeComment,
       handleReplyToComment,
       handleMoreOptions,
+      followedUsers,
+      isFollowLoading,
+      handleFollowCommentAuthor,
     ],
   );
 
