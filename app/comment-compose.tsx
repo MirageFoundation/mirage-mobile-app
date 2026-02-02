@@ -138,9 +138,10 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(
     initialAttachment?.type === "image" ? initialAttachment.url : null,
   );
-  const [selectedGifUrl, setSelectedGifUrl] = useState<string | null>(
-    initialAttachment?.type === "gif" ? initialAttachment.url : null,
-  );
+ const [selectedGifUrl, setSelectedGifUrl] = useState<string | null>(
+   initialAttachment?.type === "gif" ? initialAttachment.url : null,
+ );
+  const [isMediaLoading, setIsMediaLoading] = useState(false);
 
   const hasAttachment = selectedImageUri !== null || selectedGifUrl !== null;
   const canSubmit = text.trim().length > 0 || hasAttachment;
@@ -244,6 +245,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
       triggerHaptic("medium");
       setSelectedImageUri(null);
       setSelectedGifUrl(gifUrl);
+      setIsMediaLoading(true);
       inputModeRef.current = "keyboard";
       setInputMode("keyboard");
       setGifSearch("");
@@ -262,6 +264,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
     if (!result.canceled && result.assets[0]) {
       setSelectedGifUrl(null);
       setSelectedImageUri(result.assets[0].uri);
+      setIsMediaLoading(true);
       inputModeRef.current = "keyboard";
       setInputMode("keyboard");
       setTimeout(() => inputRef.current?.focus(), 100);
@@ -272,6 +275,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
     triggerHaptic("selection");
     setSelectedImageUri(null);
     setSelectedGifUrl(null);
+    setIsMediaLoading(false);
   }, []);
 
   return (
@@ -435,24 +439,32 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
           )}
 
           {/* Image/GIF Preview */}
-          {(selectedImageUri || selectedGifUrl) && (
-            <Animated.View
-              entering={FadeIn.duration(200)}
-              exiting={FadeOut.duration(150)}
-              style={styles.previewContainer}
-            >
-              <View style={styles.previewWrapper}>
-                <RNImage
-                  source={{
-                    uri: selectedImageUri || selectedGifUrl || undefined,
-                  }}
-                  style={styles.previewImage}
-                  resizeMode="cover"
-                />
-                <Pressable
-                  onPress={handleRemoveAttachment}
-                  style={styles.removeButton}
-                >
+         {(selectedImageUri || selectedGifUrl) && (
+           <Animated.View
+             entering={FadeIn.duration(200)}
+             exiting={FadeOut.duration(150)}
+             style={styles.previewContainer}
+           >
+             <View style={styles.previewWrapper}>
+               <RNImage
+                 source={{
+                   uri: selectedImageUri || selectedGifUrl || undefined,
+                 }}
+                 style={styles.previewImage}
+                 resizeMode="cover"
+                  onLoadStart={() => setIsMediaLoading(true)}
+                  onLoad={() => setIsMediaLoading(false)}
+                  onError={() => setIsMediaLoading(false)}
+               />
+                {isMediaLoading && (
+                  <View style={styles.previewLoadingOverlay}>
+                    <ActivityIndicator size="small" color="#fff" />
+                  </View>
+                )}
+               <Pressable
+                 onPress={handleRemoveAttachment}
+                 style={styles.removeButton}
+               >
                   <Feather name="x" size={14} color="#fff" />
                 </Pressable>
               </View>
@@ -761,6 +773,12 @@ const styles = StyleSheet.create((theme) => ({
   previewImage: {
     width: PREVIEW_WIDTH,
     height: PREVIEW_HEIGHT,
+  },
+  previewLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   removeButton: {
     position: "absolute",
