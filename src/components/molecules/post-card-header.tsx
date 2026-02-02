@@ -77,12 +77,12 @@ export const PostCardHeader = memo(function PostCardHeader({
               •
             </Text>
           )}
-         <TimeAgo
-           timestamp={createdAt}
-           showSuffix={false}
+          <TimeAgo
+            timestamp={createdAt}
+            showSuffix={false}
             size="md"
-           style={{ color: theme.colors.text.subtle }}
-         />
+            style={{ color: theme.colors.text.subtle }}
+          />
           <Text size="sm" style={{ color: theme.colors.text.subtle }}>
             •
           </Text>
@@ -258,7 +258,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     borderRadius: theme.radius.full,
     minWidth: 54,
-    height: 28,
+    height: 22,
     paddingHorizontal: 10,
     borderWidth: 1,
   },

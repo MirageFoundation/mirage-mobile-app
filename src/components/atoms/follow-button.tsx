@@ -6,7 +6,10 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type FollowButtonSize = "sm" | "md" | "lg";
 
-const SIZE_CONFIG: Record<FollowButtonSize, { height: number; paddingHorizontal: number; fontSize: "xs" | "sm" | "md" }> = {
+const SIZE_CONFIG: Record<
+  FollowButtonSize,
+  { height: number; paddingHorizontal: number; fontSize: "xs" | "sm" | "md" }
+> = {
   sm: { height: 22, paddingHorizontal: 8, fontSize: "xs" },
   md: { height: 26, paddingHorizontal: 10, fontSize: "xs" },
   lg: { height: 32, paddingHorizontal: 14, fontSize: "sm" },
@@ -61,15 +64,15 @@ export const FollowButton = ({
   styles.useVariants({ isFollowing });
 
   const buttonText = isFollowing ? "Following" : "Follow";
-  const textColor = isFollowing 
-    ? theme.colors.text.default 
+  const textColor = isFollowing
+    ? theme.colors.text.default
     : theme.colors.background.default;
 
   // When loading, just show the activity indicator without container styling
   if (loading) {
     return (
-      <Animated.View 
-        style={{ 
+      <Animated.View
+        style={{
           transform: [{ scale }],
           height,
           minWidth: 54,
@@ -77,10 +80,7 @@ export const FollowButton = ({
           justifyContent: "center",
         }}
       >
-        <ActivityIndicator 
-          size="small" 
-          color={theme.colors.text.subtle} 
-        />
+        <ActivityIndicator size="small" color={theme.colors.text.subtle} />
       </Animated.View>
     );
   }
@@ -98,11 +98,7 @@ export const FollowButton = ({
           disabled && styles.disabled,
         ]}
       >
-        <Text 
-          size={fontSize} 
-          weight="semibold"
-          style={{ color: textColor }}
-        >
+        <Text size={fontSize} weight="semibold" style={{ color: textColor }}>
           {buttonText}
         </Text>
       </Pressable>
@@ -135,4 +131,3 @@ const styles = StyleSheet.create((theme) => ({
     opacity: 0.6,
   },
 }));
-
