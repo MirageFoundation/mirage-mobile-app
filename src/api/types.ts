@@ -19,7 +19,7 @@ export interface PostFilters {
   address?: string;
   allowed_tags?: string;
   feed?: "home" | "following";
-  by?: "magic" | "new" | "top";
+  by?: "magic" | "newest" | "top";
 }
 
 export interface UserFilters {

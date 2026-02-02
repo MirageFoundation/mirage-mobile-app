@@ -17,7 +17,7 @@ export interface GetPostsParams {
   address?: string; // viewer address for filtering/votes
   allowed_tags?: string; // comma-separated, default 'sensitive'
   feed?: "home" | "following";
-  by?: "magic" | "new" | "top"; // sort mode
+  by?: "magic" | "newest" | "top"; // sort mode
 }
 
 /**

@@ -62,6 +62,7 @@ export const getApiBaseUrl = (server: ApiServer): string => {
 type PreferencesState = {
   // Feed
   feedType: FeedType;
+  followingFeedType: FeedType;
 
   // Theme
   theme: ThemeMode;
@@ -92,6 +93,7 @@ type PreferencesState = {
 
   // Actions
   setFeedType: (type: FeedType) => void;
+  setFollowingFeedType: (type: FeedType) => void;
   setTheme: (theme: ThemeMode) => void;
   setAdultContent: (enabled: boolean) => void;
   setHasSeenAdultPrompt: () => void;
@@ -113,6 +115,7 @@ export const usePreferencesStore = create<PreferencesState>()(
     (set) => ({
       // Feed
       feedType: "home",
+      followingFeedType: "home",
 
       // Theme
       theme: "system",
@@ -143,6 +146,7 @@ export const usePreferencesStore = create<PreferencesState>()(
 
       // Actions
       setFeedType: (type) => set({ feedType: type }),
+      setFollowingFeedType: (type) => set({ followingFeedType: type }),
       setTheme: (theme) => set({ theme }),
       setAdultContent: (enabled) =>
         set((state) => {

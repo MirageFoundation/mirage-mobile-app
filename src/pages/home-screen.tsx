@@ -108,6 +108,7 @@ export function HomeScreen() {
   const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
   const currentUser = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const isInitializing = useAuthStore((s) => s.isInitializing);
 
   // Network state for video autoplay
   const { networkType } = useNetworkState();
@@ -152,7 +153,6 @@ export function HomeScreen() {
       case "latest":
         return "newest" as const;
       default:
-        // Default to "magic" for algorithm-based feed
         return "magic" as const;
     }
   }, [feedType]);
@@ -843,7 +843,7 @@ export function HomeScreen() {
   }, [posts.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const ListEmptyComponent = useCallback(() => {
-    if (isLoading) {
+    if (isLoading || isInitializing) {
       return <PostCardSkeletonList count={5} />;
     }
 
@@ -878,7 +878,7 @@ export function HomeScreen() {
         </Text>
       </Box>
     );
-  }, [isLoading, isError, error]);
+  }, [isLoading, isInitializing, isError, error]);
 
  const ListHeaderComponent = useCallback(() => {
     if (!isManualRefreshing) return null;

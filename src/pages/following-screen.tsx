@@ -58,10 +58,23 @@ export function FollowingScreen() {
   const toast = useToast();
 
   const currentUser = useAuthStore((s) => s.user);
+  const followingFeedType = usePreferencesStore((s) => s.followingFeedType);
+  const setFollowingFeedType = usePreferencesStore(
+    (s) => s.setFollowingFeedType
+  );
   const selectedContentTypes = usePreferencesStore(
     (s) => s.selectedContentTypes
   );
   const shareServer = usePreferencesStore((s) => s.shareServer);
+
+  const sortBy = useMemo(() => {
+    switch (followingFeedType) {
+      case "latest":
+        return "newest" as const;
+      default:
+        return "magic" as const;
+    }
+  }, [followingFeedType]);
 
   const allowedTags = useMemo(
     () => getAllowedTagsFromContentTypes(selectedContentTypes),
@@ -131,7 +144,7 @@ export function FollowingScreen() {
   } = useInfinitePosts({
     limit: 20,
     feed: "following",
-    by: "magic",
+    by: sortBy,
     allowed_tags: allowedTags || undefined,
   });
 
@@ -800,7 +813,13 @@ export function FollowingScreen() {
       <View style={[styles.statusBarBackground, { height: insets.top }]} />
 
       {/* Animated Header */}
-      <FeedHeader title="Following" animatedStyle={headerAnimatedStyle} />
+      <FeedHeader
+        title="Following"
+        feedType={followingFeedType}
+        onFeedTypeChange={setFollowingFeedType}
+        onSearchPress={() => router.push("/search")}
+        animatedStyle={headerAnimatedStyle}
+      />
 
       {/* Scrollable Feed - using HomePostList for consistency with home screen */}
       <HomePostList

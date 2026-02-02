@@ -32,7 +32,7 @@ type FeedOption = {
 };
 
 const FEED_OPTIONS: FeedOption[] = [
-  { value: "home", label: "Home", icon: "home-outline", iconFilled: "home" },
+  { value: "home", label: "Magic", icon: "sparkles-outline", iconFilled: "sparkles" },
   {
     value: "latest",
     label: "Latest",
@@ -89,6 +89,21 @@ export const FeedHeader = ({
     onFeedTypeChange?.(option.value);
   };
 
+  const AppIcon = () =>
+    isDark ? (
+      <Image
+        source={require("@/assets/images/app-dark-icon.png")}
+        style={styles.appIcon}
+        resizeMode="contain"
+      />
+    ) : (
+      <Image
+        source={require("@/assets/images/app-icon.png")}
+        style={styles.appIcon}
+        resizeMode="contain"
+      />
+    );
+
   return (
     <Animated.View
       style={[styles.container, { paddingTop: insets.top }, animatedStyle]}
@@ -104,29 +119,8 @@ export const FeedHeader = ({
             <Menu onOpen={handleMenuOpen} onClose={handleMenuClose}>
               <MenuTrigger>
                 <View style={styles.titleButton}>
-                  {feedType === "home" &&
-                    (isDark ? (
-                      <Image
-                        source={require("@/assets/images/app-dark-icon.png")}
-                        style={styles.appIcon}
-                        resizeMode="contain"
-                      />
-                    ) : (
-                      <Image
-                        source={require("@/assets/images/app-icon.png")}
-                        style={styles.appIcon}
-                        resizeMode="contain"
-                      />
-                    ))}
-                  <Text
-                    size="xl"
-                    weight="bold"
-                    style={
-                      feedType === "home"
-                        ? { color: theme.colors.text.default }
-                        : undefined
-                    }
-                  >
+                  <AppIcon />
+                  <Text size="xl" weight="bold">
                     {title}
                   </Text>
                   <Animated.View
@@ -224,29 +218,8 @@ export const FeedHeader = ({
             </Menu>
           ) : (
             <View style={styles.titleButton}>
-              {feedType === "home" &&
-                (isDark ? (
-                  <Image
-                    source={require("@/assets/images/app-dark-icon.png")}
-                    style={styles.appIcon}
-                    resizeMode="contain"
-                  />
-                ) : (
-                  <Image
-                    source={require("@/assets/images/app-icon.png")}
-                    style={styles.appIcon}
-                    resizeMode="contain"
-                  />
-                ))}
-              <Text
-                size="xl"
-                weight="bold"
-                style={
-                  feedType === "home"
-                    ? { color: theme.colors.text.default }
-                    : undefined
-                }
-              >
+              <AppIcon />
+              <Text size="xl" weight="bold">
                 {title}
               </Text>
             </View>
