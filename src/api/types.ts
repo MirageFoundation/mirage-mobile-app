@@ -39,10 +39,24 @@ export interface ParametersResponse {
 }
 
 export interface TierInfo {
-  level: number;
-  name: string;
-  price: number;
-  features: string[];
+  period_fee: string;
+  vote_weight: number;
+  max_content_length: string;
+  max_title_length: string;
+  max_followed_users: string;
+  max_followed_topics: string;
+  max_followed_mods: string;
+  max_blocked_users: string;
+  max_blocked_posts: string;
+  max_quality_posts: string;
+  editing_time_mins: string;
+  archive_duration_days: string;
+  award_permissions: number;
+  eligible_for_mod: boolean;
+  can_change_name: boolean;
+  can_have_biography: boolean;
+  can_have_avatar: boolean;
+  can_have_banner: boolean;
 }
 
 export interface ConfigResponse {
@@ -68,6 +82,9 @@ export interface ConfigResponse {
   validator_operator_address: string;
   validator_consensus_address: string;
   validator_moniker: string;
+
+  // Misc
+  giphy_api_key: string;
 }
 
 // ============================================

@@ -91,7 +91,6 @@ export {
 export {
   ActivePlanCard,
   PlanCard,
-  PLANS,
   type Plan,
   type PlanFeature,
 } from "./subscription";

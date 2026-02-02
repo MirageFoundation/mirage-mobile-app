@@ -1,3 +1,2 @@
 export { ActivePlanCard } from "./active-plan-card";
-export { PlanCard, PLANS, type Plan, type PlanFeature } from "./plan-card";
-
+export { PlanCard, type Plan, type PlanFeature } from "./plan-card";
