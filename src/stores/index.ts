@@ -16,3 +16,4 @@ export { useUIStore } from "./ui-store";
 export { storage, mmkvStorage } from "./mmkv-storage";
 export { useSearchStore, type RecentSearch } from "./search-store";
 export { useContentModerationStore } from "./content-moderation-store";
+export { useCommentComposeStore } from "./comment-compose-store";

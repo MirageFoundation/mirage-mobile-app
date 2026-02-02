@@ -44,6 +44,7 @@ import {
   usePreferencesStore,
   getShareBaseUrl,
 } from "@/src/stores";
+import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import {
   AntDesign,
   Ionicons,
@@ -1213,6 +1214,32 @@ export default function PostDetailScreen() {
     ],
   );
 
+  const pendingComment = useCommentComposeStore((s) => s.pendingComment);
+ const clearPendingComment = useCommentComposeStore(
+   (s) => s.clearPendingComment,
+ );
+
+  const wasDismissed = useCommentComposeStore((s) => s.wasDismissed);
+  const setWasDismissed = useCommentComposeStore((s) => s.setWasDismissed);
+
+  useEffect(() => {
+    if (wasDismissed) {
+      setReplyingTo(null);
+      setWasDismissed(false);
+    }
+  }, [wasDismissed, setWasDismissed]);
+
+  useEffect(() => {
+    if (pendingComment) {
+      handleSubmitComment(
+        pendingComment.text,
+        pendingComment.imageUri,
+        pendingComment.gifUrl,
+      );
+      clearPendingComment();
+    }
+  }, [pendingComment, handleSubmitComment, clearPendingComment]);
+
   const handleDeleteComment = useCallback(() => {
     if (!selectedComment) return;
     deleteHandler.requestDelete(selectedComment.id, "comment");
@@ -1791,15 +1818,20 @@ export default function PostDetailScreen() {
           initialNumToRender={5}
         />
 
-        {/* Comment input */}
-        <CommentInput
-          ref={commentInputRef}
-          isLoggedIn={isLoggedIn}
-          onAuthRequired={showAuthSheet}
-          replyingTo={replyingTo?.author.username}
-          onCancelReply={handleCancelReply}
-          onSubmit={handleSubmitComment}
-          loading={isSubmitting}
+       {/* Comment input */}
+      <CommentInput
+        ref={commentInputRef}
+        isLoggedIn={isLoggedIn}
+        onAuthRequired={showAuthSheet}
+        replyingTo={replyingTo?.author.username}
+         replyingToId={replyingTo?.id}
+          replyingToContent={replyingTo?.content}
+        onCancelReply={handleCancelReply}
+          postId={id}
+          postTitle={displayPost?.title}
+          postAuthorUsername={displayPost?.author.username}
+         postThumbnail={postThumbnail}
+          postContent={displayPost?.body}
         />
 
         {/* Comment options sheet */}
