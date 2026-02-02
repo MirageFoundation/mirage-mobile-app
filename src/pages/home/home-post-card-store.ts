@@ -51,6 +51,7 @@ type HomePostCardState = {
   allowAutoplay: boolean;
   feedActive: boolean;
   shouldScrollToTop: boolean;
+  disabledTopicName?: string;
   setCurrentUserId: (id?: string) => void;
   setFollowedUsers: (users: Set<string>) => void;
   setFollowedTopics: (topics: Set<string>) => void;
@@ -65,6 +66,7 @@ type HomePostCardState = {
   setFeedActive: (active: boolean) => void;
   triggerScrollToTop: () => void;
   clearScrollToTop: () => void;
+  setDisabledTopicName: (name?: string) => void;
 };
 
 const emptySet = new Set<string>();
@@ -82,6 +84,7 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
   allowAutoplay: true,
   feedActive: true,
   shouldScrollToTop: false,
+  disabledTopicName: undefined,
   setCurrentUserId: (id) => set({ currentUserId: id }),
   setFollowedUsers: (users) => set({ followedUsers: users }),
   setFollowedTopics: (topics) => set({ followedTopics: topics }),
@@ -127,6 +130,7 @@ setVoteOverride: (postId, override) =>
   setFeedActive: (active) => set({ feedActive: active }),
   triggerScrollToTop: () => set({ shouldScrollToTop: true }),
   clearScrollToTop: () => set({ shouldScrollToTop: false }),
+  setDisabledTopicName: (name) => set({ disabledTopicName: name }),
 }));
 
 // Primitive selectors that return stable values
@@ -165,3 +169,6 @@ export const useFeedActive = () =>
 // Handler selectors - these return stable function references
 export const useHandlers = () =>
   useHomePostCardStore((state) => state.handlers);
+
+export const useIsTopicDisabled = (topic?: string) =>
+  useHomePostCardStore((state) => topic ? state.disabledTopicName === topic : false);

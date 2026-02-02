@@ -325,9 +325,9 @@ export function HomeScreen() {
     router.push(`/user/${authorId}`);
   }, [router]);
 
-  const handleTopicPress = useCallback((topic: string) => {
-    router.push(`/search?q=${encodeURIComponent(topic)}&tab=topics`);
-  }, [router]);
+ const handleTopicPress = useCallback((topic: string) => {
+    router.push(`/topic/${encodeURIComponent(topic)}`);
+ }, [router]);
 
   const postsByIdRef = useRef<Map<string, Post>>(new Map());
 
@@ -949,6 +949,7 @@ export function HomeScreen() {
   const setShareServer = useHomePostCardStore((state) => state.setShareServer);
   const setAllowAutoplay = useHomePostCardStore((state) => state.setAllowAutoplay);
   const setFeedActive = useHomePostCardStore((state) => state.setFeedActive);
+  const setDisabledTopicName = useHomePostCardStore((state) => state.setDisabledTopicName);
 
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
   const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
@@ -990,10 +991,11 @@ export function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       setFeedActive(true);
+      setDisabledTopicName(undefined);
       return () => {
         setFeedActive(false);
       };
-    }, [setFeedActive])
+    }, [setFeedActive, setDisabledTopicName])
   );
 
 // Store refs to latest handlers - these update without triggering re-renders

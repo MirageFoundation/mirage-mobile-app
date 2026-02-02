@@ -456,9 +456,9 @@ export function UserFollowingScreen() {
     [router],
   );
 
-  const handleTopicPress = useCallback((topic: string) => {
-    setSelectedTopic(topic);
-  }, []);
+ const handleTopicPress = useCallback((topic: string) => {
+    router.push(`/topic/${encodeURIComponent(topic)}`);
+  }, [router]);
 
   const handleBackFromTopic = useCallback(() => {
     setSelectedTopic(null);

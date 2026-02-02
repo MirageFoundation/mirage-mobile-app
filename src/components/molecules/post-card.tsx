@@ -55,6 +55,7 @@ isTopicFollowed?: boolean;
   /** Whether to show the URL card/Play Now row (default: true) */
   showUrlCard?: boolean;
   hideCommentAction?: boolean;
+  topicDisabled?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -82,6 +83,7 @@ if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
   if (prevProps.contentRevealed !== nextProps.contentRevealed) return false;
   if (prevProps.shareUrl !== nextProps.shareUrl) return false;
   if (prevProps.showUrlCard !== nextProps.showUrlCard) return false;
+  if (prevProps.topicDisabled !== nextProps.topicDisabled) return false;
 
   return true;
 }
@@ -113,6 +115,7 @@ allowAutoplay = true,
   shareUrl,
   showUrlCard = true,
   hideCommentAction = false,
+  topicDisabled = false,
   style,
 }: PostCardProps) {
   if (__DEV__) {
@@ -187,7 +190,8 @@ allowAutoplay = true,
       isTopicFollowed={isTopicFollowed}
       showFollowButton={showFollowButton}
        onAuthorPress={onAuthorPress}
-        onTopicPress={onTopicPress}
+        onTopicPress={topicDisabled ? undefined : onTopicPress}
+        topicDisabled={topicDisabled}
         onFollowUser={onFollowUser}
         onFollowTopic={onFollowTopic}
         onMorePress={onMorePress}

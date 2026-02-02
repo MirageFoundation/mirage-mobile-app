@@ -11,3 +11,4 @@ export { VideoEditorScreen } from "./create/video-editor-screen";
 export { UserProfileScreen } from "./user-profile-screen";
 export { UserFollowingScreen } from "./user-following-screen";
 export { BlockedListScreen } from "./blocked-list-screen";
+export { TopicFeedScreen } from "./topic-feed-screen";

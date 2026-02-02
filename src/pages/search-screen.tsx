@@ -282,26 +282,25 @@ export function SearchScreen() {
     clearRecentSearches();
   }, [clearRecentSearches]);
 
-  const handleTrendingTopicPress = useCallback(
-    (topic: TopicInfo) => {
-      triggerHaptic("light");
-      setSearchQuery(topic.topic);
-      addRecentSearch(topic.topic);
-      Keyboard.dismiss();
-    },
-    [addRecentSearch],
-  );
+ const handleTrendingTopicPress = useCallback(
+   (topic: TopicInfo) => {
+     triggerHaptic("light");
+     addRecentSearch(topic.topic);
+     Keyboard.dismiss();
+      router.push(`/topic/${encodeURIComponent(topic.topic)}`);
+   },
+    [addRecentSearch, router],
+ );
 
-  const handleTopicResultPress = useCallback(
-    (topic: TopicInfo) => {
-      triggerHaptic("light");
-      addRecentSearch(topic.topic);
-      Keyboard.dismiss();
-      // Set selected topic to show posts within topics tab
-      setSelectedTopic(topic);
-    },
-    [addRecentSearch],
-  );
+ const handleTopicResultPress = useCallback(
+   (topic: TopicInfo) => {
+     triggerHaptic("light");
+     addRecentSearch(topic.topic);
+     Keyboard.dismiss();
+      router.push(`/topic/${encodeURIComponent(topic.topic)}`);
+   },
+    [addRecentSearch, router],
+ );
 
   const handleBackFromTopic = useCallback(() => {
     triggerHaptic("light");

@@ -26,6 +26,7 @@ type PostCardHeaderProps = {
   onFollowUser?: () => void;
   onFollowTopic?: () => void;
   onMorePress?: () => void;
+  topicDisabled?: boolean;
 };
 
 export const PostCardHeader = memo(function PostCardHeader({
@@ -41,6 +42,7 @@ export const PostCardHeader = memo(function PostCardHeader({
   onFollowUser,
   onFollowTopic,
   onMorePress,
+  topicDisabled = false,
 }: PostCardHeaderProps) {
   const { theme } = useUnistyles();
 
@@ -76,8 +78,8 @@ export const PostCardHeader = memo(function PostCardHeader({
   return (
     <View style={styles.header}>
       <View style={styles.authorSection}>
-        <View style={styles.authorRow}>
-         {topic && (
+       <View style={styles.authorRow}>
+         {topic && !topicDisabled && (
             <Pressable
               onPress={handleTopicPress}
               hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
@@ -88,7 +90,12 @@ export const PostCardHeader = memo(function PostCardHeader({
               </Text>
             </Pressable>
           )}
-          {topic && (
+          {topic && topicDisabled && (
+            <Text size="md" weight="bold" numberOfLines={1} style={{ color: theme.colors.text.subtle }}>
+              #{topic}
+            </Text>
+          )}
+          {topic && !topicDisabled && (
             <Text size="sm" style={{ color: theme.colors.text.subtle }}>
               •
             </Text>

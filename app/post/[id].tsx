@@ -851,7 +851,7 @@ const handleAuthorPress = useCallback(() => {
 
 const handleTopicPress = useCallback(() => {
   if (!displayPost?.topic) return;
-  router.push(`/search?q=${encodeURIComponent(displayPost.topic)}&tab=topics`);
+  router.push(`/topic/${encodeURIComponent(displayPost.topic)}`);
 }, [displayPost, router]);
 
 const handleFollowPost = useCallback(() => {

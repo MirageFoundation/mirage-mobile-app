@@ -52,14 +52,20 @@ export default function RootLayout() {
            animation: "slide_from_right",
          }}
        />
+      <Stack.Screen
+        name="comment-compose"
+        options={{
+          animation: "slide_from_bottom",
+           presentation: "fullScreenModal",
+        }}
+      />
        <Stack.Screen
-         name="comment-compose"
+         name="topic/[id]"
          options={{
-           animation: "slide_from_bottom",
-            presentation: "fullScreenModal",
+           animation: "slide_from_right",
          }}
        />
-      </Stack>
+     </Stack>
       <AuthSheet />
     </RootProvider>
   );
