@@ -418,15 +418,15 @@ export const CommentItem = ({
             </View>
           </View>
           <Pressable onPress={handlePress} style={styles.expandArea} />
-         {!isOwnComment && (
-           <FollowButton
-             isFollowing={isFollowingAuthor}
-             onPress={onFollowPress}
-             size="sm"
-             loading={isFollowLoading}
+          {!isOwnComment && (
+            <FollowButton
+              isFollowing={isFollowingAuthor}
+              onPress={onFollowPress}
+              size="sm"
+              loading={isFollowLoading}
               disabled={isFollowingAuthor}
-           />
-         )}
+            />
+          )}
         </View>
 
         {/* Comment content - collapsible */}
@@ -541,15 +541,15 @@ export const CommentItem = ({
 const styles = StyleSheet.create((theme) => ({
   container: {
     flexDirection: "row",
-    paddingVertical: theme.spacing.xs,
+    paddingBottom: theme.spacing.xs,
     paddingHorizontal: theme.spacing.md,
   },
-  threadLineContainer: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: theme.spacing.md,
-  },
+ threadLineContainer: {
+   position: "absolute",
+    top: theme.spacing.sm + 2,
+   bottom: 0,
+   left: theme.spacing.md,
+ },
   threadLine: {
     position: "absolute",
     top: 0,
