@@ -166,8 +166,8 @@ const MenuItem = ({
   const color = disabled
     ? theme.colors.text.muted
     : isDestructive
-    ? theme.colors.error[500]
-    : theme.colors.text.subtle;
+      ? theme.colors.error[500]
+      : theme.colors.text.subtle;
 
   return (
     <Pressable
@@ -212,11 +212,11 @@ export const PostOptionsSheet = forwardRef<
       onReport,
       onDismiss,
     },
-    ref
+    ref,
   ) => {
     const bottomSheetRef = useRef<BottomSheetModal>(null);
-  const { theme } = useUnistyles();
-  const insets = useSafeAreaInsets();
+    const { theme } = useUnistyles();
+    const insets = useSafeAreaInsets();
     const shareServer = usePreferencesStore((s) => s.shareServer);
 
     const present = useCallback(() => {
@@ -238,7 +238,7 @@ export const PostOptionsSheet = forwardRef<
           onDismiss?.();
         }
       },
-      [onDismiss]
+      [onDismiss],
     );
 
     const renderBackdrop = useCallback(
@@ -250,16 +250,16 @@ export const PostOptionsSheet = forwardRef<
           opacity={0.5}
         />
       ),
-      []
+      [],
     );
 
-  const getShareUrl = useCallback(() => {
-    if (!post?.id) return "";
+    const getShareUrl = useCallback(() => {
+      if (!post?.id) return "";
       return `${getShareBaseUrl(shareServer)}/view_post?post_id=${post.id}`;
     }, [post?.id, shareServer]);
 
-   const getShareMessage = useCallback(() => {
-     const url = getShareUrl();
+    const getShareMessage = useCallback(() => {
+      const url = getShareUrl();
       return `What do you think about this? 🗳️\n${url}`;
     }, [getShareUrl]);
 
@@ -271,14 +271,14 @@ export const PostOptionsSheet = forwardRef<
         switch (appId) {
           case "whatsapp": {
             const url = `whatsapp://send?text=${encodeURIComponent(
-              getShareMessage()
+              getShareMessage(),
             )}`;
             const canOpen = await Linking.canOpenURL(url);
             if (canOpen) {
               await Linking.openURL(url);
             } else {
               await Linking.openURL(
-                `https://wa.me/?text=${encodeURIComponent(getShareMessage())}`
+                `https://wa.me/?text=${encodeURIComponent(getShareMessage())}`,
               );
             }
             break;
@@ -299,7 +299,7 @@ export const PostOptionsSheet = forwardRef<
           }
           case "telegram": {
             const url = `tg://msg_url?url=${encodeURIComponent(
-              getShareUrl()
+              getShareUrl(),
             )}&text=${encodeURIComponent(post?.title || "")}`;
             const canOpen = await Linking.canOpenURL(url);
             if (canOpen) {
@@ -307,8 +307,8 @@ export const PostOptionsSheet = forwardRef<
             } else {
               await Linking.openURL(
                 `https://t.me/share/url?url=${encodeURIComponent(
-                  getShareUrl()
-                )}&text=${encodeURIComponent(post?.title || "")}`
+                  getShareUrl(),
+                )}&text=${encodeURIComponent(post?.title || "")}`,
               );
             }
             break;
@@ -318,12 +318,12 @@ export const PostOptionsSheet = forwardRef<
             await Clipboard.setStringAsync(getShareUrl());
             break;
           }
-        case "more": {
-          try {
-          await Share.share({
+          case "more": {
+            try {
+              await Share.share({
                 message: getShareMessage(),
-            url: getShareUrl(),
-            title: post?.title,
+                url: getShareUrl(),
+                title: post?.title,
               });
             } catch {
               // User cancelled
@@ -333,7 +333,7 @@ export const PostOptionsSheet = forwardRef<
         }
         dismiss();
       },
-      [getShareMessage, getShareUrl, post?.title, dismiss]
+      [getShareMessage, getShareUrl, post?.title, dismiss],
     );
 
     // Menu handlers
@@ -398,7 +398,7 @@ export const PostOptionsSheet = forwardRef<
       ({ item }: { item: ShareApp }) => (
         <ShareAppButton item={item} onPress={handleShareApp} />
       ),
-      [handleShareApp]
+      [handleShareApp],
     );
 
     return (
@@ -551,7 +551,7 @@ export const PostOptionsSheet = forwardRef<
         </BottomSheetView>
       </BottomSheetModal>
     );
-  }
+  },
 );
 
 PostOptionsSheet.displayName = "PostOptionsSheet";
@@ -606,9 +606,9 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm + 3,
   },
   menuItemIOS: {
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm + 3,
   },
 }));

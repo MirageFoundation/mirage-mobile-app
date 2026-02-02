@@ -5,7 +5,11 @@ import {
   useUserFollowed,
   uploadImageAndGetUrl,
 } from "@/src/api/read";
-import { useToggleFollowUser, useToggleFollowTopic, useComment } from "@/src/api/write";
+import {
+  useToggleFollowUser,
+  useToggleFollowTopic,
+  useComment,
+} from "@/src/api/write";
 import type { PoWProgress } from "@/src/api/write/signing";
 import { Avatar } from "@/src/components/atoms";
 import {
@@ -33,7 +37,13 @@ import {
   type VoteResult,
 } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
-import { useAuthStore, useContentModerationStore, useUIStore, usePreferencesStore, getShareBaseUrl } from "@/src/stores";
+import {
+  useAuthStore,
+  useContentModerationStore,
+  useUIStore,
+  usePreferencesStore,
+  getShareBaseUrl,
+} from "@/src/stores";
 import {
   AntDesign,
   Ionicons,
@@ -70,7 +80,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { getLastPressedPostY } from "@/src/utils/post-transition";
 
 export default function PostDetailScreen() {
-  const { id, highlight } = useLocalSearchParams<{ id: string; highlight?: string }>();
+  const { id, highlight } = useLocalSearchParams<{
+    id: string;
+    highlight?: string;
+  }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -108,9 +121,9 @@ export default function PostDetailScreen() {
   const flatListRef = useRef<FlatList<Comment>>(null);
 
   // State for highlighted comment (from URL param)
-  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(
-    highlight || null
-  );
+  const [highlightedCommentId, setHighlightedCommentId] = useState<
+    string | null
+  >(highlight || null);
 
   // Track if screen is focused (for pausing videos when navigating away)
   const [screenActive, setScreenActive] = useState(true);
@@ -121,7 +134,7 @@ export default function PostDetailScreen() {
       return () => {
         setScreenActive(false);
       };
-    }, [])
+    }, []),
   );
 
   // Track if component is still mounted (to avoid navigating back if user already left)
@@ -146,11 +159,11 @@ export default function PostDetailScreen() {
   const { data: followedData } = useUserFollowed();
   const followedUsers = useMemo(
     () => followedData?.followed_users ?? [],
-    [followedData]
+    [followedData],
   );
   const followedTopics = useMemo(
     () => followedData?.followed_topics ?? [],
-    [followedData]
+    [followedData],
   );
 
   // Follow/unfollow mutations
@@ -169,7 +182,9 @@ export default function PostDetailScreen() {
   const globalUnhideComment = useContentModerationStore((s) => s.unhideComment);
 
   // Local state for filtering comments on this screen
-  const [hiddenCommentIds, setHiddenCommentIds] = useState<Set<string>>(new Set());
+  const [hiddenCommentIds, setHiddenCommentIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(new Set());
 
   // Delete, Block, and Report handlers
@@ -186,24 +201,30 @@ export default function PostDetailScreen() {
   const reportHandler = useReportHandler({});
 
   // Helper to remove comment from local state
-  const removeCommentFromState = useCallback((commentId: string) => {
-    const removeComment = (
-      targetId: string,
-      commentList: Comment[]
-    ): Comment[] => {
-      return commentList
-        .filter((c) => c.id !== targetId)
-        .map((c) => ({
-          ...c,
-          replies: c.replies ? removeComment(targetId, c.replies) : undefined,
-        }));
-    };
-    setLocalComments((prev) => removeComment(commentId, prev));
-    setLocalPostUpdates((prev) => ({
-      ...prev,
-      comments: Math.max(0, (prev.comments ?? displayPost?.comments ?? 0) - 1),
-    }));
-  }, [displayPost?.comments]);
+  const removeCommentFromState = useCallback(
+    (commentId: string) => {
+      const removeComment = (
+        targetId: string,
+        commentList: Comment[],
+      ): Comment[] => {
+        return commentList
+          .filter((c) => c.id !== targetId)
+          .map((c) => ({
+            ...c,
+            replies: c.replies ? removeComment(targetId, c.replies) : undefined,
+          }));
+      };
+      setLocalComments((prev) => removeComment(commentId, prev));
+      setLocalPostUpdates((prev) => ({
+        ...prev,
+        comments: Math.max(
+          0,
+          (prev.comments ?? displayPost?.comments ?? 0) - 1,
+        ),
+      }));
+    },
+    [displayPost?.comments],
+  );
 
   // Optimistic confirm handlers - hide content/navigate immediately before API call
   const handleConfirmDelete = useCallback(() => {
@@ -230,7 +251,14 @@ export default function PostDetailScreen() {
     }
     // Then proceed with API call
     deleteHandler.confirmDelete();
-  }, [deleteHandler, router, removeCommentFromState, globalHidePost, globalHideComment, highlight]);
+  }, [
+    deleteHandler,
+    router,
+    removeCommentFromState,
+    globalHidePost,
+    globalHideComment,
+    highlight,
+  ]);
 
   const handleConfirmBlock = useCallback(() => {
     const pending = blockHandler.pendingBlock;
@@ -265,7 +293,14 @@ export default function PostDetailScreen() {
     }
     // Then proceed with API call
     blockHandler.confirmBlock();
-  }, [blockHandler, displayPost?.author.id, router, globalHidePost, globalBlockUser, globalHideComment]);
+  }, [
+    blockHandler,
+    displayPost?.author.id,
+    router,
+    globalHidePost,
+    globalBlockUser,
+    globalHideComment,
+  ]);
 
   const handleReportSubmitWithOptimistic = useCallback(
     (reason: string) => {
@@ -290,7 +325,7 @@ export default function PostDetailScreen() {
       // Then proceed with API call
       reportHandler.submitReport(reason);
     },
-    [reportHandler, router, globalHidePost, globalHideComment]
+    [reportHandler, router, globalHidePost, globalHideComment],
   );
 
   // Present report sheet when showReportSheet is true
@@ -305,15 +340,21 @@ export default function PostDetailScreen() {
   const handlePoWProgress = useCallback(
     (progress: PoWProgress) => {
       if (commentToastId) {
-        const progressPercent = progress.estimatedTotalMs > 0
-          ? Math.min(99, Math.round((progress.elapsedMs / progress.estimatedTotalMs) * 100))
-          : 0;
+        const progressPercent =
+          progress.estimatedTotalMs > 0
+            ? Math.min(
+                99,
+                Math.round(
+                  (progress.elapsedMs / progress.estimatedTotalMs) * 100,
+                ),
+              )
+            : 0;
         toast.update(commentToastId, {
           description: `Computing proof of work... ${progressPercent}%`,
         });
       }
     },
-    [commentToastId, toast]
+    [commentToastId, toast],
   );
 
   const commentMutation = useComment({
@@ -335,7 +376,9 @@ export default function PostDetailScreen() {
   const [localPostUpdates, setLocalPostUpdates] = useState<Partial<Post>>({});
   const [localComments, setLocalComments] = useState<Comment[]>([]);
   // Track optimistic replies to API comments (parentId -> optimistic comments)
-  const [optimisticReplies, setOptimisticReplies] = useState<Record<string, Comment[]>>({});
+  const [optimisticReplies, setOptimisticReplies] = useState<
+    Record<string, Comment[]>
+  >({});
 
   // Vote overrides for comments (tracks hasLiked, hasDisliked, and likeDelta)
 
@@ -346,7 +389,7 @@ export default function PostDetailScreen() {
   // This prevents duplicates when user pulls to refresh after posting
   useEffect(() => {
     if (!commentsData?.children) return;
-    
+
     // Skip initial load - only clean up on subsequent refreshes
     if (!hasInitialCommentsLoaded.current) {
       hasInitialCommentsLoaded.current = true;
@@ -356,7 +399,7 @@ export default function PostDetailScreen() {
     // Helper to check if server comments contain a matching comment
     const findMatchingServerComment = (
       optimisticComment: Comment,
-      serverComments: Comment[]
+      serverComments: Comment[],
     ): boolean => {
       for (const serverComment of serverComments) {
         // Match by content and author (since optimistic IDs are different)
@@ -368,7 +411,9 @@ export default function PostDetailScreen() {
         }
         // Check nested replies
         if (serverComment.replies && serverComment.replies.length > 0) {
-          if (findMatchingServerComment(optimisticComment, serverComment.replies)) {
+          if (
+            findMatchingServerComment(optimisticComment, serverComment.replies)
+          ) {
             return true;
           }
         }
@@ -379,7 +424,9 @@ export default function PostDetailScreen() {
     // Clean up localComments - remove optimistic comments that now exist on server
     setLocalComments((prev) => {
       const filtered = prev.filter(
-        (c) => !c.id.startsWith("optimistic-") || !findMatchingServerComment(c, comments)
+        (c) =>
+          !c.id.startsWith("optimistic-") ||
+          !findMatchingServerComment(c, comments),
       );
       return filtered.length === prev.length ? prev : filtered;
     });
@@ -391,7 +438,9 @@ export default function PostDetailScreen() {
 
       for (const [parentId, replies] of Object.entries(prev)) {
         const filtered = replies.filter(
-          (c) => !c.id.startsWith("optimistic-") || !findMatchingServerComment(c, comments)
+          (c) =>
+            !c.id.startsWith("optimistic-") ||
+            !findMatchingServerComment(c, comments),
         );
         if (filtered.length > 0) {
           updated[parentId] = filtered;
@@ -425,10 +474,17 @@ export default function PostDetailScreen() {
           };
         });
       },
-      [post?.likes]
+      [post?.likes],
     ),
     onRollback: useCallback(
-      (targetId: string, previousState: { hasLiked: boolean; hasDisliked: boolean; likes: number }) => {
+      (
+        targetId: string,
+        previousState: {
+          hasLiked: boolean;
+          hasDisliked: boolean;
+          likes: number;
+        },
+      ) => {
         setLocalPostUpdates((prev) => ({
           ...prev,
           hasLiked: previousState.hasLiked,
@@ -436,30 +492,34 @@ export default function PostDetailScreen() {
           likes: previousState.likes,
         }));
       },
-      []
+      [],
     ),
   });
 
- // Vote handler for comments
- const commentVoteHandler = useVoteHandler({
-   onOptimisticUpdate: useCallback(
-     (targetId: string, result: VoteResult) => {
-       setCommentVoteOverrides((prev) => {
-         const currentDelta = prev[targetId]?.likeDelta ?? 0;
-         return {
-           ...prev,
-           [targetId]: {
-             hasLiked: result.hasLiked,
-             hasDisliked: result.hasDisliked,
-             likeDelta: currentDelta + result.likeDelta,
-           },
-         };
-       });
-     },
-     []
-   ),
+  // Vote handler for comments
+  const commentVoteHandler = useVoteHandler({
+    onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
+      setCommentVoteOverrides((prev) => {
+        const currentDelta = prev[targetId]?.likeDelta ?? 0;
+        return {
+          ...prev,
+          [targetId]: {
+            hasLiked: result.hasLiked,
+            hasDisliked: result.hasDisliked,
+            likeDelta: currentDelta + result.likeDelta,
+          },
+        };
+      });
+    }, []),
     onRollback: useCallback(
-      (targetId: string, previousState: { hasLiked: boolean; hasDisliked: boolean; likes: number }) => {
+      (
+        targetId: string,
+        previousState: {
+          hasLiked: boolean;
+          hasDisliked: boolean;
+          likes: number;
+        },
+      ) => {
         // Revert to previous state by removing the override
         setCommentVoteOverrides((prev) => {
           const newOverrides = { ...prev };
@@ -467,7 +527,7 @@ export default function PostDetailScreen() {
           return newOverrides;
         });
       },
-      []
+      [],
     ),
   });
 
@@ -504,7 +564,7 @@ export default function PostDetailScreen() {
 
       return updatedComment;
     },
-    [commentVoteOverrides]
+    [commentVoteOverrides],
   );
 
   // Apply optimistic replies to a comment tree recursively
@@ -512,20 +572,20 @@ export default function PostDetailScreen() {
     (comment: Comment): Comment => {
       const pendingReplies = optimisticReplies[comment.id] ?? [];
       const existingReplies = comment.replies ?? [];
-      
+
       // Recursively apply to existing replies
       const processedReplies = existingReplies.map(applyOptimisticReplies);
-      
+
       // Add optimistic replies
       const allReplies = [...processedReplies, ...pendingReplies];
-      
+
       return {
         ...comment,
         replies: allReplies.length > 0 ? allReplies : comment.replies,
         replyCount: (comment.replyCount ?? 0) + pendingReplies.length,
       };
     },
-    [optimisticReplies]
+    [optimisticReplies],
   );
 
   // Filter out hidden comments and comments from blocked users recursively
@@ -535,14 +595,16 @@ export default function PostDetailScreen() {
         .filter(
           (comment) =>
             !hiddenCommentIds.has(comment.id) &&
-            !blockedUserIds.has(comment.author.id)
+            !blockedUserIds.has(comment.author.id),
         )
         .map((comment) => ({
           ...comment,
-          replies: comment.replies ? filterComments(comment.replies) : undefined,
+          replies: comment.replies
+            ? filterComments(comment.replies)
+            : undefined,
         }));
     },
-    [hiddenCommentIds, blockedUserIds]
+    [hiddenCommentIds, blockedUserIds],
   );
 
   // Merge API comments with locally added comments and apply vote overrides + optimistic replies
@@ -550,26 +612,38 @@ export default function PostDetailScreen() {
   const allComments = useMemo(() => {
     const merged = [...localComments, ...comments];
     return filterComments(
-      merged
-        .map(applyOptimisticReplies)
-        .map(applyVoteOverridesToComment)
+      merged.map(applyOptimisticReplies).map(applyVoteOverridesToComment),
     ).sort((a, b) => {
-      const timeA = a.createdAt instanceof Date ? a.createdAt.getTime() : Number(a.createdAt);
-      const timeB = b.createdAt instanceof Date ? b.createdAt.getTime() : Number(b.createdAt);
+      const timeA =
+        a.createdAt instanceof Date
+          ? a.createdAt.getTime()
+          : Number(a.createdAt);
+      const timeB =
+        b.createdAt instanceof Date
+          ? b.createdAt.getTime()
+          : Number(b.createdAt);
       return timeB - timeA; // Descending order (latest first)
     });
-  }, [localComments, comments, applyOptimisticReplies, applyVoteOverridesToComment, filterComments]);
+  }, [
+    localComments,
+    comments,
+    applyOptimisticReplies,
+    applyVoteOverridesToComment,
+    filterComments,
+  ]);
 
   // Helper to find if a comment or its nested replies contain the target ID
   const findCommentInTree = useCallback(
     (comment: Comment, targetId: string): boolean => {
       if (comment.id === targetId) return true;
       if (comment.replies) {
-        return comment.replies.some((reply) => findCommentInTree(reply, targetId));
+        return comment.replies.some((reply) =>
+          findCommentInTree(reply, targetId),
+        );
       }
       return false;
     },
-    []
+    [],
   );
 
   // Scroll to highlighted comment when data loads
@@ -581,7 +655,7 @@ export default function PostDetailScreen() {
       // If not found at top level, find which top-level comment contains it as a nested reply
       if (index === -1) {
         index = allComments.findIndex((c) =>
-          findCommentInTree(c, highlightedCommentId)
+          findCommentInTree(c, highlightedCommentId),
         );
       }
 
@@ -611,7 +685,7 @@ export default function PostDetailScreen() {
   const handlePostHeaderLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = event.nativeEvent.layout.height;
     setPostHeaderHeight((current) =>
-      Math.abs(current - nextHeight) < 1 ? current : nextHeight
+      Math.abs(current - nextHeight) < 1 ? current : nextHeight,
     );
   }, []);
 
@@ -633,7 +707,7 @@ export default function PostDetailScreen() {
         });
       }
     },
-    [postHeaderHeight, stickyHeaderVisible]
+    [postHeaderHeight, stickyHeaderVisible],
   );
 
   useAnimatedReaction(
@@ -675,15 +749,17 @@ export default function PostDetailScreen() {
     const currentPost = displayPost;
     if (!currentPost) return;
 
-    const currentHasLiked = localPostUpdates.hasLiked ?? currentPost.hasLiked ?? false;
-    const currentHasDisliked = localPostUpdates.hasDisliked ?? currentPost.hasDisliked ?? false;
+    const currentHasLiked =
+      localPostUpdates.hasLiked ?? currentPost.hasLiked ?? false;
+    const currentHasDisliked =
+      localPostUpdates.hasDisliked ?? currentPost.hasDisliked ?? false;
     const currentLikes = localPostUpdates.likes ?? currentPost.likes;
 
     postVoteHandler.handleUpvote(
       currentPost.id,
       currentHasLiked,
       currentHasDisliked,
-      currentLikes
+      currentLikes,
     );
   }, [displayPost, localPostUpdates, postVoteHandler]);
 
@@ -691,15 +767,17 @@ export default function PostDetailScreen() {
     const currentPost = displayPost;
     if (!currentPost) return;
 
-    const currentHasLiked = localPostUpdates.hasLiked ?? currentPost.hasLiked ?? false;
-    const currentHasDisliked = localPostUpdates.hasDisliked ?? currentPost.hasDisliked ?? false;
+    const currentHasLiked =
+      localPostUpdates.hasLiked ?? currentPost.hasLiked ?? false;
+    const currentHasDisliked =
+      localPostUpdates.hasDisliked ?? currentPost.hasDisliked ?? false;
     const currentLikes = localPostUpdates.likes ?? currentPost.likes;
 
     postVoteHandler.handleDownvote(
       currentPost.id,
       currentHasLiked,
       currentHasDisliked,
-      currentLikes
+      currentLikes,
     );
   }, [displayPost, localPostUpdates, postVoteHandler]);
 
@@ -719,7 +797,7 @@ export default function PostDetailScreen() {
       // Show loading toast
       const toastId = toast.loading(
         `${action} @${authorUsername}`,
-        "Computing proof of work..."
+        "Computing proof of work...",
       );
 
       // Use setTimeout to allow toast to render before heavy operations
@@ -750,7 +828,9 @@ export default function PostDetailScreen() {
         } catch (error: unknown) {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
-          const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
+          const isAlreadyFollowed = errorMessage
+            .toLowerCase()
+            .includes("already follow");
           const isNotFollowing =
             errorMessage.toLowerCase().includes("not following") ||
             errorMessage.includes("not in followed");
@@ -812,7 +892,7 @@ export default function PostDetailScreen() {
       // Show loading toast
       const toastId = toast.loading(
         `${action} #${topic}`,
-        "Computing proof of work..."
+        "Computing proof of work...",
       );
 
       // Use setTimeout to allow toast to render before heavy operations
@@ -834,7 +914,9 @@ export default function PostDetailScreen() {
         } catch (error: unknown) {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
-          const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
+          const isAlreadyFollowed = errorMessage
+            .toLowerCase()
+            .includes("already follow");
           const isNotFollowing =
             errorMessage.toLowerCase().includes("not following") ||
             errorMessage.includes("not in followed");
@@ -885,7 +967,7 @@ export default function PostDetailScreen() {
     (
       commentId: string,
       updater: (comment: Comment) => Comment,
-      commentList: Comment[]
+      commentList: Comment[],
     ): Comment[] => {
       return commentList.map((comment) => {
         if (comment.id === commentId) {
@@ -900,7 +982,7 @@ export default function PostDetailScreen() {
         return comment;
       });
     },
-    []
+    [],
   );
 
   const handleLikeComment = useCallback(
@@ -908,16 +990,16 @@ export default function PostDetailScreen() {
       commentId: string,
       currentlyLiked: boolean,
       currentlyDisliked: boolean,
-      currentLikes: number = 0
+      currentLikes: number = 0,
     ) => {
       commentVoteHandler.handleUpvote(
         commentId,
         currentlyLiked,
         currentlyDisliked,
-        currentLikes
+        currentLikes,
       );
     },
-    [commentVoteHandler]
+    [commentVoteHandler],
   );
 
   const handleDislikeComment = useCallback(
@@ -925,16 +1007,16 @@ export default function PostDetailScreen() {
       commentId: string,
       currentlyLiked: boolean,
       currentlyDisliked: boolean,
-      currentLikes: number = 0
+      currentLikes: number = 0,
     ) => {
       commentVoteHandler.handleDownvote(
         commentId,
         currentlyLiked,
         currentlyDisliked,
-        currentLikes
+        currentLikes,
       );
     },
-    [commentVoteHandler]
+    [commentVoteHandler],
   );
 
   const handleReplyToComment = useCallback(
@@ -947,7 +1029,7 @@ export default function PostDetailScreen() {
         }, 100);
       });
     },
-    [requireAuth]
+    [requireAuth],
   );
 
   const handleCancelReply = useCallback(() => {
@@ -971,8 +1053,10 @@ export default function PostDetailScreen() {
       // Show loading toast
       const hasMedia = imageUri || gifUrl;
       const toastId = toast.loading(
-        replyingToUsername ? `Replying to @${replyingToUsername}` : "Posting comment",
-        hasMedia ? "Uploading media..." : "Computing proof of work..."
+        replyingToUsername
+          ? `Replying to @${replyingToUsername}`
+          : "Posting comment",
+        hasMedia ? "Uploading media..." : "Computing proof of work...",
       );
       setCommentToastId(toastId);
 
@@ -986,7 +1070,8 @@ export default function PostDetailScreen() {
           toast.update(toastId, {
             type: "error",
             title: "Image upload failed",
-            description: error instanceof Error ? error.message : "Please try again",
+            description:
+              error instanceof Error ? error.message : "Please try again",
             duration: 4000,
           });
           setTimeout(() => toast.dismiss(toastId), 4000);
@@ -1000,9 +1085,7 @@ export default function PostDetailScreen() {
       let finalContent = text;
       if (mediaUrl) {
         // Append media URL on a new line if there's text, or just the URL if no text
-        finalContent = text.trim()
-          ? `${text.trim()}\n\n${mediaUrl}`
-          : mediaUrl;
+        finalContent = text.trim() ? `${text.trim()}\n\n${mediaUrl}` : mediaUrl;
       }
       toast.update(toastId, { description: "Computing proof of work..." });
 
@@ -1033,7 +1116,10 @@ export default function PostDetailScreen() {
         // Add as a reply to the parent comment
         setOptimisticReplies((prev) => ({
           ...prev,
-          [replyTarget.id]: [...(prev[replyTarget.id] ?? []), optimisticComment],
+          [replyTarget.id]: [
+            ...(prev[replyTarget.id] ?? []),
+            optimisticComment,
+          ],
         }));
       } else {
         // Add as top-level comment
@@ -1044,7 +1130,7 @@ export default function PostDetailScreen() {
         ...prev,
         comments: (prev.comments ?? displayPost?.comments ?? 0) + 1,
       }));
-      
+
       // Clear reply state immediately so UI updates
       setReplyingTo(null);
       setIsSubmitting(false);
@@ -1059,7 +1145,9 @@ export default function PostDetailScreen() {
         // Update toast to success
         toast.update(toastId, {
           type: "success",
-          title: replyingToUsername ? `Replied to @${replyingToUsername}` : "Comment posted!",
+          title: replyingToUsername
+            ? `Replied to @${replyingToUsername}`
+            : "Comment posted!",
           description: undefined,
           duration: 3000,
         });
@@ -1078,7 +1166,7 @@ export default function PostDetailScreen() {
             const updated = { ...prev };
             if (updated[replyTarget.id]) {
               updated[replyTarget.id] = updated[replyTarget.id].filter(
-                (c) => c.id !== optimisticCommentId
+                (c) => c.id !== optimisticCommentId,
               );
               if (updated[replyTarget.id].length === 0) {
                 delete updated[replyTarget.id];
@@ -1088,13 +1176,16 @@ export default function PostDetailScreen() {
           });
         } else {
           setLocalComments((prev) =>
-            prev.filter((c) => c.id !== optimisticCommentId)
+            prev.filter((c) => c.id !== optimisticCommentId),
           );
         }
 
         setLocalPostUpdates((prev) => ({
           ...prev,
-          comments: Math.max(0, (prev.comments ?? displayPost?.comments ?? 0) - 1),
+          comments: Math.max(
+            0,
+            (prev.comments ?? displayPost?.comments ?? 0) - 1,
+          ),
         }));
 
         // Update toast to error
@@ -1119,7 +1210,7 @@ export default function PostDetailScreen() {
       displayPost,
       toast,
       commentMutation,
-    ]
+    ],
   );
 
   const handleDeleteComment = useCallback(() => {
@@ -1142,7 +1233,10 @@ export default function PostDetailScreen() {
   // Handler for blocking the post author
   const handleBlockPostAuthor = useCallback(() => {
     if (!displayPost) return;
-    blockHandler.requestBlockUser(displayPost.author.id, displayPost.author.username);
+    blockHandler.requestBlockUser(
+      displayPost.author.id,
+      displayPost.author.username,
+    );
   }, [displayPost, blockHandler]);
 
   // Handler for reporting the post
@@ -1160,7 +1254,10 @@ export default function PostDetailScreen() {
   // Handler for blocking a comment author
   const handleBlockCommentAuthor = useCallback(() => {
     if (!selectedComment) return;
-    blockHandler.requestBlockUser(selectedComment.author.id, selectedComment.author.username);
+    blockHandler.requestBlockUser(
+      selectedComment.author.id,
+      selectedComment.author.username,
+    );
   }, [selectedComment, blockHandler]);
 
   // Handler for reporting a comment
@@ -1168,6 +1265,50 @@ export default function PostDetailScreen() {
     if (!selectedComment) return;
     reportHandler.requestReport(selectedComment.id, "comment");
   }, [selectedComment, reportHandler]);
+
+  const handleToggleFollowCommentAuthor = useCallback(() => {
+    if (!selectedComment || isFollowLoading) return;
+    const authorId = selectedComment.author.id;
+    const authorUsername = selectedComment.author.username;
+    const isCurrentlyFollowing = followedUsers.includes(authorId);
+
+    requireAuth(async () => {
+      const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
+      const actionPast = isCurrentlyFollowing ? "Unfollowed" : "Followed";
+      const toastId = toast.loading(
+        `${action} @${authorUsername}`,
+        "Computing proof of work...",
+      );
+
+      setTimeout(async () => {
+        setIsFollowLoading(true);
+        try {
+          await toggleFollowMutation.mutateAsync({
+            userAddress: authorId,
+            isCurrentlyFollowing,
+          });
+          toast.update(toastId, {
+            type: "success",
+            title: `${actionPast} @${authorUsername}`,
+          });
+        } catch {
+          toast.update(toastId, {
+            type: "error",
+            title: `Failed to ${action.toLowerCase()} @${authorUsername}`,
+          });
+        } finally {
+          setIsFollowLoading(false);
+        }
+      }, 50);
+    });
+  }, [
+    selectedComment,
+    isFollowLoading,
+    followedUsers,
+    requireAuth,
+    toast,
+    toggleFollowMutation,
+  ]);
 
   // Handler for opening post options sheet
   const handlePostMorePress = useCallback(() => {
@@ -1196,31 +1337,25 @@ export default function PostDetailScreen() {
   }, []);
 
   // Render header (close button + right icons)
- const renderHeader = useMemo(
-   () => (
-     <LinearGradient
-       colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
-       start={{ x: 0, y: 0 }}
-       end={{ x: 1, y: 1 }}
-       style={[
-         styles.header,
-         { paddingTop: insets.top },
-       ]}
-     >
-       {/* Left: Close button */}
-       <Pressable onPress={handleBack} style={styles.headerButton}>
-         <AntDesign name="close" size={22} color="#FFFFFF" />
-       </Pressable>
+  const renderHeader = useMemo(
+    () => (
+      <LinearGradient
+        colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.header, { paddingTop: insets.top }]}
+      >
+        {/* Left: Close button */}
+        <Pressable onPress={handleBack} style={styles.headerButton}>
+          <AntDesign name="close" size={22} color="#FFFFFF" />
+        </Pressable>
 
-       {/* Spacer */}
-       <View style={styles.headerSpacer} />
-     </LinearGradient>
-   ),
-   [
-     insets.top,
-     handleBack,
-   ]
- );
+        {/* Spacer */}
+        <View style={styles.headerSpacer} />
+      </LinearGradient>
+    ),
+    [insets.top, handleBack],
+  );
 
   // Render list header (post + divider)
   const listHeader = useMemo(() => {
@@ -1298,11 +1433,18 @@ export default function PostDetailScreen() {
     }
 
     return (
-      <Animated.View style={postEnteringStyle} onLayout={handlePostHeaderLayout}>
+      <Animated.View
+        style={postEnteringStyle}
+        onLayout={handlePostHeaderLayout}
+      >
         <PostCard
           post={displayPost}
           isOwnPost={currentUser?.id === displayPost.author.id}
-          isTopicFollowed={displayPost?.topic ? followedTopics.includes(displayPost.topic) : false}
+          isTopicFollowed={
+            displayPost?.topic
+              ? followedTopics.includes(displayPost.topic)
+              : false
+          }
           screenActive={screenActive}
           onLikePress={handleLikePost}
           onDislikePress={handleDislikePost}
@@ -1365,7 +1507,7 @@ export default function PostDetailScreen() {
       handleDislikeComment,
       handleReplyToComment,
       handleMoreOptions,
-    ]
+    ],
   );
 
   // Render a single comment skeleton
@@ -1471,7 +1613,7 @@ export default function PostDetailScreen() {
         </View>
       );
     },
-    [theme.colors.background.subtle]
+    [theme.colors.background.subtle],
   );
 
   const renderEmptyComments = useCallback(() => {
@@ -1561,10 +1703,7 @@ export default function PostDetailScreen() {
   const postThumbnail = displayPost?.media?.[0]?.uri;
 
   return (
-    <KeyboardAvoidingView
-      style={styles.keyboardView}
-      behavior="padding"
-    >
+    <KeyboardAvoidingView style={styles.keyboardView} behavior="padding">
       <Box flex background="base">
         {/* Header */}
         {renderHeader}
@@ -1663,15 +1802,21 @@ export default function PostDetailScreen() {
         />
 
         {/* Comment options sheet */}
-       <CommentOptionsSheet
-         ref={optionsSheetRef}
-         comment={selectedComment}
+        <CommentOptionsSheet
+          ref={optionsSheetRef}
+          comment={selectedComment}
           rootPostId={id}
-         isOwnComment={currentUser?.id === selectedComment?.author.id}
+          isOwnComment={currentUser?.id === selectedComment?.author.id}
+          isFollowingAuthor={
+            selectedComment?.author.id
+              ? followedUsers.includes(selectedComment.author.id)
+              : false
+          }
           onDelete={handleDeleteComment}
           onBlockComment={handleBlockComment}
           onBlockUser={handleBlockCommentAuthor}
           onReport={handleReportComment}
+          onToggleFollowAuthor={handleToggleFollowCommentAuthor}
           onDismiss={() => setSelectedComment(null)}
         />
 
@@ -1680,8 +1825,16 @@ export default function PostDetailScreen() {
           ref={postOptionsSheetRef}
           post={displayPost}
           isOwnPost={currentUser?.id === displayPost?.author.id}
-          isTopicFollowed={displayPost?.topic ? followedTopics.includes(displayPost.topic) : false}
-          isFollowingUser={displayPost?.author.id ? followedUsers.includes(displayPost.author.id) : false}
+          isTopicFollowed={
+            displayPost?.topic
+              ? followedTopics.includes(displayPost.topic)
+              : false
+          }
+          isFollowingUser={
+            displayPost?.author.id
+              ? followedUsers.includes(displayPost.author.id)
+              : false
+          }
           onFollowUser={handleFollowPost}
           onFollowTopic={handleFollowTopic}
           onDelete={handleDeletePost}
