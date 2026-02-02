@@ -414,11 +414,23 @@ export const CommentItem = ({
                 </Text>
 
                 <TimeAgo timestamp={createdAt} showSuffix={false} size="md" />
+                {isCollapsed && (
+                  <Text
+                    size="md"
+                    mode="subtle"
+                    numberOfLines={1}
+                    style={styles.collapsedPreview}
+                  >
+                    {content}
+                  </Text>
+                )}
               </View>
             </View>
-          </View>
-          <Pressable onPress={handlePress} style={styles.expandArea} />
-          {!isOwnComment && (
+         </View>
+          {!isCollapsed && (
+            <Pressable onPress={handlePress} style={styles.expandArea} />
+          )}
+         {!isOwnComment && !isCollapsed && (
             <FollowButton
               isFollowing={isFollowingAuthor}
               onPress={onFollowPress}
@@ -544,12 +556,12 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: theme.spacing.xs,
     paddingHorizontal: theme.spacing.md,
   },
- threadLineContainer: {
-   position: "absolute",
+  threadLineContainer: {
+    position: "absolute",
     top: theme.spacing.sm + 2,
-   bottom: 0,
-   left: theme.spacing.md,
- },
+    bottom: 0,
+    left: theme.spacing.md,
+  },
   threadLine: {
     position: "absolute",
     top: 0,
@@ -568,8 +580,11 @@ const styles = StyleSheet.create((theme) => ({
   authorSection: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
   },
-  authorInfo: {},
+ authorInfo: {
+   flex: 1,
+ },
   usernameButton: {
     paddingVertical: 2,
     paddingHorizontal: 2,
@@ -581,11 +596,16 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     height: 32,
   },
-  authorRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.xs,
+  collapsedPreview: {
+    flexShrink: 1,
+    marginLeft: theme.spacing.xs,
   },
+ authorRow: {
+   flexDirection: "row",
+   alignItems: "center",
+    flex: 1,
+   gap: theme.spacing.xs,
+ },
   content: {
     marginTop: theme.spacing.xs,
     lineHeight: 18,
