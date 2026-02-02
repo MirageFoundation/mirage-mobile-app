@@ -35,7 +35,7 @@ type SideMenuProps = {
   onSaved?: () => void;
   onHistory?: () => void;
   onDrafts?: () => void;
-  onNetwork?: () => void;
+  onFollowing?: () => void;
   onInviteAndEarn?: () => void;
   onHelp?: () => void;
   onAbout?: () => void;
@@ -260,7 +260,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       onSaved,
       onHistory,
       onDrafts,
-      onNetwork,
+      onFollowing,
       onInviteAndEarn,
       onHelp,
       onAbout,
@@ -484,10 +484,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   {/* Social Section */}
                   <SectionHeader title="Social" />
                   <MenuItem
-                    iconName="globe-outline"
-                    title="Network"
-                    subtitle="Your connections"
-                    onPress={createHandler(onNetwork)}
+                    iconName="people-outline"
+                    title="Following"
+                    subtitle="Users and topics you follow"
+                    onPress={createHandler(onFollowing)}
                   />
                   <MenuItem
                     iconName="gift-outline"

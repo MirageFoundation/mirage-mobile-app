@@ -3,7 +3,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FlatList } from "react-native";
-import { ActivityIndicator, RefreshControl, View } from "react-native";
+import { ActivityIndicator, Linking, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -271,23 +271,23 @@ export function HomeScreen() {
     console.log("Navigate to drafts");
   }, []);
 
-  const handleMenuNetwork = useCallback(() => {
-    // TODO: Navigate to network
-    console.log("Navigate to network");
-  }, []);
+  const handleMenuFollowing = useCallback(() => {
+    const id = currentUser?.walletAddress || currentUser?.username;
+    if (id) {
+      router.push(`/user-following/${id}`);
+    }
+  }, [router, currentUser?.walletAddress, currentUser?.username]);
 
   const handleMenuInvite = useCallback(() => {
     router.push("/invite-and-earn");
   }, [router]);
 
   const handleMenuHelp = useCallback(() => {
-    // TODO: Navigate to help
-    console.log("Navigate to help");
+    Linking.openURL("https://mirage.foundation/faq");
   }, []);
 
   const handleMenuAbout = useCallback(() => {
-    // TODO: Navigate to about
-    console.log("Navigate to about");
+    Linking.openURL("https://mirage.foundation");
   }, []);
 
   const handleMenuLogout = useCallback(async () => {
@@ -1150,7 +1150,7 @@ useEffect(() => {
         onSaved={handleMenuSaved}
         onHistory={handleMenuHistory}
         onDrafts={handleMenuDrafts}
-        onNetwork={handleMenuNetwork}
+        onFollowing={handleMenuFollowing}
         onInviteAndEarn={handleMenuInvite}
         onHelp={handleMenuHelp}
         onAbout={handleMenuAbout}
