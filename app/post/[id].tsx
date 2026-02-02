@@ -10,6 +10,7 @@ import {
   useToggleFollowTopic,
   useComment,
 } from "@/src/api/write";
+import { useEdit } from "@/src/api/write";
 import type { PoWProgress } from "@/src/api/write/signing";
 import { Avatar } from "@/src/components/atoms";
 import {
@@ -367,8 +368,34 @@ export default function PostDetailScreen() {
     [commentToastId, toast],
   );
 
-  const commentMutation = useComment({
-    onPoWProgress: handlePoWProgress,
+ const commentMutation = useComment({
+   onPoWProgress: handlePoWProgress,
+ });
+
+  const editToastIdRef = useRef<string | null>(null);
+  const handleEditPoWProgress = useCallback(
+    (progress: PoWProgress) => {
+      const tid = editToastIdRef.current;
+      if (tid) {
+        const pct =
+          progress.estimatedTotalMs > 0
+            ? Math.min(
+                99,
+                Math.round(
+                  (progress.elapsedMs / progress.estimatedTotalMs) * 100,
+                ),
+              )
+            : 0;
+        toast.update(tid, {
+          description: `Computing proof of work... ${pct}%`,
+        });
+      }
+    },
+    [toast],
+  );
+
+  const editMutation = useEdit({
+    onPoWProgress: handleEditPoWProgress,
   });
 
   // Transform API post and comments to UI format
@@ -463,11 +490,15 @@ export default function PostDetailScreen() {
       return hasChanges ? updated : prev;
     });
   }, [commentsData?.children, comments]);
-  const [commentVoteOverrides, setCommentVoteOverrides] = useState<
-    Record<
-      string,
-      { hasLiked?: boolean; hasDisliked?: boolean; likeDelta?: number }
-    >
+ const [commentVoteOverrides, setCommentVoteOverrides] = useState<
+   Record<
+     string,
+     { hasLiked?: boolean; hasDisliked?: boolean; likeDelta?: number }
+   >
+ >({});
+
+  const [commentEditOverrides, setCommentEditOverrides] = useState<
+    Record<string, string>
   >({});
 
   // Vote handler for the post
@@ -574,7 +605,26 @@ export default function PostDetailScreen() {
 
       return updatedComment;
     },
-    [commentVoteOverrides],
+   [commentVoteOverrides],
+ );
+
+  const applyEditOverridesToComment = useCallback(
+    (comment: Comment): Comment => {
+      const editedContent = commentEditOverrides[comment.id];
+      const updatedComment: Comment = editedContent !== undefined
+        ? { ...comment, content: editedContent }
+        : comment;
+
+      if (updatedComment.replies && updatedComment.replies.length > 0) {
+        return {
+          ...updatedComment,
+          replies: updatedComment.replies.map(applyEditOverridesToComment),
+        };
+      }
+
+      return updatedComment;
+    },
+    [commentEditOverrides],
   );
 
   // Apply optimistic replies to a comment tree recursively
@@ -619,28 +669,29 @@ export default function PostDetailScreen() {
 
   // Merge API comments with locally added comments and apply vote overrides + optimistic replies
   // Filter hidden/blocked and sort by createdAt descending (latest first)
-  const allComments = useMemo(() => {
-    const merged = [...localComments, ...comments];
-    return filterComments(
-      merged.map(applyOptimisticReplies).map(applyVoteOverridesToComment),
-    ).sort((a, b) => {
-      const timeA =
-        a.createdAt instanceof Date
-          ? a.createdAt.getTime()
-          : Number(a.createdAt);
-      const timeB =
-        b.createdAt instanceof Date
-          ? b.createdAt.getTime()
-          : Number(b.createdAt);
-      return timeB - timeA; // Descending order (latest first)
-    });
-  }, [
-    localComments,
-    comments,
-    applyOptimisticReplies,
-    applyVoteOverridesToComment,
-    filterComments,
-  ]);
+ const allComments = useMemo(() => {
+   const merged = [...localComments, ...comments];
+   return filterComments(
+      merged.map(applyOptimisticReplies).map(applyVoteOverridesToComment).map(applyEditOverridesToComment),
+   ).sort((a, b) => {
+     const timeA =
+       a.createdAt instanceof Date
+         ? a.createdAt.getTime()
+         : Number(a.createdAt);
+     const timeB =
+       b.createdAt instanceof Date
+         ? b.createdAt.getTime()
+         : Number(b.createdAt);
+     return timeB - timeA; // Descending order (latest first)
+   });
+ }, [
+   localComments,
+   comments,
+   applyOptimisticReplies,
+   applyVoteOverridesToComment,
+    applyEditOverridesToComment,
+   filterComments,
+ ]);
 
   // Helper to find if a comment or its nested replies contain the target ID
   const findCommentInTree = useCallback(
@@ -1227,6 +1278,8 @@ export default function PostDetailScreen() {
  const clearPendingComment = useCommentComposeStore(
    (s) => s.clearPendingComment,
  );
+  const pendingEdit = useCommentComposeStore((s) => s.pendingEdit);
+  const clearPendingEdit = useCommentComposeStore((s) => s.clearPendingEdit);
 
   const wasDismissed = useCommentComposeStore((s) => s.wasDismissed);
   const setWasDismissed = useCommentComposeStore((s) => s.setWasDismissed);
@@ -1249,10 +1302,92 @@ export default function PostDetailScreen() {
     }
   }, [pendingComment, handleSubmitComment, clearPendingComment]);
 
+useEffect(() => {
+ if (pendingEdit) {
+   const { commentId, parentId, text, imageUri, gifUrl } = pendingEdit;
+   clearPendingEdit();
+
+    if (!commentId || commentId.startsWith("optimistic-")) return;
+
+   let finalContent = text;
+    if (imageUri) {
+      finalContent = text.trim() ? `${text.trim()}\n\n${imageUri}` : imageUri;
+    } else if (gifUrl) {
+      finalContent = text.trim() ? `${text.trim()}\n\n${gifUrl}` : gifUrl;
+    }
+
+      setCommentEditOverrides((prev) => ({ ...prev, [commentId]: finalContent }));
+
+     toast.dismissAll();
+     const toastId = toast.loading("Editing comment", "Computing proof of work...");
+     editToastIdRef.current = toastId;
+
+    (async () => {
+      try {
+        await editMutation.mutateAsync({
+          postId: commentId,
+          parentId,
+          title: "",
+          content: finalContent,
+          tag: "",
+        });
+
+        toast.update(toastId, {
+          type: "success",
+          title: "Comment edited!",
+          description: undefined,
+          duration: 3000,
+        });
+       setTimeout(() => toast.dismiss(toastId), 3000);
+
+        await refetchComments();
+        setCommentEditOverrides((prev) => {
+          const next = { ...prev };
+          delete next[commentId];
+          return next;
+        });
+      } catch (error: unknown) {
+          setCommentEditOverrides((prev) => {
+            const next = { ...prev };
+            delete next[commentId];
+            return next;
+          });
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to edit comment";
+         toast.update(toastId, {
+           type: "error",
+           title: "Failed to edit comment",
+           description: errorMessage,
+           duration: 5000,
+         });
+         setTimeout(() => toast.dismiss(toastId), 5000);
+       } finally {
+          editToastIdRef.current = null;
+       }
+     })();
+   }
+  }, [pendingEdit, clearPendingEdit, editMutation, toast, refetchComments, editToastIdRef]);
+
   const handleDeleteComment = useCallback(() => {
     if (!selectedComment) return;
     deleteHandler.requestDelete(selectedComment.id, "comment");
   }, [selectedComment, deleteHandler]);
+
+ const handleEditComment = useCallback(() => {
+    if (!selectedComment || !id || selectedComment.id.startsWith("optimistic-")) return;
+   const params: Record<string, string> = {
+      postId: id,
+      postTitle: displayPost?.title ?? "",
+      postAuthorUsername: displayPost?.author.username ?? "",
+      editCommentId: selectedComment.id,
+      editParentId: selectedComment.parentId ?? id,
+      editContent: selectedComment.content,
+    };
+    if (displayPost?.media?.[0]?.uri) {
+      params.postThumbnail = displayPost.media[0].uri;
+    }
+    router.push({ pathname: "/comment-compose", params });
+  }, [selectedComment, id, displayPost, router]);
 
   // Handler for deleting the post
   const handleDeletePost = useCallback(() => {
@@ -1901,6 +2036,7 @@ export default function PostDetailScreen() {
               : false
           }
           onDelete={handleDeleteComment}
+          onEdit={handleEditComment}
           onBlockComment={handleBlockComment}
           onBlockUser={handleBlockCommentAuthor}
           onReport={handleReportComment}

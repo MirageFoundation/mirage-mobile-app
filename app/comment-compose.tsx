@@ -68,29 +68,60 @@ export default function CommentComposeScreen() {
  const inputRef = useRef<TextInput>(null);
  const gifSearchRef = useRef<TextInput>(null);
   const linkUrlRef = useRef<TextInput>(null);
- const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
+const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
+  const setPendingEdit = useCommentComposeStore((s) => s.setPendingEdit);
 
-  const {
-    postId,
-    postTitle,
-    postAuthorUsername,
-    postThumbnail,
-    postContent,
-    replyToId,
-    replyToUsername,
-    replyToContent,
-  } = useLocalSearchParams<{
-    postId: string;
-    postTitle: string;
-    postAuthorUsername: string;
-    postThumbnail?: string;
-    postContent?: string;
-    replyToId?: string;
-    replyToUsername?: string;
-    replyToContent?: string;
-  }>();
+ const {
+   postId,
+   postTitle,
+   postAuthorUsername,
+   postThumbnail,
+   postContent,
+   replyToId,
+   replyToUsername,
+   replyToContent,
+    editCommentId,
+    editParentId,
+    editContent,
+ } = useLocalSearchParams<{
+   postId: string;
+   postTitle: string;
+   postAuthorUsername: string;
+   postThumbnail?: string;
+   postContent?: string;
+   replyToId?: string;
+   replyToUsername?: string;
+   replyToContent?: string;
+   editCommentId?: string;
+   editParentId?: string;
+   editContent?: string;
+ }>();
 
-  const [text, setText] = useState("");
+  const isEditMode = !!editCommentId;
+
+  const initialText = useMemo(() => {
+    if (isEditMode && editContent) {
+      const { text: extractedText } = extractImageUrls(editContent);
+      return extractedText;
+    }
+    return "";
+  }, []);
+
+  const initialAttachment = useMemo(() => {
+    if (isEditMode && editContent) {
+      const { imageUrls } = extractImageUrls(editContent);
+      if (imageUrls.length > 0) {
+        const url = imageUrls[0];
+        if (GIPHY_URL_REGEX.test(url)) {
+          return { type: "gif" as const, url };
+        }
+        return { type: "image" as const, url };
+      }
+    }
+    return null;
+  }, []);
+
+  const [text, setText] = useState(initialText);
   const [inputMode, setInputMode] = useState<InputMode>("keyboard");
   const inputModeRef = useRef<InputMode>("keyboard");
   const [linkName, setLinkName] = useState("");
@@ -104,8 +135,12 @@ export default function CommentComposeScreen() {
     isConfigured: isGiphyConfigured,
   } = useGiphy({ debounceMs: 300, limit: 20 });
 
-  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
-  const [selectedGifUrl, setSelectedGifUrl] = useState<string | null>(null);
+  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(
+    initialAttachment?.type === "image" ? initialAttachment.url : null,
+  );
+  const [selectedGifUrl, setSelectedGifUrl] = useState<string | null>(
+    initialAttachment?.type === "gif" ? initialAttachment.url : null,
+  );
 
   const hasAttachment = selectedImageUri !== null || selectedGifUrl !== null;
   const canSubmit = text.trim().length > 0 || hasAttachment;
@@ -142,11 +177,21 @@ export default function CommentComposeScreen() {
     if (!canSubmit) return;
     Keyboard.dismiss();
     triggerHaptic("medium");
-    setPendingComment({
-      text: text.trim(),
-      imageUri: selectedImageUri,
-      gifUrl: selectedGifUrl,
-    });
+    if (isEditMode && editCommentId && editParentId) {
+      setPendingEdit({
+        commentId: editCommentId,
+        parentId: editParentId,
+        text: text.trim(),
+        imageUri: selectedImageUri,
+        gifUrl: selectedGifUrl,
+      });
+    } else {
+      setPendingComment({
+        text: text.trim(),
+        imageUri: selectedImageUri,
+        gifUrl: selectedGifUrl,
+      });
+    }
     router.back();
   }, [
     canSubmit,
@@ -154,6 +199,10 @@ export default function CommentComposeScreen() {
     selectedImageUri,
     selectedGifUrl,
     setPendingComment,
+    setPendingEdit,
+    isEditMode,
+    editCommentId,
+    editParentId,
     router,
   ]);
 
@@ -246,7 +295,7 @@ export default function CommentComposeScreen() {
             />
           </Pressable>
           <Text size="lg" weight="bold" style={styles.headerTitle}>
-            Add comment
+            {isEditMode ? "Edit comment" : "Add comment"}
           </Text>
           <Pressable
             onPress={handleSubmit}
@@ -267,7 +316,7 @@ export default function CommentComposeScreen() {
                 color: canSubmit ? "#FFFFFF" : theme.colors.text.subtle,
               }}
             >
-              Post
+              {isEditMode ? "Save" : "Post"}
             </Text>
           </Pressable>
         </View>

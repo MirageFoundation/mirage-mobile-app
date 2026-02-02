@@ -25,6 +25,7 @@ type CommentOptionsSheetProps = {
   onCopyText?: () => void;
   onBlockUser?: () => void;
   onBlockComment?: () => void;
+  onEdit?: () => void;
   onDelete?: () => void;
   onReport?: () => void;
   onToggleFollowAuthor?: () => void;
@@ -88,6 +89,7 @@ export const CommentOptionsSheet = forwardRef<
       onCopyText,
       onBlockUser,
       onBlockComment,
+      onEdit,
       onDelete,
       onReport,
       onToggleFollowAuthor,
@@ -165,6 +167,12 @@ export const CommentOptionsSheet = forwardRef<
       dismiss();
       onDelete?.();
     }, [dismiss, onDelete]);
+
+    const handleEdit = useCallback(() => {
+      triggerHaptic("selection");
+      dismiss();
+      onEdit?.();
+    }, [dismiss, onEdit]);
 
     const handleReport = useCallback(() => {
       triggerHaptic("warning");
@@ -275,6 +283,15 @@ export const CommentOptionsSheet = forwardRef<
                 title="Report"
                 onPress={handleReport}
                 isDestructive
+              />
+            )}
+
+            {isOwnComment && (
+              <MenuItem
+                iconComponent={Feather}
+                iconName="edit-2"
+                title="Edit Comment"
+                onPress={handleEdit}
               />
             )}
 

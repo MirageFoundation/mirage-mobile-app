@@ -62,6 +62,10 @@ import {
   usePreferencesStore,
   getShareBaseUrl,
 } from "@/src/stores";
+import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
+import { useEdit } from "@/src/api/write";
+import type { PoWProgress } from "@/src/api/write/signing";
+import { useToast } from "@/src/providers/toast-provider";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const AnimatedFlatList = Animated.createAnimatedComponent(
@@ -146,6 +150,31 @@ export function ProfileScreen() {
   const blockHandler = useBlockHandler({});
   const reportHandler = useReportHandler({});
 
+ const toast = useToast();
+ const pendingEdit = useCommentComposeStore((s) => s.pendingEdit);
+ const clearPendingEdit = useCommentComposeStore((s) => s.clearPendingEdit);
+
+  const editToastIdRef = useRef<string | null>(null);
+  const handleEditPoWProgress = useCallback(
+    (progress: PoWProgress) => {
+      const tid = editToastIdRef.current;
+      if (tid) {
+        const pct =
+          progress.estimatedTotalMs > 0
+            ? Math.min(99, Math.round((progress.elapsedMs / progress.estimatedTotalMs) * 100))
+            : 0;
+        toast.update(tid, { description: `Computing proof of work... ${pct}%` });
+      }
+    },
+    [toast],
+  );
+
+ const editMutation = useEdit({ onPoWProgress: handleEditPoWProgress });
+
+  const [commentEditOverrides, setCommentEditOverrides] = useState<
+    Record<string, string>
+  >({});
+
   const headerHeight = insets.top + HEADER_BAR_HEIGHT;
   const stickyThreshold = PROFILE_CONTENT_HEIGHT;
 
@@ -165,13 +194,18 @@ export function ProfileScreen() {
     limit: 20,
   });
 
-  const apiPosts = useMemo(() => {
-    const allPosts = postsData?.pages.flatMap((page) => page.posts) ?? [];
-    if (getTabType() === "submissions") {
-      return allPosts.filter((post) => !hiddenPostIds.has(post.post_id));
-    }
-    return allPosts.filter((post) => !hiddenCommentIds.has(post.post_id));
-  }, [postsData, getTabType, hiddenPostIds, hiddenCommentIds]);
+ const apiPosts = useMemo(() => {
+   const allPosts = postsData?.pages.flatMap((page) => page.posts) ?? [];
+   if (getTabType() === "submissions") {
+     return allPosts.filter((post) => !hiddenPostIds.has(post.post_id));
+   }
+    return allPosts
+      .filter((post) => !hiddenCommentIds.has(post.post_id))
+      .map((post) => {
+        const override = commentEditOverrides[post.post_id];
+        return override !== undefined ? { ...post, content: override } : post;
+      });
+  }, [postsData, getTabType, hiddenPostIds, hiddenCommentIds, commentEditOverrides]);
 
   const uiPosts = useMemo(
     () => apiPosts.map((post) => transformApiPost(post)),
@@ -328,6 +362,94 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
     },
     [router],
   );
+
+  const handleEditCommentPress = useCallback(
+    (comment: ApiPost, rootPostId: string) => {
+      const params: Record<string, string> = {
+        postId: rootPostId,
+        postTitle: "",
+        postAuthorUsername: "",
+        editCommentId: comment.post_id,
+        editParentId: comment.root_post_id || rootPostId,
+        editContent: comment.content,
+      };
+      router.push({ pathname: "/comment-compose", params });
+    },
+    [router],
+  );
+
+  const handleDeleteCommentPress = useCallback(
+    (comment: ApiPost) => {
+      deleteHandler.requestDelete(comment.post_id, "comment");
+    },
+    [deleteHandler],
+  );
+
+useEffect(() => {
+  if (pendingEdit) {
+    const { commentId, parentId, text, imageUri, gifUrl } = pendingEdit;
+    clearPendingEdit();
+
+    if (!commentId || commentId.startsWith("optimistic-")) return;
+
+   let finalContent = text;
+    if (imageUri) {
+      finalContent = text.trim() ? `${text.trim()}\n\n${imageUri}` : imageUri;
+    } else if (gifUrl) {
+      finalContent = text.trim() ? `${text.trim()}\n\n${gifUrl}` : gifUrl;
+    }
+
+      setCommentEditOverrides((prev) => ({ ...prev, [commentId]: finalContent }));
+
+     toast.dismissAll();
+      const toastId = toast.loading("Editing comment", "Computing proof of work...");
+      editToastIdRef.current = toastId;
+
+     (async () => {
+       try {
+         await editMutation.mutateAsync({
+           postId: commentId,
+           parentId,
+           title: "",
+           content: finalContent,
+           tag: "",
+         });
+
+         toast.update(toastId, {
+           type: "success",
+           title: "Comment edited!",
+           description: undefined,
+           duration: 3000,
+         });
+       setTimeout(() => toast.dismiss(toastId), 3000);
+
+        await refetchPosts();
+        setCommentEditOverrides((prev) => {
+          const next = { ...prev };
+          delete next[commentId];
+          return next;
+        });
+      } catch (error: unknown) {
+          setCommentEditOverrides((prev) => {
+            const next = { ...prev };
+            delete next[commentId];
+            return next;
+          });
+        const errorMessage =
+           error instanceof Error ? error.message : "Failed to edit comment";
+         toast.update(toastId, {
+           type: "error",
+           title: "Failed to edit comment",
+           description: errorMessage,
+           duration: 5000,
+         });
+         setTimeout(() => toast.dismiss(toastId), 5000);
+       } finally {
+          editToastIdRef.current = null;
+       }
+     })();
+   }
+ }, [pendingEdit, clearPendingEdit, editMutation, toast, refetchPosts]);
 
   const handleAuthorPress = useCallback(
     (authorId: string) => {
@@ -514,14 +636,14 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
           );
         }
 
-        if (activeTab === 1 && "post_id" in item) {
-          return (
-            <MemoizedProfileCommentItem
-              comment={item}
-              onPress={handleCommentPress}
-            />
-          );
-        }
+       if (activeTab === 1 && "post_id" in item) {
+         return (
+           <MemoizedProfileCommentItem
+             comment={item}
+             onPress={handleCommentPress}
+           />
+         );
+       }
 
         return null;
       },
@@ -541,7 +663,7 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
         handlePostPress,
         handleAuthorPress,
         handlePostMorePress,
-        handleCommentPress,
+       handleCommentPress,
       ],
     );
 
@@ -693,9 +815,17 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
 
       <ConfirmationPopup
         visible={deleteHandler.showConfirmation}
-        title="Delete Post?"
+        title={
+          deleteHandler.pendingTarget?.type === "comment"
+            ? "Delete Comment?"
+            : "Delete Post?"
+        }
         message="This action cannot be undone."
-        description="The post will be permanently removed."
+        description={
+          deleteHandler.pendingTarget?.type === "comment"
+            ? "The comment will be permanently removed."
+            : "The post will be permanently removed."
+        }
         icon="trash-outline"
         isDestructive
         isLoading={deleteHandler.isDeleting}
