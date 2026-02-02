@@ -55,6 +55,7 @@ import {
   useAuthStore,
   useContentModerationStore,
   usePreferencesStore,
+  useSavedPostsStore,
 } from "@/src/stores";
 
 export function HomeScreen() {
@@ -262,9 +263,8 @@ export function HomeScreen() {
   }, [router]);
 
   const handleMenuSaved = useCallback(() => {
-    // TODO: Navigate to saved posts
-    console.log("Navigate to saved");
-  }, []);
+    router.push("/saved-posts");
+  }, [router]);
 
   const handleMenuHistory = useCallback(() => {
     // TODO: Navigate to history
@@ -459,10 +459,13 @@ export function HomeScreen() {
   }, [selectedPost, deleteHandler]);
 
   const handleSavePost = useCallback(() => {
-    // TODO: Call save API
-    console.log("Save post:", selectedPost?.id);
-    toast.success("Post saved", "You can find it in your saved items.");
-  }, [selectedPost?.id, toast]);
+    if (!selectedPost) return;
+    const saved = useSavedPostsStore.getState().toggleSavePost(selectedPost);
+    toast.success(
+      saved ? "Post saved" : "Post unsaved",
+      saved ? "You can find it in your saved items." : "Removed from saved items.",
+    );
+  }, [selectedPost, toast]);
 
   const handleCopyText = useCallback(() => {
     // Toast will be shown after copy (handled in sheet)
@@ -1113,6 +1116,7 @@ useEffect(() => {
         onFollowUser={handleFollowUserFromSheet}
         onFollowTopic={handleFollowTopic}
         onSave={handleSavePost}
+        isSaved={selectedPost ? useSavedPostsStore.getState().isPostSaved(selectedPost.id) : false}
         onCopyText={handleCopyText}
         onReport={handleReport}
         onBlockUser={handleBlockUser}

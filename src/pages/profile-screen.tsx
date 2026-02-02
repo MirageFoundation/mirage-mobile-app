@@ -320,8 +320,8 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
   }, []);
 
   const handleMenuSaved = useCallback(() => {
-    console.log("Saved pressed");
-  }, []);
+    router.push("/saved-posts");
+  }, [router]);
 
   const handleOnlineStatusChange = useCallback((isOnline: boolean) => {
     console.log("Online status changed:", isOnline);

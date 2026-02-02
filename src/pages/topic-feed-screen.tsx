@@ -47,6 +47,7 @@ import {
   useAuthStore,
   useContentModerationStore,
   usePreferencesStore,
+  useSavedPostsStore,
 } from "@/src/stores";
 
 export function TopicFeedScreen() {
@@ -405,8 +406,13 @@ export function TopicFeedScreen() {
   }, [selectedPost, deleteHandler]);
 
   const handleSavePost = useCallback(() => {
-    toast.success("Post saved", "You can find it in your saved items.");
-  }, [toast]);
+    if (!selectedPost) return;
+    const saved = useSavedPostsStore.getState().toggleSavePost(selectedPost);
+    toast.success(
+      saved ? "Post saved" : "Post unsaved",
+      saved ? "You can find it in your saved items." : "Removed from saved items.",
+    );
+  }, [selectedPost, toast]);
 
   const handleCopyText = useCallback(() => {
     toast.success("Copied", "Text copied to clipboard.");
@@ -892,6 +898,7 @@ export function TopicFeedScreen() {
         onFollowUser={handleFollowUserFromSheet}
         onFollowTopic={handleFollowTopic}
         onSave={handleSavePost}
+        isSaved={selectedPost ? useSavedPostsStore.getState().isPostSaved(selectedPost.id) : false}
         onCopyText={handleCopyText}
         onReport={handleReport}
         onBlockUser={handleBlockUser}

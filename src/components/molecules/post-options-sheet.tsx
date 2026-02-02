@@ -30,6 +30,8 @@ type PostOptionsSheetProps = {
   isTopicFollowed?: boolean;
   /** Whether the user is currently followed */
   isFollowingUser?: boolean;
+  /** Whether the post is currently saved */
+  isSaved?: boolean;
   /** Callback when show fewer is pressed */
   onShowFewer?: () => void;
   /** Callback when follow/unfollow user is pressed */
@@ -200,6 +202,7 @@ export const PostOptionsSheet = forwardRef<
       isOwnPost = false,
       isTopicFollowed = false,
       isFollowingUser = false,
+      isSaved = false,
       onShowFewer,
       onFollowUser,
       onFollowTopic,
@@ -450,8 +453,8 @@ export const PostOptionsSheet = forwardRef<
             {/* Save Post */}
             <MenuItem
               iconComponent={Feather}
-              iconName="bookmark"
-              title="Save"
+              iconName={isSaved ? "bookmark" : "bookmark"}
+              title={isSaved ? "Unsave" : "Save"}
               onPress={handleSave}
             />
 
@@ -477,7 +480,7 @@ export const PostOptionsSheet = forwardRef<
               />
             )}
 
-            {/* Follow/Unfollow Topic (only if post has a topic) */}
+           {/* Follow/Unfollow Topic (only if post has a topic) */}
             {post?.topic && (
               <MenuItem
                 iconComponent={Ionicons}
@@ -488,24 +491,6 @@ export const PostOptionsSheet = forwardRef<
                     : `Follow #${post.topic}`
                 }
                 onPress={handleFollowTopic}
-              />
-            )}
-
-            {/* Show Fewer Posts Like This (only for other users' posts) */}
-            {!isOwnPost && (
-              <MenuItem
-                iconName="eye-outline"
-                title="Show fewer posts like this"
-                onPress={handleShowFewer}
-              />
-            )}
-
-            {/* Hide Post (only for other users' posts) */}
-            {!isOwnPost && (
-              <MenuItem
-                iconName="eye-off-outline"
-                title="Hide"
-                onPress={handleHidePost}
               />
             )}
 

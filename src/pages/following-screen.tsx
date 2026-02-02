@@ -40,6 +40,7 @@ import {
   useAuthStore,
   useContentModerationStore,
   usePreferencesStore,
+  useSavedPostsStore,
 } from "@/src/stores";
 import { HomePostList } from "./home/home-post-list";
 import { useHomePostCardStore } from "./home/home-post-card-store";
@@ -429,9 +430,13 @@ export function FollowingScreen() {
   }, [selectedPost, deleteHandler]);
 
   const handleSavePost = useCallback(() => {
-    console.log("Save post:", selectedPost?.id);
-    toast.success("Post saved", "You can find it in your saved items.");
-  }, [selectedPost?.id, toast]);
+    if (!selectedPost) return;
+    const saved = useSavedPostsStore.getState().toggleSavePost(selectedPost);
+    toast.success(
+      saved ? "Post saved" : "Post unsaved",
+      saved ? "You can find it in your saved items." : "Removed from saved items.",
+    );
+  }, [selectedPost, toast]);
 
   const handleCopyText = useCallback(() => {
     toast.success("Copied", "Text copied to clipboard.");
@@ -868,6 +873,7 @@ export function FollowingScreen() {
         onFollowUser={handleFollowUserFromSheet}
         onFollowTopic={handleFollowTopic}
         onSave={handleSavePost}
+        isSaved={selectedPost ? useSavedPostsStore.getState().isPostSaved(selectedPost.id) : false}
         onCopyText={handleCopyText}
         onReport={handleReport}
         onBlockUser={handleBlockUser}
