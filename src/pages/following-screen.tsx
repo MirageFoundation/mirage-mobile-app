@@ -65,9 +65,10 @@ export function FollowingScreen() {
   const selectedContentTypes = usePreferencesStore(
     (s) => s.selectedContentTypes
   );
-  const shareServer = usePreferencesStore((s) => s.shareServer);
+ const shareServer = usePreferencesStore((s) => s.shareServer);
+  const hideDownvotedPosts = usePreferencesStore((s) => s.hideDownvotedPosts);
 
-  const sortBy = useMemo(() => {
+ const sortBy = useMemo(() => {
     switch (followingFeedType) {
       case "latest":
         return "newest" as const;
@@ -160,17 +161,21 @@ export function FollowingScreen() {
         uniquePostsMap.set(post.post_id, post);
       }
     }
-    const uniquePosts = Array.from(uniquePostsMap.values());
+   const uniquePosts = Array.from(uniquePostsMap.values());
 
-    // Note: isFollowing is handled by HomePostCardItem via the store, not here
-    const transformedPosts = transformApiPosts(uniquePosts);
+   // Note: isFollowing is handled by HomePostCardItem via the store, not here
+    const filteredPosts = hideDownvotedPosts
+      ? uniquePosts.filter((post) => post.user_vote !== -1)
+      : uniquePosts;
 
-    // Filter out hidden posts and posts from blocked users
-    return transformedPosts.filter(
-      (post) =>
-        !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id)
-    );
-  }, [data, hiddenPostIds, blockedUserIds]);
+    const transformedPosts = transformApiPosts(filteredPosts);
+
+   // Filter out hidden posts and posts from blocked users
+   return transformedPosts.filter(
+     (post) =>
+       !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id)
+   );
+  }, [data, hiddenPostIds, blockedUserIds, hideDownvotedPosts]);
 
   // Revealed posts for content warnings
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
