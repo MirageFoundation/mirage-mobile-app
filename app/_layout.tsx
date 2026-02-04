@@ -39,6 +39,18 @@ export default function RootLayout() {
             presentation: "modal",
           }}
         />
+        <Stack.Screen
+          name="user-following/[id]"
+          options={{
+            animation: "slide_from_right",
+          }}
+        />
+        <Stack.Screen
+          name="blocked-list"
+          options={{
+            animation: "slide_from_right",
+          }}
+        />
       </Stack>
       <AuthSheet />
     </RootProvider>

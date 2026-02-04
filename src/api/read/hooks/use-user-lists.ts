@@ -52,6 +52,15 @@ export function useUserBlocked() {
   });
 }
 
+export function useUserBlockedByAddress(address: string | undefined | null) {
+  return useQuery({
+    queryKey: queryKeys.userBlocked(address!),
+    queryFn: () => getUserBlocked({ address: address! }),
+    enabled: !!address,
+    staleTime: 1000 * 60,
+  });
+}
+
 /**
  * Get current user's personalized preferences
  * Only enabled when wallet is connected
@@ -65,6 +74,15 @@ export function usePreferences() {
     enabled: !!walletAddress,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 60, // 1 hour
+  });
+}
+
+export function usePreferencesByAddress(address: string | undefined | null) {
+  return useQuery({
+    queryKey: queryKeys.preferences(address!),
+    queryFn: () => getPreferences({ address: address! }),
+    enabled: !!address,
+    staleTime: 1000 * 60 * 5,
   });
 }
 

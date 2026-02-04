@@ -49,6 +49,7 @@ import {
   ReportSheetRef,
   UserProfileMenuSheet,
   UserProfileMenuSheetRef,
+  ProfileAboutTab,
 } from "@/src/components/molecules";
 import { PostCardItem } from "@/src/components/molecules/post-card-item";
 import { PostCardSkeletonList } from "@/src/components/molecules/post-card-skeleton";
@@ -248,7 +249,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     [apiPosts]
   );
 
-  const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
+ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
     if (isBlocked || activeTab === 2) {
       return ["header", "tabs"];
     }
@@ -279,11 +280,10 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   }, [userStatus, profile]);
 
   const displayUsername = userStatus?.username ?? profile?.username;
-  const username = displayUsername ?? "user";
-  const avatarUrl = profile?.avatar || undefined;
-  const followersCount = 0;
+ const username = displayUsername ?? "user";
+ const avatarUrl = profile?.avatar || undefined;
 
-  const gradientColors = useMemo(() => getGradientColor(username), [username]);
+ const gradientColors = useMemo(() => getGradientColor(username), [username]);
   const isLoading = isResolvingUsername || isLoadingStatus || isLoadingProfile;
   const isOwnProfile = currentUser?.walletAddress === userAddress;
 
@@ -308,7 +308,12 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     }
   }, [isOwnProfile]);
 
-  const handleFollowersPress = useCallback(() => {}, []);
+  const handleFollowersPress = useCallback(() => {
+    const followId = userAddress || id;
+    if (followId) {
+      router.push(`/user-following/${followId}`);
+    }
+  }, [router, userAddress, id]);
 
 const handleFollow = useCallback(() => {
   if (!userAddress) return;
@@ -627,9 +632,8 @@ const handleUnfollow = useCallback(() => {
              username={username}
              avatarSeed={userAddress || username}
              avatarUrl={avatarUrl}
-             walletAddress={userAddress || "0x0000...0000"}
-             followersCount={followersCount}
-             balance={profileData.balance}
+            walletAddress={userAddress || "0x0000...0000"}
+            balance={profileData.balance}
              reserve={profileData.reserve}
              accountAgeDays={profileData.accountAgeDays}
              gradientColors={gradientColors}
@@ -700,11 +704,10 @@ const handleUnfollow = useCallback(() => {
         return null;
      },
     [
-      username,
-      userAddress,
-      avatarUrl,
-      followersCount,
-      profileData,
+     username,
+     userAddress,
+     avatarUrl,
+     profileData,
       gradientColors,
       scrollY,
       handleFollowersPress,
@@ -739,13 +742,12 @@ const handleUnfollow = useCallback(() => {
           onUnblock={handleUnblockUser}
         />
       );
-    }
+   }
 
     if (activeTab === 2) {
       return (
-        <ProfileEmptyState
-          tabType="about"
-          onSettingsPress={handleSettingsPress}
+        <ProfileAboutTab
+          userAddress={userAddress}
           isOwnProfile={isOwnProfile}
         />
       );
@@ -788,6 +790,7 @@ const handleUnfollow = useCallback(() => {
     isOwnProfile,
     isBlocked,
     handleUnblockUser,
+    userAddress,
   ]);
 
   const stickyTabsAnimatedStyle = useAnimatedStyle(() => {

@@ -42,6 +42,7 @@ import {
   ProfileEmptyState,
   ReportSheet,
   ReportSheetRef,
+  ProfileAboutTab,
 } from "@/src/components/molecules";
 import { PostCardItem } from "@/src/components/molecules/post-card-item";
 import { PostCardSkeletonList } from "@/src/components/molecules/post-card-skeleton";
@@ -177,11 +178,11 @@ export function ProfileScreen() {
     [apiPosts],
   );
 
- const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
+const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
    if (activeTab === 2) {
       return ["header", "tabs"];
    }
-   const posts = activeTab === 0 ? uiPosts : apiPosts;
+    const posts = activeTab === 0 ? uiPosts : apiPosts;
     return ["header", "tabs", ...posts];
   }, [activeTab, uiPosts, apiPosts]);
 
@@ -235,11 +236,10 @@ export function ProfileScreen() {
     };
   }, [userStatus, profile]);
 
-  const username = userStatus?.username ?? user?.username ?? "user";
-  const avatarUrl = profile?.avatar || undefined;
-  const followersCount = user?.followerCount ?? 0;
+ const username = userStatus?.username ?? user?.username ?? "user";
+ const avatarUrl = profile?.avatar || undefined;
 
-  const gradientColors = useMemo(() => getGradientColor(username), [username]);
+ const gradientColors = useMemo(() => getGradientColor(username), [username]);
   const isLoading = isLoadingStatus || isLoadingProfile;
 
   const handleBackPress = useCallback(() => {
@@ -294,11 +294,18 @@ export function ProfileScreen() {
   }, []);
 
   const handleFollowersPress = useCallback(() => {
-    console.log("Followers pressed");
-  }, []);
+    const id = user?.walletAddress || user?.username;
+    if (id) {
+      router.push(`/user-following/${id}`);
+    }
+  }, [router, user?.walletAddress, user?.username]);
 
   const handleSettingsPress = useCallback(() => {
     router.push("/settings");
+  }, [router]);
+
+  const handleBlockedPress = useCallback(() => {
+    router.push("/blocked-list");
   }, [router]);
 
   const handlePostPress = useCallback(
@@ -429,7 +436,7 @@ export function ProfileScreen() {
   const lastFetchTime = useRef(0);
   const isFetchingRef = useRef(false);
 
-  const handleEndReached = useCallback(() => {
+ const handleEndReached = useCallback(() => {
     if (activeTab === 2) return;
     const now = Date.now();
     if (
@@ -464,9 +471,8 @@ export function ProfileScreen() {
              username={username}
              avatarSeed={user?.walletAddress || username}
              avatarUrl={avatarUrl}
-             walletAddress={user?.walletAddress || "0x0000...0000"}
-             followersCount={followersCount}
-             balance={profileData.balance}
+            walletAddress={user?.walletAddress || "0x0000...0000"}
+            balance={profileData.balance}
              reserve={profileData.reserve}
              accountAgeDays={profileData.accountAgeDays}
              gradientColors={gradientColors}
@@ -520,11 +526,10 @@ export function ProfileScreen() {
         return null;
       },
      [
-       username,
-       user?.walletAddress,
-       avatarUrl,
-       followersCount,
-       profileData,
+      username,
+      user?.walletAddress,
+      avatarUrl,
+      profileData,
        gradientColors,
        scrollY,
        handleFollowersPress,
@@ -540,13 +545,13 @@ export function ProfileScreen() {
       ],
     );
 
-  const ListFooterComponent = useCallback(() => {
+ const ListFooterComponent = useCallback(() => {
     if (activeTab === 2) {
       return (
-        <ProfileEmptyState
-          tabType="about"
-          onSettingsPress={handleSettingsPress}
+        <ProfileAboutTab
+          userAddress={user?.walletAddress}
           isOwnProfile={true}
+          onBlockedPress={handleBlockedPress}
         />
       );
     }
@@ -585,6 +590,8 @@ export function ProfileScreen() {
     isFetchingNextPage,
     listData.length,
     handleSettingsPress,
+    user?.walletAddress,
+    handleBlockedPress,
   ]);
 
   const stickyTabsAnimatedStyle = useAnimatedStyle(() => {

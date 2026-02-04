@@ -72,6 +72,7 @@ export { ProfilePostsList } from "./profile-posts-list";
 export { ProfilePostsSkeleton } from "./profile-posts-skeleton";
 export { UserProfileContent } from "./user-profile-content";
 export { UserProfileContentAnimated } from "./user-profile-content-animated";
+export { ProfileAboutTab } from "./profile-about-tab";
 
 // Settings
 export {
