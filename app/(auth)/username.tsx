@@ -139,11 +139,7 @@ export default function UsernameScreen() {
   const handleClose = useCallback(() => {
     triggerHaptic("selection");
     router.back();
-    // Show auth sheet after going back
-    setTimeout(() => {
-      showAuthSheet();
-    }, 100);
-  }, [router, showAuthSheet]);
+  }, [router]);
 
   const handleLogin = useCallback(() => {
     triggerHaptic("selection");

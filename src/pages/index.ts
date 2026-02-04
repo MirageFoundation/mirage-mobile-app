@@ -1,4 +1,5 @@
 export { HomeScreen } from "./home-screen";
+export { LoggedOutHome } from "./logged-out-home";
 export { FollowingScreen } from "./following-screen";
 export { InboxScreen } from "./inbox-screen";
 export { CreateScreen } from "./create-screen";

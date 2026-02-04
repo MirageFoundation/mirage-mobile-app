@@ -39,11 +39,7 @@ export default function LoginScreen() {
   const handleBack = useCallback(() => {
     triggerHaptic("selection");
     router.back();
-    // Show auth sheet after going back
-    setTimeout(() => {
-      showAuthSheet();
-    }, 100);
-  }, [router, showAuthSheet]);
+  }, [router]);
 
   const handleWordsChange = useCallback((newWords: string[]) => {
     setWords(newWords);

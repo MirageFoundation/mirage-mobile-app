@@ -57,6 +57,7 @@ import {
   usePreferencesStore,
   useSavedPostsStore,
 } from "@/src/stores";
+import { LoggedOutHome } from "./logged-out-home";
 
 export function HomeScreen() {
   const { theme } = useUnistyles();
@@ -110,9 +111,15 @@ export function HomeScreen() {
   const hideDownvotedPosts = usePreferencesStore((s) => s.hideDownvotedPosts);
  const currentUser = useAuthStore((s) => s.user);
  const logout = useAuthStore((s) => s.logout);
-  const isInitializing = useAuthStore((s) => s.isInitializing);
+ const isInitializing = useAuthStore((s) => s.isInitializing);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
 
   // Network state for video autoplay
+
+  if (!isLoggedIn && !isInitializing) {
+    return <LoggedOutHome />;
+  }
+
   const { networkType } = useNetworkState();
 
   // Fetch user's followed list (for showing "Following" status on posts)
