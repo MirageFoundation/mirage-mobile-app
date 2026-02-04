@@ -51,6 +51,26 @@ const queryClient = new QueryClient({
 | Feed/Posts    | 1 min     | 4 hrs  | Pull-to-refresh |
 | Comments      | 30 sec    | 1 hr   | On navigate     |
 | Static Lists  | 10 min    | 24 hrs | Manual          |
+| Bridge        | 30 sec    | 1 hr   | On navigate     |
+
+---
+
+## On-Chain vs Indexer Endpoints
+
+The app reads from two sources:
+
+1. **On-chain queries** — Served by the Mirage node via gRPC-gateway (REST base `:1317`). These map directly to the `mirage.core.v1.Query` service:
+   - `GET /mirage/core/v1/params` → GetParams
+   - `GET /mirage/core/v1/difficulty` → GetDifficulty
+   - `GET /mirage/core/v1/profile/{address}` → GetProfile
+   - `GET /mirage/core/v1/profiles` → GetProfiles
+   - `GET /mirage/core/v1/bridge/status` → GetBridgeStatus
+   - `GET /mirage/core/v1/bridge/config` → GetBridgeConfig
+   - `GET /mirage/core/v1/bridge/attestation/{source_chain}/{burn_id}` → GetBridgeAttestation
+   - `GET /mirage/core/v1/bridge/mint/{destination_chain}/{burn_id}` → GetBridgeMint
+   - `GET /mirage/core/v1/bridge/burn/{destination_chain}/{burn_id}` → GetBridgeBurn
+
+2. **Indexer/relay endpoints** — Served by the relay node (feeds, search, inbox, leaderboard, etc.). These aggregate and enrich on-chain data.
 
 ---
 
@@ -78,6 +98,7 @@ Most endpoints work without authentication. The `address` parameter enables pers
 | `GET /leaderboard`               | Leaderboard                                           |
 | `GET /get_peers`                 | Peer list                                             |
 | `GET /get_stats`                 | App statistics                                        |
+| Bridge query endpoints           | All bridge queries are public                         |
 
 ### Address Required (Personalized)
 
@@ -112,9 +133,11 @@ src/api/read/
 ├── hooks/
 │   ├── index.ts
 │   ├── use-parameters.ts
+│   ├── use-difficulty.ts
 │   ├── use-config.ts
 │   ├── use-user-status.ts
 │   ├── use-profile.ts
+│   ├── use-profiles.ts
 │   ├── use-posts.ts
 │   ├── use-user-posts.ts
 │   ├── use-post-detail.ts
@@ -125,7 +148,12 @@ src/api/read/
 │   ├── use-user-blocked.ts
 │   ├── use-tx-status.ts
 │   ├── use-network-stats.ts
-│   └── use-leaderboard.ts
+│   ├── use-leaderboard.ts
+│   ├── use-bridge-status.ts
+│   ├── use-bridge-config.ts
+│   ├── use-bridge-attestation.ts
+│   ├── use-bridge-mint.ts
+│   └── use-bridge-burn.ts
 │
 └── endpoints/
     ├── index.ts
@@ -138,6 +166,7 @@ src/api/read/
     ├── search.ts
     ├── social.ts
     ├── stats.ts
+    ├── bridge.ts
     └── types.ts
 ```
 
@@ -151,11 +180,13 @@ src/api/read/
 export const queryKeys = {
   // Config & Parameters
   parameters: (address?: string) => ["parameters", address] as const,
+  difficulty: () => ["difficulty"] as const,
   config: (address?: string) => ["config", address] as const,
 
   // User
   userStatus: (address: string) => ["user", "status", address] as const,
   profile: (address: string) => ["user", "profile", address] as const,
+  profiles: (page?: number) => ["profiles", page] as const,
   userPosts: (owner: string, type?: string) =>
     ["user", "posts", owner, type] as const,
   userFollowed: (address: string) => ["user", "followed", address] as const,
@@ -199,6 +230,16 @@ export const queryKeys = {
 
   // Peers
   peers: () => ["peers"] as const,
+
+  // Bridge
+  bridgeStatus: () => ["bridge", "status"] as const,
+  bridgeConfig: () => ["bridge", "config"] as const,
+  bridgeAttestation: (sourceChain: string, burnId: string) =>
+    ["bridge", "attestation", sourceChain, burnId] as const,
+  bridgeMint: (destinationChain: string, burnId: string) =>
+    ["bridge", "mint", destinationChain, burnId] as const,
+  bridgeBurn: (destinationChain: string, burnId: string) =>
+    ["bridge", "burn", destinationChain, burnId] as const,
 } as const;
 ```
 
@@ -206,7 +247,7 @@ export const queryKeys = {
 
 ## Endpoint Definitions
 
-### 1. Parameters & Config
+### 1. Parameters, Difficulty & Config
 
 #### `GET /get_parameters`
 
@@ -230,22 +271,66 @@ interface ParametersResponse {
 // staleTime: 0 (always fresh for signing)
 ```
 
+#### `GET /mirage/core/v1/difficulty` (On-chain)
+
+**Purpose**: Returns the current PoW difficulty state directly from the node.
+
+> **On-chain endpoint** — This is a gRPC-gateway query on the Mirage node, not a relay/indexer endpoint.
+
+```typescript
+interface DifficultyResponse {
+  current_difficulty: number;
+  previous_difficulty: number;
+  last_change_height: number;
+  pow_message_count: number;
+  consecutive_low_usage: number;
+  latest_block_hash: string; // hex, lowercase
+  current_height: number;
+}
+
+// Hook: useDifficulty
+// staleTime: 0 (always fresh for signing)
+// Note: Can be used instead of /get_parameters for PoW params.
+//       latest_block_hash + current_difficulty are the key fields for signing.
+```
+
 #### `GET /get_config`
 
 **Purpose**: Chain parameters, tier info, validator info
 
+> **Mapping**: The relay exposes this as `/get_config`. The on-chain equivalent is
+> `GET /mirage/core/v1/params` (GetParams), which returns the full `Params` object.
+
 ```typescript
 interface ConfigResponse {
-  // Chain params
+  // Chain params (from on-chain Params)
+  min_difficulty: number;
+  pow_message_window: number;
+  pow_message_limit: number;
+  pow_calm_period_definition: number;
+  pow_calm_sequence_threshold: number;
   max_username_size: number;
   min_username_size: number;
   max_topic_size: number;
   min_topic_size: number;
   subscription_period: number;
   mint_interval: number;
-  tiers: TierInfo[];
+  mint_quantity: number;
+  block_hash_window: number;
+  pow_difficulty_allowance: number;
+  mint_dynamic_credit_cap: number;
+  mint_dynamic_split: number;
+  subscription_reserve_percent: number;
+  relay_min_gas_price: number;
+  relay_max_gas_fee: number;
+  max_envelope_age: number;
+  tiers: TierConfig[];
 
-  // Difficulty snapshot
+  // Bridge config
+  bridge_chains: BridgeChainConfig[];
+  bridge_attestation_threshold: number; // basis points, 6667 = 66.67%
+
+  // Difficulty snapshot (from relay, or use /difficulty endpoint)
   pow_difficulty: number;
   pow_message_count: number;
   pow_calm_sequence: number;
@@ -253,11 +338,38 @@ interface ConfigResponse {
   current_height: number;
   block_time: number;
 
-  // Validator info
+  // Validator info (relay-specific)
   validator_account_address: string;
   validator_operator_address: string;
   validator_consensus_address: string;
   validator_moniker: string;
+}
+
+interface TierConfig {
+  period_fee: number;
+  max_followed_mods: number;
+  max_followed_users: number;
+  max_followed_topics: number;
+  max_blocked_users: number;
+  max_blocked_posts: number;
+  max_quality_posts: number;
+  max_title_length: number;
+  max_content_length: number;
+  editing_time_mins: number;
+  archive_duration_days: number;
+  vote_weight: number;
+  award_permissions: number;
+  eligible_for_mod: boolean;
+  can_change_name: boolean;
+  can_have_biography: boolean;
+  can_have_avatar: boolean;
+  can_have_banner: boolean;
+}
+
+interface BridgeChainConfig {
+  chain_id: string;
+  enabled: boolean;
+  fee: number; // umirage
 }
 
 // Hook: useConfig
@@ -305,6 +417,9 @@ interface RecentVote {
 
 **Replaces**: `GET /profile?address=...`
 
+> **On-chain equivalent**: `GET /mirage/core/v1/profile/{address}` (GetProfile) — accepts only `mirage1...` address.
+> The relay endpoint `/u/[id]` also accepts usernames and resolves them.
+
 ```typescript
 interface GetProfileParams {
   id: string; // username OR mirage1... address
@@ -313,11 +428,11 @@ interface GetProfileParams {
 interface ProfileResponse {
   owner: string;
   username: string | null;
-  level: number;
+  level: number; // 0=free, 1-3=paid
   created_at: number;
   subscription_expiry: number;
   auto_renew: boolean;
-  reserve_funds: number;
+  reserve_funds: number; // umirage
   is_moderator: boolean;
   biography: string;
   avatar: string;
@@ -329,11 +444,39 @@ interface ProfileResponse {
   followed_moderators: string[];
   blocked_users: string[];
   blocked_posts: string[];
-  quality_posts: string[];
+  quality_posts: string[]; // txhashes
 }
 
 // Hook: useProfile
 // staleTime: 1 minute
+```
+
+#### `GET /mirage/core/v1/profiles` (On-chain)
+
+**Purpose**: Returns all profiles with Cosmos SDK pagination.
+
+> **On-chain endpoint** — Paginated profile listing directly from the node.
+
+```typescript
+interface GetProfilesParams {
+  pagination?: {
+    key?: string; // base64 page key
+    limit?: number;
+    offset?: number;
+    count_total?: boolean;
+  };
+}
+
+interface ProfilesResponse {
+  profiles: ProfileResponse[];
+  pagination: {
+    next_key: string | null; // base64
+    total: string;
+  };
+}
+
+// Hook: useProfiles
+// staleTime: 5 minutes
 ```
 
 #### `GET /get_user_followed`
@@ -445,7 +588,7 @@ const displayPoints = Math.round(
 );
 ```
 
-#### `GET / `
+#### `GET /get_user_posts`
 
 **Purpose**: User's submissions or comments
 
@@ -680,6 +823,7 @@ interface TxStatusResponse {
     | "profile"
     | "follow_user"
     | "follow_topic"
+    | "bridge_burn"
     | "unknown";
   details?: TxDetails; // Type-specific, only when indexed & success
   error_details?: string; // When code != 0
@@ -914,6 +1058,121 @@ interface VideoUploadResponse {
 
 ---
 
+### 13. Bridge Endpoints (On-chain)
+
+All bridge query endpoints are served by the Mirage node via gRPC-gateway. They are public (no address required).
+
+#### `GET /mirage/core/v1/bridge/status`
+
+**Purpose**: Returns bridge status including enabled chains and pending attestations.
+
+```typescript
+interface BridgeStatusResponse {
+  enabled_chains: BridgeChainConfig[];
+  pending_attestations_count: number;
+  chain_status: {
+    chain_id: string;
+    current_sequence: number;
+  }[];
+}
+
+// Hook: useBridgeStatus
+// staleTime: 30 seconds
+```
+
+#### `GET /mirage/core/v1/bridge/config`
+
+**Purpose**: Returns bridge configuration parameters.
+
+```typescript
+interface BridgeConfigResponse {
+  chains: BridgeChainConfig[];
+  attestation_threshold: number; // basis points, 6667 = 66.67%
+}
+
+// Hook: useBridgeConfig
+// staleTime: 5 minutes
+```
+
+#### `GET /mirage/core/v1/bridge/attestation/{source_chain}/{burn_id}`
+
+**Purpose**: Query a specific inbound attestation (external chain → Mirage).
+
+```typescript
+interface GetBridgeAttestationParams {
+  source_chain: string; // e.g. "solana"
+  burn_id: string; // burn tx hash on the external chain
+}
+
+interface BridgeAttestationResponse {
+  found: boolean;
+  source_chain: string;
+  burn_id: string;
+  mirage_recipient: string;
+  amount: number; // umirage
+  attestors: string[]; // validator operator addresses
+  attested_power: number;
+  required_power: number;
+  minted: boolean;
+  created_at: number; // block height
+}
+
+// Hook: useBridgeAttestation
+// staleTime: 30 seconds
+```
+
+#### `GET /mirage/core/v1/bridge/mint/{destination_chain}/{burn_id}`
+
+**Purpose**: Query an outbound bridge mint confirmation (Mirage → external chain).
+
+```typescript
+interface GetBridgeMintParams {
+  destination_chain: string;
+  burn_id: string; // Mirage burn sequence number
+}
+
+interface BridgeMintResponse {
+  found: boolean;
+  minted: boolean;
+  destination_chain: string;
+  destination_tx: string; // tx hash on destination chain
+  attestors: string[];
+  attested_power: number;
+  required_power: number;
+}
+
+// Hook: useBridgeMint
+// staleTime: 30 seconds
+```
+
+#### `GET /mirage/core/v1/bridge/burn/{destination_chain}/{burn_id}`
+
+**Purpose**: Query an outbound bridge burn record (Mirage → external chain).
+
+```typescript
+interface GetBridgeBurnParams {
+  destination_chain: string;
+  burn_id: string; // Mirage burn sequence number
+}
+
+interface BridgeBurnResponse {
+  found: boolean;
+  burn_id: string;
+  owner: string; // Mirage address that initiated the burn
+  destination_chain: string;
+  destination_address: string; // recipient on destination chain
+  amount: number; // gross amount burned (umirage)
+  bridge_fee: number; // fee deducted (umirage)
+  sequence: number; // outbound bridge sequence for the chain
+  created_at: number; // block height
+}
+
+// Hook: useBridgeBurn
+// staleTime: 30 seconds
+```
+
+---
+
 ## Hook Implementation Pattern
 
 ```typescript
@@ -998,6 +1257,10 @@ queryClient.invalidateQueries({ queryKey: queryKeys.profile(address) });
 // After username set
 queryClient.invalidateQueries({ queryKey: queryKeys.userStatus(address) });
 queryClient.invalidateQueries({ queryKey: queryKeys.profile(address) });
+
+// After bridge burn
+queryClient.invalidateQueries({ queryKey: ["bridge"] });
+queryClient.invalidateQueries({ queryKey: queryKeys.userStatus(address) });
 ```
 
 ---
@@ -1012,3 +1275,6 @@ queryClient.invalidateQueries({ queryKey: queryKeys.profile(address) });
 - [ ] Loading states work correctly
 - [ ] Query invalidation triggers refetch
 - [ ] TX status polling stops when confirmed
+- [ ] Bridge query endpoints return correct data
+- [ ] Difficulty endpoint returns fresh signing params
+- [ ] TierConfig and BridgeChainConfig types match on-chain Params
