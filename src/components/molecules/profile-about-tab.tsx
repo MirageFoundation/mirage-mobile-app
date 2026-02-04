@@ -172,14 +172,14 @@ function AboutSkeleton() {
 function EmptySection({ message }: { message: string }) {
   const { theme } = useUnistyles();
   return (
-    <View
-      style={[
-        styles.emptySection,
-        { backgroundColor: theme.colors.background.subtle },
-      ]}
-    >
-      <Text size="sm" mode="subtle" style={{ textAlign: "center" }}>
-        {message}
+   <View
+     style={[
+       styles.emptySection,
+       { backgroundColor: theme.colors.background.subtle },
+     ]}
+   >
+      <Text size="md" mode="subtle" style={{ textAlign: "center" }}>
+       {message}
       </Text>
     </View>
   );
@@ -207,26 +207,26 @@ function ExpandableSection({
 
   return (
     <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Text
-          size="md"
-          weight="bold"
-          style={{ color: theme.colors.text.default }}
-        >
-          {title}
-        </Text>
+     <View style={styles.sectionHeader}>
+       <Text
+          size="lg"
+         weight="bold"
+         style={{ color: theme.colors.text.default }}
+       >
+         {title}
+       </Text>
         <View
           style={[
             styles.countBadge,
             { backgroundColor: theme.colors.background.subtle },
           ]}
-        >
-          <Text
-            size="xs"
-            weight="bold"
-            style={{ color: theme.colors.text.subtle }}
-          >
-            {count}
+       >
+         <Text
+            size="sm"
+           weight="bold"
+           style={{ color: theme.colors.text.subtle }}
+         >
+           {count}
           </Text>
         </View>
       </View>
@@ -235,9 +235,9 @@ function ExpandableSection({
         <Pressable
           onPress={() => setExpanded(!expanded)}
           style={styles.showMoreButton}
-        >
-          <Text size="sm" weight="medium" style={{ color: "rgb(29, 68, 150)" }}>
-            {expanded ? "Show Less" : `Show All (${totalCount})`}
+       >
+         <Text size="md" weight="medium" style={{ color: "rgb(29, 68, 150)" }}>
+           {expanded ? "Show Less" : `Show All (${totalCount})`}
           </Text>
           <Icon
             icon={Ionicons}
@@ -273,18 +273,18 @@ function TopicPreferenceItem({
         { borderBottomColor: theme.colors.border.subtle },
       ]}
     >
-      <View style={styles.preferenceRank}>
-        <Text size="xs" mode="subtle" weight="medium">
-          {rank}
-        </Text>
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text
-          size="sm"
-          weight="medium"
-          style={{ color: theme.colors.text.default }}
-        >
-          # {topic}
+     <View style={styles.preferenceRank}>
+        <Text size="sm" mode="subtle" weight="medium">
+         {rank}
+       </Text>
+     </View>
+     <View style={{ flex: 1 }}>
+       <Text
+          size="md"
+         weight="medium"
+         style={{ color: theme.colors.text.default }}
+       >
+         # {topic}
         </Text>
       </View>
       <View style={styles.weightContainer}>
@@ -297,13 +297,13 @@ function TopicPreferenceItem({
             },
           ]}
         />
-        <Text
-          size="xs"
-          mode="subtle"
-          weight="medium"
-          style={{ minWidth: 40, textAlign: "right" }}
-        >
-          {formatWeight(weight)}
+       <Text
+          size="sm"
+         mode="subtle"
+         weight="medium"
+         style={{ minWidth: 40, textAlign: "right" }}
+       >
+         {formatWeight(weight)}
         </Text>
       </View>
     </Pressable>
@@ -336,18 +336,18 @@ function AuthorPreferenceItem({
         { borderBottomColor: theme.colors.border.subtle },
       ]}
     >
-      <View style={styles.preferenceRank}>
-        <Text size="xs" mode="subtle" weight="medium">
-          {rank}
+     <View style={styles.preferenceRank}>
+        <Text size="sm" mode="subtle" weight="medium">
+         {rank}
         </Text>
       </View>
-      <Avatar size="sm" seed={user} rounded="full" />
-      <View style={{ flex: 1, marginLeft: 8 }}>
-        <Text
-          size="sm"
-          weight="medium"
-          style={{ color: theme.colors.text.default }}
-          numberOfLines={1}
+     <Avatar size="sm" seed={user} rounded="full" />
+     <View style={{ flex: 1, marginLeft: 8 }}>
+       <Text
+          size="md"
+         weight="medium"
+         style={{ color: theme.colors.text.default }}
+         numberOfLines={1}
         >
           {displayName}
         </Text>
@@ -362,13 +362,13 @@ function AuthorPreferenceItem({
             },
           ]}
         />
-        <Text
-          size="xs"
-          mode="subtle"
-          weight="medium"
-          style={{ minWidth: 40, textAlign: "right" }}
-        >
-          {formatWeight(weight)}
+       <Text
+          size="sm"
+         mode="subtle"
+         weight="medium"
+         style={{ minWidth: 40, textAlign: "right" }}
+       >
+         {formatWeight(weight)}
         </Text>
       </View>
     </Pressable>
@@ -388,25 +388,25 @@ function SimilarUserItem({ user }: { user: SimilarUser }) {
       ]}
     >
       <Avatar size="md" seed={user.address} rounded="full" />
-      <View style={{ flex: 1, marginLeft: 12 }}>
-        <Text
-          size="sm"
-          weight="medium"
-          style={{ color: theme.colors.text.default }}
-          numberOfLines={1}
+     <View style={{ flex: 1, marginLeft: 12 }}>
+       <Text
+          size="md"
+         weight="medium"
+         style={{ color: theme.colors.text.default }}
+         numberOfLines={1}
         >
           {user.username ||
             `${user.address.slice(0, 8)}...${user.address.slice(-4)}`}
         </Text>
-        <View style={{ flexDirection: "row", gap: 8, marginTop: 2 }}>
-          <Text size="xs" mode="subtle">
-            {formatSimilarity(user.similarity)} match
-          </Text>
-          <Text size="xs" mode="subtle">
-            •
-          </Text>
-          <Text size="xs" mode="subtle">
-            {user.shared_dimensions} shared
+       <View style={{ flexDirection: "row", gap: 8, marginTop: 2 }}>
+          <Text size="sm" mode="subtle">
+           {formatSimilarity(user.similarity)} match
+         </Text>
+          <Text size="sm" mode="subtle">
+           •
+         </Text>
+          <Text size="sm" mode="subtle">
+           {user.shared_dimensions} shared
           </Text>
         </View>
       </View>
@@ -534,13 +534,13 @@ function ProfileDetailsSection({
 
   return (
     <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Text
-          size="md"
-          weight="bold"
-          style={{ color: theme.colors.text.default }}
-        >
-          Profile Details
+     <View style={styles.sectionHeader}>
+       <Text
+          size="lg"
+         weight="bold"
+         style={{ color: theme.colors.text.default }}
+       >
+         Profile Details
         </Text>
       </View>
       {details.map((detail, index) => (
@@ -562,14 +562,14 @@ function ProfileDetailsSection({
               flex: 1,
             }}
           >
-            <Icon
-              icon={Ionicons}
-              name={detail.icon}
-              size={16}
-              color={theme.colors.text.subtle}
-            />
-            <Text size="sm" mode="subtle">
-              {detail.label}
+           <Icon
+             icon={Ionicons}
+             name={detail.icon}
+              size={18}
+             color={theme.colors.text.subtle}
+           />
+            <Text size="md" mode="subtle">
+             {detail.label}
             </Text>
           </View>
           {detail.label === "Bio" ? (
@@ -577,11 +577,11 @@ function ProfileDetailsSection({
               <MarkdownContent content={detail.value} />
             </View>
           ) : (
-            <Text
-              size="sm"
-              weight="medium"
-              style={{
-                color: theme.colors.text.default,
+           <Text
+              size="md"
+             weight="medium"
+             style={{
+               color: theme.colors.text.default,
                 maxWidth: "55%",
                 textAlign: "right",
               }}
@@ -691,17 +691,17 @@ export function ProfileAboutTab({
           style={styles.emptyImage}
           contentFit="contain"
         />
-        <Text
-          size="lg"
-          weight="bold"
-          style={{ color: theme.colors.text.default, textAlign: "center" }}
-        >
+       <Text
+          size="xl"
+         weight="bold"
+         style={{ color: theme.colors.text.default, textAlign: "center" }}
+       >
           {isOwnProfile ? "Nothing here yet" : "No information available"}
         </Text>
-        <Text
-          size="sm"
-          mode="subtle"
-          style={{ marginTop: 8, textAlign: "center", maxWidth: 280 }}
+       <Text
+          size="md"
+         mode="subtle"
+         style={{ marginTop: 8, textAlign: "center", maxWidth: 280 }}
         >
           {isOwnProfile
             ? "Start interacting with posts to build your algorithm profile."
@@ -728,15 +728,15 @@ export function ProfileAboutTab({
             color={theme.colors.text.subtle}
           />
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text
-              size="sm"
-              weight="medium"
-              style={{ color: theme.colors.text.default }}
-            >
-              Blocked Users & Posts
-            </Text>
-            <Text size="xs" mode="subtle">
-              {blockedUsersCount} user{blockedUsersCount !== 1 ? "s" : ""},{" "}
+           <Text
+              size="md"
+             weight="medium"
+             style={{ color: theme.colors.text.default }}
+           >
+             Blocked Users & Posts
+           </Text>
+            <Text size="sm" mode="subtle">
+             {blockedUsersCount} user{blockedUsersCount !== 1 ? "s" : ""},{" "}
               {blockedPostsCount} post{blockedPostsCount !== 1 ? "s" : ""}
             </Text>
           </View>
@@ -810,12 +810,12 @@ export function ProfileAboutTab({
       {!hasAlgoData && !isLoading && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text
-              size="md"
-              weight="bold"
-              style={{ color: theme.colors.text.default }}
-            >
-              Algorithm Profile
+           <Text
+              size="lg"
+             weight="bold"
+             style={{ color: theme.colors.text.default }}
+           >
+             Algorithm Profile
             </Text>
           </View>
           <EmptySection

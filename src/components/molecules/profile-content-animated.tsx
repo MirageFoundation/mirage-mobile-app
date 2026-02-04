@@ -90,10 +90,11 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
   onFollowersPress,
   isLoading = false,
 }: ProfileContentAnimatedProps) {
-  const [copied, setCopied] = useState(false);
-  const walletScale = useRef(new RNAnimated.Value(1)).current;
+ const [copied, setCopied] = useState(false);
+ const walletScale = useRef(new RNAnimated.Value(1)).current;
+  const followingScale = useRef(new RNAnimated.Value(1)).current;
 
-  const gradientAnimation = useSharedValue(0);
+ const gradientAnimation = useSharedValue(0);
 
   useEffect(() => {
     gradientAnimation.value = withRepeat(
@@ -151,13 +152,31 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
   }, [walletScale]);
 
   const handleWalletPressOut = useCallback(() => {
-    RNAnimated.spring(walletScale, {
+   RNAnimated.spring(walletScale, {
+     toValue: 1,
+     useNativeDriver: true,
+     friction: 8,
+     tension: 100,
+   }).start();
+ }, [walletScale]);
+
+  const handleFollowingPressIn = useCallback(() => {
+    RNAnimated.spring(followingScale, {
+      toValue: 0.92,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 100,
+    }).start();
+  }, [followingScale]);
+
+  const handleFollowingPressOut = useCallback(() => {
+    RNAnimated.spring(followingScale, {
       toValue: 1,
       useNativeDriver: true,
       friction: 8,
       tension: 100,
     }).start();
-  }, [walletScale]);
+  }, [followingScale]);
 
   const contentFadeStyle = useAnimatedStyle(() => {
     if (!scrollY) return { opacity: 1 };
@@ -205,20 +224,26 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
             )}
           </Box>
 
-          <Pressable onPress={onFollowersPress}>
-            <Box direction="row" alignItems="center" mt="xs">
-              <Text size="md" weight="medium" style={styles.whiteText}>
-                following
-              </Text>
-              <Icon
-                icon={Ionicons}
-                name="chevron-forward"
-                size={14}
-                color="rgba(255,255,255,0.8)"
-                style={{ marginLeft: 2 }}
-              />
-            </Box>
-          </Pressable>
+          <RNAnimated.View style={{ transform: [{ scale: followingScale }], alignSelf: "flex-start" }}>
+            <Pressable
+              onPress={onFollowersPress}
+              onPressIn={handleFollowingPressIn}
+              onPressOut={handleFollowingPressOut}
+            >
+              <Box direction="row" alignItems="center" mt="xs">
+                <Text size="md" weight="medium" style={styles.whiteText}>
+                  following
+                </Text>
+                <Icon
+                  icon={Ionicons}
+                  name="chevron-forward"
+                  size={14}
+                  color="rgba(255,255,255,0.8)"
+                  style={{ marginLeft: 2 }}
+                />
+              </Box>
+            </Pressable>
+          </RNAnimated.View>
 
           <RNAnimated.View
             style={[
