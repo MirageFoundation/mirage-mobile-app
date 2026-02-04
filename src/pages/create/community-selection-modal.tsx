@@ -1,9 +1,11 @@
 import { EvilIcons, Feather } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Keyboard,
   Modal,
+  Platform,
   Pressable,
   TextInput,
   View,
@@ -17,82 +19,26 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { Avatar } from "@/src/components/atoms";
+import {
+  useDebouncedSearchTopics,
+  useTopics,
+} from "@/src/api/read/hooks/use-topics";
+import type { TopicInfo } from "@/src/api/types";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { useAuthStore } from "@/src/stores/auth-store";
 import { type Community } from "@/src/stores/draft-store";
 
-// Mock communities data
-const MOCK_COMMUNITIES: Community[] = [
-  {
-    id: "tech",
-    name: "Technology",
-    avatar: undefined,
-    memberCount: 125000,
-    description: "Discuss the latest in tech, gadgets, and innovation",
-    isSubscribed: true,
-  },
-  {
-    id: "gaming",
-    name: "Gaming",
-    avatar: undefined,
-    memberCount: 89000,
-    description: "For gamers, by gamers. Share your plays and reviews",
-    isSubscribed: true,
-  },
-  {
-    id: "crypto",
-    name: "Cryptocurrency",
-    avatar: undefined,
-    memberCount: 56000,
-    description:
-      "Crypto news, trading strategies, and blockchain tech Crypto news, trading strategies, and blockchain tech",
-    isSubscribed: false,
-  },
-  {
-    id: "music",
-    name: "Music",
-    avatar: undefined,
-    memberCount: 78000,
-    description: "Share and discover music across all genres",
-    isSubscribed: true,
-  },
-  {
-    id: "movies",
-    name: "Movies & TV",
-    avatar: undefined,
-    memberCount: 95000,
-    description: "Reviews, discussions, and recommendations",
-    isSubscribed: false,
-  },
-  {
-    id: "art",
-    name: "Art & Design",
-    avatar: undefined,
-    memberCount: 42000,
-    description: "Showcase your creativity and get inspired",
-    isSubscribed: false,
-  },
-  {
-    id: "news",
-    name: "News",
-    avatar: undefined,
-    memberCount: 156000,
-    description: "Stay informed with the latest news from around the world",
-    isSubscribed: true,
-  },
-  {
-    id: "sports",
-    name: "Sports",
-    avatar: undefined,
-    memberCount: 112000,
-    description: "All things sports - scores, highlights, and discussions",
-    isSubscribed: false,
-  },
-];
+const topicToCommunity = (topic: TopicInfo): Community => ({
+  id: topic.topic.toLowerCase(),
+  name: topic.topic.toLowerCase(),
+  avatar: undefined,
+  memberCount: topic.post_count ?? topic.count ?? 0,
+  description: undefined,
+  isSubscribed: false,
+});
 
 type CommunitySelectionModalProps = {
   visible: boolean;
@@ -101,8 +47,7 @@ type CommunitySelectionModalProps = {
   selectedCommunity?: Community;
 };
 
-// Format member count
-const formatMemberCount = (count: number): string => {
+const formatCount = (count: number): string => {
   if (count >= 1000000) {
     return `${(count / 1000000).toFixed(1)}M`;
   }
@@ -112,7 +57,31 @@ const formatMemberCount = (count: number): string => {
   return count.toString();
 };
 
-// Community Item Component
+const CreateTopicItem = ({
+  topicName,
+  onPress,
+}: {
+  topicName: string;
+  onPress: () => void;
+}) => {
+  const { theme } = useUnistyles();
+
+  return (
+    <Pressable onPress={onPress} style={styles.createTopicItem}>
+      <Box direction="row" alignItems="center" gap="sm" py="md">
+        <Feather name="plus" size={20} color={theme.colors.brand[500]} />
+        <Text
+          size="lg"
+          weight="semibold"
+          style={{ color: theme.colors.brand[500] }}
+        >
+          Create #{topicName.toLowerCase()}
+        </Text>
+      </Box>
+    </Pressable>
+  );
+};
+
 const CommunityItem = ({
   community,
   isSelected,
@@ -144,21 +113,17 @@ const CommunityItem = ({
       onPressOut={handlePressOut}
     >
       <Animated.View style={[styles.communityItem, animatedStyle]}>
-        <Avatar
-          size={44}
-          seed={community.id}
-          source={community.avatar ? { uri: community.avatar } : undefined}
-          rounded="full"
-        />
         <View style={styles.communityInfo}>
           <View style={styles.communityHeader}>
             <Text size="lg" weight="semibold" numberOfLines={1}>
-              {community.name}
+              #{community.name.toLowerCase()}
             </Text>
           </View>
-          <Text size="md" mode="subtle" style={{ lineHeight: 18 }}>
-            {formatMemberCount(community.memberCount)} members
-          </Text>
+          {community.memberCount > 0 && (
+            <Text size="md" mode="subtle" style={{ lineHeight: 18 }}>
+              {formatCount(community.memberCount)} posts
+            </Text>
+          )}
           {community.description && (
             <Text
               size="md"
@@ -185,43 +150,70 @@ export const CommunitySelectionModal = ({
   selectedCommunity,
 }: CommunitySelectionModalProps) => {
   const { theme } = useUnistyles();
-  const { user } = useAuthStore();
+  const insets = useSafeAreaInsets();
 
-  // State
   const [searchText, setSearchText] = useState("");
   const searchInputRef = useRef<TextInput>(null);
 
-  // Animation values
   const searchExpandProgress = useSharedValue(0);
 
-  // User's profile as first community option
-  const userCommunity: Community = useMemo(
-    () => ({
-      id: user?.id ?? "user",
-      name: user?.username ?? "Your Profile",
-      avatar: user?.avatar,
-      memberCount: user?.followerCount ?? 0,
-      description: "Post to your profile",
-      isSubscribed: true,
-    }),
-    [user]
+  const { data: topicsData, isLoading: isLoadingTopics } = useTopics(100);
+
+  const {
+    data: searchData,
+    isSearching,
+    isDebouncing,
+  } = useDebouncedSearchTopics(
+    searchText.length >= 2 ? searchText : null,
+    750,
+    { limit: 50 },
   );
 
-  // Filter communities based on search
   const filteredCommunities = useMemo(() => {
-    const allCommunities = [userCommunity, ...MOCK_COMMUNITIES];
-    if (!searchText.trim()) {
-      return allCommunities;
+    if (searchText.length >= 2 && searchData?.topics) {
+      return searchData.topics.map(topicToCommunity);
     }
-    const query = searchText.toLowerCase();
-    return allCommunities.filter(
-      (c) =>
-        c.name.toLowerCase().includes(query) ||
-        c.description?.toLowerCase().includes(query)
-    );
-  }, [searchText, userCommunity]);
 
-  // Handle search focus
+    if (searchText.trim() && topicsData?.topics) {
+      const query = searchText.toLowerCase();
+      const apiCommunities = topicsData.topics.map(topicToCommunity);
+      return apiCommunities.filter((c) => c.name.toLowerCase().includes(query));
+    }
+
+    return topicsData?.topics?.map(topicToCommunity) ?? [];
+  }, [searchText, topicsData, searchData]);
+
+  const exactTopicExists = useMemo(() => {
+    if (!searchText.trim()) return true;
+    const normalizedSearch = searchText.toLowerCase().trim();
+    return filteredCommunities.some(
+      (c) =>
+        c.id === normalizedSearch || c.name.toLowerCase() === normalizedSearch,
+    );
+  }, [searchText, filteredCommunities]);
+
+  const createTopicOption: Community | null = useMemo(() => {
+    if (!searchText.trim() || exactTopicExists || isDebouncing || isSearching)
+      return null;
+    const cleanName = searchText
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
+    if (!cleanName) return null;
+
+    return {
+      id: cleanName,
+      name: cleanName,
+      avatar: undefined,
+      memberCount: 0,
+      description: undefined,
+      isSubscribed: false,
+      isNewTopic: true,
+    };
+  }, [searchText, exactTopicExists, isDebouncing, isSearching]);
+
+  const isLoading = isLoadingTopics || isDebouncing || isSearching;
+
   const handleSearchFocus = useCallback(() => {
     searchExpandProgress.value = withTiming(1, { duration: 200 });
   }, [searchExpandProgress]);
@@ -249,7 +241,6 @@ export const CommunitySelectionModal = ({
     onClose();
   }, [onClose, searchExpandProgress]);
 
-  // Animated styles
   const headerAnimatedStyle = useAnimatedStyle(() => ({
     opacity: interpolate(searchExpandProgress.value, [0, 1], [1, 0]),
     height: interpolate(searchExpandProgress.value, [0, 1], [48, 0]),
@@ -261,7 +252,10 @@ export const CommunitySelectionModal = ({
     width: interpolate(searchExpandProgress.value, [0, 1], [0, 68]),
   }));
 
-  // Reset state when modal closes
+  const searchContainerAnimatedStyle = useAnimatedStyle(() => ({
+    marginTop: interpolate(searchExpandProgress.value, [0, 1], [16, 8]),
+  }));
+
   useEffect(() => {
     if (!visible) {
       setSearchText("");
@@ -280,8 +274,21 @@ export const CommunitySelectionModal = ({
         }}
       />
     ),
-    [selectedCommunity, onSelect]
+    [selectedCommunity, onSelect],
   );
+
+  const ListHeaderComponent = useMemo(() => {
+    if (!createTopicOption) return null;
+    return (
+      <CreateTopicItem
+        topicName={createTopicOption.name}
+        onPress={() => {
+          triggerHaptic("selection");
+          onSelect(createTopicOption);
+        }}
+      />
+    );
+  }, [createTopicOption, onSelect]);
 
   return (
     <Modal
@@ -295,10 +302,10 @@ export const CommunitySelectionModal = ({
           styles.container,
           {
             backgroundColor: theme.colors.background.default,
+            paddingTop: Platform.OS === "android" ? insets.top : 0,
           },
         ]}
       >
-        {/* Header */}
         <Animated.View style={[styles.header, headerAnimatedStyle]}>
           <Pressable onPress={handleClose} style={styles.closeButton}>
             <EvilIcons
@@ -307,26 +314,27 @@ export const CommunitySelectionModal = ({
               color={theme.colors.text.default}
             />
           </Pressable>
-          <Text size="md" weight="semibold" style={styles.headerTitle}>
-            Post to
+          <Text size="lg" weight="semibold" style={styles.headerTitle}>
+            Select a topic
           </Text>
           <View style={styles.closeButton} />
         </Animated.View>
 
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
+        <Animated.View
+          style={[styles.searchContainer, searchContainerAnimatedStyle]}
+        >
           <View style={styles.searchInputContainer}>
             <View
               style={[
                 styles.searchInputWrapper,
                 {
-                  backgroundColor: "rgb(227,229,230)",
+                  backgroundColor: theme.colors.background.light,
                 },
               ]}
             >
               <Feather
                 name="search"
-                size={16}
+                size={20}
                 color={theme.colors.text.subtle}
                 style={{ marginRight: 6 }}
               />
@@ -334,9 +342,13 @@ export const CommunitySelectionModal = ({
                 ref={searchInputRef}
                 style={[
                   styles.searchInput,
-                  { color: theme.colors.text.default },
+                  {
+                    color: theme.colors.text.default,
+                    fontWeight: theme.typography.weight.semibold,
+                    fontSize: theme.typography.size.lg,
+                  },
                 ]}
-                placeholder="Search for a community"
+                placeholder="Search for a topic"
                 placeholderTextColor={theme.colors.text.subtle}
                 value={searchText}
                 onChangeText={setSearchText}
@@ -365,7 +377,6 @@ export const CommunitySelectionModal = ({
             </View>
           </View>
 
-          {/* Cancel Button */}
           <Animated.View
             style={[styles.cancelButtonContainer, cancelButtonAnimatedStyle]}
           >
@@ -375,24 +386,37 @@ export const CommunitySelectionModal = ({
               </Text>
             </Pressable>
           </Animated.View>
-        </View>
+        </Animated.View>
 
-        {/* Communities List */}
-        <FlatList
-          data={filteredCommunities}
-          renderItem={renderCommunityItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListEmptyComponent={
-            <Box center p="lg">
-              <Text mode="subtle">No communities found</Text>
-            </Box>
-          }
-          ListFooterComponent={() => <View style={{ height: 100 }} />}
-        />
+        {isLoading ? (
+          <Box p="lg" alignItems="center">
+            <ActivityIndicator size="large" color={theme.colors.brand[500]} />
+            <Text mode="subtle" style={{ marginTop: 12 }}>
+              Loading topics...
+            </Text>
+          </Box>
+        ) : (
+          <FlatList
+            data={filteredCommunities}
+            renderItem={renderCommunityItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            ListHeaderComponent={ListHeaderComponent}
+            ListEmptyComponent={
+              <Box center p="lg">
+                <Text mode="subtle">
+                  {searchText.length > 0
+                    ? "No topics found matching your search"
+                    : "No topics available"}
+                </Text>
+              </Box>
+            }
+            ListFooterComponent={() => <View style={{ height: 100 }} />}
+          />
+        )}
       </Box>
     </Modal>
   );
@@ -422,7 +446,6 @@ const styles = StyleSheet.create((theme) => ({
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: theme.spacing.md,
     paddingHorizontal: theme.spacing.md,
     paddingBottom: theme.spacing.xs,
   },
@@ -438,7 +461,7 @@ const styles = StyleSheet.create((theme) => ({
   searchInputWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    height: 42,
+    height: 46,
     borderRadius: theme.radius.lg,
     paddingHorizontal: theme.spacing.sm,
   },
@@ -454,6 +477,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   listContent: {
     paddingHorizontal: theme.spacing.md,
+  },
+  createTopicItem: {
+    paddingHorizontal: theme.spacing.sm,
+    borderBottomWidth: 0.5,
+    borderBottomColor: theme.colors.border.subtle,
   },
   communityItem: {
     flexDirection: "row",

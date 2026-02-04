@@ -15,7 +15,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { useAuthStore } from "@/src/stores";
+import { useAuthStore, usePreferencesStore, getShareBaseUrl } from "@/src/stores";
 
 // Referral Link Card Component
 const ReferralLinkCard = ({
@@ -238,11 +238,13 @@ export function InviteAndEarnScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const user = useAuthStore((s) => s.user);
+  const shareServer = usePreferencesStore((s) => s.shareServer);
 
   // Generate referral links based on user ID
   const userId = user?.id || "user123";
-  const referralLink1 = `https://mirage.app/r/${userId}`;
-  const referralLink2 = `https://mirage.app/invite/${userId}`;
+  const shareBaseUrl = getShareBaseUrl(shareServer);
+  const referralLink1 = `${shareBaseUrl}/r/${userId}`;
+  const referralLink2 = `${shareBaseUrl}/invite/${userId}`;
 
   // Mock stats data
   const stats = {

@@ -61,7 +61,7 @@ const BlurGradientBoxBase = ({
   return (
     <Box {...boxProps} style={[containerStyle, style]}>
       {/* Glassmorphic background: Blur + gradient */}
-      <Box style={{ ...StyleSheet.absoluteFillObject, zIndex: 0 }}>
+      <Box style={[StyleSheet.absoluteFillObject, { zIndex: 0 }]}>
         <LinearGradient
           colors={gradientColors}
           start={gradientStart}

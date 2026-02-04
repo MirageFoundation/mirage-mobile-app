@@ -1,8 +1,14 @@
 import { ConfigContext, ExpoConfig } from "expo/config";
 
+const env = process.env.EXPO_PUBLIC_ENV || "";
+const bundleIdentifier = env
+  ? `talk.mirage.mobile.${env}`
+  : `talk.mirage.mobile`;
+const scheme = env ? `shadow${env}` : `mirage`;
+
+const name = env ? `mirage (${env.toUpperCase()})` : "mirage";
+
 export default ({ config }: ConfigContext): ExpoConfig => {
-  const env = process.env.EXPO_PUBLIC_ENV || "dev";
-  const name = env === "production" ? "Mirage" : `Mirage (${env})`;
   const slug = "mirage";
 
   return {
@@ -12,12 +18,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     version: "1.0.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
-    scheme: "mirage",
+    scheme: scheme,
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
       supportsTablet: true,
-      bundleIdentifier: "com.mirage.app",
+      bundleIdentifier: bundleIdentifier,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
       },
@@ -29,9 +35,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         backgroundImage: "./assets/images/android-icon-background.png",
         monochromeImage: "./assets/images/android-icon-monochrome.png",
       },
-      package: "com.mirage.app",
+      package: bundleIdentifier,
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
+      softwareKeyboardLayoutMode: "resize",
     },
     web: {
       output: "static",

@@ -1,6 +1,8 @@
 import React, { createContext, useContext } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { DevToolbar } from "@/src/components/ui/dev-toolbar";
+
 const QueryClearContext = createContext<
   { clearQueries: () => Promise<void> } | undefined
 >(undefined);
@@ -28,7 +30,7 @@ export const QueryClearProvider: React.FC<{ children: React.ReactNode }> = ({
   return (
     <QueryClearContext.Provider value={{ clearQueries }}>
       {children}
-      {/* {__DEV__ && <DevToolbar />} */}
+      {__DEV__ && <DevToolbar />}
     </QueryClearContext.Provider>
   );
 };

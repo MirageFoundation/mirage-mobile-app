@@ -32,6 +32,13 @@ export default function RootLayout() {
             animation: "fade",
           }}
         />
+        <Stack.Screen
+          name="video-editor"
+          options={{
+            animation: "slide_from_bottom",
+            presentation: "modal",
+          }}
+        />
       </Stack>
       <AuthSheet />
     </RootProvider>

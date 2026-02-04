@@ -1,9 +1,14 @@
-import { useRef, useEffect } from "react";
-import { Animated, Pressable, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import {
+  DownvoteFilledIcon,
+  DownvoteOutlineIcon,
+  UpvoteFilledIcon,
+  UpvoteOutlineIcon,
+} from "@/assets/figma-icons";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useEffect, useRef } from "react";
+import { Animated, Pressable } from "react-native";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type VoteButtonProps = {
   /** Vote type: like (upvote) or dislike (downvote) */
@@ -52,15 +57,10 @@ export const VoteButton = ({
     }).start();
   }, [isActive, colorAnim]);
 
-  const getIconName = (): keyof typeof Ionicons.glyphMap => {
-    if (type === "like") {
-      return isActive ? "thumbs-up" : "thumbs-up-outline";
-    }
-    return isActive ? "thumbs-down" : "thumbs-down-outline";
-  };
-
   const getActiveColor = () => {
-    return type === "like" ? theme.colors.success[500] : theme.colors.error[500];
+    return type === "like"
+      ? theme.colors.success[500]
+      : theme.colors.error[500];
   };
 
   const handlePressIn = () => {
@@ -82,7 +82,7 @@ export const VoteButton = ({
 
   const handlePress = () => {
     if (disabled) return;
-    
+
     // Bounce animation
     Animated.sequence([
       Animated.spring(scale, {
@@ -115,6 +115,21 @@ export const VoteButton = ({
   const iconColor = isActive ? getActiveColor() : theme.colors.text.subtle;
   const textColor = isActive ? getActiveColor() : theme.colors.text.subtle;
 
+  const renderIcon = () => {
+    if (type === "like") {
+      return isActive ? (
+        <UpvoteFilledIcon size={iconSize} color={iconColor} />
+      ) : (
+        <UpvoteOutlineIcon size={iconSize} color={iconColor} />
+      );
+    }
+    return isActive ? (
+      <DownvoteFilledIcon size={iconSize} color={iconColor} />
+    ) : (
+      <DownvoteOutlineIcon size={iconSize} color={iconColor} />
+    );
+  };
+
   return (
     <Pressable
       onPressIn={handlePressIn}
@@ -130,10 +145,11 @@ export const VoteButton = ({
           disabled && styles.disabled,
         ]}
       >
-        <Ionicons name={getIconName()} size={iconSize} color={iconColor} />
+        {renderIcon()}
         {showCount && (
           <Text
             size={size === "lg" ? "md" : size === "md" ? "sm" : "xs"}
+            weight="bold"
             style={{ color: textColor }}
           >
             {formatCount(count)}
@@ -153,4 +169,3 @@ const styles = StyleSheet.create((theme) => ({
     opacity: 0.5,
   },
 }));
-

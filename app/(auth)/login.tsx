@@ -1,21 +1,32 @@
+import { getUserStatus } from "@/src/api/read/endpoints/users";
 import { RecoveryPhraseInput } from "@/src/components/molecules";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useAuthStore, useUIStore } from "@/src/stores";
+import { isValidMnemonic } from "@/src/wallet";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { Image, Keyboard, Pressable, View } from "react-native";
+import {
+  Image,
+  Keyboard,
+  Platform,
+  Pressable,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { theme } = useUnistyles();
+  const { theme, rt } = useUnistyles();
+  const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
 
+  const importWallet = useAuthStore((s) => s.importWallet);
+  const setUserLevel = useAuthStore((s) => s.setUserLevel);
+  const setHasUsername = useAuthStore((s) => s.setHasUsername);
   const setUser = useAuthStore((s) => s.setUser);
-  const setRecoveryPhrase = useAuthStore((s) => s.setRecoveryPhrase);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
 
   const [words, setWords] = useState<string[]>(Array(12).fill(""));
@@ -46,28 +57,42 @@ export default function LoginScreen() {
   }, []);
 
   const validatePhrase = useCallback(() => {
-    // In a real app, validate against BIP-39 word list
-    // For now, just check that all words are at least 3 chars
-    const newErrors: Record<number, boolean> = {};
-    let hasError = false;
+    const phrase = words.join(" ").trim().toLowerCase();
 
-    words.forEach((word, index) => {
-      if (word.length < 3) {
-        newErrors[index] = true;
-        hasError = true;
+    // Validate using BIP39
+    if (!isValidMnemonic(phrase)) {
+      // Try to identify which words are invalid
+      const newErrors: Record<number, boolean> = {};
+
+      // Mark words that are too short as potentially invalid
+      words.forEach((word, index) => {
+        if (word.length < 3) {
+          newErrors[index] = true;
+        }
+      });
+
+      // If no specific errors found, mark all as potentially wrong
+      if (Object.keys(newErrors).length === 0) {
+        words.forEach((_, index) => {
+          newErrors[index] = true;
+        });
       }
-    });
 
-    setErrors(newErrors);
-    return !hasError;
+      setErrors(newErrors);
+      return false;
+    }
+
+    return true;
   }, [words]);
 
   const handleLogin = useCallback(async () => {
     if (!isComplete) return;
 
+    const phrase = words.join(" ").trim().toLowerCase();
+
     if (!validatePhrase()) {
       triggerHaptic("error");
-      setLoginError("Some words appear to be invalid");
+      setLoginError("Invalid recovery phrase. Please check your words.");
       return;
     }
 
@@ -75,34 +100,76 @@ export default function LoginScreen() {
     triggerHaptic("selection");
     Keyboard.dismiss();
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      // Import the wallet using the mnemonic
+      await importWallet(phrase);
 
-    // Mock: Check if phrase is "valid" (for demo, any 12 valid words work)
-    const phrase = words.join(" ");
+      // Get the wallet address from auth store after import
+      const walletAddress = useAuthStore.getState().walletAddress;
 
-    // Simulate successful login
-    triggerHaptic("success");
+      if (walletAddress) {
+        try {
+          // Fetch user status from API to get username and subscription level
+          const userStatus = await getUserStatus({ address: walletAddress });
 
-    // Store auth state
-    setRecoveryPhrase(phrase);
-    setUser({
-      id: "user_" + Date.now(),
-      username: "recovered_user",
-      walletAddress: "0x" + Math.random().toString(16).slice(2, 10) + "...",
-      tier: "Standard",
-    });
+          // Update auth store with user level
+          setUserLevel(userStatus.user_level);
 
-    setIsLoading(false);
+          // Update username info
+          if (userStatus.username) {
+            setHasUsername(true);
+            setUser({
+              id: walletAddress,
+              username: userStatus.username,
+              walletAddress,
+              tier:
+                ["Free", "Basic", "Premium", "Pro"][userStatus.user_level] ||
+                "Free",
+            });
+          }
+        } catch (apiError) {
+          // API error shouldn't block login - user can still use the app
+          console.warn("[Login] Failed to fetch user status:", apiError);
+        }
+      }
 
-    // Navigate back to app
-    router.dismissAll();
-  }, [isComplete, words, validatePhrase, setUser, setRecoveryPhrase, router]);
+      triggerHaptic("success");
+
+      // Navigate to home
+      router.dismissAll();
+    } catch (error) {
+      console.error("[Login] Failed to import wallet:", error);
+      triggerHaptic("error");
+
+      if (error instanceof Error) {
+        if (error.message.includes("Invalid mnemonic")) {
+          setLoginError("Invalid recovery phrase. Please check your words.");
+        } else if (error.message.includes("already exists")) {
+          setLoginError("A wallet already exists. Please logout first.");
+        } else {
+          setLoginError("Failed to import wallet. Please try again.");
+        }
+      } else {
+        setLoginError("An unexpected error occurred.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [
+    isComplete,
+    words,
+    validatePhrase,
+    importWallet,
+    setUserLevel,
+    setHasUsername,
+    setUser,
+    router,
+  ]);
 
   return (
     <Box flex background="base">
       {/* Header */}
-      <View style={[styles.header, { paddingTop: 20 }]}>
+      <View style={[styles.header, { paddingTop: Platform.OS === "ios" ? 20 : insets.top }]}>
         <Pressable onPress={handleBack} style={styles.closeButton}>
           <EvilIcons name="close" size={36} color={theme.colors.text.default} />
         </Pressable>
@@ -113,7 +180,11 @@ export default function LoginScreen() {
         {/* Title section */}
         <View style={styles.titleSection}>
           <Image
-            source={require("@/assets/images/app-icon.png")}
+            source={
+              isDark
+                ? require("@/assets/images/app-dark-icon.png")
+                : require("@/assets/images/app-icon.png")
+            }
             style={styles.appIcon}
           />
           <Text style={styles.titleText}>Login to Mirage</Text>
@@ -157,21 +228,12 @@ export default function LoginScreen() {
           onPress={handleLogin}
           disabled={!isComplete || isLoading}
           loading={isLoading}
+          gap="sm"
           style={{
             width: "100%",
-            backgroundColor:
-              !isComplete || isLoading
-                ? "rgb(242, 242, 242)"
-                : theme.colors.primary[500],
           }}
         >
-          <Button.Text
-            style={{
-              color:
-                !isComplete || isLoading ? theme.colors.text.subtle : "#fff",
-            }}
-            weight="medium"
-          >
+          <Button.Text weight="medium">
             {isLoading ? "Logging in..." : "Log in"}
           </Button.Text>
         </Button>
@@ -213,7 +275,6 @@ const styles = StyleSheet.create((theme) => ({
   scrollView: {
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
-    // marginTop: 80,
     justifyContent: "center",
   },
   titleSection: {
@@ -254,7 +315,6 @@ const styles = StyleSheet.create((theme) => ({
     height: 1,
     backgroundColor: theme.colors.border.subtle,
     width: "100%",
-    // marginBottom: theme.spacing.md,
   },
   createAccountButton: {
     paddingTop: theme.spacing.md,

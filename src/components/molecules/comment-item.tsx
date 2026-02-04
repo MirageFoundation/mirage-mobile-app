@@ -1,9 +1,23 @@
-import { Avatar, TimeAgo } from "@/src/components/atoms";
+import {
+  DownvoteFilledIcon,
+  DownvoteOutlineIcon,
+  UpvoteFilledIcon,
+  UpvoteOutlineIcon,
+} from "@/assets/figma-icons";
+import { TimeAgo } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons, Octicons } from "@expo/vector-icons";
-import { useCallback, useEffect } from "react";
-import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
+import { Image } from "expo-image";
+import * as Linking from "expo-linking";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Pressable,
+  Animated as RNAnimated,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import Animated, {
   Easing,
   interpolate,
@@ -13,6 +27,13 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+
+// Link color for clickable links
+const LINK_COLOR = "#3B82F6"; // Blue shade
+
+// Vote colors (same as post-actions)
+const UPVOTE_COLOR = "#FF4757"; // Red shade for upvote
+const DOWNVOTE_COLOR = "#8B5CF6"; // Purple shade for downvote
 
 export type CommentAuthor = {
   id: string;
@@ -41,6 +62,8 @@ type CommentItemProps = {
   comment: Comment;
   /** Whether the current user is the author */
   isOwnComment?: boolean;
+  /** Whether this comment is highlighted (navigated to from profile) */
+  isHighlighted?: boolean;
   /** Callback when the comment row is pressed (for collapse) */
   onPress?: () => void;
   /** Callback when avatar/username is pressed */
@@ -68,9 +91,243 @@ const SIZE_CONFIG = {
   avatarSize: "sm" as const,
 };
 
+// Regex to match markdown links: [text](url)
+const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\(([^)]+)\)/g;
+
+// Regex to match image URLs (standalone URLs on their own line)
+const IMAGE_URL_REGEX = /^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp))$/i;
+
+// Regex to match Cloudflare Images URLs
+const CLOUDFLARE_IMAGE_REGEX = /^https?:\/\/imagedelivery\.net\/[^\s]+$/i;
+
+// Regex to match Giphy URLs (handles media.giphy.com, media0-4.giphy.com, i.giphy.com)
+const GIPHY_URL_REGEX =
+  /^https?:\/\/(?:media\d?\.giphy\.com|i\.giphy\.com)\/[^\s]+$/i;
+
+type ContentPart =
+  | { type: "text"; content: string }
+  | { type: "link"; text: string; url: string }
+  | { type: "image"; url: string };
+
+/**
+ * Check if a URL is an image URL
+ */
+function isImageUrl(url: string): boolean {
+  return (
+    IMAGE_URL_REGEX.test(url) ||
+    CLOUDFLARE_IMAGE_REGEX.test(url) ||
+    GIPHY_URL_REGEX.test(url)
+  );
+}
+
+/**
+ * Parse content and extract markdown links and images
+ */
+function parseContentWithLinks(content: string): ContentPart[] {
+  const parts: ContentPart[] = [];
+
+  // First, split by newlines to handle standalone image URLs
+  const lines = content.split("\n");
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
+    const trimmedLine = line.trim();
+
+    // Check if this line is a standalone image URL
+    if (isImageUrl(trimmedLine)) {
+      parts.push({ type: "image", url: trimmedLine });
+      continue;
+    }
+
+    // Otherwise, parse for markdown links
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    // Reset regex state
+    MARKDOWN_LINK_REGEX.lastIndex = 0;
+
+    let hasContent = false;
+
+    while ((match = MARKDOWN_LINK_REGEX.exec(line)) !== null) {
+      // Add text before the link
+      if (match.index > lastIndex) {
+        const textBefore = line.slice(lastIndex, match.index);
+        if (textBefore) {
+          parts.push({ type: "text", content: textBefore });
+          hasContent = true;
+        }
+      }
+
+      // Add the link
+      parts.push({
+        type: "link",
+        text: match[1],
+        url: match[2],
+      });
+      hasContent = true;
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text after the last link
+    if (lastIndex < line.length) {
+      const remaining = line.slice(lastIndex);
+      if (remaining) {
+        parts.push({ type: "text", content: remaining });
+        hasContent = true;
+      }
+    }
+
+    // Add newline between lines (except for the last line)
+    if (lineIndex < lines.length - 1 && hasContent) {
+      parts.push({ type: "text", content: "\n" });
+    }
+  }
+
+  return parts;
+}
+
+/**
+ * Component to render an image in comment
+ */
+const CommentImage = ({ url }: { url: string }) => {
+  const { theme } = useUnistyles();
+  const [hasError, setHasError] = useState(false);
+
+  if (hasError) {
+    return (
+      <View
+        style={[
+          commentImageStyles.errorContainer,
+          { backgroundColor: theme.colors.background.subtle },
+        ]}
+      >
+        <Text size="xs" mode="subtle">
+          Failed to load image
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={commentImageStyles.container}>
+      <Image
+        source={{ uri: url }}
+        style={commentImageStyles.image}
+        contentFit="cover"
+        transition={200}
+        onError={() => setHasError(true)}
+      />
+    </View>
+  );
+};
+
+const commentImageStyles = StyleSheet.create((theme) => ({
+  container: {
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+    borderRadius: theme.radius.md,
+    overflow: "hidden",
+  },
+  image: {
+    width: "100%",
+    height: 200,
+    borderRadius: theme.radius.md,
+  },
+  errorContainer: {
+    width: "100%",
+    height: 100,
+    borderRadius: theme.radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+  },
+}));
+
+/**
+ * Component to render content with clickable links and images
+ */
+const CommentContent = ({ content }: { content: string }) => {
+  const parts = useMemo(() => parseContentWithLinks(content), [content]);
+
+  const handleLinkPress = useCallback((url: string) => {
+    triggerHaptic("light");
+    // Ensure URL has protocol
+    const fullUrl =
+      url.startsWith("http://") || url.startsWith("https://")
+        ? url
+        : `https://${url}`;
+    Linking.openURL(fullUrl).catch((err) => {
+      console.error("Failed to open URL:", err);
+    });
+  }, []);
+
+  // Check if we have any images
+  const hasImages = parts.some((part) => part.type === "image");
+
+  // If no links and no images, render simple text
+  if (parts.length === 1 && parts[0].type === "text") {
+    return (
+      <Text size="md" style={styles.content}>
+        {content}
+      </Text>
+    );
+  }
+
+  // Separate text/link parts from image parts for proper rendering
+  const textParts: ContentPart[] = [];
+  const imageParts: ContentPart[] = [];
+
+  for (const part of parts) {
+    if (part.type === "image") {
+      imageParts.push(part);
+    } else {
+      textParts.push(part);
+    }
+  }
+
+  return (
+    <View>
+      {/* Text content */}
+      {textParts.length > 0 && (
+        <Text size="md" style={styles.content}>
+          {textParts.map((part, index) => {
+            if (part.type === "text") {
+              return part.content;
+            }
+            if (part.type === "link") {
+              return (
+                <Text
+                  key={index}
+                  size="md"
+                  style={{ color: LINK_COLOR }}
+                  onPress={() => handleLinkPress(part.url)}
+                >
+                  {part.text}
+                </Text>
+              );
+            }
+            return null;
+          })}
+        </Text>
+      )}
+
+      {/* Images */}
+      {imageParts.map(
+        (part, index) =>
+          part.type === "image" && (
+            <CommentImage key={`img-${index}`} url={part.url} />
+          ),
+      )}
+    </View>
+  );
+};
+
 export const CommentItem = ({
   comment,
   isOwnComment = false,
+  isHighlighted = false,
   onPress,
   onAuthorPress,
   onLikePress,
@@ -85,6 +342,15 @@ export const CommentItem = ({
   const { theme } = useUnistyles();
 
   const { author, content, likes, hasLiked, hasDisliked, createdAt } = comment;
+
+  // Highlight style for navigated-to comment
+  const highlightStyle = isHighlighted
+    ? { backgroundColor: theme.colors.primary[500] + "20" } // 20% opacity
+    : undefined;
+
+  // Animation values for arrow movement (using RN Animated for transform)
+  const upArrowTranslateY = useRef(new RNAnimated.Value(0)).current;
+  const downArrowTranslateY = useRef(new RNAnimated.Value(0)).current;
 
   // Animation for collapse/expand
   const animationProgress = useSharedValue(isCollapsed ? 0 : 1);
@@ -110,7 +376,7 @@ export const CommentItem = ({
     const opacity = interpolate(
       animationProgress.value,
       [0, 0.5, 1],
-      [0, 0.5, 1]
+      [0, 0.5, 1],
     );
     const translateY = interpolate(animationProgress.value, [0, 1], [-8, 0]);
     const scale = interpolate(animationProgress.value, [0, 1], [0.97, 1]);
@@ -140,13 +406,43 @@ export const CommentItem = ({
 
   const handleLikePress = useCallback(() => {
     triggerHaptic(hasLiked ? "light" : "medium");
+
+    // Animate arrow movement - bounce up
+    RNAnimated.sequence([
+      RNAnimated.timing(upArrowTranslateY, {
+        toValue: -3,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      RNAnimated.timing(upArrowTranslateY, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
     onLikePress?.();
-  }, [hasLiked, onLikePress]);
+  }, [hasLiked, onLikePress, upArrowTranslateY]);
 
   const handleDislikePress = useCallback(() => {
     triggerHaptic(hasDisliked ? "light" : "medium");
+
+    // Animate arrow movement - bounce down
+    RNAnimated.sequence([
+      RNAnimated.timing(downArrowTranslateY, {
+        toValue: 3,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      RNAnimated.timing(downArrowTranslateY, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
     onDislikePress?.();
-  }, [hasDisliked, onDislikePress]);
+  }, [hasDisliked, onDislikePress, downArrowTranslateY]);
 
   const handleReplyPress = useCallback(() => {
     triggerHaptic("selection");
@@ -171,8 +467,15 @@ export const CommentItem = ({
 
   const iconColor = theme.colors.text.subtle;
 
+  // Vote colors persist based on state (same as post-actions)
+  const upvoteColor = hasLiked ? UPVOTE_COLOR : iconColor;
+  const downvoteColor = hasDisliked ? DOWNVOTE_COLOR : iconColor;
+
   return (
-    <Pressable onPress={handlePress} style={[styles.container, style]}>
+    <Pressable
+      onPress={handlePress}
+      style={[styles.container, highlightStyle, style]}
+    >
       {/* Thread line for nested comments */}
       {depth > 0 && (
         <View style={[styles.threadLineContainer, { width: indentWidth }]}>
@@ -185,79 +488,107 @@ export const CommentItem = ({
       <View style={[styles.contentWrapper, { marginLeft: indentWidth }]}>
         {/* Header: Avatar, Username, Time */}
         <View style={styles.header}>
-          <Pressable onPress={handleAuthorPress} style={styles.authorSection}>
-            <Avatar
-              size={SIZE_CONFIG.avatarSize}
-              seed={author.avatarSeed ?? author.username}
-              source={author.avatarUrl ? { uri: author.avatarUrl } : undefined}
-              bordered
-            />
+          <View style={styles.authorSection}>
             <View style={styles.authorInfo}>
               <View style={styles.authorRow}>
-                <Text size="sm" weight="semibold" numberOfLines={1}>
-                  @{author.username}
-                </Text>
-                <Text size="xs" mode="subtle">
+                <Pressable
+                  onPress={handleAuthorPress}
+                  hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+                  style={({ pressed }) => [
+                    styles.usernameButton,
+                    pressed && styles.usernameButtonPressed,
+                  ]}
+                >
+                  <Text size="sm" weight="bold" numberOfLines={1} mode="subtle">
+                    @{author.username}
+                  </Text>
+                </Pressable>
+
+                <Text size="sm" mode="subtle">
                   ·
                 </Text>
+
                 <TimeAgo timestamp={createdAt} showSuffix={false} size="xs" />
               </View>
             </View>
-          </Pressable>
+          </View>
           {/* Tappable area to expand/collapse */}
           <Pressable onPress={handlePress} style={styles.expandArea} />
         </View>
 
         {/* Comment content - collapsible */}
         <Animated.View style={animatedContentStyle}>
-          <Text size="sm" style={styles.content}>
-            {content}
-          </Text>
+          <CommentContent content={content} />
 
           {/* Actions below content on the right */}
           <View style={styles.actionsRow}>
             <View style={styles.actions}>
               {/* More options (three dots) */}
-              <Pressable onPress={handleMorePress} style={styles.actionButton}>
+              <Pressable
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                onPress={handleMorePress}
+                style={styles.actionButton}
+              >
                 <Ionicons
                   name="ellipsis-horizontal"
-                  size={SIZE_CONFIG.iconSize}
+                  size={SIZE_CONFIG.iconSize + 5}
                   color={iconColor}
                 />
               </Pressable>
 
               {/* Reply */}
-              <Pressable onPress={handleReplyPress} style={styles.actionButton}>
+              <Pressable
+                onPress={handleReplyPress}
+                style={styles.actionButton}
+                hitSlop={{ top: 20, bottom: 20, left: 10, right: 10 }}
+              >
                 <Octicons
                   name="reply"
-                  size={SIZE_CONFIG.iconSize - 1}
+                  size={
+                    depth === 0
+                      ? SIZE_CONFIG.iconSize
+                      : SIZE_CONFIG.iconSize + 4
+                  }
                   color={iconColor}
                 />
                 {depth === 0 && (
-                  <Text size="xs" mode="subtle" style={styles.actionText}>
+                  <Text
+                    size={theme.typography.size.xs}
+                    mode="subtle"
+                    weight="semibold"
+                    style={styles.actionText}
+                  >
                     Reply
                   </Text>
                 )}
               </Pressable>
 
               {/* Like */}
-              <Pressable onPress={handleLikePress} style={styles.actionButton}>
-                <Ionicons
-                  name="arrow-up"
-                  size={SIZE_CONFIG.iconSize}
-                  color={hasLiked ? theme.colors.success[500] : iconColor}
-                />
+              <Pressable
+                onPress={handleLikePress}
+                style={styles.actionButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <RNAnimated.View
+                  style={{ transform: [{ translateY: upArrowTranslateY }] }}
+                >
+                  {hasLiked ? (
+                    <UpvoteFilledIcon
+                      size={SIZE_CONFIG.iconSize}
+                      color={upvoteColor}
+                    />
+                  ) : (
+                    <UpvoteOutlineIcon
+                      size={SIZE_CONFIG.iconSize}
+                      color={upvoteColor}
+                    />
+                  )}
+                </RNAnimated.View>
                 {likes > 0 && (
                   <Text
                     size="xs"
-                    style={[
-                      styles.actionText,
-                      {
-                        color: hasLiked
-                          ? theme.colors.success[500]
-                          : theme.colors.text.subtle,
-                      },
-                    ]}
+                    weight="bold"
+                    style={[styles.actionText, { color: upvoteColor }]}
                   >
                     {formatCount(likes)}
                   </Text>
@@ -268,12 +599,23 @@ export const CommentItem = ({
               <Pressable
                 onPress={handleDislikePress}
                 style={styles.actionButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons
-                  name="arrow-down"
-                  size={SIZE_CONFIG.iconSize}
-                  color={hasDisliked ? theme.colors.error[500] : iconColor}
-                />
+                <RNAnimated.View
+                  style={{ transform: [{ translateY: downArrowTranslateY }] }}
+                >
+                  {hasDisliked ? (
+                    <DownvoteFilledIcon
+                      size={SIZE_CONFIG.iconSize}
+                      color={downvoteColor}
+                    />
+                  ) : (
+                    <DownvoteOutlineIcon
+                      size={SIZE_CONFIG.iconSize}
+                      color={downvoteColor}
+                    />
+                  )}
+                </RNAnimated.View>
               </Pressable>
             </View>
           </View>
@@ -314,8 +656,13 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
   },
-  authorInfo: {
-    marginLeft: theme.spacing.xs,
+  authorInfo: {},
+  usernameButton: {
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+  },
+  usernameButtonPressed: {
+    opacity: 0.6,
   },
   expandArea: {
     flex: 1,
@@ -338,7 +685,7 @@ const styles = StyleSheet.create((theme) => ({
   actions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.md,
+    gap: theme.spacing.lg,
   },
   actionButton: {
     flexDirection: "row",
@@ -346,6 +693,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: 4,
   },
   actionText: {
-    marginLeft: 3,
+    marginLeft: 8,
   },
 }));

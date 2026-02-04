@@ -10,20 +10,31 @@
       "ios": {
         "simulator": true,
         "image": "macos-sonoma-14.6-xcode-16.1"
+      },
+      "env": {
+        "EXPO_PUBLIC_ENV": "dev"
       }
     },
     "dev": {
       "developmentClient": true,
       "channel": "dev",
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_ENV": "dev"
+      }
     },
     "preview": {
       "distribution": "internal",
-      "channel": "preview"
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_ENV": "preview"
+      }
     },
     "production": {
       "autoIncrement": true,
       "channel": "production",
+      "env": {
+      },
       "ios": {
         "image": "macos-sonoma-14.6-xcode-16.1",
         "node": "24.4.0"

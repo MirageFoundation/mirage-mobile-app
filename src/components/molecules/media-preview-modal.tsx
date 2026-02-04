@@ -1,0 +1,328 @@
+import { Ionicons } from "@expo/vector-icons";
+import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
+import { Image } from "expo-image";
+import { memo, useCallback, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Dimensions,
+  Modal,
+  Pressable,
+  View,
+} from "react-native";
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet } from "react-native-unistyles";
+
+import type { ResolvedMedia } from "./post-card-utils";
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+type MediaPreviewModalProps = {
+  visible: boolean;
+  media: ResolvedMedia | null;
+  onClose: () => void;
+};
+
+export const MediaPreviewModal = memo(function MediaPreviewModal({
+  visible,
+  media,
+  onClose,
+}: MediaPreviewModalProps) {
+  const insets = useSafeAreaInsets();
+  const videoRef = useRef<Video | null>(null);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+
+  const resetTransforms = useCallback(() => {
+    scale.value = withTiming(1);
+    savedScale.value = 1;
+    translateX.value = withTiming(0);
+    translateY.value = withTiming(0);
+    savedTranslateX.value = 0;
+    savedTranslateY.value = 0;
+  }, [scale, savedScale, translateX, translateY, savedTranslateX, savedTranslateY]);
+
+  const handleClose = useCallback(() => {
+    resetTransforms();
+    setIsVideoPlaying(true);
+    setIsMuted(false);
+    setIsLoading(true);
+    onClose();
+  }, [onClose, resetTransforms]);
+
+  const handleVideoToggle = useCallback(async () => {
+    if (!videoRef.current) return;
+    try {
+      const status = await videoRef.current.getStatusAsync();
+      if (!status.isLoaded) return;
+      if (status.isPlaying) {
+        await videoRef.current.pauseAsync();
+        setIsVideoPlaying(false);
+      } else {
+        if (status.didJustFinish) {
+          await videoRef.current.replayAsync();
+        } else {
+          await videoRef.current.playAsync();
+        }
+        setIsVideoPlaying(true);
+      }
+    } catch {}
+  }, []);
+
+  const handleMuteToggle = useCallback(() => {
+    setIsMuted((prev) => !prev);
+  }, []);
+
+  const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
+    if (!status.isLoaded) return;
+    if (status.isPlaying && !status.isBuffering) {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const pinchGesture = Gesture.Pinch()
+    .onUpdate((e) => {
+      scale.value = savedScale.value * e.scale;
+    })
+    .onEnd(() => {
+      if (scale.value < 1) {
+        scale.value = withTiming(1);
+        savedScale.value = 1;
+        translateX.value = withTiming(0);
+        translateY.value = withTiming(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      } else if (scale.value > 4) {
+        scale.value = withTiming(4);
+        savedScale.value = 4;
+      } else {
+        savedScale.value = scale.value;
+      }
+    });
+
+  const panGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      if (savedScale.value > 1) {
+        translateX.value = savedTranslateX.value + e.translationX;
+        translateY.value = savedTranslateY.value + e.translationY;
+      }
+    })
+    .onEnd(() => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    });
+
+  const doubleTapGesture = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      if (savedScale.value > 1) {
+        scale.value = withTiming(1);
+        savedScale.value = 1;
+        translateX.value = withTiming(0);
+        translateY.value = withTiming(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      } else {
+        scale.value = withTiming(2);
+        savedScale.value = 2;
+      }
+    });
+
+  const composedGesture = Gesture.Simultaneous(
+    pinchGesture,
+    panGesture,
+    doubleTapGesture
+  );
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  if (!media) return null;
+
+  const isVideo = media.type === "video";
+  const isGif = media.type === "gif";
+  const isImage = media.type === "image";
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={handleClose}
+      statusBarTranslucent
+    >
+      <GestureHandlerRootView style={styles.gestureRoot}>
+        <View style={styles.container}>
+          <Pressable
+            style={[styles.closeButton, { top: insets.top + 10 }]}
+            onPress={handleClose}
+            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+          >
+            <View style={styles.closeButtonInner}>
+              <Ionicons name="close" size={24} color="#fff" />
+            </View>
+          </Pressable>
+
+          {isImage && (
+            <GestureDetector gesture={composedGesture}>
+              <Animated.View style={[styles.mediaContainer, animatedStyle]}>
+                <Image
+                  source={{ uri: media.uri }}
+                  style={styles.fullMedia}
+                  contentFit="contain"
+                  onLoad={() => setIsLoading(false)}
+                />
+              </Animated.View>
+            </GestureDetector>
+          )}
+
+          {isGif && (
+            <View style={styles.mediaContainer}>
+              <Image
+                source={{ uri: media.uri }}
+                style={styles.fullMedia}
+                contentFit="contain"
+                onLoad={() => setIsLoading(false)}
+              />
+            </View>
+          )}
+
+          {isVideo && (
+            <Pressable style={styles.mediaContainer} onPress={handleVideoToggle}>
+              <Video
+                ref={videoRef}
+                source={{ uri: media.uri }}
+                style={styles.fullMedia}
+                resizeMode={ResizeMode.CONTAIN}
+                shouldPlay={isVideoPlaying}
+                isLooping
+                isMuted={isMuted}
+                useNativeControls={false}
+                onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+                onLoad={() => setIsLoading(false)}
+              />
+              {!isVideoPlaying && !isLoading && (
+                <View style={styles.playOverlay}>
+                  <View style={styles.playButton}>
+                    <Ionicons name="play" size={40} color="#fff" />
+                  </View>
+                </View>
+              )}
+            </Pressable>
+          )}
+
+          {isLoading && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#fff" />
+            </View>
+          )}
+
+          {isVideo && (
+            <Pressable
+              style={[styles.muteButton, { bottom: insets.bottom + 20 }]}
+              onPress={handleMuteToggle}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <View style={styles.controlButtonInner}>
+                <Ionicons
+                  name={isMuted ? "volume-mute" : "volume-high"}
+                  size={20}
+                  color="#fff"
+                />
+              </View>
+            </Pressable>
+          )}
+        </View>
+      </GestureHandlerRootView>
+    </Modal>
+  );
+});
+
+const styles = StyleSheet.create((theme) => ({
+  gestureRoot: {
+    flex: 1,
+  },
+  container: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  closeButton: {
+    position: "absolute",
+    right: 16,
+    zIndex: 100,
+  },
+  closeButtonInner: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mediaContainer: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  fullMedia: {
+    width: "100%",
+    height: "100%",
+  },
+  loadingContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  playButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  muteButton: {
+    position: "absolute",
+    right: 20,
+    zIndex: 100,
+  },
+  controlButtonInner: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+}));

@@ -12,12 +12,14 @@ type CommentThreadProps = {
   maxDepth?: number;
   /** Whether the current user ID matches author (for highlighting own comments) */
   currentUserId?: string | null;
+  /** ID of comment to highlight (from navigation) */
+  highlightedCommentId?: string | null;
   /** Callback when author avatar/username is pressed */
   onAuthorPress?: (authorId: string) => void;
   /** Callback when like is pressed */
-  onLikePress?: (commentId: string) => void;
+  onLikePress?: (commentId: string, hasLiked: boolean, hasDisliked: boolean, likes: number) => void;
   /** Callback when dislike is pressed */
-  onDislikePress?: (commentId: string) => void;
+  onDislikePress?: (commentId: string, hasLiked: boolean, hasDisliked: boolean, likes: number) => void;
   /** Callback when reply is pressed */
   onReplyPress?: (comment: Comment) => void;
   /** Callback when more options is pressed */
@@ -31,6 +33,7 @@ export const CommentThread = ({
   depth = 0,
   maxDepth = 4,
   currentUserId,
+  highlightedCommentId,
   onAuthorPress,
   onLikePress,
   onDislikePress,
@@ -49,6 +52,7 @@ export const CommentThread = ({
   }, []);
 
   const isOwnComment = currentUserId === comment.author.id;
+  const isHighlighted = highlightedCommentId === comment.id;
 
   return (
     <View style={styles.container}>
@@ -56,13 +60,14 @@ export const CommentThread = ({
       <CommentItem
         comment={comment}
         isOwnComment={isOwnComment}
+        isHighlighted={isHighlighted}
         depth={depth}
         maxDepth={maxDepth}
         isCollapsed={isCollapsed}
         onPress={handleToggleCollapse}
         onAuthorPress={() => onAuthorPress?.(comment.author.id)}
-        onLikePress={() => onLikePress?.(comment.id)}
-        onDislikePress={() => onDislikePress?.(comment.id)}
+        onLikePress={() => onLikePress?.(comment.id, comment.hasLiked ?? false, comment.hasDisliked ?? false, comment.likes)}
+        onDislikePress={() => onDislikePress?.(comment.id, comment.hasLiked ?? false, comment.hasDisliked ?? false, comment.likes)}
         onReplyPress={() => onReplyPress?.(comment)}
         onMorePress={() => onMorePress?.(comment)}
       />
@@ -77,6 +82,7 @@ export const CommentThread = ({
               depth={depth + 1}
               maxDepth={maxDepth}
               currentUserId={currentUserId}
+              highlightedCommentId={highlightedCommentId}
               onAuthorPress={onAuthorPress}
               onLikePress={onLikePress}
               onDislikePress={onDislikePress}

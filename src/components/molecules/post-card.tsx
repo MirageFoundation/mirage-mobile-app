@@ -1,109 +1,103 @@
-import {
-  Avatar,
-  ContentWarningBadge,
-  FollowButton,
-  TimeAgo,
-  type ContentWarningType,
-} from "@/src/components/atoms";
-import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
-import { useState } from "react";
-import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { logPress } from "@/src/utils/press-logger";
+import { memo, useCallback, useMemo, useState } from "react";
+import { Linking, Pressable, type StyleProp, type ViewStyle } from "react-native";
+import { StyleSheet } from "react-native-unistyles";
+
+import { MediaPreviewModal } from "./media-preview-modal";
 import { PostActions } from "./post-actions";
+import { PostCardContent } from "./post-card-content";
+import { PostCardHeader } from "./post-card-header";
+import { PostCardMedia } from "./post-card-media";
+import type { Post } from "./post-card-types";
+import { resolvePostContent } from "./post-card-utils";
 
-export type PostAuthor = {
-  id: string;
-  username: string;
-  avatarSeed?: string;
-  avatarUrl?: string;
-};
-
-export type PostMedia = {
-  uri: string;
-  type: "image" | "video" | "gif";
-  width?: number;
-  height?: number;
-  aspectRatio?: number;
-};
-
-export type Post = {
-  id: string;
-  author: PostAuthor;
-  title: string;
-  body?: string;
-  topic?: string;
-  media?: PostMedia[];
-  contentWarnings?: ContentWarningType[];
-  likes: number;
-  dislikes: number;
-  comments: number;
-  hasLiked?: boolean;
-  hasDisliked?: boolean;
-  isFollowing?: boolean;
-  createdAt: Date | string | number;
-};
+export type { Post, PostAuthor, PostMedia } from "./post-card-types";
 
 type PostCardProps = {
-  /** Post data */
   post: Post;
-  /** Whether the current user is the author */
   isOwnPost?: boolean;
-  /** Callback when the post card is pressed */
+  isVisible?: boolean;
+  /** Whether to show the follow button (default: true) */
+  showFollowButton?: boolean;
+  /** Whether the topic is followed */
+  isTopicFollowed?: boolean;
+  /** Whether video autoplay is allowed based on user settings and network */
+  allowAutoplay?: boolean;
   onPress?: () => void;
-  /** Callback when author avatar/username is pressed */
   onAuthorPress?: () => void;
-  /** Callback when follow button is pressed */
-  onFollowPress?: () => void;
-  /** Callback when more options (three dots) is pressed */
+  onFollowUser?: () => void;
+  onFollowTopic?: () => void;
   onMorePress?: () => void;
-  /** Callback when like is pressed */
   onLikePress?: () => void;
-  /** Callback when dislike is pressed */
   onDislikePress?: () => void;
-  /** Callback when comment is pressed */
   onCommentPress?: () => void;
-  /** Callback when share is pressed */
   onSharePress?: () => void;
-  /** Callback when content warning is pressed to reveal */
   onRevealContent?: () => void;
-  /** Whether content has been revealed (for NSFW posts) */
   contentRevealed?: boolean;
-  /** Follow button loading state */
-  followLoading?: boolean;
-  /** URL for sharing */
   shareUrl?: string;
-  /** Custom style */
+  /** Whether to show the URL card/Play Now row (default: true) */
+  showUrlCard?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
-export const PostCard = ({
-  post,
-  isOwnPost = false,
-  onPress,
-  onAuthorPress,
-  onFollowPress,
-  onMorePress,
-  onLikePress,
-  onDislikePress,
-  onCommentPress,
-  onSharePress,
-  onRevealContent,
-  contentRevealed = false,
-  followLoading = false,
-  shareUrl,
-  style,
-}: PostCardProps) => {
-  const { theme } = useUnistyles();
-  const [imageError, setImageError] = useState(false);
+function arePostCardPropsEqual(
+  prevProps: PostCardProps,
+  nextProps: PostCardProps
+): boolean {
+  const prevPost = prevProps.post;
+  const nextPost = nextProps.post;
 
-  const {
-    author,
-    title,
-    body,
-    media,
+  if (prevPost.id !== nextPost.id) return false;
+  if (prevPost.likes !== nextPost.likes) return false;
+  if (prevPost.dislikes !== nextPost.dislikes) return false;
+  if (prevPost.comments !== nextPost.comments) return false;
+  if (prevPost.hasLiked !== nextPost.hasLiked) return false;
+  if (prevPost.hasDisliked !== nextPost.hasDisliked) return false;
+  if (prevPost.isFollowing !== nextPost.isFollowing) return false;
+
+  if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
+  if (prevProps.isVisible !== nextProps.isVisible) return false;
+  if (prevProps.showFollowButton !== nextProps.showFollowButton) return false;
+  if (prevProps.isTopicFollowed !== nextProps.isTopicFollowed) return false;
+  if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
+  if (prevProps.contentRevealed !== nextProps.contentRevealed) return false;
+  if (prevProps.shareUrl !== nextProps.shareUrl) return false;
+  if (prevProps.showUrlCard !== nextProps.showUrlCard) return false;
+
+  return true;
+}
+
+export const PostCard = memo(function PostCard({
+ post,
+ isOwnPost = false,
+ isVisible = false,
+ showFollowButton = true,
+ isTopicFollowed = false,
+ allowAutoplay = true,
+ onPress,
+ onAuthorPress,
+ onFollowUser,
+ onFollowTopic,
+ onMorePress,
+ onLikePress,
+ onDislikePress,
+ onCommentPress,
+ onSharePress,
+ onRevealContent,
+ contentRevealed = false,
+ shareUrl,
+ showUrlCard = true,
+ style,
+}: PostCardProps) {
+ if (__DEV__) {
+   console.log("[render] post_card", post.id);
+ }
+ const {
+   author,
+   title,
+   body,
+   media,
     contentWarnings,
     likes,
     dislikes,
@@ -112,166 +106,78 @@ export const PostCard = ({
     hasDisliked,
     isFollowing,
     createdAt,
+    topic,
   } = post;
 
-  const hasContentWarning = contentWarnings && contentWarnings.length > 0;
-  const shouldBlurContent = hasContentWarning && !contentRevealed;
-  const primaryMedia = media?.[0];
-  const hasMultipleMedia = media && media.length > 1;
+  const shouldBlurContent = !!contentWarnings?.length && !contentRevealed;
 
-  // Calculate aspect ratio for media
-  const getMediaAspectRatio = () => {
-    if (primaryMedia?.aspectRatio) return primaryMedia.aspectRatio;
-    if (primaryMedia?.width && primaryMedia?.height) {
-      return primaryMedia.width / primaryMedia.height;
-    }
-    return 16 / 9; // Default aspect ratio
-  };
+  const resolvedContent = useMemo(
+    () => resolvePostContent(body, media),
+    [body, media]
+  );
 
-  const handlePress = () => {
+  const handlePress = useCallback(() => {
     triggerHaptic("selection");
+    logPress({ name: "post_card", postId: post.id });
     onPress?.();
-  };
+  }, [onPress, post.id]);
 
-  const handleAuthorPress = () => {
+  const handlePlayNowPress = useCallback(() => {
+    if (!resolvedContent.extractedUrl) return;
     triggerHaptic("selection");
-    onAuthorPress?.();
-  };
+    Linking.openURL(resolvedContent.extractedUrl);
+  }, [resolvedContent.extractedUrl]);
 
-  const handleMorePress = () => {
-    triggerHaptic("selection");
-    onMorePress?.();
-  };
+  const [showMediaPreview, setShowMediaPreview] = useState(false);
+
+  const handleMediaPress = useCallback(() => {
+    setShowMediaPreview(true);
+  }, []);
+
+  const handleCloseMediaPreview = useCallback(() => {
+    setShowMediaPreview(false);
+  }, []);
 
   return (
     <Pressable onPress={handlePress} style={[styles.container, style]}>
-      {/* Header: Avatar, Username, Time, Follow, More */}
-      <View style={styles.header}>
-        <Pressable onPress={handleAuthorPress} style={styles.authorSection}>
-          <Avatar
-            size="sm"
-            seed={author.avatarSeed ?? author.username}
-            source={author.avatarUrl ? { uri: author.avatarUrl } : undefined}
-            bordered
-          />
-          <View style={styles.authorInfo}>
-            <View style={styles.authorRow}>
-              <Text size="sm" weight="semibold" numberOfLines={1}>
-                @{author.username}
-              </Text>
-              <TimeAgo timestamp={createdAt} showSuffix={false} size="xs" />
-            </View>
-          </View>
-        </Pressable>
+      <PostCardHeader
+        author={author}
+        topic={topic}
+        createdAt={createdAt}
+        isOwnPost={isOwnPost}
+        isFollowing={isFollowing}
+        isTopicFollowed={isTopicFollowed}
+        showFollowButton={showFollowButton}
+        onAuthorPress={onAuthorPress}
+        onFollowUser={onFollowUser}
+        onFollowTopic={onFollowTopic}
+        onMorePress={onMorePress}
+      />
 
-        {/* Right section: Follow button + More options */}
-        <View style={styles.headerActions}>
-          {!isOwnPost && (
-            <FollowButton
-              isFollowing={isFollowing ?? false}
-              onPress={onFollowPress}
-              loading={followLoading}
-              size="sm"
-            />
-          )}
-          <Pressable onPress={handleMorePress} style={styles.moreButton}>
-            <Ionicons
-              name="ellipsis-horizontal"
-              size={18}
-              color={theme.colors.text.subtle}
-            />
-          </Pressable>
-        </View>
-      </View>
+      <PostCardContent
+        title={title}
+        bodyWithoutUrl={resolvedContent.bodyWithoutUrl}
+        extractedUrl={resolvedContent.extractedUrl}
+        displayDomain={resolvedContent.displayDomain}
+        bodyVideoUrl={resolvedContent.bodyVideoUrl}
+        shouldBlurContent={shouldBlurContent}
+        contentWarnings={contentWarnings}
+        showUrlCard={showUrlCard}
+        onRevealContent={onRevealContent}
+        onPlayNowPress={handlePlayNowPress}
+      />
 
-      {/* Content Warning Badge */}
-      {hasContentWarning && (
-        <View style={styles.warningBadge}>
-          <ContentWarningBadge
-            types={contentWarnings}
-            onPress={onRevealContent}
-            compact
-          />
-        </View>
-      )}
+      <PostCardMedia
+        media={resolvedContent.resolvedMedia}
+        isVisible={isVisible}
+        shouldBlurContent={shouldBlurContent}
+        hasMultipleMedia={resolvedContent.hasMultipleMedia}
+        extraMediaCount={resolvedContent.extraMediaCount}
+        allowAutoplay={allowAutoplay}
+        onRevealContent={onRevealContent}
+        onMediaPress={handleMediaPress}
+      />
 
-      {/* Title */}
-      <Text
-        size="lg"
-        weight="semibold"
-        style={styles.title}
-        numberOfLines={shouldBlurContent ? 1 : 3}
-      >
-        {title}
-      </Text>
-
-      {/* Media */}
-      {primaryMedia && !imageError && (
-        <View style={styles.mediaContainer}>
-          <View
-            style={[
-              styles.mediaWrapper,
-              { aspectRatio: getMediaAspectRatio() },
-            ]}
-          >
-            <Image
-              source={{ uri: primaryMedia.uri }}
-              style={styles.media}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              onError={() => setImageError(true)}
-              blurRadius={shouldBlurContent ? 30 : 0}
-            />
-
-            {/* Play button for videos */}
-            {primaryMedia.type === "video" && (
-              <View style={styles.playOverlay}>
-                <View style={styles.playButton}>
-                  <Text size="xl" style={{ color: "#fff" }}>
-                    ▶
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            {/* GIF badge */}
-            {primaryMedia.type === "gif" && (
-              <View style={styles.gifBadge}>
-                <Text size="xs" weight="bold" style={{ color: "#fff" }}>
-                  GIF
-                </Text>
-              </View>
-            )}
-
-            {/* Multiple media indicator */}
-            {hasMultipleMedia && (
-              <View style={styles.multiMediaBadge}>
-                <Text size="xs" weight="semibold" style={{ color: "#fff" }}>
-                  +{media.length - 1}
-                </Text>
-              </View>
-            )}
-
-            {/* Blur overlay with reveal button */}
-            {shouldBlurContent && (
-              <Pressable onPress={onRevealContent} style={styles.blurOverlay}>
-                <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                  Tap to reveal
-                </Text>
-              </Pressable>
-            )}
-          </View>
-        </View>
-      )}
-
-      {/* Body text */}
-      {body && !shouldBlurContent && (
-        <Text size="sm" mode="default" style={styles.body} numberOfLines={4}>
-          {body}
-        </Text>
-      )}
-
-      {/* Actions */}
       <PostActions
         likes={likes}
         dislikes={dislikes}
@@ -286,9 +192,15 @@ export const PostCard = ({
         shareTitle={title}
         style={styles.actions}
       />
+
+      <MediaPreviewModal
+        visible={showMediaPreview}
+        media={resolvedContent.resolvedMedia ?? null}
+      onClose={handleCloseMediaPreview}
+      />
     </Pressable>
   );
-};
+}, arePostCardPropsEqual);
 
 const styles = StyleSheet.create((theme) => ({
   container: {
@@ -297,101 +209,6 @@ const styles = StyleSheet.create((theme) => ({
     borderBottomColor: theme.colors.border.subtle,
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.md,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  authorSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  authorInfo: {
-    flex: 1,
-    marginLeft: theme.spacing.xs,
-    justifyContent: "center",
-  },
-  authorRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.xs,
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.xs,
-  },
-  moreButton: {
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: theme.radius.full,
-  },
-  warningBadge: {
-    marginTop: theme.spacing.sm,
-  },
-  title: {
-    marginTop: theme.spacing.xs,
-    lineHeight: 20,
-  },
-  mediaContainer: {
-    marginTop: theme.spacing.sm,
-    borderRadius: theme.radius.md,
-    overflow: "hidden",
-  },
-  mediaWrapper: {
-    width: "100%",
-    backgroundColor: theme.colors.background.subtle,
-    borderRadius: theme.radius.md,
-    overflow: "hidden",
-  },
-  media: {
-    width: "100%",
-    height: "100%",
-  },
-  playOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  playButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  gifBadge: {
-    position: "absolute",
-    bottom: theme.spacing.sm,
-    left: theme.spacing.sm,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 2,
-    borderRadius: theme.radius.sm,
-  },
-  multiMediaBadge: {
-    position: "absolute",
-    top: theme.spacing.sm,
-    right: theme.spacing.sm,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
-    borderRadius: theme.radius.sm,
-  },
-  blurOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-  },
-  body: {
-    marginTop: theme.spacing.xs,
-    lineHeight: 16,
   },
   actions: {
     marginTop: theme.spacing.sm,

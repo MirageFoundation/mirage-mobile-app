@@ -1,11 +1,16 @@
+import {
+  CommentIcon,
+  DownvoteFilledIcon,
+  DownvoteOutlineIcon,
+  ShareIcon,
+  UpvoteFilledIcon,
+  UpvoteOutlineIcon,
+} from "@/assets/figma-icons";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { memo, useRef } from "react";
 import {
-  AntDesign,
-  Ionicons,
-  MaterialCommunityIcons,
-} from "@expo/vector-icons";
-import {
+  Animated,
   Pressable,
   Share,
   View,
@@ -13,6 +18,10 @@ import {
   type ViewStyle,
 } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+
+// Vote colors
+const UPVOTE_COLOR = "#FF4757"; // Red shade for upvote
+const DOWNVOTE_COLOR = "#8B5CF6"; // Purple shade for downvote
 
 type PostActionsProps = {
   /** Number of likes */
@@ -54,11 +63,11 @@ const SIZE_CONFIG = {
     voteTextSize: "xs" as const,
   },
   md: {
-    iconSize: 14,
+    iconSize: 16,
     gap: 14,
-    textSize: "xs" as const,
-    pillHeight: 26,
-    voteTextSize: "xs" as const,
+    textSize: "sm" as const,
+    pillHeight: 30,
+    voteTextSize: "sm" as const,
   },
   lg: {
     iconSize: 18,
@@ -69,7 +78,7 @@ const SIZE_CONFIG = {
   },
 };
 
-export const PostActions = ({
+export const PostActions = memo(function PostActions({
   likes,
   dislikes,
   comments,
@@ -84,19 +93,53 @@ export const PostActions = ({
   size = "md",
   disabled = false,
   style,
-}: PostActionsProps) => {
+}: PostActionsProps) {
   const { theme } = useUnistyles();
   const { iconSize, gap, pillHeight, voteTextSize } = SIZE_CONFIG[size];
+
+  // Animation values for arrow movement
+  const upArrowTranslateY = useRef(new Animated.Value(0)).current;
+  const downArrowTranslateY = useRef(new Animated.Value(0)).current;
 
   const handleLikePress = () => {
     if (disabled) return;
     triggerHaptic(hasLiked ? "light" : "medium");
+
+    // Animate arrow movement - bounce up
+    Animated.sequence([
+      Animated.timing(upArrowTranslateY, {
+        toValue: -4,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(upArrowTranslateY, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
     onLikePress?.();
   };
 
   const handleDislikePress = () => {
     if (disabled) return;
     triggerHaptic(hasDisliked ? "light" : "medium");
+
+    // Animate arrow movement - bounce down
+    Animated.sequence([
+      Animated.timing(downArrowTranslateY, {
+        toValue: 4,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(downArrowTranslateY, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
     onDislikePress?.();
   };
 
@@ -133,8 +176,14 @@ export const PostActions = ({
     return num.toString();
   };
 
-  const iconColor = theme.colors.text.default;
-  const textColor = theme.colors.text.default;
+  const defaultColor = theme.colors.text.default;
+
+  // Colors persist based on vote state
+  // When upvoted: both arrow and count are red
+  // When downvoted: both arrow and count are purple
+  // When neutral: default color
+  const upvoteColor = hasLiked ? UPVOTE_COLOR : defaultColor;
+  const downvoteColor = hasDisliked ? DOWNVOTE_COLOR : defaultColor;
 
   return (
     <View style={[styles.container, { gap }, style]}>
@@ -144,13 +193,24 @@ export const PostActions = ({
         <Pressable
           onPress={handleLikePress}
           disabled={disabled}
+          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
           style={[styles.voteButton, disabled && styles.disabled]}
         >
-          <AntDesign name="arrow-up" size={iconSize} color={iconColor} />
+          <Animated.View
+            style={{
+              transform: [{ translateY: upArrowTranslateY }],
+            }}
+          >
+            {hasLiked ? (
+              <UpvoteFilledIcon size={iconSize} color={upvoteColor} />
+            ) : (
+              <UpvoteOutlineIcon size={iconSize} color={upvoteColor} />
+            )}
+          </Animated.View>
           <Text
             size={voteTextSize}
-            weight={hasLiked ? "semibold" : "regular"}
-            style={{ marginLeft: 3, color: textColor }}
+            weight="bold"
+            style={{ marginLeft: 14, color: upvoteColor }}
           >
             {formatCount(likes)}
           </Text>
@@ -163,9 +223,20 @@ export const PostActions = ({
         <Pressable
           onPress={handleDislikePress}
           disabled={disabled}
+          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
           style={[styles.voteButton, disabled && styles.disabled]}
         >
-          <AntDesign name="arrow-down" size={iconSize} color={iconColor} />
+          <Animated.View
+            style={{
+              transform: [{ translateY: downArrowTranslateY }],
+            }}
+          >
+            {hasDisliked ? (
+              <DownvoteFilledIcon size={iconSize} color={downvoteColor} />
+            ) : (
+              <DownvoteOutlineIcon size={iconSize} color={downvoteColor} />
+            )}
+          </Animated.View>
         </Pressable>
       </View>
 
@@ -178,14 +249,15 @@ export const PostActions = ({
             onCommentPress?.();
           }}
           disabled={disabled}
+          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
           style={[styles.voteButton, disabled && styles.disabled]}
         >
-          <MaterialCommunityIcons
-            name="comment-outline"
-            size={iconSize}
-            color={iconColor}
-          />
-          <Text size={voteTextSize} style={{ marginLeft: 3, color: textColor }}>
+          <CommentIcon size={iconSize} color={defaultColor} />
+          <Text
+            size={voteTextSize}
+            weight="bold"
+            style={{ marginLeft: 10, color: defaultColor }}
+          >
             {formatCount(comments)}
           </Text>
         </Pressable>
@@ -201,12 +273,12 @@ export const PostActions = ({
           disabled={disabled}
           style={[styles.voteButton, disabled && styles.disabled]}
         >
-          <Ionicons name="share-outline" size={iconSize} color={iconColor} />
+          <ShareIcon size={iconSize} color={defaultColor} />
         </Pressable>
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create((theme) => ({
   container: {
@@ -225,8 +297,8 @@ const styles = StyleSheet.create((theme) => ({
   voteButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   voteDivider: {
     width: 1,

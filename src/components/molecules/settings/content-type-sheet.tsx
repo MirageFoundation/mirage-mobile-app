@@ -10,7 +10,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { ContentType } from "@/src/stores/preferences-store";
+import { ContentType, isAdultContentEnabled } from "@/src/stores/preferences-store";
 
 type ContentTypeOption = {
   value: ContentType;
@@ -89,7 +89,13 @@ export const ContentTypeSheet = forwardRef<
     [onToggle]
   );
 
-  const isSelected = (type: ContentType) => selectedTypes.includes(type);
+  const isSelected = (type: ContentType) => {
+    // "None" means no adult content - show as selected when only sensitive is enabled
+    if (type === "none") {
+      return !isAdultContentEnabled(selectedTypes) && !selectedTypes.includes("all");
+    }
+    return selectedTypes.includes(type);
+  };
 
   return (
     <BottomSheet

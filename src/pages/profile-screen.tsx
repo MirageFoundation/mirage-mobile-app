@@ -1,7 +1,8 @@
+import { useFocusEffect } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { Dimensions, Share, View } from "react-native";
-import PagerView from "react-native-pager-view";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Dimensions, ScrollView, Share, View } from "react-native";
 import Animated, {
   interpolate,
   runOnJS,
@@ -12,8 +13,13 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+import { useProfile, useUserStatus } from "@/src/api/read";
 import {
+  ConfirmationPopup,
   getGradientColor,
+  type Post,
+  PostOptionsSheet,
+  PostOptionsSheetRef,
   PROFILE_CONTENT_HEIGHT,
   ProfileContent,
   ProfileHeaderBar,
@@ -21,35 +27,125 @@ import {
   ProfileMenuSheetRef,
   ProfileTabBar,
   ProfileTabContent,
+  ReportSheet,
+  ReportSheetRef,
 } from "@/src/components/molecules";
 import { Box } from "@/src/components/ui/primitives";
-import { useAuthStore } from "@/src/stores";
+import {
+  useBlockHandler,
+  useDeleteHandler,
+  useReportHandler,
+} from "@/src/hooks";
+import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
+import { useAuthStore, useContentModerationStore, usePreferencesStore, getShareBaseUrl } from "@/src/stores";
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-// Height of the header bar (approximately)
 const HEADER_BAR_HEIGHT = 56;
+
+const formatMirageBalance = (umirage: number): number => {
+  return Math.floor(umirage / 1_000_000);
+};
+
+const calculateAccountAgeDays = (
+  createdAt: number | null | undefined
+): number => {
+  if (!createdAt) return 0;
+  const now = Date.now() / 1000;
+  const ageInSeconds = now - createdAt;
+  return ageInSeconds / (60 * 60 * 24);
+};
 
 export function ProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const shareServer = usePreferencesStore((s) => s.shareServer);
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
+  const queryClient = useQueryClient();
 
-  // Scroll tracking
+  const { registerProfileScrollRef, registerProfileRefreshCallback } =
+    useScrollAnimationContext();
+
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  const {
+    data: userStatus,
+    isLoading: isLoadingStatus,
+    refetch: refetchUserStatus,
+  } = useUserStatus();
+
+  const {
+    data: profile,
+    isLoading: isLoadingProfile,
+    refetch: refetchProfile,
+  } = useProfile();
+
+  useEffect(() => {
+    registerProfileScrollRef(scrollViewRef.current);
+  }, [registerProfileScrollRef]);
+
+  useEffect(() => {
+    const handleRefresh = async () => {
+      setIsRefreshing(true);
+      try {
+        await Promise.all([refetchUserStatus(), refetchProfile()]);
+        if (user?.walletAddress) {
+          queryClient.invalidateQueries({
+            queryKey: ["user", "posts", user.walletAddress],
+          });
+        }
+      } finally {
+        setIsRefreshing(false);
+      }
+    };
+    registerProfileRefreshCallback(handleRefresh);
+  }, [
+    registerProfileRefreshCallback,
+    refetchUserStatus,
+    refetchProfile,
+    queryClient,
+    user?.walletAddress,
+  ]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (user?.walletAddress) {
+        queryClient.invalidateQueries({
+          queryKey: ["user", "posts", user.walletAddress],
+        });
+      }
+    }, [queryClient, user?.walletAddress])
+  );
+
   const scrollY = useSharedValue(0);
   const [shouldShowStickyTabs, setShouldShowStickyTabs] = useState(false);
-
-  // Tab state
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
-  const pagerRef = useRef<PagerView>(null);
 
-  // Menu sheet ref
   const menuSheetRef = useRef<ProfileMenuSheetRef>(null);
+  const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
+  const reportSheetRef = useRef<ReportSheetRef>(null);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
-  // Calculate heights
+  const globalHidePost = useContentModerationStore((s) => s.hidePost);
+  const globalUnhidePost = useContentModerationStore((s) => s.unhidePost);
+  const globalHideComment = useContentModerationStore((s) => s.hideComment);
+  const globalUnhideComment = useContentModerationStore((s) => s.unhideComment);
+
+  const deleteHandler = useDeleteHandler({
+    onRollback: (targetId, targetType) => {
+      if (targetType === "post") {
+        globalUnhidePost(targetId);
+      } else {
+        globalUnhideComment(targetId);
+      }
+    },
+  });
+  const blockHandler = useBlockHandler({});
+  const reportHandler = useReportHandler({});
+
   const headerHeight = insets.top + HEADER_BAR_HEIGHT;
-  // Point at which tabs should become sticky (when they reach the header)
   const stickyThreshold = PROFILE_CONTENT_HEIGHT;
 
   const updateStickyState = useCallback((shouldStick: boolean) => {
@@ -59,51 +155,50 @@ export function ProfileScreen() {
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       scrollY.value = event.contentOffset.y;
-
-      // Check if tabs should be sticky
       const shouldStick = event.contentOffset.y >= stickyThreshold;
       runOnJS(updateStickyState)(shouldStick);
     },
   });
 
-  // Mock data for development
-  const mockProfileData = {
-    balance: 12450,
-    reserve: 5230,
-    accountAgeDays: 127,
-  };
+  const profileData = useMemo(() => {
+    const balance = userStatus?.balance ?? 0;
+    const reserve = userStatus?.reserve_funds ?? 0;
+    const createdAt = profile?.created_at ?? userStatus?.profile_registered_at;
+    const accountAgeDays = calculateAccountAgeDays(createdAt);
 
-  const username = user?.username || "user";
+    return {
+      balance: formatMirageBalance(balance),
+      reserve: formatMirageBalance(reserve),
+      accountAgeDays,
+    };
+  }, [userStatus, profile]);
+
+  const username = userStatus?.username ?? user?.username ?? "user";
+  const avatarUrl = profile?.avatar || undefined;
+  const followersCount = user?.followerCount ?? 0;
+
   const gradientColor = useMemo(() => getGradientColor(username), [username]);
+  const isLoading = isLoadingStatus || isLoadingProfile;
 
   const handleBackPress = useCallback(() => {
     router.back();
   }, [router]);
 
-  const handleUsernamePress = useCallback(() => {
-    console.log("Username pressed");
-  }, []);
-
-  const handleSearchPress = useCallback(() => {
-    console.log("Search pressed");
-  }, []);
-
   const handleSharePress = useCallback(async () => {
     try {
       await Share.share({
         message: `Check out @${user?.username} on Mirage!`,
-        url: `https://mirage.app/u/${user?.username}`,
+        url: `${getShareBaseUrl(shareServer)}/u/${user?.username}`,
       });
     } catch (error) {
       console.error("Share error:", error);
     }
-  }, [user?.username]);
+  }, [user?.username, shareServer]);
 
   const handleMenuPress = useCallback(() => {
     menuSheetRef.current?.present();
   }, []);
 
-  // Menu sheet handlers
   const handleMenuSettings = useCallback(() => {
     router.push("/settings");
   }, [router]);
@@ -136,28 +231,122 @@ export function ProfileScreen() {
     console.log("Online status changed:", isOnline);
   }, []);
 
-  const handleEditPress = useCallback(() => {
-    console.log("Edit pressed");
-  }, []);
-
   const handleFollowersPress = useCallback(() => {
     console.log("Followers pressed");
   }, []);
 
   const handleSettingsPress = useCallback(() => {
-    console.log("Settings pressed");
+    router.push("/settings");
+  }, [router]);
+
+  const handlePostPress = useCallback(
+    (postId: string) => {
+      router.push(`/post/${postId}`);
+    },
+    [router]
+  );
+
+  const handleCommentPress = useCallback(
+    (commentId: string, rootPostId: string) => {
+      if (!rootPostId || rootPostId === "undefined") {
+        console.warn("Cannot navigate: missing root post ID for comment", commentId);
+        return;
+      }
+      router.push(`/post/${rootPostId}?highlight=${commentId}`);
+    },
+    [router]
+  );
+
+  const handleAuthorPress = useCallback(
+    (authorId: string) => {
+      router.push(`/user/${authorId}`);
+    },
+    [router]
+  );
+
+  const handlePostMorePress = useCallback((post: Post) => {
+    setSelectedPost(post);
+    postOptionsSheetRef.current?.present();
   }, []);
+
+  const handleDeletePost = useCallback(() => {
+    if (!selectedPost) return;
+    deleteHandler.requestDelete(selectedPost.id, "post");
+  }, [selectedPost, deleteHandler]);
+
+  const handleBlockPost = useCallback(() => {
+    if (!selectedPost) return;
+    blockHandler.requestBlockPost(selectedPost.id);
+  }, [selectedPost, blockHandler]);
+
+  const handleReportPost = useCallback(() => {
+    if (!selectedPost) return;
+    reportHandler.requestReport(selectedPost.id, "post");
+  }, [selectedPost, reportHandler]);
+
+  const handleConfirmDelete = useCallback(() => {
+    const pending = deleteHandler.pendingTarget;
+    if (pending) {
+      if (pending.type === "post") {
+        globalHidePost(pending.id);
+      } else {
+        globalHideComment(pending.id);
+      }
+    }
+    setSelectedPost(null);
+    deleteHandler.confirmDelete();
+  }, [deleteHandler, globalHidePost, globalHideComment]);
+
+  const handleConfirmBlock = useCallback(() => {
+    const pending = blockHandler.pendingBlock;
+    if (pending && pending.type === "post") {
+      globalHidePost(pending.id);
+    }
+    setSelectedPost(null);
+    blockHandler.confirmBlock();
+  }, [blockHandler, globalHidePost]);
+
+  const handleReportSubmit = useCallback(
+    (reason: string) => {
+      const pending = reportHandler.pendingTarget;
+      if (pending && pending.type === "post") {
+        globalHidePost(pending.id);
+      }
+      setSelectedPost(null);
+      reportSheetRef.current?.dismiss();
+      reportHandler.submitReport(reason);
+    },
+    [reportHandler, globalHidePost]
+  );
+
+  useEffect(() => {
+    if (reportHandler.showReportSheet) {
+      reportSheetRef.current?.present();
+    }
+  }, [reportHandler.showReportSheet]);
 
   const handleTabChange = useCallback((index: number) => {
     setActiveTab(index);
-    pagerRef.current?.setPage(index);
   }, []);
 
-  const handlePageSelected = useCallback((e: any) => {
-    setActiveTab(e.nativeEvent.position);
-  }, []);
+  const handleTabDoubleTap = useCallback(
+    async (index: number) => {
+      setIsRefreshing(true);
+      try {
+        await Promise.all([refetchUserStatus(), refetchProfile()]);
+        if (user?.walletAddress) {
+          const type = index === 0 ? "submissions" : "comments";
+          queryClient.invalidateQueries({
+            queryKey: ["user", "posts", user.walletAddress, type],
+          });
+        }
+      } finally {
+        setIsRefreshing(false);
+      }
+    },
+    [refetchUserStatus, refetchProfile, queryClient, user?.walletAddress]
+  );
 
-  // Animated style for sticky tabs fade in
   const stickyTabsAnimatedStyle = useAnimatedStyle(() => {
     const opacity = interpolate(
       scrollY.value,
@@ -168,21 +357,33 @@ export function ProfileScreen() {
     return { opacity };
   });
 
+  const getTabType = () => {
+    switch (activeTab) {
+      case 0:
+        return "posts";
+      case 1:
+        return "comments";
+      case 2:
+        return "about";
+      default:
+        return "posts";
+    }
+  };
+
   return (
     <Box flex background="base">
-      {/* Fixed Header Bar - Always at top */}
       <ProfileHeaderBar
         username={username}
+        userLevel={userStatus?.user_level ?? 0}
         gradientColor={gradientColor}
         scrollY={scrollY}
+        isRefreshing={isRefreshing}
+        isLoading={isLoading}
         onBackPress={handleBackPress}
-        onUsernamePress={handleUsernamePress}
-        onSearchPress={handleSearchPress}
         onSharePress={handleSharePress}
         onMenuPress={handleMenuPress}
       />
 
-      {/* Sticky Tab Bar - Fixed below header when scrolled */}
       {shouldShowStickyTabs && (
         <Animated.View
           style={[
@@ -197,13 +398,14 @@ export function ProfileScreen() {
           <ProfileTabBar
             activeTab={activeTab}
             onTabChange={handleTabChange}
+            onTabDoubleTap={handleTabDoubleTap}
             tabWidth={SCREEN_WIDTH}
           />
         </Animated.View>
       )}
 
-      {/* Single Scrollable Content */}
       <Animated.ScrollView
+        ref={scrollViewRef as any}
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
@@ -213,63 +415,46 @@ export function ProfileScreen() {
         onScroll={scrollHandler}
         scrollEventThrottle={16}
         bounces={true}
+        nestedScrollEnabled
       >
-        {/* Profile Content - Scrolls and fades */}
-        <ProfileContent
-          username={username}
-          avatarSeed={user?.username}
-          avatarUrl={undefined}
-          walletAddress={user?.walletAddress || "0x0000...0000"}
-          followersCount={user?.followerCount || 0}
-          balance={mockProfileData.balance}
-          reserve={mockProfileData.reserve}
-          accountAgeDays={mockProfileData.accountAgeDays}
-          gradientColor={gradientColor}
-          scrollY={scrollY}
-          onEditPress={handleEditPress}
-          onFollowersPress={handleFollowersPress}
-        />
+       <ProfileContent
+         username={username}
+         avatarSeed={username}
+         avatarUrl={avatarUrl}
+         walletAddress={user?.walletAddress || "0x0000...0000"}
+         followersCount={followersCount}
+         balance={profileData.balance}
+         reserve={profileData.reserve}
+         accountAgeDays={profileData.accountAgeDays}
+          userLevel={userStatus?.user_level ?? 0}
+         gradientColor={gradientColor}
+         scrollY={scrollY}
+         onFollowersPress={handleFollowersPress}
+         isLoading={isLoading}
+       />
 
-        {/* Inline Tab Bar (scrolls with content) */}
         <View style={{ backgroundColor: theme.colors.background.default }}>
           <ProfileTabBar
             activeTab={activeTab}
             onTabChange={handleTabChange}
+            onTabDoubleTap={handleTabDoubleTap}
             tabWidth={SCREEN_WIDTH}
           />
         </View>
 
-        {/* Tab Content - Uses PagerView for swipe */}
         <View style={styles.tabContent}>
-          <PagerView
-            ref={pagerRef}
-            style={styles.pagerView}
-            initialPage={0}
-            onPageSelected={handlePageSelected}
-          >
-            <View key="posts" style={styles.page}>
-              <ProfileTabContent
-                tabType="posts"
-                onSettingsPress={handleSettingsPress}
-              />
-            </View>
-            <View key="comments" style={styles.page}>
-              <ProfileTabContent
-                tabType="comments"
-                onSettingsPress={handleSettingsPress}
-              />
-            </View>
-            <View key="about" style={styles.page}>
-              <ProfileTabContent
-                tabType="about"
-                onSettingsPress={handleSettingsPress}
-              />
-            </View>
-          </PagerView>
+          <ProfileTabContent
+            tabType={getTabType()}
+            owner={user?.walletAddress}
+            onSettingsPress={handleSettingsPress}
+            onPostPress={handlePostPress}
+            onCommentPress={handleCommentPress}
+            onAuthorPress={handleAuthorPress}
+            onMorePress={handlePostMorePress}
+          />
         </View>
       </Animated.ScrollView>
 
-      {/* Profile Menu Bottom Sheet */}
       <ProfileMenuSheet
         ref={menuSheetRef}
         isOnline={true}
@@ -281,6 +466,49 @@ export function ProfileScreen() {
         onHistory={handleMenuHistory}
         onSaved={handleMenuSaved}
         onOnlineStatusChange={handleOnlineStatusChange}
+      />
+
+      <PostOptionsSheet
+        ref={postOptionsSheetRef}
+        post={selectedPost}
+        isOwnPost={true}
+        onDelete={handleDeletePost}
+        onBlockPost={handleBlockPost}
+        onReport={handleReportPost}
+        onDismiss={() => setSelectedPost(null)}
+      />
+
+      <ConfirmationPopup
+        visible={deleteHandler.showConfirmation}
+        title="Delete Post?"
+        message="This action cannot be undone."
+        description="The post will be permanently removed."
+        icon="trash-outline"
+        isDestructive
+        isLoading={deleteHandler.isDeleting}
+        confirmText="Delete"
+        onConfirm={handleConfirmDelete}
+        onCancel={deleteHandler.cancelDelete}
+      />
+
+      <ConfirmationPopup
+        visible={blockHandler.showConfirmation}
+        title={`Block ${blockHandler.pendingBlock?.label || "this post"}?`}
+        message="You won't see this content anymore."
+        description="You can unblock later from settings."
+        icon="ban-outline"
+        confirmText="Block"
+        isDestructive
+        onConfirm={handleConfirmBlock}
+        onCancel={blockHandler.cancelBlock}
+      />
+
+      <ReportSheet
+        ref={reportSheetRef}
+        targetType={reportHandler.pendingTarget?.type}
+        onSubmit={handleReportSubmit}
+        onDismiss={reportHandler.cancelReport}
+        isLoading={reportHandler.isReporting}
       />
     </Box>
   );
@@ -300,13 +528,7 @@ const styles = StyleSheet.create((theme) => ({
     zIndex: 99,
   },
   tabContent: {
-    minHeight: SCREEN_HEIGHT,
-  },
-  pagerView: {
     flex: 1,
-    minHeight: SCREEN_HEIGHT,
-  },
-  page: {
-    flex: 1,
+    minHeight: 400,
   },
 }));

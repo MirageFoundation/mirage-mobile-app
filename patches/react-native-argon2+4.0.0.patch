@@ -1,0 +1,77 @@
+diff --git a/node_modules/react-native-argon2/android/src/main/java/com/poowf/argon2/RNArgon2Module.java b/node_modules/react-native-argon2/android/src/main/java/com/poowf/argon2/RNArgon2Module.java
+index 07caf94..603d31b 100644
+--- a/node_modules/react-native-argon2/android/src/main/java/com/poowf/argon2/RNArgon2Module.java
++++ b/node_modules/react-native-argon2/android/src/main/java/com/poowf/argon2/RNArgon2Module.java
+@@ -1,5 +1,6 @@
+ package com.poowf.argon2;
+ 
++import android.util.Base64;
+ import android.app.Activity;
+ import android.content.Intent;
+ 
+@@ -63,7 +64,17 @@ public class RNArgon2Module extends ReactContextBaseJavaModule {
+     @ReactMethod
+     public void argon2(String password, String salt, ReadableMap config, Promise promise) {
+         try {
+-            final byte[] passwordBytes = password.getBytes("UTF-8");
++            String passwordEncoding = config.hasKey("passwordEncoding") ? config.getString("passwordEncoding") : "utf8";
++            final byte[] passwordBytes;
++            if ("hex".equalsIgnoreCase(passwordEncoding)) {
++                passwordBytes = hexStringToByteArray(password);
++            } else if ("base64".equalsIgnoreCase(passwordEncoding) || "b64".equalsIgnoreCase(passwordEncoding)) {
++                passwordBytes = Base64.decode(password, Base64.DEFAULT);
++            } else if ("latin1".equalsIgnoreCase(passwordEncoding) || "iso-8859-1".equalsIgnoreCase(passwordEncoding) || "binary".equalsIgnoreCase(passwordEncoding)) {
++                passwordBytes = password.getBytes("ISO-8859-1");
++            } else {
++                passwordBytes = password.getBytes("UTF-8");
++            }
+             
+             String saltEncoding = config.hasKey("saltEncoding") ? config.getString("saltEncoding") : "utf8";
+             final byte[] saltBytes = ("hex".equalsIgnoreCase(saltEncoding)) ? hexStringToByteArray(salt) : salt.getBytes("UTF-8");
+diff --git a/node_modules/react-native-argon2/index.d.ts b/node_modules/react-native-argon2/index.d.ts
+index b8050ef..a30f4aa 100644
+--- a/node_modules/react-native-argon2/index.d.ts
++++ b/node_modules/react-native-argon2/index.d.ts
+@@ -7,6 +7,9 @@ export interface Argon2Options {
+   mode?: Argon2Mode;
+ // 'utf8' (default, for backward compatibility)
+   saltEncoding?: 'utf8' | 'hex';
++// 'utf8' (default). Use 'latin1' to interpret each codepoint 0-255 as a byte (ISO-8859-1),
++// or 'hex'/'base64' to decode the password string into bytes before hashing.
++  passwordEncoding?: 'utf8' | 'latin1' | 'hex' | 'base64';
+ }
+ 
+ export interface Argon2Result {
+diff --git a/node_modules/react-native-argon2/ios/RNArgon2.swift b/node_modules/react-native-argon2/ios/RNArgon2.swift
+index a9aad3f..6a45adb 100644
+--- a/node_modules/react-native-argon2/ios/RNArgon2.swift
++++ b/node_modules/react-native-argon2/ios/RNArgon2.swift
+@@ -33,9 +33,26 @@ class RNArgon2: NSObject {
+     let saltObject = Salt(bytes: validSaltData)
+     
+     do {
++      let passwordEncoding = (configDict["passwordEncoding"] as? String ?? "utf8").lowercased()
++      let passwordData: Data?
++      if passwordEncoding == "hex" {
++        passwordData = Data(hexString: password)
++      } else if passwordEncoding == "base64" || passwordEncoding == "b64" {
++        passwordData = Data(base64Encoded: password)
++      } else if passwordEncoding == "latin1" || passwordEncoding == "iso-8859-1" || passwordEncoding == "binary" {
++        passwordData = password.data(using: .isoLatin1)
++      } else {
++        passwordData = password.data(using: .utf8)
++      }
++      guard let validPasswordData = passwordData else {
++        let error = NSError(domain: "com.poowf.argon2", code: 400, userInfo: ["Error reason": "Invalid password format"])
++        reject("E_ARGON2", "Invalid password format", error)
++        return
++      }
++
+       // Generate hash using Argon2Swift
+-      let result = try Argon2Swift.hashPasswordString(
+-        password: password,
++      let result = try Argon2Swift.hashPasswordBytes(
++        password: validPasswordData,
+         salt: saltObject,
+         iterations: iterations,
+         memory: memory,

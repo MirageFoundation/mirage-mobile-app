@@ -1,5 +1,6 @@
+import { MenuIcon } from "@/assets/figma-icons";
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, View } from "react-native";
+import { Image, Pressable, View } from "react-native";
 import {
   Menu,
   MenuOption,
@@ -33,28 +34,10 @@ type FeedOption = {
 const FEED_OPTIONS: FeedOption[] = [
   { value: "home", label: "Home", icon: "home-outline", iconFilled: "home" },
   {
-    value: "popular",
-    label: "Popular",
-    icon: "flame-outline",
-    iconFilled: "flame",
-  },
-  {
     value: "latest",
     label: "Latest",
     icon: "time-outline",
     iconFilled: "time",
-  },
-  {
-    value: "news",
-    label: "News",
-    icon: "newspaper-outline",
-    iconFilled: "newspaper",
-  },
-  {
-    value: "watch",
-    label: "Watch",
-    icon: "play-circle-outline",
-    iconFilled: "play-circle",
   },
 ];
 
@@ -76,7 +59,8 @@ export const FeedHeader = ({
   animatedStyle,
 }: FeedHeaderProps) => {
   const insets = useSafeAreaInsets();
-  const { theme } = useUnistyles();
+  const { theme, rt } = useUnistyles();
+  const isDark = rt.themeName === "dark";
 
   // Rotation animation for chevron
   const rotation = useSharedValue(0);
@@ -113,22 +97,34 @@ export const FeedHeader = ({
         {/* Left section - Menu button and Title (as feed type selector) */}
         <View style={styles.leftSection}>
           <Pressable onPress={onMenuPress} style={styles.iconButton}>
-            <Ionicons
-              name="menu-outline"
-              size={24}
-              color={theme.colors.text.default}
-            />
+            <MenuIcon size={18} color={theme.colors.text.default} />
           </Pressable>
 
           {onFeedTypeChange ? (
             <Menu onOpen={handleMenuOpen} onClose={handleMenuClose}>
               <MenuTrigger>
                 <View style={styles.titleButton}>
+                  {feedType === "home" &&
+                    (isDark ? (
+                      <Image
+                        source={require("@/assets/images/app-dark-icon.png")}
+                        style={styles.appIcon}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <Image
+                        source={require("@/assets/images/app-icon.png")}
+                        style={styles.appIcon}
+                        resizeMode="contain"
+                      />
+                    ))}
                   <Text
                     size="xl"
                     weight="bold"
                     style={
-                      feedType === "home" ? { color: MIRAGE_COLOR } : undefined
+                      feedType === "home"
+                        ? { color: theme.colors.text.default }
+                        : undefined
                     }
                   >
                     {title}
@@ -228,7 +224,29 @@ export const FeedHeader = ({
             </Menu>
           ) : (
             <View style={styles.titleButton}>
-              <Text size="xl" weight="bold">
+              {feedType === "home" &&
+                (isDark ? (
+                  <Image
+                    source={require("@/assets/images/app-dark-icon.png")}
+                    style={styles.appIcon}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <Image
+                    source={require("@/assets/images/app-icon.png")}
+                    style={styles.appIcon}
+                    resizeMode="contain"
+                  />
+                ))}
+              <Text
+                size="xl"
+                weight="bold"
+                style={
+                  feedType === "home"
+                    ? { color: theme.colors.text.default }
+                    : undefined
+                }
+              >
                 {title}
               </Text>
             </View>
@@ -239,7 +257,7 @@ export const FeedHeader = ({
         <Pressable onPress={onSearchPress} style={styles.iconButton}>
           <Ionicons
             name="search-outline"
-            size={22}
+            size={20}
             color={theme.colors.text.default}
           />
         </Pressable>
@@ -264,7 +282,7 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
   },
   leftSection: {
     flexDirection: "row",
@@ -282,5 +300,10 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     paddingVertical: 8,
     paddingHorizontal: 4,
+  },
+  appIcon: {
+    width: 22,
+    height: 22,
+    marginRight: 6,
   },
 }));

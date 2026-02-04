@@ -17,7 +17,10 @@ import {
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { useAuthStore, usePreferencesStore, type ThemeMode } from "@/src/stores";
+import { useQueryClear } from "@/src/providers/query-clear-provider";
+import { useApiServer } from "@/src/providers/api-server-provider";
+import { useToast } from "@/src/providers/toast-provider";
+import { useAuthStore, useDraftStore, useSearchStore, usePreferencesStore, type ThemeMode, type ApiServer, type VideoAutoplayNetwork } from "@/src/stores";
 
 // Auto-collapse threshold options
 const collapseThresholdOptions: ValueOption<number | null>[] = [
@@ -38,6 +41,19 @@ const sidebarCountOptions: ValueOption<number>[] = [
   { value: -1, label: "Show All" },
 ];
 
+// Server options
+const apiServerOptions: ValueOption<ApiServer>[] = [
+  { value: "mirage.talk", label: "mirage.talk" },
+  { value: "mirage.vote", label: "mirage.vote" },
+];
+
+// Video autoplay network options
+const videoAutoplayNetworkOptions: ValueOption<VideoAutoplayNetwork>[] = [
+  { value: "always", label: "Always" },
+  { value: "wifi_only", label: "WiFi Only" },
+  { value: "never", label: "Never" },
+];
+
 type SettingItem = {
   id: string;
   component: React.ReactNode;
@@ -53,8 +69,13 @@ export function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
 
-  // Stores
+ // Stores
   const logout = useAuthStore((s) => s.logout);
+  const clearDraft = useDraftStore((s) => s.clearDraft);
+  const clearRecentSearches = useSearchStore((s) => s.clearRecentSearches);
+  const { clearQueries } = useQueryClear();
+  const { switchServer } = useApiServer();
+  const toast = useToast();
   const {
     theme: themeMode,
     setTheme,
@@ -66,10 +87,16 @@ export function SettingsScreen() {
     setHideDownvotedPosts,
     autoCollapseThreshold,
     setAutoCollapseThreshold,
-    topicsBeforeShowMore,
+   topicsBeforeShowMore,
     setTopicsBeforeShowMore,
     peopleBeforeShowMore,
     setPeopleBeforeShowMore,
+    autoPlayVideos,
+    setAutoPlayVideos,
+    videoAutoplayNetwork,
+    setVideoAutoplayNetwork,
+    apiServer,
+    setShareServer,
   } = usePreferencesStore();
 
   // Sheet refs
@@ -77,9 +104,12 @@ export function SettingsScreen() {
   const collapseThresholdSheetRef = useRef<ValuePickerSheetRef>(null);
   const topicsCountSheetRef = useRef<ValuePickerSheetRef>(null);
   const peopleCountSheetRef = useRef<ValuePickerSheetRef>(null);
+  const apiServerSheetRef = useRef<ValuePickerSheetRef>(null);
+  const videoAutoplayNetworkSheetRef = useRef<ValuePickerSheetRef>(null);
 
   // Logout popup state
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // Handlers
   const handleBack = useCallback(() => {
@@ -87,25 +117,66 @@ export function SettingsScreen() {
     router.back();
   }, [router]);
 
-  const handleThemeChange = useCallback(
+ const handleThemeChange = useCallback(
     (value: ThemeMode) => {
       setTheme(value);
     },
     [setTheme]
   );
 
-  const handleLogout = useCallback(() => {
-    logout();
-    setShowLogoutPopup(false);
-    router.replace("/(tabs)");
-  }, [logout, router]);
+const handleApiServerChange = useCallback(
+    async (server: ApiServer) => {
+      if (server === apiServer) {
+        return;
+      }
+      
+      try {
+        await switchServer(server);
+        setShareServer(server);
+        toast.success(`Switched to ${server}`);
+        router.replace("/(tabs)");
+      } catch (err) {
+        toast.error("Failed to switch server");
+      }
+    },
+    [switchServer, apiServer, toast, router, setShareServer]
+  );
+
+  const handleLogout = useCallback(async () => {
+    setIsLoggingOut(true);
+    
+    try {
+      // Clear all user data
+      await logout();
+      clearDraft();
+      clearRecentSearches();
+      await clearQueries();
+      
+      setShowLogoutPopup(false);
+      router.replace("/(tabs)");
+    } catch (error) {
+      console.error("[SettingsScreen] Logout failed:", error);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }, [logout, clearDraft, clearRecentSearches, clearQueries, router]);
 
   // Get display labels
   const getContentTypeLabel = () => {
     if (selectedContentTypes.includes("all")) return "All";
     if (selectedContentTypes.includes("none")) return "None";
+    // Show "None" if only sensitive content is selected (no adult content)
+    if (
+      selectedContentTypes.length === 1 &&
+      selectedContentTypes[0] === "sensitive"
+    ) {
+      return "None";
+    }
     if (selectedContentTypes.length === 1) {
-      return selectedContentTypes[0].charAt(0).toUpperCase() + selectedContentTypes[0].slice(1);
+      return (
+        selectedContentTypes[0].charAt(0).toUpperCase() +
+        selectedContentTypes[0].slice(1)
+      );
     }
     return `${selectedContentTypes.length} selected`;
   };
@@ -123,6 +194,19 @@ export function SettingsScreen() {
   const getPeopleCountLabel = () => {
     if (peopleBeforeShowMore === -1) return "All";
     return String(peopleBeforeShowMore);
+  };
+
+  const getVideoAutoplayNetworkLabel = () => {
+    switch (videoAutoplayNetwork) {
+      case "always":
+        return "Always";
+      case "wifi_only":
+        return "WiFi Only";
+      case "never":
+        return "Never";
+      default:
+        return "Always";
+    }
   };
 
   // Section data
@@ -227,6 +311,56 @@ export function SettingsScreen() {
           id: "theme",
           component: (
             <ThemeSelector value={themeMode} onChange={handleThemeChange} />
+          ),
+        },
+      ],
+    },
+    {
+      title: "Video",
+      data: [
+        {
+          id: "auto-play-videos",
+          component: (
+            <SettingRow
+              type="toggle"
+              icon="play-circle-outline"
+              title="Auto-Play Videos"
+              subtitle="Automatically play videos in feed"
+              value={autoPlayVideos}
+              onValueChange={setAutoPlayVideos}
+            />
+          ),
+        },
+        {
+          id: "video-autoplay-network",
+          component: (
+            <SettingRow
+              type="value"
+              icon="wifi-outline"
+              title="Autoplay On"
+              subtitle="Network type for video autoplay"
+              rightText={getVideoAutoplayNetworkLabel()}
+              onPress={() => videoAutoplayNetworkSheetRef.current?.present()}
+              disabled={!autoPlayVideos}
+            />
+          ),
+      },
+    ],
+    },
+   {
+      title: "Server",
+      data: [
+        {
+          id: "api-server",
+          component: (
+            <SettingRow
+              type="value"
+              icon="server-outline"
+              title="Server"
+              subtitle="Server used for API requests and sharing"
+              rightText={apiServer}
+              onPress={() => apiServerSheetRef.current?.present()}
+            />
           ),
         },
       ],
@@ -339,7 +473,7 @@ export function SettingsScreen() {
         onChange={setTopicsBeforeShowMore}
       />
 
-      <ValuePickerSheet
+     <ValuePickerSheet
         ref={peopleCountSheetRef}
         title="People Before 'Show More'"
         options={sidebarCountOptions}
@@ -347,11 +481,28 @@ export function SettingsScreen() {
         onChange={setPeopleBeforeShowMore}
       />
 
+      <ValuePickerSheet
+        ref={apiServerSheetRef}
+        title="Server"
+        options={apiServerOptions}
+        value={apiServer}
+        onChange={handleApiServerChange}
+      />
+
+      <ValuePickerSheet
+        ref={videoAutoplayNetworkSheetRef}
+        title="Video Autoplay Network"
+        options={videoAutoplayNetworkOptions}
+        value={videoAutoplayNetwork}
+        onChange={setVideoAutoplayNetwork}
+      />
+
       {/* Logout Confirmation */}
       <LogoutConfirmationPopup
         visible={showLogoutPopup}
         onCancel={() => setShowLogoutPopup(false)}
         onConfirm={handleLogout}
+        isLoading={isLoggingOut}
       />
     </Box>
   );

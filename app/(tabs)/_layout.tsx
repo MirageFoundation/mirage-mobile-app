@@ -1,4 +1,14 @@
 import {
+  CreateFilledIcon,
+  CreateOutlineIcon,
+  FollowingFilledIcon,
+  FollowingOutlineIcon,
+  HomeFilledIcon,
+  HomeOutlineIcon,
+  InboxFilledIcon,
+  InboxOutlineIcon,
+} from "@/assets/figma-icons";
+import {
   ScrollAnimationProvider,
   TAB_BAR_HEIGHT,
   useScrollAnimationContext,
@@ -20,7 +30,12 @@ const PROTECTED_TABS = ["following", "create", "inbox", "profile"];
 
 const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
   const insets = useSafeAreaInsets();
-  const { tabBarAnimatedStyle } = useScrollAnimationContext();
+  const {
+    tabBarAnimatedStyle,
+    scrollToTopAndRefresh,
+    scrollToTopAndRefreshFollowing,
+    scrollToTopAndRefreshProfile,
+  } = useScrollAnimationContext();
 
   // Auth state
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
@@ -53,17 +68,33 @@ const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
               canPreventDefault: true,
             });
 
+            // If already on home tab, scroll to top and refresh
+            if (isFocused && route.name === "index") {
+              scrollToTopAndRefresh();
+              return;
+            }
+
+            // If already on following tab, scroll to top and refresh
+            if (isFocused && route.name === "following") {
+              scrollToTopAndRefreshFollowing();
+              return;
+            }
+
+            // If already on profile tab, scroll to top and refresh
+            if (isFocused && route.name === "profile") {
+              scrollToTopAndRefreshProfile();
+              return;
+            }
+
             if (!isFocused && !event.defaultPrevented) {
               navigation.navigate(route.name);
             }
           };
 
-          const iconName = getIconName(route.name, isFocused);
-
           return (
             <TabBarItem
               key={route.key}
-              iconName={iconName}
+              routeName={route.name}
               label={options.title || route.name}
               isFocused={isFocused}
               onPress={onPress}
@@ -76,12 +107,12 @@ const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
 };
 
 const TabBarItem = ({
-  iconName,
+  routeName,
   label,
   isFocused,
   onPress,
 }: {
-  iconName: string;
+  routeName: string;
   label: string;
   isFocused: boolean;
   onPress: () => void;
@@ -102,17 +133,61 @@ const TabBarItem = ({
     onPress();
   };
 
+  const iconColor = isFocused
+    ? theme.colors.primary[500]
+    : theme.colors.text.subtle;
+
+  const renderIcon = () => {
+    const iconSize = 20;
+
+    switch (routeName) {
+      case "index":
+        return isFocused ? (
+          <HomeFilledIcon size={iconSize} color={iconColor} />
+        ) : (
+          <HomeOutlineIcon size={iconSize} color={iconColor} />
+        );
+      case "following":
+        return isFocused ? (
+          <FollowingFilledIcon size={iconSize} color={iconColor} />
+        ) : (
+          <FollowingOutlineIcon size={iconSize} color={iconColor} />
+        );
+      case "create":
+        return isFocused ? (
+          <CreateFilledIcon size={iconSize} color={iconColor} />
+        ) : (
+          <CreateOutlineIcon size={iconSize} color={iconColor} />
+        );
+      case "inbox":
+        return isFocused ? (
+          <InboxFilledIcon size={iconSize} color={iconColor} />
+        ) : (
+          <InboxOutlineIcon size={iconSize} color={iconColor} />
+        );
+      case "profile":
+        // Profile still uses Ionicons as we don't have a custom profile icon yet
+        return (
+          <Ionicons
+            name={isFocused ? "person" : "person-outline"}
+            size={iconSize}
+            color={iconColor}
+          />
+        );
+      default:
+        return (
+          <Ionicons name="help-outline" size={iconSize} color={iconColor} />
+        );
+    }
+  };
+
   return (
     <Animated.View
       style={[styles.tabItem, animatedStyle]}
       onTouchStart={handlePressIn}
       onTouchEnd={handlePressOut}
     >
-      <Ionicons
-        name={iconName as any}
-        size={22}
-        style={[styles.tabIcon, isFocused && styles.tabIconFocused]}
-      />
+      {renderIcon()}
       <Text
         style={{
           fontSize: 9,
@@ -126,22 +201,6 @@ const TabBarItem = ({
       </Text>
     </Animated.View>
   );
-};
-
-const getIconName = (routeName: string, isFocused: boolean): string => {
-  const icons: Record<string, { focused: string; unfocused: string }> = {
-    index: { focused: "home", unfocused: "home-outline" },
-    following: { focused: "people", unfocused: "people-outline" },
-    create: { focused: "add-circle", unfocused: "add-circle-outline" },
-    inbox: { focused: "mail", unfocused: "mail-outline" },
-    profile: { focused: "person", unfocused: "person-outline" },
-  };
-
-  const icon = icons[routeName] || {
-    focused: "help",
-    unfocused: "help-outline",
-  };
-  return isFocused ? icon.focused : icon.unfocused;
 };
 
 function TabsContent() {
