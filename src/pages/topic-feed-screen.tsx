@@ -803,36 +803,38 @@ export function TopicFeedScreen() {
     };
   });
 
-  useEffect(() => {
-    setHandlers({
-      onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
-      onAuthorPress: (authorId) =>
-        handlersRef.current.handleAuthorPress(authorId),
-      onTopicPress: (topic) => handlersRef.current.handleTopicPress(topic),
-      onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
-      onLikePress: (postId, liked, disliked, likes) =>
-        handlersRef.current.handleUpvote(postId, liked, disliked, likes),
-      onDislikePress: (postId, liked, disliked, likes) =>
-        handlersRef.current.handleDownvote(postId, liked, disliked, likes),
-      onCommentPress: (postId) =>
-        handlersRef.current.handleCommentPress(postId),
-      onFollowUser: (authorId, username, isFollowing) =>
-        handlersRef.current.handleFollowPress(authorId, username, isFollowing),
-      onFollowTopic: (topic, isFollowed) =>
-        handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
-      onRevealContent: (postId) =>
-        handlersRef.current.handleRevealContent(postId),
-      onBlockUser: (postId, authorId, authorUsername) =>
-        handlersRef.current.handleBlockUserFromCard(
-          postId,
-          authorId,
-          authorUsername,
-        ),
-      onBlockPost: (postId) =>
-        handlersRef.current.handleBlockPostFromCard(postId),
-      onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
-    });
-  }, [setHandlers]);
+  useFocusEffect(
+    useCallback(() => {
+      setHandlers({
+        onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
+        onAuthorPress: (authorId) =>
+          handlersRef.current.handleAuthorPress(authorId),
+        onTopicPress: (topic) => handlersRef.current.handleTopicPress(topic),
+        onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
+        onLikePress: (postId, liked, disliked, likes) =>
+          handlersRef.current.handleUpvote(postId, liked, disliked, likes),
+        onDislikePress: (postId, liked, disliked, likes) =>
+          handlersRef.current.handleDownvote(postId, liked, disliked, likes),
+        onCommentPress: (postId) =>
+          handlersRef.current.handleCommentPress(postId),
+        onFollowUser: (authorId, username, isFollowing) =>
+          handlersRef.current.handleFollowPress(authorId, username, isFollowing),
+        onFollowTopic: (topic, isFollowed) =>
+          handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
+        onRevealContent: (postId) =>
+          handlersRef.current.handleRevealContent(postId),
+        onBlockUser: (postId, authorId, authorUsername) =>
+          handlersRef.current.handleBlockUserFromCard(
+            postId,
+            authorId,
+            authorUsername,
+          ),
+        onBlockPost: (postId) =>
+          handlersRef.current.handleBlockPostFromCard(postId),
+        onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
+      });
+    }, [setHandlers])
+  );
 
   return (
     <Box flex background="base">

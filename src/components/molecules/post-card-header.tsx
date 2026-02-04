@@ -20,8 +20,8 @@ type PostCardHeaderProps = {
   createdAt: Date | string | number;
   isOwnPost: boolean;
   isFollowing?: boolean;
- isTopicFollowed?: boolean;
- showFollowButton?: boolean;
+  isTopicFollowed?: boolean;
+  showFollowButton?: boolean;
   onAuthorPress?: () => void;
   onTopicPress?: () => void;
   onFollowUser?: () => void;
@@ -36,8 +36,8 @@ export const PostCardHeader = memo(function PostCardHeader({
   createdAt,
   isOwnPost,
   isFollowing,
- isTopicFollowed,
- showFollowButton = true,
+  isTopicFollowed,
+  showFollowButton = true,
   onAuthorPress,
   onTopicPress,
   onFollowUser,
@@ -79,8 +79,8 @@ export const PostCardHeader = memo(function PostCardHeader({
   return (
     <View style={styles.header}>
       <View style={styles.authorSection}>
-       <View style={styles.authorRow}>
-         {topic && !topicDisabled && (
+        <View style={styles.authorRow}>
+          {topic && !topicDisabled && (
             <Pressable
               onPress={handleTopicPress}
               hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
@@ -92,7 +92,12 @@ export const PostCardHeader = memo(function PostCardHeader({
             </Pressable>
           )}
           {topic && topicDisabled && (
-            <Text size="md" weight="bold" numberOfLines={1} style={{ color: theme.colors.text.subtle }}>
+            <Text
+              size="md"
+              weight="bold"
+              numberOfLines={1}
+              style={{ color: theme.colors.text.subtle }}
+            >
               #{topic}
             </Text>
           )}
@@ -140,7 +145,7 @@ export const PostCardHeader = memo(function PostCardHeader({
                   hitSlop: { top: 12, bottom: 12, left: 12, right: 12 },
                 },
               }}
-           >
+            >
               <View
                 style={[
                   styles.followButton,
@@ -185,7 +190,7 @@ export const PostCardHeader = memo(function PostCardHeader({
                 },
               }}
             >
-             {topic && (
+              {topic && (
                 <MenuOption onSelect={handleFollowTopic}>
                   <View style={styles.menuOption}>
                     <Ionicons
@@ -198,7 +203,7 @@ export const PostCardHeader = memo(function PostCardHeader({
                       }
                     />
                     <Text
-                      size="sm"
+                      size="md"
                       weight={isTopicFollowed ? "semibold" : "medium"}
                       style={
                         isTopicFollowed
@@ -224,7 +229,7 @@ export const PostCardHeader = memo(function PostCardHeader({
                     }
                   />
                   <Text
-                    size="sm"
+                    size="md"
                     weight={isFollowing ? "semibold" : "medium"}
                     style={
                       isFollowing
@@ -292,8 +297,8 @@ const styles = StyleSheet.create((theme) => ({
     height: 22,
     paddingHorizontal: 10,
     borderWidth: 1,
- },
- menuOption: {
+  },
+  menuOption: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
