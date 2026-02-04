@@ -108,7 +108,12 @@ export default function UsernameScreen() {
   }, []);
 
   const handleInviteCodeChange = useCallback((text: string) => {
-    setInviteCode(text);
+    const raw = text.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+    if (raw.length > 4) {
+      setInviteCode(raw.slice(0, 4) + "-" + raw.slice(4));
+    } else {
+      setInviteCode(raw);
+    }
     setInviteStatus("idle");
     setCreateError(null);
   }, []);
@@ -342,7 +347,8 @@ export default function UsernameScreen() {
               autoCorrect={false}
               size="lg"
               variant="filled"
-              style={styles.input}
+             style={styles.input}
+              maxLength={9}
               rightAccessory={
                 inviteCode.length > 0 ? (
                   <Pressable style={styles.statusIcon} onPress={() => { setInviteCode(""); setInviteStatus("idle"); }}>
