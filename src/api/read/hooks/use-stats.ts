@@ -4,6 +4,7 @@ import {
   getNetworkStats,
   getCirculationStats,
   getAppStats,
+  getWelcomeStats,
   getLeaderboard,
   getReferralStats,
   getPeers,
@@ -50,6 +51,15 @@ export function useAppStats() {
     queryFn: getAppStats,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 60, // 1 hour
+  });
+}
+
+export function useWelcomeStats() {
+  return useQuery({
+    queryKey: queryKeys.welcomeStats(),
+    queryFn: getWelcomeStats,
+    staleTime: 1000 * 30,
+    gcTime: 1000 * 60 * 60,
   });
 }
 

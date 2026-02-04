@@ -339,6 +339,12 @@ export interface TxStatusResponse {
 // Stats & Network
 // ============================================
 
+export interface WelcomeStatsResponse {
+  registered_users: number;
+  posts_24h: number;
+  active_24h: number;
+}
+
 export interface DifficultyHistory {
   height: number;
   difficulty: number;

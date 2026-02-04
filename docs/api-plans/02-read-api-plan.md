@@ -98,6 +98,7 @@ Most endpoints work without authentication. The `address` parameter enables pers
 | `GET /leaderboard`               | Leaderboard                                           |
 | `GET /get_peers`                 | Peer list                                             |
 | `GET /get_stats`                 | App statistics                                        |
+| `GET /get_welcome_stats`         | Landing page stats (cached 30s)                       |
 | Bridge query endpoints           | All bridge queries are public                         |
 
 ### Address Required (Personalized)
@@ -223,6 +224,7 @@ export const queryKeys = {
   networkStats: () => ["stats", "network"] as const,
   circulationStats: () => ["stats", "circulation"] as const,
   appStats: () => ["stats", "app"] as const,
+  welcomeStats: () => ["stats", "welcome"] as const,
   leaderboard: (days?: number) => ["leaderboard", days] as const,
 
   // Referral
@@ -943,6 +945,21 @@ interface AppStatsResponse {
 }
 
 // Hook: useAppStats
+```
+
+#### `GET /get_welcome_stats`
+
+**Purpose**: Lightweight stats for the landing page (cached 30s)
+
+```typescript
+interface WelcomeStatsResponse {
+  registered_users: number;
+  posts_24h: number;
+  active_24h: number;
+}
+
+// Hook: useWelcomeStats
+// staleTime: 30 seconds
 ```
 
 #### `GET /leaderboard`

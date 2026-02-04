@@ -77,6 +77,7 @@ export {
   useNetworkStats,
   useCirculationStats,
   useAppStats,
+  useWelcomeStats,
   useLeaderboard,
   useReferralStats,
   useReferralStatsByAddress,

@@ -6,6 +6,7 @@ import type {
   LeaderboardResponse,
   ReferralStatsResponse,
   PeersResponse,
+  WelcomeStatsResponse,
 } from "../../types";
 
 // ============================================
@@ -31,6 +32,10 @@ export async function getCirculationStats(): Promise<CirculationStatsResponse> {
  */
 export async function getAppStats(): Promise<AppStatsResponse> {
   return api.get<AppStatsResponse>("/get_stats");
+}
+
+export async function getWelcomeStats(): Promise<WelcomeStatsResponse> {
+  return api.get<WelcomeStatsResponse>("/get_welcome_stats");
 }
 
 // ============================================

@@ -9,7 +9,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Box, Text } from "@/src/components/ui/primitives";
-import { useAppStats } from "@/src/api/read/hooks/use-stats";
+import { useWelcomeStats } from "@/src/api/read/hooks/use-stats";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   HEADER_HEIGHT,
@@ -21,11 +21,11 @@ export function LoggedOutHome() {
   const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { data: stats } = useAppStats();
+  const { data: stats } = useWelcomeStats();
 
-  const totalUsers = stats?.total_users;
-  const activeToday = stats?.dau_today;
-  const postsToday = stats?.total_posts;
+  const totalUsers = stats?.registered_users;
+  const activeToday = stats?.active_24h;
+  const postsToday = stats?.posts_24h;
 
   return (
     <Box flex background="base">
