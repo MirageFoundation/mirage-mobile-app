@@ -231,12 +231,12 @@ function UserRow({
   const { data } = useUsernameFromAddress(address);
   const displayName = data?.username ?? address.slice(0, 10) + "...";
 
-  return (
-    <Pressable onPress={() => onPress(address)} style={styles.row}>
-      <Avatar size="md" seed={address} rounded="full" />
-      <Text
-        size="md"
-        weight="medium"
+ return (
+   <Pressable onPress={() => onPress(address)} style={styles.row}>
+      <Avatar size="sm" seed={address} rounded="full" />
+     <Text
+       size="md"
+       weight="medium"
         style={{ marginLeft: 12, color: theme.colors.text.default, flex: 1 }}
         numberOfLines={1}
       >
@@ -292,10 +292,10 @@ function ModeratorRow({
   const { data } = useUsernameFromAddress(address);
   const displayName = data?.username ?? address.slice(0, 10) + "...";
 
-  return (
-    <Pressable onPress={() => onPress(address)} style={styles.row}>
-      <Avatar size="md" seed={address} rounded="full" />
-      <Box style={{ marginLeft: 12, flex: 1 }}>
+ return (
+   <Pressable onPress={() => onPress(address)} style={styles.row}>
+      <Avatar size="sm" seed={address} rounded="full" />
+     <Box style={{ marginLeft: 12, flex: 1 }}>
         <Text
           size="md"
           weight="medium"
@@ -599,37 +599,34 @@ export function UserFollowingScreen() {
         </View>
 
         <View style={styles.tabBar}>
-          {TABS.map((tab) => {
-            const isActive = activeTab === tab.key;
-            const count = tabCounts[tab.key];
-            const hasCount = !isLoading && followedData;
-            return (
-              <Pressable
-                key={tab.key}
-                onPress={() => handleTabPress(tab.key)}
-                style={styles.tab}
-              >
-                <Text
-                  size="sm"
-                  weight={isActive ? "bold" : "medium"}
-                  style={{
-                    color: isActive
-                      ? theme.colors.text.default
-                      : theme.colors.text.subtle,
-                  }}
-                >
-                  {tab.label}
-                  {hasCount ? ` (${count})` : ""}
-                </Text>
-                {isActive && (
-                  <View
-                    style={[
-                      styles.tabIndicator,
-                      { backgroundColor: theme.colors.text.default },
-                    ]}
-                  />
-                )}
-              </Pressable>
+         {TABS.map((tab) => {
+           const isActive = activeTab === tab.key;
+           const count = tabCounts[tab.key];
+           const hasCount = !isLoading && followedData;
+           return (
+             <Pressable
+               key={tab.key}
+               onPress={() => handleTabPress(tab.key)}
+                style={[
+                  styles.tab,
+                  isActive && {
+                    borderBottomColor: theme.colors.primary[500],
+                  },
+                ]}
+             >
+               <Text
+                  size="md"
+                  weight={isActive ? "semibold" : "regular"}
+                 style={{
+                   color: isActive
+                      ? theme.colors.primary[500]
+                     : theme.colors.text.subtle,
+                 }}
+               >
+                 {tab.label}
+                 {hasCount ? ` (${count})` : ""}
+               </Text>
+             </Pressable>
             );
           })}
         </View>
@@ -716,14 +713,8 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
-    position: "relative",
-  },
-  tabIndicator: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 2,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
   },
   row: {
     flexDirection: "row",

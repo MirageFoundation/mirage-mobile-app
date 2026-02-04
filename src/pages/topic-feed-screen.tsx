@@ -856,11 +856,11 @@ export function TopicFeedScreen() {
             color={theme.colors.text.default}
           />
         </Pressable>
-        <Text
-          size="xl"
-          weight="semibold"
-          numberOfLines={1}
-          style={styles.headerTitle}
+       <Text
+          size="lg"
+          weight="bold"
+         numberOfLines={1}
+         style={styles.headerTitle}
         >
           #{topicName}
         </Text>

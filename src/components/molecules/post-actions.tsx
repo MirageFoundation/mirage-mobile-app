@@ -340,12 +340,12 @@ export const PostActions = memo(function PostActions({
             }}
           >
             <View style={[styles.votePill, { height: pillHeight }]}>
-              <View style={[styles.voteButton, disabled && styles.disabled]}>
-                <Ionicons
-                  name="flag-outline"
-                  size={iconSize}
-                  color={theme.colors.error[500]}
-                />
+             <View style={[styles.voteButton, disabled && styles.disabled]}>
+               <Ionicons
+                  name="ban-outline"
+                 size={iconSize}
+                 color={theme.colors.error[500]}
+               />
               </View>
             </View>
           </MenuTrigger>
