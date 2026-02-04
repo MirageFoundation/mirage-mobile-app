@@ -741,16 +741,17 @@ useEffect(() => {
 
   return (
     <Box flex background="base">
-      <ProfileHeaderBar
-        username={username}
-        userLevel={userStatus?.user_level ?? 0}
-        gradientColors={gradientColors}
-        scrollY={scrollY}
-        isRefreshing={isRefreshing}
-        isLoading={isLoading}
-        onBackPress={handleBackPress}
-        onMenuPress={handleMenuPress}
-      />
+     <ProfileHeaderBar
+       username={username}
+       userLevel={userStatus?.user_level ?? 0}
+       gradientColors={gradientColors}
+       scrollY={scrollY}
+       isRefreshing={isRefreshing}
+       isLoading={isLoading}
+        isOwnProfile={true}
+       onBackPress={handleBackPress}
+       onMenuPress={handleMenuPress}
+     />
 
       <Animated.View
         style={[

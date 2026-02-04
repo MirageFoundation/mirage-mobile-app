@@ -6,6 +6,7 @@ import {
 } from "@/assets/figma-icons";
 import { TimeAgo, FollowButton } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
+import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons, Octicons } from "@expo/vector-icons";
@@ -448,8 +449,9 @@ export const CommentItem = ({
           {/* Actions below content on the right */}
           <View style={styles.actionsRow}>
             <View style={styles.actions}>
-              {/* More options (three dots) */}
-              <Pressable
+             {/* More options (three dots) */}
+              <AnimatedPressable
+                scaleAmount={0.85}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 onPress={handleMorePress}
                 style={styles.actionButton}
@@ -459,10 +461,11 @@ export const CommentItem = ({
                   size={SIZE_CONFIG.iconSize + 5}
                   color={iconColor}
                 />
-              </Pressable>
+              </AnimatedPressable>
 
               {/* Reply */}
-              <Pressable
+              <AnimatedPressable
+                scaleAmount={0.85}
                 onPress={handleReplyPress}
                 style={styles.actionButton}
                 hitSlop={{ top: 20, bottom: 20, left: 10, right: 10 }}
@@ -486,7 +489,7 @@ export const CommentItem = ({
                     Reply
                   </Text>
                 )}
-              </Pressable>
+              </AnimatedPressable>
 
               {/* Like */}
               <Pressable

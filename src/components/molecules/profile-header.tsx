@@ -1,5 +1,6 @@
 const PROFILE_GRADIENT_COLORS: readonly string[] = ["rgb(102, 126, 234)", "rgb(118, 75, 162)", "#000000"];
 import { Ionicons } from "@expo/vector-icons";
+import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -193,27 +194,39 @@ onBackPress,
              <ActivityIndicator size="small" color="#FFFFFF" />
            </View>
          )}
-       {!isOwnProfile && (
-          <Pressable
-             onPress={() => {
-               triggerHaptic("selection");
-               if (isFollowing) {
-                 onUnfollowPress?.();
-               } else {
-                 onFollowPress?.();
-               }
-             }}
-             style={styles.followButton}
-           >
-              <Text
-                size="sm"
-                weight="semibold"
-                style={styles.followButtonText}
-              >
-                {isFollowing ? "Following" : "Follow"}
-              </Text>
-           </Pressable>
-         )}
+     {!isOwnProfile && (
+         <AnimatedPressable
+            scaleAmount={0.9}
+            onPress={() => {
+              triggerHaptic("selection");
+              if (isFollowing) {
+                onUnfollowPress?.();
+              } else {
+                onFollowPress?.();
+              }
+            }}
+             style={[
+               styles.followButton,
+              {
+                backgroundColor: isFollowing
+                  ? "rgba(255,255,255,0.15)"
+                   : "rgb(232, 84, 41)",
+                borderWidth: 1,
+                borderColor: isFollowing
+                  ? "rgba(255,255,255,0.3)"
+                   : "rgb(232, 84, 41)",
+              },
+             ]}
+          >
+             <Text
+               size="sm"
+               weight="semibold"
+               style={styles.followButtonText}
+             >
+               {isFollowing ? "Following" : "Follow"}
+             </Text>
+          </AnimatedPressable>
+        )}
          <IconButton
            name="ellipsis-horizontal"
            size="md"

@@ -1,5 +1,6 @@
 import { TimeAgo } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
+import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { memo, useCallback } from "react";
@@ -238,7 +239,8 @@ export const PostCardHeader = memo(function PostCardHeader({
             </MenuOptions>
           </Menu>
         )}
-        <Pressable
+        <AnimatedPressable
+          scaleAmount={0.85}
           hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
           onPress={handleMorePress}
           style={styles.moreButton}
@@ -248,7 +250,7 @@ export const PostCardHeader = memo(function PostCardHeader({
             size={18}
             color={theme.colors.text.default}
           />
-        </Pressable>
+        </AnimatedPressable>
       </View>
     </View>
   );

@@ -1,6 +1,7 @@
 import { MenuIcon } from "@/assets/figma-icons";
 import { Ionicons } from "@expo/vector-icons";
-import { Image, Pressable, View } from "react-native";
+import { Image, View } from "react-native";
+import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
 import {
   Menu,
   MenuOption,
@@ -110,10 +111,10 @@ export const FeedHeader = ({
     >
       <View style={styles.content}>
         {/* Left section - Menu button and Title (as feed type selector) */}
-        <View style={styles.leftSection}>
-          <Pressable onPress={onMenuPress} style={styles.iconButton}>
+       <View style={styles.leftSection}>
+          <AnimatedPressable scaleAmount={0.85} onPress={onMenuPress} style={styles.iconButton}>
             <MenuIcon size={18} color={theme.colors.text.default} />
-          </Pressable>
+          </AnimatedPressable>
 
           {onFeedTypeChange ? (
             <Menu onOpen={handleMenuOpen} onClose={handleMenuClose}>
@@ -226,14 +227,14 @@ export const FeedHeader = ({
           )}
         </View>
 
-        {/* Right section - Search */}
-        <Pressable onPress={onSearchPress} style={styles.iconButton}>
+       {/* Right section - Search */}
+        <AnimatedPressable scaleAmount={0.85} onPress={onSearchPress} style={styles.iconButton}>
           <Ionicons
             name="search-outline"
             size={20}
             color={theme.colors.text.default}
           />
-        </Pressable>
+        </AnimatedPressable>
       </View>
     </Animated.View>
   );

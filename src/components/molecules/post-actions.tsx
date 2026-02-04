@@ -95,6 +95,25 @@ const SIZE_CONFIG = {
   },
 };
 
+const makePressHandlers = (scale: Animated.Value) => ({
+  onPressIn: () => {
+    Animated.spring(scale, {
+      toValue: 0.9,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 100,
+    }).start();
+  },
+  onPressOut: () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 100,
+    }).start();
+  },
+});
+
 export const PostActions = memo(function PostActions({
   likes,
   dislikes,
@@ -123,6 +142,10 @@ export const PostActions = memo(function PostActions({
   // Animation values for arrow movement
   const upArrowTranslateY = useRef(new Animated.Value(0)).current;
   const downArrowTranslateY = useRef(new Animated.Value(0)).current;
+
+  const commentPillScale = useRef(new Animated.Value(1)).current;
+  const sharePillScale = useRef(new Animated.Value(1)).current;
+  const banPillScale = useRef(new Animated.Value(1)).current;
 
   const handleLikePress = () => {
     if (disabled) return;
@@ -291,13 +314,14 @@ export const PostActions = memo(function PostActions({
       </View>
 
       {!hideCommentAction && (
-        <View style={[styles.votePill, { height: pillHeight }]}>
+        <Animated.View style={[styles.votePill, { height: pillHeight, transform: [{ scale: commentPillScale }] }]}>
           <Pressable
             onPress={() => {
               if (disabled) return;
               triggerHaptic("selection");
               onCommentPress?.();
             }}
+            {...makePressHandlers(commentPillScale)}
             disabled={disabled}
             hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
             style={[styles.voteButton, disabled && styles.disabled]}
@@ -311,22 +335,23 @@ export const PostActions = memo(function PostActions({
               {formatCount(comments)}
             </Text>
           </Pressable>
-        </View>
+        </Animated.View>
       )}
 
       {/* Spacer to push share to the right */}
       <View style={styles.spacer} />
 
       {/* Share pill container */}
-      <View style={[styles.votePill, { height: pillHeight }]}>
+      <Animated.View style={[styles.votePill, { height: pillHeight, transform: [{ scale: sharePillScale }] }]}>
         <Pressable
           onPress={handleShare}
+          {...makePressHandlers(sharePillScale)}
           disabled={disabled}
           style={[styles.voteButton, disabled && styles.disabled]}
         >
           <ShareIcon size={iconSize} color={defaultColor} />
         </Pressable>
-      </View>
+      </Animated.View>
 
       {/* Moderation menu (only for other users' posts) */}
       {!isOwnPost && (
@@ -336,10 +361,11 @@ export const PostActions = memo(function PostActions({
               triggerOuterWrapper: { marginLeft: -3 },
               triggerTouchable: {
                 hitSlop: { top: 6, bottom: 6, left: 6, right: 6 },
+                ...makePressHandlers(banPillScale),
               },
             }}
           >
-            <View style={[styles.votePill, { height: pillHeight }]}>
+            <Animated.View style={[styles.votePill, { height: pillHeight, transform: [{ scale: banPillScale }] }]}>
              <View style={[styles.voteButton, disabled && styles.disabled]}>
                <Ionicons
                   name="ban-outline"
@@ -347,7 +373,7 @@ export const PostActions = memo(function PostActions({
                  color={theme.colors.error[500]}
                />
               </View>
-            </View>
+            </Animated.View>
           </MenuTrigger>
           <MenuOptions
             customStyles={{
