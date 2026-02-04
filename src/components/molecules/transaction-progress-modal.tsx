@@ -412,18 +412,25 @@ export function TransactionProgressModal({
                 </Button>
               )}
 
-              <Button
-                size="lg"
-                mode={progress.phase === "success" ? "brand" : "subtle"}
-                rounded="full"
-                onPress={handleDismiss}
-                style={styles.button}
-              >
-                <Button.Text
-                  style={
-                    progress.phase === "success" ? { color: "#fff" } : undefined
-                  }
-                >
+             <Button
+               size="lg"
+                mode={progress.phase === "success" ? "brand" : "brand"}
+               rounded="full"
+               onPress={handleDismiss}
+                style={[
+                  styles.button,
+                  progress.phase === "error" && {
+                    backgroundColor: "rgba(239, 68, 68, 0.9)",
+                  },
+                ]}
+             >
+               <Button.Text
+                 style={
+                    progress.phase === "success" || progress.phase === "error"
+                      ? { color: "#fff" }
+                      : undefined
+                 }
+               >
                   {progress.phase === "success" ? "Continue" : "Close"}
                 </Button.Text>
               </Button>

@@ -1,6 +1,11 @@
 import { useConfig } from "@/src/api/read/hooks/use-parameters";
 import { useUsernameAvailability } from "@/src/api/read/hooks/use-username-resolution";
 import { validateInviteCode } from "@/src/api/read/endpoints/users";
+import { getTxStatus } from "@/src/api/read/endpoints/tx";
+import { setUsername as setUsernameOnChain } from "@/src/api/write";
+import {
+  TransactionProgressModal,
+} from "@/src/components/molecules";
 import {
   Box,
   Button,
@@ -9,11 +14,13 @@ import {
   Text,
 } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { executeWithProgress, useTransactionProgress } from "@/src/hooks";
+import { walletService } from "@/src/services/wallet-service";
 import { useAuthStore, useUIStore } from "@/src/stores";
 import { apiClient } from "@/src/api/client";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -38,13 +45,19 @@ export default function UsernameScreen() {
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
 
   const createNewWallet = useAuthStore((s) => s.createNewWallet);
-  const isCreatingWallet = useAuthStore((s) => s.isCreatingWallet);
+ const isCreatingWallet = useAuthStore((s) => s.isCreatingWallet);
+ const setHasUsername = useAuthStore((s) => s.setHasUsername);
+  const clearRecoveryPhrase = useAuthStore((s) => s.clearRecoveryPhrase);
 
   const [username, setUsername] = useState("");
   const [status, setStatus] = useState<UsernameStatus>("idle");
   const [inviteCode, setInviteCode] = useState("");
   const [inviteStatus, setInviteStatus] = useState<InviteCodeStatus>("idle");
   const [createError, setCreateError] = useState<string | null>(null);
+  const [isSettingUp, setIsSettingUp] = useState(false);
+
+  const walletConfirmedRef = useRef(false);
+  const txProgress = useTransactionProgress();
 
   useEffect(() => {
     apiClient.setBaseUrl("https://mirage.talk");
@@ -132,8 +145,9 @@ export default function UsernameScreen() {
 
     setInviteStatus("checking");
 
-    try {
-      const result = await validateInviteCode({ code: inviteCode.trim() });
+   try {
+      const rawCode = inviteCode.replace(/-/g, "").trim();
+      const result = await validateInviteCode({ code: rawCode });
 
       if (!result.valid) {
         if (result.error === "already_used") {
@@ -148,6 +162,7 @@ export default function UsernameScreen() {
       }
 
       setInviteStatus("valid");
+      setIsSettingUp(true);
 
       const mnemonic = await createNewWallet();
 
@@ -155,27 +170,88 @@ export default function UsernameScreen() {
         throw new Error("Failed to generate wallet");
       }
 
-      triggerHaptic("success");
+      const wallet = await walletService.getWallet();
 
-      router.push({
-        pathname: "/(auth)/recovery-phrase",
-        params: { username, inviteCode: inviteCode.trim() },
-      });
-    } catch (error) {
-      console.error("[Username] Failed to create wallet:", error);
-      triggerHaptic("error");
-
-      if (error instanceof Error) {
-        if (error.message.includes("already exists")) {
-          setCreateError("A wallet already exists. Please logout first.");
-        } else {
-          setCreateError("Failed to create wallet. Please try again.");
-        }
-      } else {
-        setCreateError("An unexpected error occurred.");
+      if (!wallet) {
+        throw new Error("Wallet not available");
       }
+
+      const txResult = await executeWithProgress(
+        txProgress,
+        async (onPoWProgress) => {
+          txProgress.setPhase("signing");
+        const response = await setUsernameOnChain(
+          wallet,
+            { username, invite_code: inviteCode.trim() },
+          onPoWProgress
+          );
+          txProgress.setPhase("submitting");
+          return response;
+        },
+        {
+          pollTxStatus: true,
+          getTxStatus: async (hash) => {
+            const s = await getTxStatus({ hash });
+            return {
+              found: s.found,
+              indexed: s.indexed ?? false,
+              success: s.success,
+              error_details: s.error_details,
+            };
+          },
+        }
+      );
+
+      if (!txResult.success) {
+        setIsSettingUp(false);
+        return;
+      }
+
+     setHasUsername(true);
+
+     triggerHaptic("success");
+
+      setTimeout(() => {
+        txProgress.hideModal();
+        router.push({
+          pathname: "/(auth)/recovery-phrase",
+          params: { username },
+        });
+      }, 1500);
+    } catch (error) {
+      console.error("[Username] Failed to create account:", error);
+      triggerHaptic("error");
+      setIsSettingUp(false);
+
+      if (!txProgress.isVisible) {
+        if (error instanceof Error) {
+          if (error.message.includes("already exists")) {
+            setCreateError("A wallet already exists. Please logout first.");
+          } else {
+            setCreateError("Failed to create account. Please try again.");
+          }
+        } else {
+          setCreateError("An unexpected error occurred.");
+        }
+     }
+   }
+ }, [status, username, inviteCode, createNewWallet, setHasUsername, txProgress, router]);
+
+  const handleRetry = useCallback(() => {
+    txProgress.reset();
+    setTimeout(() => {
+      handleContinue();
+    }, 100);
+  }, [txProgress, handleContinue]);
+
+  const handleDismissError = useCallback(async () => {
+    txProgress.hideModal();
+    setIsSettingUp(false);
+    if (!walletConfirmedRef.current) {
+      await walletService.clearWallet();
+      clearRecoveryPhrase();
     }
-  }, [status, username, inviteCode, createNewWallet, router]);
+  }, [txProgress, clearRecoveryPhrase]);
 
   const handleClose = useCallback(() => {
     triggerHaptic("selection");
@@ -300,10 +376,33 @@ export default function UsernameScreen() {
   };
 
   const isButtonEnabled =
-    status === "available" && inviteCode.trim().length > 0 && !isCreatingWallet && inviteStatus !== "checking";
+    status === "available" && inviteCode.trim().length > 0 && !isCreatingWallet && !isSettingUp && inviteStatus !== "checking";
 
   return (
     <Box flex background="base">
+      <TransactionProgressModal
+        visible={txProgress.isVisible}
+        progress={txProgress.progress}
+        title="Setting Up Account"
+        description={`Registering @${username} on the blockchain`}
+        onDismiss={
+          txProgress.progress.phase === "success"
+            ? () => {
+                txProgress.hideModal();
+                router.push({
+                  pathname: "/(auth)/recovery-phrase",
+                  params: { username },
+                });
+              }
+            : handleDismissError
+        }
+        onRetry={handleRetry}
+        dismissible={
+          txProgress.progress.phase === "success" ||
+          txProgress.progress.phase === "error"
+        }
+      />
+
       <View style={[styles.header, { paddingTop: Platform.OS === "ios" ? 20 : insets.top }]}>
         <Pressable onPress={handleClose} style={styles.closeButton}>
           <EvilIcons name="close" size={36} color={theme.colors.text.default} />
@@ -415,11 +514,11 @@ export default function UsernameScreen() {
             rounded="full"
             onPress={handleContinue}
             disabled={!isButtonEnabled}
-            loading={isCreatingWallet || inviteStatus === "checking"}
+            loading={isCreatingWallet || isSettingUp || inviteStatus === "checking"}
             style={[styles.continueButton]}
           >
             <Button.Text weight="medium">
-              {inviteStatus === "checking" ? "Validating code..." : isCreatingWallet ? "Creating wallet..." : "Continue"}
+              {inviteStatus === "checking" ? "Validating code..." : isCreatingWallet || isSettingUp ? "Creating account..." : "Continue"}
             </Button.Text>
           </Button>
 
