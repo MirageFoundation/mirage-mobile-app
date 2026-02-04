@@ -1,6 +1,7 @@
 import { RootProvider } from "@/src/providers/root-provider";
 import { Stack } from "expo-router";
 import { AuthSheet } from "@/src/components/molecules";
+import { ThemedStatusBar } from "@/src/components/ui/themed-status-bar";
 
 export default function RootLayout() {
   return (
@@ -72,6 +73,7 @@ export default function RootLayout() {
        }}
      />
      </Stack>
+      <ThemedStatusBar />
       <AuthSheet />
     </RootProvider>
   );
