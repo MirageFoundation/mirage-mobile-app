@@ -23,7 +23,10 @@ import { useTopics, useUserFollowed } from "@/src/api/read";
 import { useToggleFollowTopic } from "@/src/api/write";
 import type { TopicInfo } from "@/src/api/types";
 import { Box, Text } from "@/src/components/ui/primitives";
-import { ContentWarningBadge, type ContentWarningType } from "@/src/components/atoms";
+import {
+  ContentWarningBadge,
+  type ContentWarningType,
+} from "@/src/components/atoms";
 import { useAuthGuard } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
 import { triggerHaptic } from "@/src/components/utils/haptics";
@@ -118,7 +121,9 @@ function TopicRow({
     };
 
     if (topic.flags && typeof topic.flags === "object") {
-      for (const [key, value] of Object.entries(topic.flags as Record<string, boolean>)) {
+      for (const [key, value] of Object.entries(
+        topic.flags as Record<string, boolean>,
+      )) {
         if (value === true) {
           const mapped = tagMap[key.toLowerCase()];
           if (mapped && !warnings.includes(mapped)) {
@@ -149,13 +154,13 @@ function TopicRow({
     >
       <View style={styles.topicInfo}>
         <View style={styles.topicNameRow}>
-         <Text
-           size="lg"
-           weight="semibold"
-           numberOfLines={1}
+          <Text
+            size="lg"
+            weight="semibold"
+            numberOfLines={1}
             style={{ flexShrink: 1 }}
           >
-          #{topic.topic}
+            #{topic.topic}
           </Text>
           {contentWarnings.length > 0 && (
             <ContentWarningBadge types={contentWarnings} size="sm" compact />
@@ -168,7 +173,7 @@ function TopicRow({
           <Text size="md" mode="subtle">
             ·
           </Text>
-         <Text size="md" mode="subtle">
+          <Text size="md" mode="subtle">
             {topic.comment_count ?? topic.count ?? 0} comments
           </Text>
         </View>
@@ -459,11 +464,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   followButton: {
     paddingHorizontal: 12,
-    paddingVertical: 5,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: "transparent",
     minWidth: 76,
+    height: 30,
     alignItems: "center",
     justifyContent: "center",
   },

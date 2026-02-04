@@ -72,12 +72,12 @@ export function TopicFeedScreen() {
   const blockUser = useContentModerationStore((s) => s.blockUser);
 
   const selectedContentTypes = usePreferencesStore(
-    (s) => s.selectedContentTypes
+    (s) => s.selectedContentTypes,
   );
   const shareServer = usePreferencesStore((s) => s.shareServer);
   const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
   const videoAutoplayNetwork = usePreferencesStore(
-    (s) => s.videoAutoplayNetwork
+    (s) => s.videoAutoplayNetwork,
   );
   const hideDownvotedPosts = usePreferencesStore((s) => s.hideDownvotedPosts);
   const currentUser = useAuthStore((s) => s.user);
@@ -87,11 +87,11 @@ export function TopicFeedScreen() {
   const { data: followedData } = useUserFollowed();
   const followedUsers = useMemo(
     () => followedData?.followed_users ?? [],
-    [followedData]
+    [followedData],
   );
   const followedTopics = useMemo(
     () => followedData?.followed_topics ?? [],
-    [followedData]
+    [followedData],
   );
 
   const toggleFollowMutation = useToggleFollowUser();
@@ -103,13 +103,13 @@ export function TopicFeedScreen() {
   }, [toggleFollowMutation.mutateAsync]);
 
   const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const followLoadingUsersRef = useRef<Set<string>>(new Set());
 
   const allowedTags = useMemo(
     () => getAllowedTagsFromContentTypes(selectedContentTypes),
-    [selectedContentTypes]
+    [selectedContentTypes],
   );
 
   const {
@@ -147,17 +147,17 @@ export function TopicFeedScreen() {
 
     return transformedPosts.filter(
       (post) =>
-        !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id)
+        !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id),
     );
   }, [data, hiddenPostIds, blockedUserIds, hideDownvotedPosts]);
 
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
   const setVoteOverride = useHomePostCardStore(
-    (state) => state.setVoteOverride
+    (state) => state.setVoteOverride,
   );
   const clearVoteOverride = useHomePostCardStore(
-    (state) => state.clearVoteOverride
+    (state) => state.clearVoteOverride,
   );
 
   const { handleUpvote, handleDownvote } = useVoteHandler({
@@ -169,13 +169,13 @@ export function TopicFeedScreen() {
           likeDelta: result.likeDelta,
         });
       },
-      [setVoteOverride]
+      [setVoteOverride],
     ),
     onRollback: useCallback(
       (targetId: string) => {
         clearVoteOverride(targetId);
       },
-      [clearVoteOverride]
+      [clearVoteOverride],
     ),
   });
 
@@ -183,21 +183,21 @@ export function TopicFeedScreen() {
     (postId: string) => {
       router.push(`/post/${postId}`);
     },
-    [router]
+    [router],
   );
 
   const handleAuthorPress = useCallback(
     (authorId: string) => {
       router.push(`/user/${authorId}`);
     },
-    [router]
+    [router],
   );
 
   const handleTopicPress = useCallback(
     (topic: string) => {
       router.push(`/topic/${encodeURIComponent(topic)}`);
     },
-    [router]
+    [router],
   );
 
   const postsByIdRef = useRef<Map<string, Post>>(new Map());
@@ -222,7 +222,7 @@ export function TopicFeedScreen() {
     (postId: string) => {
       router.push(`/post/${postId}`);
     },
-    [router]
+    [router],
   );
 
   const blockHandler = useBlockHandler({});
@@ -264,7 +264,7 @@ export function TopicFeedScreen() {
       reportSheetRef.current?.dismiss();
       reportHandler.submitReport(reason);
     },
-    [reportHandler, hidePost]
+    [reportHandler, hidePost],
   );
 
   useEffect(() => {
@@ -277,7 +277,7 @@ export function TopicFeedScreen() {
     (
       authorId: string,
       authorUsername: string,
-      isCurrentlyFollowing: boolean
+      isCurrentlyFollowing: boolean,
     ) => {
       if (followLoadingUsersRef.current.has(authorId)) {
         return;
@@ -289,7 +289,7 @@ export function TopicFeedScreen() {
 
         const toastId = toast.loading(
           `${action} @${authorUsername}`,
-          "Computing proof of work..."
+          "Computing proof of work...",
         );
 
         setTimeout(async () => {
@@ -354,7 +354,7 @@ export function TopicFeedScreen() {
         }, 0);
       });
     },
-    [requireAuth, toast]
+    [requireAuth, toast],
   );
 
   const handleReport = useCallback(() => {
@@ -367,7 +367,7 @@ export function TopicFeedScreen() {
     if (selectedPost) {
       blockHandler.requestBlockUser(
         selectedPost.author.id,
-        selectedPost.author.username
+        selectedPost.author.username,
       );
     }
   }, [selectedPost, blockHandler]);
@@ -382,21 +382,21 @@ export function TopicFeedScreen() {
     (postId: string, authorId: string, authorUsername: string) => {
       blockHandler.requestBlockUser(authorId, authorUsername);
     },
-    [blockHandler]
+    [blockHandler],
   );
 
   const handleBlockPostFromCard = useCallback(
     (postId: string) => {
       blockHandler.requestBlockPost(postId);
     },
-    [blockHandler]
+    [blockHandler],
   );
 
   const handleReportFromCard = useCallback(
     (postId: string) => {
       reportHandler.requestReport(postId, "post");
     },
-    [reportHandler]
+    [reportHandler],
   );
 
   const handleDeletePost = useCallback(() => {
@@ -410,7 +410,9 @@ export function TopicFeedScreen() {
     const saved = useSavedPostsStore.getState().toggleSavePost(selectedPost);
     toast.success(
       saved ? "Post saved" : "Post unsaved",
-      saved ? "You can find it in your saved items." : "Removed from saved items.",
+      saved
+        ? "You can find it in your saved items."
+        : "Removed from saved items.",
     );
   }, [selectedPost, toast]);
 
@@ -430,7 +432,7 @@ export function TopicFeedScreen() {
 
       const toastId = toast.loading(
         `${action} #${topic}`,
-        "Computing proof of work..."
+        "Computing proof of work...",
       );
 
       setTimeout(async () => {
@@ -504,7 +506,7 @@ export function TopicFeedScreen() {
 
         const toastId = toast.loading(
           `${action} #${topic}`,
-          "Computing proof of work..."
+          "Computing proof of work...",
         );
 
         setTimeout(async () => {
@@ -555,7 +557,7 @@ export function TopicFeedScreen() {
         }, 0);
       });
     },
-    [requireAuth, toast, toggleFollowTopicMutation]
+    [requireAuth, toast, toggleFollowTopicMutation],
   );
 
   const handleShowFewer = useCallback(() => {
@@ -671,7 +673,7 @@ export function TopicFeedScreen() {
       paddingBottom: insets.bottom + 16,
       flexGrow: posts.length === 0 ? 1 : undefined,
     }),
-    [insets.bottom, insets.top, posts.length]
+    [insets.bottom, insets.top, posts.length],
   );
 
   const refreshControl = useMemo(
@@ -683,48 +685,49 @@ export function TopicFeedScreen() {
         progressViewOffset={insets.top + HEADER_HEIGHT}
       />
     ),
-    [handleRefresh, insets.top]
+    [handleRefresh, insets.top],
   );
 
   const setCurrentUserId = useHomePostCardStore(
-    (state) => state.setCurrentUserId
+    (state) => state.setCurrentUserId,
   );
   const setFollowedUsersStore = useHomePostCardStore(
-    (state) => state.setFollowedUsers
+    (state) => state.setFollowedUsers,
   );
   const setFollowedTopicsStore = useHomePostCardStore(
-    (state) => state.setFollowedTopics
+    (state) => state.setFollowedTopics,
   );
   const setFollowLoadingUsersStore = useHomePostCardStore(
-    (state) => state.setFollowLoadingUsers
+    (state) => state.setFollowLoadingUsers,
   );
   const setRevealedPostsStore = useHomePostCardStore(
-    (state) => state.setRevealedPosts
+    (state) => state.setRevealedPosts,
   );
   const setHandlers = useHomePostCardStore((state) => state.setHandlers);
   const setShareServerStore = useHomePostCardStore(
-    (state) => state.setShareServer
+    (state) => state.setShareServer,
   );
   const setAllowAutoplay = useHomePostCardStore(
-    (state) => state.setAllowAutoplay
+    (state) => state.setAllowAutoplay,
   );
   const setFeedActive = useHomePostCardStore((state) => state.setFeedActive);
   const setDisabledTopicName = useHomePostCardStore(
-    (state) => state.setDisabledTopicName
+    (state) => state.setDisabledTopicName,
   );
 
   const followedUsersSet = useMemo(
     () => new Set(followedUsers),
-    [followedUsers]
+    [followedUsers],
   );
   const followedTopicsSet = useMemo(
     () => new Set(followedTopics),
-    [followedTopics]
+    [followedTopics],
   );
 
   const allowAutoplay = useMemo(
-    () => shouldAutoplayVideo(autoPlayVideos, videoAutoplayNetwork, networkType),
-    [autoPlayVideos, videoAutoplayNetwork, networkType]
+    () =>
+      shouldAutoplayVideo(autoPlayVideos, videoAutoplayNetwork, networkType),
+    [autoPlayVideos, videoAutoplayNetwork, networkType],
   );
 
   useEffect(() => {
@@ -763,7 +766,7 @@ export function TopicFeedScreen() {
         setFeedActive(false);
         setDisabledTopicName(undefined);
       };
-    }, [setFeedActive, setDisabledTopicName, topicName])
+    }, [setFeedActive, setDisabledTopicName, topicName]),
   );
 
   const handlersRef = useRef({
@@ -823,7 +826,7 @@ export function TopicFeedScreen() {
         handlersRef.current.handleBlockUserFromCard(
           postId,
           authorId,
-          authorUsername
+          authorUsername,
         ),
       onBlockPost: (postId) =>
         handlersRef.current.handleBlockPostFromCard(postId),
@@ -856,11 +859,11 @@ export function TopicFeedScreen() {
             color={theme.colors.text.default}
           />
         </Pressable>
-       <Text
-          size="lg"
+        <Text
+          size="xl"
           weight="bold"
-         numberOfLines={1}
-         style={styles.headerTitle}
+          numberOfLines={1}
+          style={styles.headerTitle}
         >
           #{topicName}
         </Text>
@@ -898,7 +901,11 @@ export function TopicFeedScreen() {
         onFollowUser={handleFollowUserFromSheet}
         onFollowTopic={handleFollowTopic}
         onSave={handleSavePost}
-        isSaved={selectedPost ? useSavedPostsStore.getState().isPostSaved(selectedPost.id) : false}
+        isSaved={
+          selectedPost
+            ? useSavedPostsStore.getState().isPostSaved(selectedPost.id)
+            : false
+        }
         onCopyText={handleCopyText}
         onReport={handleReport}
         onBlockUser={handleBlockUser}
