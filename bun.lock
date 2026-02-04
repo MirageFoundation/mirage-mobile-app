@@ -59,7 +59,7 @@
         "react-dom": "19.1.0",
         "react-native": "0.81.5",
         "react-native-argon2": "^4.0.0",
-        "react-native-argon2-turbo": "^0.1.0",
+        "react-native-argon2-turbo": "^0.1.1",
         "react-native-cloud-storage": "^2.3.0",
         "react-native-edge-to-edge": "^1.7.0",
         "react-native-gesture-handler": "~2.28.0",
@@ -1712,7 +1712,7 @@
 
     "react-native-argon2": ["react-native-argon2@4.0.0", "", {}, "sha512-K6qIg9nBCHtu9/t5BdaGtmqKvmYjUy4aDrG2CeI4WNEMeQPlj91uDb9KP6AnFiFX3W7Unqo4f3uEgKcDUpZxcg=="],
 
-    "react-native-argon2-turbo": ["react-native-argon2-turbo@0.1.0", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-LQPyWdF/0L00vKzIGa7fwmDEpdG6G2K61wCZlhnybSGizEzkcNXgHUxQMTrKgHtVjxebkwDo/7qwV3Zbbhp5+A=="],
+    "react-native-argon2-turbo": ["react-native-argon2-turbo@0.1.1", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-ZGbnxlUZPBGKVkufFEHhUSt2wvEFnG6JhZhoOX7U96hszvbRq/wajoO3KePnB1sl2rJQDWhC3ShwtTyPyZ9lfg=="],
 
     "react-native-cloud-storage": ["react-native-cloud-storage@2.3.0", "", { "peerDependencies": { "expo": ">=48.0.0", "react": "*", "react-native": "*" }, "optionalPeers": ["expo"] }, "sha512-Bt+vnHO5Ae/ITMpZfySOxSVQckPKMb8ZQ0IXsSR7+y+AnShtlTbQ08qEYlHCXOp6+NGAhGD5ushqYO4nrd18tg=="],
 
