@@ -6,15 +6,17 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useAuthStore } from "@/src/stores";
 import { apiClient } from "@/src/api/client";
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useNavigation } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CommonActions } from "@react-navigation/native";
 import { Image, Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 export default function RecoveryPhraseScreen() {
-  const router = useRouter();
-  const params = useLocalSearchParams<{ username?: string }>();
+ const router = useRouter();
+  const navigation = useNavigation();
+ const params = useLocalSearchParams<{ username?: string }>();
   const { theme, rt } = useUnistyles();
   const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
@@ -30,11 +32,11 @@ export default function RecoveryPhraseScreen() {
     return recoveryPhrase.split(" ");
   }, [recoveryPhrase]);
 
-  useEffect(() => {
+useEffect(() => {
     if (!recoveryPhrase && !isConfirming) {
       router.dismissTo("/(auth)/username");
     }
-  }, [recoveryPhrase, isConfirming, router]);
+ }, [recoveryPhrase, isConfirming, router]);
 
   const handleCheckboxChange = useCallback(() => {
     triggerHaptic("selection");
@@ -47,11 +49,12 @@ export default function RecoveryPhraseScreen() {
     setIsConfirming(true);
     triggerHaptic("selection");
 
-    try {
+   try {
+     // await confirmWalletCreation();
       await confirmWalletCreation();
       triggerHaptic("success");
-      apiClient.setBaseUrl("https://mirage.vote");
-      router.dismissTo("/(tabs)");
+     apiClient.setBaseUrl("https://mirage.vote");
+      router.dismissAll();
     } catch (error) {
       console.error("[RecoveryPhrase] Failed to confirm wallet:", error);
       triggerHaptic("error");

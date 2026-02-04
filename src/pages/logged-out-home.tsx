@@ -1,5 +1,11 @@
 import { useRouter } from "expo-router";
-import { Image, Linking, Pressable, ScrollView, View } from "react-native";
+import {
+  Image,
+  Linking,
+  Pressable,
+  ScrollView,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Box, Text } from "@/src/components/ui/primitives";
@@ -79,30 +85,106 @@ export function LoggedOutHome() {
           </Pressable>
         </View>
 
-        <View
-          style={[
-            styles.statsContainer,
-            { backgroundColor: theme.colors.background.subtle },
-          ]}
-        >
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>
-              {totalUsers != null ? totalUsers.toLocaleString() : "-"}
-            </Text>
-            <Text style={styles.statLabel}>USERS</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>
-              {activeToday != null ? activeToday.toLocaleString() : "-"}
-            </Text>
-            <Text style={styles.statLabel}>ACTIVE (24H)</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statNumber}>
-              {postsToday != null ? postsToday.toLocaleString() : "-"}
-            </Text>
-            <Text style={styles.statLabel}>POSTS (24H)</Text>
-          </View>
+        <View style={styles.statsCardOuter}>
+          <LinearGradient
+            colors={
+              isDark
+                ? ["rgba(102,126,234,0.35)", "rgba(118,75,162,0.35)"]
+                : ["rgba(102,126,234,0.12)", "rgba(118,75,162,0.12)"]
+            }
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.statsGradientBorder}
+          >
+            <View
+              style={[
+                styles.statsCard,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(15,15,25,0.92)"
+                    : "rgba(255,255,255,0.95)",
+                },
+              ]}
+            >
+              <LinearGradient
+                colors={
+                  isDark
+                    ? ["rgba(102,126,234,0.06)", "transparent", "rgba(118,75,162,0.06)"]
+                    : ["rgba(102,126,234,0.04)", "transparent", "rgba(118,75,162,0.04)"]
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.statsInnerGlow}
+             />
+
+            <View style={styles.statsRow}>
+               <View style={styles.statItem}>
+                 <Text
+                    style={[
+                      styles.statNumber,
+                      { color: isDark ? "#A5B4FC" : "rgb(79,70,229)" },
+                    ]}
+                  >
+                    {totalUsers != null ? totalUsers.toLocaleString() : "-"}
+                  </Text>
+                  <Text style={styles.statLabel}>USERS</Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.statDivider,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(139,92,246,0.20)"
+                        : "rgba(102,126,234,0.15)",
+                    },
+                  ]}
+                />
+
+               <View style={styles.statItem}>
+                 <Text
+                   style={[
+                     styles.statNumber,
+                     { color: isDark ? "#6EE7B7" : "#059669" },
+                    ]}
+                  >
+                    {activeToday != null ? activeToday.toLocaleString() : "-"}
+                  </Text>
+                  <Text style={styles.statLabel}>ACTIVE (24H)</Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.statDivider,
+                    {
+                      backgroundColor: isDark
+                        ? "rgba(139,92,246,0.20)"
+                        : "rgba(102,126,234,0.15)",
+                    },
+                  ]}
+                />
+
+              <View style={styles.statItem}>
+                  <Text
+                    style={[
+                      styles.statNumber,
+                      { color: isDark ? "#FCD34D" : "#D97706" },
+                    ]}
+                  >
+                    {postsToday != null ? postsToday.toLocaleString() : "-"}
+                  </Text>
+                  <Text style={styles.statLabel}>POSTS (24H)</Text>
+                </View>
+              </View>
+
+              <LinearGradient
+                colors={["rgb(102,126,234)", "rgb(118,75,162)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.statsAccentBar}
+              />
+            </View>
+          </LinearGradient>
         </View>
 
         <View style={styles.ctaSection}>
@@ -110,7 +192,7 @@ export function LoggedOutHome() {
             Have an invite code? Join the community today.
           </Text>
 
-         <View style={styles.buttonRow}>
+          <View style={styles.buttonRow}>
             <Pressable
               style={styles.createButton}
               onPress={() => router.push("/(auth)/username")}
@@ -212,19 +294,63 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: "500",
     textDecorationLine: "underline",
   },
-  statsContainer: {
+  statsCardOuter: {
+    marginBottom: theme.spacing.xl,
+    borderRadius: 20,
+    shadowColor: "rgb(102,126,234)",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  statsGradientBorder: {
+    borderRadius: 20,
+    padding: 1.5,
+  },
+  statsInnerGlow: {
+    ...({
+      position: "absolute",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      borderRadius: 18.5,
+    } as const),
+  },
+  statsHeading: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    color: theme.colors.text.subtle,
+    textAlign: "center",
+    marginBottom: theme.spacing.md,
+  },
+  statsRow: {
     flexDirection: "row",
     justifyContent: "space-around",
-    borderRadius: theme.radius.lg,
-    paddingVertical: theme.spacing.lg,
-    marginBottom: theme.spacing.xl,
+    alignItems: "center",
+  },
+  statsCard: {
+    borderRadius: 18.5,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    overflow: "hidden",
+    position: "relative",
   },
   statItem: {
     alignItems: "center",
+    flex: 1,
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    borderRadius: 1,
   },
   statNumber: {
-    fontSize: 24,
-    lineHeight: 34,
+    fontSize: 26,
+    lineHeight: 32,
     fontWeight: "800",
   },
   statLabel: {
@@ -232,8 +358,17 @@ const styles = StyleSheet.create((theme) => ({
     lineHeight: 16,
     fontWeight: "600",
     color: theme.colors.text.subtle,
-    marginTop: 4,
+    marginTop: 2,
     letterSpacing: 0.5,
+  },
+  statsAccentBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    borderBottomLeftRadius: 18.5,
+    borderBottomRightRadius: 18.5,
   },
   ctaSection: {
     alignItems: "center",
@@ -250,29 +385,29 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing.md,
     width: "100%",
   },
-createButton: {
- flex: 1,
-},
-createButtonGradient: {
-  height: 54,
- alignItems: "center",
-  justifyContent: "center",
-  borderRadius: theme.radius.lg,
-},
- createButtonText: {
-   color: "#FFFFFF",
-   fontSize: 16,
-   lineHeight: 22,
-   fontWeight: "600",
- },
- signInButton: {
-   flex: 1,
+  createButton: {
+    flex: 1,
+  },
+  createButtonGradient: {
     height: 54,
-   borderRadius: theme.radius.lg,
-   alignItems: "center",
+    alignItems: "center",
     justifyContent: "center",
-   borderWidth: 1,
- },
+    borderRadius: theme.radius.lg,
+  },
+  createButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: "600",
+  },
+  signInButton: {
+    flex: 1,
+    height: 54,
+    borderRadius: theme.radius.lg,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
   signInButtonText: {
     fontSize: 16,
     lineHeight: 22,

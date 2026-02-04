@@ -131,7 +131,7 @@ export default function UsernameScreen() {
     setCreateError(null);
   }, []);
 
-  const handleContinue = useCallback(async () => {
+const handleContinue = useCallback(async () => {
     if (status !== "available") return;
     if (!inviteCode.trim()) {
       setInviteStatus("invalid");
@@ -145,7 +145,7 @@ export default function UsernameScreen() {
 
     setInviteStatus("checking");
 
-   try {
+    try {
       const rawCode = inviteCode.replace(/-/g, "").trim();
       const result = await validateInviteCode({ code: rawCode });
 
@@ -180,10 +180,10 @@ export default function UsernameScreen() {
         txProgress,
         async (onPoWProgress) => {
           txProgress.setPhase("signing");
-        const response = await setUsernameOnChain(
-          wallet,
+          const response = await setUsernameOnChain(
+            wallet,
             { username, invite_code: inviteCode.trim() },
-          onPoWProgress
+            onPoWProgress
           );
           txProgress.setPhase("submitting");
           return response;
@@ -207,13 +207,13 @@ export default function UsernameScreen() {
         return;
       }
 
-     setHasUsername(true);
+      setHasUsername(true);
 
-     triggerHaptic("success");
+      triggerHaptic("success");
 
       setTimeout(() => {
         txProgress.hideModal();
-        router.push({
+        router.replace({
           pathname: "/(auth)/recovery-phrase",
           params: { username },
         });
@@ -233,9 +233,9 @@ export default function UsernameScreen() {
         } else {
           setCreateError("An unexpected error occurred.");
         }
-     }
-   }
- }, [status, username, inviteCode, createNewWallet, setHasUsername, txProgress, router]);
+      }
+    }
+  }, [status, username, inviteCode, createNewWallet, setHasUsername, txProgress, router]);
 
   const handleRetry = useCallback(() => {
     txProgress.reset();
@@ -375,7 +375,7 @@ export default function UsernameScreen() {
     }
   };
 
-  const isButtonEnabled =
+const isButtonEnabled =
     status === "available" && inviteCode.trim().length > 0 && !isCreatingWallet && !isSettingUp && inviteStatus !== "checking";
 
   return (
