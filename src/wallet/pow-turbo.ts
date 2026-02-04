@@ -115,11 +115,11 @@ export async function computePoW(
       `[PoW Turbo] Found! nonce=${result.nonce}, attempts=${result.attempts}, time=${result.elapsedMs}ms, rate=${hashRate} h/s`
     );
 
-    return {
-      pow: result.nonce,
-      digest: hexToUint8Array(result.digest),
-      computeTimeMs: result.elapsedMs,
-      attempts: result.attempts,
+   return {
+     pow: result.nonce < 0 ? (result.nonce >>> 0) : result.nonce,
+     digest: hexToUint8Array(result.digest),
+     computeTimeMs: result.elapsedMs,
+     attempts: result.attempts,
     };
   } finally {
     if (progressInterval) {
