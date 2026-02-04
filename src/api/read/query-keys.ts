@@ -58,4 +58,7 @@ export const queryKeys = {
 
   // Peers
   peers: () => ["peers"] as const,
+
+  // Invite Code
+  inviteCode: (code: string) => ["inviteCode", code] as const,
 } as const;

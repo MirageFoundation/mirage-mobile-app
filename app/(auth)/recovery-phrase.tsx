@@ -9,6 +9,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { executeWithProgress, useTransactionProgress } from "@/src/hooks";
 import { walletService } from "@/src/services/wallet-service";
 import { useAuthStore } from "@/src/stores";
+import { apiClient } from "@/src/api/client";
 import { AntDesign, Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -18,7 +19,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 export default function RecoveryPhraseScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ username?: string }>();
+  const params = useLocalSearchParams<{ username?: string; inviteCode?: string }>();
   const { theme, rt } = useUnistyles();
   const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
@@ -159,6 +160,7 @@ export default function RecoveryPhraseScreen() {
 
       // Navigate to home (modal will auto-dismiss on success)
       setTimeout(() => {
+        apiClient.setBaseUrl("https://mirage.vote");
         txProgress.hideModal();
         router.dismissTo("/(tabs)");
       }, 1500);

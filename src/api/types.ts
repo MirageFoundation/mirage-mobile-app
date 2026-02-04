@@ -446,6 +446,17 @@ export interface ReferralStatsResponse {
 }
 
 // ============================================
+// Invite Code
+// ============================================
+
+export interface ValidateInviteCodeResponse {
+  valid: boolean;
+  code: string;
+  error?: "invalid_code" | "already_used" | "expired";
+  message?: string;
+}
+
+// ============================================
 // Peers
 // ============================================
 

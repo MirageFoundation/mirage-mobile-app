@@ -86,3 +86,6 @@ export {
 // Media Upload
 export { useUploadMedia, uploadImageAndGetUrl } from "./use-upload-media";
 export type { UploadMediaInput, UseUploadMediaOptions } from "./use-upload-media";
+
+// Invite Code
+export { useValidateInviteCode } from "./use-invite-code";

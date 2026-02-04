@@ -1,5 +1,6 @@
 import { useConfig } from "@/src/api/read/hooks/use-parameters";
 import { useUsernameAvailability } from "@/src/api/read/hooks/use-username-resolution";
+import { validateInviteCode } from "@/src/api/read/endpoints/users";
 import {
   Box,
   Button,
@@ -9,6 +10,7 @@ import {
 } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useAuthStore, useUIStore } from "@/src/stores";
+import { apiClient } from "@/src/api/client";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -18,12 +20,15 @@ import {
   Keyboard,
   Platform,
   Pressable,
+  ScrollView,
   View,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid";
+type InviteCodeStatus = "idle" | "checking" | "valid" | "invalid" | "used" | "expired";
 
 export default function UsernameScreen() {
   const router = useRouter();
@@ -37,14 +42,21 @@ export default function UsernameScreen() {
 
   const [username, setUsername] = useState("");
   const [status, setStatus] = useState<UsernameStatus>("idle");
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteStatus, setInviteStatus] = useState<InviteCodeStatus>("idle");
   const [createError, setCreateError] = useState<string | null>(null);
 
-  // Get config for username size limits
+  useEffect(() => {
+    apiClient.setBaseUrl("https://mirage.talk");
+    return () => {
+      apiClient.setBaseUrl("https://mirage.vote");
+    };
+  }, []);
+
   const { data: config } = useConfig();
   const minUsernameSize = config?.min_username_size ?? 3;
   const maxUsernameSize = config?.max_username_size ?? 20;
 
-  // Check username availability via API (checks both username and anon-username)
   const {
     data: usernameData,
     isLoading: isCheckingUsername,
@@ -53,10 +65,8 @@ export default function UsernameScreen() {
     username.length >= minUsernameSize ? username : null
   );
 
-  // Validate username format
   const validateUsername = useCallback(
     (value: string) => {
-      // Username rules: min-max chars, alphanumeric + hyphens (must match backend)
       if (value.length < minUsernameSize || value.length > maxUsernameSize) {
         return false;
       }
@@ -66,7 +76,6 @@ export default function UsernameScreen() {
     [minUsernameSize, maxUsernameSize]
   );
 
-  // Update status based on validation and API response
   useEffect(() => {
     if (username.length === 0) {
       setStatus("idle");
@@ -93,20 +102,48 @@ export default function UsernameScreen() {
   }, [username, validateUsername, isCheckingUsername, isFetched, usernameData]);
 
   const handleUsernameChange = useCallback((text: string) => {
-    // Only allow valid characters
     const sanitized = text.toLowerCase().replace(/[^a-z0-9-]/g, "");
     setUsername(sanitized);
     setCreateError(null);
   }, []);
 
+  const handleInviteCodeChange = useCallback((text: string) => {
+    setInviteCode(text);
+    setInviteStatus("idle");
+    setCreateError(null);
+  }, []);
+
   const handleContinue = useCallback(async () => {
     if (status !== "available") return;
+    if (!inviteCode.trim()) {
+      setInviteStatus("invalid");
+      setCreateError("Please enter an invite code");
+      triggerHaptic("error");
+      return;
+    }
 
     triggerHaptic("selection");
     Keyboard.dismiss();
 
+    setInviteStatus("checking");
+
     try {
-      // Create new wallet and get mnemonic
+      const result = await validateInviteCode({ code: inviteCode.trim() });
+
+      if (!result.valid) {
+        if (result.error === "already_used") {
+          setInviteStatus("used");
+        } else if (result.error === "expired") {
+          setInviteStatus("expired");
+        } else {
+          setInviteStatus("invalid");
+        }
+        triggerHaptic("error");
+        return;
+      }
+
+      setInviteStatus("valid");
+
       const mnemonic = await createNewWallet();
 
       if (!mnemonic) {
@@ -115,10 +152,9 @@ export default function UsernameScreen() {
 
       triggerHaptic("success");
 
-      // Navigate to recovery phrase screen with username
       router.push({
         pathname: "/(auth)/recovery-phrase",
-        params: { username },
+        params: { username, inviteCode: inviteCode.trim() },
       });
     } catch (error) {
       console.error("[Username] Failed to create wallet:", error);
@@ -134,15 +170,17 @@ export default function UsernameScreen() {
         setCreateError("An unexpected error occurred.");
       }
     }
-  }, [status, username, createNewWallet, router]);
+  }, [status, username, inviteCode, createNewWallet, router]);
 
   const handleClose = useCallback(() => {
     triggerHaptic("selection");
+    apiClient.setBaseUrl("https://mirage.vote");
     router.back();
   }, [router]);
 
   const handleLogin = useCallback(() => {
     triggerHaptic("selection");
+    apiClient.setBaseUrl("https://mirage.vote");
     router.replace("/(auth)/login");
   }, [router]);
 
@@ -153,7 +191,7 @@ export default function UsernameScreen() {
           <ActivityIndicator size="small" color={theme.colors.text.subtle} />
         );
       case "available":
-        return <Ionicons name="checkmark" size={20} color="rgb(47,105,35)" />;
+        return <Ionicons name="checkmark" size={20} color="rgb(34,197,94)" />;
       case "taken":
         return (
           <Ionicons
@@ -168,6 +206,29 @@ export default function UsernameScreen() {
             name="alert-circle"
             size={20}
             color={theme.colors.warning[500]}
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
+  const getInviteStatusIcon = () => {
+    switch (inviteStatus) {
+      case "checking":
+        return (
+          <ActivityIndicator size="small" color={theme.colors.text.subtle} />
+        );
+      case "valid":
+        return <Ionicons name="checkmark" size={20} color="rgb(34,197,94)" />;
+      case "used":
+      case "expired":
+      case "invalid":
+        return (
+          <Ionicons
+            name="close-circle"
+            size={20}
+            color={theme.colors.error[500]}
           />
         );
       default:
@@ -190,10 +251,27 @@ export default function UsernameScreen() {
     }
   }, [status, minUsernameSize, maxUsernameSize]);
 
+  const getInviteStatusMessage = useMemo(() => {
+    switch (inviteStatus) {
+      case "checking":
+        return "Validating invite code...";
+      case "valid":
+        return "Invite code accepted!";
+      case "used":
+        return "This invite code has already been used";
+      case "expired":
+        return "This invite code has expired";
+      case "invalid":
+        return "Invalid invite code";
+      default:
+        return "";
+    }
+  }, [inviteStatus]);
+
   const getStatusColor = () => {
     switch (status) {
       case "available":
-        return "rgb(47,105,35)";
+        return "rgb(34,197,94)";
       case "taken":
         return theme.colors.error[500];
       case "invalid":
@@ -203,113 +281,164 @@ export default function UsernameScreen() {
     }
   };
 
-  const isButtonEnabled = status === "available" && !isCreatingWallet;
+  const getInviteStatusColor = () => {
+    switch (inviteStatus) {
+      case "valid":
+        return "rgb(34,197,94)";
+      case "used":
+      case "expired":
+      case "invalid":
+        return theme.colors.error[500];
+      default:
+        return theme.colors.text.subtle;
+    }
+  };
+
+  const isButtonEnabled =
+    status === "available" && inviteCode.trim().length > 0 && !isCreatingWallet && inviteStatus !== "checking";
 
   return (
     <Box flex background="base">
-      {/* Header with close button */}
       <View style={[styles.header, { paddingTop: Platform.OS === "ios" ? 20 : insets.top }]}>
         <Pressable onPress={handleClose} style={styles.closeButton}>
           <EvilIcons name="close" size={36} color={theme.colors.text.default} />
         </Pressable>
       </View>
 
-      {/* Content */}
-      <View style={styles.content}>
-        {/* App Icon */}
-        <View style={styles.iconContainer}>
-          <Image
-            source={
-              isDark
-                ? require("@/assets/images/app-dark-icon.png")
-                : require("@/assets/images/app-icon.png")
-            }
-            style={styles.appIcon}
-            resizeMode="contain"
-          />
-        </View>
-
-        {/* Title */}
-        <View style={styles.titleContainer}>
-          <Text style={styles.titleText}>Hi new friend,</Text>
-          <Text style={styles.titleText}>welcome to Mirage</Text>
-        </View>
-
-        {/* Subtitle */}
-        <Text style={styles.subtitle}>Choose your username to get started</Text>
-
-        {/* Username input */}
-        <View style={styles.inputWrapper}>
-          <Input
-            value={username}
-            onChangeText={handleUsernameChange}
-            placeholder="Username"
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="username"
-            size="lg"
-            variant="filled"
-            style={styles.input}
-            maxLength={maxUsernameSize}
-            rightAccessory={
-              username.length > 0 ? (
-                <View style={styles.statusIcon}>{getStatusIcon()}</View>
-              ) : undefined
-            }
-          />
-        </View>
-
-        {/* Status message */}
-        <View style={styles.statusContainer}>
-          {status !== "idle" && (
-            <Text size="sm" style={{ color: getStatusColor() }}>
-              {getStatusMessage}
-            </Text>
-          )}
-          {createError && (
-            <Text size="sm" style={{ color: theme.colors.error[500] }}>
-              {createError}
-            </Text>
-          )}
-        </View>
-
-        {/* Continue button */}
-        <Button
-          size="lg"
-          rounded="full"
-          onPress={handleContinue}
-          disabled={!isButtonEnabled}
-          loading={isCreatingWallet}
-          style={[styles.continueButton]}
+      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+          showsVerticalScrollIndicator={false}
         >
-          <Button.Text weight="medium">
-            {isCreatingWallet ? "Creating wallet..." : "Continue"}
-          </Button.Text>
-        </Button>
+          <View style={styles.iconContainer}>
+            <Image
+              source={
+                isDark
+                  ? require("@/assets/images/app-dark-icon.png")
+                  : require("@/assets/images/app-icon.png")
+              }
+              style={styles.appIcon}
+              resizeMode="contain"
+            />
+          </View>
 
-        {/* Terms text */}
-        <Text style={styles.termsText}>
-          By continuing, you agree to our{" "}
-          <Text
-            weight="semibold"
-            style={styles.termsLink}
-            onPress={() => console.log("User Agreement")}
-          >
-            User Agreement
-          </Text>{" "}
-          and acknowledge that you understand the{" "}
-          <Text
-            weight="semibold"
-            style={styles.termsLink}
-            onPress={() => console.log("Privacy Policy")}
-          >
-            Privacy Policy
+          <View style={styles.titleContainer}>
+            <Text style={styles.titleText}>Hi new friend,</Text>
+            <Text style={styles.titleText}>welcome to Mirage</Text>
+          </View>
+
+          <Text style={styles.subtitle}>
+            Pick a username and enter your invite code to join
           </Text>
-          .
-        </Text>
-      </View>
 
-      {/* Footer */}
+          <View style={styles.inviteInputWrapper}>
+            <Input
+              value={inviteCode}
+              onChangeText={handleInviteCodeChange}
+              placeholder="XXXX-XXXX"
+              autoCapitalize="characters"
+              autoCorrect={false}
+              size="lg"
+              variant="filled"
+              style={styles.input}
+              rightAccessory={
+                inviteCode.length > 0 ? (
+                  <Pressable style={styles.statusIcon} onPress={() => { setInviteCode(""); setInviteStatus("idle"); }}>
+                    {inviteStatus !== "idle" ? getInviteStatusIcon() : (
+                      <Ionicons name="close-circle" size={20} color={theme.colors.text.subtle} />
+                    )}
+                  </Pressable>
+                ) : undefined
+              }
+            />
+          </View>
+
+          <View style={[styles.statusContainer, { marginBottom: theme.spacing.sm }]}>
+            {inviteStatus !== "idle" ? (
+              <Text size="sm" style={{ color: getInviteStatusColor() }}>
+                {getInviteStatusMessage}
+              </Text>
+            ) : (
+              <Text size="sm" style={{ color: theme.colors.text.subtle, opacity: 0.6 }}>
+                Enter a invite code
+              </Text>
+            )}
+          </View>
+
+          <View style={styles.inputWrapper}>
+            <Input
+              value={username}
+              onChangeText={handleUsernameChange}
+              placeholder="Choose a username"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="username"
+              size="lg"
+              variant="filled"
+              style={styles.input}
+              maxLength={maxUsernameSize}
+              rightAccessory={
+                username.length > 0 ? (
+                  <View style={styles.statusIcon}>{getStatusIcon()}</View>
+                ) : undefined
+              }
+            />
+          </View>
+
+          <View style={styles.statusContainer}>
+            {status !== "idle" ? (
+              <Text size="sm" style={{ color: getStatusColor() }}>
+                {getStatusMessage}
+              </Text>
+            ) : (
+              <Text size="sm" style={{ color: theme.colors.text.subtle, opacity: 0.6 }}>
+                This is how people will find you on Mirage
+              </Text>
+            )}
+            {createError && (
+              <Text size="sm" style={{ color: theme.colors.error[500] }}>
+                {createError}
+              </Text>
+            )}
+          </View>
+
+          <Button
+            size="lg"
+            rounded="full"
+            onPress={handleContinue}
+            disabled={!isButtonEnabled}
+            loading={isCreatingWallet || inviteStatus === "checking"}
+            style={[styles.continueButton]}
+          >
+            <Button.Text weight="medium">
+              {inviteStatus === "checking" ? "Validating code..." : isCreatingWallet ? "Creating wallet..." : "Continue"}
+            </Button.Text>
+          </Button>
+
+          <Text style={styles.termsText}>
+            By continuing, you agree to our{" "}
+            <Text
+              weight="semibold"
+              style={styles.termsLink}
+              onPress={() => console.log("User Agreement")}
+            >
+              User Agreement
+            </Text>{" "}
+            and acknowledge that you understand the{" "}
+            <Text
+              weight="semibold"
+              style={styles.termsLink}
+              onPress={() => console.log("Privacy Policy")}
+            >
+              Privacy Policy
+            </Text>
+            .
+          </Text>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <Divider size="extraThin" />
         <Pressable onPress={handleLogin} style={styles.loginLink}>
@@ -333,7 +462,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: theme.spacing.lg,
     justifyContent: "center",
   },
@@ -364,6 +493,10 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.neutral[600],
   },
   inputWrapper: {
+    marginBottom: theme.spacing.xs,
+  },
+  inviteInputWrapper: {
+    marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.xs,
   },
   input: {

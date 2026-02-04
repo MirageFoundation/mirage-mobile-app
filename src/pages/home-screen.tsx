@@ -112,13 +112,7 @@ export function HomeScreen() {
  const currentUser = useAuthStore((s) => s.user);
  const logout = useAuthStore((s) => s.logout);
  const isInitializing = useAuthStore((s) => s.isInitializing);
-  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
-
-  // Network state for video autoplay
-
-  if (!isLoggedIn && !isInitializing) {
-    return <LoggedOutHome />;
-  }
+ const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
 
   const { networkType } = useNetworkState();
 
@@ -1067,6 +1061,10 @@ useEffect(() => {
   onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
 });
 }, [setHandlers]); // Only run once - setHandlers is stable
+
+  if (!isLoggedIn && !isInitializing) {
+    return <LoggedOutHome />;
+  }
 
   return (
     <Box flex background="base">
