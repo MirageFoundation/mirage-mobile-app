@@ -254,7 +254,8 @@ export interface TopicInfo {
   topic: string;
   post_count?: number;
   count?: number;
-  flags?: string[];
+  comment_count?: number;
+  flags?: Record<string, boolean>;
   dominant_tag?: string;
   dominant_ratio?: number;
 }

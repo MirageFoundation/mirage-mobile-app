@@ -288,6 +288,10 @@ export function HomeScreen() {
     router.push("/invite-and-earn");
   }, [router]);
 
+  const handleMenuTopics = useCallback(() => {
+    router.push("/topics");
+  }, [router]);
+
   const handleMenuHelp = useCallback(() => {
     Linking.openURL("https://mirage.foundation/faq");
   }, []);
@@ -1174,6 +1178,7 @@ useEffect(() => {
         onHistory={handleMenuHistory}
         onDrafts={handleMenuDrafts}
         onFollowing={handleMenuFollowing}
+        onTopics={handleMenuTopics}
         onInviteAndEarn={handleMenuInvite}
         onHelp={handleMenuHelp}
         onAbout={handleMenuAbout}

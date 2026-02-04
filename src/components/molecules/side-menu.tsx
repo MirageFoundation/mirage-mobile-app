@@ -38,6 +38,7 @@ type SideMenuProps = {
   onHistory?: () => void;
   onDrafts?: () => void;
   onFollowing?: () => void;
+  onTopics?: () => void;
   onInviteAndEarn?: () => void;
   onHelp?: () => void;
   onAbout?: () => void;
@@ -272,6 +273,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       onHistory,
       onDrafts,
       onFollowing,
+      onTopics,
       onInviteAndEarn,
       onHelp,
       onAbout,
@@ -518,6 +520,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     title="Invite & Earn"
                     subtitle="Get rewards"
                     onPress={createHandler(onInviteAndEarn)}
+                  />
+                  <MenuItem
+                    iconName="pricetags-outline"
+                    title="Topics"
+                    subtitle="Explore all topics"
+                    onPress={createHandler(onTopics)}
                   />
                   <SectionFooter />
 
