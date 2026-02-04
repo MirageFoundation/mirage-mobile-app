@@ -177,10 +177,10 @@ export const PostActions = memo(function PostActions({
     // Default native share behavior
     if (shareUrl) {
       try {
-    await Share.share({
+        await Share.share({
           message: `What do you think about this? 🗳️\n${shareUrl}`,
-      url: shareUrl,
-      title: shareTitle,
+          url: shareUrl,
+          title: shareTitle,
         });
       } catch {
         // User cancelled or share failed - silent fail
@@ -290,27 +290,29 @@ export const PostActions = memo(function PostActions({
         </Pressable>
       </View>
 
-      {!hideCommentAction && <View style={[styles.votePill, { height: pillHeight }]}>
-        <Pressable
-          onPress={() => {
-            if (disabled) return;
-            triggerHaptic("selection");
-            onCommentPress?.();
-          }}
-          disabled={disabled}
-          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-          style={[styles.voteButton, disabled && styles.disabled]}
-        >
-          <CommentIcon size={iconSize} color={defaultColor} />
-          <Text
-            size={voteTextSize}
-            weight="bold"
-            style={{ marginLeft: 10, color: defaultColor }}
+      {!hideCommentAction && (
+        <View style={[styles.votePill, { height: pillHeight }]}>
+          <Pressable
+            onPress={() => {
+              if (disabled) return;
+              triggerHaptic("selection");
+              onCommentPress?.();
+            }}
+            disabled={disabled}
+            hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+            style={[styles.voteButton, disabled && styles.disabled]}
           >
-            {formatCount(comments)}
-          </Text>
-        </Pressable>
-      </View>}
+            <CommentIcon size={iconSize} color={defaultColor} />
+            <Text
+              size={voteTextSize}
+              weight="bold"
+              style={{ marginLeft: 8, color: defaultColor, marginTop: -2 }}
+            >
+              {formatCount(comments)}
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
       {/* Spacer to push share to the right */}
       <View style={styles.spacer} />
