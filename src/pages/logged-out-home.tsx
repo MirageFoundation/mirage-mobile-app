@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useAppStats } from "@/src/api/read/hooks/use-stats";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   HEADER_HEIGHT,
   TAB_BAR_HEIGHT,
@@ -109,15 +110,19 @@ export function LoggedOutHome() {
             Have an invite code? Join the community today.
           </Text>
 
-          <View style={styles.buttonRow}>
+         <View style={styles.buttonRow}>
             <Pressable
-              style={[
-                styles.createButton,
-                { backgroundColor: theme.colors.brand[500] },
-              ]}
+              style={styles.createButton}
               onPress={() => router.push("/(auth)/username")}
             >
-              <Text style={styles.createButtonText}>Create Account</Text>
+              <LinearGradient
+                colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.createButtonGradient}
+              >
+                <Text style={styles.createButtonText}>Create Account</Text>
+              </LinearGradient>
             </Pressable>
 
             <Pressable
@@ -245,25 +250,29 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing.md,
     width: "100%",
   },
-  createButton: {
-    flex: 1,
-    paddingVertical: 16,
-    borderRadius: theme.radius.lg,
-    alignItems: "center",
-  },
-  createButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: "600",
-  },
-  signInButton: {
-    flex: 1,
-    paddingVertical: 16,
-    borderRadius: theme.radius.lg,
-    alignItems: "center",
-    borderWidth: 1,
-  },
+createButton: {
+ flex: 1,
+},
+createButtonGradient: {
+  height: 54,
+ alignItems: "center",
+  justifyContent: "center",
+  borderRadius: theme.radius.lg,
+},
+ createButtonText: {
+   color: "#FFFFFF",
+   fontSize: 16,
+   lineHeight: 22,
+   fontWeight: "600",
+ },
+ signInButton: {
+   flex: 1,
+    height: 54,
+   borderRadius: theme.radius.lg,
+   alignItems: "center",
+    justifyContent: "center",
+   borderWidth: 1,
+ },
   signInButtonText: {
     fontSize: 16,
     lineHeight: 22,
