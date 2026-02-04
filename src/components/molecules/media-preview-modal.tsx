@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
-import { memo, useCallback, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -61,12 +61,22 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
   }, [scale, savedScale, translateX, translateY, savedTranslateX, savedTranslateY]);
 
   const handleClose = useCallback(() => {
+    videoRef.current?.pauseAsync().catch(() => {});
     resetTransforms();
-    setIsVideoPlaying(true);
+    setIsVideoPlaying(false);
     setIsMuted(false);
     setIsLoading(true);
     onClose();
   }, [onClose, resetTransforms]);
+
+  useEffect(() => {
+    if (!visible) {
+      videoRef.current?.pauseAsync().catch(() => {});
+      setIsVideoPlaying(false);
+    } else {
+      setIsVideoPlaying(true);
+    }
+  }, [visible]);
 
   const handleVideoToggle = useCallback(async () => {
     if (!videoRef.current) return;

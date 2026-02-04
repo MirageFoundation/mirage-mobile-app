@@ -8,6 +8,7 @@ import { api } from "@/src/api/client";
 import type { MirageWallet } from "@/src/wallet";
 import { buildSignedEnvelope, canonBaseReport } from "../signing";
 import type { ReportResponse, PoWProgressCallback } from "../signing";
+import { withPowRetry } from "../utils/retry-pow";
 
 // ============================================
 // Types
@@ -42,15 +43,17 @@ export async function report(
     throw new Error("Report reason must be 200 characters or less");
   }
 
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBaseReport,
-    payloadFields: {
-      target,
-      reason,
-    },
-    onPoWProgress,
-  });
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseReport,
+      payloadFields: {
+        target,
+        reason,
+      },
+      onPoWProgress,
+    });
 
-  return api.post<ReportResponse>("/core/report", payload);
+    return api.post<ReportResponse>("/core/report", payload);
+  }, "report");
 }

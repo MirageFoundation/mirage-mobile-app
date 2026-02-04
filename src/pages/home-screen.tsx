@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FlatList } from "react-native";
@@ -420,6 +421,27 @@ export function HomeScreen() {
       blockHandler.requestBlockPost(selectedPost.id);
     }
   }, [selectedPost, blockHandler]);
+
+  const handleBlockUserFromCard = useCallback(
+    (postId: string, authorId: string, authorUsername: string) => {
+      blockHandler.requestBlockUser(authorId, authorUsername);
+    },
+    [blockHandler]
+  );
+
+  const handleBlockPostFromCard = useCallback(
+    (postId: string) => {
+      blockHandler.requestBlockPost(postId);
+    },
+    [blockHandler]
+  );
+
+  const handleReportFromCard = useCallback(
+    (postId: string) => {
+      reportHandler.requestReport(postId, "post");
+    },
+    [reportHandler]
+  );
 
   const handleDeletePost = useCallback(() => {
     if (selectedPost) {
@@ -917,6 +939,7 @@ export function HomeScreen() {
   const setHandlers = useHomePostCardStore((state) => state.setHandlers);
   const setShareServer = useHomePostCardStore((state) => state.setShareServer);
   const setAllowAutoplay = useHomePostCardStore((state) => state.setAllowAutoplay);
+  const setFeedActive = useHomePostCardStore((state) => state.setFeedActive);
 
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
   const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
@@ -955,52 +978,71 @@ export function HomeScreen() {
    setAllowAutoplay(allowAutoplay);
  }, [allowAutoplay, setAllowAutoplay]);
 
- // Store refs to latest handlers - these update without triggering re-renders
- const handlersRef = useRef({
-   handlePostPress,
-   handleAuthorPress,
-   handleMorePress,
-   handleUpvote,
-   handleDownvote,
-   handleCommentPress,
-   handleFollowPress,
-   handleFollowTopicFromCard,
-   handleRevealContent,
- });
+  useFocusEffect(
+    useCallback(() => {
+      setFeedActive(true);
+      return () => {
+        setFeedActive(false);
+      };
+    }, [setFeedActive])
+  );
 
- // Keep refs updated
- useEffect(() => {
-   handlersRef.current = {
-     handlePostPress,
-     handleAuthorPress,
-     handleMorePress,
-     handleUpvote,
-     handleDownvote,
-     handleCommentPress,
-     handleFollowPress,
-     handleFollowTopicFromCard,
-     handleRevealContent,
-   };
- });
+// Store refs to latest handlers - these update without triggering re-renders
+const handlersRef = useRef({
+  handlePostPress,
+  handleAuthorPress,
+  handleMorePress,
+  handleUpvote,
+  handleDownvote,
+  handleCommentPress,
+  handleFollowPress,
+  handleFollowTopicFromCard,
+  handleRevealContent,
+  handleBlockUserFromCard,
+  handleBlockPostFromCard,
+  handleReportFromCard,
+});
 
- // Set handlers ONCE on mount with stable wrapper functions that delegate to refs
- useEffect(() => {
-   setHandlers({
-     onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
-     onAuthorPress: (authorId) => handlersRef.current.handleAuthorPress(authorId),
-     onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
-     onLikePress: (postId, liked, disliked, likes) =>
-       handlersRef.current.handleUpvote(postId, liked, disliked, likes),
-     onDislikePress: (postId, liked, disliked, likes) =>
-     handlersRef.current.handleDownvote(postId, liked, disliked, likes),
-   onCommentPress: (postId) => handlersRef.current.handleCommentPress(postId),
-   onFollowUser: (authorId, username, isFollowing) =>
-     handlersRef.current.handleFollowPress(authorId, username, isFollowing),
-   onFollowTopic: (topic, isFollowed) =>
-     handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
-   onRevealContent: (postId) => handlersRef.current.handleRevealContent(postId),
- });
- }, [setHandlers]); // Only run once - setHandlers is stable
+// Keep refs updated
+useEffect(() => {
+  handlersRef.current = {
+    handlePostPress,
+    handleAuthorPress,
+    handleMorePress,
+    handleUpvote,
+    handleDownvote,
+    handleCommentPress,
+    handleFollowPress,
+    handleFollowTopicFromCard,
+    handleRevealContent,
+    handleBlockUserFromCard,
+    handleBlockPostFromCard,
+    handleReportFromCard,
+  };
+});
+
+// Set handlers ONCE on mount with stable wrapper functions that delegate to refs
+useEffect(() => {
+  setHandlers({
+    onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
+    onAuthorPress: (authorId) => handlersRef.current.handleAuthorPress(authorId),
+    onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
+    onLikePress: (postId, liked, disliked, likes) =>
+      handlersRef.current.handleUpvote(postId, liked, disliked, likes),
+    onDislikePress: (postId, liked, disliked, likes) =>
+    handlersRef.current.handleDownvote(postId, liked, disliked, likes),
+  onCommentPress: (postId) => handlersRef.current.handleCommentPress(postId),
+  onFollowUser: (authorId, username, isFollowing) =>
+    handlersRef.current.handleFollowPress(authorId, username, isFollowing),
+  onFollowTopic: (topic, isFollowed) =>
+    handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
+  onRevealContent: (postId) => handlersRef.current.handleRevealContent(postId),
+  onBlockUser: (postId, authorId, authorUsername) =>
+    handlersRef.current.handleBlockUserFromCard(postId, authorId, authorUsername),
+  onBlockPost: (postId) => handlersRef.current.handleBlockPostFromCard(postId),
+  onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
+});
+}, [setHandlers]); // Only run once - setHandlers is stable
 
   return (
     <Box flex background="base">

@@ -1,7 +1,13 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { Text } from "@/src/components/ui/primitives";
 import { logPress } from "@/src/utils/press-logger";
 import { memo, useCallback, useMemo, useState } from "react";
-import { Linking, Pressable, type StyleProp, type ViewStyle } from "react-native";
+import {
+  Linking,
+  Pressable,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 
 import { MediaPreviewModal } from "./media-preview-modal";
@@ -24,6 +30,8 @@ type PostCardProps = {
   isTopicFollowed?: boolean;
   /** Whether video autoplay is allowed based on user settings and network */
   allowAutoplay?: boolean;
+  /** Whether the screen/feed is active (for pausing videos) */
+  screenActive?: boolean;
   onPress?: () => void;
   onAuthorPress?: () => void;
   onFollowUser?: () => void;
@@ -33,6 +41,9 @@ type PostCardProps = {
   onDislikePress?: () => void;
   onCommentPress?: () => void;
   onSharePress?: () => void;
+  onBlockUser?: () => void;
+  onBlockPost?: () => void;
+  onReport?: () => void;
   onRevealContent?: () => void;
   contentRevealed?: boolean;
   shareUrl?: string;
@@ -43,7 +54,7 @@ type PostCardProps = {
 
 function arePostCardPropsEqual(
   prevProps: PostCardProps,
-  nextProps: PostCardProps
+  nextProps: PostCardProps,
 ): boolean {
   const prevPost = prevProps.post;
   const nextPost = nextProps.post;
@@ -61,6 +72,7 @@ function arePostCardPropsEqual(
   if (prevProps.showFollowButton !== nextProps.showFollowButton) return false;
   if (prevProps.isTopicFollowed !== nextProps.isTopicFollowed) return false;
   if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
+  if (prevProps.screenActive !== nextProps.screenActive) return false;
   if (prevProps.contentRevealed !== nextProps.contentRevealed) return false;
   if (prevProps.shareUrl !== nextProps.shareUrl) return false;
   if (prevProps.showUrlCard !== nextProps.showUrlCard) return false;
@@ -69,35 +81,39 @@ function arePostCardPropsEqual(
 }
 
 export const PostCard = memo(function PostCard({
- post,
- isOwnPost = false,
- isVisible = false,
- showFollowButton = true,
- isTopicFollowed = false,
- allowAutoplay = true,
- onPress,
- onAuthorPress,
- onFollowUser,
- onFollowTopic,
- onMorePress,
- onLikePress,
- onDislikePress,
- onCommentPress,
- onSharePress,
- onRevealContent,
- contentRevealed = false,
- shareUrl,
- showUrlCard = true,
- style,
+  post,
+  isOwnPost = false,
+  isVisible = false,
+  showFollowButton = true,
+  isTopicFollowed = false,
+  allowAutoplay = true,
+  screenActive = true,
+  onPress,
+  onAuthorPress,
+  onFollowUser,
+  onFollowTopic,
+  onMorePress,
+  onLikePress,
+  onDislikePress,
+  onCommentPress,
+  onSharePress,
+  onBlockUser,
+  onBlockPost,
+  onReport,
+  onRevealContent,
+  contentRevealed = false,
+  shareUrl,
+  showUrlCard = true,
+  style,
 }: PostCardProps) {
- if (__DEV__) {
-   console.log("[render] post_card", post.id);
- }
- const {
-   author,
-   title,
-   body,
-   media,
+  if (__DEV__) {
+    //  console.log("[render] post_card", post.id);
+  }
+  const {
+    author,
+    title,
+    body,
+    media,
     contentWarnings,
     likes,
     dislikes,
@@ -113,7 +129,7 @@ export const PostCard = memo(function PostCard({
 
   const resolvedContent = useMemo(
     () => resolvePostContent(body, media),
-    [body, media]
+    [body, media],
   );
 
   const handlePress = useCallback(() => {
@@ -156,7 +172,6 @@ export const PostCard = memo(function PostCard({
 
       <PostCardContent
         title={title}
-        bodyWithoutUrl={resolvedContent.bodyWithoutUrl}
         extractedUrl={resolvedContent.extractedUrl}
         displayDomain={resolvedContent.displayDomain}
         bodyVideoUrl={resolvedContent.bodyVideoUrl}
@@ -174,9 +189,16 @@ export const PostCard = memo(function PostCard({
         hasMultipleMedia={resolvedContent.hasMultipleMedia}
         extraMediaCount={resolvedContent.extraMediaCount}
         allowAutoplay={allowAutoplay}
+        screenActive={screenActive && !showMediaPreview}
         onRevealContent={onRevealContent}
         onMediaPress={handleMediaPress}
       />
+
+      {resolvedContent.bodyWithoutUrl && !shouldBlurContent && (
+        <Text size="md" style={styles.body}>
+          {resolvedContent.bodyWithoutUrl}
+        </Text>
+      )}
 
       <PostActions
         likes={likes}
@@ -190,13 +212,18 @@ export const PostCard = memo(function PostCard({
         onSharePress={onSharePress}
         shareUrl={shareUrl}
         shareTitle={title}
+        isOwnPost={isOwnPost}
+        authorUsername={author.username}
+        onBlockUser={onBlockUser}
+        onBlockPost={onBlockPost}
+        onReport={onReport}
         style={styles.actions}
       />
 
       <MediaPreviewModal
         visible={showMediaPreview}
         media={resolvedContent.resolvedMedia ?? null}
-      onClose={handleCloseMediaPreview}
+        onClose={handleCloseMediaPreview}
       />
     </Pressable>
   );
@@ -212,5 +239,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   actions: {
     marginTop: theme.spacing.sm,
+  },
+  body: {
+    marginTop: theme.spacing.sm,
+    lineHeight: 18,
   },
 }));

@@ -226,11 +226,15 @@ export const useAuthStore = create<AuthState>()(
       /**
        * Import wallet from mnemonic
        */
-      importWallet: async (mnemonic: string) => {
-        set({ isCreatingWallet: true });
+     importWallet: async (mnemonic: string) => {
+       set({ isCreatingWallet: true });
 
-        try {
-          const metadata = await walletService.importWallet(mnemonic);
+       try {
+          if (await walletService.hasWallet()) {
+            await walletService.clearWallet();
+          }
+
+         const metadata = await walletService.importWallet(mnemonic);
 
           set({
             isLoggedIn: true,

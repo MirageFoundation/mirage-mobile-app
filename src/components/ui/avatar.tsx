@@ -1,8 +1,8 @@
-import { Image } from "expo-image";
-import type { ImageProps } from "expo-image";
 import { Box } from "@/components/ui/primitives/box";
-import { StyleSheet } from "react-native-unistyles";
+import type { ImageProps } from "expo-image";
+import { Image } from "expo-image";
 import { useMemo } from "react";
+import { StyleSheet } from "react-native-unistyles";
 
 interface AvatarProps extends ImageProps {
   size?: number;
@@ -30,7 +30,7 @@ export default function Avatar({
   const imgSource = useMemo(() => {
     if (source) return source;
     return {
-      url: `https://api.dicebear.com/7.x/bottts/svg?seed=${seed}`,
+      url: `https://api.dicebear.com/9.x/identicon/svg?seed=${seed}`,
     };
   }, [source, seed]);
 

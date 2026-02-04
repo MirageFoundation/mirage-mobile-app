@@ -97,12 +97,6 @@ const SHARE_APPS: ShareApp[] = [
     color: "#0088CC",
   },
   { id: "copy", iconName: "link", iconComponent: Feather, label: "Copy" },
-  {
-    id: "more",
-    iconName: "ellipsis-horizontal",
-    iconComponent: Ionicons,
-    label: "More",
-  },
 ];
 
 // Share app button component

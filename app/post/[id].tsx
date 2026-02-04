@@ -39,6 +39,7 @@ import {
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -85,6 +86,18 @@ export default function PostDetailScreen() {
   // State for highlighted comment (from URL param)
   const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(
     highlight || null
+  );
+
+  // Track if screen is focused (for pausing videos when navigating away)
+  const [screenActive, setScreenActive] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      setScreenActive(true);
+      return () => {
+        setScreenActive(false);
+      };
+    }, [])
   );
 
   // Track if component is still mounted (to avoid navigating back if user already left)
@@ -1267,6 +1280,7 @@ export default function PostDetailScreen() {
          post={displayPost}
          isOwnPost={currentUser?.id === displayPost.author.id}
          isTopicFollowed={displayPost?.topic ? followedTopics.includes(displayPost.topic) : false}
+         screenActive={screenActive}
          onLikePress={handleLikePost}
          onDislikePress={handleDislikePost}
          onFollowUser={handleFollowPost}
@@ -1295,6 +1309,7 @@ export default function PostDetailScreen() {
     revealedContent,
     isFollowLoading,
     id,
+    screenActive,
     theme.colors.background.subtle,
     handlePostHeaderLayout,
   ]);

@@ -15,41 +15,7 @@ import {
   canonBaseDelete,
 } from "../signing";
 import type { WriteResponse, PoWProgressCallback } from "../signing";
-
-// ============================================
-// Helpers
-// ============================================
-
-/**
- * Check if error is a stale/invalid block hash error
- */
-function isStaleBlockHashError(error: any): boolean {
-  const errorMessage = error?.response?.data?.error || error?.message || "";
-  return (
-    errorMessage.includes("invalid last_block_hash") ||
-    errorMessage.includes("stale")
-  );
-}
-
-/**
- * Execute a request with retry on stale block hash error
- */
-async function withStaleHashRetry<T>(
-  makeRequest: () => Promise<T>,
-  operationName: string
-): Promise<T> {
-  try {
-    return await makeRequest();
-  } catch (error: any) {
-    if (isStaleBlockHashError(error)) {
-      console.log(
-        `[${operationName}] Got stale block hash error, retrying with fresh parameters...`
-      );
-      return await makeRequest();
-    }
-    throw error;
-  }
-}
+import { withPowRetry } from "../utils/retry-pow";
 
 // ============================================
 // Types
@@ -113,20 +79,22 @@ export async function createPost(
 ): Promise<WriteResponse> {
   const { topic, title, content, tag = "" } = input;
 
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBasePost,
-    payloadFields: {
-      target: "", // Empty for new post
-      topic,
-      title,
-      content,
-      tag,
-    },
-    onPoWProgress,
-  });
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBasePost,
+      payloadFields: {
+        target: "",
+        topic,
+        title,
+        content,
+        tag,
+      },
+      onPoWProgress,
+    });
 
-  return api.post<WriteResponse>("/core/post", payload);
+    return api.post<WriteResponse>("/core/post", payload);
+  }, "createPost");
 }
 
 /**
@@ -139,20 +107,22 @@ export async function createComment(
 ): Promise<WriteResponse> {
   const { parentId, content, title = "", tag = "" } = input;
 
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBasePost,
-    payloadFields: {
-      target: parentId, // Parent txhash for comment
-      topic: "", // Empty for comments
-      title,
-      content,
-      tag,
-    },
-    onPoWProgress,
-  });
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBasePost,
+      payloadFields: {
+        target: parentId,
+        topic: "",
+        title,
+        content,
+        tag,
+      },
+      onPoWProgress,
+    });
 
-  return api.post<WriteResponse>("/core/post", payload);
+    return api.post<WriteResponse>("/core/post", payload);
+  }, "createComment");
 }
 
 /**
@@ -165,26 +135,27 @@ export async function editPost(
 ): Promise<WriteResponse> {
   const { postId, topic = "", title, content, tag = "", parentId = "" } = input;
 
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBaseEdit,
-    payloadFields: {
-      target: parentId, // Parent for comments, empty for posts
-      topic,
-      title,
-      content,
-      tag,
-      override: postId, // The post being edited
-    },
-    onPoWProgress,
-  });
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseEdit,
+      payloadFields: {
+        target: parentId,
+        topic,
+        title,
+        content,
+        tag,
+        override: postId,
+      },
+      onPoWProgress,
+    });
 
-  return api.post<WriteResponse>("/core/edit", payload);
+    return api.post<WriteResponse>("/core/edit", payload);
+  }, "editPost");
 }
 
 /**
  * Delete a post or comment
- * Includes retry logic for stale block hash errors
  */
 export async function deletePost(
   wallet: MirageWallet,
@@ -193,7 +164,7 @@ export async function deletePost(
 ): Promise<WriteResponse> {
   const { postId } = input;
 
-  const makeRequest = async () => {
+  return withPowRetry(async () => {
     const payload = await buildSignedEnvelope({
       wallet,
       baseBuilder: canonBaseDelete,
@@ -202,23 +173,7 @@ export async function deletePost(
       },
       onPoWProgress,
     });
-    return api.post<WriteResponse>("/core/delete_post", payload);
-  };
 
-  try {
-    return await makeRequest();
-  } catch (error: any) {
-    // Retry once if we get an invalid/stale block hash error
-    const errorMessage = error?.response?.data?.error || error?.message || "";
-    if (
-      errorMessage.includes("invalid last_block_hash") ||
-      errorMessage.includes("stale")
-    ) {
-      console.log(
-        "[deletePost] Got stale block hash error, retrying with fresh parameters..."
-      );
-      return await makeRequest();
-    }
-    throw error;
-  }
+    return api.post<WriteResponse>("/core/delete_post", payload);
+  }, "deletePost");
 }

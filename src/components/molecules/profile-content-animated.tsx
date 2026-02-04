@@ -1,12 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Animated as RNAnimated, View } from "react-native";
 import Animated, {
+  Easing,
   interpolate,
   SharedValue,
   useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
 } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 
@@ -16,16 +20,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 
 import { SCROLL_THRESHOLD } from "./profile-header";
 
-const TIER_NAMES: Record<number, string> = {
-  0: "Free",
-  1: "Basic",
-  2: "Pro",
-  3: "Premium",
-};
-
-const getTierName = (level: number): string => {
-  return TIER_NAMES[level] ?? "Free";
-};
+const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
 
 const formatAccountAge = (days: number): string => {
   const totalMinutes = days * 24 * 60;
@@ -68,7 +63,7 @@ const formatNumber = (num: number): string => {
   return num.toString();
 };
 
-type UserProfileContentProps = {
+type ProfileContentAnimatedProps = {
  username: string;
  avatarSeed?: string;
  avatarUrl?: string;
@@ -77,14 +72,13 @@ type UserProfileContentProps = {
  balance: number;
  reserve: number;
  accountAgeDays: number;
-  userLevel?: number;
  gradientColors: readonly string[];
  scrollY?: SharedValue<number>;
  onFollowersPress?: () => void;
  isLoading?: boolean;
 };
 
-export const UserProfileContent = ({
+export const ProfileContentAnimated = memo(function ProfileContentAnimated({
  username,
  avatarSeed,
  avatarUrl,
@@ -93,14 +87,39 @@ export const UserProfileContent = ({
  balance,
  reserve,
  accountAgeDays,
-  userLevel = 0,
-  gradientColors,
-  scrollY,
+ gradientColors,
+ scrollY,
  onFollowersPress,
  isLoading = false,
-}: UserProfileContentProps) => {
+}: ProfileContentAnimatedProps) {
   const [copied, setCopied] = useState(false);
   const walletScale = useRef(new RNAnimated.Value(1)).current;
+
+  const gradientAnimation = useSharedValue(0);
+
+  useEffect(() => {
+    gradientAnimation.value = withRepeat(
+      withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true
+    );
+  }, [gradientAnimation]);
+
+  const gradientAnimatedStyle = useAnimatedStyle(() => {
+    const translateY = interpolate(
+      gradientAnimation.value,
+      [0, 1],
+      [0, -20]
+    );
+    const scale = interpolate(
+      gradientAnimation.value,
+      [0, 0.5, 1],
+      [1, 1.05, 1]
+    );
+    return {
+      transform: [{ translateY }, { scale }],
+    };
+  });
 
   const truncatedAddress = useMemo(() => {
     if (!walletAddress) return "";
@@ -159,13 +178,19 @@ export const UserProfileContent = ({
     return { opacity };
   });
 
+  const gradientColorsArray = useMemo(
+    () => [...gradientColors] as [string, string, ...string[]],
+    [gradientColors]
+  );
+
   return (
-    <LinearGradient
-      colors={[...gradientColors] as [string, string, ...string[]]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.gradientContent}
-    >
+    <View style={styles.container}>
+      <AnimatedLinearGradient
+        colors={gradientColorsArray}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={[styles.gradientContent, gradientAnimatedStyle]}
+      />
       <Animated.View style={[styles.profileContentInner, contentFadeStyle]}>
         <Box px="md" pt="sm">
           <Avatar
@@ -188,35 +213,15 @@ export const UserProfileContent = ({
 
          <Pressable onPress={onFollowersPress}>
            <Box direction="row" alignItems="center" mt="xs">
-              <Box
-                direction="row"
-                center
-                gap="xs"
-                py="xs"
-                px="sm"
-                rounded="full"
-                style={styles.tierBadge}
-              >
-                <Icon
-                  icon={Ionicons}
-                  name="shield-checkmark"
-                  size={12}
-                  color="#FFFFFF"
-                />
-                <Text size="xs" weight="medium" style={styles.whiteText}>
-                  {getTierName(userLevel)} Tier
-                </Text>
-              </Box>
-             <Box style={styles.dot} />
              <Text size="sm" weight="bold" style={styles.whiteText}>
                {formatNumber(followersCount)}
              </Text>
-             <Text size="sm" style={styles.whiteText}>
-               {" "}
-               followers
-             </Text>
-           </Box>
-         </Pressable>
+              <Text size="sm" style={styles.whiteText}>
+                {" "}
+                followers
+              </Text>
+            </Box>
+          </Pressable>
 
           <RNAnimated.View
             style={[
@@ -317,39 +322,33 @@ export const UserProfileContent = ({
           </Box>
         </Box>
       </Animated.View>
-    </LinearGradient>
+    </View>
   );
-};
+});
 
 const styles = StyleSheet.create((theme) => ({
-  gradientContent: {
+  container: {
     width: "100%",
+    overflow: "hidden",
+  },
+  gradientContent: {
+    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "120%",
+  },
+  profileContentInner: {
     paddingBottom: theme.spacing.lg,
   },
-  profileContentInner: {},
  whiteText: {
    color: "#FFFFFF",
  },
-  tierBadge: {
-    backgroundColor: "rgba(255,255,255,0.15)",
-  },
  usernameContentSkeleton: {
-    width: 120,
-    height: 24,
-    borderRadius: 4,
-    backgroundColor: "rgba(255,255,255,0.2)",
-  },
-  subtleWhiteText: {
-    color: "rgba(255,255,255,0.7)",
-  },
-  dot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: "rgba(255,255,255,0.5)",
-    marginHorizontal: theme.spacing.xs,
-  },
-  walletAnimatedContainer: {
+   width: 120,
+   height: 24,
+   borderRadius: 4,
+   backgroundColor: "rgba(255,255,255,0.2)",
+ },
+ walletAnimatedContainer: {
     alignSelf: "flex-start",
     marginTop: theme.spacing.sm,
   },

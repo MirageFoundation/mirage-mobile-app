@@ -1,3 +1,4 @@
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FlatList } from "react-native";
@@ -375,6 +376,27 @@ export function FollowingScreen() {
     }
   }, [selectedPost, blockHandler]);
 
+  const handleBlockUserFromCard = useCallback(
+    (postId: string, authorId: string, authorUsername: string) => {
+      blockHandler.requestBlockUser(authorId, authorUsername);
+    },
+    [blockHandler]
+  );
+
+  const handleBlockPostFromCard = useCallback(
+    (postId: string) => {
+      blockHandler.requestBlockPost(postId);
+    },
+    [blockHandler]
+  );
+
+  const handleReportFromCard = useCallback(
+    (postId: string) => {
+      reportHandler.requestReport(postId, "post");
+    },
+    [reportHandler]
+  );
+
   const handleDeletePost = useCallback(() => {
     if (selectedPost) {
       deleteHandler.requestDelete(selectedPost.id, "post");
@@ -665,6 +687,7 @@ export function FollowingScreen() {
   const setRevealedPostsStore = useHomePostCardStore((state) => state.setRevealedPosts);
   const setHandlers = useHomePostCardStore((state) => state.setHandlers);
   const setShareServer = useHomePostCardStore((state) => state.setShareServer);
+  const setFeedActive = useHomePostCardStore((state) => state.setFeedActive);
 
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
   const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
@@ -693,6 +716,15 @@ export function FollowingScreen() {
     setShareServer(shareServer);
   }, [shareServer, setShareServer]);
 
+  useFocusEffect(
+    useCallback(() => {
+      setFeedActive(true);
+      return () => {
+        setFeedActive(false);
+      };
+    }, [setFeedActive])
+  );
+
   // Store refs to latest handlers
   const handlersRef = useRef({
     handlePostPress,
@@ -704,6 +736,9 @@ export function FollowingScreen() {
     handleFollowPress,
     handleFollowTopicFromCard,
     handleRevealContent,
+    handleBlockUserFromCard,
+    handleBlockPostFromCard,
+    handleReportFromCard,
   });
 
   useEffect(() => {
@@ -717,6 +752,9 @@ export function FollowingScreen() {
       handleFollowPress,
       handleFollowTopicFromCard,
       handleRevealContent,
+      handleBlockUserFromCard,
+      handleBlockPostFromCard,
+      handleReportFromCard,
     };
   });
 
@@ -736,6 +774,10 @@ export function FollowingScreen() {
       onFollowTopic: (topic, isFollowed) =>
         handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
       onRevealContent: (postId) => handlersRef.current.handleRevealContent(postId),
+      onBlockUser: (postId, authorId, authorUsername) =>
+        handlersRef.current.handleBlockUserFromCard(postId, authorId, authorUsername),
+      onBlockPost: (postId) => handlersRef.current.handleBlockPostFromCard(postId),
+      onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
     });
   }, [setHandlers]);
 

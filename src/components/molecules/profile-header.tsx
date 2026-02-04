@@ -1,3 +1,4 @@
+const PROFILE_GRADIENT_COLORS: readonly string[] = ["rgb(102, 126, 234)", "rgb(118, 75, 162)", "#000000"];
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
@@ -22,18 +23,6 @@ import { Avatar, IconButton } from "@/src/components/atoms";
 import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
-const GRADIENT_COLORS = [
-  "#E85429",
-  "#8B5CF6",
-  "#3B82F6",
-  "#10B981",
-  "#F59E0B",
-  "#EF4444",
-  "#EC4899",
-  "#6366F1",
-  "#14B8A6",
-  "#F97316",
-];
 
 export const PROFILE_CONTENT_HEIGHT = 280;
 export const SCROLL_THRESHOLD = PROFILE_CONTENT_HEIGHT;
@@ -50,31 +39,34 @@ const getTierName = (level: number): string => {
 };
 
 type ProfileHeaderBarProps = {
-  username: string;
-  userLevel?: number;
-  gradientColor: string;
-  scrollY?: SharedValue<number>;
-  isRefreshing?: boolean;
-  isLoading?: boolean;
-  onBackPress?: () => void;
-  onSharePress?: () => void;
-  onMenuPress?: () => void;
+username: string;
+userLevel?: number;
+gradientColors: readonly string[];
+scrollY?: SharedValue<number>;
+isRefreshing?: boolean;
+isLoading?: boolean;
+ isOwnProfile?: boolean;
+ isFollowing?: boolean;
+onBackPress?: () => void;
+ onFollowPress?: () => void;
+ onUnfollowPress?: () => void;
+onMenuPress?: () => void;
 };
 
 type ProfileContentProps = {
- username: string;
- avatarSeed?: string;
- avatarUrl?: string;
- walletAddress: string;
- followersCount: number;
- balance: number;
- reserve: number;
- accountAgeDays: number;
+  username: string;
+  avatarSeed?: string;
+  avatarUrl?: string;
+  walletAddress: string;
+  followersCount: number;
+  balance: number;
+  reserve: number;
+  accountAgeDays: number;
   userLevel?: number;
- gradientColor: string;
- scrollY?: SharedValue<number>;
- onFollowersPress?: () => void;
- isLoading?: boolean;
+  gradientColors: readonly string[];
+  scrollY?: SharedValue<number>;
+  onFollowersPress?: () => void;
+  isLoading?: boolean;
 };
 
 type ProfileHeaderProps = ProfileHeaderBarProps & ProfileContentProps;
@@ -120,35 +112,33 @@ const formatNumber = (num: number): string => {
   return num.toString();
 };
 
-export const getGradientColor = (username: string): string => {
-  if (!username) return GRADIENT_COLORS[0];
-  let hash = 0;
-  for (let i = 0; i < username.length; i++) {
-    hash = username.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return GRADIENT_COLORS[Math.abs(hash) % GRADIENT_COLORS.length];
+export const getGradientColor = (_username?: string): readonly string[] => {
+  return PROFILE_GRADIENT_COLORS;
 };
 
 export const ProfileHeaderBar = ({
-  username,
-  userLevel = 0,
-  gradientColor,
-  scrollY,
-  isRefreshing = false,
-  isLoading = false,
-  onBackPress,
-  onSharePress,
-  onMenuPress,
+username,
+userLevel = 0,
+gradientColors,
+scrollY,
+isRefreshing = false,
+isLoading = false,
+ isOwnProfile = false,
+ isFollowing = false,
+onBackPress,
+ onFollowPress,
+  onUnfollowPress,
+ onMenuPress,
 }: ProfileHeaderBarProps) => {
   const insets = useSafeAreaInsets();
 
   const headerBgStyle = useAnimatedStyle(() => {
-    if (!scrollY) return { backgroundColor: gradientColor };
+    if (!scrollY) return { backgroundColor: gradientColors[0] };
 
     const backgroundColor = interpolateColor(
       scrollY.value,
       [0, SCROLL_THRESHOLD * 0.3, SCROLL_THRESHOLD * 0.7, SCROLL_THRESHOLD],
-      [gradientColor, gradientColor, "#000000", "#000000"],
+      [gradientColors[0], gradientColors[0], "#000000", "#000000"],
     );
 
     return { backgroundColor };
@@ -197,18 +187,36 @@ export const ProfileHeaderBar = ({
           </Box>
         </Box>
 
-        <Box direction="row" center gap="xs">
-          {isRefreshing && (
-            <View style={styles.refreshIndicator}>
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            </View>
-          )}
-          <Pressable onPress={onSharePress} style={styles.shareButton}>
-            <ShareIcon size={18} color="#FFFFFF" />
-          </Pressable>
-          <IconButton
-            name="ellipsis-horizontal"
-            size="md"
+       <Box direction="row" center gap="xs">
+         {isRefreshing && (
+           <View style={styles.refreshIndicator}>
+             <ActivityIndicator size="small" color="#FFFFFF" />
+           </View>
+         )}
+       {!isOwnProfile && (
+          <Pressable
+             onPress={() => {
+               triggerHaptic("selection");
+               if (isFollowing) {
+                 onUnfollowPress?.();
+               } else {
+                 onFollowPress?.();
+               }
+             }}
+             style={styles.followButton}
+           >
+              <Text
+                size="sm"
+                weight="semibold"
+                style={styles.followButtonText}
+              >
+                {isFollowing ? "Following" : "Follow"}
+              </Text>
+           </Pressable>
+         )}
+         <IconButton
+           name="ellipsis-horizontal"
+           size="md"
             color="#FFFFFF"
             onPress={onMenuPress}
             style={styles.iconButton}
@@ -220,19 +228,19 @@ export const ProfileHeaderBar = ({
 };
 
 export const ProfileContent = ({
- username,
- avatarSeed,
- avatarUrl,
- walletAddress,
- followersCount,
- balance,
- reserve,
- accountAgeDays,
+  username,
+  avatarSeed,
+  avatarUrl,
+  walletAddress,
+  followersCount,
+  balance,
+  reserve,
+  accountAgeDays,
   userLevel = 0,
- gradientColor,
- scrollY,
- onFollowersPress,
- isLoading = false,
+  gradientColors,
+  scrollY,
+  onFollowersPress,
+  isLoading = false,
 }: ProfileContentProps) => {
   const [copied, setCopied] = useState(false);
   const walletScale = useRef(new RNAnimated.Value(1)).current;
@@ -296,7 +304,7 @@ export const ProfileContent = ({
 
   return (
     <LinearGradient
-      colors={[gradientColor, "#000000"]}
+      colors={[...gradientColors] as [string, string, ...string[]]}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.gradientContent}
@@ -321,8 +329,8 @@ export const ProfileContent = ({
             )}
           </Box>
 
-         <Pressable onPress={onFollowersPress}>
-           <Box direction="row" alignItems="center" mt="xs">
+          <Pressable onPress={onFollowersPress}>
+            <Box direction="row" alignItems="center" mt="xs">
               <Box
                 direction="row"
                 center
@@ -342,16 +350,16 @@ export const ProfileContent = ({
                   {getTierName(userLevel)} Tier
                 </Text>
               </Box>
-             <Box style={styles.dot} />
-             <Text size="sm" weight="bold" style={styles.whiteText}>
-               {formatNumber(followersCount)}
-             </Text>
-             <Text size="sm" style={styles.whiteText}>
-               {" "}
-               followers
-             </Text>
-           </Box>
-         </Pressable>
+              <Box style={styles.dot} />
+              <Text size="sm" weight="bold" style={styles.whiteText}>
+                {formatNumber(followersCount)}
+              </Text>
+              <Text size="sm" style={styles.whiteText}>
+                {" "}
+                followers
+              </Text>
+            </Box>
+          </Pressable>
 
           <RNAnimated.View
             style={[
@@ -457,22 +465,19 @@ export const ProfileContent = ({
 };
 
 export const ProfileHeader = ({
-  username,
-  avatarSeed,
-  avatarUrl,
-  walletAddress,
-  followersCount,
-  balance,
-  reserve,
-  accountAgeDays,
-  userLevel,
-  scrollY,
-  onBackPress,
-  onSharePress,
-  onMenuPress,
-  onFollowersPress,
+ username,
+ avatarSeed,
+ avatarUrl,
+ walletAddress,
+ followersCount,
+ balance,
+ reserve,
+ accountAgeDays,
+ userLevel,
+ scrollY,
+ onFollowersPress,
 }: ProfileHeaderProps) => {
-  const gradientColor = useMemo(() => getGradientColor(username), [username]);
+  const gradientColors = useMemo(() => getGradientColor(username), [username]);
 
   return (
     <View style={styles.container}>
@@ -485,7 +490,7 @@ export const ProfileHeader = ({
         balance={balance}
         reserve={reserve}
         accountAgeDays={accountAgeDays}
-        gradientColor={gradientColor}
+        gradientColors={gradientColors}
         scrollY={scrollY}
         onFollowersPress={onFollowersPress}
       />
@@ -516,15 +521,27 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "rgba(0,0,0,0.3)",
     borderRadius: theme.radius.full,
   },
-  shareButton: {
-    width: 40,
-    height: 40,
-    borderRadius: theme.radius.full,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  refreshIndicator: {
+ shareButton: {
+   width: 40,
+   height: 40,
+   borderRadius: theme.radius.full,
+   backgroundColor: "rgba(0,0,0,0.3)",
+   alignItems: "center",
+   justifyContent: "center",
+ },
+followButton: {
+  height: 32,
+  paddingHorizontal: 16,
+  borderRadius: theme.radius.full,
+   backgroundColor: "rgba(0,0,0,0.3)",
+  alignItems: "center",
+  justifyContent: "center",
+  minWidth: 80,
+},
+followButtonText: {
+ color: "#FFFFFF",
+},
+refreshIndicator: {
     width: 32,
     height: 32,
     borderRadius: theme.radius.full,
@@ -548,13 +565,13 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: 4,
     backgroundColor: "rgba(255,255,255,0.2)",
   },
- whiteText: {
-   color: "#FFFFFF",
- },
+  whiteText: {
+    color: "#FFFFFF",
+  },
   tierBadge: {
     backgroundColor: "rgba(255,255,255,0.15)",
   },
- subtleWhiteText: {
+  subtleWhiteText: {
     color: "rgba(255,255,255,0.7)",
   },
   dot: {

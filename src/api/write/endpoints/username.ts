@@ -8,6 +8,7 @@ import { api } from "@/src/api/client";
 import type { MirageWallet } from "@/src/wallet";
 import { buildSignedEnvelope, canonBaseSetUsername } from "../signing";
 import type { WriteResponse, PoWProgressCallback } from "../signing";
+import { withPowRetry } from "../utils/retry-pow";
 
 // ============================================
 // Types
@@ -45,20 +46,19 @@ export async function setUsername(
 ): Promise<WriteResponse> {
   const { username, referrer } = input;
 
-  // Build signed envelope
-  const payload = await buildSignedEnvelope({
-    wallet,
-    baseBuilder: canonBaseSetUsername,
-    payloadFields: {
-      target: wallet.address,
-      username,
-    },
-    onPoWProgress,
-  });
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseSetUsername,
+      payloadFields: {
+        target: wallet.address,
+        username,
+      },
+      onPoWProgress,
+    });
 
-  // Add referrer if provided (not part of signed payload)
-  const body = referrer ? { ...payload, referrer } : payload;
+    const body = referrer ? { ...payload, referrer } : payload;
 
-  // Submit to API
-  return api.post<WriteResponse>("/core/set_username", body);
+    return api.post<WriteResponse>("/core/set_username", body);
+  }, "setUsername");
 }

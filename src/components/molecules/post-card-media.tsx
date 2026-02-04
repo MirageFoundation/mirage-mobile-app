@@ -4,9 +4,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   Platform,
   Pressable,
   View,
@@ -14,6 +15,14 @@ import {
 } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import type { ResolvedMedia } from "./post-card-utils";
+
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const MEDIA_MAX_HEIGHT = 450;
+const MEDIA_HORIZONTAL_PADDING = 32; // md padding * 2
+
+export type PostCardMediaRef = {
+  pauseVideo: () => void;
+};
 
 type PostCardMediaProps = {
   media?: ResolvedMedia;
@@ -23,6 +32,8 @@ type PostCardMediaProps = {
   extraMediaCount: number;
   /** Whether video autoplay is allowed based on user settings and network */
   allowAutoplay?: boolean;
+  /** Whether the screen/feed is active (for pausing videos when navigating away) */
+  screenActive?: boolean;
   onRevealContent?: () => void;
   /** Called when media is pressed (for opening preview) */
   onMediaPress?: () => void;
@@ -39,16 +50,17 @@ function getMediaAspectRatio(media?: ResolvedMedia): number {
   return 16 / 9;
 }
 
-export const PostCardMedia = memo(function PostCardMedia({
+export const PostCardMedia = memo(forwardRef<PostCardMediaRef, PostCardMediaProps>(function PostCardMedia({
   media,
   isVisible,
   shouldBlurContent,
   hasMultipleMedia,
   extraMediaCount,
   allowAutoplay = true,
+  screenActive = true,
   onRevealContent,
   onMediaPress,
-}: PostCardMediaProps) {
+}, ref) {
   const [imageError, setImageError] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isVideoLoading, setIsVideoLoading] = useState(false);
@@ -58,6 +70,17 @@ export const PostCardMedia = memo(function PostCardMedia({
   const aspectRatioLockedRef = useRef(false);
   // Track if user manually initiated playback (vs autoplay)
   const userInitiatedPlayRef = useRef(false);
+
+  useImperativeHandle(ref, () => ({
+    pauseVideo: () => {
+      if (videoRef.current) {
+        videoRef.current.pauseAsync().catch(() => {});
+        setIsVideoPlaying(false);
+        setIsVideoLoading(false);
+        userInitiatedPlayRef.current = false;
+      }
+    },
+  }));
 
   const resolvedMediaUri = media?.uri;
   const cachedAspectRatio = resolvedMediaUri
@@ -93,20 +116,25 @@ export const PostCardMedia = memo(function PostCardMedia({
       return;
     }
 
-    // Only auto-play if allowed by settings and visible
-    if (isVisible && allowAutoplay) {
+    // Only auto-play if allowed by settings, visible, and screen is active
+    if (isVisible && allowAutoplay && screenActive) {
       // Autoplay - no loading indicator, just play silently in background
       setIsVideoPlaying(true);
-    } else if (!isVisible) {
-      // Pause when not visible regardless of autoplay setting
+    } else if (!isVisible || !screenActive) {
+      // Pause when not visible or screen not active
       setIsVideoPlaying(false);
       setIsVideoLoading(false);
       userInitiatedPlayRef.current = false;
       videoRef.current?.pauseAsync().catch(() => {});
+   }
+ }, [media?.type, shouldBlurContent, isVisible, allowAutoplay, screenActive, resolvedMediaUri]);
+
+  // Apply mute state changes to video
+  useEffect(() => {
+    if (videoRef.current && media?.type === "video") {
+      videoRef.current.setStatusAsync({ isMuted }).catch(() => {});
     }
-    // Note: If allowAutoplay changes to false while playing, we don't stop
-    // the video - we just prevent future auto-plays
-  }, [media?.type, shouldBlurContent, isVisible, allowAutoplay, resolvedMediaUri]);
+  }, [isMuted, media?.type]);
 
   const updateMediaAspectRatioFromSize = useCallback(
     (width?: number, height?: number) => {
@@ -195,12 +223,28 @@ export const PostCardMedia = memo(function PostCardMedia({
   );
 
   const handleMuteToggle = useCallback(
-    (event: GestureResponderEvent) => {
+    async (event: GestureResponderEvent) => {
       event.stopPropagation?.();
       triggerHaptic("light");
-      setIsMuted((prev) => !prev);
+      const newMutedState = !isMuted;
+      setIsMuted(newMutedState);
+      
+      // When unmuting, we need to pause and resume to initialize audio
+      if (videoRef.current) {
+        try {
+          if (!newMutedState) {
+            // Unmuting: pause, set unmuted, then play to initialize audio
+            await videoRef.current.pauseAsync();
+            await videoRef.current.setStatusAsync({ isMuted: false });
+            await videoRef.current.playAsync();
+          } else {
+            // Muting: just set the status
+            await videoRef.current.setStatusAsync({ isMuted: true });
+          }
+        } catch {}
+      }
     },
-    []
+    [isMuted]
   );
 
   const handleMediaPress = useCallback(
@@ -219,6 +263,16 @@ export const PostCardMedia = memo(function PostCardMedia({
   // Don't hide cloudflarestream videos on error - they might be processing
   const isCloudflareVideo = media?.uri?.includes("cloudflarestream.com") || media?.uri?.includes("videodelivery.net");
   const shouldHideOnError = imageError && !isCloudflareVideo && !isVideoProcessing;
+
+  // Calculate if media would exceed max height - if so, use fixed height instead of aspect ratio
+  const containerWidth = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
+  const calculatedHeight = containerWidth / mediaAspectRatio;
+  const exceedsMaxHeight = calculatedHeight > MEDIA_MAX_HEIGHT;
+  
+  // When height exceeds max, use fixed height. Otherwise use aspect ratio for natural sizing
+  const mediaWrapperStyle = exceedsMaxHeight
+    ? { height: MEDIA_MAX_HEIGHT }
+    : { aspectRatio: mediaAspectRatio };
   
   if (!media || shouldHideOnError) return null;
 
@@ -228,50 +282,53 @@ export const PostCardMedia = memo(function PostCardMedia({
 
   return (
     <View style={styles.mediaContainer}>
-      <View style={[styles.mediaWrapper, { aspectRatio: mediaAspectRatio }]}>
+      <View style={[styles.mediaWrapper, mediaWrapperStyle]}>
         {media.type === "video" ? (
-          <Video
-            ref={videoRef}
-            source={mediaSource}
-            style={styles.media}
-            resizeMode={ResizeMode.COVER}
-            shouldPlay={isVideoPlaying}
-            isLooping={true}
-            isMuted={isMuted}
-            useNativeControls={false}
-            onLoad={(status) => {
-              if (!status.isLoaded) return;
-              const { width, height } = status.naturalSize ?? {};
-              updateMediaAspectRatioFromSize(width, height);
-            }}
-            onReadyForDisplay={(event) => {
-              const { width, height } = event.naturalSize ?? {};
-              updateMediaAspectRatioFromSize(width, height);
-              // Video is ready to display - hide loading if user initiated
-              if (userInitiatedPlayRef.current) {
+          <Pressable onPress={handleMediaPress} style={styles.media}>
+            <Video
+              ref={videoRef}
+              source={mediaSource}
+              style={styles.media}
+              resizeMode={ResizeMode.COVER}
+              shouldPlay={isVideoPlaying && screenActive}
+              isLooping={true}
+              isMuted={isMuted}
+              useNativeControls={false}
+             onLoad={() => {
+               // Ensure mute state is applied when video loads
+                videoRef.current?.setStatusAsync({ isMuted }).catch(() => {});
+             }}
+             onReadyForDisplay={(event) => {
+                const { width, height } = event.naturalSize ?? {};
+                updateMediaAspectRatioFromSize(width, height);
+                // Video is ready to display - hide loading if user initiated
+                if (userInitiatedPlayRef.current) {
+                  setIsVideoLoading(false);
+                  userInitiatedPlayRef.current = false;
+                }
+                // Video loaded successfully - clear processing state
+                if (isVideoProcessing) {
+                  setIsVideoProcessing(false);
+                }
+                // Ensure mute state is applied
+                videoRef.current?.setStatusAsync({ isMuted }).catch(() => {});
+              }}
+              onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+              onError={(error) => {
+                if (__DEV__) {
+                  console.log("[PostCardMedia] Video error:", error, "uri:", mediaSource.uri);
+                }
+                // For cloudflare stream videos, show processing state instead of hiding
+                const isCloudflare = mediaSource.uri?.includes("cloudflarestream.com") || mediaSource.uri?.includes("videodelivery.net");
+                if (isCloudflare) {
+                  setIsVideoProcessing(true);
+                } else {
+                  setImageError(true);
+                }
                 setIsVideoLoading(false);
-                userInitiatedPlayRef.current = false;
-              }
-              // Video loaded successfully - clear processing state
-              if (isVideoProcessing) {
-                setIsVideoProcessing(false);
-              }
-            }}
-            onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-            onError={(error) => {
-              if (__DEV__) {
-                console.log("[PostCardMedia] Video error:", error, "uri:", mediaSource.uri);
-              }
-              // For cloudflare stream videos, show processing state instead of hiding
-              const isCloudflare = mediaSource.uri?.includes("cloudflarestream.com") || mediaSource.uri?.includes("videodelivery.net");
-              if (isCloudflare) {
-                setIsVideoProcessing(true);
-              } else {
-                setImageError(true);
-              }
-              setIsVideoLoading(false);
-            }}
-          />
+              }}
+            />
+          </Pressable>
         ) : (
           <Pressable onPress={handleMediaPress} style={styles.media}>
           <Image
@@ -388,7 +445,7 @@ export const PostCardMedia = memo(function PostCardMedia({
       </View>
     </View>
   );
-});
+}));
 
 const styles = StyleSheet.create((theme) => ({
   mediaContainer: {
@@ -401,10 +458,13 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.background.subtle,
     borderRadius: theme.radius.md,
     overflow: "hidden",
+    borderWidth: 0.3,
+    borderColor: theme.colors.border.subtle,
   },
   media: {
     width: "100%",
     height: "100%",
+    borderRadius: theme.radius.md,
   },
   playOverlay: {
     ...StyleSheet.absoluteFillObject,

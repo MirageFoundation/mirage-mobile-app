@@ -8,6 +8,7 @@ import {
 } from "@/assets/figma-icons";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { Ionicons } from "@expo/vector-icons";
 import { memo, useRef } from "react";
 import {
   Animated,
@@ -17,6 +18,12 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import {
+  Menu,
+  MenuOption,
+  MenuOptions,
+  MenuTrigger,
+} from "react-native-popup-menu";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 // Vote colors
@@ -52,6 +59,16 @@ type PostActionsProps = {
   disabled?: boolean;
   /** Custom style */
   style?: StyleProp<ViewStyle>;
+  /** Whether this is the current user's own post */
+  isOwnPost?: boolean;
+  /** Author username for moderation menu */
+  authorUsername?: string;
+  /** Callback when block user is pressed */
+  onBlockUser?: () => void;
+  /** Callback when block post is pressed */
+  onBlockPost?: () => void;
+  /** Callback when report is pressed */
+  onReport?: () => void;
 };
 
 const SIZE_CONFIG = {
@@ -93,6 +110,11 @@ export const PostActions = memo(function PostActions({
   size = "md",
   disabled = false,
   style,
+  isOwnPost = false,
+  authorUsername,
+  onBlockUser,
+  onBlockPost,
+  onReport,
 }: PostActionsProps) {
   const { theme } = useUnistyles();
   const { iconSize, gap, pillHeight, voteTextSize } = SIZE_CONFIG[size];
@@ -165,6 +187,21 @@ export const PostActions = memo(function PostActions({
     }
   };
 
+  const handleBlockUser = () => {
+    triggerHaptic("warning");
+    onBlockUser?.();
+  };
+
+  const handleBlockPost = () => {
+    triggerHaptic("warning");
+    onBlockPost?.();
+  };
+
+  const handleReport = () => {
+    triggerHaptic("warning");
+    onReport?.();
+  };
+
   // Format count for display (e.g., 1234 -> 1.2K)
   const formatCount = (num: number): string => {
     if (num >= 1000000) {
@@ -207,10 +244,22 @@ export const PostActions = memo(function PostActions({
               <UpvoteOutlineIcon size={iconSize} color={upvoteColor} />
             )}
           </Animated.View>
+        </Pressable>
+
+        {/* Divider */}
+        <View style={styles.voteDivider} />
+
+        {/* Vote count */}
+        <Pressable
+          onPress={handleLikePress}
+          disabled={disabled}
+          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+          style={[styles.voteButton, disabled && styles.disabled]}
+        >
           <Text
             size={voteTextSize}
             weight="bold"
-            style={{ marginLeft: 14, color: upvoteColor }}
+            style={{ color: upvoteColor }}
           >
             {formatCount(likes)}
           </Text>
@@ -276,6 +325,97 @@ export const PostActions = memo(function PostActions({
           <ShareIcon size={iconSize} color={defaultColor} />
         </Pressable>
       </View>
+
+      {/* Moderation menu (only for other users' posts) */}
+      {!isOwnPost && (
+        <Menu>
+          <MenuTrigger
+            customStyles={{
+              triggerOuterWrapper: { marginLeft: -3 },
+              triggerTouchable: {
+                hitSlop: { top: 6, bottom: 6, left: 6, right: 6 },
+              },
+            }}
+          >
+            <View style={[styles.votePill, { height: pillHeight }]}>
+              <View style={[styles.voteButton, disabled && styles.disabled]}>
+                <Ionicons
+                  name="flag-outline"
+                  size={iconSize}
+                  color={theme.colors.error[500]}
+                />
+              </View>
+            </View>
+          </MenuTrigger>
+          <MenuOptions
+            customStyles={{
+              optionsContainer: {
+                backgroundColor: theme.colors.background.default,
+                borderRadius: theme.radius.lg,
+                minWidth: 180,
+                shadowColor: theme.colors.contrast.base,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.15,
+                shadowRadius: 12,
+                elevation: 8,
+                borderWidth: 1,
+                borderColor: theme.colors.border.subtle,
+                marginTop: 4,
+                paddingVertical: 8,
+              },
+            }}
+          >
+            <MenuOption onSelect={handleBlockUser}>
+              <View style={styles.menuOption}>
+                <Ionicons
+                  name="ban-outline"
+                  size={16}
+                  color={theme.colors.error[500]}
+                />
+                <Text
+                  size="sm"
+                  weight="medium"
+                  style={{ color: theme.colors.error[500] }}
+                >
+                  Block @{authorUsername}
+                </Text>
+              </View>
+            </MenuOption>
+            <MenuOption onSelect={handleBlockPost}>
+              <View style={styles.menuOption}>
+                <Ionicons
+                  name="eye-off-outline"
+                  size={16}
+                  color={theme.colors.error[500]}
+                />
+                <Text
+                  size="sm"
+                  weight="medium"
+                  style={{ color: theme.colors.error[500] }}
+                >
+                  Block Post
+                </Text>
+              </View>
+            </MenuOption>
+            <MenuOption onSelect={handleReport}>
+              <View style={styles.menuOption}>
+                <Ionicons
+                  name="flag-outline"
+                  size={16}
+                  color={theme.colors.error[500]}
+                />
+                <Text
+                  size="sm"
+                  weight="medium"
+                  style={{ color: theme.colors.error[500] }}
+                >
+                  Report Post
+                </Text>
+              </View>
+            </MenuOption>
+          </MenuOptions>
+        </Menu>
+      )}
     </View>
   );
 });
@@ -314,5 +454,12 @@ const styles = StyleSheet.create((theme) => ({
   },
   disabled: {
     opacity: 0.5,
+  },
+  menuOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: theme.spacing.xs + 2,
+    paddingHorizontal: theme.spacing.md,
   },
 }));

@@ -32,6 +32,9 @@ type HomePostCardHandlers = {
   ) => void;
   onFollowTopic?: (topic: string, isCurrentlyFollowed: boolean) => void;
   onRevealContent?: (postId: string) => void;
+  onBlockUser?: (postId: string, authorId: string, authorUsername: string) => void;
+  onBlockPost?: (postId: string) => void;
+  onReport?: (postId: string) => void;
 };
 
 type HomePostCardState = {
@@ -45,6 +48,7 @@ type HomePostCardState = {
   handlers: HomePostCardHandlers;
   shareServer: ShareServer;
   allowAutoplay: boolean;
+  feedActive: boolean;
   shouldScrollToTop: boolean;
   setCurrentUserId: (id?: string) => void;
   setFollowedUsers: (users: Set<string>) => void;
@@ -57,6 +61,7 @@ type HomePostCardState = {
   setHandlers: (handlers: HomePostCardHandlers) => void;
   setShareServer: (server: ShareServer) => void;
   setAllowAutoplay: (allow: boolean) => void;
+  setFeedActive: (active: boolean) => void;
   triggerScrollToTop: () => void;
   clearScrollToTop: () => void;
 };
@@ -74,6 +79,7 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
   handlers: {},
   shareServer: "mirage.talk",
   allowAutoplay: true,
+  feedActive: true,
   shouldScrollToTop: false,
   setCurrentUserId: (id) => set({ currentUserId: id }),
   setFollowedUsers: (users) => set({ followedUsers: users }),
@@ -117,6 +123,7 @@ setVoteOverride: (postId, override) =>
   setHandlers: (handlers) => set({ handlers }),
   setShareServer: (server) => set({ shareServer: server }),
   setAllowAutoplay: (allow) => set({ allowAutoplay: allow }),
+  setFeedActive: (active) => set({ feedActive: active }),
   triggerScrollToTop: () => set({ shouldScrollToTop: true }),
   clearScrollToTop: () => set({ shouldScrollToTop: false }),
 }));
@@ -150,6 +157,9 @@ export const useShareServer = () =>
 
 export const useAllowAutoplay = () =>
   useHomePostCardStore((state) => state.allowAutoplay);
+
+export const useFeedActive = () =>
+  useHomePostCardStore((state) => state.feedActive);
 
 // Handler selectors - these return stable function references
 export const useHandlers = () =>

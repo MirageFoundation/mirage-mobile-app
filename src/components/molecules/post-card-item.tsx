@@ -10,6 +10,7 @@ type PostCardItemProps = {
  isTopicFollowed?: boolean;
  contentRevealed?: boolean;
  shareUrl?: string;
+  showFollowButton?: boolean;
   showUrlCard?: boolean;
  onPostPress?: (postId: string) => void;
   onAuthorPress?: (authorId: string) => void;
@@ -34,6 +35,9 @@ type PostCardItemProps = {
   ) => void;
   onFollowTopic?: (topic: string, isCurrentlyFollowed: boolean) => void;
   onRevealContent?: (postId: string) => void;
+  onBlockUser?: (postId: string, authorId: string, authorUsername: string) => void;
+  onBlockPost?: (postId: string) => void;
+  onReport?: (postId: string) => void;
 };
 
 function arePostCardItemPropsEqual(
@@ -52,14 +56,15 @@ function arePostCardItemPropsEqual(
 }
 
 export const PostCardItem = memo(function PostCardItem({
- post,
- isVisible = false,
- isOwnPost = false,
- isTopicFollowed = false,
- contentRevealed = false,
- shareUrl,
+post,
+isVisible = false,
+isOwnPost = false,
+isTopicFollowed = false,
+contentRevealed = false,
+shareUrl,
+  showFollowButton = true,
   showUrlCard,
- onPostPress,
+onPostPress,
   onAuthorPress,
   onMorePress,
   onLikePress,
@@ -68,6 +73,9 @@ export const PostCardItem = memo(function PostCardItem({
   onFollowUser,
   onFollowTopic,
   onRevealContent,
+  onBlockUser,
+  onBlockPost,
+  onReport,
 }: PostCardItemProps) {
   const handlePostPress = useCallback(() => {
     logPress({ name: "post_card_item", postId: post.id });
@@ -123,14 +131,30 @@ export const PostCardItem = memo(function PostCardItem({
     onRevealContent?.(post.id);
   }, [onRevealContent, post.id]);
 
-  return (
-    <PostCard
-      post={post}
-      isOwnPost={isOwnPost}
-      isVisible={isVisible}
-      isTopicFollowed={isTopicFollowed}
-      onPress={handlePostPress}
-      onAuthorPress={handleAuthorPress}
+  const handleBlockUser = useCallback(() => {
+    logPress({ name: "post_block_user", postId: post.id });
+    onBlockUser?.(post.id, post.author.id, post.author.username);
+  }, [onBlockUser, post.id, post.author.id, post.author.username]);
+
+  const handleBlockPost = useCallback(() => {
+    logPress({ name: "post_block_post", postId: post.id });
+    onBlockPost?.(post.id);
+  }, [onBlockPost, post.id]);
+
+  const handleReport = useCallback(() => {
+    logPress({ name: "post_report", postId: post.id });
+    onReport?.(post.id);
+  }, [onReport, post.id]);
+
+ return (
+   <PostCard
+     post={post}
+     isOwnPost={isOwnPost}
+     isVisible={isVisible}
+     isTopicFollowed={isTopicFollowed}
+      showFollowButton={showFollowButton}
+     onPress={handlePostPress}
+     onAuthorPress={handleAuthorPress}
       onMorePress={handleMorePress}
       onLikePress={handleLikePress}
       onDislikePress={handleDislikePress}
@@ -138,6 +162,9 @@ export const PostCardItem = memo(function PostCardItem({
       onFollowUser={handleFollowUser}
      onFollowTopic={handleFollowTopic}
      onRevealContent={handleRevealContent}
+     onBlockUser={handleBlockUser}
+     onBlockPost={handleBlockPost}
+     onReport={handleReport}
      contentRevealed={contentRevealed}
      shareUrl={shareUrl}
       showUrlCard={showUrlCard}

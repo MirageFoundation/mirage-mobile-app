@@ -4,7 +4,6 @@ import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Dimensions,
   Image,
   Keyboard,
@@ -29,6 +28,9 @@ import type { ContentTag } from "@/src/api/write/endpoints/posts";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useToast } from "@/src/providers/toast-provider";
+import { TransactionProgressModal } from "@/src/components/molecules/transaction-progress-modal";
+import { useTransactionProgress } from "@/src/hooks/use-transaction-progress";
+import { getTxStatus } from "@/src/api/read/endpoints/tx";
 import { useDraftStore, type Community } from "@/src/stores/draft-store";
 import { useHomePostCardStore } from "./home/home-post-card-store";
 
@@ -106,7 +108,8 @@ export function CreateScreen() {
     },
   });
 
-  const postMutation = usePost();
+  const txProgress = useTransactionProgress();
+  const postMutation = usePost({ onPoWProgress: txProgress.updatePoWProgress });
   const toast = useToast();
   const triggerScrollToTop = useHomePostCardStore((s) => s.triggerScrollToTop);
 
@@ -196,10 +199,11 @@ export function CreateScreen() {
   ]);
 
   const handlePost = useCallback(async () => {
-    if (!canPost || isSubmitting) return;
+    if (!canPost || isSubmitting || txProgress.isVisible) return;
 
     Keyboard.dismiss();
     setIsSubmitting(true);
+    txProgress.startTransaction();
     triggerHaptic("medium");
 
     try {
@@ -216,6 +220,7 @@ export function CreateScreen() {
             error instanceof Error ? error.message : "Please try again",
           );
           setIsSubmitting(false);
+          txProgress.reset();
           return;
         }
       }
@@ -252,11 +257,27 @@ export function CreateScreen() {
 
       console.log("[CreatePost] Submitting post:", postInput);
 
+      txProgress.setPhase("signing");
       const result = await postMutation.mutateAsync(postInput);
 
-      console.log("[CreatePost] Post created successfully:", result);
+      txProgress.setPhase("confirming");
+      let confirmed = false;
+      if (result?.tx_hash) {
+        for (let i = 0; i < 30; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          try {
+            const status = await getTxStatus({ hash: result.tx_hash });
+            if (status.found && status.indexed) {
+              confirmed = true;
+              break;
+            }
+          } catch {}
+        }
+      }
 
-      triggerHaptic("success");
+      txProgress.setSuccess(result?.tx_hash);
+
+      console.log("[CreatePost] Post created successfully:", result);
 
       setSelectedContentWarning("");
       setShowLinkInput(false);
@@ -275,6 +296,7 @@ export function CreateScreen() {
       triggerScrollToTop();
 
       setTimeout(() => {
+        txProgress.hideModal();
         router.replace("/(tabs)/");
       }, 1000);
     } catch (error) {
@@ -284,9 +306,7 @@ export function CreateScreen() {
 
       const errorMessage =
         error instanceof Error ? error.message : "Failed to create post";
-      toast.error("Failed to create post", errorMessage);
-
-      triggerHaptic("error");
+      txProgress.setError(errorMessage);
     }
   }, [
     canPost,
@@ -300,6 +320,7 @@ export function CreateScreen() {
     isVideoMuted,
     resetVideoUpload,
     router,
+    txProgress,
   ]);
 
   const handleCommunitySelect = useCallback(
@@ -1023,47 +1044,17 @@ export function CreateScreen() {
         </Pressable>
       </Modal>
 
-      <Modal
-        visible={isSubmitting}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-      >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: theme.colors.background.base,
-              borderRadius: theme.radius.lg,
-              padding: theme.spacing.xl,
-              alignItems: "center",
-              minWidth: 200,
-            }}
-          >
-            <ActivityIndicator
-              size="large"
-              color={theme.colors.brand[500]}
-              style={{ marginBottom: theme.spacing.md }}
-            />
-            <Text
-              size="md"
-              weight="medium"
-              style={{ marginBottom: theme.spacing.xs }}
-            >
-              Creating post...
-            </Text>
-            <Text size="sm" mode="subtle" style={{ textAlign: "center" }}>
-              Please wait while we submit your post
-            </Text>
-          </View>
-        </View>
-      </Modal>
+      <TransactionProgressModal
+        visible={txProgress.isVisible}
+        progress={txProgress.progress}
+        title="Creating Post"
+        description="Your post is being published to the blockchain"
+        onDismiss={() => {
+          txProgress.hideModal();
+          setIsSubmitting(false);
+        }}
+        onRetry={handlePost}
+      />
     </Box>
   );
 }
