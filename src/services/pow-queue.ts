@@ -51,7 +51,8 @@ export interface PowQueueState {
   totalCount: number;
   currentProgress: number;
   lastError: Error | null;
-  lastCompletedAction: { type: PowActionType; success: boolean } | null;
+ lastCompletedAction: { type: PowActionType; success: boolean } | null;
+  successOverlay: { type: PowActionType; success: boolean } | null;
 }
 
 export interface PowQueueActions {
@@ -69,6 +70,7 @@ type PowQueueStore = PowQueueState & PowQueueActions;
 const RESULT_DISPLAY_DELAY_MS = 800;
 const SUCCESS_SYNC_DELAY_MS = 500;
 const NATIVE_CLEANUP_TIMEOUT_MS = 500;
+const SUCCESS_OVERLAY_DURATION_MS = 2000;
 
 let actionIdCounter = 0;
 
@@ -141,6 +143,7 @@ export const getSuccessLabel = (type: PowActionType): string => {
 
 let isProcessingLock = false;
 let currentCancelReject: ((reason?: unknown) => void) | null = null;
+let successOverlayTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   queue: [],
@@ -149,8 +152,9 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   completedCount: 0,
   totalCount: 0,
   currentProgress: 0,
-  lastError: null,
-  lastCompletedAction: null,
+ lastError: null,
+ lastCompletedAction: null,
+  successOverlay: null,
 
   enqueue: <T>(action: PowAction<T>) => {
     action.onOptimisticUpdate?.();
@@ -244,12 +248,11 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
 
     const [nextAction, ...remainingQueue] = state.queue;
 
-    set({
-      currentAction: nextAction,
-      queue: remainingQueue,
-      currentProgress: 0,
-      lastCompletedAction: null,
-    });
+   set({
+     currentAction: nextAction,
+     queue: remainingQueue,
+     currentProgress: 0,
+   });
 
     let wasCancelled = false;
     let executePromise: Promise<unknown> | null = null;
@@ -264,17 +267,20 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       const result = await Promise.race([executePromise, cancelPromise]);
 
       currentCancelReject = null;
-      nextAction.onSuccess?.(result);
+    nextAction.onSuccess?.(result);
 
-      set((s) => ({
-        completedCount: s.completedCount + 1,
-        lastError: null,
-        lastCompletedAction: { type: nextAction.type, success: true },
-      }));
+    set((s) => ({
+      completedCount: s.completedCount + 1,
+      lastError: null,
+      lastCompletedAction: { type: nextAction.type, success: true },
+      successOverlay: { type: nextAction.type, success: true },
+    }));
 
-      await new Promise((resolve) =>
-        setTimeout(resolve, SUCCESS_SYNC_DELAY_MS)
-      );
+     if (successOverlayTimeout) clearTimeout(successOverlayTimeout);
+     successOverlayTimeout = setTimeout(() => {
+       set({ successOverlay: null });
+       successOverlayTimeout = null;
+     }, SUCCESS_OVERLAY_DURATION_MS);
     } catch (error) {
       currentCancelReject = null;
 
@@ -286,11 +292,18 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
         nextAction.onRollback?.();
         nextAction.onError?.(err);
 
-        set((s) => ({
-          completedCount: s.completedCount + 1,
-          lastError: err,
-          lastCompletedAction: { type: nextAction.type, success: false },
-        }));
+       set((s) => ({
+         completedCount: s.completedCount + 1,
+         lastError: err,
+         lastCompletedAction: { type: nextAction.type, success: false },
+         successOverlay: { type: nextAction.type, success: false },
+       }));
+
+       if (successOverlayTimeout) clearTimeout(successOverlayTimeout);
+       successOverlayTimeout = setTimeout(() => {
+         set({ successOverlay: null });
+         successOverlayTimeout = null;
+       }, SUCCESS_OVERLAY_DURATION_MS);
       }
     } finally {
       if (wasCancelled) {
@@ -307,15 +320,11 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
             get().processNext();
           }
         });
-      } else {
-        isProcessingLock = false;
-        set({ currentAction: null, currentProgress: 0 });
-        setTimeout(() => {
-          InteractionManager.runAfterInteractions(() => {
-            get().processNext();
-          });
-        }, RESULT_DISPLAY_DELAY_MS);
-      }
+    } else {
+       isProcessingLock = false;
+       set({ currentAction: null, currentProgress: 0 });
+       get().processNext();
+     }
     }
   },
 
@@ -346,10 +355,11 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       isProcessing: false,
       completedCount: 0,
       totalCount: 0,
-      currentProgress: 0,
-      lastError: null,
-      lastCompletedAction: null,
-    });
+     currentProgress: 0,
+     lastError: null,
+     lastCompletedAction: null,
+     successOverlay: null,
+   });
   },
 }));
 
@@ -367,7 +377,8 @@ export const usePowQueue = () => {
     completedCount: store.completedCount,
     totalCount: store.totalCount,
     currentProgress: store.currentProgress,
-    pendingCount: store.queue.length + (store.currentAction ? 1 : 0),
-    lastCompletedAction: store.lastCompletedAction,
-  };
+   pendingCount: store.queue.length + (store.currentAction ? 1 : 0),
+   lastCompletedAction: store.lastCompletedAction,
+   successOverlay: store.successOverlay,
+ };
 };

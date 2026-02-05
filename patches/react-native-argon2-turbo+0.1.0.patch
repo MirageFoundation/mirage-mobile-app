@@ -1,0 +1,258 @@
+diff --git a/node_modules/react-native-argon2-turbo/android/src/main/java/com/argon2turbo/Argon2TurboModule.kt b/node_modules/react-native-argon2-turbo/android/src/main/java/com/argon2turbo/Argon2TurboModule.kt
+index 2d1f98f..7454db3 100644
+--- a/node_modules/react-native-argon2-turbo/android/src/main/java/com/argon2turbo/Argon2TurboModule.kt
++++ b/node_modules/react-native-argon2-turbo/android/src/main/java/com/argon2turbo/Argon2TurboModule.kt
+@@ -59,18 +59,20 @@ class Argon2TurboModule(reactContext: ReactApplicationContext) :
+         promise: Promise
+     ) {
+         scope.launch {
+-            try {
+-                val argon2Kt = Argon2Kt()
+-                val result = performHash(
+-                    argon2Kt,
+-                    password.toByteArray(Charsets.UTF_8),
+-                    salt.toByteArray(Charsets.UTF_8),
+-                    iterations.toInt(),
+-                    memory.toInt(),
+-                    parallelism.toInt(),
+-                    hashLength.toInt(),
+-                    mode
+-                )
++           try {
++               val argon2Kt = Argon2Kt()
++               val pwdBytes = decodeInput(password, passwordEncoding)
++               val saltBytes = decodeInput(salt, saltEncoding)
++               val result = performHash(
++                   argon2Kt,
++                   pwdBytes,
++                   saltBytes,
++                   iterations.toInt(),
++                   memory.toInt(),
++                   parallelism.toInt(),
++                   hashLength.toInt(),
++                   mode
++               )
+                 withContext(Dispatchers.Main) {
+                     promise.resolve(result)
+                 }
+@@ -93,16 +95,18 @@ class Argon2TurboModule(reactContext: ReactApplicationContext) :
+         passwordEncoding: String,
+         saltEncoding: String
+     ): WritableMap {
+-        val argon2Kt = Argon2Kt()
+-        return performHash(
+-            argon2Kt,
+-            password.toByteArray(Charsets.UTF_8),
+-            salt.toByteArray(Charsets.UTF_8),
+-            iterations.toInt(),
+-            memory.toInt(),
+-            parallelism.toInt(),
+-            hashLength.toInt(),
+-            mode
++       val argon2Kt = Argon2Kt()
++       val pwdBytes = decodeInput(password, passwordEncoding)
++       val saltBytes = decodeInput(salt, saltEncoding)
++       return performHash(
++           argon2Kt,
++           pwdBytes,
++           saltBytes,
++           iterations.toInt(),
++           memory.toInt(),
++           parallelism.toInt(),
++           hashLength.toInt(),
++           mode
+         )
+     }
+ 
+@@ -256,13 +260,13 @@ class Argon2TurboModule(reactContext: ReactApplicationContext) :
+                 val finalAttempts = workerAttempts.sumOf { it.get() }
+                 totalAttempts.set(finalAttempts)
+ 
+-                if (result != null) {
+-                    withContext(Dispatchers.Main) {
+-                        promise.resolve(Arguments.createMap().apply {
+-                            putInt("nonce", result.nonce.toInt())
+-                            putString("digest", result.digest)
+-                            putInt("attempts", finalAttempts)
+-                            putDouble("elapsedMs", elapsedMs.toDouble())
++               if (result != null) {
++                   withContext(Dispatchers.Main) {
++                       promise.resolve(Arguments.createMap().apply {
++                           putDouble("nonce", result.nonce.toLong().toDouble())
++                           putString("digest", result.digest)
++                           putInt("attempts", finalAttempts)
++                           putDouble("elapsedMs", elapsedMs.toDouble())
+                         })
+                     }
+                 } else {
+@@ -401,11 +405,19 @@ class Argon2TurboModule(reactContext: ReactApplicationContext) :
+         return result
+     }
+ 
+-    private fun bytesToHex(bytes: ByteArray): String {
+-        return bytes.joinToString("") { "%02x".format(it) }
+-    }
++   private fun bytesToHex(bytes: ByteArray): String {
++       return bytes.joinToString("") { "%02x".format(it) }
++   }
++
++   private fun decodeInput(input: String, encoding: String): ByteArray {
++       return when (encoding) {
++           "hex" -> hexToBytes(input)
++           "base64" -> android.util.Base64.decode(input, android.util.Base64.DEFAULT)
++           else -> input.toByteArray(Charsets.UTF_8)
++       }
++   }
+ 
+-    companion object {
++   companion object {
+         const val NAME = "Argon2Turbo"
+     }
+ }
+diff --git a/node_modules/react-native-argon2-turbo/ios/Argon2Turbo.mm b/node_modules/react-native-argon2-turbo/ios/Argon2Turbo.mm
+index 6f36180..4ad2885 100644
+--- a/node_modules/react-native-argon2-turbo/ios/Argon2Turbo.mm
++++ b/node_modules/react-native-argon2-turbo/ios/Argon2Turbo.mm
+@@ -56,16 +56,18 @@ - (void)hash:(NSString *)password
+ saltEncoding:(NSString *)saltEncoding
+      resolve:(RCTPromiseResolveBlock)resolve
+       reject:(RCTPromiseRejectBlock)reject {
+-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+-        @try {
+-            NSDictionary *result = [self performHash:password
+-                                                salt:salt
+-                                          iterations:(int)iterations
+-                                              memory:(int)memory
+-                                         parallelism:(int)parallelism
+-                                          hashLength:(int)hashLength
+-                                                mode:mode];
+-            dispatch_async(dispatch_get_main_queue(), ^{
++   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
++       @try {
++           NSDictionary *result = [self performHash:password
++                                               salt:salt
++                                         iterations:(int)iterations
++                                             memory:(int)memory
++                                        parallelism:(int)parallelism
++                                         hashLength:(int)hashLength
++                                               mode:mode
++                                   passwordEncoding:passwordEncoding
++                                       saltEncoding:saltEncoding];
++           dispatch_async(dispatch_get_main_queue(), ^{
+                 resolve(result);
+             });
+         } @catch (NSException *exception) {
+@@ -85,13 +87,15 @@ - (NSDictionary *)hashSync:(NSString *)password
+                       mode:(NSString *)mode
+           passwordEncoding:(NSString *)passwordEncoding
+               saltEncoding:(NSString *)saltEncoding {
+-    return [self performHash:password
+-                        salt:salt
+-                  iterations:(int)iterations
+-                      memory:(int)memory
+-                 parallelism:(int)parallelism
+-                  hashLength:(int)hashLength
+-                        mode:mode];
++   return [self performHash:password
++                       salt:salt
++                 iterations:(int)iterations
++                     memory:(int)memory
++                parallelism:(int)parallelism
++                 hashLength:(int)hashLength
++                       mode:mode
++           passwordEncoding:passwordEncoding
++               saltEncoding:saltEncoding];
+ }
+ 
+ - (NSDictionary *)performHash:(NSString *)password
+@@ -100,7 +104,9 @@ - (NSDictionary *)performHash:(NSString *)password
+                        memory:(int)memory
+                   parallelism:(int)parallelism
+                    hashLength:(int)hashLength
+-                         mode:(NSString *)mode {
++                         mode:(NSString *)mode
++             passwordEncoding:(NSString *)passwordEncoding
++                 saltEncoding:(NSString *)saltEncoding {
+     NSError *error = nil;
+     
+     Argon2TypeObjC type = Argon2TypeObjCId;
+@@ -110,24 +116,31 @@ - (NSDictionary *)performHash:(NSString *)password
+         type = Argon2TypeObjCD;
+     }
+     
+-    Argon2HashResult *result = [Argon2Core hashStringWithPassword:password
+-                                                             salt:salt
+-                                                       iterations:iterations
+-                                                           memory:memory
+-                                                      parallelism:parallelism
+-                                                       hashLength:hashLength
+-                                                             type:type
+-                                                            error:&error];
++   NSData *pwdData = [self decodeInput:password encoding:passwordEncoding];
++   NSData *saltData = [self decodeInput:salt encoding:saltEncoding];
++   
++   NSData *hashData = [Argon2Core computeArgon2BytesWithPassword:pwdData
++                                                            salt:saltData
++                                                      iterations:iterations
++                                                          memory:memory
++                                                     parallelism:parallelism
++                                                      hashLength:hashLength];
+     
+-    if (error || result == nil) {
++   if (hashData == nil) {
+         @throw [NSException exceptionWithName:@"Argon2Error"
+                                        reason:error.localizedDescription ?: @"Hash computation failed"
+                                      userInfo:nil];
+     }
+     
++   NSString *rawHashHex = [self dataToHex:hashData];
++   NSString *encodedHash = [NSString stringWithFormat:@"$argon2id$v=19$m=%d,t=%d,p=%d$%@$%@",
++       memory, iterations, parallelism,
++       [[saltData base64EncodedStringWithOptions:0] stringByReplacingOccurrencesOfString:@"=" withString:@""],
++       [[hashData base64EncodedStringWithOptions:0] stringByReplacingOccurrencesOfString:@"=" withString:@""]];
++   
+     return @{
+-        @"rawHash": result.rawHashHex,
+-        @"encodedHash": result.encodedHash
++       @"rawHash": rawHashHex,
++       @"encodedHash": encodedHash
+     };
+ }
+ 
+@@ -247,13 +260,13 @@ - (void)computePow:(NSString *)base
+         // Cleanup heap-allocated found flag
+         delete foundResultPtr;
+         
+-        dispatch_async(dispatch_get_main_queue(), ^{
+-            if (found && winningDigest) {
+-                resolve(@{
+-                    @"nonce": @(winningNonce),
+-                    @"digest": winningDigest,
+-                    @"attempts": @(totalAttempts),
+-                    @"elapsedMs": @(elapsedMs)
++       dispatch_async(dispatch_get_main_queue(), ^{
++           if (found && winningDigest) {
++               resolve(@{
++                   @"nonce": @((double)winningNonce),
++                   @"digest": winningDigest,
++                   @"attempts": @(totalAttempts),
++                   @"elapsedMs": @(elapsedMs)
+                 });
+             } else if (waitResult != 0) {
+                 reject(@"POW_TIMEOUT", @"PoW computation timed out", nil);
+@@ -348,6 +361,15 @@ - (void)getPowProgress:(RCTPromiseResolveBlock)resolve
+ 
+ #pragma mark - Helper Methods
+ 
++- (NSData *)decodeInput:(NSString *)input encoding:(NSString *)encoding {
++    if ([encoding isEqualToString:@"hex"]) {
++        return [self hexToData:input];
++    } else if ([encoding isEqualToString:@"base64"]) {
++        return [[NSData alloc] initWithBase64EncodedString:input options:0];
++    }
++    return [input dataUsingEncoding:NSUTF8StringEncoding];
++}
++
+ - (int)countLeadingZeroBits:(NSData *)data {
+     const uint8_t *bytes = (const uint8_t *)data.bytes;
+     int count = 0;
