@@ -81,16 +81,25 @@ export type {
 
 // Media Upload
 export {
-  getUploadUrl,
-  getImageUploadUrl,
-  getVideoUploadUrl,
-  uploadToSignedUrl,
-  uploadImage,
-  getImageUrl,
-  getContentTypeFromUri,
+ getUploadUrl,
+ getImageUploadUrl,
+ getVideoUploadUrl,
+ uploadToSignedUrl,
+ uploadImage,
+ getImageUrl,
+ getContentTypeFromUri,
 } from "./media";
 export type {
-  MediaType,
-  GetUploadUrlParams,
-  UploadImageResult,
+ MediaType,
+ GetUploadUrlParams,
+ UploadImageResult,
 } from "./media";
+
+// Quests
+export { getDailyQuests } from "./quests";
+export type {
+  DailyQuest,
+  DailyQuestsResponse,
+  QuestReward,
+  GetDailyQuestsParams,
+} from "./quests";

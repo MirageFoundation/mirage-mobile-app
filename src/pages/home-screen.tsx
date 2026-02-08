@@ -285,13 +285,17 @@ export function HomeScreen() {
     }
   }, [router, currentUser?.walletAddress, currentUser?.username]);
 
-  const handleMenuInvite = useCallback(() => {
-    router.push("/invite-and-earn");
+ const handleMenuInvite = useCallback(() => {
+   router.push("/invite-and-earn");
+ }, [router]);
+
+  const handleMenuQuests = useCallback(() => {
+    router.push("/quests");
   }, [router]);
 
-  const handleMenuTopics = useCallback(() => {
-    router.push("/topics");
-  }, [router]);
+ const handleMenuTopics = useCallback(() => {
+   router.push("/topics");
+ }, [router]);
 
   const handleMenuHelp = useCallback(() => {
     Linking.openURL("https://mirage.foundation/faq");
@@ -1175,21 +1179,22 @@ useFocusEffect(
         onCancel={deleteHandler.cancelDelete}
       />
 
-      {/* Side Menu */}
-      <SideMenu
-        ref={sideMenuRef}
-        onSettings={handleMenuSettings}
-        onSubscription={handleMenuSubscription}
-        onSaved={handleMenuSaved}
-        onHistory={handleMenuHistory}
-        onDrafts={handleMenuDrafts}
-        onFollowing={handleMenuFollowing}
-        onTopics={handleMenuTopics}
-        onInviteAndEarn={handleMenuInvite}
-        onHelp={handleMenuHelp}
-        onAbout={handleMenuAbout}
-        onLogout={handleMenuLogout}
-      />
+     {/* Side Menu */}
+     <SideMenu
+       ref={sideMenuRef}
+       onSettings={handleMenuSettings}
+       onSubscription={handleMenuSubscription}
+       onSaved={handleMenuSaved}
+       onHistory={handleMenuHistory}
+       onDrafts={handleMenuDrafts}
+       onFollowing={handleMenuFollowing}
+       onTopics={handleMenuTopics}
+       onInviteAndEarn={handleMenuInvite}
+        onQuests={handleMenuQuests}
+       onHelp={handleMenuHelp}
+       onAbout={handleMenuAbout}
+       onLogout={handleMenuLogout}
+     />
     </Box>
   );
 }

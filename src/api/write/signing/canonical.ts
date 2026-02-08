@@ -524,10 +524,28 @@ export interface ReportParams extends BaseParams {
 }
 
 export function canonBaseReport(params: ReportParams): Uint8Array {
+ return concatBytes(
+   prefix("MsgReport"),
+   encodeHeader(params),
+   encString(100, params.target),
+   encString(101, params.reason)
+ );
+}
+
+// --- ClaimReward (Daily Quest Rewards) ---
+
+export interface ClaimRewardParams extends BaseParams {
+  /** Your address */
+  target: string;
+  /** Quest ID to claim */
+  questId: string;
+}
+
+export function canonBaseClaimReward(params: ClaimRewardParams): Uint8Array {
   return concatBytes(
-    prefix("MsgReport"),
+    prefix("MsgClaimReward"),
     encodeHeader(params),
     encString(100, params.target),
-    encString(101, params.reason)
+    encString(101, params.questId)
   );
 }

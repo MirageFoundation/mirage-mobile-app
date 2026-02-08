@@ -91,3 +91,6 @@ export type { UploadMediaInput, UseUploadMediaOptions } from "./use-upload-media
 // Invite Code
 export { useValidateInviteCode } from "./use-invite-code";
 export { useInviteCodes, useInviteCodesByAddress } from "./use-invite-codes";
+
+// Daily Quests
+export { useDailyQuests, useDailyQuestsByAddress } from "./use-daily-quests";

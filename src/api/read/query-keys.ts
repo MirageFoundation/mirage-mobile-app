@@ -60,7 +60,10 @@ export const queryKeys = {
   // Peers
   peers: () => ["peers"] as const,
 
-  // Invite Code
-  inviteCode: (code: string) => ["inviteCode", code] as const,
-  inviteCodes: (address: string) => ["inviteCodes", address] as const,
+ // Invite Code
+ inviteCode: (code: string) => ["inviteCode", code] as const,
+ inviteCodes: (address: string) => ["inviteCodes", address] as const,
+
+  // Daily Quests
+  dailyQuests: (address: string) => ["dailyQuests", address] as const,
 } as const;

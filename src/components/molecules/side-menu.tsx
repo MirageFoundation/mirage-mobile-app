@@ -36,18 +36,19 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MENU_WIDTH = SCREEN_WIDTH * 0.8;
 
 type SideMenuProps = {
-  onSettings?: () => void;
-  onSubscription?: () => void;
-  onSaved?: () => void;
-  onHistory?: () => void;
-  onDrafts?: () => void;
-  onFollowing?: () => void;
-  onTopics?: () => void;
-  onInviteAndEarn?: () => void;
-  onHelp?: () => void;
-  onAbout?: () => void;
-  onLogout?: () => Promise<void>;
-  onDismiss?: () => void;
+ onSettings?: () => void;
+ onSubscription?: () => void;
+ onSaved?: () => void;
+ onHistory?: () => void;
+ onDrafts?: () => void;
+ onFollowing?: () => void;
+ onTopics?: () => void;
+ onInviteAndEarn?: () => void;
+  onQuests?: () => void;
+ onHelp?: () => void;
+ onAbout?: () => void;
+ onLogout?: () => Promise<void>;
+ onDismiss?: () => void;
 };
 
 export type SideMenuRef = {
@@ -275,23 +276,24 @@ const LogoutMenuItem = ({ onPress }: { onPress?: () => void }) => {
 };
 
 export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
-  (
-    {
-      onSettings,
-      onSubscription,
-      onSaved,
-      onHistory,
-      onDrafts,
-      onFollowing,
-      onTopics,
-      onInviteAndEarn,
-      onHelp,
-      onAbout,
-      onLogout,
-      onDismiss,
-    },
-    ref,
-  ) => {
+ (
+   {
+     onSettings,
+     onSubscription,
+     onSaved,
+     onHistory,
+     onDrafts,
+     onFollowing,
+     onTopics,
+     onInviteAndEarn,
+      onQuests,
+     onHelp,
+     onAbout,
+     onLogout,
+     onDismiss,
+   },
+   ref,
+ ) => {
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
     const router = useRouter();
@@ -547,18 +549,24 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     subtitle="Users and topics you follow"
                     onPress={createHandler(onFollowing)}
                   />
+                 <MenuItem
+                   iconName="gift-outline"
+                   title="Invite & Earn"
+                   subtitle="Get rewards"
+                   onPress={createHandler(onInviteAndEarn)}
+                 />
                   <MenuItem
-                    iconName="gift-outline"
-                    title="Invite & Earn"
-                    subtitle="Get rewards"
-                    onPress={createHandler(onInviteAndEarn)}
+                    iconName="trophy-outline"
+                    title="Daily Quests"
+                    subtitle="Complete tasks for rewards"
+                    onPress={createHandler(onQuests)}
                   />
-                  <MenuItem
-                    iconName="pricetags-outline"
-                    title="Topics"
-                    subtitle="Explore all topics"
-                    onPress={createHandler(onTopics)}
-                  />
+                 <MenuItem
+                   iconName="pricetags-outline"
+                   title="Topics"
+                   subtitle="Explore all topics"
+                   onPress={createHandler(onTopics)}
+                 />
                   <SectionFooter />
 
                   {/* Followed Users */}
