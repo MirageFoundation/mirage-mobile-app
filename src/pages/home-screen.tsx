@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FlatList } from "react-native";
@@ -964,11 +964,11 @@ const ListHeaderComponent = useCallback(() => {
   const setRevealedPostsStore = useHomePostCardStore(
     (state) => state.setRevealedPosts
   );
-  const setHandlers = useHomePostCardStore((state) => state.setHandlers);
-  const setShareServer = useHomePostCardStore((state) => state.setShareServer);
-  const setAllowAutoplay = useHomePostCardStore((state) => state.setAllowAutoplay);
-  const setFeedActive = useHomePostCardStore((state) => state.setFeedActive);
-  const setDisabledTopicName = useHomePostCardStore((state) => state.setDisabledTopicName);
+ const setHandlers = useHomePostCardStore((state) => state.setHandlers);
+ const setShareServer = useHomePostCardStore((state) => state.setShareServer);
+ const setAllowAutoplay = useHomePostCardStore((state) => state.setAllowAutoplay);
+  const setActiveFeedScreen = useHomePostCardStore((state) => state.setActiveFeedScreen);
+ const setDisabledTopicName = useHomePostCardStore((state) => state.setDisabledTopicName);
 
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
   const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
@@ -1003,19 +1003,18 @@ const ListHeaderComponent = useCallback(() => {
    setShareServer(shareServer);
  }, [shareServer, setShareServer]);
 
- useEffect(() => {
-   setAllowAutoplay(allowAutoplay);
- }, [allowAutoplay, setAllowAutoplay]);
+useEffect(() => {
+  setAllowAutoplay(allowAutoplay);
+}, [allowAutoplay, setAllowAutoplay]);
 
-  useFocusEffect(
-    useCallback(() => {
-      setFeedActive(true);
-      setDisabledTopicName(undefined);
-      return () => {
-        setFeedActive(false);
-      };
-    }, [setFeedActive, setDisabledTopicName])
-  );
+ const isFocused = useIsFocused();
+
+ useEffect(() => {
+    setActiveFeedScreen(isFocused ? 'home' : null);
+   if (isFocused) {
+     setDisabledTopicName(undefined);
+   }
+  }, [isFocused, setActiveFeedScreen, setDisabledTopicName]);
 
 // Store refs to latest handlers - these update without triggering re-renders
 const handlersRef = useRef({
@@ -1098,18 +1097,19 @@ useFocusEffect(
       />
 
       {/* Scrollable Feed */}
-      <HomePostList
-        ref={flatListRef}
-        data={posts}
-        contentContainerStyle={listContentStyle}
-        onScroll={scrollHandler}
-        ListHeaderComponent={ListHeaderComponent}
-        ListEmptyComponent={ListEmptyComponent}
-        ListFooterComponent={ListFooterComponent}
-        refreshControl={refreshControl}
-       onEndReached={handleEndReached}
-        onEndReachedThreshold={1.5}
-     />
+     <HomePostList
+       ref={flatListRef}
+       data={posts}
+       contentContainerStyle={listContentStyle}
+       onScroll={scrollHandler}
+       ListHeaderComponent={ListHeaderComponent}
+       ListEmptyComponent={ListEmptyComponent}
+       ListFooterComponent={ListFooterComponent}
+       refreshControl={refreshControl}
+      onEndReached={handleEndReached}
+       onEndReachedThreshold={1.5}
+        feedScreen="home"
+    />
 
       {/* Adult Content Permission Popup */}
       <AdultContentPopup

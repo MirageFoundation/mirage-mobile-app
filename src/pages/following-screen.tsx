@@ -1,4 +1,4 @@
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FlatList } from "react-native";
@@ -725,10 +725,10 @@ export function FollowingScreen() {
   const setFollowedTopicsStore = useHomePostCardStore((state) => state.setFollowedTopics);
   const setFollowLoadingUsersStore = useHomePostCardStore((state) => state.setFollowLoadingUsers);
   const setRevealedPostsStore = useHomePostCardStore((state) => state.setRevealedPosts);
-  const setHandlers = useHomePostCardStore((state) => state.setHandlers);
-  const setShareServer = useHomePostCardStore((state) => state.setShareServer);
-  const setFeedActive = useHomePostCardStore((state) => state.setFeedActive);
-  const setDisabledTopicName = useHomePostCardStore((state) => state.setDisabledTopicName);
+ const setHandlers = useHomePostCardStore((state) => state.setHandlers);
+ const setShareServer = useHomePostCardStore((state) => state.setShareServer);
+  const setActiveFeedScreen = useHomePostCardStore((state) => state.setActiveFeedScreen);
+ const setDisabledTopicName = useHomePostCardStore((state) => state.setDisabledTopicName);
 
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
   const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
@@ -753,21 +753,20 @@ export function FollowingScreen() {
     setRevealedPostsStore(revealedPosts);
   }, [revealedPosts, setRevealedPostsStore]);
 
-  useEffect(() => {
-    setShareServer(shareServer);
-  }, [shareServer, setShareServer]);
+ useEffect(() => {
+   setShareServer(shareServer);
+ }, [shareServer, setShareServer]);
 
-  useFocusEffect(
-    useCallback(() => {
-      setFeedActive(true);
-      setDisabledTopicName(undefined);
-      return () => {
-        setFeedActive(false);
-      };
-    }, [setFeedActive, setDisabledTopicName])
-  );
+ const isFocused = useIsFocused();
 
-  // Store refs to latest handlers
+ useEffect(() => {
+    setActiveFeedScreen(isFocused ? 'following' : null);
+   if (isFocused) {
+     setDisabledTopicName(undefined);
+   }
+  }, [isFocused, setActiveFeedScreen, setDisabledTopicName]);
+
+// Store refs to latest handlers
   const handlersRef = useRef({
     handlePostPress,
     handleAuthorPress,
@@ -842,18 +841,19 @@ export function FollowingScreen() {
       />
 
       {/* Scrollable Feed - using HomePostList for consistency with home screen */}
-      <HomePostList
-        ref={flatListRef}
-        data={posts}
-        contentContainerStyle={listContentStyle}
-        onScroll={scrollHandler}
-        ListHeaderComponent={ListHeaderComponent}
-        ListEmptyComponent={ListEmptyComponent}
-        ListFooterComponent={ListFooterComponent}
-        refreshControl={refreshControl}
-       onEndReached={handleEndReached}
-        onEndReachedThreshold={1.5}
-     />
+     <HomePostList
+       ref={flatListRef}
+       data={posts}
+       contentContainerStyle={listContentStyle}
+       onScroll={scrollHandler}
+       ListHeaderComponent={ListHeaderComponent}
+       ListEmptyComponent={ListEmptyComponent}
+       ListFooterComponent={ListFooterComponent}
+       refreshControl={refreshControl}
+      onEndReached={handleEndReached}
+       onEndReachedThreshold={1.5}
+        feedScreen="following"
+    />
 
       {/* Post Options Sheet */}
       <PostOptionsSheet

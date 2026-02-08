@@ -39,54 +39,54 @@ type HomePostCardHandlers = {
 };
 
 type HomePostCardState = {
-  currentUserId?: string;
-  followedUsers: Set<string>;
-  followedTopics: Set<string>;
-  followLoadingUsers: Set<string>;
-  revealedPosts: Set<string>;
-  visiblePostIds: Set<string>;
-  voteOverrides: Record<string, VoteOverride>;
-  handlers: HomePostCardHandlers;
-  shareServer: ShareServer;
-  allowAutoplay: boolean;
-  feedActive: boolean;
-  shouldScrollToTop: boolean;
-  disabledTopicName?: string;
-  setCurrentUserId: (id?: string) => void;
-  setFollowedUsers: (users: Set<string>) => void;
-  setFollowedTopics: (topics: Set<string>) => void;
-  setFollowLoadingUsers: (users: Set<string>) => void;
-  setRevealedPosts: (posts: Set<string>) => void;
-  setVisiblePostIds: (posts: Set<string>) => void;
-  setVoteOverride: (postId: string, override: VoteOverride) => void;
-  clearVoteOverride: (postId: string) => void;
-  setHandlers: (handlers: HomePostCardHandlers) => void;
-  setShareServer: (server: ShareServer) => void;
-  setAllowAutoplay: (allow: boolean) => void;
-  setFeedActive: (active: boolean) => void;
-  triggerScrollToTop: () => void;
-  clearScrollToTop: () => void;
-  setDisabledTopicName: (name?: string) => void;
-  reset: () => void;
+ currentUserId?: string;
+ followedUsers: Set<string>;
+ followedTopics: Set<string>;
+ followLoadingUsers: Set<string>;
+ revealedPosts: Set<string>;
+ visiblePostIds: Set<string>;
+ voteOverrides: Record<string, VoteOverride>;
+ handlers: HomePostCardHandlers;
+ shareServer: ShareServer;
+ allowAutoplay: boolean;
+  activeFeedScreen: 'home' | 'following' | 'topic' | null;
+ shouldScrollToTop: boolean;
+ disabledTopicName?: string;
+ setCurrentUserId: (id?: string) => void;
+ setFollowedUsers: (users: Set<string>) => void;
+ setFollowedTopics: (topics: Set<string>) => void;
+ setFollowLoadingUsers: (users: Set<string>) => void;
+ setRevealedPosts: (posts: Set<string>) => void;
+ setVisiblePostIds: (posts: Set<string>) => void;
+ setVoteOverride: (postId: string, override: VoteOverride) => void;
+ clearVoteOverride: (postId: string) => void;
+ setHandlers: (handlers: HomePostCardHandlers) => void;
+ setShareServer: (server: ShareServer) => void;
+ setAllowAutoplay: (allow: boolean) => void;
+  setActiveFeedScreen: (screen: 'home' | 'following' | 'topic' | null) => void;
+ triggerScrollToTop: () => void;
+ clearScrollToTop: () => void;
+ setDisabledTopicName: (name?: string) => void;
+ reset: () => void;
 };
 
 const emptySet = new Set<string>();
 
 export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
-  currentUserId: undefined,
-  followedUsers: emptySet,
-  followedTopics: emptySet,
-  followLoadingUsers: emptySet,
-  revealedPosts: emptySet,
-  visiblePostIds: emptySet,
-  voteOverrides: {},
-  handlers: {},
-  shareServer: "mirage.talk",
-  allowAutoplay: true,
-  feedActive: true,
-  shouldScrollToTop: false,
-  disabledTopicName: undefined,
-  setCurrentUserId: (id) => set({ currentUserId: id }),
+ currentUserId: undefined,
+ followedUsers: emptySet,
+ followedTopics: emptySet,
+ followLoadingUsers: emptySet,
+ revealedPosts: emptySet,
+ visiblePostIds: emptySet,
+ voteOverrides: {},
+ handlers: {},
+ shareServer: "mirage.talk",
+ allowAutoplay: true,
+  activeFeedScreen: null,
+ shouldScrollToTop: false,
+ disabledTopicName: undefined,
+ setCurrentUserId: (id) => set({ currentUserId: id }),
   setFollowedUsers: (users) => set({ followedUsers: users }),
   setFollowedTopics: (topics) => set({ followedTopics: topics }),
   setFollowLoadingUsers: (users) => set({ followLoadingUsers: users }),
@@ -125,24 +125,25 @@ setVoteOverride: (postId, override) =>
       const { [postId]: _, ...rest } = state.voteOverrides;
       return { voteOverrides: rest };
     }),
-  setHandlers: (handlers) => set({ handlers }),
-  setShareServer: (server) => set({ shareServer: server }),
-  setAllowAutoplay: (allow) => set({ allowAutoplay: allow }),
-  setFeedActive: (active) => set({ feedActive: active }),
-  triggerScrollToTop: () => set({ shouldScrollToTop: true }),
-  clearScrollToTop: () => set({ shouldScrollToTop: false }),
-  setDisabledTopicName: (name) => set({ disabledTopicName: name }),
-  reset: () => set({
-    currentUserId: undefined,
-    followedUsers: emptySet,
-    followedTopics: emptySet,
-    followLoadingUsers: emptySet,
-    revealedPosts: emptySet,
-    visiblePostIds: emptySet,
-    voteOverrides: {},
-    shouldScrollToTop: false,
-    disabledTopicName: undefined,
-  }),
+ setHandlers: (handlers) => set({ handlers }),
+ setShareServer: (server) => set({ shareServer: server }),
+ setAllowAutoplay: (allow) => set({ allowAutoplay: allow }),
+  setActiveFeedScreen: (screen) => set({ activeFeedScreen: screen }),
+ triggerScrollToTop: () => set({ shouldScrollToTop: true }),
+ clearScrollToTop: () => set({ shouldScrollToTop: false }),
+ setDisabledTopicName: (name) => set({ disabledTopicName: name }),
+ reset: () => set({
+   currentUserId: undefined,
+   followedUsers: emptySet,
+   followedTopics: emptySet,
+   followLoadingUsers: emptySet,
+   revealedPosts: emptySet,
+   visiblePostIds: emptySet,
+   voteOverrides: {},
+   shouldScrollToTop: false,
+   disabledTopicName: undefined,
+    activeFeedScreen: null,
+ }),
 }));
 
 // Primitive selectors that return stable values
@@ -173,10 +174,10 @@ export const useShareServer = () =>
   useHomePostCardStore((state) => state.shareServer);
 
 export const useAllowAutoplay = () =>
-  useHomePostCardStore((state) => state.allowAutoplay);
+ useHomePostCardStore((state) => state.allowAutoplay);
 
-export const useFeedActive = () =>
-  useHomePostCardStore((state) => state.feedActive);
+export const useFeedActive = (screen: 'home' | 'following' | 'topic') =>
+  useHomePostCardStore((state) => state.activeFeedScreen === screen);
 
 // Handler selectors - these return stable function references
 export const useHandlers = () =>

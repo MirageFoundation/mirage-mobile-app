@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FlatList } from "react-native";
@@ -707,13 +707,13 @@ export function TopicFeedScreen() {
   const setShareServerStore = useHomePostCardStore(
     (state) => state.setShareServer,
   );
-  const setAllowAutoplay = useHomePostCardStore(
-    (state) => state.setAllowAutoplay,
-  );
-  const setFeedActive = useHomePostCardStore((state) => state.setFeedActive);
-  const setDisabledTopicName = useHomePostCardStore(
-    (state) => state.setDisabledTopicName,
-  );
+ const setAllowAutoplay = useHomePostCardStore(
+   (state) => state.setAllowAutoplay,
+ );
+  const setActiveFeedScreen = useHomePostCardStore((state) => state.setActiveFeedScreen);
+ const setDisabledTopicName = useHomePostCardStore(
+   (state) => state.setDisabledTopicName,
+ );
 
   const followedUsersSet = useMemo(
     () => new Set(followedUsers),
@@ -754,22 +754,22 @@ export function TopicFeedScreen() {
     setShareServerStore(shareServer);
   }, [shareServer, setShareServerStore]);
 
-  useEffect(() => {
-    setAllowAutoplay(allowAutoplay);
-  }, [allowAutoplay, setAllowAutoplay]);
+ useEffect(() => {
+   setAllowAutoplay(allowAutoplay);
+ }, [allowAutoplay, setAllowAutoplay]);
 
-  useFocusEffect(
-    useCallback(() => {
-      setFeedActive(true);
-      setDisabledTopicName(topicName);
-      return () => {
-        setFeedActive(false);
-        setDisabledTopicName(undefined);
-      };
-    }, [setFeedActive, setDisabledTopicName, topicName]),
-  );
+ const isFocused = useIsFocused();
 
-  const handlersRef = useRef({
+ useEffect(() => {
+    setActiveFeedScreen(isFocused ? 'topic' : null);
+   if (isFocused) {
+     setDisabledTopicName(topicName);
+   } else {
+     setDisabledTopicName(undefined);
+   }
+  }, [isFocused, setActiveFeedScreen, setDisabledTopicName, topicName]);
+
+const handlersRef = useRef({
     handlePostPress,
     handleAuthorPress,
     handleTopicPress,
@@ -872,18 +872,19 @@ export function TopicFeedScreen() {
         <View style={styles.headerRight} />
       </View>
 
-      <HomePostList
-        ref={flatListRef}
-        data={posts}
-        contentContainerStyle={listContentStyle}
-        onScroll={() => {}}
-        ListHeaderComponent={ListHeaderComponent}
-        ListEmptyComponent={ListEmptyComponent}
-        ListFooterComponent={ListFooterComponent}
-        refreshControl={refreshControl}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={1.5}
-      />
+     <HomePostList
+       ref={flatListRef}
+       data={posts}
+       contentContainerStyle={listContentStyle}
+       onScroll={() => {}}
+       ListHeaderComponent={ListHeaderComponent}
+       ListEmptyComponent={ListEmptyComponent}
+       ListFooterComponent={ListFooterComponent}
+       refreshControl={refreshControl}
+       onEndReached={handleEndReached}
+       onEndReachedThreshold={1.5}
+        feedScreen="topic"
+     />
 
       <PostOptionsSheet
         ref={postOptionsSheetRef}
