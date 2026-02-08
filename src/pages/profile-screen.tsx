@@ -244,11 +244,13 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
   useFocusEffect(
     useCallback(() => {
       if (user?.walletAddress) {
+        refetchUserStatus();
+        refetchProfile();
         queryClient.invalidateQueries({
           queryKey: ["user", "posts", user.walletAddress],
         });
       }
-    }, [queryClient, user?.walletAddress]),
+    }, [queryClient, user?.walletAddress, refetchUserStatus, refetchProfile]),
   );
 
   const scrollHandler = useAnimatedScrollHandler({
