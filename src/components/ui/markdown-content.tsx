@@ -121,10 +121,22 @@ export const MarkdownContent = memo(function MarkdownContent({
         opacity: 0.8,
       },
       listItem: {
+        flexDirection: "row",
+        alignItems: "flex-start",
         marginBottom: theme.spacing.xs,
       },
       listBullet: {
         color: theme.colors.text.subtle,
+        fontSize: theme.typography.size.md,
+        lineHeight: theme.typography.size.md * theme.typography.leading.normal,
+        marginRight: theme.spacing.xs,
+      },
+      listItemContent: {
+        flex: 1,
+        flexWrap: "wrap",
+      },
+      list: {
+        marginVertical: theme.spacing.xs,
       },
       image: {
         borderRadius: theme.radius.md,
