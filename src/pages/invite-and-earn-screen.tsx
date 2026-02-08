@@ -45,9 +45,11 @@ const InviteCodeCard = ({
   isUsed: boolean;
   onShare: (code: string) => void;
 }) => {
-  const { theme } = useUnistyles();
+  const { theme, rt } = useUnistyles();
   const [copied, setCopied] = useState(false);
   const scale = useSharedValue(1);
+
+  const isLightTheme = rt.themeName !== "dark";
 
   const handleCopy = useCallback(async () => {
     if (isUsed) return;
@@ -89,6 +91,14 @@ const InviteCodeCard = ({
               : theme.colors.brand[500] + "40",
             opacity: isUsed ? 0.6 : 1,
           },
+          !isUsed &&
+            isLightTheme && {
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.08,
+              shadowRadius: 8,
+              elevation: 4,
+            },
         ]}
       >
         <View style={styles.codeContent}>
@@ -167,41 +177,41 @@ const ShareCodeSheet = ({
 }: {
   sheetRef: React.RefObject<BottomSheetModal | null>;
   code: string | null;
-  onDismiss: () => void;
+onDismiss: () => void;
 }) => {
- const { theme } = useUnistyles();
- const insets = useSafeAreaInsets();
- const shareServer = usePreferencesStore((s) => s.shareServer);
-  const [copiedCode, setCopiedCode] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
+  const { theme } = useUnistyles();
+const insets = useSafeAreaInsets();
+const shareServer = usePreferencesStore((s) => s.shareServer);
+const [copiedCode, setCopiedCode] = useState(false);
+ const [copiedLink, setCopiedLink] = useState(false);
 
- const shareUrl = code
-   ? `${getShareBaseUrl(shareServer)}/join?code=${code}`
-   : "";
- const shareMessage = `Join me on Mirage! Use my invite code: ${code}\n\n${shareUrl}`;
+  const shareUrl = code
+    ? `${getShareBaseUrl(shareServer)}/join?code=${code}`
+    : "";
+  const shareMessage = `Join me on Mirage! Use my invite code: ${code}\n\n${shareUrl}`;
 
- const handleCopyCode = useCallback(async () => {
-   if (!code) return;
-   try {
-     await Clipboard.setStringAsync(code);
-     triggerHaptic("success");
+  const handleCopyCode = useCallback(async () => {
+    if (!code) return;
+    try {
+      await Clipboard.setStringAsync(code);
+      triggerHaptic("success");
       setCopiedCode(true);
       setTimeout(() => setCopiedCode(false), 2000);
-   } catch (error) {
-     console.error("Failed to copy:", error);
-   }
- }, [code]);
+    } catch (error) {
+      console.error("Failed to copy:", error);
+    }
+  }, [code]);
 
- const handleCopyLink = useCallback(async () => {
-   try {
-     await Clipboard.setStringAsync(shareUrl);
-     triggerHaptic("success");
+  const handleCopyLink = useCallback(async () => {
+    try {
+      await Clipboard.setStringAsync(shareUrl);
+      triggerHaptic("success");
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
-   } catch (error) {
-     console.error("Failed to copy:", error);
-   }
- }, [shareUrl]);
+    } catch (error) {
+      console.error("Failed to copy:", error);
+    }
+  }, [shareUrl]);
 
   const handleNativeShare = useCallback(async () => {
     try {
@@ -259,12 +269,12 @@ const ShareCodeSheet = ({
           </Text>
         </View>
 
-        <View
-          style={[
-            styles.codeDisplayContainer,
-            { backgroundColor: theme.colors.background.subtle },
-          ]}
-        >
+      <View
+        style={[
+          styles.codeDisplayContainer,
+          { backgroundColor: theme.colors.background.subtle },
+        ]}
+      >
           <Text size="sm" mode="subtle" style={styles.codeLabel}>
             YOUR INVITE CODE
           </Text>
@@ -273,45 +283,45 @@ const ShareCodeSheet = ({
           </Text>
         </View>
 
-       <View style={styles.shareOptions}>
-         <Pressable
-           onPress={handleCopyCode}
-           style={({ pressed }) => [
-             styles.shareOption,
-             { backgroundColor: theme.colors.background.subtle },
-             pressed && { opacity: 0.7 },
-           ]}
-         >
-           <View
-             style={[
-               styles.shareOptionIcon,
-               {
+        <View style={styles.shareOptions}>
+          <Pressable
+            onPress={handleCopyCode}
+            style={({ pressed }) => [
+              styles.shareOption,
+              { backgroundColor: theme.colors.background.subtle },
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <View
+              style={[
+                styles.shareOptionIcon,
+                {
                   backgroundColor: copiedCode
-                   ? theme.colors.success[500]
-                   : theme.colors.brand[500],
-               },
-             ]}
-           >
-             <Ionicons
+                    ? theme.colors.success[500]
+                    : theme.colors.brand[500],
+                },
+              ]}
+            >
+              <Ionicons
                 name={copiedCode ? "checkmark" : "copy-outline"}
-               size={20}
-               color="#FFFFFF"
-             />
-           </View>
-           <Text size="sm" weight="medium">
+                size={20}
+                color="#FFFFFF"
+              />
+            </View>
+            <Text size="sm" weight="medium">
               {copiedCode ? "Copied!" : "Copy Code"}
-           </Text>
-         </Pressable>
+            </Text>
+          </Pressable>
 
-         <Pressable
-           onPress={handleCopyLink}
-           style={({ pressed }) => [
-             styles.shareOption,
-             { backgroundColor: theme.colors.background.subtle },
-             pressed && { opacity: 0.7 },
-           ]}
-         >
-           <View
+          <Pressable
+            onPress={handleCopyLink}
+            style={({ pressed }) => [
+              styles.shareOption,
+              { backgroundColor: theme.colors.background.subtle },
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <View
               style={[
                 styles.shareOptionIcon,
                 {
@@ -320,17 +330,17 @@ const ShareCodeSheet = ({
                     : "#6366F1",
                 },
               ]}
-           >
+            >
               <Ionicons
                 name={copiedLink ? "checkmark" : "link-outline"}
                 size={20}
                 color="#FFFFFF"
               />
-           </View>
-           <Text size="sm" weight="medium">
+            </View>
+            <Text size="sm" weight="medium">
               {copiedLink ? "Copied!" : "Copy Link"}
-           </Text>
-         </Pressable>
+            </Text>
+          </Pressable>
 
           <Pressable
             onPress={handleNativeShare}
@@ -356,20 +366,53 @@ const ShareCodeSheet = ({
 };
 
 export function InviteAndEarnScreen() {
- const router = useRouter();
- const insets = useSafeAreaInsets();
- const { theme } = useUnistyles();
- const sheetRef = useRef<BottomSheetModal>(null);
- const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { theme } = useUnistyles();
+  const sheetRef = useRef<BottomSheetModal>(null);
+  const [selectedCode, setSelectedCode] = useState<string | null>(null);
 
- const { data: inviteCodesData, isLoading } = useInviteCodes();
+  const { data: inviteCodesData, isLoading } = useInviteCodes();
 
-  const availableCodes = inviteCodesData?.codes.filter((c) => !c.is_used) ?? [];
-  const usedCodes = inviteCodesData?.codes.filter((c) => c.is_used) ?? [];
-  const availableCount = inviteCodesData?.available ?? 0;
-  const totalCount = inviteCodesData?.total ?? 0;
+  // TODO: Remove mock data before production
+  const USE_MOCK_DATA = true;
+  const mockInviteCodesData = {
+    codes: [
+      {
+        code: "AB12-CD34",
+        used_by: null,
+        created_at: 1768454857,
+        used_at: null,
+        is_used: false,
+      },
+      {
+        code: "EF56-GH78",
+        used_by: null,
+        created_at: 1768454857,
+        used_at: null,
+        is_used: false,
+      },
+      {
+        code: "IJ90-KL12",
+        used_by: "mirage1abc123",
+        created_at: 1768454857,
+        used_at: 1770100000,
+        is_used: true,
+      },
+    ],
+    total: 3,
+    available: 2,
+  };
 
- const handleBack = useCallback(() => {
+  const displayData = USE_MOCK_DATA ? mockInviteCodesData : inviteCodesData;
+  const displayLoading = USE_MOCK_DATA ? false : isLoading;
+
+  const availableCodes = displayData?.codes.filter((c) => !c.is_used) ?? [];
+  const usedCodes = displayData?.codes.filter((c) => c.is_used) ?? [];
+  const availableCount = displayData?.available ?? 0;
+  const totalCount = displayData?.total ?? 0;
+
+  const handleBack = useCallback(() => {
     triggerHaptic("light");
     router.back();
   }, [router]);
@@ -437,23 +480,23 @@ export function InviteAndEarnScreen() {
           <Text size="md" mode="subtle" style={styles.heroSubtitle}>
             {availableCount > 0
               ? "Mirage is now invite-only — because great conversations require great people! But don't fret, we've given you some invite codes for your friends. Use them wisely."
-             : "Mirage is now invite-only — because great conversations require great people! Unfortunately, you're out of invite codes. But don't worry, we might drop some more soon. Stay tuned!"}
-         </Text>
+              : "Mirage is now invite-only — because great conversations require great people! Unfortunately, you're out of invite codes. But don't worry, we might drop some more soon. Stay tuned!"}
+          </Text>
 
-          {isLoading ? (
-           <ActivityIndicator
-             size="small"
-             color={theme.colors.brand[500]}
-             style={{ marginTop: 24 }}
-           />
-         ) : null}
-       </View>
+          {displayLoading ? (
+            <ActivityIndicator
+              size="small"
+              color={theme.colors.brand[500]}
+              style={{ marginTop: 24 }}
+            />
+          ) : null}
+        </View>
 
-        {isLoading ? (
-         <View style={styles.loadingContainer}>
-           <ActivityIndicator size="large" color={theme.colors.brand[500]} />
-         </View>
-       ) : (
+        {displayLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.brand[500]} />
+          </View>
+        ) : (
           <>
             {availableCodes.length > 0 && (
               <View style={styles.section}>
@@ -498,7 +541,7 @@ export function InviteAndEarnScreen() {
                   <View
                     style={[
                       styles.countBadge,
-                      { backgroundColor: theme.colors.text.subtle + "20" },
+                      { backgroundColor: theme.colors.background.lighter },
                     ]}
                   >
                     <Text
@@ -607,14 +650,13 @@ const styles = StyleSheet.create((theme) => ({
   sectionTitle: {
     marginBottom: theme.spacing.sm,
   },
-  countBadge: {
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 2,
-    minWidth: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: theme.radius.full,
-  },
+countBadge: {
+    width: 20,
+    height: 20,
+  alignItems: "center",
+  justifyContent: "center",
+    borderRadius: 10,
+},
   codesGrid: {
     gap: theme.spacing.sm,
   },
