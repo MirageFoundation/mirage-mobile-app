@@ -67,6 +67,7 @@ type HomePostCardState = {
   triggerScrollToTop: () => void;
   clearScrollToTop: () => void;
   setDisabledTopicName: (name?: string) => void;
+  reset: () => void;
 };
 
 const emptySet = new Set<string>();
@@ -131,6 +132,17 @@ setVoteOverride: (postId, override) =>
   triggerScrollToTop: () => set({ shouldScrollToTop: true }),
   clearScrollToTop: () => set({ shouldScrollToTop: false }),
   setDisabledTopicName: (name) => set({ disabledTopicName: name }),
+  reset: () => set({
+    currentUserId: undefined,
+    followedUsers: emptySet,
+    followedTopics: emptySet,
+    followLoadingUsers: emptySet,
+    revealedPosts: emptySet,
+    visiblePostIds: emptySet,
+    voteOverrides: {},
+    shouldScrollToTop: false,
+    disabledTopicName: undefined,
+  }),
 }));
 
 // Primitive selectors that return stable values
