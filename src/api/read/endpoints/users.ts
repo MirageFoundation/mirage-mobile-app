@@ -10,6 +10,7 @@ import type {
   AddressFromUsernameResponse,
   UsernameFromAddressResponse,
   ValidateInviteCodeResponse,
+  GetInviteCodesResponse,
 } from "../../types";
 
 // ============================================
@@ -188,6 +189,16 @@ export async function getUsers(
 // ============================================
 // Invite Code Validation
 // ============================================
+
+export interface GetInviteCodesParams {
+ address: string;
+}
+
+export async function getInviteCodes(
+ params: GetInviteCodesParams
+): Promise<GetInviteCodesResponse> {
+  return api.get<GetInviteCodesResponse>("/get_invite_codes", params);
+}
 
 export interface ValidateInviteCodeParams {
   code: string;

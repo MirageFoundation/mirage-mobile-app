@@ -62,4 +62,5 @@ export const queryKeys = {
 
   // Invite Code
   inviteCode: (code: string) => ["inviteCode", code] as const,
+  inviteCodes: (address: string) => ["inviteCodes", address] as const,
 } as const;

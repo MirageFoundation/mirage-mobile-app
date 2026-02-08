@@ -1,270 +1,390 @@
-import { EvilIcons, Ionicons } from "@expo/vector-icons";
+import { EvilIcons, Ionicons, Feather } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { useCallback, useState, useRef } from "react";
+import {
+  Pressable,
+  ScrollView,
+  View,
+  Share,
+  Platform,
+  ActivityIndicator,
+} from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSequence,
   withTiming,
+  FadeIn,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetView,
+} from "@gorhom/bottom-sheet";
 
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { useAuthStore, usePreferencesStore, getShareBaseUrl } from "@/src/stores";
+import {
+  useAuthStore,
+  usePreferencesStore,
+  getShareBaseUrl,
+} from "@/src/stores";
+import { useInviteCodes } from "@/src/api/read/hooks";
+import type { InviteCode } from "@/src/api/types";
 
-// Referral Link Card Component
-const ReferralLinkCard = ({
-  label,
-  link,
-  onCopy,
+const InviteCodeCard = ({
+  code,
+  isUsed,
+  onShare,
 }: {
-  label: string;
-  link: string;
-  onCopy: (link: string) => void;
+  code: InviteCode;
+  isUsed: boolean;
+  onShare: (code: string) => void;
 }) => {
   const { theme } = useUnistyles();
   const [copied, setCopied] = useState(false);
   const scale = useSharedValue(1);
 
   const handleCopy = useCallback(async () => {
+    if (isUsed) return;
     try {
-      await Clipboard.setStringAsync(link);
+      await Clipboard.setStringAsync(code.code);
       triggerHaptic("success");
       setCopied(true);
-
-      // Animate the button
       scale.value = withSequence(
         withTiming(0.95, { duration: 100 }),
-        withTiming(1, { duration: 100 })
+        withTiming(1, { duration: 100 }),
       );
-
-      // Reset after 2 seconds
       setTimeout(() => setCopied(false), 2000);
-      onCopy(link);
     } catch (error) {
       console.error("Failed to copy:", error);
     }
-  }, [link, onCopy, scale]);
+  }, [code.code, isUsed, scale]);
+
+  const handleShare = useCallback(() => {
+    if (isUsed) return;
+    triggerHaptic("light");
+    onShare(code.code);
+  }, [code.code, isUsed, onShare]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
 
   return (
-    <View style={styles.linkCard}>
-      <Text size="sm" weight="medium" mode="subtle" style={styles.linkLabel}>
-        {label}
-      </Text>
-      <Animated.View style={animatedStyle}>
-        <Pressable
-          onPress={handleCopy}
-          style={({ pressed }) => [
-            styles.linkContainer,
-            {
-              backgroundColor: theme.colors.background.subtle,
-              borderColor: copied
-                ? theme.colors.success[500]
-                : theme.colors.border.subtle,
-            },
-            pressed && { opacity: 0.8 },
-          ]}
-        >
-          <Text
-            size="sm"
-            weight="regular"
-            numberOfLines={1}
-            style={styles.linkText}
-          >
-            {link}
-          </Text>
-          <View
-            style={[
-              styles.copyButton,
-              {
-                backgroundColor: copied
-                  ? theme.colors.success[500]
-                  : theme.colors.brand[500],
-              },
-            ]}
-          >
-            <Ionicons
-              name={copied ? "checkmark" : "copy-outline"}
-              size={16}
-              color="#FFFFFF"
-            />
-          </View>
-        </Pressable>
-      </Animated.View>
-      {copied && (
-        <Text size="xs" mode="success" style={styles.copiedText}>
-          Link copied to clipboard!
-        </Text>
-      )}
-    </View>
-  );
-};
-
-// Bullet Point Component
-const BulletPoint = ({ children }: { children: React.ReactNode }) => {
-  const { theme } = useUnistyles();
-
-  return (
-    <View style={styles.bulletContainer}>
-      <View
-        style={[styles.bullet, { backgroundColor: theme.colors.brand[500] }]}
-      />
-      <Text size="sm" weight="regular" style={styles.bulletText}>
-        {children}
-      </Text>
-    </View>
-  );
-};
-
-// Gradient color schemes for different stat types
-const STAT_THEMES = {
-  pending: {
-    gradient: ["#F59E0B", "#D97706", "#B45309"] as const,
-    iconBg: "rgba(251, 191, 36, 0.2)",
-    icon: "time-outline" as const,
-    glow: "#F59E0B",
-  },
-  paid: {
-    gradient: ["#10B981", "#059669", "#047857"] as const,
-    iconBg: "rgba(16, 185, 129, 0.2)",
-    icon: "checkmark-circle-outline" as const,
-    glow: "#10B981",
-  },
-  referrals: {
-    gradient: ["#8B5CF6", "#7C3AED", "#6D28D9"] as const,
-    iconBg: "rgba(139, 92, 246, 0.2)",
-    icon: "people-outline" as const,
-    glow: "#8B5CF6",
-  },
-};
-
-// Creative Stats Card Component with Gradients
-const StatsCard = ({
-  type,
-  label,
-  value,
-  unit,
-  subtitle,
-}: {
-  type: "pending" | "paid" | "referrals";
-  label: string;
-  value: string;
-  unit?: string;
-  subtitle?: string;
-}) => {
-  const { theme } = useUnistyles();
-  const statTheme = STAT_THEMES[type];
-
-  return (
-    <View style={styles.statsCardWrapper}>
-      {/* Glow effect */}
+    <Animated.View style={animatedStyle} entering={FadeIn.duration(300)}>
       <View
         style={[
-          styles.statsCardGlow,
-          { backgroundColor: statTheme.glow, opacity: 0.08 },
-        ]}
-      />
-      <View
-        style={[
-          styles.statsCard,
+          styles.inviteCodeCard,
           {
-            backgroundColor: theme.colors.background.default,
-            borderColor: `${statTheme.glow}30`,
+            backgroundColor: isUsed
+              ? theme.colors.background.subtle
+              : theme.colors.background.default,
+            borderColor: isUsed
+              ? theme.colors.border.subtle
+              : theme.colors.brand[500] + "40",
+            opacity: isUsed ? 0.6 : 1,
           },
         ]}
       >
-        {/* Header with icon */}
-        <View style={styles.statsCardHeader}>
-          <Text size="md" weight="medium" mode="subtle">
-            {label}
-          </Text>
-        </View>
-
-        {/* Value */}
-        <View style={styles.statsValueContainer}>
+        <View style={styles.codeContent}>
+          <View style={styles.codeHeader}>
+            <View
+              style={[
+                styles.codeStatusDot,
+                {
+                  backgroundColor: isUsed
+                    ? theme.colors.text.subtle
+                    : theme.colors.success[500],
+                },
+              ]}
+            />
+            <Text size="sm" mode="subtle">
+              {isUsed ? "Used" : "Available"}
+            </Text>
+          </View>
           <Text
-            size="mega"
+            size="xl"
             weight="bold"
-            style={{ color: statTheme.gradient[0] }}
+            style={[
+              styles.codeText,
+              {
+                letterSpacing: 2,
+                color: isUsed
+                  ? theme.colors.text.subtle
+                  : theme.colors.text.default,
+              },
+            ]}
           >
-            {value}
+            {code.code}
           </Text>
-          {unit && (
-            <Box
-              flex
-              direction="row"
-              justifyContent="space-between"
-              alignItems="center"
+        </View>
+        {!isUsed && (
+          <View style={styles.codeActions}>
+            <Pressable
+              onPress={handleCopy}
+              style={({ pressed }) => [
+                styles.actionButton,
+                {
+                  backgroundColor: copied
+                    ? theme.colors.success[500]
+                    : theme.colors.background.subtle,
+                },
+                pressed && { opacity: 0.7 },
+              ]}
             >
-              <Text
-                size="sm"
-                weight="medium"
-                style={{ color: statTheme.gradient[0] }}
-              >
-                {unit}
-              </Text>
-              {subtitle && (
-                <Text size="sm" mode="subtle">
-                  {subtitle}
-                </Text>
-              )}
-            </Box>
-          )}
+              <Ionicons
+                name={copied ? "checkmark" : "copy-outline"}
+                size={18}
+                color={copied ? "#FFFFFF" : theme.colors.text.default}
+              />
+            </Pressable>
+            <Pressable
+              onPress={handleShare}
+              style={({ pressed }) => [
+                styles.actionButton,
+                { backgroundColor: theme.colors.brand[500] },
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Ionicons name="share-outline" size={18} color="#FFFFFF" />
+            </Pressable>
+          </View>
+        )}
+      </View>
+    </Animated.View>
+  );
+};
+
+const ShareCodeSheet = ({
+  sheetRef,
+  code,
+  onDismiss,
+}: {
+  sheetRef: React.RefObject<BottomSheetModal | null>;
+  code: string | null;
+  onDismiss: () => void;
+}) => {
+ const { theme } = useUnistyles();
+ const insets = useSafeAreaInsets();
+ const shareServer = usePreferencesStore((s) => s.shareServer);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+ const shareUrl = code
+   ? `${getShareBaseUrl(shareServer)}/join?code=${code}`
+   : "";
+ const shareMessage = `Join me on Mirage! Use my invite code: ${code}\n\n${shareUrl}`;
+
+ const handleCopyCode = useCallback(async () => {
+   if (!code) return;
+   try {
+     await Clipboard.setStringAsync(code);
+     triggerHaptic("success");
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+   } catch (error) {
+     console.error("Failed to copy:", error);
+   }
+ }, [code]);
+
+ const handleCopyLink = useCallback(async () => {
+   try {
+     await Clipboard.setStringAsync(shareUrl);
+     triggerHaptic("success");
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+   } catch (error) {
+     console.error("Failed to copy:", error);
+   }
+ }, [shareUrl]);
+
+  const handleNativeShare = useCallback(async () => {
+    try {
+      triggerHaptic("light");
+      await Share.share({
+        message: Platform.OS === "ios" ? shareMessage : shareUrl,
+        url: Platform.OS === "ios" ? shareUrl : undefined,
+        title: "Join Mirage",
+      });
+      sheetRef.current?.dismiss();
+    } catch (error) {
+      console.error("Share failed:", error);
+    }
+  }, [shareMessage, shareUrl, sheetRef]);
+
+  const renderBackdrop = useCallback(
+    (props: any) => (
+      <BottomSheetBackdrop
+        {...props}
+        disappearsOnIndex={-1}
+        appearsOnIndex={0}
+        opacity={0.5}
+      />
+    ),
+    [],
+  );
+
+  return (
+    <BottomSheetModal
+      ref={sheetRef}
+      snapPoints={[480]}
+      enableDynamicSizing={false}
+      backdropComponent={renderBackdrop}
+      onDismiss={onDismiss}
+      handleIndicatorStyle={{ backgroundColor: theme.colors.text.subtle }}
+      backgroundStyle={{ backgroundColor: theme.colors.background.default }}
+    >
+      <BottomSheetView
+        style={[styles.sheetContent, { paddingBottom: insets.bottom + 32 }]}
+      >
+        <View style={styles.sheetHeader}>
+          <View
+            style={[
+              styles.sheetIconContainer,
+              { backgroundColor: theme.colors.brand[500] + "15" },
+            ]}
+          >
+            <Ionicons name="gift" size={32} color={theme.colors.brand[500]} />
+          </View>
+          <Text size="xl" weight="bold" style={styles.sheetTitle}>
+            Share Invite Code
+          </Text>
+          <Text size="md" mode="subtle" style={styles.sheetSubtitle}>
+            Invite a friend to join Mirage
+          </Text>
         </View>
 
-        {/* Bottom accent bar */}
-        <LinearGradient
-          colors={[...statTheme.gradient, "transparent"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.statsAccentBar}
-        />
-      </View>
-    </View>
+        <View
+          style={[
+            styles.codeDisplayContainer,
+            { backgroundColor: theme.colors.background.subtle },
+          ]}
+        >
+          <Text size="sm" mode="subtle" style={styles.codeLabel}>
+            YOUR INVITE CODE
+          </Text>
+          <Text size="mega" weight="bold" style={{ letterSpacing: 4 }}>
+            {code}
+          </Text>
+        </View>
+
+       <View style={styles.shareOptions}>
+         <Pressable
+           onPress={handleCopyCode}
+           style={({ pressed }) => [
+             styles.shareOption,
+             { backgroundColor: theme.colors.background.subtle },
+             pressed && { opacity: 0.7 },
+           ]}
+         >
+           <View
+             style={[
+               styles.shareOptionIcon,
+               {
+                  backgroundColor: copiedCode
+                   ? theme.colors.success[500]
+                   : theme.colors.brand[500],
+               },
+             ]}
+           >
+             <Ionicons
+                name={copiedCode ? "checkmark" : "copy-outline"}
+               size={20}
+               color="#FFFFFF"
+             />
+           </View>
+           <Text size="sm" weight="medium">
+              {copiedCode ? "Copied!" : "Copy Code"}
+           </Text>
+         </Pressable>
+
+         <Pressable
+           onPress={handleCopyLink}
+           style={({ pressed }) => [
+             styles.shareOption,
+             { backgroundColor: theme.colors.background.subtle },
+             pressed && { opacity: 0.7 },
+           ]}
+         >
+           <View
+              style={[
+                styles.shareOptionIcon,
+                {
+                  backgroundColor: copiedLink
+                    ? theme.colors.success[500]
+                    : "#6366F1",
+                },
+              ]}
+           >
+              <Ionicons
+                name={copiedLink ? "checkmark" : "link-outline"}
+                size={20}
+                color="#FFFFFF"
+              />
+           </View>
+           <Text size="sm" weight="medium">
+              {copiedLink ? "Copied!" : "Copy Link"}
+           </Text>
+         </Pressable>
+
+          <Pressable
+            onPress={handleNativeShare}
+            style={({ pressed }) => [
+              styles.shareOption,
+              { backgroundColor: theme.colors.background.subtle },
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <View
+              style={[styles.shareOptionIcon, { backgroundColor: "#10B981" }]}
+            >
+              <Feather name="share" size={20} color="#FFFFFF" />
+            </View>
+            <Text size="sm" weight="medium">
+              Share
+            </Text>
+          </Pressable>
+        </View>
+      </BottomSheetView>
+    </BottomSheetModal>
   );
 };
 
 export function InviteAndEarnScreen() {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { theme } = useUnistyles();
-  const user = useAuthStore((s) => s.user);
-  const shareServer = usePreferencesStore((s) => s.shareServer);
+ const router = useRouter();
+ const insets = useSafeAreaInsets();
+ const { theme } = useUnistyles();
+ const sheetRef = useRef<BottomSheetModal>(null);
+ const [selectedCode, setSelectedCode] = useState<string | null>(null);
 
-  // Generate referral links based on user ID
-  const userId = user?.id || "user123";
-  const shareBaseUrl = getShareBaseUrl(shareServer);
-  const referralLink1 = `${shareBaseUrl}/r/${userId}`;
-  const referralLink2 = `${shareBaseUrl}/invite/${userId}`;
+ const { data: inviteCodesData, isLoading } = useInviteCodes();
 
-  // Mock stats data
-  const stats = {
-    pending: "0.00",
-    paid: "0.00",
-    referrals: 0,
-  };
+  const availableCodes = inviteCodesData?.codes.filter((c) => !c.is_used) ?? [];
+  const usedCodes = inviteCodesData?.codes.filter((c) => c.is_used) ?? [];
+  const availableCount = inviteCodesData?.available ?? 0;
+  const totalCount = inviteCodesData?.total ?? 0;
 
-  const handleBack = useCallback(() => {
+ const handleBack = useCallback(() => {
     triggerHaptic("light");
     router.back();
   }, [router]);
 
-  const handleCopyLink = useCallback((link: string) => {
-    console.log("Copied link:", link);
+  const handleShareCode = useCallback((code: string) => {
+    setSelectedCode(code);
+    sheetRef.current?.present();
+  }, []);
+
+  const handleSheetDismiss = useCallback(() => {
+    setSelectedCode(null);
   }, []);
 
   return (
     <Box flex background="base">
-      {/* Header */}
       <View
         style={[
           styles.header,
@@ -298,167 +418,119 @@ export function InviteAndEarnScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero Section */}
         <View style={styles.heroSection}>
+          <LinearGradient
+            colors={[theme.colors.brand[500] + "20", "transparent"]}
+            style={styles.heroGradient}
+          />
           <View
             style={[
               styles.heroIconContainer,
-              { backgroundColor: `${theme.colors.brand[500]}15` },
+              { backgroundColor: theme.colors.brand[500] + "15" },
             ]}
           >
             <Ionicons name="gift" size={40} color={theme.colors.brand[500]} />
           </View>
           <Text size="xxl" weight="bold" style={styles.heroTitle}>
-            Earn MIRAGE by Inviting Friends
+            Invite Friends
           </Text>
-          <Text size="sm" mode="subtle" style={styles.heroSubtitle}>
-            Share your referral links and earn rewards up to 5 levels deep
-          </Text>
-        </View>
+          <Text size="md" mode="subtle" style={styles.heroSubtitle}>
+            {availableCount > 0
+              ? "Mirage is now invite-only — because great conversations require great people! But don't fret, we've given you some invite codes for your friends. Use them wisely."
+             : "Mirage is now invite-only — because great conversations require great people! Unfortunately, you're out of invite codes. But don't worry, we might drop some more soon. Stay tuned!"}
+         </Text>
 
-        {/* Referral Links Section */}
-        <View style={styles.section}>
-          <Text size="md" weight="semibold" style={styles.sectionTitle}>
-            Your Referral Links
-          </Text>
-          <ReferralLinkCard
-            label="Link #1"
-            link={referralLink1}
-            onCopy={handleCopyLink}
-          />
-          <ReferralLinkCard
-            label="Link #2"
-            link={referralLink2}
-            onCopy={handleCopyLink}
-          />
-        </View>
+          {isLoading ? (
+           <ActivityIndicator
+             size="small"
+             color={theme.colors.brand[500]}
+             style={{ marginTop: 24 }}
+           />
+         ) : null}
+       </View>
 
-        {/* How It Works Section */}
-        <View style={styles.section}>
-          <Text size="md" weight="semibold" style={styles.sectionTitle}>
-            How It Works
-          </Text>
-          <View
-            style={[
-              styles.howItWorksCard,
-              {
-                backgroundColor: theme.colors.background.subtle,
-                borderColor: theme.colors.border.subtle,
-              },
-            ]}
-          >
-            <BulletPoint>Share your referral link with friends</BulletPoint>
-            <BulletPoint>
-              Earn 1 MIRAGE for each day a direct referral posts or comments (L1
-              = 1x)
-            </BulletPoint>
-            <BulletPoint>
-              Earn 0.5 MIRAGE for each day their referrals post (L2 = 0.5x)
-            </BulletPoint>
-            <BulletPoint>
-              Earn 0.25, 0.125, 0.0625 for L3, L4, L5 respectively
-            </BulletPoint>
-            <BulletPoint>Max 10 active days count per referral</BulletPoint>
-            <BulletPoint>
-              Rewards are reviewed weekly and paid out after approval
-            </BulletPoint>
-          </View>
-        </View>
+        {isLoading ? (
+         <View style={styles.loadingContainer}>
+           <ActivityIndicator size="large" color={theme.colors.brand[500]} />
+         </View>
+       ) : (
+          <>
+            {availableCodes.length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text size="md" weight="semibold">
+                    Available Codes
+                  </Text>
+                  <View
+                    style={[
+                      styles.countBadge,
+                      { backgroundColor: theme.colors.success[500] + "20" },
+                    ]}
+                  >
+                    <Text
+                      size="sm"
+                      weight="semibold"
+                      style={{ color: theme.colors.success[500] }}
+                    >
+                      {availableCount}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.codesGrid}>
+                  {availableCodes.map((code) => (
+                    <InviteCodeCard
+                      key={code.code}
+                      code={code}
+                      isUsed={false}
+                      onShare={handleShareCode}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
 
-        {/* Example Section */}
-        <View style={styles.section}>
-          <Text size="md" weight="semibold" style={styles.sectionTitle}>
-            Example
-          </Text>
-          <View
-            style={[
-              styles.exampleCard,
-              {
-                backgroundColor: `${theme.colors.brand[500]}08`,
-                borderColor: `${theme.colors.brand[500]}30`,
-              },
-            ]}
-          >
-            <Ionicons
-              name="calculator-outline"
-              size={24}
-              color={theme.colors.brand[500]}
-              style={styles.exampleIcon}
-            />
-            <Text size="sm" weight="regular" style={styles.exampleText}>
-              You invite Alice and Bob. Alice is active for 5 days and invites
-              Carol, who is active for 3 days.
-            </Text>
-            <View style={styles.exampleCalc}>
-              <Text size="sm" weight="medium" mode="brand">
-                You earn: (5 × 1) + (5 × 1) + (3 × 0.5) = 11.5 MIRAGE
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Stats Section */}
-        <View style={styles.section}>
-          <Text size="md" weight="semibold" style={styles.sectionTitle}>
-            Your Rewards
-          </Text>
-          <View style={styles.statsRow}>
-            <StatsCard
-              type="pending"
-              label="Pending"
-              value={stats.pending}
-              unit="MIRAGE"
-            />
-            <StatsCard
-              type="paid"
-              label="Paid"
-              value={stats.paid}
-              unit="MIRAGE"
-            />
-          </View>
-          <StatsCard
-            type="referrals"
-            label="Referrals"
-            value={String(stats.referrals)}
-            unit="USERS"
-            subtitle="across all levels"
-          />
-          <Text size="sm" weight="thin" mode="subtle" style={styles.emptyText}>
-            No referrals yet. Share your link to get started!
-          </Text>
-        </View>
-
-        {/* Important Note Section */}
-        <View style={styles.section}>
-          <View
-            style={[
-              styles.warningCard,
-              {
-                backgroundColor: `${theme.colors.warning[500]}10`,
-                borderColor: `${theme.colors.warning[500]}40`,
-              },
-            ]}
-          >
-            <View style={styles.warningHeader}>
-              <Ionicons
-                name="warning"
-                size={20}
-                color={theme.colors.warning[500]}
-              />
-              <Text size="md" weight="semibold" mode="warning">
-                Important Note
-              </Text>
-            </View>
-            <Text size="sm" weight="regular" style={styles.warningText}>
-              Creating fake accounts (sockpuppets) to game the referral system
-              is strictly prohibited. All referred accounts are reviewed for
-              authenticity. If sockpuppet activity is detected, your account
-              will be suspended and all pending rewards will be forfeited. Only
-              invite real people who will genuinely participate in Mirage.
-            </Text>
-          </View>
-        </View>
+            {usedCodes.length > 0 && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text size="md" weight="semibold">
+                    Used Codes
+                  </Text>
+                  <View
+                    style={[
+                      styles.countBadge,
+                      { backgroundColor: theme.colors.text.subtle + "20" },
+                    ]}
+                  >
+                    <Text
+                      size="sm"
+                      weight="bold"
+                      style={{ color: theme.colors.text.default }}
+                    >
+                      {usedCodes.length}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.codesGrid}>
+                  {usedCodes.map((code) => (
+                    <InviteCodeCard
+                      key={code.code}
+                      code={code}
+                      isUsed={true}
+                      onShare={handleShareCode}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
+          </>
+        )}
       </ScrollView>
+
+      <ShareCodeSheet
+        sheetRef={sheetRef}
+        code={selectedCode}
+        onDismiss={handleSheetDismiss}
+      />
     </Box>
   );
 }
@@ -491,6 +563,17 @@ const styles = StyleSheet.create((theme) => ({
   heroSection: {
     alignItems: "center",
     paddingVertical: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: theme.radius.xl,
+  },
+  heroGradient: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   heroIconContainer: {
     width: 80,
@@ -508,152 +591,116 @@ const styles = StyleSheet.create((theme) => ({
     textAlign: "center",
     paddingHorizontal: theme.spacing.lg,
   },
+  loadingContainer: {
+    padding: theme.spacing.xxl,
+    alignItems: "center",
+  },
   section: {
     marginBottom: theme.spacing.lg,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
   },
   sectionTitle: {
     marginBottom: theme.spacing.sm,
   },
-  linkCard: {
-    marginBottom: theme.spacing.sm,
+  countBadge: {
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 2,
+    minWidth: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.radius.full,
   },
-  linkLabel: {
-    marginBottom: theme.spacing.xs,
-    marginLeft: theme.spacing.xs,
+  codesGrid: {
+    gap: theme.spacing.sm,
   },
-  linkContainer: {
+  inviteCodeCard: {
     flexDirection: "row",
     alignItems: "center",
-    paddingLeft: theme.spacing.md,
-    paddingRight: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs,
+    justifyContent: "space-between",
+    padding: theme.spacing.md,
     borderRadius: theme.radius.lg,
     borderWidth: 1,
   },
-  linkText: {
+  codeContent: {
     flex: 1,
-    marginRight: theme.spacing.sm,
   },
-  copyButton: {
-    width: 36,
-    height: 36,
+  codeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+    marginBottom: theme.spacing.xs,
+  },
+  codeStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  codeText: {
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  },
+  codeActions: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
+  actionButton: {
+    width: 40,
+    height: 40,
     borderRadius: theme.radius.md,
     alignItems: "center",
     justifyContent: "center",
   },
-  copiedText: {
-    marginTop: theme.spacing.xs,
-    marginLeft: theme.spacing.xs,
-  },
-  howItWorksCard: {
+  sheetContent: {
     padding: theme.spacing.md,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    gap: theme.spacing.sm,
   },
-  bulletContainer: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-  },
-  bullet: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginTop: 6,
-    marginRight: theme.spacing.sm,
-  },
-  bulletText: {
-    flex: 1,
-  },
-  exampleCard: {
-    padding: theme.spacing.md,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-  },
-  exampleIcon: {
-    marginBottom: theme.spacing.sm,
-  },
-  exampleText: {
-    marginBottom: theme.spacing.sm,
-  },
-  exampleCalc: {
-    paddingTop: theme.spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(66, 133, 244, 0.2)",
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
-  },
-  statsCardWrapper: {
-    flex: 1,
-    position: "relative",
-  },
-  statsCardGlow: {
-    position: "absolute",
-    top: 4,
-    left: 4,
-    right: 4,
-    bottom: -4,
-    borderRadius: theme.radius.xl,
-    transform: [{ scale: 1.02 }],
-  },
-  statsCard: {
-    padding: theme.spacing.md,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    overflow: "hidden",
-    position: "relative",
-  },
-  statsCardHeader: {
-    flexDirection: "row",
+  sheetHeader: {
     alignItems: "center",
-    gap: theme.spacing.xs,
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
   },
-  statsIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  sheetIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: theme.spacing.md,
   },
-  statsValueContainer: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: theme.spacing.xs,
+  sheetTitle: {
+    marginBottom: theme.spacing.xs,
   },
-
-  statsAccentBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 3,
+  sheetSubtitle: {
+    textAlign: "center",
   },
-  emptyState: {
+  codeDisplayContainer: {
     alignItems: "center",
     padding: theme.spacing.lg,
     borderRadius: theme.radius.lg,
-    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.lg,
   },
-  emptyText: {
-    marginTop: theme.spacing.xs,
-    textAlign: "left",
+  codeLabel: {
+    marginBottom: theme.spacing.sm,
+    letterSpacing: 1,
   },
-  warningCard: {
+  shareOptions: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
+  shareOption: {
+    flex: 1,
+    alignItems: "center",
     padding: theme.spacing.md,
     borderRadius: theme.radius.lg,
-    borderWidth: 1,
-  },
-  warningHeader: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
   },
-  warningText: {
-    lineHeight: 18,
+  shareOptionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
   },
 }));

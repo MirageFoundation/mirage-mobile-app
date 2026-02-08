@@ -456,6 +456,20 @@ export interface ReferralStatsResponse {
 // Invite Code
 // ============================================
 
+export interface InviteCode {
+  code: string;
+  used_by: string | null;
+  created_at: number;
+  used_at: number | null;
+  is_used: boolean;
+}
+
+export interface GetInviteCodesResponse {
+  codes: InviteCode[];
+  total: number;
+  available: number;
+}
+
 export interface ValidateInviteCodeResponse {
   valid: boolean;
   code: string;
