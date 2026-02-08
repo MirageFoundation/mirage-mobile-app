@@ -14,6 +14,7 @@ import {
   useIsPostVisible,
   useShareServer,
   useVoteOverride,
+  useCommentCountOverride,
   useIsTopicDisabled,
 } from "./home-post-card-store";
 
@@ -51,6 +52,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  const isTopicFollowed = useIsTopicFollowed(post.topic);
  const contentRevealed = useIsPostRevealed(post.id);
  const voteOverride = useVoteOverride(post.id);
+ const commentCountOverride = useCommentCountOverride(post.id);
  const isOwnPost = useIsOwnPost(post.author.id);
  const isTopicDisabled = useIsTopicDisabled(post.topic);
  const shareServer = useShareServer();
@@ -168,7 +170,8 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   const displayPost = useMemo(() => {
     const needsFollowingUpdate = (post.isFollowing ?? false) !== isFollowing;
     const needsVoteUpdate = !!voteOverride;
-    if (!needsFollowingUpdate && !needsVoteUpdate) return post;
+    const needsCommentCountUpdate = !!commentCountOverride;
+    if (!needsFollowingUpdate && !needsVoteUpdate && !needsCommentCountUpdate) return post;
     return {
       ...post,
       isFollowing,
@@ -177,8 +180,11 @@ export const HomePostCardItem = memo(function HomePostCardItem({
         hasLiked: voteOverride.hasLiked ?? post.hasLiked,
         hasDisliked: voteOverride.hasDisliked ?? post.hasDisliked,
       }),
+      ...(commentCountOverride && {
+        comments: post.comments + (commentCountOverride.commentDelta ?? 0),
+      }),
     };
-  }, [post, isFollowing, voteOverride]);
+  }, [post, isFollowing, voteOverride, commentCountOverride]);
 
   return (
    <PostCard

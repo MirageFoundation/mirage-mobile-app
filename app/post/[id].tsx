@@ -46,6 +46,7 @@ import {
   getShareBaseUrl,
 } from "@/src/stores";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
+import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 import {
   AntDesign,
   Ionicons,
@@ -173,6 +174,12 @@ export default function PostDetailScreen() {
   const toggleFollowTopicMutation = useToggleFollowTopic();
   const toast = useToast();
 
+  // Shared store for vote and comment count overrides (syncs with home/following screens)
+  const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
+  const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
+  const incrementCommentCount = useHomePostCardStore((state) => state.incrementCommentCount);
+  const decrementCommentCount = useHomePostCardStore((state) => state.decrementCommentCount);
+
   // Track follow loading state
 const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Set());
   const followLoadingRef = useRef<Set<string>>(new Set());
@@ -231,11 +238,11 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
         ...prev,
         comments: Math.max(
           0,
-          (prev.comments ?? displayPost?.comments ?? 0) - 1,
+          (prev.comments ?? commentsData?.root?.comments ?? 0) - 1,
         ),
       }));
     },
-    [displayPost?.comments],
+    [commentsData?.root?.comments],
   );
 
   // Optimistic confirm handlers - hide content/navigate immediately before API call
@@ -250,9 +257,14 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
           router.back();
         }
       } else {
-        globalHideComment(pending.id);
+      globalHideComment(pending.id);
         setHiddenCommentIds((prev) => new Set(prev).add(pending.id));
         removeCommentFromState(pending.id);
+
+        // Also update shared store (syncs with home/following screens)
+        if (id) {
+          decrementCommentCount(id);
+        }
 
         // If deleting the highlighted comment (came from profile), navigate back
         if (highlight && pending.id === highlight && isMountedRef.current) {
@@ -270,6 +282,8 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
     globalHidePost,
     globalHideComment,
     highlight,
+    id,
+    decrementCommentCount,
   ]);
 
   const handleConfirmBlock = useCallback(() => {
@@ -284,9 +298,9 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
         }
       } else if (pending.type === "user") {
         // Block user in global store (syncs to home screen)
-        globalBlockUser(pending.id);
+      globalBlockUser(pending.id);
         // Check if the blocked user is the post author
-        const isPostAuthor = displayPost?.author.id === pending.id;
+        const isPostAuthor = commentsData?.root?.user_id === pending.id;
         if (isPostAuthor) {
           // Navigate back if blocking the post author
           if (isMountedRef.current) {
@@ -307,7 +321,7 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
     blockHandler.confirmBlock();
   }, [
     blockHandler,
-    displayPost?.author.id,
+    commentsData?.root?.user_id,
     router,
     globalHidePost,
     globalBlockUser,
@@ -507,17 +521,15 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
   const postVoteHandler = useVoteHandler({
     onOptimisticUpdate: useCallback(
       (targetId: string, result: VoteResult) => {
-        setLocalPostUpdates((prev) => {
-          const currentLikes = prev.likes ?? post?.likes ?? 0;
-          return {
-            ...prev,
-            hasLiked: result.hasLiked,
-            hasDisliked: result.hasDisliked,
-            likes: currentLikes + result.likeDelta,
-          };
+        // Only update shared store - don't use local state for votes
+        // This ensures consistency between home/following and post detail screens
+        setVoteOverride(targetId, {
+          hasLiked: result.hasLiked,
+          hasDisliked: result.hasDisliked,
+          likeDelta: result.likeDelta,
         });
       },
-      [post?.likes],
+      [setVoteOverride],
     ),
     onRollback: useCallback(
       (
@@ -528,14 +540,10 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
           likes: number;
         },
       ) => {
-        setLocalPostUpdates((prev) => ({
-          ...prev,
-          hasLiked: previousState.hasLiked,
-          hasDisliked: previousState.hasDisliked,
-          likes: previousState.likes,
-        }));
+        // Clear the shared store override
+        clearVoteOverride(targetId);
       },
-      [],
+      [clearVoteOverride],
     ),
   });
 
@@ -575,10 +583,41 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
   });
 
   // Merge post data with local updates (for optimistic UI)
+  // Read vote override from shared store (in case vote was made on home/following)
+  const sharedVoteOverride = useHomePostCardStore((state) => 
+    id ? state.voteOverrides[id] : undefined
+  );
+  const sharedCommentCountOverride = useHomePostCardStore((state) =>
+    id ? state.commentCountOverrides[id] : undefined
+  );
+
+  // Merge post data with local updates and shared store overrides (for optimistic UI)
   const displayPost = useMemo(() => {
     if (!post) return null;
-    return { ...post, ...localPostUpdates };
-  }, [post, localPostUpdates]);
+    
+    // Start with base post data and local updates (for non-vote fields like comments, isFollowing)
+    let result = { ...post, ...localPostUpdates };
+    
+    // Always apply shared store vote override (votes only use shared store, not local state)
+    if (sharedVoteOverride) {
+      result = {
+        ...result,
+        likes: (post.likes ?? 0) + (sharedVoteOverride.likeDelta ?? 0),
+        hasLiked: sharedVoteOverride.hasLiked ?? result.hasLiked,
+        hasDisliked: sharedVoteOverride.hasDisliked ?? result.hasDisliked,
+      };
+    }
+    
+    // Apply shared store comment count override if present (and not already overridden locally)
+    if (sharedCommentCountOverride && localPostUpdates.comments === undefined) {
+      result = {
+        ...result,
+        comments: (result.comments ?? 0) + (sharedCommentCountOverride.commentDelta ?? 0),
+      };
+    }
+    
+    return result;
+  }, [post, localPostUpdates, sharedVoteOverride, sharedCommentCountOverride]);
   const [revealedContent, setRevealedContent] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
@@ -812,37 +851,25 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
     const currentPost = displayPost;
     if (!currentPost) return;
 
-    const currentHasLiked =
-      localPostUpdates.hasLiked ?? currentPost.hasLiked ?? false;
-    const currentHasDisliked =
-      localPostUpdates.hasDisliked ?? currentPost.hasDisliked ?? false;
-    const currentLikes = localPostUpdates.likes ?? currentPost.likes;
-
     postVoteHandler.handleUpvote(
       currentPost.id,
-      currentHasLiked,
-      currentHasDisliked,
-      currentLikes,
+      currentPost.hasLiked ?? false,
+      currentPost.hasDisliked ?? false,
+      currentPost.likes,
     );
-  }, [displayPost, localPostUpdates, postVoteHandler]);
+  }, [displayPost, postVoteHandler]);
 
   const handleDislikePost = useCallback(() => {
     const currentPost = displayPost;
     if (!currentPost) return;
 
-    const currentHasLiked =
-      localPostUpdates.hasLiked ?? currentPost.hasLiked ?? false;
-    const currentHasDisliked =
-      localPostUpdates.hasDisliked ?? currentPost.hasDisliked ?? false;
-    const currentLikes = localPostUpdates.likes ?? currentPost.likes;
-
     postVoteHandler.handleDownvote(
       currentPost.id,
-      currentHasLiked,
-      currentHasDisliked,
-      currentLikes,
+      currentPost.hasLiked ?? false,
+      currentPost.hasDisliked ?? false,
+      currentPost.likes,
     );
-  }, [displayPost, localPostUpdates, postVoteHandler]);
+  }, [displayPost, postVoteHandler]);
 
 const handleAuthorPress = useCallback(() => {
   if (!displayPost) return;
@@ -1201,6 +1228,11 @@ const handleFollowPost = useCallback(() => {
         comments: (prev.comments ?? displayPost?.comments ?? 0) + 1,
       }));
 
+      // Also update shared store (syncs with home/following screens)
+      if (id) {
+        incrementCommentCount(id);
+      }
+
       // Clear reply state immediately so UI updates
       setReplyingTo(null);
       setIsSubmitting(false);
@@ -1257,6 +1289,11 @@ const handleFollowPost = useCallback(() => {
             (prev.comments ?? displayPost?.comments ?? 0) - 1,
           ),
         }));
+
+        // Also revert shared store (syncs with home/following screens)
+        if (id) {
+          decrementCommentCount(id);
+        }
 
         // Update toast to error
         toast.update(toastId, {

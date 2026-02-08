@@ -8,6 +8,10 @@ type VoteOverride = {
   likeDelta?: number;
 };
 
+type CommentCountOverride = {
+  commentDelta: number;
+};
+
 type HomePostCardHandlers = {
   onPostPress?: (postId: string) => void;
   onAuthorPress?: (authorId: string) => void;
@@ -46,6 +50,7 @@ type HomePostCardState = {
  revealedPosts: Set<string>;
  visiblePostIds: Set<string>;
  voteOverrides: Record<string, VoteOverride>;
+ commentCountOverrides: Record<string, CommentCountOverride>;
  handlers: HomePostCardHandlers;
  shareServer: ShareServer;
  allowAutoplay: boolean;
@@ -60,6 +65,9 @@ type HomePostCardState = {
  setVisiblePostIds: (posts: Set<string>) => void;
  setVoteOverride: (postId: string, override: VoteOverride) => void;
  clearVoteOverride: (postId: string) => void;
+ incrementCommentCount: (postId: string) => void;
+ decrementCommentCount: (postId: string) => void;
+ clearCommentCountOverride: (postId: string) => void;
  setHandlers: (handlers: HomePostCardHandlers) => void;
  setShareServer: (server: ShareServer) => void;
  setAllowAutoplay: (allow: boolean) => void;
@@ -80,6 +88,7 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
  revealedPosts: emptySet,
  visiblePostIds: emptySet,
  voteOverrides: {},
+ commentCountOverrides: {},
  handlers: {},
  shareServer: "mirage.talk",
  allowAutoplay: true,
@@ -125,6 +134,33 @@ setVoteOverride: (postId, override) =>
       const { [postId]: _, ...rest } = state.voteOverrides;
       return { voteOverrides: rest };
     }),
+ incrementCommentCount: (postId) =>
+   set((state) => {
+     const current = state.commentCountOverrides[postId];
+     const currentDelta = current?.commentDelta ?? 0;
+     return {
+       commentCountOverrides: {
+         ...state.commentCountOverrides,
+         [postId]: { commentDelta: currentDelta + 1 },
+       },
+     };
+   }),
+ decrementCommentCount: (postId) =>
+   set((state) => {
+     const current = state.commentCountOverrides[postId];
+     const currentDelta = current?.commentDelta ?? 0;
+     return {
+       commentCountOverrides: {
+         ...state.commentCountOverrides,
+         [postId]: { commentDelta: currentDelta - 1 },
+       },
+     };
+   }),
+ clearCommentCountOverride: (postId) =>
+   set((state) => {
+     const { [postId]: _, ...rest } = state.commentCountOverrides;
+     return { commentCountOverrides: rest };
+   }),
  setHandlers: (handlers) => set({ handlers }),
  setShareServer: (server) => set({ shareServer: server }),
  setAllowAutoplay: (allow) => set({ allowAutoplay: allow }),
@@ -140,6 +176,7 @@ setVoteOverride: (postId, override) =>
    revealedPosts: emptySet,
    visiblePostIds: emptySet,
    voteOverrides: {},
+   commentCountOverrides: {},
    shouldScrollToTop: false,
    disabledTopicName: undefined,
     activeFeedScreen: null,
@@ -166,6 +203,9 @@ export const useIsTopicFollowed = (topic?: string) =>
 
 export const useVoteOverride = (postId: string) =>
   useHomePostCardStore((state) => state.voteOverrides[postId]);
+
+export const useCommentCountOverride = (postId: string) =>
+  useHomePostCardStore((state) => state.commentCountOverrides[postId]);
 
 export const useIsOwnPost = (authorId: string) =>
  useHomePostCardStore((state) => state.currentUserId === authorId);
