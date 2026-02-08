@@ -181,14 +181,14 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   }, [post, isFollowing, voteOverride]);
 
   return (
-    <PostCard
-      post={displayPost}
-      isOwnPost={isOwnPost}
-      isVisible={isVisible}
-      isTopicFollowed={isTopicFollowed}
-      showFollowButton={false}
-      showUrlCard={false}
-      allowAutoplay={allowAutoplay}
+   <PostCard
+     post={displayPost}
+     isOwnPost={isOwnPost}
+     isVisible={isVisible}
+     isTopicFollowed={isTopicFollowed}
+      showFollowButton={true}
+     showUrlCard={false}
+     allowAutoplay={allowAutoplay}
       screenActive={feedActive}
       onPress={handlePostPress}
       onAuthorPress={handleAuthorPress}

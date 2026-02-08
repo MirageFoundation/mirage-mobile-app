@@ -4,9 +4,21 @@ import * as Linking from "expo-linking";
 import { memo, useCallback, useMemo } from "react";
 import { useUnistyles } from "react-native-unistyles";
 
+// Regex to match URLs that are not already in markdown link format
+const URL_REGEX = /(?<!\]\()(?<!\[)(https?:\/\/[^\s<>"\[\]]+)/gi;
+
+// Convert plain URLs to markdown links
+function autoLinkUrls(content: string): string {
+  // Don't convert URLs that are already inside markdown links [text](url) or images ![alt](url)
+  return content.replace(URL_REGEX, (url) => {
+    // Check if this URL is already part of a markdown link by looking at surrounding context
+    return `[${url}](${url})`;
+  });
+}
+
 type MarkdownContentProps = {
-  content: string;
-  onLinkPress?: (url: string) => void;
+ content: string;
+ onLinkPress?: (url: string) => void;
 };
 
 export const MarkdownContent = memo(function MarkdownContent({
@@ -172,13 +184,16 @@ export const MarkdownContent = memo(function MarkdownContent({
     [theme],
   );
 
-  return (
-   <Markdown
-     markdown={content}
-     styles={markdownStyles}
-      mergeStyle={false}
-     renderRules={renderRules}
-     onLinkPress={handleLinkPress}
-   />
-  );
+  // Preprocess content to auto-link plain URLs
+  const processedContent = useMemo(() => autoLinkUrls(content), [content]);
+
+ return (
+  <Markdown
+     markdown={processedContent}
+    styles={markdownStyles}
+     mergeStyle={false}
+    renderRules={renderRules}
+    onLinkPress={handleLinkPress}
+  />
+ );
 });
