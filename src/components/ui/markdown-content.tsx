@@ -15,20 +15,21 @@ export const MarkdownContent = memo(function MarkdownContent({
 }: MarkdownContentProps) {
   const { theme } = useUnistyles();
 
-  const handleLinkPress = useCallback(
-    (url: string) => {
-      if (onLinkPress) {
-        onLinkPress(url);
-        return;
-      }
-      const fullUrl =
-        url.startsWith("http://") || url.startsWith("https://")
-          ? url
-          : `https://${url}`;
+ const handleLinkPress = useCallback(
+   (url: string) => {
+     if (onLinkPress) {
+       onLinkPress(url);
+        return true;
+     }
+     const fullUrl =
+       url.startsWith("http://") || url.startsWith("https://")
+         ? url
+         : `https://${url}`;
       Linking.openURL(fullUrl).catch(() => {});
-    },
-    [onLinkPress],
-  );
+      return true;
+   },
+   [onLinkPress],
+ );
 
   const markdownStyles = useMemo<StyleMap>(
     () => ({
