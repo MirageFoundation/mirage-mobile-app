@@ -3,6 +3,7 @@ import type { Post } from "@/src/api/types";
 import { TimeAgo } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
+import { MediaPreviewModal } from "./media-preview-modal";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -40,38 +41,59 @@ function extractImageUrls(content: string): {
   return { text: textLines.join("\n").trim(), imageUrls };
 }
 
-const CommentImage = ({ url }: { url: string }) => {
-  const { theme } = useUnistyles();
-  const [hasError, setHasError] = useState(false);
+const CommentImage = ({ url, onPress }: { url: string; onPress?: () => void }) => {
+const { theme } = useUnistyles();
+const [hasError, setHasError] = useState(false);
+ const [aspectRatio, setAspectRatio] = useState(16 / 9);
 
-  if (hasError) {
-    return (
-      <View
-        style={[
-          styles.imageError,
-          { backgroundColor: theme.colors.background.subtle },
-        ]}
-      >
-        <Text size="xs" mode="subtle">
-          Failed to load image
-        </Text>
-      </View>
-    );
-  }
+  const MEDIA_MAX_HEIGHT = 450;
+  const containerWidth = 350;
+  const calculatedHeight = containerWidth / aspectRatio;
+  const exceedsMaxHeight = calculatedHeight > MEDIA_MAX_HEIGHT;
+  const containerStyle = exceedsMaxHeight
+    ? { height: MEDIA_MAX_HEIGHT }
+    : { aspectRatio };
 
+if (hasError) {
   return (
-    <View style={styles.imageContainer}>
-      <Image
-        source={{ uri: url }}
-        style={styles.image}
-        contentFit="cover"
-        transition={200}
-        onError={() => setHasError(true)}
-      />
+    <View
+      style={[
+        styles.imageError,
+        { backgroundColor: theme.colors.background.subtle },
+      ]}
+    >
+      <Text size="xs" mode="subtle">
+        Failed to load image
+      </Text>
     </View>
   );
-};
+}
 
+return (
+  <Pressable 
+      style={[styles.imageContainer, containerStyle]}
+    onPress={() => {
+      if (onPress) {
+        triggerHaptic("selection");
+        onPress();
+      }
+    }}
+  >
+    <Image
+      source={{ uri: url }}
+      style={styles.image}
+      contentFit="cover"
+      transition={200}
+       onLoad={({ source }) => {
+         if (source?.width && source?.height) {
+           setAspectRatio(source.width / source.height);
+         }
+       }}
+      onError={() => setHasError(true)}
+    />
+   </Pressable>
+);
+};
 interface ProfileCommentItemProps {
   comment: Post;
   onPress: (commentId: string, rootPostId: string) => void;
@@ -85,9 +107,10 @@ export const ProfileCommentItem = memo(function ProfileCommentItem({
   onEditPress,
   onDeletePress,
 }: ProfileCommentItemProps) {
-  const { theme } = useUnistyles();
+ const { theme } = useUnistyles();
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
-  const hasValidRootPostId = useMemo(() => {
+ const hasValidRootPostId = useMemo(() => {
     return (
       comment.root_post_id &&
       comment.root_post_id.trim() !== "" &&
@@ -122,12 +145,20 @@ export const ProfileCommentItem = memo(function ProfileCommentItem({
     onEditPress?.(comment, resolvedRootPostId);
   }, [onEditPress, comment, resolvedRootPostId]);
 
-  const handleDeletePress = useCallback(() => {
-    triggerHaptic("warning");
-    onDeletePress?.(comment);
-  }, [onDeletePress, comment]);
+ const handleDeletePress = useCallback(() => {
+   triggerHaptic("warning");
+   onDeletePress?.(comment);
+ }, [onDeletePress, comment]);
 
-  const displayPoints = Math.round(
+  const handleImagePress = useCallback((url: string) => {
+    setPreviewImageUrl(url);
+  }, []);
+
+  const handleClosePreview = useCallback(() => {
+    setPreviewImageUrl(null);
+  }, []);
+
+ const displayPoints = Math.round(
     comment.points - comment.user_weight + comment.user_vote,
   );
 
@@ -137,12 +168,13 @@ export const ProfileCommentItem = memo(function ProfileCommentItem({
   );
   const hasUpvoted = comment.user_vote === 1;
 
-  return (
-    <Pressable
-      onPress={handlePress}
-      style={[styles.container, isLoading && styles.containerLoading]}
-      disabled={isLoading}
-    >
+ return (
+    <>
+   <Pressable
+     onPress={handlePress}
+     style={[styles.container, isLoading && styles.containerLoading]}
+     disabled={isLoading}
+   >
       <View style={styles.metaRow}>
         <TimeAgo
           timestamp={comment.timestamp * 1000}
@@ -211,16 +243,27 @@ export const ProfileCommentItem = memo(function ProfileCommentItem({
         </View>
       </View>
 
-     <View>
-        {commentText.length > 0 && (
-          <MarkdownContent content={commentText} />
-        )}
-        {imageUrls.map((url, index) => (
-          <CommentImage key={`img-${index}`} url={url} />
-        ))}
-      </View>
-    </Pressable>
-  );
+    <View>
+       {commentText.length > 0 && (
+         <MarkdownContent content={commentText} />
+       )}
+       {imageUrls.map((url, index) => (
+          <CommentImage 
+            key={`img-${index}`} 
+            url={url} 
+            onPress={() => handleImagePress(url)}
+          />
+       ))}
+     </View>
+   </Pressable>
+
+    <MediaPreviewModal
+      visible={!!previewImageUrl}
+      media={previewImageUrl ? { type: "image", uri: previewImageUrl } : null}
+      onClose={handleClosePreview}
+    />
+    </>
+ );
 });
 
 const styles = StyleSheet.create((theme) => ({
@@ -259,18 +302,19 @@ const styles = StyleSheet.create((theme) => ({
   actionButton: {
     padding: 4,
   },
-  imageContainer: {
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.xs,
-    borderRadius: theme.radius.md,
-    overflow: "hidden",
-  },
-  image: {
-    width: "100%",
-    height: 200,
-    borderRadius: theme.radius.md,
-  },
-  imageError: {
+ imageContainer: {
+   marginTop: theme.spacing.sm,
+   marginBottom: theme.spacing.xs,
+   borderRadius: theme.radius.md,
+   overflow: "hidden",
+   backgroundColor: theme.colors.background.subtle,
+ },
+ image: {
+   width: "100%",
+   height: "100%",
+   borderRadius: theme.radius.md,
+ },
+ imageError: {
     width: "100%",
     height: 100,
     borderRadius: theme.radius.md,
