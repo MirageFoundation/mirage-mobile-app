@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { usePowQueueStore, getSuccessLabel } from "@/src/services/pow-queue";
+import { getPowProgress } from "@/src/wallet";
 import { Text } from "./primitives";
 
 const formatElapsedTime = (ms: number): string => {
@@ -30,6 +31,13 @@ const formatElapsedTime = (ms: number): string => {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, "0")}`;
+};
+
+const formatHashRate = (rate: number): string => {
+  if (rate >= 1000) {
+    return `${(rate / 1000).toFixed(1)}k`;
+  }
+  return `${Math.round(rate)}`;
 };
 
 export const PowQueueToast = () => {
@@ -53,6 +61,7 @@ export const PowQueueToast = () => {
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [hashRate, setHashRate] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
   const [overlayData, setOverlayData] = useState<{ type: string; success: boolean } | null>(null);
   
@@ -121,6 +130,7 @@ export const PowQueueToast = () => {
     if (isProcessing && !isVisible) {
       setIsVisible(true);
       setElapsedMs(0);
+      setHashRate(0);
       animateIn();
     }
   }, [isProcessing, isVisible]);
@@ -128,6 +138,7 @@ export const PowQueueToast = () => {
   useEffect(() => {
     if (currentAction) {
       setElapsedMs(0);
+      setHashRate(0);
     }
   }, [currentAction?.id]);
 
@@ -176,9 +187,18 @@ export const PowQueueToast = () => {
 
   useEffect(() => {
     if (isShowingProcessing && isVisible) {
-      const interval = setInterval(() => {
-        setElapsedMs((prev) => prev + 100);
-      }, 100);
+      const interval = setInterval(async () => {
+        try {
+          const progress = await getPowProgress();
+          setElapsedMs(progress.elapsedMs);
+          if (progress.elapsedMs > 0 && progress.attempts > 0) {
+            const rate = progress.attempts / (progress.elapsedMs / 1000);
+            setHashRate(rate);
+          }
+        } catch {
+          setElapsedMs((prev) => prev + 200);
+        }
+      }, 200);
       return () => clearInterval(interval);
     }
   }, [isShowingProcessing, isVisible]);
@@ -227,7 +247,7 @@ export const PowQueueToast = () => {
         return (
           <Ionicons
             name="checkmark-circle"
-            size={20}
+            size={16}
             color={colors.icon}
           />
         );
@@ -235,7 +255,7 @@ export const PowQueueToast = () => {
         return (
           <Ionicons
             name="alert-circle"
-            size={20}
+            size={16}
             color={colors.icon}
           />
         );
@@ -258,7 +278,7 @@ export const PowQueueToast = () => {
           </View>
 
           <View style={styles.textContainer}>
-            <Text size="sm" weight="semibold" numberOfLines={1}>
+            <Text size="xs" weight="semibold" numberOfLines={1}>
               {displayLabel}
               {isShowingProcessing && progressPercent ? ` ${progressPercent}` : ""}
             </Text>
@@ -273,9 +293,17 @@ export const PowQueueToast = () => {
               </View>
             )}
 
+            {showTimer && hashRate > 0 && (
+              <View style={[styles.hashRateContainer, { backgroundColor: timerBackground }]}>
+                <Text size="xs" weight="medium" style={styles.timerText}>
+                  {formatHashRate(hashRate)} h/s
+                </Text>
+              </View>
+            )}
+
             {showTimer && (
               <View style={[styles.timerContainer, { backgroundColor: timerBackground }]}>
-                <Text size="sm" weight="medium" style={styles.timerText}>
+                <Text size="xs" weight="medium" style={styles.timerText}>
                   {formatElapsedTime(elapsedMs)}
                 </Text>
               </View>
@@ -329,12 +357,12 @@ export const PowQueueToast = () => {
             <View style={styles.iconContainer}>
               <Ionicons
                 name={overlayData.success ? "checkmark-circle" : "alert-circle"}
-                size={20}
+                size={16}
                 color={overlayColors.icon}
               />
             </View>
             <View style={styles.textContainer}>
-              <Text size="sm" weight="semibold" numberOfLines={1}>
+              <Text size="xs" weight="semibold" numberOfLines={1}>
                 {overlayLabel}
               </Text>
             </View>
@@ -374,7 +402,7 @@ export const PowQueueToast = () => {
       style={[
         styles.container,
         {
-          top: insets.top + 8,
+          top: insets.top + 4,
           transform: [{ translateY }, { scale }],
           opacity,
         },
@@ -389,8 +417,8 @@ export const PowQueueToast = () => {
 const styles = StyleSheet.create((theme) => ({
   container: {
     position: "absolute",
-    left: 38,
-    right: 38,
+    left: 48,
+    right: 48,
     zIndex: 9999,
   },
   blurContainer: {
@@ -401,13 +429,13 @@ const styles = StyleSheet.create((theme) => ({
   content: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    gap: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    gap: 6,
   },
   iconContainer: {
-    width: 22,
-    height: 22,
+    width: 18,
+    height: 18,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -417,28 +445,34 @@ const styles = StyleSheet.create((theme) => ({
   rightSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 4,
   },
   counterBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
   counterText: {
     color: theme.colors.text.default,
     fontVariant: ["tabular-nums"],
-    fontSize: 11,
+    fontSize: 10,
+  },
+  hashRateContainer: {
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
   timerContainer: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    minWidth: 48,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 8,
+    minWidth: 36,
     alignItems: "center",
   },
   timerText: {
     color: theme.colors.text.subtle,
     fontVariant: ["tabular-nums"],
+    fontSize: 10,
   },
   overlayContainer: {
     position: "absolute",
