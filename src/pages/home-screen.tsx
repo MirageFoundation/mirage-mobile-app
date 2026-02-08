@@ -17,19 +17,20 @@ import {
   useUserFollowed,
 } from "@/src/api";
 import {
- AdultContentPopup,
- ConfirmationPopup,
- FeedHeader,
-  InviteCodesCard,
- type Post,
- PostCardSkeleton,
- PostCardSkeletonList,
-  PostOptionsSheet,
-  type PostOptionsSheetRef,
-  ReportSheet,
-  type ReportSheetRef,
-  SideMenu,
-  type SideMenuRef,
+AdultContentPopup,
+ConfirmationPopup,
+FeedHeader,
+ InviteCodesCard,
+  QuestsSummaryCard,
+type Post,
+PostCardSkeleton,
+PostCardSkeletonList,
+ PostOptionsSheet,
+ type PostOptionsSheetRef,
+ ReportSheet,
+ type ReportSheetRef,
+ SideMenu,
+ type SideMenuRef,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import {
@@ -913,7 +914,8 @@ const ListHeaderComponent = useCallback(() => {
             />
           </Box>
         )}
-        <InviteCodesCard />
+       <InviteCodesCard />
+        <QuestsSummaryCard />
       </>
     );
   }, [isManualRefreshing, theme.colors.background.emphasis]);

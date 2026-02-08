@@ -91,10 +91,12 @@ type PreferencesState = {
  autoPlayVideos: boolean;
  videoAutoplayNetwork: VideoAutoplayNetwork;
 
-  // Home Screen Cards
-  hideInviteCard: boolean;
+ // Home Screen Cards
+ hideInviteCard: boolean;
+  inviteCardExpanded: boolean;
+  questsCardExpanded: boolean;
 
- // Actions
+// Actions
  setFeedType: (type: FeedType) => void;
   setFollowingFeedType: (type: FeedType) => void;
   setTheme: (theme: ThemeMode) => void;
@@ -111,7 +113,9 @@ type PreferencesState = {
   setApiServer: (server: ApiServer) => void;
  setAutoPlayVideos: (autoPlay: boolean) => void;
  setVideoAutoplayNetwork: (network: VideoAutoplayNetwork) => void;
-  setHideInviteCard: (hide: boolean) => void;
+ setHideInviteCard: (hide: boolean) => void;
+  setInviteCardExpanded: (expanded: boolean) => void;
+  setQuestsCardExpanded: (expanded: boolean) => void;
 };
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -148,10 +152,12 @@ export const usePreferencesStore = create<PreferencesState>()(
      autoPlayVideos: true,
      videoAutoplayNetwork: "always",
 
-      // Home Screen Cards
-      hideInviteCard: false,
+     // Home Screen Cards
+     hideInviteCard: false,
+      inviteCardExpanded: true,
+      questsCardExpanded: true,
 
-     // Actions
+    // Actions
      setFeedType: (type) => set({ feedType: type }),
       setFollowingFeedType: (type) => set({ followingFeedType: type }),
       setTheme: (theme) => set({ theme }),
@@ -262,10 +268,12 @@ export const usePreferencesStore = create<PreferencesState>()(
      setApiServer: (server) => set({ apiServer: server }),
      setAutoPlayVideos: (autoPlay) => set({ autoPlayVideos: autoPlay }),
      setVideoAutoplayNetwork: (network) => set({ videoAutoplayNetwork: network }),
-      setHideInviteCard: (hide) => set({ hideInviteCard: hide }),
-   }),
-    {
-      name: "preferences-storage",
+     setHideInviteCard: (hide) => set({ hideInviteCard: hide }),
+      setInviteCardExpanded: (expanded) => set({ inviteCardExpanded: expanded }),
+      setQuestsCardExpanded: (expanded) => set({ questsCardExpanded: expanded }),
+  }),
+   {
+     name: "preferences-storage",
       storage: createJSONStorage(() => mmkvStorage),
       version: 1,
       migrate: (persistedState: unknown, version: number) => {

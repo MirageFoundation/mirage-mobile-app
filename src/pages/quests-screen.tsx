@@ -3,21 +3,25 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  View,
+ ActivityIndicator,
+ Alert,
+  Dimensions,
+  Modal,
+ Pressable,
+ ScrollView,
+ View,
 } from "react-native";
 import Animated, {
-  interpolate,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withSpring,
-  withTiming,
-  Easing,
+ interpolate,
+  runOnJS,
+ useAnimatedStyle,
+ useSharedValue,
+  withDelay,
+ withRepeat,
+ withSequence,
+ withSpring,
+ withTiming,
+ Easing,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -46,9 +50,292 @@ const ACTION_COLORS: Record<string, string> = {
 };
 
 const BUTTON_GRADIENT_COLORS: readonly [string, string] = [
-  "rgb(102, 126, 234)",
-  "rgb(118, 75, 162)",
+ "rgb(102, 126, 234)",
+ "rgb(118, 75, 162)",
 ];
+
+const CONFETTI_COLORS = [
+  "#FF6B6B",
+  "#4ECDC4",
+  "#45B7D1",
+  "#96CEB4",
+  "#FFEAA7",
+  "#DDA0DD",
+  "#98D8C8",
+  "#F7DC6F",
+  "#BB8FCE",
+  "#85C1E9",
+];
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
+
+function ConfettiPiece({ delay, index }: { delay: number; index: number }) {
+  const translateY = useSharedValue(-50);
+  const translateX = useSharedValue(0);
+  const rotate = useSharedValue(0);
+  const opacity = useSharedValue(1);
+  const scale = useSharedValue(1);
+
+  const startX = Math.random() * SCREEN_WIDTH;
+  const color = CONFETTI_COLORS[index % CONFETTI_COLORS.length];
+  const size = 8 + Math.random() * 8;
+  const isCircle = Math.random() > 0.5;
+
+  useEffect(() => {
+    const drift = (Math.random() - 0.5) * 100;
+    
+    translateY.value = withDelay(
+      delay,
+      withTiming(SCREEN_HEIGHT + 100, {
+        duration: 3000 + Math.random() * 2000,
+        easing: Easing.out(Easing.quad),
+      })
+    );
+    
+    translateX.value = withDelay(
+      delay,
+      withRepeat(
+        withSequence(
+          withTiming(drift, { duration: 500 }),
+          withTiming(-drift, { duration: 500 })
+        ),
+        -1,
+        true
+      )
+    );
+    
+    rotate.value = withDelay(
+      delay,
+      withRepeat(
+        withTiming(360, { duration: 1000 + Math.random() * 1000 }),
+        -1,
+        false
+      )
+    );
+    
+    opacity.value = withDelay(
+      delay + 2000,
+      withTiming(0, { duration: 1000 })
+    );
+    
+    scale.value = withDelay(
+      delay,
+      withSequence(
+        withSpring(1.2, { damping: 8 }),
+        withSpring(1, { damping: 10 })
+      )
+    );
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: translateY.value },
+      { translateX: translateX.value },
+      { rotate: `${rotate.value}deg` },
+      { scale: scale.value },
+    ],
+    opacity: opacity.value,
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        {
+          position: "absolute",
+          left: startX,
+          top: 0,
+          width: size,
+          height: isCircle ? size : size * 0.6,
+          backgroundColor: color,
+          borderRadius: isCircle ? size / 2 : 2,
+        },
+        animatedStyle,
+      ]}
+    />
+  );
+}
+
+function ConfettiAnimation({ isVisible }: { isVisible: boolean }) {
+  if (!isVisible) return null;
+
+  return (
+    <View
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        pointerEvents: "none",
+        zIndex: 1000,
+      }}
+    >
+      {Array.from({ length: 50 }).map((_, i) => (
+        <ConfettiPiece key={i} index={i} delay={i * 30} />
+      ))}
+    </View>
+  );
+}
+
+function ClaimSuccessModal({
+  visible,
+  rewardAmount,
+  onClose,
+}: {
+  visible: boolean;
+  rewardAmount: number;
+  onClose: () => void;
+}) {
+  const { theme } = useUnistyles();
+  const scaleAnim = useSharedValue(0);
+  const opacityAnim = useSharedValue(0);
+
+ useEffect(() => {
+   if (visible) {
+     opacityAnim.value = withTiming(1, { duration: 300 });
+     scaleAnim.value = withSequence(
+        withSpring(1.03, { damping: 15, stiffness: 300 }),
+        withSpring(1, { damping: 15 })
+     );
+   } else {
+     opacityAnim.value = withTiming(0, { duration: 200 });
+     scaleAnim.value = withTiming(0, { duration: 200 });
+   }
+ }, [visible]);
+
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: opacityAnim.value * 0.7,
+  }));
+
+  const modalStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scaleAnim.value }],
+    opacity: opacityAnim.value,
+  }));
+
+  const handleClose = useCallback(() => {
+    triggerHaptic("light");
+    onClose();
+  }, [onClose]);
+
+  return (
+    <Modal visible={visible} transparent animationType="none">
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Animated.View
+          style={[
+            {
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "#000",
+            },
+            backdropStyle,
+          ]}
+        />
+        <ConfettiAnimation isVisible={visible} />
+        <Animated.View
+          style={[
+            {
+              backgroundColor: theme.colors.background.default,
+              borderRadius: 24,
+              padding: 32,
+              alignItems: "center",
+              marginHorizontal: 32,
+              borderWidth: 1,
+              borderColor: theme.colors.border.subtle,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.3,
+              shadowRadius: 20,
+              elevation: 10,
+            },
+            modalStyle,
+          ]}
+        >
+          <View
+            style={{
+              width: 80,
+              height: 80,
+              borderRadius: 40,
+              backgroundColor: theme.colors.success[500] + "20",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: 20,
+            }}
+          >
+            <Ionicons
+              name="trophy"
+              size={40}
+              color={theme.colors.success[500]}
+            />
+          </View>
+
+          <Text size="xl" weight="bold" style={{ marginBottom: 8, textAlign: "center" }}>
+            Rewards Claimed!
+          </Text>
+
+          <Box
+            direction="row"
+            alignItems="center"
+            gap="xs"
+            style={{ marginBottom: 24 }}
+          >
+            <Ionicons
+              name="sparkles"
+              size={20}
+              color={theme.colors.warning[500]}
+            />
+            <Text
+              size="lg"
+              weight="bold"
+              style={{ color: theme.colors.warning[500] }}
+            >
+              +{rewardAmount.toLocaleString()} MRG
+            </Text>
+          </Box>
+
+          <Text
+            size="sm"
+            mode="subtle"
+            style={{ textAlign: "center", marginBottom: 24 }}
+          >
+            Your rewards have been added to your balance
+          </Text>
+
+         <Pressable
+           onPress={handleClose}
+           style={({ pressed }) => [
+             {
+                paddingHorizontal: 48,
+               borderRadius: 12,
+               overflow: "hidden",
+             },
+             { opacity: pressed ? 0.9 : 1 },
+           ]}
+         >
+           <LinearGradient
+             colors={[...BUTTON_GRADIENT_COLORS]}
+             start={{ x: 0, y: 0 }}
+             end={{ x: 1, y: 0 }}
+             style={{
+                paddingVertical: 12,
+                paddingHorizontal: 32,
+               alignItems: "center",
+               justifyContent: "center",
+               borderRadius: 12,
+             }}
+           >
+              <Text size="md" weight="bold" style={{ color: "#fff" }}>
+               Awesome!
+             </Text>
+           </LinearGradient>
+         </Pressable>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+}
 
 function formatTimeRemaining(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -535,11 +822,11 @@ function ClaimAllButton({
 }) {
   const canClaim = completedQuests.length > 0 && !hasClaimed;
 
- const handlePress = useCallback(() => {
+const handlePress = useCallback(() => {
     if (canClaim && !isClaiming) {
-      triggerHaptic("medium");
-      onClaim();
-    }
+    triggerHaptic("medium");
+    onClaim();
+  }
   }, [canClaim, isClaiming, onClaim]);
 
   return (
@@ -609,23 +896,20 @@ export function QuestsScreen() {
  const insets = useSafeAreaInsets();
  const { theme } = useUnistyles();
 
- const { data, isLoading, error, refetch } = useDailyQuests();
-  const { data: pendingData, refetch: refetchPending } = usePendingRewards();
- const [timeRemaining, setTimeRemaining] = useState<number>(0);
- const [isClaiming, setIsClaiming] = useState(false);
+const { data, isLoading, error, refetch } = useDailyQuests();
+ const { data: pendingData, refetch: refetchPending } = usePendingRewards();
+const [timeRemaining, setTimeRemaining] = useState<number>(0);
+const [isClaiming, setIsClaiming] = useState(false);
+const [showSuccessModal, setShowSuccessModal] = useState(false);
 
- const claimMutation = useClaimReward({
-   onSuccess: (response) => {
-     setIsClaiming(false);
-     triggerHaptic("success");
-     Alert.alert(
-       "Rewards Claimed!",
-       response.message || "Your rewards have been added to your balance.",
-       [{ text: "OK" }],
-     );
-     refetch();
-      refetchPending();
-   },
+const claimMutation = useClaimReward({
+  onSuccess: (response) => {
+    setIsClaiming(false);
+    triggerHaptic("success");
+     setShowSuccessModal(true);
+    refetch();
+     refetchPending();
+  },
    onError: (error) => {
      setIsClaiming(false);
       triggerHaptic("error");
@@ -669,11 +953,15 @@ const totalReward = useMemo(() => {
     return completedQuests.length > 0 && pendingData.pending_rewards.length === 0;
   }, [completedQuests.length, pendingData]);
 
- const handleClaimAll = useCallback(() => {
+const handleClaimAll = useCallback(() => {
     if (completedQuests.length === 0) return;
     setIsClaiming(true);
     claimMutation.mutate({ questId: "all" });
   }, [completedQuests, claimMutation]);
+
+  const handleCloseSuccessModal = useCallback(() => {
+    setShowSuccessModal(false);
+  }, []);
 
   const totalCount = data?.daily_quests?.length ?? 0;
 
@@ -809,10 +1097,16 @@ const totalReward = useMemo(() => {
              hasClaimed={hasClaimed}
            />
          </Box>
-        </View>
-      )}
-    </Box>
-  );
+       </View>
+     )}
+
+      <ClaimSuccessModal
+        visible={showSuccessModal}
+        rewardAmount={totalReward || 1250}
+        onClose={handleCloseSuccessModal}
+      />
+   </Box>
+ );
 }
 
 const styles = StyleSheet.create((theme) => ({
