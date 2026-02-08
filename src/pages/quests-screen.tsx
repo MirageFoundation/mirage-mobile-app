@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { useDailyQuests } from "@/src/api/read/hooks";
+import { usePendingRewards } from "@/src/api/read/hooks";
 import { useClaimReward } from "@/src/api/write/hooks";
 import type { DailyQuest } from "@/src/api/read/endpoints/quests";
 import { Box, Text } from "@/src/components/ui/primitives";
@@ -210,6 +211,18 @@ function CountdownTimer({
           { backgroundColor: theme.colors.primary[500] },
         ]}
       />
+      <Box
+        style={[
+          styles.timerGlowLeft,
+          { backgroundColor: theme.colors.primary[500] },
+        ]}
+      />
+      <Box
+        style={[
+          styles.timerGlowRight,
+          { backgroundColor: theme.colors.primary[500] },
+        ]}
+      />
       <Box alignItems="center" gap="sm">
         <Text size="sm" weight="semibold" mode="subtle">
           TIME REMAINING
@@ -239,7 +252,7 @@ function CountdownTimer({
             ]}
           />
         </Box>
-        <Text size="xs" mode="subtle">
+        <Text size="sm" mode="subtle">
           Complete quests before timer resets
         </Text>
       </Box>
@@ -294,18 +307,19 @@ function QuestRequirements({ quest }: { quest: DailyQuest }) {
   );
 }
 
-function QuestCard({ quest }: { quest: DailyQuest }) {
-  const { theme } = useUnistyles();
+function QuestCard({ quest, rewardMultiplier }: { quest: DailyQuest; rewardMultiplier: number }) {
+ const { theme } = useUnistyles();
   const progressAnim = useSharedValue(0);
   const checkmarkScale = useSharedValue(quest.completed ? 1 : 0);
 
   const iconName = ACTION_ICONS[quest.action_type] || "star-outline";
-  const accentColor =
-    ACTION_COLORS[quest.action_type] || theme.colors.primary[500];
-  const progress = quest.target > 0 ? quest.progress / quest.target : 0;
-  const rewardAmount = quest.rewards[0]?.amount ?? 0;
+ const accentColor =
+   ACTION_COLORS[quest.action_type] || theme.colors.primary[500];
+ const progress = quest.target > 0 ? quest.progress / quest.target : 0;
+  const baseReward = quest.rewards[0]?.amount ?? 0;
+  const rewardAmount = Math.floor(baseReward * rewardMultiplier);
 
-  useEffect(() => {
+ useEffect(() => {
     progressAnim.value = withSpring(progress, { damping: 15, stiffness: 100 });
   }, [progress, progressAnim]);
 
@@ -333,8 +347,10 @@ function QuestCard({ quest }: { quest: DailyQuest }) {
       style={[
         styles.questCard,
         {
-          backgroundColor: theme.colors.background.default,
-          borderWidth: 1,
+          backgroundColor: quest.completed
+            ? theme.colors.success[500] + "10"
+            : theme.colors.background.default,
+          borderWidth: quest.completed ? 2 : 1,
           borderColor: quest.completed
             ? theme.colors.success[500] + "40"
             : theme.colors.border.subtle,
@@ -503,32 +519,36 @@ function RewardMultiplierBadge({ multiplier }: { multiplier: number }) {
 }
 
 function ClaimAllButton({
-  completedQuests,
-  totalReward,
-  onClaim,
-  isClaiming,
-  hasClaimed,
+ completedQuests,
+  totalQuests,
+ totalReward,
+ onClaim,
+ isClaiming,
+ hasClaimed,
 }: {
-  completedQuests: DailyQuest[];
-  totalReward: number;
-  onClaim: () => void;
-  isClaiming: boolean;
-  hasClaimed: boolean;
+ completedQuests: DailyQuest[];
+  totalQuests: number;
+ totalReward: number;
+ onClaim: () => void;
+ isClaiming: boolean;
+ hasClaimed: boolean;
 }) {
-  const handlePress = useCallback(() => {
-    if (!isClaiming) {
+  const canClaim = completedQuests.length > 0 && !hasClaimed;
+
+ const handlePress = useCallback(() => {
+    if (canClaim && !isClaiming) {
       triggerHaptic("medium");
       onClaim();
     }
-  }, [isClaiming, onClaim]);
+  }, [canClaim, isClaiming, onClaim]);
 
   return (
     <Pressable
       onPress={handlePress}
-      disabled={isClaiming}
+      disabled={!canClaim || isClaiming}
       style={({ pressed }) => [
         styles.claimAllButton,
-        { opacity: pressed ? 0.9 : 1 },
+        { opacity: pressed && canClaim ? 0.9 : canClaim ? 1 : 0.5 },
       ]}
     >
       <LinearGradient
@@ -536,15 +556,19 @@ function ClaimAllButton({
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.gradientButton}
-      >
-        {isClaiming ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <Text size="lg" weight="bold" style={{ color: "#fff" }}>
-            Complete Quests
-          </Text>
-        )}
-      </LinearGradient>
+     >
+      {isClaiming ? (
+        <ActivityIndicator size="small" color="#fff" />
+       ) : hasClaimed ? (
+         <Text size="lg" weight="bold" style={{ color: "#fff" }}>
+            Claimed
+         </Text>
+      ) : (
+        <Text size="lg" weight="bold" style={{ color: "#fff" }}>
+           Claim Rewards
+        </Text>
+      )}
+     </LinearGradient>
     </Pressable>
   );
 }
@@ -581,29 +605,29 @@ function EmptyState() {
 }
 
 export function QuestsScreen() {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { theme } = useUnistyles();
+ const router = useRouter();
+ const insets = useSafeAreaInsets();
+ const { theme } = useUnistyles();
 
-  const { data, isLoading, error, refetch } = useDailyQuests();
-  const [timeRemaining, setTimeRemaining] = useState<number>(0);
-  const [isClaiming, setIsClaiming] = useState(false);
-  const [hasClaimed, setHasClaimed] = useState(false);
+ const { data, isLoading, error, refetch } = useDailyQuests();
+  const { data: pendingData, refetch: refetchPending } = usePendingRewards();
+ const [timeRemaining, setTimeRemaining] = useState<number>(0);
+ const [isClaiming, setIsClaiming] = useState(false);
 
-  const claimMutation = useClaimReward({
-    onSuccess: (response) => {
-      setHasClaimed(true);
-      setIsClaiming(false);
-      triggerHaptic("success");
-      Alert.alert(
-        "Rewards Claimed!",
-        response.message || "Your rewards have been added to your balance.",
-        [{ text: "OK" }],
-      );
-      refetch();
-    },
-    onError: (error) => {
-      setIsClaiming(false);
+ const claimMutation = useClaimReward({
+   onSuccess: (response) => {
+     setIsClaiming(false);
+     triggerHaptic("success");
+     Alert.alert(
+       "Rewards Claimed!",
+       response.message || "Your rewards have been added to your balance.",
+       [{ text: "OK" }],
+     );
+     refetch();
+      refetchPending();
+   },
+   onError: (error) => {
+     setIsClaiming(false);
       triggerHaptic("error");
       Alert.alert(
         "Claim Failed",
@@ -633,13 +657,19 @@ export function QuestsScreen() {
     return data.daily_quests.filter((q) => q.completed);
   }, [data?.daily_quests]);
 
-  const totalReward = useMemo(() => {
-    return completedQuests.reduce((sum, quest) => {
-      return sum + (quest.rewards[0]?.amount ?? 0);
-    }, 0);
-  }, [completedQuests]);
+const totalReward = useMemo(() => {
+   const multiplier = data?.reward_multiplier ?? 1;
+  return completedQuests.reduce((sum, quest) => {
+     return Math.floor(sum + (quest.rewards[0]?.amount ?? 0) * multiplier);
+  }, 0);
+ }, [completedQuests, data?.reward_multiplier]);
 
-  const handleClaimAll = useCallback(() => {
+  const hasClaimed = useMemo(() => {
+    if (!pendingData) return false;
+    return completedQuests.length > 0 && pendingData.pending_rewards.length === 0;
+  }, [completedQuests.length, pendingData]);
+
+ const handleClaimAll = useCallback(() => {
     if (completedQuests.length === 0) return;
     setIsClaiming(true);
     claimMutation.mutate({ questId: "all" });
@@ -724,9 +754,9 @@ export function QuestsScreen() {
               TODAY'S QUESTS
             </Text>
 
-            {data.daily_quests.map((quest) => (
-              <QuestCard key={quest.id} quest={quest} />
-            ))}
+           {data.daily_quests.map((quest) => (
+              <QuestCard key={quest.id} quest={quest} rewardMultiplier={data.reward_multiplier} />
+           ))}
 
             {data.suspended && (
               <Box
@@ -769,15 +799,16 @@ export function QuestsScreen() {
             },
           ]}
         >
-          <Box px="md">
-            <ClaimAllButton
-              completedQuests={completedQuests}
-              totalReward={totalReward}
-              onClaim={handleClaimAll}
-              isClaiming={isClaiming}
-              hasClaimed={hasClaimed}
-            />
-          </Box>
+         <Box px="md">
+           <ClaimAllButton
+             completedQuests={completedQuests}
+              totalQuests={totalCount}
+             totalReward={totalReward}
+             onClaim={handleClaimAll}
+             isClaiming={isClaiming}
+             hasClaimed={hasClaimed}
+           />
+         </Box>
         </View>
       )}
     </Box>
@@ -820,6 +851,24 @@ const styles = StyleSheet.create((theme) => ({
     height: 100,
     borderRadius: 50,
     opacity: 0.1,
+  },
+  timerGlowLeft: {
+    position: "absolute",
+    bottom: -30,
+    left: -80,
+    width: 120,
+    height: 120,
+    borderRadius: 35,
+    opacity: 0.08,
+  },
+  timerGlowRight: {
+    position: "absolute",
+    bottom: -30,
+    right: -50,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    opacity: 0.08,
   },
   progressBarContainer: {
     width: "100%",

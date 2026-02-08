@@ -64,6 +64,7 @@ export const queryKeys = {
  inviteCode: (code: string) => ["inviteCode", code] as const,
  inviteCodes: (address: string) => ["inviteCodes", address] as const,
 
-  // Daily Quests
-  dailyQuests: (address: string) => ["dailyQuests", address] as const,
+ // Daily Quests
+ dailyQuests: (address: string) => ["dailyQuests", address] as const,
+  pendingRewards: (address: string) => ["pendingRewards", address] as const,
 } as const;

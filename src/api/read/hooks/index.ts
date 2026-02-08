@@ -93,4 +93,9 @@ export { useValidateInviteCode } from "./use-invite-code";
 export { useInviteCodes, useInviteCodesByAddress } from "./use-invite-codes";
 
 // Daily Quests
-export { useDailyQuests, useDailyQuestsByAddress } from "./use-daily-quests";
+export {
+  useDailyQuests,
+  useDailyQuestsByAddress,
+  usePendingRewards,
+  usePendingRewardsByAddress,
+} from "./use-daily-quests";

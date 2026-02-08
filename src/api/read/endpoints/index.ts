@@ -96,10 +96,12 @@ export type {
 } from "./media";
 
 // Quests
-export { getDailyQuests } from "./quests";
+export { getDailyQuests, getPendingRewards } from "./quests";
 export type {
-  DailyQuest,
-  DailyQuestsResponse,
-  QuestReward,
-  GetDailyQuestsParams,
+ DailyQuest,
+ DailyQuestsResponse,
+ QuestReward,
+ GetDailyQuestsParams,
+  PendingReward,
+  PendingRewardsResponse,
 } from "./quests";

@@ -23,12 +23,29 @@ export interface DailyQuest {
 }
 
 export interface DailyQuestsResponse {
+ balance: number;
+ daily_quests: DailyQuest[];
+ debug: boolean;
+ reward_multiplier: number;
+ seconds_until_reset: number;
+ suspended: boolean;
+}
+
+export interface PendingReward {
+  quest_id: string;
+  amount: number;
+  type: string;
+}
+
+export interface PendingRewardsResponse {
   balance: number;
-  daily_quests: DailyQuest[];
-  debug: boolean;
+  claiming_available: boolean;
+  pending_invite_codes: number;
+  pending_rewards: PendingReward[];
   reward_multiplier: number;
-  seconds_until_reset: number;
   suspended: boolean;
+  total_mirage: number;
+  total_mirage_after_multiplier: number;
 }
 
 export interface GetDailyQuestsParams {
@@ -36,7 +53,13 @@ export interface GetDailyQuestsParams {
 }
 
 export async function getDailyQuests(
- params: GetDailyQuestsParams
+params: GetDailyQuestsParams
 ): Promise<DailyQuestsResponse> {
-  return api.get<DailyQuestsResponse>("/rewards/daily", { owner: params.address });
+ return api.get<DailyQuestsResponse>("/rewards/daily", { owner: params.address });
+}
+
+export async function getPendingRewards(
+  params: GetDailyQuestsParams
+): Promise<PendingRewardsResponse> {
+  return api.get<PendingRewardsResponse>("/rewards/pending", { owner: params.address });
 }
