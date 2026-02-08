@@ -17,12 +17,13 @@ import {
   useUserFollowed,
 } from "@/src/api";
 import {
-  AdultContentPopup,
-  ConfirmationPopup,
-  FeedHeader,
-  type Post,
-  PostCardSkeleton,
-  PostCardSkeletonList,
+ AdultContentPopup,
+ ConfirmationPopup,
+ FeedHeader,
+  InviteCodesCard,
+ type Post,
+ PostCardSkeleton,
+ PostCardSkeletonList,
   PostOptionsSheet,
   type PostOptionsSheetRef,
   ReportSheet,
@@ -897,16 +898,20 @@ export function HomeScreen() {
     );
   }, [isLoading, isInitializing, isError, error]);
 
- const ListHeaderComponent = useCallback(() => {
-    if (!isManualRefreshing) return null;
-   return (
-     <Box center p="md">
-       <ActivityIndicator
-         size="small"
-         color={theme.colors.background.emphasis}
-       />
-     </Box>
-   );
+const ListHeaderComponent = useCallback(() => {
+    return (
+      <>
+        {isManualRefreshing && (
+          <Box center p="md">
+            <ActivityIndicator
+              size="small"
+              color={theme.colors.background.emphasis}
+            />
+          </Box>
+        )}
+        <InviteCodesCard />
+      </>
+    );
   }, [isManualRefreshing, theme.colors.background.emphasis]);
 
   // Show skeleton when loading next page

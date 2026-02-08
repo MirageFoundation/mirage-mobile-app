@@ -87,12 +87,15 @@ type PreferencesState = {
   // API Server
   apiServer: ApiServer;
 
-  // Video
-  autoPlayVideos: boolean;
-  videoAutoplayNetwork: VideoAutoplayNetwork;
+ // Video
+ autoPlayVideos: boolean;
+ videoAutoplayNetwork: VideoAutoplayNetwork;
 
-  // Actions
-  setFeedType: (type: FeedType) => void;
+  // Home Screen Cards
+  hideInviteCard: boolean;
+
+ // Actions
+ setFeedType: (type: FeedType) => void;
   setFollowingFeedType: (type: FeedType) => void;
   setTheme: (theme: ThemeMode) => void;
   setAdultContent: (enabled: boolean) => void;
@@ -106,8 +109,9 @@ type PreferencesState = {
   setPeopleBeforeShowMore: (count: number) => void;
   setShareServer: (server: ShareServer) => void;
   setApiServer: (server: ApiServer) => void;
-  setAutoPlayVideos: (autoPlay: boolean) => void;
-  setVideoAutoplayNetwork: (network: VideoAutoplayNetwork) => void;
+ setAutoPlayVideos: (autoPlay: boolean) => void;
+ setVideoAutoplayNetwork: (network: VideoAutoplayNetwork) => void;
+  setHideInviteCard: (hide: boolean) => void;
 };
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -140,12 +144,15 @@ export const usePreferencesStore = create<PreferencesState>()(
       // API Server
       apiServer: "mirage.vote",
 
-      // Video
-      autoPlayVideos: true,
-      videoAutoplayNetwork: "always",
+     // Video
+     autoPlayVideos: true,
+     videoAutoplayNetwork: "always",
 
-      // Actions
-      setFeedType: (type) => set({ feedType: type }),
+      // Home Screen Cards
+      hideInviteCard: false,
+
+     // Actions
+     setFeedType: (type) => set({ feedType: type }),
       setFollowingFeedType: (type) => set({ followingFeedType: type }),
       setTheme: (theme) => set({ theme }),
       setAdultContent: (enabled) =>
@@ -252,10 +259,11 @@ export const usePreferencesStore = create<PreferencesState>()(
       setTopicsBeforeShowMore: (count) => set({ topicsBeforeShowMore: count }),
       setPeopleBeforeShowMore: (count) => set({ peopleBeforeShowMore: count }),
       setShareServer: (server) => set({ shareServer: server }),
-      setApiServer: (server) => set({ apiServer: server }),
-      setAutoPlayVideos: (autoPlay) => set({ autoPlayVideos: autoPlay }),
-      setVideoAutoplayNetwork: (network) => set({ videoAutoplayNetwork: network }),
-    }),
+     setApiServer: (server) => set({ apiServer: server }),
+     setAutoPlayVideos: (autoPlay) => set({ autoPlayVideos: autoPlay }),
+     setVideoAutoplayNetwork: (network) => set({ videoAutoplayNetwork: network }),
+      setHideInviteCard: (hide) => set({ hideInviteCard: hide }),
+   }),
     {
       name: "preferences-storage",
       storage: createJSONStorage(() => mmkvStorage),
