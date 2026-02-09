@@ -33,8 +33,6 @@
     "production": {
       "autoIncrement": true,
       "channel": "production",
-      "env": {
-      },
       "ios": {
         "image": "macos-sonoma-14.6-xcode-16.1",
         "node": "24.4.0"
