@@ -15,3 +15,4 @@ export { BlockedListScreen } from "./blocked-list-screen";
 export { TopicFeedScreen } from "./topic-feed-screen";
 export { SavedPostsScreen } from "./saved-posts-screen";
 export { TopicsListScreen } from "./topics-list-screen";
+export { QuestsScreen } from "./quests-screen";

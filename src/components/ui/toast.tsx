@@ -210,7 +210,7 @@ export const Toast = ({
       style={[
         styles.container,
         {
-          top: insets.top + 8,
+          top: insets.top + 4,
           transform: [{ translateY }, { scale }],
           opacity,
         },
@@ -229,7 +229,7 @@ export const Toast = ({
               ) : (
                 <Ionicons
                   name={ICON_MAP[toast.type]}
-                  size={20}
+                  size={16}
                   color={getIconColor()}
                 />
               )}
@@ -237,7 +237,7 @@ export const Toast = ({
 
             {/* Text */}
             <View style={styles.textContainer}>
-              <Text size="sm" weight="semibold" numberOfLines={1}>
+              <Text size="xs" weight="semibold" numberOfLines={1}>
                 {toast.title}
               </Text>
             </View>
@@ -256,7 +256,7 @@ export const Toast = ({
               {/* Timer for loading */}
               {toast.type === "loading" && (
                 <View style={[styles.timerContainer, { backgroundColor: timerBackground }]}>
-                  <Text size="sm" weight="medium" style={styles.timerText}>
+                  <Text size="xs" weight="medium" style={styles.timerText}>
                     {formatElapsedTime(elapsedMs)}
                   </Text>
                 </View>
@@ -267,7 +267,7 @@ export const Toast = ({
                 <Pressable onPress={handleDismiss} style={[styles.closeButton, { backgroundColor: timerBackground }]}>
                   <Ionicons
                     name="close"
-                    size={16}
+                    size={14}
                     color={theme.colors.text.subtle}
                   />
                 </Pressable>
@@ -316,8 +316,8 @@ export const ToastContainer = ({ toasts, onDismiss }: ToastContainerProps) => {
 const styles = StyleSheet.create((theme) => ({
   container: {
     position: "absolute",
-    left: 38,
-    right: 38,
+    left: 48,
+    right: 48,
     zIndex: 9999,
   },
   blurContainer: {
@@ -328,13 +328,13 @@ const styles = StyleSheet.create((theme) => ({
   content: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    gap: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    gap: 6,
   },
   iconContainer: {
-    width: 22,
-    height: 22,
+    width: 18,
+    height: 18,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -344,34 +344,35 @@ const styles = StyleSheet.create((theme) => ({
   rightSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 4,
   },
   counterBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
   counterText: {
     color: theme.colors.text.default,
     fontVariant: ["tabular-nums"],
-    fontSize: 11,
+    fontSize: 10,
   },
   closeButton: {
-    width: 24,
-    height: 24,
+    width: 20,
+    height: 20,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 12,
+    borderRadius: 10,
   },
   timerContainer: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-    minWidth: 48,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 8,
+    minWidth: 36,
     alignItems: "center",
   },
   timerText: {
     color: theme.colors.text.subtle,
     fontVariant: ["tabular-nums"],
+    fontSize: 10,
   },
 }));

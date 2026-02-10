@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FlatList } from "react-native";
@@ -17,18 +17,20 @@ import {
   useUserFollowed,
 } from "@/src/api";
 import {
-  AdultContentPopup,
-  ConfirmationPopup,
-  FeedHeader,
-  type Post,
-  PostCardSkeleton,
-  PostCardSkeletonList,
-  PostOptionsSheet,
-  type PostOptionsSheetRef,
-  ReportSheet,
-  type ReportSheetRef,
-  SideMenu,
-  type SideMenuRef,
+AdultContentPopup,
+ConfirmationPopup,
+FeedHeader,
+ InviteCodesCard,
+  QuestsSummaryCard,
+type Post,
+PostCardSkeleton,
+PostCardSkeletonList,
+ PostOptionsSheet,
+ type PostOptionsSheetRef,
+ ReportSheet,
+ type ReportSheetRef,
+ SideMenu,
+ type SideMenuRef,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import {
@@ -284,13 +286,17 @@ export function HomeScreen() {
     }
   }, [router, currentUser?.walletAddress, currentUser?.username]);
 
-  const handleMenuInvite = useCallback(() => {
-    router.push("/invite-and-earn");
+ const handleMenuInvite = useCallback(() => {
+   router.push("/invite-and-earn");
+ }, [router]);
+
+  const handleMenuQuests = useCallback(() => {
+    router.push("/quests");
   }, [router]);
 
-  const handleMenuTopics = useCallback(() => {
-    router.push("/topics");
-  }, [router]);
+ const handleMenuTopics = useCallback(() => {
+   router.push("/topics");
+ }, [router]);
 
   const handleMenuHelp = useCallback(() => {
     Linking.openURL("https://mirage.foundation/faq");
@@ -897,16 +903,21 @@ export function HomeScreen() {
     );
   }, [isLoading, isInitializing, isError, error]);
 
- const ListHeaderComponent = useCallback(() => {
-    if (!isManualRefreshing) return null;
-   return (
-     <Box center p="md">
-       <ActivityIndicator
-         size="small"
-         color={theme.colors.background.emphasis}
-       />
-     </Box>
-   );
+const ListHeaderComponent = useCallback(() => {
+    return (
+      <>
+        {isManualRefreshing && (
+          <Box center p="md">
+            <ActivityIndicator
+              size="small"
+              color={theme.colors.background.emphasis}
+            />
+          </Box>
+        )}
+       <InviteCodesCard />
+        <QuestsSummaryCard />
+      </>
+    );
   }, [isManualRefreshing, theme.colors.background.emphasis]);
 
   // Show skeleton when loading next page
@@ -953,11 +964,11 @@ export function HomeScreen() {
   const setRevealedPostsStore = useHomePostCardStore(
     (state) => state.setRevealedPosts
   );
-  const setHandlers = useHomePostCardStore((state) => state.setHandlers);
-  const setShareServer = useHomePostCardStore((state) => state.setShareServer);
-  const setAllowAutoplay = useHomePostCardStore((state) => state.setAllowAutoplay);
-  const setFeedActive = useHomePostCardStore((state) => state.setFeedActive);
-  const setDisabledTopicName = useHomePostCardStore((state) => state.setDisabledTopicName);
+ const setHandlers = useHomePostCardStore((state) => state.setHandlers);
+ const setShareServer = useHomePostCardStore((state) => state.setShareServer);
+ const setAllowAutoplay = useHomePostCardStore((state) => state.setAllowAutoplay);
+  const setActiveFeedScreen = useHomePostCardStore((state) => state.setActiveFeedScreen);
+ const setDisabledTopicName = useHomePostCardStore((state) => state.setDisabledTopicName);
 
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
   const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
@@ -992,19 +1003,18 @@ export function HomeScreen() {
    setShareServer(shareServer);
  }, [shareServer, setShareServer]);
 
- useEffect(() => {
-   setAllowAutoplay(allowAutoplay);
- }, [allowAutoplay, setAllowAutoplay]);
+useEffect(() => {
+  setAllowAutoplay(allowAutoplay);
+}, [allowAutoplay, setAllowAutoplay]);
 
-  useFocusEffect(
-    useCallback(() => {
-      setFeedActive(true);
-      setDisabledTopicName(undefined);
-      return () => {
-        setFeedActive(false);
-      };
-    }, [setFeedActive, setDisabledTopicName])
-  );
+ const isFocused = useIsFocused();
+
+ useEffect(() => {
+    setActiveFeedScreen(isFocused ? 'home' : null);
+   if (isFocused) {
+     setDisabledTopicName(undefined);
+   }
+  }, [isFocused, setActiveFeedScreen, setDisabledTopicName]);
 
 // Store refs to latest handlers - these update without triggering re-renders
 const handlersRef = useRef({
@@ -1087,18 +1097,19 @@ useFocusEffect(
       />
 
       {/* Scrollable Feed */}
-      <HomePostList
-        ref={flatListRef}
-        data={posts}
-        contentContainerStyle={listContentStyle}
-        onScroll={scrollHandler}
-        ListHeaderComponent={ListHeaderComponent}
-        ListEmptyComponent={ListEmptyComponent}
-        ListFooterComponent={ListFooterComponent}
-        refreshControl={refreshControl}
-       onEndReached={handleEndReached}
-        onEndReachedThreshold={1.5}
-     />
+     <HomePostList
+       ref={flatListRef}
+       data={posts}
+       contentContainerStyle={listContentStyle}
+       onScroll={scrollHandler}
+       ListHeaderComponent={ListHeaderComponent}
+       ListEmptyComponent={ListEmptyComponent}
+       ListFooterComponent={ListFooterComponent}
+       refreshControl={refreshControl}
+      onEndReached={handleEndReached}
+       onEndReachedThreshold={1.5}
+        feedScreen="home"
+    />
 
       {/* Adult Content Permission Popup */}
       <AdultContentPopup
@@ -1170,21 +1181,22 @@ useFocusEffect(
         onCancel={deleteHandler.cancelDelete}
       />
 
-      {/* Side Menu */}
-      <SideMenu
-        ref={sideMenuRef}
-        onSettings={handleMenuSettings}
-        onSubscription={handleMenuSubscription}
-        onSaved={handleMenuSaved}
-        onHistory={handleMenuHistory}
-        onDrafts={handleMenuDrafts}
-        onFollowing={handleMenuFollowing}
-        onTopics={handleMenuTopics}
-        onInviteAndEarn={handleMenuInvite}
-        onHelp={handleMenuHelp}
-        onAbout={handleMenuAbout}
-        onLogout={handleMenuLogout}
-      />
+     {/* Side Menu */}
+     <SideMenu
+       ref={sideMenuRef}
+       onSettings={handleMenuSettings}
+       onSubscription={handleMenuSubscription}
+       onSaved={handleMenuSaved}
+       onHistory={handleMenuHistory}
+       onDrafts={handleMenuDrafts}
+       onFollowing={handleMenuFollowing}
+       onTopics={handleMenuTopics}
+       onInviteAndEarn={handleMenuInvite}
+        onQuests={handleMenuQuests}
+       onHelp={handleMenuHelp}
+       onAbout={handleMenuAbout}
+       onLogout={handleMenuLogout}
+     />
     </Box>
   );
 }

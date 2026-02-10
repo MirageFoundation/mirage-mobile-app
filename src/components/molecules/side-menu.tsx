@@ -26,24 +26,29 @@ import { Avatar } from "@/src/components/atoms";
 import { useAuthStore } from "@/src/stores";
 import { useRouter } from "expo-router";
 import { LogoutConfirmationPopup } from "./logout-confirmation-popup";
-import { useUserFollowed, useUsernameFromAddress } from "@/src/api/read/hooks";
+import {
+  useUserFollowed,
+  useUsernameFromAddress,
+  useUserStatus,
+} from "@/src/api/read/hooks";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MENU_WIDTH = SCREEN_WIDTH * 0.8;
 
 type SideMenuProps = {
-  onSettings?: () => void;
-  onSubscription?: () => void;
-  onSaved?: () => void;
-  onHistory?: () => void;
-  onDrafts?: () => void;
-  onFollowing?: () => void;
-  onTopics?: () => void;
-  onInviteAndEarn?: () => void;
-  onHelp?: () => void;
-  onAbout?: () => void;
-  onLogout?: () => Promise<void>;
-  onDismiss?: () => void;
+ onSettings?: () => void;
+ onSubscription?: () => void;
+ onSaved?: () => void;
+ onHistory?: () => void;
+ onDrafts?: () => void;
+ onFollowing?: () => void;
+ onTopics?: () => void;
+ onInviteAndEarn?: () => void;
+  onQuests?: () => void;
+ onHelp?: () => void;
+ onAbout?: () => void;
+ onLogout?: () => Promise<void>;
+ onDismiss?: () => void;
 };
 
 export type SideMenuRef = {
@@ -173,14 +178,17 @@ const FollowedUserItem = ({
   const displayName = data?.username ?? address.slice(0, 10) + "...";
 
   return (
-   <Pressable
-     onPress={onPress}
-     style={({ pressed }) => [styles.userListItem, pressed && { opacity: 0.7 }]}
-   >
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.userListItem,
+        pressed && { opacity: 0.7 },
+      ]}
+    >
       <Avatar size="sm" seed={address} rounded="full" />
-     <Text
+      <Text
         style={{ color: theme.colors.text.default, flex: 1, marginLeft: 10 }}
-       size="md"
+        size="md"
         weight="medium"
         numberOfLines={1}
       >
@@ -207,7 +215,10 @@ const FollowedTopicItem = ({
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.topicListItem, pressed && { opacity: 0.7 }]}
+      style={({ pressed }) => [
+        styles.topicListItem,
+        pressed && { opacity: 0.7 },
+      ]}
     >
       <Text
         style={{ color: theme.colors.text.default, flex: 1 }}
@@ -265,23 +276,24 @@ const LogoutMenuItem = ({ onPress }: { onPress?: () => void }) => {
 };
 
 export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
-  (
-    {
-      onSettings,
-      onSubscription,
-      onSaved,
-      onHistory,
-      onDrafts,
-      onFollowing,
-      onTopics,
-      onInviteAndEarn,
-      onHelp,
-      onAbout,
-      onLogout,
-      onDismiss,
-    },
-    ref,
-  ) => {
+ (
+   {
+     onSettings,
+     onSubscription,
+     onSaved,
+     onHistory,
+     onDrafts,
+     onFollowing,
+     onTopics,
+     onInviteAndEarn,
+      onQuests,
+     onHelp,
+     onAbout,
+     onLogout,
+     onDismiss,
+   },
+   ref,
+ ) => {
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
     const router = useRouter();
@@ -291,6 +303,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
 
     const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
     const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+
+    const { data: userStatus } = useUserStatus();
+    const balance = userStatus?.balance
+      ? Math.floor(userStatus.balance / 1_000_000)
+      : 0;
 
     const { data: followedData, isLoading: isLoadingFollowed } =
       useUserFollowed();
@@ -475,7 +492,24 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
             >
               {isLoggedIn ? (
                 <>
-                  {/* Subscription at top */}
+                  <View style={styles.balanceCard}>
+                    <Text
+                      style={{ color: theme.colors.text.subtle }}
+                      size="lg"
+                      weight="bold"
+                    >
+                      BALANCE
+                    </Text>
+                    <Text
+                      style={{ color: theme.colors.text.default }}
+                      size="mega"
+                      weight="bold"
+                    >
+                      {balance.toLocaleString()} MRG
+                    </Text>
+                  </View>
+                  <SectionFooter />
+
                   <SectionHeader title="Subscription" />
                   <MenuItem
                     iconName="card-outline"
@@ -515,18 +549,24 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     subtitle="Users and topics you follow"
                     onPress={createHandler(onFollowing)}
                   />
+                 <MenuItem
+                   iconName="gift-outline"
+                   title="Invite & Earn"
+                   subtitle="Get rewards"
+                   onPress={createHandler(onInviteAndEarn)}
+                 />
                   <MenuItem
-                    iconName="gift-outline"
-                    title="Invite & Earn"
-                    subtitle="Get rewards"
-                    onPress={createHandler(onInviteAndEarn)}
+                    iconName="trophy-outline"
+                    title="Daily Quests"
+                    subtitle="Complete tasks for rewards"
+                    onPress={createHandler(onQuests)}
                   />
-                  <MenuItem
-                    iconName="pricetags-outline"
-                    title="Topics"
-                    subtitle="Explore all topics"
-                    onPress={createHandler(onTopics)}
-                  />
+                 <MenuItem
+                   iconName="pricetags-outline"
+                   title="Topics"
+                   subtitle="Explore all topics"
+                   onPress={createHandler(onTopics)}
+                 />
                   <SectionFooter />
 
                   {/* Followed Users */}
@@ -540,7 +580,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   />
                   {isLoadingFollowed ? (
                     <View style={styles.loadingContainer}>
-                      <ActivityIndicator size="small" color={theme.colors.text.subtle} />
+                      <ActivityIndicator
+                        size="small"
+                        color={theme.colors.text.subtle}
+                      />
                     </View>
                   ) : followedUsers.length > 0 ? (
                     followedUsers.map((address) => (
@@ -552,7 +595,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     ))
                   ) : (
                     <Text
-                      style={{ color: theme.colors.text.subtle, paddingVertical: 8 }}
+                      style={{
+                        color: theme.colors.text.subtle,
+                        paddingVertical: 8,
+                      }}
                       size="sm"
                     >
                       Not following anyone yet
@@ -571,7 +617,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   />
                   {isLoadingFollowed ? (
                     <View style={styles.loadingContainer}>
-                      <ActivityIndicator size="small" color={theme.colors.text.subtle} />
+                      <ActivityIndicator
+                        size="small"
+                        color={theme.colors.text.subtle}
+                      />
                     </View>
                   ) : followedTopics.length > 0 ? (
                     followedTopics.map((topic) => (
@@ -583,7 +632,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     ))
                   ) : (
                     <Text
-                      style={{ color: theme.colors.text.subtle, paddingVertical: 8 }}
+                      style={{
+                        color: theme.colors.text.subtle,
+                        paddingVertical: 8,
+                      }}
                       size="sm"
                     >
                       No followed topics yet
@@ -754,5 +806,11 @@ const styles = StyleSheet.create((theme) => ({
   loadingContainer: {
     paddingVertical: theme.spacing.md,
     alignItems: "center",
+  },
+  balanceCard: {
+    paddingVertical: theme.spacing.md,
+    marginTop: theme.spacing.sm,
+    borderRadius: 16,
+    gap: theme.spacing.xs,
   },
 }));

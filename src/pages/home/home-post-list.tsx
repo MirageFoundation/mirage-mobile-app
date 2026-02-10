@@ -21,30 +21,32 @@ import { useHomePostCardStore } from "./home-post-card-store";
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Post>);
 
 type HomePostListProps = {
-  data: Post[];
-  contentContainerStyle: object;
-  onScroll: (event: any) => void;
-  ListHeaderComponent?: ComponentType<any> | ReactElement | null;
-  ListEmptyComponent?: ComponentType<any> | ReactElement | null;
-  ListFooterComponent?: ComponentType<any> | ReactElement | null;
-  refreshControl?: ReactElement | null;
-  onEndReached?: () => void;
-  onEndReachedThreshold?: number;
+ data: Post[];
+ contentContainerStyle: object;
+ onScroll: (event: any) => void;
+ ListHeaderComponent?: ComponentType<any> | ReactElement | null;
+ ListEmptyComponent?: ComponentType<any> | ReactElement | null;
+ ListFooterComponent?: ComponentType<any> | ReactElement | null;
+ refreshControl?: ReactElement | null;
+ onEndReached?: () => void;
+ onEndReachedThreshold?: number;
+  feedScreen: 'home' | 'following' | 'topic';
 };
 
 const HomePostListInner = function HomePostListInner(
-  {
-    data,
-    contentContainerStyle,
-    onScroll,
-    ListHeaderComponent,
-    ListEmptyComponent,
-    ListFooterComponent,
-    refreshControl,
-    onEndReached,
-    onEndReachedThreshold,
-  }: HomePostListProps,
-  ref: Ref<FlatList<Post>>
+ {
+   data,
+   contentContainerStyle,
+   onScroll,
+   ListHeaderComponent,
+   ListEmptyComponent,
+   ListFooterComponent,
+   refreshControl,
+   onEndReached,
+   onEndReachedThreshold,
+    feedScreen,
+ }: HomePostListProps,
+ ref: Ref<FlatList<Post>>
 ) {
   const setVisiblePostIds = useHomePostCardStore(
     (state) => state.setVisiblePostIds
@@ -66,10 +68,10 @@ const HomePostListInner = function HomePostListInner(
     }
   ).current;
 
-  const renderItem = useCallback<ListRenderItem<Post>>(
-    ({ item }) => <HomePostCardItem post={item} />,
-    []
-  );
+ const renderItem = useCallback<ListRenderItem<Post>>(
+    ({ item }) => <HomePostCardItem post={item} feedScreen={feedScreen} />,
+    [feedScreen]
+ );
 
   const keyExtractor = useMemo(() => (item: Post) => item.id, []);
 

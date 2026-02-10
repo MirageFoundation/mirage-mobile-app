@@ -57,3 +57,6 @@ export type { UseSendTokensOptions } from "./use-send-tokens";
 // Moderation
 export { useReport } from "./use-report";
 export type { UseReportOptions } from "./use-report";
+
+// Rewards
+export { useClaimReward } from "./use-claim-reward";

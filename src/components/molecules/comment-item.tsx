@@ -8,6 +8,7 @@ import { TimeAgo, FollowButton } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
+import { MediaPreviewModal } from "./media-preview-modal";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -137,53 +138,75 @@ function extractImageUrls(content: string): {
 }
 
 /**
- * Component to render an image in comment
- */
-const CommentImage = ({ url }: { url: string }) => {
-  const { theme } = useUnistyles();
-  const [hasError, setHasError] = useState(false);
+* Component to render an image in comment
+*/
+const CommentImage = ({ url, onPress }: { url: string; onPress?: () => void }) => {
+const { theme } = useUnistyles();
+const [hasError, setHasError] = useState(false);
+ const [aspectRatio, setAspectRatio] = useState(16 / 9);
 
-  if (hasError) {
-    return (
-      <View
-        style={[
-          commentImageStyles.errorContainer,
-          { backgroundColor: theme.colors.background.subtle },
-        ]}
-      >
-        <Text size="xs" mode="subtle">
-          Failed to load image
-        </Text>
-      </View>
-    );
-  }
+  const MEDIA_MAX_HEIGHT = 450;
+  const containerWidth = 350;
+  const calculatedHeight = containerWidth / aspectRatio;
+  const exceedsMaxHeight = calculatedHeight > MEDIA_MAX_HEIGHT;
+  const containerStyle = exceedsMaxHeight
+    ? { height: MEDIA_MAX_HEIGHT }
+    : { aspectRatio };
 
+if (hasError) {
   return (
-    <View style={commentImageStyles.container}>
-      <Image
-        source={{ uri: url }}
-        style={commentImageStyles.image}
-        contentFit="cover"
-        transition={200}
-        onError={() => setHasError(true)}
-      />
+    <View
+      style={[
+        commentImageStyles.errorContainer,
+        { backgroundColor: theme.colors.background.subtle },
+      ]}
+    >
+      <Text size="xs" mode="subtle">
+        Failed to load image
+      </Text>
     </View>
   );
-};
+}
 
+return (
+  <Pressable 
+      style={[commentImageStyles.container, containerStyle]}
+    onPress={() => {
+       if (onPress) {
+         triggerHaptic("selection");
+         onPress();
+       }
+     }}
+   >
+    <Image
+      source={{ uri: url }}
+      style={commentImageStyles.image}
+      contentFit="cover"
+      transition={200}
+       onLoad={({ source }) => {
+         if (source?.width && source?.height) {
+           setAspectRatio(source.width / source.height);
+         }
+       }}
+      onError={() => setHasError(true)}
+    />
+   </Pressable>
+);
+};
 const commentImageStyles = StyleSheet.create((theme) => ({
-  container: {
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.xs,
-    borderRadius: theme.radius.md,
-    overflow: "hidden",
-  },
-  image: {
-    width: "100%",
-    height: 200,
-    borderRadius: theme.radius.md,
-  },
-  errorContainer: {
+container: {
+  marginTop: theme.spacing.sm,
+  marginBottom: theme.spacing.xs,
+  borderRadius: theme.radius.md,
+  overflow: "hidden",
+  backgroundColor: theme.colors.background.subtle,
+},
+image: {
+ width: "100%",
+ height: "100%",
+ borderRadius: theme.radius.md,
+},
+errorContainer: {
     width: "100%",
     height: 100,
     borderRadius: theme.radius.md,
@@ -195,31 +218,53 @@ const commentImageStyles = StyleSheet.create((theme) => ({
 }));
 
 const CommentContent = ({ content }: { content: string }) => {
-  const { text, imageUrls } = useMemo(
-    () => extractImageUrls(content),
-    [content],
-  );
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
-  const handleLinkPress = useCallback((url: string) => {
-    triggerHaptic("light");
-    const fullUrl =
-      url.startsWith("http://") || url.startsWith("https://")
-        ? url
-        : `https://${url}`;
-    Linking.openURL(fullUrl).catch(() => {});
+ const { text, imageUrls } = useMemo(
+   () => extractImageUrls(content),
+   [content],
+ );
+
+ const handleLinkPress = useCallback((url: string) => {
+   triggerHaptic("light");
+   const fullUrl =
+     url.startsWith("http://") || url.startsWith("https://")
+       ? url
+       : `https://${url}`;
+   Linking.openURL(fullUrl).catch(() => {});
+ }, []);
+
+  const handleImagePress = useCallback((url: string) => {
+    setPreviewImageUrl(url);
   }, []);
 
-  return (
-    <View style={styles.content}>
-      {text.length > 0 && (
-        <MarkdownContent content={text} onLinkPress={handleLinkPress} />
-      )}
+  const handleClosePreview = useCallback(() => {
+    setPreviewImageUrl(null);
+  }, []);
 
-      {imageUrls.map((url, index) => (
-        <CommentImage key={`img-${index}`} url={url} />
-      ))}
-    </View>
-  );
+ return (
+    <>
+      <View style={styles.content}>
+        {text.length > 0 && (
+          <MarkdownContent content={text} onLinkPress={handleLinkPress} />
+        )}
+
+        {imageUrls.map((url, index) => (
+          <CommentImage 
+            key={`img-${index}`} 
+            url={url} 
+            onPress={() => handleImagePress(url)}
+          />
+        ))}
+      </View>
+
+      <MediaPreviewModal
+        visible={!!previewImageUrl}
+        media={previewImageUrl ? { type: "image", uri: previewImageUrl } : null}
+        onClose={handleClosePreview}
+      />
+    </>
+ );
 };
 
 export const CommentItem = ({
@@ -479,16 +524,16 @@ export const CommentItem = ({
                   }
                   color={iconColor}
                 />
-                {depth === 0 && (
-                  <Text
-                    size={theme.typography.size.xs}
-                    mode="subtle"
-                    weight="semibold"
-                    style={styles.actionText}
-                  >
-                    Reply
-                  </Text>
-                )}
+               {depth === 0 && (
+                 <Text
+                    size="xs"
+                   mode="subtle"
+                   weight="semibold"
+                   style={styles.actionText}
+                 >
+                   Reply
+                 </Text>
+               )}
               </AnimatedPressable>
 
               {/* Like */}

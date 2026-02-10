@@ -48,3 +48,7 @@ export type { SendTokensInput, SubscriptionLevel } from "./tokens";
 // Moderation
 export { report } from "./moderation";
 export type { ReportInput } from "./moderation";
+
+// Rewards
+export { claimReward } from "./rewards";
+export type { ClaimRewardInput, ClaimRewardResponse } from "./rewards";

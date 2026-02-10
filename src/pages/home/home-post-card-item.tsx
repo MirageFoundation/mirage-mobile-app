@@ -14,11 +14,13 @@ import {
   useIsPostVisible,
   useShareServer,
   useVoteOverride,
+  useCommentCountOverride,
   useIsTopicDisabled,
 } from "./home-post-card-store";
 
 type HomePostCardItemProps = {
-  post: Post;
+ post: Post;
+  feedScreen: 'home' | 'following' | 'topic';
 };
 
 function areHomePostCardItemPropsEqual(
@@ -32,29 +34,32 @@ function areHomePostCardItemPropsEqual(
   if (prev.likes !== next.likes) return false;
   if (prev.dislikes !== next.dislikes) return false;
   if (prev.comments !== next.comments) return false;
-  if (prev.hasLiked !== next.hasLiked) return false;
-  if (prev.hasDisliked !== next.hasDisliked) return false;
-  return true;
+ if (prev.hasLiked !== next.hasLiked) return false;
+ if (prev.hasDisliked !== next.hasDisliked) return false;
+  if (prevProps.feedScreen !== nextProps.feedScreen) return false;
+ return true;
 }
 
 // Get handlers from store without subscribing to changes
 const getHandlers = () => useHomePostCardStore.getState().handlers;
 
 export const HomePostCardItem = memo(function HomePostCardItem({
-  post,
+ post,
+  feedScreen,
 }: HomePostCardItemProps) {
-  const isVisible = useIsPostVisible(post.id);
-  const isFollowing = useIsFollowing(post.author.id);
-  const isTopicFollowed = useIsTopicFollowed(post.topic);
-  const contentRevealed = useIsPostRevealed(post.id);
-  const voteOverride = useVoteOverride(post.id);
-  const isOwnPost = useIsOwnPost(post.author.id);
-  const isTopicDisabled = useIsTopicDisabled(post.topic);
-  const shareServer = useShareServer();
-  const allowAutoplay = useAllowAutoplay();
-  const feedActive = useFeedActive();
+ const isVisible = useIsPostVisible(post.id);
+ const isFollowing = useIsFollowing(post.author.id);
+ const isTopicFollowed = useIsTopicFollowed(post.topic);
+ const contentRevealed = useIsPostRevealed(post.id);
+ const voteOverride = useVoteOverride(post.id);
+ const commentCountOverride = useCommentCountOverride(post.id);
+ const isOwnPost = useIsOwnPost(post.author.id);
+ const isTopicDisabled = useIsTopicDisabled(post.topic);
+ const shareServer = useShareServer();
+ const allowAutoplay = useAllowAutoplay();
+  const feedActive = useFeedActive(feedScreen);
 
- // Store post data in ref to avoid recreating callbacks
+// Store post data in ref to avoid recreating callbacks
  const postRef = useRef(post);
  const isFollowingRef = useRef(isFollowing);
  const isTopicFollowedRef = useRef(isTopicFollowed);
@@ -165,7 +170,8 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   const displayPost = useMemo(() => {
     const needsFollowingUpdate = (post.isFollowing ?? false) !== isFollowing;
     const needsVoteUpdate = !!voteOverride;
-    if (!needsFollowingUpdate && !needsVoteUpdate) return post;
+    const needsCommentCountUpdate = !!commentCountOverride;
+    if (!needsFollowingUpdate && !needsVoteUpdate && !needsCommentCountUpdate) return post;
     return {
       ...post,
       isFollowing,
@@ -174,18 +180,21 @@ export const HomePostCardItem = memo(function HomePostCardItem({
         hasLiked: voteOverride.hasLiked ?? post.hasLiked,
         hasDisliked: voteOverride.hasDisliked ?? post.hasDisliked,
       }),
+      ...(commentCountOverride && {
+        comments: post.comments + (commentCountOverride.commentDelta ?? 0),
+      }),
     };
-  }, [post, isFollowing, voteOverride]);
+  }, [post, isFollowing, voteOverride, commentCountOverride]);
 
   return (
-    <PostCard
-      post={displayPost}
-      isOwnPost={isOwnPost}
-      isVisible={isVisible}
-      isTopicFollowed={isTopicFollowed}
-      showFollowButton={false}
-      showUrlCard={false}
-      allowAutoplay={allowAutoplay}
+   <PostCard
+     post={displayPost}
+     isOwnPost={isOwnPost}
+     isVisible={isVisible}
+     isTopicFollowed={isTopicFollowed}
+      showFollowButton={true}
+     showUrlCard={false}
+     allowAutoplay={allowAutoplay}
       screenActive={feedActive}
       onPress={handlePostPress}
       onAuthorPress={handleAuthorPress}

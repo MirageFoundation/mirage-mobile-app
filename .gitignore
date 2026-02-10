@@ -46,3 +46,4 @@ external
 reference
 build-*
 .otto
+.env

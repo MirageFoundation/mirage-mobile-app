@@ -131,7 +131,7 @@ export async function computePoW(
 /**
  * Cancel ongoing PoW computation (cancels all parallel workers)
  */
-export { cancelPow };
+export { cancelPow, getPowProgress };
 
 /**
  * Estimate time to compute PoW at given difficulty

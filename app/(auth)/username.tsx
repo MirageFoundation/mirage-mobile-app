@@ -3,9 +3,7 @@ import { useUsernameAvailability } from "@/src/api/read/hooks/use-username-resol
 import { validateInviteCode } from "@/src/api/read/endpoints/users";
 import { getTxStatus } from "@/src/api/read/endpoints/tx";
 import { setUsername as setUsernameOnChain } from "@/src/api/write";
-import {
-  TransactionProgressModal,
-} from "@/src/components/molecules";
+import { TransactionProgressModal } from "@/src/components/molecules";
 import {
   Box,
   Button,
@@ -35,7 +33,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid";
-type InviteCodeStatus = "idle" | "checking" | "valid" | "invalid" | "used" | "expired";
+type InviteCodeStatus =
+  | "idle"
+  | "checking"
+  | "valid"
+  | "invalid"
+  | "used"
+  | "expired";
 
 export default function UsernameScreen() {
   const router = useRouter();
@@ -45,8 +49,8 @@ export default function UsernameScreen() {
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
 
   const createNewWallet = useAuthStore((s) => s.createNewWallet);
- const isCreatingWallet = useAuthStore((s) => s.isCreatingWallet);
- const setHasUsername = useAuthStore((s) => s.setHasUsername);
+  const isCreatingWallet = useAuthStore((s) => s.isCreatingWallet);
+  const setHasUsername = useAuthStore((s) => s.setHasUsername);
   const clearRecoveryPhrase = useAuthStore((s) => s.clearRecoveryPhrase);
 
   const [username, setUsername] = useState("");
@@ -75,7 +79,7 @@ export default function UsernameScreen() {
     isLoading: isCheckingUsername,
     isFetched,
   } = useUsernameAvailability(
-    username.length >= minUsernameSize ? username : null
+    username.length >= minUsernameSize ? username : null,
   );
 
   const validateUsername = useCallback(
@@ -83,10 +87,10 @@ export default function UsernameScreen() {
       if (value.length < minUsernameSize || value.length > maxUsernameSize) {
         return false;
       }
-      const isValid = /^[a-z0-9-]+$/.test(value);
+      const isValid = /^[a-zA-Z0-9-]+$/.test(value);
       return isValid;
     },
-    [minUsernameSize, maxUsernameSize]
+    [minUsernameSize, maxUsernameSize],
   );
 
   useEffect(() => {
@@ -115,7 +119,7 @@ export default function UsernameScreen() {
   }, [username, validateUsername, isCheckingUsername, isFetched, usernameData]);
 
   const handleUsernameChange = useCallback((text: string) => {
-    const sanitized = text.toLowerCase().replace(/[^a-z0-9-]/g, "");
+    const sanitized = text.replace(/[^a-zA-Z0-9-]/g, "");
     setUsername(sanitized);
     setCreateError(null);
   }, []);
@@ -131,7 +135,7 @@ export default function UsernameScreen() {
     setCreateError(null);
   }, []);
 
-const handleContinue = useCallback(async () => {
+  const handleContinue = useCallback(async () => {
     if (status !== "available") return;
     if (!inviteCode.trim()) {
       setInviteStatus("invalid");
@@ -183,7 +187,7 @@ const handleContinue = useCallback(async () => {
           const response = await setUsernameOnChain(
             wallet,
             { username, invite_code: inviteCode.trim() },
-            onPoWProgress
+            onPoWProgress,
           );
           txProgress.setPhase("submitting");
           return response;
@@ -199,7 +203,7 @@ const handleContinue = useCallback(async () => {
               error_details: s.error_details,
             };
           },
-        }
+        },
       );
 
       if (!txResult.success) {
@@ -235,7 +239,15 @@ const handleContinue = useCallback(async () => {
         }
       }
     }
-  }, [status, username, inviteCode, createNewWallet, setHasUsername, txProgress, router]);
+  }, [
+    status,
+    username,
+    inviteCode,
+    createNewWallet,
+    setHasUsername,
+    txProgress,
+    router,
+  ]);
 
   const handleRetry = useCallback(() => {
     txProgress.reset();
@@ -375,8 +387,12 @@ const handleContinue = useCallback(async () => {
     }
   };
 
-const isButtonEnabled =
-    status === "available" && inviteCode.trim().length > 0 && !isCreatingWallet && !isSettingUp && inviteStatus !== "checking";
+  const isButtonEnabled =
+    status === "available" &&
+    inviteCode.trim().length > 0 &&
+    !isCreatingWallet &&
+    !isSettingUp &&
+    inviteStatus !== "checking";
 
   return (
     <Box flex background="base">
@@ -403,7 +419,12 @@ const isButtonEnabled =
         }
       />
 
-      <View style={[styles.header, { paddingTop: Platform.OS === "ios" ? 20 : insets.top }]}>
+      <View
+        style={[
+          styles.header,
+          { paddingTop: Platform.OS === "ios" ? 20 : insets.top },
+        ]}
+      >
         <Pressable onPress={handleClose} style={styles.closeButton}>
           <EvilIcons name="close" size={36} color={theme.colors.text.default} />
         </Pressable>
@@ -429,7 +450,7 @@ const isButtonEnabled =
           </View>
 
           <View style={styles.titleContainer}>
-            <Text style={styles.titleText}>Hi new friend,</Text>
+            <Text style={styles.titleText}>Hello Friend,</Text>
             <Text style={styles.titleText}>welcome to Mirage</Text>
           </View>
 
@@ -446,13 +467,25 @@ const isButtonEnabled =
               autoCorrect={false}
               size="lg"
               variant="filled"
-             style={styles.input}
+              style={styles.input}
               maxLength={9}
               rightAccessory={
                 inviteCode.length > 0 ? (
-                  <Pressable style={styles.statusIcon} onPress={() => { setInviteCode(""); setInviteStatus("idle"); }}>
-                    {inviteStatus !== "idle" ? getInviteStatusIcon() : (
-                      <Ionicons name="close-circle" size={20} color={theme.colors.text.subtle} />
+                  <Pressable
+                    style={styles.statusIcon}
+                    onPress={() => {
+                      setInviteCode("");
+                      setInviteStatus("idle");
+                    }}
+                  >
+                    {inviteStatus !== "idle" ? (
+                      getInviteStatusIcon()
+                    ) : (
+                      <Ionicons
+                        name="close-circle"
+                        size={20}
+                        color={theme.colors.text.subtle}
+                      />
                     )}
                   </Pressable>
                 ) : undefined
@@ -460,13 +493,18 @@ const isButtonEnabled =
             />
           </View>
 
-          <View style={[styles.statusContainer, { marginBottom: theme.spacing.sm }]}>
+          <View
+            style={[styles.statusContainer, { marginBottom: theme.spacing.sm }]}
+          >
             {inviteStatus !== "idle" ? (
               <Text size="sm" style={{ color: getInviteStatusColor() }}>
                 {getInviteStatusMessage}
               </Text>
             ) : (
-              <Text size="sm" style={{ color: theme.colors.text.subtle, opacity: 0.6 }}>
+              <Text
+                size="sm"
+                style={{ color: theme.colors.text.subtle, opacity: 0.6 }}
+              >
                 Enter a invite code
               </Text>
             )}
@@ -498,7 +536,10 @@ const isButtonEnabled =
                 {getStatusMessage}
               </Text>
             ) : (
-              <Text size="sm" style={{ color: theme.colors.text.subtle, opacity: 0.6 }}>
+              <Text
+                size="sm"
+                style={{ color: theme.colors.text.subtle, opacity: 0.6 }}
+              >
                 This is how people will find you on Mirage
               </Text>
             )}
@@ -514,11 +555,17 @@ const isButtonEnabled =
             rounded="full"
             onPress={handleContinue}
             disabled={!isButtonEnabled}
-            loading={isCreatingWallet || isSettingUp || inviteStatus === "checking"}
+            loading={
+              isCreatingWallet || isSettingUp || inviteStatus === "checking"
+            }
             style={[styles.continueButton]}
           >
             <Button.Text weight="medium">
-              {inviteStatus === "checking" ? "Validating code..." : isCreatingWallet || isSettingUp ? "Creating account..." : "Continue"}
+              {inviteStatus === "checking"
+                ? "Validating code..."
+                : isCreatingWallet || isSettingUp
+                  ? "Creating account..."
+                  : "Continue"}
             </Button.Text>
           </Button>
 

@@ -61,5 +61,5 @@ export {
 // ============================================
 export type { PoWInput, PoWResult } from "./pow-turbo";
 export type { PoWParams } from "./pow";
-export { computePoW, cancelPow, estimatePoWTime } from "./pow-turbo";
+export { computePoW, cancelPow, estimatePoWTime, getPowProgress } from "./pow-turbo";
 export { verifyPoW, leadingZeroBits, uvarint } from "./pow";

@@ -4,6 +4,8 @@ import { mmkvStorage } from "./mmkv-storage";
 import { walletService } from "@/src/services/wallet-service";
 import { getUserStatus } from "@/src/api/read/endpoints/users";
 import type { WalletMetadata } from "@/src/wallet";
+import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { useContentModerationStore } from "./content-moderation-store";
 
 // ============================================
 // Types
@@ -304,6 +306,9 @@ export const useAuthStore = create<AuthState>()(
           hasOnboarded: false,
           recoveryPhrase: null,
         });
+
+        useHomePostCardStore.getState().reset();
+        useContentModerationStore.getState().clearAll();
       },
 
       // ============================================
