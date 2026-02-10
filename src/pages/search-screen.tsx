@@ -1018,6 +1018,7 @@ export function SearchScreen() {
             keyExtractor={(item) => `post-${item.post_id}`}
             renderItem={renderPostResult}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={[
               styles.listContent,
@@ -1033,6 +1034,7 @@ export function SearchScreen() {
               keyExtractor={(item) => `topic-post-${item.post_id}`}
               renderItem={renderPostResult}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               showsVerticalScrollIndicator={false}
               contentContainerStyle={[
                 styles.listContent,
@@ -1058,6 +1060,7 @@ export function SearchScreen() {
               keyExtractor={(item) => `topic-${item.topic}`}
               renderItem={renderTopicResult}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               showsVerticalScrollIndicator={false}
               contentContainerStyle={[
                 styles.listContent,
@@ -1073,6 +1076,7 @@ export function SearchScreen() {
             keyExtractor={(item) => `user-${item.address}`}
             renderItem={renderUserResult}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={[
               styles.listContent,
@@ -1087,6 +1091,7 @@ export function SearchScreen() {
           data={[]}
           renderItem={null}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.listContent,
