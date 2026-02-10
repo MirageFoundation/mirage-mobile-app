@@ -4,9 +4,9 @@ import { useRouter } from "expo-router";
 import { useCallback, useMemo } from "react";
 import { Pressable, View } from "react-native";
 import Animated, {
- useAnimatedStyle,
- useDerivedValue,
- withTiming,
+  useAnimatedStyle,
+  useDerivedValue,
+  withTiming,
 } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -26,13 +26,15 @@ function formatTimeShort(seconds: number): string {
 }
 
 export function QuestsSummaryCard() {
- const { theme, rt } = useUnistyles();
- const router = useRouter();
- const { data, isLoading } = useDailyQuests();
+  const { theme, rt } = useUnistyles();
+  const router = useRouter();
+  const { data, isLoading } = useDailyQuests();
   const { data: pendingData } = usePendingRewards();
- const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
- const questsCardExpanded = usePreferencesStore((s) => s.questsCardExpanded);
- const setQuestsCardExpanded = usePreferencesStore((s) => s.setQuestsCardExpanded);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const questsCardExpanded = usePreferencesStore((s) => s.questsCardExpanded);
+  const setQuestsCardExpanded = usePreferencesStore(
+    (s) => s.setQuestsCardExpanded,
+  );
 
   const isLightTheme = rt.themeName !== "dark";
 
@@ -49,13 +51,13 @@ export function QuestsSummaryCard() {
     return data.daily_quests.filter((q) => q.completed);
   }, [data?.daily_quests]);
 
- const totalQuests = data?.daily_quests?.length ?? 0;
- const completedCount = completedQuests.length;
- const progress = totalQuests > 0 ? completedCount / totalQuests : 0;
- const allComplete = completedCount === totalQuests && totalQuests > 0;
+  const totalQuests = data?.daily_quests?.length ?? 0;
+  const completedCount = completedQuests.length;
+  const progress = totalQuests > 0 ? completedCount / totalQuests : 0;
+  const allComplete = completedCount === totalQuests && totalQuests > 0;
 
- const hasClaimed = useMemo(() => {
-   if (!pendingData) return false;
+  const hasClaimed = useMemo(() => {
+    if (!pendingData) return false;
     // Only show "Claimed" when ALL quests are completed AND no pending rewards
     return allComplete && pendingData.pending_rewards.length === 0;
   }, [allComplete, pendingData]);
@@ -63,7 +65,7 @@ export function QuestsSummaryCard() {
   // Has rewards to claim when there are pending rewards
   const hasRewardsToClaim = pendingData?.pending_rewards?.length > 0;
 
- const totalReward = useMemo(() => {
+  const totalReward = useMemo(() => {
     const multiplier = data?.reward_multiplier ?? 1;
     return completedQuests.reduce((sum, quest) => {
       return Math.floor(sum + (quest.rewards[0]?.amount ?? 0) * multiplier);
@@ -108,7 +110,11 @@ export function QuestsSummaryCard() {
               { backgroundColor: theme.colors.warning[500] + "20" },
             ]}
           >
-            <Ionicons name="trophy" size={18} color={theme.colors.warning[500]} />
+            <Ionicons
+              name="trophy"
+              size={18}
+              color={theme.colors.warning[500]}
+            />
           </View>
           <View style={styles.titleContent}>
             <Text size="md" weight="semibold">
@@ -118,7 +124,8 @@ export function QuestsSummaryCard() {
               {completedCount}/{totalQuests} completed
               {data?.seconds_until_reset && (
                 <Text size="xs" mode="subtle">
-                  {" "}• {formatTimeShort(data.seconds_until_reset)} left
+                  {" "}
+                  • {formatTimeShort(data.seconds_until_reset)} left
                 </Text>
               )}
             </Text>
@@ -132,8 +139,16 @@ export function QuestsSummaryCard() {
                 { backgroundColor: theme.colors.success[500] + "20" },
               ]}
             >
-              <Ionicons name="sparkles" size={12} color={theme.colors.success[500]} />
-              <Text size="xs" weight="bold" style={{ color: theme.colors.success[500] }}>
+              <Ionicons
+                name="sparkles"
+                size={12}
+                color={theme.colors.success[500]}
+              />
+              <Text
+                size="xs"
+                weight="bold"
+                style={{ color: theme.colors.success[500] }}
+              >
                 +{totalReward.toLocaleString()}
               </Text>
             </View>
@@ -173,7 +188,9 @@ export function QuestsSummaryCard() {
             {data?.daily_quests.slice(0, 3).map((quest) => (
               <View key={quest.id} style={styles.questItem}>
                 <Ionicons
-                  name={quest.completed ? "checkmark-circle" : "ellipse-outline"}
+                  name={
+                    quest.completed ? "checkmark-circle" : "ellipse-outline"
+                  }
                   size={16}
                   color={
                     quest.completed
@@ -183,7 +200,9 @@ export function QuestsSummaryCard() {
                 />
                 <Text
                   size="sm"
-                  style={quest.completed ? { flex: 1 } : { flex: 1, opacity: 0.6 }}
+                  style={
+                    quest.completed ? { flex: 1 } : { flex: 1, opacity: 0.6 }
+                  }
                   numberOfLines={1}
                 >
                   {quest.title}
@@ -195,26 +214,30 @@ export function QuestsSummaryCard() {
             ))}
           </View>
 
-         <Pressable
-           onPress={handleViewQuests}
+          <Pressable
+            onPress={handleViewQuests}
             disabled={hasClaimed}
-           style={({ pressed }) => [
-             styles.gradientButtonContainer,
+            style={({ pressed }) => [
+              styles.gradientButtonContainer,
               pressed && !hasClaimed && { opacity: 0.9 },
               hasClaimed && { opacity: 0.5 },
-           ]}
-         >
-           <LinearGradient
-             colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
-             start={{ x: 0, y: 0 }}
-             end={{ x: 1, y: 0 }}
-             style={styles.gradientButton}
-           >
-            <Text size="sm" weight="semibold" style={{ color: "#FFFFFF" }}>
-               {hasRewardsToClaim ? "Claim Rewards" : hasClaimed ? "Claimed" : "View All Quests"}
-            </Text>
-           </LinearGradient>
-         </Pressable>
+            ]}
+          >
+            <LinearGradient
+              colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.gradientButton}
+            >
+              <Text size="sm" weight="semibold" style={{ color: "#FFFFFF" }}>
+                {hasRewardsToClaim
+                  ? "Claim Rewards"
+                  : hasClaimed
+                    ? "Claimed"
+                    : "View All Quests"}
+              </Text>
+            </LinearGradient>
+          </Pressable>
         </View>
       )}
     </View>
@@ -224,8 +247,8 @@ export function QuestsSummaryCard() {
 const styles = StyleSheet.create((theme) => ({
   container: {
     marginHorizontal: theme.spacing.md,
-    marginTop: theme.spacing.lg,
-    marginBottom: theme.spacing.xs,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     overflow: "hidden",
