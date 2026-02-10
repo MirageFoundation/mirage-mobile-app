@@ -53,14 +53,17 @@ export function SavedPostsScreen() {
 
   const { handleUpvote, handleDownvote } = useVoteHandler({
     onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
-      setVoteOverrides((prev) => ({
-        ...prev,
-        [targetId]: {
-          hasLiked: result.hasLiked,
-          hasDisliked: result.hasDisliked,
-          likeDelta: result.likeDelta,
-        },
-      }));
+      setVoteOverrides((prev) => {
+        const existing = prev[targetId];
+        return {
+          ...prev,
+          [targetId]: {
+            hasLiked: result.hasLiked,
+            hasDisliked: result.hasDisliked,
+            likeDelta: (existing?.likeDelta ?? 0) + result.likeDelta,
+          },
+        };
+      });
     }, []),
     onRollback: useCallback((targetId: string) => {
       setVoteOverrides((prev) => {

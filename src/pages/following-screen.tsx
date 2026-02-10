@@ -92,7 +92,7 @@ export function FollowingScreen() {
       setVoteOverride(targetId, {
         hasLiked: result.hasLiked,
         hasDisliked: result.hasDisliked,
-        likeDelta: result.likeDelta,
+        likes: result.newLikes,
       });
     }, [setVoteOverride]),
     onRollback: useCallback(

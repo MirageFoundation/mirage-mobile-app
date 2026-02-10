@@ -521,12 +521,10 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
   const postVoteHandler = useVoteHandler({
     onOptimisticUpdate: useCallback(
       (targetId: string, result: VoteResult) => {
-        // Only update shared store - don't use local state for votes
-        // This ensures consistency between home/following and post detail screens
         setVoteOverride(targetId, {
           hasLiked: result.hasLiked,
           hasDisliked: result.hasDisliked,
-          likeDelta: result.likeDelta,
+          likes: result.newLikes,
         });
       },
       [setVoteOverride],
@@ -602,7 +600,7 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
     if (sharedVoteOverride) {
       result = {
         ...result,
-        likes: (post.likes ?? 0) + (sharedVoteOverride.likeDelta ?? 0),
+        likes: sharedVoteOverride.likes ?? (post.likes ?? 0),
         hasLiked: sharedVoteOverride.hasLiked ?? result.hasLiked,
         hasDisliked: sharedVoteOverride.hasDisliked ?? result.hasDisliked,
       };

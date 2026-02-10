@@ -28,7 +28,10 @@ export interface VoteResult {
   hasDisliked: boolean;
   likeDelta: number;
   direction: VoteDirection;
+  newLikes: number;
 }
+
+type BaseVoteResult = Omit<VoteResult, "newLikes">;
 
 export interface UseVoteHandlerOptions {
   onOptimisticUpdate?: (targetId: string, result: VoteResult) => void;
@@ -62,7 +65,7 @@ function calculateVoteResult(
   action: "upvote" | "downvote",
   currentlyLiked: boolean,
   currentlyDisliked: boolean
-): VoteResult {
+): BaseVoteResult {
   if (action === "upvote") {
     if (currentlyLiked) {
       return {
@@ -183,6 +186,7 @@ export function useVoteHandler(
             hasDisliked: desiredDirection === -1,
             likeDelta,
             direction: desiredDirection as VoteDirection,
+            newLikes: pending.previousState.likes + likeDelta,
           };
 
           const actionType = getVoteActionType(newResult.direction);
@@ -237,13 +241,16 @@ export function useVoteHandler(
           likes: currentLikes,
         };
 
+        const newLikes = currentLikes + result.likeDelta;
+        const resultWithLikes: VoteResult = { ...result, newLikes };
+
         const actionType = getVoteActionType(result.direction);
         const actionId = generateActionId();
 
         pendingVotes.current.set(targetId, {
           actionId,
           previousState,
-          optimisticResult: result,
+          optimisticResult: resultWithLikes,
         });
 
         enqueue({
@@ -253,11 +260,11 @@ export function useVoteHandler(
           execute: async () => {
             return voteAsyncRef.current({
               target: targetId,
-              direction: result.direction,
+              direction: resultWithLikes.direction,
             });
           },
           onOptimisticUpdate: () => {
-            onOptimisticUpdate?.(targetId, result);
+            onOptimisticUpdate?.(targetId, resultWithLikes);
           },
           onSuccess: () => {
             pendingVotes.current.delete(targetId);

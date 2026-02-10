@@ -99,7 +99,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
    const override = voteOverrideRef.current;
    const currentHasLiked = override?.hasLiked ?? p.hasLiked ?? false;
    const currentHasDisliked = override?.hasDisliked ?? p.hasDisliked ?? false;
-   const currentLikes = p.likes + (override?.likeDelta ?? 0);
+   const currentLikes = override?.likes ?? p.likes;
    logPress({ name: "post_like", postId: p.id });
    getHandlers().onLikePress?.(
      p.id,
@@ -114,7 +114,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
    const override = voteOverrideRef.current;
    const currentHasLiked = override?.hasLiked ?? p.hasLiked ?? false;
    const currentHasDisliked = override?.hasDisliked ?? p.hasDisliked ?? false;
-   const currentLikes = p.likes + (override?.likeDelta ?? 0);
+   const currentLikes = override?.likes ?? p.likes;
    logPress({ name: "post_dislike", postId: p.id });
    getHandlers().onDislikePress?.(
      p.id,
@@ -176,7 +176,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       ...post,
       isFollowing,
       ...(voteOverride && {
-        likes: post.likes + (voteOverride.likeDelta ?? 0),
+        likes: voteOverride.likes ?? post.likes,
         hasLiked: voteOverride.hasLiked ?? post.hasLiked,
         hasDisliked: voteOverride.hasDisliked ?? post.hasDisliked,
       }),
