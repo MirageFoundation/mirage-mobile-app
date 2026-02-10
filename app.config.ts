@@ -26,6 +26,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       bundleIdentifier: bundleIdentifier,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
+        UIBackgroundModes: ["fetch", "remote-notification"],
       },
     },
     android: {
@@ -93,6 +94,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           photosPermission: "$(PRODUCT_NAME) needs access to your Photos.",
         },
       ],
+      "expo-notifications",
     ],
     experiments: {
       typedRoutes: true,

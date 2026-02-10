@@ -1,5 +1,5 @@
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
-import React, { memo } from "react";
+import React, { memo, useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { MenuProvider } from "react-native-popup-menu";
@@ -12,6 +12,7 @@ import { ThemeProvider } from "./theme-provider";
 import { ToastProvider } from "./toast-provider";
 import { PowQueueToast } from "@/src/components/ui/pow-queue-toast";
 import { WalletProvider } from "./wallet-provider";
+import { initInboxNotifications } from "@/src/services/inbox-notifications";
 
 const CoreProviders = memo(({ children }: { children: React.ReactNode }) => (
   <ThemeContextProvider>
@@ -33,6 +34,10 @@ AuthProviders.displayName = "AuthProviders";
 
 export const RootProvider = memo(
   ({ children }: { children: React.ReactNode }) => {
+    useEffect(() => {
+      initInboxNotifications();
+    }, []);
+
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
         <MenuProvider>

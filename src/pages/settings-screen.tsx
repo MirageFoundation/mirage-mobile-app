@@ -19,6 +19,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useApiServer } from "@/src/providers/api-server-provider";
 import { useToast } from "@/src/providers/toast-provider";
 import { usePreferencesStore, type ThemeMode, type ApiServer, type VideoAutoplayNetwork } from "@/src/stores";
+import { runInboxCheckNow, sendTestNotification, resetAndTestInboxNotification, getNotificationDebugInfo } from "@/src/services/inbox-notifications";
 
 // Auto-collapse threshold options
 const collapseThresholdOptions: ValueOption<number | null>[] = [
@@ -329,6 +330,74 @@ const handleApiServerChange = useCallback(
         },
       ],
     },
+    ...(__DEV__ ? [{
+      title: "Notifications",
+      data: [
+        {
+          id: "notification-status",
+          component: (() => {
+            const info = getNotificationDebugInfo();
+            return (
+              <SettingRow
+                type="navigate"
+                icon="information-circle-outline"
+                title="Background Fetch Status"
+                subtitle={`Last check: ${info.lastCheck} | Tracked: ${info.notifiedCount} | Seeded: ${info.isSeeded}`}
+                onPress={() => {
+                  const fresh = getNotificationDebugInfo();
+                  toast.success(`Last: ${fresh.lastCheck} | IDs: ${fresh.notifiedCount}`);
+                }}
+              />
+            );
+          })(),
+        },
+        {
+          id: "test-notification",
+          component: (
+            <SettingRow
+              type="navigate"
+              icon="notifications-outline"
+              title="Check Inbox Now"
+              subtitle="Fetch inbox and notify for any new replies"
+              onPress={() => {
+                runInboxCheckNow();
+                toast.success("Checking inbox for new replies...");
+              }}
+            />
+          ),
+        },
+        {
+          id: "send-test-notification",
+          component: (
+            <SettingRow
+              type="navigate"
+              icon="pulse-outline"
+              title="Send Test Notification"
+              subtitle="Fire a dummy notification to verify they work"
+              onPress={() => {
+                sendTestNotification();
+                toast.success("Test notification sent!");
+              }}
+            />
+          ),
+        },
+        {
+          id: "reset-and-test",
+          component: (
+            <SettingRow
+              type="navigate"
+              icon="refresh-outline"
+              title="Reset & Test Inbox"
+              subtitle="Clears seen replies, re-fetches inbox, notifies for all"
+              onPress={() => {
+                resetAndTestInboxNotification();
+                toast.success("Reset done, checking inbox...");
+              }}
+            />
+          ),
+        },
+      ],
+    }] : []),
   ];
 
   const renderItem = ({ item }: { item: SettingItem }) => {
