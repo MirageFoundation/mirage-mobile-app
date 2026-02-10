@@ -448,19 +448,11 @@ export const PostCardMedia = memo(
               >
                 This may take a few moments
               </Text>
-            </View>
-          )}
+           </View>
+         )}
 
-          {media.type === "gif" && (
-            <View style={styles.gifBadge}>
-              <Text size="xs" weight="bold" style={{ color: "#fff" }}>
-                GIF
-              </Text>
-            </View>
-          )}
-
-          {hasMultipleMedia && (
-            <View style={styles.multiMediaBadge}>
+         {hasMultipleMedia && (
+           <View style={styles.multiMediaBadge}>
               <Text size="xs" weight="semibold" style={{ color: "#fff" }}>
                 +{extraMediaCount}
               </Text>
@@ -492,19 +484,37 @@ export const PostCardMedia = memo(
                </View>
              )}
            </Pressable>
+        )}
+
+         {/* Video badge - placed after blur so it's always visible */}
+         {media.type === "video" && (
+           <View style={styles.videoBadge}>
+             <Text size="xs" weight="bold" style={{ color: "#fff" }}>
+               VIDEO
+             </Text>
+           </View>
          )}
 
-          {/* Video badge - placed after blur so it's always visible */}
-          {media.type === "video" && (
-            <View style={styles.videoBadge}>
+          {/* GIF badge - placed after blur so it's always visible */}
+          {media.type === "gif" && (
+            <View style={styles.gifBadge}>
               <Text size="xs" weight="bold" style={{ color: "#fff" }}>
-                VIDEO
+                GIF
               </Text>
             </View>
           )}
-       </View>
-     </View>
-   );
+
+         {/* Image badge - placed after blur so it's always visible */}
+         {media.type === "image" && (
+           <View style={styles.imageBadge}>
+             <Text size="xs" weight="bold" style={{ color: "#fff" }}>
+                IMG
+             </Text>
+           </View>
+         )}
+      </View>
+    </View>
+  );
   }),
 );
 
@@ -570,16 +580,27 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
- gifBadge: {
+gifBadge: {
+  position: "absolute",
+   top: theme.spacing.sm,
+  left: theme.spacing.sm,
+   backgroundColor: theme.colors.primary.main,
+  paddingHorizontal: theme.spacing.xs,
+  paddingVertical: 2,
+  borderRadius: theme.radius.sm,
+   zIndex: 20,
+},
+ videoBadge: {
    position: "absolute",
-   bottom: theme.spacing.sm,
+   top: theme.spacing.sm,
    left: theme.spacing.sm,
-   backgroundColor: "rgba(0, 0, 0, 0.7)",
+   backgroundColor: theme.colors.primary.main,
    paddingHorizontal: theme.spacing.xs,
    paddingVertical: 2,
    borderRadius: theme.radius.sm,
+   zIndex: 20,
  },
-  videoBadge: {
+  imageBadge: {
     position: "absolute",
     top: theme.spacing.sm,
     left: theme.spacing.sm,
@@ -589,7 +610,7 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.radius.sm,
     zIndex: 20,
   },
- multiMediaBadge: {
+multiMediaBadge: {
     position: "absolute",
     top: theme.spacing.sm,
     right: theme.spacing.sm,
