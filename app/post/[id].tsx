@@ -1727,7 +1727,7 @@ const handleToggleFollowCommentAuthor = useCallback(() => {
           onReport={handleReportPost}
           onRevealContent={handleRevealContent}
           contentRevealed={revealedContent}
-          shareUrl={`${getShareBaseUrl(shareServer)}/view_post?post_id=${id}`}
+          shareUrl={`${getShareBaseUrl(shareServer)}/p/${id}`}
           showUrlCard={false}
           hideCommentAction
         />

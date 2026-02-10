@@ -172,7 +172,7 @@ export function SavedPostsScreen() {
       <PostCardItem
         post={item}
         isOwnPost={currentUser?.id === item.author.id}
-        shareUrl={`${getShareBaseUrl(shareServer)}/view_post?post_id=${item.id}`}
+        shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
         showUrlCard={false}
         onPostPress={handlePostPress}
         onAuthorPress={handleAuthorPress}

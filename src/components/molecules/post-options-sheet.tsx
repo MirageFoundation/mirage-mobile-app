@@ -258,7 +258,7 @@ export const PostOptionsSheet = forwardRef<
 
     const getShareUrl = useCallback(() => {
       if (!post?.id) return "";
-      return `${getShareBaseUrl(shareServer)}/view_post?post_id=${post.id}`;
+      return `${getShareBaseUrl(shareServer)}/p/${post.id}`;
     }, [post?.id, shareServer]);
 
     const getShareMessage = useCallback(() => {

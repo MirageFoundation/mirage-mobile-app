@@ -212,7 +212,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
      onReport={handleReport}
     onMediaPress={handlePostPress}
     contentRevealed={contentRevealed}
-      shareUrl={`${getShareBaseUrl(shareServer)}/view_post?post_id=${post.id}`}
+      shareUrl={`${getShareBaseUrl(shareServer)}/p/${post.id}`}
   />
   );
 }, areHomePostCardItemPropsEqual);

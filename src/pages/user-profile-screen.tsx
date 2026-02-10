@@ -674,7 +674,7 @@ const handleUnfollow = useCallback(() => {
             isOwnPost={isOwnProfile}
             showUrlCard={false}
             showFollowButton={false}
-            shareUrl={`${getShareBaseUrl(shareServer)}/view_post?post_id=${item.id}`}
+            shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
          onPostPress={handlePostPress}
              onAuthorPress={handleAuthorPress}
              onCommentPress={handlePostPress}
