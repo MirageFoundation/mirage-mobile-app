@@ -34,15 +34,16 @@ export async function claimReward(
   const { questId } = input;
 
   return withPowRetry(async () => {
-    const payload = await buildSignedEnvelope({
-      wallet,
-      baseBuilder: canonBaseClaimReward,
-      payloadFields: {
+   const payload = await buildSignedEnvelope({
+     wallet,
+     baseBuilder: canonBaseClaimReward,
+     payloadFields: {
+        owner: wallet.address,
         target: wallet.address,
-        questId,
-      },
-      onPoWProgress,
-    });
+       questId,
+     },
+     onPoWProgress,
+   });
 
     return api.post<ClaimRewardResponse>("/rewards/claim", payload);
   }, "claimReward");

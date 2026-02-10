@@ -1,27 +1,28 @@
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
- ActivityIndicator,
- Alert,
+  ActivityIndicator,
+  Alert,
   Dimensions,
   Modal,
- Pressable,
- ScrollView,
- View,
+  Pressable,
+  ScrollView,
+  View,
 } from "react-native";
 import Animated, {
- interpolate,
+  interpolate,
   runOnJS,
- useAnimatedStyle,
- useSharedValue,
+  useAnimatedStyle,
+  useSharedValue,
   withDelay,
- withRepeat,
- withSequence,
- withSpring,
- withTiming,
- Easing,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+  Easing,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -50,8 +51,8 @@ const ACTION_COLORS: Record<string, string> = {
 };
 
 const BUTTON_GRADIENT_COLORS: readonly [string, string] = [
- "rgb(102, 126, 234)",
- "rgb(118, 75, 162)",
+  "rgb(102, 126, 234)",
+  "rgb(118, 75, 162)",
 ];
 
 const CONFETTI_COLORS = [
@@ -83,47 +84,44 @@ function ConfettiPiece({ delay, index }: { delay: number; index: number }) {
 
   useEffect(() => {
     const drift = (Math.random() - 0.5) * 100;
-    
+
     translateY.value = withDelay(
       delay,
       withTiming(SCREEN_HEIGHT + 100, {
         duration: 3000 + Math.random() * 2000,
         easing: Easing.out(Easing.quad),
-      })
+      }),
     );
-    
+
     translateX.value = withDelay(
       delay,
       withRepeat(
         withSequence(
           withTiming(drift, { duration: 500 }),
-          withTiming(-drift, { duration: 500 })
+          withTiming(-drift, { duration: 500 }),
         ),
         -1,
-        true
-      )
+        true,
+      ),
     );
-    
+
     rotate.value = withDelay(
       delay,
       withRepeat(
         withTiming(360, { duration: 1000 + Math.random() * 1000 }),
         -1,
-        false
-      )
+        false,
+      ),
     );
-    
-    opacity.value = withDelay(
-      delay + 2000,
-      withTiming(0, { duration: 1000 })
-    );
-    
+
+    opacity.value = withDelay(delay + 2000, withTiming(0, { duration: 1000 }));
+
     scale.value = withDelay(
       delay,
       withSequence(
         withSpring(1.2, { damping: 8 }),
-        withSpring(1, { damping: 10 })
-      )
+        withSpring(1, { damping: 10 }),
+      ),
     );
   }, []);
 
@@ -190,18 +188,18 @@ function ClaimSuccessModal({
   const scaleAnim = useSharedValue(0);
   const opacityAnim = useSharedValue(0);
 
- useEffect(() => {
-   if (visible) {
-     opacityAnim.value = withTiming(1, { duration: 300 });
-     scaleAnim.value = withSequence(
+  useEffect(() => {
+    if (visible) {
+      opacityAnim.value = withTiming(1, { duration: 300 });
+      scaleAnim.value = withSequence(
         withSpring(1.03, { damping: 15, stiffness: 300 }),
-        withSpring(1, { damping: 15 })
-     );
-   } else {
-     opacityAnim.value = withTiming(0, { duration: 200 });
-     scaleAnim.value = withTiming(0, { duration: 200 });
-   }
- }, [visible]);
+        withSpring(1, { damping: 15 }),
+      );
+    } else {
+      opacityAnim.value = withTiming(0, { duration: 200 });
+      scaleAnim.value = withTiming(0, { duration: 200 });
+    }
+  }, [visible]);
 
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: opacityAnim.value * 0.7,
@@ -271,7 +269,11 @@ function ClaimSuccessModal({
             />
           </View>
 
-          <Text size="xl" weight="bold" style={{ marginBottom: 8, textAlign: "center" }}>
+          <Text
+            size="xl"
+            weight="bold"
+            style={{ marginBottom: 8, textAlign: "center" }}
+          >
             Rewards Claimed!
           </Text>
 
@@ -303,34 +305,34 @@ function ClaimSuccessModal({
             Your rewards have been added to your balance
           </Text>
 
-         <Pressable
-           onPress={handleClose}
-           style={({ pressed }) => [
-             {
+          <Pressable
+            onPress={handleClose}
+            style={({ pressed }) => [
+              {
                 paddingHorizontal: 48,
-               borderRadius: 12,
-               overflow: "hidden",
-             },
-             { opacity: pressed ? 0.9 : 1 },
-           ]}
-         >
-           <LinearGradient
-             colors={[...BUTTON_GRADIENT_COLORS]}
-             start={{ x: 0, y: 0 }}
-             end={{ x: 1, y: 0 }}
-             style={{
+                borderRadius: 12,
+                overflow: "hidden",
+              },
+              { opacity: pressed ? 0.9 : 1 },
+            ]}
+          >
+            <LinearGradient
+              colors={[...BUTTON_GRADIENT_COLORS]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={{
                 paddingVertical: 12,
                 paddingHorizontal: 32,
-               alignItems: "center",
-               justifyContent: "center",
-               borderRadius: 12,
-             }}
-           >
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: 12,
+              }}
+            >
               <Text size="md" weight="bold" style={{ color: "#fff" }}>
-               Awesome!
-             </Text>
-           </LinearGradient>
-         </Pressable>
+                Awesome!
+              </Text>
+            </LinearGradient>
+          </Pressable>
         </Animated.View>
       </View>
     </Modal>
@@ -594,19 +596,25 @@ function QuestRequirements({ quest }: { quest: DailyQuest }) {
   );
 }
 
-function QuestCard({ quest, rewardMultiplier }: { quest: DailyQuest; rewardMultiplier: number }) {
- const { theme } = useUnistyles();
+function QuestCard({
+  quest,
+  rewardMultiplier,
+}: {
+  quest: DailyQuest;
+  rewardMultiplier: number;
+}) {
+  const { theme } = useUnistyles();
   const progressAnim = useSharedValue(0);
   const checkmarkScale = useSharedValue(quest.completed ? 1 : 0);
 
   const iconName = ACTION_ICONS[quest.action_type] || "star-outline";
- const accentColor =
-   ACTION_COLORS[quest.action_type] || theme.colors.primary[500];
- const progress = quest.target > 0 ? quest.progress / quest.target : 0;
+  const accentColor =
+    ACTION_COLORS[quest.action_type] || theme.colors.primary[500];
+  const progress = quest.target > 0 ? quest.progress / quest.target : 0;
   const baseReward = quest.rewards[0]?.amount ?? 0;
   const rewardAmount = Math.floor(baseReward * rewardMultiplier);
 
- useEffect(() => {
+  useEffect(() => {
     progressAnim.value = withSpring(progress, { damping: 15, stiffness: 100 });
   }, [progress, progressAnim]);
 
@@ -806,27 +814,29 @@ function RewardMultiplierBadge({ multiplier }: { multiplier: number }) {
 }
 
 function ClaimAllButton({
- completedQuests,
+  completedQuests,
   totalQuests,
- totalReward,
- onClaim,
- isClaiming,
- hasClaimed,
+  totalReward,
+  onClaim,
+  isClaiming,
+  hasClaimed,
+  powStatus,
 }: {
- completedQuests: DailyQuest[];
+  completedQuests: DailyQuest[];
   totalQuests: number;
- totalReward: number;
- onClaim: () => void;
- isClaiming: boolean;
- hasClaimed: boolean;
+  totalReward: number;
+  onClaim: () => void;
+  isClaiming: boolean;
+  hasClaimed: boolean;
+  powStatus: string | null;
 }) {
   const canClaim = completedQuests.length > 0 && !hasClaimed;
 
-const handlePress = useCallback(() => {
+  const handlePress = useCallback(() => {
     if (canClaim && !isClaiming) {
-    triggerHaptic("medium");
-    onClaim();
-  }
+      triggerHaptic("medium");
+      onClaim();
+    }
   }, [canClaim, isClaiming, onClaim]);
 
   return (
@@ -842,20 +852,40 @@ const handlePress = useCallback(() => {
         colors={[...BUTTON_GRADIENT_COLORS]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
-        style={styles.gradientButton}
-     >
-      {isClaiming ? (
-        <ActivityIndicator size="small" color="#fff" />
-       ) : hasClaimed ? (
-         <Text size="lg" weight="bold" style={{ color: "#fff" }}>
+        style={[styles.gradientButton, isClaiming && styles.claimingGradient]}
+      >
+        {isClaiming ? (
+          <>
+            <View style={{ flex: 1, alignItems: "center" }}>
+              <Text size="lg" weight="bold" style={{ color: "#fff" }}>
+                Claiming
+              </Text>
+              {powStatus && (
+                <Text
+                  size="xs"
+                  weight="medium"
+                  style={{ color: "#fff", opacity: 0.8 }}
+                >
+                  {powStatus}
+                </Text>
+              )}
+            </View>
+            <ActivityIndicator
+              size="small"
+              color="#fff"
+              style={{ position: "absolute", right: 16 }}
+            />
+          </>
+        ) : hasClaimed ? (
+          <Text size="lg" weight="bold" style={{ color: "#fff" }}>
             Claimed
-         </Text>
-      ) : (
-        <Text size="lg" weight="bold" style={{ color: "#fff" }}>
-           Claim Rewards
-        </Text>
-      )}
-     </LinearGradient>
+          </Text>
+        ) : (
+          <Text size="lg" weight="bold" style={{ color: "#fff" }}>
+            Claim Rewards
+          </Text>
+        )}
+      </LinearGradient>
     </Pressable>
   );
 }
@@ -892,26 +922,29 @@ function EmptyState() {
 }
 
 export function QuestsScreen() {
- const router = useRouter();
- const insets = useSafeAreaInsets();
- const { theme } = useUnistyles();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { theme } = useUnistyles();
 
-const { data, isLoading, error, refetch } = useDailyQuests();
- const { data: pendingData, refetch: refetchPending } = usePendingRewards();
-const [timeRemaining, setTimeRemaining] = useState<number>(0);
-const [isClaiming, setIsClaiming] = useState(false);
-const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const { data, isLoading, error, refetch } = useDailyQuests();
+  const { data: pendingData, refetch: refetchPending } = usePendingRewards();
+ const [timeRemaining, setTimeRemaining] = useState<number>(0);
+  const [isClaiming, setIsClaiming] = useState(false);
+ const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [powStatus, setPowStatus] = useState<string | null>(null);
 
-const claimMutation = useClaimReward({
-  onSuccess: (response) => {
-    setIsClaiming(false);
-    triggerHaptic("success");
-     setShowSuccessModal(true);
-    refetch();
-     refetchPending();
-  },
-   onError: (error) => {
-     setIsClaiming(false);
+  const claimMutation = useClaimReward({
+    onSuccess: (response) => {
+      setIsClaiming(false);
+      setPowStatus(null);
+      triggerHaptic("success");
+      setShowSuccessModal(true);
+      refetch();
+      refetchPending();
+    },
+    onError: (error) => {
+      setIsClaiming(false);
+      setPowStatus(null);
       triggerHaptic("error");
       Alert.alert(
         "Claim Failed",
@@ -919,7 +952,22 @@ const claimMutation = useClaimReward({
         [{ text: "OK" }],
       );
     },
+    onPoWProgress: (progress) => {
+      const elapsed = Math.round(progress.elapsedMs / 1000);
+      const hashRate =
+        progress.elapsedMs > 0
+          ? Math.round(progress.attempts / (progress.elapsedMs / 1000))
+          : 0;
+      setPowStatus(`POW: ${elapsed}s • ${hashRate.toLocaleString()} H/s`);
+    },
   });
+
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+      refetchPending();
+    }, [refetch, refetchPending]),
+  );
 
   useEffect(() => {
     if (data?.seconds_until_reset) {
@@ -941,21 +989,24 @@ const claimMutation = useClaimReward({
     return data.daily_quests.filter((q) => q.completed);
   }, [data?.daily_quests]);
 
-const totalReward = useMemo(() => {
-   const multiplier = data?.reward_multiplier ?? 1;
-  return completedQuests.reduce((sum, quest) => {
-     return Math.floor(sum + (quest.rewards[0]?.amount ?? 0) * multiplier);
-  }, 0);
- }, [completedQuests, data?.reward_multiplier]);
+  const totalReward = useMemo(() => {
+    const multiplier = data?.reward_multiplier ?? 1;
+    return completedQuests.reduce((sum, quest) => {
+      return Math.floor(sum + (quest.rewards[0]?.amount ?? 0) * multiplier);
+    }, 0);
+  }, [completedQuests, data?.reward_multiplier]);
 
   const hasClaimed = useMemo(() => {
     if (!pendingData) return false;
-    return completedQuests.length > 0 && pendingData.pending_rewards.length === 0;
+    return (
+      completedQuests.length > 0 && pendingData.pending_rewards.length === 0
+    );
   }, [completedQuests.length, pendingData]);
 
-const handleClaimAll = useCallback(() => {
+  const handleClaimAll = useCallback(() => {
     if (completedQuests.length === 0) return;
     setIsClaiming(true);
+    setPowStatus("Preparing...");
     claimMutation.mutate({ questId: "all" });
   }, [completedQuests, claimMutation]);
 
@@ -1042,9 +1093,13 @@ const handleClaimAll = useCallback(() => {
               TODAY'S QUESTS
             </Text>
 
-           {data.daily_quests.map((quest) => (
-              <QuestCard key={quest.id} quest={quest} rewardMultiplier={data.reward_multiplier} />
-           ))}
+            {data.daily_quests.map((quest) => (
+              <QuestCard
+                key={quest.id}
+                quest={quest}
+                rewardMultiplier={data.reward_multiplier}
+              />
+            ))}
 
             {data.suspended && (
               <Box
@@ -1087,26 +1142,27 @@ const handleClaimAll = useCallback(() => {
             },
           ]}
         >
-         <Box px="md">
-           <ClaimAllButton
-             completedQuests={completedQuests}
+          <Box px="md">
+            <ClaimAllButton
+              completedQuests={completedQuests}
               totalQuests={totalCount}
-             totalReward={totalReward}
-             onClaim={handleClaimAll}
-             isClaiming={isClaiming}
-             hasClaimed={hasClaimed}
-           />
-         </Box>
-       </View>
-     )}
+              totalReward={totalReward}
+              onClaim={handleClaimAll}
+              isClaiming={isClaiming}
+              hasClaimed={hasClaimed}
+              powStatus={powStatus}
+            />
+          </Box>
+        </View>
+      )}
 
       <ClaimSuccessModal
         visible={showSuccessModal}
         rewardAmount={totalReward || 1250}
         onClose={handleCloseSuccessModal}
       />
-   </Box>
- );
+    </Box>
+  );
 }
 
 const styles = StyleSheet.create((theme) => ({
@@ -1227,7 +1283,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   gradientButton: {
     paddingVertical: 16,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+  },
+  claimingGradient: {
+    paddingVertical: 11,
   },
 }));

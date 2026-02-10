@@ -54,12 +54,14 @@ export function QuestsSummaryCard() {
  const progress = totalQuests > 0 ? completedCount / totalQuests : 0;
  const allComplete = completedCount === totalQuests && totalQuests > 0;
 
-  const hasClaimed = useMemo(() => {
-    if (!pendingData) return false;
-    return completedCount > 0 && pendingData.pending_rewards.length === 0;
-  }, [completedCount, pendingData]);
+ const hasClaimed = useMemo(() => {
+   if (!pendingData) return false;
+    // Only show "Claimed" when ALL quests are completed AND no pending rewards
+    return allComplete && pendingData.pending_rewards.length === 0;
+  }, [allComplete, pendingData]);
 
-  const hasRewardsToClaim = completedCount > 0 && !hasClaimed;
+  // Has rewards to claim when there are pending rewards
+  const hasRewardsToClaim = pendingData?.pending_rewards?.length > 0;
 
  const totalReward = useMemo(() => {
     const multiplier = data?.reward_multiplier ?? 1;

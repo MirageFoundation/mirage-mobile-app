@@ -20,7 +20,6 @@ import {
 AdultContentPopup,
 ConfirmationPopup,
 FeedHeader,
- InviteCodesCard,
   QuestsSummaryCard,
 type Post,
 PostCardSkeleton,
@@ -808,15 +807,20 @@ export function HomeScreen() {
            pageParams: [1],
          };
        }
-       return {
-         ...oldData,
-         pages: [newFirstPage, ...oldData.pages.slice(1)],
-         pageParams: [1, ...oldData.pageParams.slice(1)],
-       };
-     });
-   } catch (error) {
-     console.error("Failed to refresh feed:", error);
-   } finally {
+      return {
+        ...oldData,
+        pages: [newFirstPage, ...oldData.pages.slice(1)],
+        pageParams: [1, ...oldData.pageParams.slice(1)],
+      };
+    });
+
+    // Also refetch quests data
+    if (currentUser?.walletAddress) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.dailyQuests(currentUser.walletAddress) });
+    }
+  } catch (error) {
+    console.error("Failed to refresh feed:", error);
+  } finally {
      // Hide the refresh indicator
      setIsManualRefreshing(false);
    }
@@ -914,7 +918,6 @@ const ListHeaderComponent = useCallback(() => {
             />
           </Box>
         )}
-       <InviteCodesCard />
         <QuestsSummaryCard />
       </>
     );
