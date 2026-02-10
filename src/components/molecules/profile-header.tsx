@@ -127,12 +127,12 @@ export const ProfileHeaderBar = ({
   const insets = useSafeAreaInsets();
 
   const headerBgStyle = useAnimatedStyle(() => {
-    if (!scrollY) return { backgroundColor: gradientColors[0] };
+    if (!scrollY) return { backgroundColor: "rgba(0,0,0,0)" };
 
     const backgroundColor = interpolateColor(
       scrollY.value,
       [0, SCROLL_THRESHOLD * 0.3, SCROLL_THRESHOLD * 0.7, SCROLL_THRESHOLD],
-      [gradientColors[0], gradientColors[0], "#000000", "#000000"],
+      ["rgba(0,0,0,0)", "rgba(0,0,0,0)", "#000000", "#000000"],
     );
 
     return { backgroundColor };

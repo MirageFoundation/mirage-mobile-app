@@ -605,6 +605,7 @@ useEffect(() => {
              scrollY={scrollY}
              onFollowersPress={handleFollowersPress}
              isLoading={isLoading}
+            headerHeight={headerHeight}
            />
          );
         }
@@ -660,6 +661,7 @@ useEffect(() => {
        scrollY,
        handleFollowersPress,
         isLoading,
+       headerHeight,
         theme.colors.background.default,
         activeTab,
         handleTabChange,
