@@ -908,9 +908,10 @@ export function HomeScreen() {
   }, [isLoading, isInitializing, isError, error]);
 
 const ListHeaderComponent = useCallback(() => {
+    const showRefreshIndicator = isManualRefreshing || (isRefetching && !isLoading && posts.length > 0);
     return (
       <>
-        {isManualRefreshing && (
+        {showRefreshIndicator && (
           <Box center p="md">
             <ActivityIndicator
               size="small"
@@ -921,7 +922,7 @@ const ListHeaderComponent = useCallback(() => {
         <QuestsSummaryCard />
       </>
     );
-  }, [isManualRefreshing, theme.colors.background.emphasis]);
+  }, [isManualRefreshing, isRefetching, isLoading, posts.length, theme.colors.background.emphasis]);
 
   // Show skeleton when loading next page
   const ListFooterComponent = useCallback(() => {

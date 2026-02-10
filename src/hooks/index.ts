@@ -53,3 +53,7 @@ export {
   shouldAutoplayVideo,
   type NetworkType,
 } from "./use-network-state";
+export {
+  useAppState,
+  type AppStateInfo,
+} from "./use-app-state";
