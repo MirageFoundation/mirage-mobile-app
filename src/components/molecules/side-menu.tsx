@@ -492,32 +492,44 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
             >
               {isLoggedIn ? (
                 <>
-                  <View style={styles.balanceCard}>
-                    <Text
-                      style={{ color: theme.colors.text.subtle }}
-                      size="lg"
-                      weight="bold"
-                    >
-                      BALANCE
-                    </Text>
-                    <Text
-                      style={{ color: theme.colors.text.default }}
-                      size="mega"
-                      weight="bold"
-                    >
-                      {balance.toLocaleString()} MRG
-                    </Text>
-                  </View>
-                  <SectionFooter />
+                 <View style={styles.balanceCard}>
+                   <Text
+                     style={{ color: theme.colors.text.subtle }}
+                      size="sm"
+                      weight="semibold"
+                   >
+                     BALANCE
+                   </Text>
+                   <Text
+                     style={{ color: theme.colors.text.default }}
+                      size="xl"
+                     weight="bold"
+                   >
+                     {balance.toLocaleString()} MRG
+                   </Text>
+                </View>
+                <SectionFooter />
 
-                  <SectionHeader title="Subscription" />
-                  <MenuItem
-                    iconName="card-outline"
-                    title="Subscription"
-                    subtitle="Manage your plan"
-                    onPress={createHandler(onSubscription)}
+                  <SectionHeader title="Rewards & Plans" />
+                 <MenuItem
+                   iconName="gift-outline"
+                   title="Invite & Earn"
+                    subtitle="Get rewards"
+                    onPress={createHandler(onInviteAndEarn)}
                   />
-                  <SectionFooter />
+                  <MenuItem
+                    iconName="trophy-outline"
+                    title="Daily Quests"
+                    subtitle="Complete tasks for rewards"
+                    onPress={createHandler(onQuests)}
+                  />
+                 <MenuItem
+                   iconName="card-outline"
+                   title="Subscription"
+                   subtitle="Manage your plan"
+                   onPress={createHandler(onSubscription)}
+                 />
+                 <SectionFooter />
 
                   {/* Content Section */}
                   <SectionHeader title="Content" />
@@ -542,32 +554,20 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   <SectionFooter />
 
                   {/* Social Section */}
-                  <SectionHeader title="Social" />
-                  <MenuItem
-                    iconName="people-outline"
-                    title="Following"
-                    subtitle="Users and topics you follow"
-                    onPress={createHandler(onFollowing)}
-                  />
+                 <SectionHeader title="Social" />
                  <MenuItem
-                   iconName="gift-outline"
-                   title="Invite & Earn"
-                   subtitle="Get rewards"
-                   onPress={createHandler(onInviteAndEarn)}
+                   iconName="people-outline"
+                   title="Following"
+                   subtitle="Users and topics you follow"
+                   onPress={createHandler(onFollowing)}
                  />
-                  <MenuItem
-                    iconName="trophy-outline"
-                    title="Daily Quests"
-                    subtitle="Complete tasks for rewards"
-                    onPress={createHandler(onQuests)}
-                  />
-                 <MenuItem
-                   iconName="pricetags-outline"
-                   title="Topics"
-                   subtitle="Explore all topics"
-                   onPress={createHandler(onTopics)}
-                 />
-                  <SectionFooter />
+                <MenuItem
+                  iconName="pricetags-outline"
+                  title="Topics"
+                  subtitle="Explore all topics"
+                  onPress={createHandler(onTopics)}
+                />
+                 <SectionFooter />
 
                   {/* Followed Users */}
                   <SectionHeader
