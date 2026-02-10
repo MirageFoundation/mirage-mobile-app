@@ -79,7 +79,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { LinearGradient } from "expo-linear-gradient";
 import { getLastPressedPostY } from "@/src/utils/post-transition";
 
 export default function PostDetailScreen() {
@@ -113,6 +112,20 @@ export default function PostDetailScreen() {
   }));
   const { theme } = useUnistyles();
   const { requireAuth, isLoggedIn } = useAuthGuard();
+
+  const { rt } = useUnistyles();
+  const isDark = rt.themeName === "dark";
+  const HEADER_COLORS_LIGHT = ["#0071cf", "#000000"];
+  const HEADER_COLORS_DARK = ["#fff", "#86daff", "#c5bfee", "#0e315c", "#0000ff"];
+  const headerBgColor = useMemo(() => {
+    const colors = isDark ? HEADER_COLORS_DARK : HEADER_COLORS_LIGHT;
+    let hash = 0;
+    const seed = id ?? "";
+    for (let i = 0; i < seed.length; i++) {
+      hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+    }
+    return colors[Math.abs(hash) % colors.length];
+  }, [id, isDark]);
 
   const currentUser = useAuthStore((s) => s.user);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
@@ -1608,22 +1621,15 @@ const handleToggleFollowCommentAuthor = useCallback(() => {
   // Render header (close button + right icons)
   const renderHeader = useMemo(
     () => (
-      <LinearGradient
-        colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.header, { paddingTop: insets.top }]}
-      >
-        {/* Left: Close button */}
+      <View style={[styles.header, { paddingTop: insets.top, backgroundColor: headerBgColor }]}>
         <Pressable onPress={handleBack} style={styles.headerButton}>
-          <AntDesign name="close" size={22} color="#FFFFFF" />
+          <AntDesign name="close" size={22} color={headerBgColor === "#fff" || headerBgColor === "#86daff" || headerBgColor === "#c5bfee" ? "#000000" : "#FFFFFF"} />
         </Pressable>
 
-        {/* Spacer */}
         <View style={styles.headerSpacer} />
-      </LinearGradient>
+      </View>
     ),
-    [insets.top, handleBack],
+    [insets.top, handleBack, headerBgColor],
   );
 
   // Render list header (post + divider)
