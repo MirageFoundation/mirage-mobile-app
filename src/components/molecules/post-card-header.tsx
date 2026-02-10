@@ -86,14 +86,14 @@ export const PostCardHeader = memo(function PostCardHeader({
               hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
               style={({ pressed }) => [pressed && styles.usernameButtonPressed]}
             >
-              <Text size="md" weight="bold" numberOfLines={1}>
+              <Text size="lg" weight="bold" numberOfLines={1}>
                 #{topic}
               </Text>
             </Pressable>
           )}
           {topic && topicDisabled && (
             <Text
-              size="md"
+              size="lg"
               weight="bold"
               numberOfLines={1}
               style={{ color: theme.colors.text.subtle }}
