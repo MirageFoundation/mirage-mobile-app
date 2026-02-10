@@ -1,5 +1,10 @@
-const PROFILE_GRADIENT_COLORS: readonly string[] = ["rgb(102, 126, 234)", "rgb(118, 75, 162)", "#000000"];
+const PROFILE_GRADIENT_COLORS: readonly string[] = [
+  "rgb(102, 126, 234)",
+  "rgb(118, 75, 162)",
+  "#000000",
+];
 import { Ionicons } from "@expo/vector-icons";
+import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -23,7 +28,6 @@ import { Avatar, IconButton } from "@/src/components/atoms";
 import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
-
 export const PROFILE_CONTENT_HEIGHT = 280;
 export const SCROLL_THRESHOLD = PROFILE_CONTENT_HEIGHT;
 
@@ -39,18 +43,18 @@ const getTierName = (level: number): string => {
 };
 
 type ProfileHeaderBarProps = {
-username: string;
-userLevel?: number;
-gradientColors: readonly string[];
-scrollY?: SharedValue<number>;
-isRefreshing?: boolean;
-isLoading?: boolean;
- isOwnProfile?: boolean;
- isFollowing?: boolean;
-onBackPress?: () => void;
- onFollowPress?: () => void;
- onUnfollowPress?: () => void;
-onMenuPress?: () => void;
+  username: string;
+  userLevel?: number;
+  gradientColors: readonly string[];
+  scrollY?: SharedValue<number>;
+  isRefreshing?: boolean;
+  isLoading?: boolean;
+  isOwnProfile?: boolean;
+  isFollowing?: boolean;
+  onBackPress?: () => void;
+  onFollowPress?: () => void;
+  onUnfollowPress?: () => void;
+  onMenuPress?: () => void;
 };
 
 type ProfileContentProps = {
@@ -117,18 +121,18 @@ export const getGradientColor = (_username?: string): readonly string[] => {
 };
 
 export const ProfileHeaderBar = ({
-username,
-userLevel = 0,
-gradientColors,
-scrollY,
-isRefreshing = false,
-isLoading = false,
- isOwnProfile = false,
- isFollowing = false,
-onBackPress,
- onFollowPress,
+  username,
+  userLevel = 0,
+  gradientColors,
+  scrollY,
+  isRefreshing = false,
+  isLoading = false,
+  isOwnProfile = false,
+  isFollowing = false,
+  onBackPress,
+  onFollowPress,
   onUnfollowPress,
- onMenuPress,
+  onMenuPress,
 }: ProfileHeaderBarProps) => {
   const insets = useSafeAreaInsets();
 
@@ -172,7 +176,7 @@ onBackPress,
                   {username}
                 </Text>
                 <Box direction="row" center gap="xs">
-                  <Text size="xs" style={styles.subtleWhiteText}>
+                  <Text size="sm" style={styles.subtleWhiteText}>
                     {getTierName(userLevel)} Tier
                   </Text>
                   <Icon
@@ -187,36 +191,44 @@ onBackPress,
           </Box>
         </Box>
 
-       <Box direction="row" center gap="xs">
-         {isRefreshing && (
-           <View style={styles.refreshIndicator}>
-             <ActivityIndicator size="small" color="#FFFFFF" />
-           </View>
-         )}
-       {!isOwnProfile && (
-          <Pressable
-             onPress={() => {
-               triggerHaptic("selection");
-               if (isFollowing) {
-                 onUnfollowPress?.();
-               } else {
-                 onFollowPress?.();
-               }
-             }}
-             style={styles.followButton}
-           >
-              <Text
-                size="sm"
-                weight="semibold"
-                style={styles.followButtonText}
-              >
+        <Box direction="row" center gap="xs">
+          {isRefreshing && (
+            <View style={styles.refreshIndicator}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            </View>
+          )}
+          {!isOwnProfile && (
+            <AnimatedPressable
+              scaleAmount={0.9}
+              onPress={() => {
+                triggerHaptic("selection");
+                if (isFollowing) {
+                  onUnfollowPress?.();
+                } else {
+                  onFollowPress?.();
+                }
+              }}
+              style={[
+                styles.followButton,
+                {
+                  backgroundColor: isFollowing
+                    ? "rgba(255,255,255,0.15)"
+                    : "rgb(232, 84, 41)",
+                  borderWidth: 1,
+                  borderColor: isFollowing
+                    ? "rgba(255,255,255,0.3)"
+                    : "rgb(232, 84, 41)",
+                },
+              ]}
+            >
+              <Text size="sm" weight="semibold" style={styles.followButtonText}>
                 {isFollowing ? "Following" : "Follow"}
               </Text>
-           </Pressable>
-         )}
-         <IconButton
-           name="ellipsis-horizontal"
-           size="md"
+            </AnimatedPressable>
+          )}
+          <IconButton
+            name="ellipsis-horizontal"
+            size="md"
             color="#FFFFFF"
             onPress={onMenuPress}
             style={styles.iconButton}
@@ -465,17 +477,17 @@ export const ProfileContent = ({
 };
 
 export const ProfileHeader = ({
- username,
- avatarSeed,
- avatarUrl,
- walletAddress,
- followersCount,
- balance,
- reserve,
- accountAgeDays,
- userLevel,
- scrollY,
- onFollowersPress,
+  username,
+  avatarSeed,
+  avatarUrl,
+  walletAddress,
+  followersCount,
+  balance,
+  reserve,
+  accountAgeDays,
+  userLevel,
+  scrollY,
+  onFollowersPress,
 }: ProfileHeaderProps) => {
   const gradientColors = useMemo(() => getGradientColor(username), [username]);
 
@@ -521,27 +533,27 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "rgba(0,0,0,0.3)",
     borderRadius: theme.radius.full,
   },
- shareButton: {
-   width: 40,
-   height: 40,
-   borderRadius: theme.radius.full,
-   backgroundColor: "rgba(0,0,0,0.3)",
-   alignItems: "center",
-   justifyContent: "center",
- },
-followButton: {
-  height: 32,
-  paddingHorizontal: 16,
-  borderRadius: theme.radius.full,
-   backgroundColor: "rgba(0,0,0,0.3)",
-  alignItems: "center",
-  justifyContent: "center",
-  minWidth: 80,
-},
-followButtonText: {
- color: "#FFFFFF",
-},
-refreshIndicator: {
+  shareButton: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.radius.full,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  followButton: {
+    height: 32,
+    paddingHorizontal: 16,
+    borderRadius: theme.radius.full,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 80,
+  },
+  followButtonText: {
+    color: "#FFFFFF",
+  },
+  refreshIndicator: {
     width: 32,
     height: 32,
     borderRadius: theme.radius.full,

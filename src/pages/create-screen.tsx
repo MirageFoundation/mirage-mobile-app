@@ -650,14 +650,15 @@ export function CreateScreen() {
               },
             ]}
           >
-            <Text
-              size="xl"
-              weight="bold"
-              style={{ color: theme.colors.text.default }}
-            >
-              #
-            </Text>
-
+            {selectedCommunity && (
+              <Text
+                size="xl"
+                weight="bold"
+                style={{ color: theme.colors.text.default }}
+              >
+                #
+              </Text>
+            )}
             <Text
               size="lg"
               weight="semibold"

@@ -33,6 +33,7 @@ import type {
 } from "@/src/api/types";
 import { Avatar } from "@/src/components/atoms";
 import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
+import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { useAuthStore } from "@/src/stores";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
@@ -125,7 +126,10 @@ function SectionSkeleton() {
       <SkeletonBox width={120} height={18} />
       <View style={{ marginTop: 12, gap: 10 }}>
         {Array.from({ length: 3 }).map((_, i) => (
-          <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <View
+            key={i}
+            style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
+          >
             <SkeletonBox width={36} height={36} borderRadius={18} />
             <View style={{ flex: 1, gap: 4 }}>
               <SkeletonBox width={100} height={14} />
@@ -168,9 +172,14 @@ function AboutSkeleton() {
 function EmptySection({ message }: { message: string }) {
   const { theme } = useUnistyles();
   return (
-    <View style={[styles.emptySection, { backgroundColor: theme.colors.background.subtle }]}>
-      <Text size="sm" mode="subtle" style={{ textAlign: "center" }}>
-        {message}
+   <View
+     style={[
+       styles.emptySection,
+       { backgroundColor: theme.colors.background.subtle },
+     ]}
+   >
+      <Text size="md" mode="subtle" style={{ textAlign: "center" }}>
+       {message}
       </Text>
     </View>
   );
@@ -191,18 +200,33 @@ function ExpandableSection({
 }) {
   const { theme } = useUnistyles();
   const [expanded, setExpanded] = useState(false);
-  const visibleCount = expanded ? totalCount : Math.min(initialVisible, totalCount);
+  const visibleCount = expanded
+    ? totalCount
+    : Math.min(initialVisible, totalCount);
   const hasMore = totalCount > initialVisible;
 
   return (
     <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Text size="md" weight="bold" style={{ color: theme.colors.text.default }}>
-          {title}
-        </Text>
-        <View style={[styles.countBadge, { backgroundColor: theme.colors.background.subtle }]}>
-          <Text size="xs" weight="bold" style={{ color: theme.colors.text.subtle }}>
-            {count}
+     <View style={styles.sectionHeader}>
+       <Text
+          size="lg"
+         weight="bold"
+         style={{ color: theme.colors.text.default }}
+       >
+         {title}
+       </Text>
+        <View
+          style={[
+            styles.countBadge,
+            { backgroundColor: theme.colors.background.subtle },
+          ]}
+       >
+         <Text
+            size="sm"
+           weight="bold"
+           style={{ color: theme.colors.text.subtle }}
+         >
+           {count}
           </Text>
         </View>
       </View>
@@ -211,9 +235,9 @@ function ExpandableSection({
         <Pressable
           onPress={() => setExpanded(!expanded)}
           style={styles.showMoreButton}
-        >
-          <Text size="sm" weight="medium" style={{ color: "rgb(29, 68, 150)" }}>
-            {expanded ? "Show Less" : `Show All (${totalCount})`}
+       >
+         <Text size="md" weight="medium" style={{ color: "rgb(29, 68, 150)" }}>
+           {expanded ? "Show Less" : `Show All (${totalCount})`}
           </Text>
           <Icon
             icon={Ionicons}
@@ -244,16 +268,23 @@ function TopicPreferenceItem({
   return (
     <Pressable
       onPress={() => router.push(`/search?q=${encodeURIComponent(topic)}`)}
-      style={[styles.preferenceRow, { borderBottomColor: theme.colors.border.subtle }]}
+      style={[
+        styles.preferenceRow,
+        { borderBottomColor: theme.colors.border.subtle },
+      ]}
     >
-      <View style={styles.preferenceRank}>
-        <Text size="xs" mode="subtle" weight="medium">
-          {rank}
-        </Text>
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text size="sm" weight="medium" style={{ color: theme.colors.text.default }}>
-          #{topic}
+     <View style={styles.preferenceRank}>
+        <Text size="sm" mode="subtle" weight="medium">
+         {rank}
+       </Text>
+     </View>
+     <View style={{ flex: 1 }}>
+       <Text
+          size="md"
+         weight="medium"
+         style={{ color: theme.colors.text.default }}
+       >
+         # {topic}
         </Text>
       </View>
       <View style={styles.weightContainer}>
@@ -266,8 +297,13 @@ function TopicPreferenceItem({
             },
           ]}
         />
-        <Text size="xs" mode="subtle" weight="medium" style={{ minWidth: 40, textAlign: "right" }}>
-          {formatWeight(weight)}
+       <Text
+          size="sm"
+         mode="subtle"
+         weight="medium"
+         style={{ minWidth: 40, textAlign: "right" }}
+       >
+         {formatWeight(weight)}
         </Text>
       </View>
     </Pressable>
@@ -286,23 +322,33 @@ function AuthorPreferenceItem({
   const { theme } = useUnistyles();
   const router = useRouter();
   const { data: usernameData } = useUsernameFromAddress(user);
-  const displayName = usernameData?.username ?? (user.length > 16 ? `${user.slice(0, 8)}...${user.slice(-4)}` : user);
+  const displayName =
+    usernameData?.username ??
+    (user.length > 16 ? `${user.slice(0, 8)}...${user.slice(-4)}` : user);
   const maxBarWidth = 120;
   const normalizedWidth = Math.min(Math.max(weight / 10, 0.1), 1) * maxBarWidth;
 
   return (
     <Pressable
       onPress={() => router.push(`/user/${user}`)}
-      style={[styles.preferenceRow, { borderBottomColor: theme.colors.border.subtle }]}
+      style={[
+        styles.preferenceRow,
+        { borderBottomColor: theme.colors.border.subtle },
+      ]}
     >
-      <View style={styles.preferenceRank}>
-        <Text size="xs" mode="subtle" weight="medium">
-          {rank}
+     <View style={styles.preferenceRank}>
+        <Text size="sm" mode="subtle" weight="medium">
+         {rank}
         </Text>
       </View>
-      <Avatar size="sm" seed={user} rounded="full" />
-      <View style={{ flex: 1, marginLeft: 8 }}>
-        <Text size="sm" weight="medium" style={{ color: theme.colors.text.default }} numberOfLines={1}>
+     <Avatar size="sm" seed={user} rounded="full" />
+     <View style={{ flex: 1, marginLeft: 8 }}>
+       <Text
+          size="md"
+         weight="medium"
+         style={{ color: theme.colors.text.default }}
+         numberOfLines={1}
+        >
           {displayName}
         </Text>
       </View>
@@ -316,8 +362,13 @@ function AuthorPreferenceItem({
             },
           ]}
         />
-        <Text size="xs" mode="subtle" weight="medium" style={{ minWidth: 40, textAlign: "right" }}>
-          {formatWeight(weight)}
+       <Text
+          size="sm"
+         mode="subtle"
+         weight="medium"
+         style={{ minWidth: 40, textAlign: "right" }}
+       >
+         {formatWeight(weight)}
         </Text>
       </View>
     </Pressable>
@@ -331,22 +382,31 @@ function SimilarUserItem({ user }: { user: SimilarUser }) {
   return (
     <Pressable
       onPress={() => router.push(`/user/${user.address}`)}
-      style={[styles.similarUserRow, { borderBottomColor: theme.colors.border.subtle }]}
+      style={[
+        styles.similarUserRow,
+        { borderBottomColor: theme.colors.border.subtle },
+      ]}
     >
       <Avatar size="md" seed={user.address} rounded="full" />
-      <View style={{ flex: 1, marginLeft: 12 }}>
-        <Text size="sm" weight="medium" style={{ color: theme.colors.text.default }} numberOfLines={1}>
-          {user.username || `${user.address.slice(0, 8)}...${user.address.slice(-4)}`}
+     <View style={{ flex: 1, marginLeft: 12 }}>
+       <Text
+          size="md"
+         weight="medium"
+         style={{ color: theme.colors.text.default }}
+         numberOfLines={1}
+        >
+          {user.username ||
+            `${user.address.slice(0, 8)}...${user.address.slice(-4)}`}
         </Text>
-        <View style={{ flexDirection: "row", gap: 8, marginTop: 2 }}>
-          <Text size="xs" mode="subtle">
-            {formatSimilarity(user.similarity)} match
-          </Text>
-          <Text size="xs" mode="subtle">
-            •
-          </Text>
-          <Text size="xs" mode="subtle">
-            {user.shared_dimensions} shared
+       <View style={{ flexDirection: "row", gap: 8, marginTop: 2 }}>
+          <Text size="sm" mode="subtle">
+           {formatSimilarity(user.similarity)} match
+         </Text>
+          <Text size="sm" mode="subtle">
+           •
+         </Text>
+          <Text size="sm" mode="subtle">
+           {user.shared_dimensions} shared
           </Text>
         </View>
       </View>
@@ -393,10 +453,12 @@ function ProfileDetailsSection({
   const accountAgeDays = createdAt
     ? (Date.now() / 1000 - createdAt) / (60 * 60 * 24)
     : 0;
-  const tierName = TIER_NAMES[userStatus?.user_level ?? profile?.level ?? 0] ?? "Free";
+  const tierName =
+    TIER_NAMES[userStatus?.user_level ?? profile?.level ?? 0] ?? "Free";
   const balance = userStatus?.balance ?? 0;
   const reserve = userStatus?.reserve_funds ?? profile?.reserve_funds ?? 0;
-  const subscriptionExpiry = profile?.subscription_expiry ?? userStatus?.subscription_expiry ?? 0;
+  const subscriptionExpiry =
+    profile?.subscription_expiry ?? userStatus?.subscription_expiry ?? 0;
   const autoRenew = profile?.auto_renew ?? userStatus?.auto_renew ?? false;
   const isModerator = profile?.is_moderator ?? false;
   const biography = profile?.biography ?? "";
@@ -404,16 +466,36 @@ function ProfileDetailsSection({
   const followedTopics = profile?.followed_topics?.length ?? 0;
   const qualityPosts = profile?.quality_posts?.length ?? 0;
 
-  const details: { label: string; value: string; icon: keyof typeof Ionicons.glyphMap }[] = [];
+  const details: {
+    label: string;
+    value: string;
+    icon: keyof typeof Ionicons.glyphMap;
+  }[] = [];
 
   if (biography) {
-    details.push({ label: "Bio", value: biography, icon: "document-text-outline" });
+    details.push({
+      label: "Bio",
+      value: biography,
+      icon: "document-text-outline",
+    });
   }
   details.push({ label: "Tier", value: tierName, icon: "shield-outline" });
-  details.push({ label: "Balance", value: `${formatBalance(balance)} MRG`, icon: "wallet-outline" });
-  details.push({ label: "Reserve", value: `${formatBalance(reserve)} MRG`, icon: "lock-closed-outline" });
+  details.push({
+    label: "Balance",
+    value: `${formatBalance(balance)} MRG`,
+    icon: "wallet-outline",
+  });
+  details.push({
+    label: "Reserve",
+    value: `${formatBalance(reserve)} MRG`,
+    icon: "lock-closed-outline",
+  });
   if (accountAgeDays > 0) {
-    details.push({ label: "Account Age", value: formatAccountAge(accountAgeDays), icon: "time-outline" });
+    details.push({
+      label: "Account Age",
+      value: formatAccountAge(accountAgeDays),
+      icon: "time-outline",
+    });
   }
   if (createdAt) {
     details.push({
@@ -430,25 +512,35 @@ function ProfileDetailsSection({
     const isActive = subscriptionExpiry > Date.now() / 1000;
     details.push({
       label: "Subscription",
-      value: isActive
-        ? `Active${autoRenew ? " (auto-renew)" : ""}`
-        : "Expired",
+      value: isActive ? `Active${autoRenew ? " (auto-renew)" : ""}` : "Expired",
       icon: "card-outline",
     });
   }
   if (isModerator) {
     details.push({ label: "Role", value: "Moderator", icon: "star-outline" });
   }
-  details.push({ label: "Following", value: `${followedUsers} users, ${followedTopics} topics`, icon: "people-outline" });
+  details.push({
+    label: "Following",
+    value: `${followedUsers} users, ${followedTopics} topics`,
+    icon: "people-outline",
+  });
   if (qualityPosts > 0) {
-    details.push({ label: "Quality Posts", value: qualityPosts.toString(), icon: "ribbon-outline" });
+    details.push({
+      label: "Quality Posts",
+      value: qualityPosts.toString(),
+      icon: "ribbon-outline",
+    });
   }
 
   return (
     <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Text size="md" weight="bold" style={{ color: theme.colors.text.default }}>
-          Profile Details
+     <View style={styles.sectionHeader}>
+       <Text
+          size="lg"
+         weight="bold"
+         style={{ color: theme.colors.text.default }}
+       >
+         Profile Details
         </Text>
       </View>
       {details.map((detail, index) => (
@@ -462,25 +554,42 @@ function ProfileDetailsSection({
             },
           ]}
         >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
-            <Icon
-              icon={Ionicons}
-              name={detail.icon}
-              size={16}
-              color={theme.colors.text.subtle}
-            />
-            <Text size="sm" mode="subtle">
-              {detail.label}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              flex: 1,
+            }}
+          >
+           <Icon
+             icon={Ionicons}
+             name={detail.icon}
+              size={18}
+             color={theme.colors.text.subtle}
+           />
+            <Text size="md" mode="subtle">
+             {detail.label}
             </Text>
           </View>
-          <Text
-            size="sm"
-            weight="medium"
-            style={{ color: theme.colors.text.default, maxWidth: "55%", textAlign: "right" }}
-            numberOfLines={2}
-          >
-            {detail.value}
-          </Text>
+          {detail.label === "Bio" ? (
+            <View style={{ maxWidth: "55%" }}>
+              <MarkdownContent content={detail.value} />
+            </View>
+          ) : (
+           <Text
+              size="md"
+             weight="medium"
+             style={{
+               color: theme.colors.text.default,
+                maxWidth: "55%",
+                textAlign: "right",
+              }}
+              numberOfLines={2}
+            >
+              {detail.value}
+            </Text>
+          )}
         </View>
       ))}
     </View>
@@ -502,11 +611,13 @@ export function ProfileAboutTab({
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const { data: ownPreferences, isLoading: isLoadingOwnPrefs } = usePreferences();
+  const { data: ownPreferences, isLoading: isLoadingOwnPrefs } =
+    usePreferences();
   const { data: otherPreferences, isLoading: isLoadingOtherPrefs } =
     usePreferencesByAddress(isOwnProfile ? null : userAddress);
 
-  const { data: ownSimilar, isLoading: isLoadingOwnSimilar } = useSimilarUsers();
+  const { data: ownSimilar, isLoading: isLoadingOwnSimilar } =
+    useSimilarUsers();
   const { data: otherSimilar, isLoading: isLoadingOtherSimilar } =
     useSimilarUsersByAddress(isOwnProfile ? null : userAddress);
 
@@ -524,23 +635,27 @@ export function ProfileAboutTab({
   const isLoadingPrefs = isOwnProfile ? isLoadingOwnPrefs : isLoadingOtherPrefs;
 
   const similarUsers = isOwnProfile ? ownSimilar : otherSimilar;
-  const isLoadingSimilar = isOwnProfile ? isLoadingOwnSimilar : isLoadingOtherSimilar;
+  const isLoadingSimilar = isOwnProfile
+    ? isLoadingOwnSimilar
+    : isLoadingOtherSimilar;
 
   const profile = isOwnProfile ? ownProfile : otherProfile;
-  const isLoadingProfile = isOwnProfile ? isLoadingOwnProfile : isLoadingOtherProfile;
+  const isLoadingProfile = isOwnProfile
+    ? isLoadingOwnProfile
+    : isLoadingOtherProfile;
 
   const userStatus = isOwnProfile ? ownStatus : otherStatus;
-  const isLoadingStatus = isOwnProfile ? isLoadingOwnStatus : isLoadingOtherStatus;
+  const isLoadingStatus = isOwnProfile
+    ? isLoadingOwnStatus
+    : isLoadingOtherStatus;
 
   const topics = useMemo(
-    () =>
-      [...(preferences?.topics ?? [])].sort((a, b) => b.weight - a.weight),
+    () => [...(preferences?.topics ?? [])].sort((a, b) => b.weight - a.weight),
     [preferences?.topics],
   );
 
   const authors = useMemo(
-    () =>
-      [...(preferences?.authors ?? [])].sort((a, b) => b.weight - a.weight),
+    () => [...(preferences?.authors ?? [])].sort((a, b) => b.weight - a.weight),
     [preferences?.authors],
   );
 
@@ -555,30 +670,38 @@ export function ProfileAboutTab({
   const blockedUsersCount = blockedData?.blocked_users?.length ?? 0;
   const blockedPostsCount = blockedData?.blocked_posts?.length ?? 0;
 
-  const isLoading = isLoadingPrefs || isLoadingSimilar || isLoadingProfile || isLoadingStatus;
+  const isLoading =
+    isLoadingPrefs || isLoadingSimilar || isLoadingProfile || isLoadingStatus;
 
   if (isLoading && !preferences && !similarUsers && !profile) {
     return <AboutSkeleton />;
   }
 
-  const hasAlgoData = topics.length > 0 || authors.length > 0 || similar.length > 0;
+  const hasAlgoData =
+    topics.length > 0 || authors.length > 0 || similar.length > 0;
   const hasAnyData = hasAlgoData || profile || userStatus;
 
   if (!hasAnyData && !isLoading) {
     return (
-      <View style={[styles.emptyContainer, { paddingBottom: insets.bottom + 100 }]}>
+      <View
+        style={[styles.emptyContainer, { paddingBottom: insets.bottom + 100 }]}
+      >
         <Image
           source={emptyInfoImage}
           style={styles.emptyImage}
           contentFit="contain"
         />
-        <Text size="lg" weight="bold" style={{ color: theme.colors.text.default, textAlign: "center" }}>
+       <Text
+          size="xl"
+         weight="bold"
+         style={{ color: theme.colors.text.default, textAlign: "center" }}
+       >
           {isOwnProfile ? "Nothing here yet" : "No information available"}
         </Text>
-        <Text
-          size="sm"
-          mode="subtle"
-          style={{ marginTop: 8, textAlign: "center", maxWidth: 280 }}
+       <Text
+          size="md"
+         mode="subtle"
+         style={{ marginTop: 8, textAlign: "center", maxWidth: 280 }}
         >
           {isOwnProfile
             ? "Start interacting with posts to build your algorithm profile."
@@ -593,15 +716,28 @@ export function ProfileAboutTab({
       {isOwnProfile && (blockedUsersCount > 0 || blockedPostsCount > 0) && (
         <Pressable
           onPress={onBlockedPress}
-          style={[styles.blockedButton, { borderBottomColor: theme.colors.border.subtle }]}
+          style={[
+            styles.blockedButton,
+            { borderBottomColor: theme.colors.border.subtle },
+          ]}
         >
-          <Icon icon={Ionicons} name="ban-outline" size={18} color={theme.colors.text.subtle} />
+          <Icon
+            icon={Ionicons}
+            name="ban-outline"
+            size={18}
+            color={theme.colors.text.subtle}
+          />
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text size="sm" weight="medium" style={{ color: theme.colors.text.default }}>
-              Blocked Users & Posts
-            </Text>
-            <Text size="xs" mode="subtle">
-              {blockedUsersCount} user{blockedUsersCount !== 1 ? "s" : ""}, {blockedPostsCount} post{blockedPostsCount !== 1 ? "s" : ""}
+           <Text
+              size="md"
+             weight="medium"
+             style={{ color: theme.colors.text.default }}
+           >
+             Blocked Users & Posts
+           </Text>
+            <Text size="sm" mode="subtle">
+             {blockedUsersCount} user{blockedUsersCount !== 1 ? "s" : ""},{" "}
+              {blockedPostsCount} post{blockedPostsCount !== 1 ? "s" : ""}
             </Text>
           </View>
           <Icon
@@ -674,8 +810,12 @@ export function ProfileAboutTab({
       {!hasAlgoData && !isLoading && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text size="md" weight="bold" style={{ color: theme.colors.text.default }}>
-              Algorithm Profile
+           <Text
+              size="lg"
+             weight="bold"
+             style={{ color: theme.colors.text.default }}
+           >
+             Algorithm Profile
             </Text>
           </View>
           <EmptySection

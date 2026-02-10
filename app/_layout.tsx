@@ -1,6 +1,7 @@
 import { RootProvider } from "@/src/providers/root-provider";
 import { Stack } from "expo-router";
 import { AuthSheet } from "@/src/components/molecules";
+import { ThemedStatusBar } from "@/src/components/ui/themed-status-bar";
 
 export default function RootLayout() {
   return (
@@ -17,7 +18,8 @@ export default function RootLayout() {
         <Stack.Screen
           name="post/[id]"
           options={{
-            animation: "slide_from_right",
+            animation: "fade",
+            animationDuration: 250,
           }}
         />
         <Stack.Screen
@@ -45,13 +47,33 @@ export default function RootLayout() {
             animation: "slide_from_right",
           }}
         />
-        <Stack.Screen
-          name="blocked-list"
-          options={{
-            animation: "slide_from_right",
-          }}
-        />
-      </Stack>
+       <Stack.Screen
+         name="blocked-list"
+         options={{
+           animation: "slide_from_right",
+         }}
+       />
+      <Stack.Screen
+        name="comment-compose"
+        options={{
+          animation: "slide_from_bottom",
+           presentation: "fullScreenModal",
+        }}
+      />
+       <Stack.Screen
+         name="topic/[id]"
+         options={{
+           animation: "slide_from_right",
+         }}
+       />
+     <Stack.Screen
+       name="saved-posts"
+       options={{
+         animation: "slide_from_right",
+       }}
+     />
+     </Stack>
+      <ThemedStatusBar />
       <AuthSheet />
     </RootProvider>
   );

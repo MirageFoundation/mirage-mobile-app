@@ -4,8 +4,10 @@ import {
   UpvoteFilledIcon,
   UpvoteOutlineIcon,
 } from "@/assets/figma-icons";
-import { TimeAgo } from "@/src/components/atoms";
+import { TimeAgo, FollowButton } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
+import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
+import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -27,9 +29,6 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-
-// Link color for clickable links
-const LINK_COLOR = "#3B82F6"; // Blue shade
 
 // Vote colors (same as post-actions)
 const UPVOTE_COLOR = "#FF4757"; // Red shade for upvote
@@ -64,6 +63,12 @@ type CommentItemProps = {
   isOwnComment?: boolean;
   /** Whether this comment is highlighted (navigated to from profile) */
   isHighlighted?: boolean;
+  /** Whether the current user is following the comment author */
+  isFollowingAuthor?: boolean;
+  /** Whether follow action is loading */
+  isFollowLoading?: boolean;
+  /** Callback when follow button is pressed */
+  onFollowPress?: () => void;
   /** Callback when the comment row is pressed (for collapse) */
   onPress?: () => void;
   /** Callback when avatar/username is pressed */
@@ -91,9 +96,6 @@ const SIZE_CONFIG = {
   avatarSize: "sm" as const,
 };
 
-// Regex to match markdown links: [text](url)
-const MARKDOWN_LINK_REGEX = /\[([^\]]+)\]\(([^)]+)\)/g;
-
 // Regex to match image URLs (standalone URLs on their own line)
 const IMAGE_URL_REGEX = /^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp))$/i;
 
@@ -104,14 +106,6 @@ const CLOUDFLARE_IMAGE_REGEX = /^https?:\/\/imagedelivery\.net\/[^\s]+$/i;
 const GIPHY_URL_REGEX =
   /^https?:\/\/(?:media\d?\.giphy\.com|i\.giphy\.com)\/[^\s]+$/i;
 
-type ContentPart =
-  | { type: "text"; content: string }
-  | { type: "link"; text: string; url: string }
-  | { type: "image"; url: string };
-
-/**
- * Check if a URL is an image URL
- */
 function isImageUrl(url: string): boolean {
   return (
     IMAGE_URL_REGEX.test(url) ||
@@ -120,71 +114,26 @@ function isImageUrl(url: string): boolean {
   );
 }
 
-/**
- * Parse content and extract markdown links and images
- */
-function parseContentWithLinks(content: string): ContentPart[] {
-  const parts: ContentPart[] = [];
-
-  // First, split by newlines to handle standalone image URLs
+function extractImageUrls(content: string): {
+  text: string;
+  imageUrls: string[];
+} {
+  const imageUrls: string[] = [];
+  const textLines: string[] = [];
   const lines = content.split("\n");
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const line = lines[lineIndex];
     const trimmedLine = line.trim();
 
-    // Check if this line is a standalone image URL
     if (isImageUrl(trimmedLine)) {
-      parts.push({ type: "image", url: trimmedLine });
-      continue;
-    }
-
-    // Otherwise, parse for markdown links
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-
-    // Reset regex state
-    MARKDOWN_LINK_REGEX.lastIndex = 0;
-
-    let hasContent = false;
-
-    while ((match = MARKDOWN_LINK_REGEX.exec(line)) !== null) {
-      // Add text before the link
-      if (match.index > lastIndex) {
-        const textBefore = line.slice(lastIndex, match.index);
-        if (textBefore) {
-          parts.push({ type: "text", content: textBefore });
-          hasContent = true;
-        }
-      }
-
-      // Add the link
-      parts.push({
-        type: "link",
-        text: match[1],
-        url: match[2],
-      });
-      hasContent = true;
-
-      lastIndex = match.index + match[0].length;
-    }
-
-    // Add remaining text after the last link
-    if (lastIndex < line.length) {
-      const remaining = line.slice(lastIndex);
-      if (remaining) {
-        parts.push({ type: "text", content: remaining });
-        hasContent = true;
-      }
-    }
-
-    // Add newline between lines (except for the last line)
-    if (lineIndex < lines.length - 1 && hasContent) {
-      parts.push({ type: "text", content: "\n" });
+      imageUrls.push(trimmedLine);
+    } else {
+      textLines.push(line);
     }
   }
 
-  return parts;
+  return { text: textLines.join("\n").trim(), imageUrls };
 }
 
 /**
@@ -245,81 +194,30 @@ const commentImageStyles = StyleSheet.create((theme) => ({
   },
 }));
 
-/**
- * Component to render content with clickable links and images
- */
 const CommentContent = ({ content }: { content: string }) => {
-  const parts = useMemo(() => parseContentWithLinks(content), [content]);
+  const { text, imageUrls } = useMemo(
+    () => extractImageUrls(content),
+    [content],
+  );
 
   const handleLinkPress = useCallback((url: string) => {
     triggerHaptic("light");
-    // Ensure URL has protocol
     const fullUrl =
       url.startsWith("http://") || url.startsWith("https://")
         ? url
         : `https://${url}`;
-    Linking.openURL(fullUrl).catch((err) => {
-      console.error("Failed to open URL:", err);
-    });
+    Linking.openURL(fullUrl).catch(() => {});
   }, []);
 
-  // Check if we have any images
-  const hasImages = parts.some((part) => part.type === "image");
-
-  // If no links and no images, render simple text
-  if (parts.length === 1 && parts[0].type === "text") {
-    return (
-      <Text size="md" style={styles.content}>
-        {content}
-      </Text>
-    );
-  }
-
-  // Separate text/link parts from image parts for proper rendering
-  const textParts: ContentPart[] = [];
-  const imageParts: ContentPart[] = [];
-
-  for (const part of parts) {
-    if (part.type === "image") {
-      imageParts.push(part);
-    } else {
-      textParts.push(part);
-    }
-  }
-
   return (
-    <View>
-      {/* Text content */}
-      {textParts.length > 0 && (
-        <Text size="md" style={styles.content}>
-          {textParts.map((part, index) => {
-            if (part.type === "text") {
-              return part.content;
-            }
-            if (part.type === "link") {
-              return (
-                <Text
-                  key={index}
-                  size="md"
-                  style={{ color: LINK_COLOR }}
-                  onPress={() => handleLinkPress(part.url)}
-                >
-                  {part.text}
-                </Text>
-              );
-            }
-            return null;
-          })}
-        </Text>
+    <View style={styles.content}>
+      {text.length > 0 && (
+        <MarkdownContent content={text} onLinkPress={handleLinkPress} />
       )}
 
-      {/* Images */}
-      {imageParts.map(
-        (part, index) =>
-          part.type === "image" && (
-            <CommentImage key={`img-${index}`} url={part.url} />
-          ),
-      )}
+      {imageUrls.map((url, index) => (
+        <CommentImage key={`img-${index}`} url={url} />
+      ))}
     </View>
   );
 };
@@ -328,6 +226,9 @@ export const CommentItem = ({
   comment,
   isOwnComment = false,
   isHighlighted = false,
+  isFollowingAuthor = false,
+  isFollowLoading = false,
+  onFollowPress,
   onPress,
   onAuthorPress,
   onLikePress,
@@ -499,21 +400,46 @@ export const CommentItem = ({
                     pressed && styles.usernameButtonPressed,
                   ]}
                 >
-                  <Text size="sm" weight="bold" numberOfLines={1} mode="subtle">
+                  <Text
+                    size="md"
+                    weight="medium"
+                    numberOfLines={1}
+                    mode="subtle"
+                  >
                     @{author.username}
                   </Text>
                 </Pressable>
 
-                <Text size="sm" mode="subtle">
+                <Text size="md" mode="subtle">
                   ·
                 </Text>
 
-                <TimeAgo timestamp={createdAt} showSuffix={false} size="xs" />
+                <TimeAgo timestamp={createdAt} showSuffix={false} size="md" />
+                {isCollapsed && (
+                  <Text
+                    size="md"
+                    mode="subtle"
+                    numberOfLines={1}
+                    style={styles.collapsedPreview}
+                  >
+                    {content}
+                  </Text>
+                )}
               </View>
             </View>
-          </View>
-          {/* Tappable area to expand/collapse */}
-          <Pressable onPress={handlePress} style={styles.expandArea} />
+         </View>
+          {!isCollapsed && (
+            <Pressable onPress={handlePress} style={styles.expandArea} />
+          )}
+         {!isOwnComment && !isCollapsed && (
+            <FollowButton
+              isFollowing={isFollowingAuthor}
+              onPress={onFollowPress}
+              size="sm"
+              loading={isFollowLoading}
+              disabled={isFollowingAuthor}
+            />
+          )}
         </View>
 
         {/* Comment content - collapsible */}
@@ -523,8 +449,9 @@ export const CommentItem = ({
           {/* Actions below content on the right */}
           <View style={styles.actionsRow}>
             <View style={styles.actions}>
-              {/* More options (three dots) */}
-              <Pressable
+             {/* More options (three dots) */}
+              <AnimatedPressable
+                scaleAmount={0.85}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 onPress={handleMorePress}
                 style={styles.actionButton}
@@ -534,10 +461,11 @@ export const CommentItem = ({
                   size={SIZE_CONFIG.iconSize + 5}
                   color={iconColor}
                 />
-              </Pressable>
+              </AnimatedPressable>
 
               {/* Reply */}
-              <Pressable
+              <AnimatedPressable
+                scaleAmount={0.85}
                 onPress={handleReplyPress}
                 style={styles.actionButton}
                 hitSlop={{ top: 20, bottom: 20, left: 10, right: 10 }}
@@ -561,7 +489,7 @@ export const CommentItem = ({
                     Reply
                   </Text>
                 )}
-              </Pressable>
+              </AnimatedPressable>
 
               {/* Like */}
               <Pressable
@@ -598,7 +526,7 @@ export const CommentItem = ({
               {/* Dislike */}
               <Pressable
                 onPress={handleDislikePress}
-                style={styles.actionButton}
+                style={[styles.actionButton, { marginRight: 8 }]}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <RNAnimated.View
@@ -628,12 +556,12 @@ export const CommentItem = ({
 const styles = StyleSheet.create((theme) => ({
   container: {
     flexDirection: "row",
-    paddingVertical: theme.spacing.xs,
+    paddingBottom: theme.spacing.xs,
     paddingHorizontal: theme.spacing.md,
   },
   threadLineContainer: {
     position: "absolute",
-    top: 0,
+    top: theme.spacing.sm + 2,
     bottom: 0,
     left: theme.spacing.md,
   },
@@ -655,8 +583,11 @@ const styles = StyleSheet.create((theme) => ({
   authorSection: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
   },
-  authorInfo: {},
+ authorInfo: {
+   flex: 1,
+ },
   usernameButton: {
     paddingVertical: 2,
     paddingHorizontal: 2,
@@ -668,11 +599,16 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     height: 32,
   },
-  authorRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.xs,
+  collapsedPreview: {
+    flexShrink: 1,
+    marginLeft: theme.spacing.xs,
   },
+ authorRow: {
+   flexDirection: "row",
+   alignItems: "center",
+    flex: 1,
+   gap: theme.spacing.xs,
+ },
   content: {
     marginTop: theme.spacing.xs,
     lineHeight: 18,
@@ -685,7 +621,7 @@ const styles = StyleSheet.create((theme) => ({
   actions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md + 2,
   },
   actionButton: {
     flexDirection: "row",
@@ -693,6 +629,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: 4,
   },
   actionText: {
-    marginLeft: 8,
+    marginLeft: 5,
   },
 }));

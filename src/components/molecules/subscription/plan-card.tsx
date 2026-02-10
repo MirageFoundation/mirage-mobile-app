@@ -15,14 +15,13 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 
 export type PlanFeature = {
   text: string;
-  isHighlight?: boolean;
 };
 
 export type Plan = {
   id: string;
   title: string;
   cost: string;
-  costValue: number; // Daily cost in MIRAGE (0 for free)
+  costValue: number;
   shortFeatures: PlanFeature[];
   fullFeatures: PlanFeature[];
   color: string;
@@ -33,163 +32,15 @@ type PlanCardProps = {
   plan: Plan;
   isActive: boolean;
   hasInsufficientFunds: boolean;
+  isSubscribing?: boolean;
   onSubscribe?: (planId: string) => void;
 };
-
-// Plan data export for use in subscription screen
-export const PLANS: Plan[] = [
-  {
-    id: "free",
-    title: "Free",
-    cost: "Free",
-    costValue: 0,
-    color: "#6B7280",
-    icon: "person-outline",
-    shortFeatures: [
-      { text: "PoW for transactions" },
-      { text: "Up to 1,000 characters" },
-      { text: "Follow up to 50 topics and 25 users" },
-      { text: "Basic posting" },
-    ],
-    fullFeatures: [
-      { text: "Free tier. No MIRAGE needed to keep this plan active." },
-      { text: "Follow up to 5 moderators." },
-      { text: "Follow up to 25 users." },
-      { text: "Follow up to 50 topics." },
-      { text: "Block up to 10 users." },
-      { text: "Block up to 25 posts." },
-      { text: "Cannot mark posts as high quality." },
-      { text: "Post titles up to 130 characters." },
-      { text: "Post content up to 1,000 characters." },
-      { text: "Edit posts for up to 10 minutes after publishing." },
-      { text: "Posts are archived after approximately 30 days." },
-      { text: "Vote weight: 1.00x." },
-      { text: "Ineligible to be moderator." },
-      { text: "Cannot change username." },
-      { text: "Profile biography not available." },
-      { text: "Profile avatar not available." },
-      { text: "Profile banner not available." },
-      { text: "Cannot give awards." },
-      { text: "Uses proof-of-work (PoW) for posts and votes." },
-    ],
-  },
-  {
-    id: "trusted",
-    title: "Trusted",
-    cost: "1 MIRAGE/day",
-    costValue: 1,
-    color: "#3B82F6",
-    icon: "shield-checkmark-outline",
-    shortFeatures: [
-      { text: "Instant posting", isHighlight: true },
-      { text: "Up to 2,000 characters" },
-      { text: "Follow up to 250 topics and 125 users" },
-      { text: "Change username" },
-      { text: "Profile biography & avatar" },
-      { text: "Give basic awards" },
-    ],
-    fullFeatures: [
-      { text: "Subscription price: 1 MIRAGE every day." },
-      { text: "Follow up to 10 moderators." },
-      { text: "Follow up to 125 users." },
-      { text: "Follow up to 250 topics." },
-      { text: "Block up to 125 users." },
-      { text: "Block up to 100 posts." },
-      { text: "Cannot mark posts as high quality." },
-      { text: "Post titles up to 165 characters." },
-      { text: "Post content up to 2,000 characters." },
-      { text: "Edit posts for up to 60 minutes after publishing." },
-      { text: "Posts are archived after approximately 90 days." },
-      { text: "Vote weight: 1.15x." },
-      { text: "Ineligible to be moderator." },
-      { text: "Can change username." },
-      { text: "Profile biography available." },
-      { text: "Profile avatar available." },
-      { text: "Profile banner available." },
-      { text: "Can give basic awards." },
-      { text: "No PoW required for posts or votes while subscribed." },
-    ],
-  },
-  {
-    id: "established",
-    title: "Established",
-    cost: "2 MIRAGE/day",
-    costValue: 2,
-    color: "#8B5CF6",
-    icon: "star-outline",
-    shortFeatures: [
-      { text: "Instant posting", isHighlight: true },
-      { text: "Up to 5,000 characters" },
-      { text: "Follow up to 500 topics and 500 users" },
-      { text: "Eligible for moderator", isHighlight: true },
-      { text: "Profile banner" },
-      { text: "Give more awards" },
-    ],
-    fullFeatures: [
-      { text: "Subscription price: 2 MIRAGE every day." },
-      { text: "Follow up to 25 moderators." },
-      { text: "Follow up to 500 users." },
-      { text: "Follow up to 500 topics." },
-      { text: "Block up to 500 users." },
-      { text: "Block up to 200 posts." },
-      { text: "Mark up to 50 posts as high quality." },
-      { text: "Post titles up to 200 characters." },
-      { text: "Post content up to 5,000 characters." },
-      { text: "Edit posts for up to 360 minutes after publishing." },
-      { text: "Posts are archived after approximately 180 days." },
-      { text: "Vote weight: 1.30x." },
-      { text: "Eligible to be moderator." },
-      { text: "Can change username." },
-      { text: "Profile biography available." },
-      { text: "Profile avatar available." },
-      { text: "Profile banner available." },
-      { text: "Can give more awards." },
-      { text: "No PoW required for posts or votes while subscribed." },
-    ],
-  },
-  {
-    id: "distinguished",
-    title: "Distinguished",
-    cost: "3 MIRAGE/day",
-    costValue: 3,
-    color: "#F59E0B",
-    icon: "diamond-outline",
-    shortFeatures: [
-      { text: "Instant posting", isHighlight: true },
-      { text: "Up to 25,000 characters" },
-      { text: "Follow up to 1000 topics and 1000 users" },
-      { text: "Maximum vote weight", isHighlight: true },
-      { text: "All profile features" },
-      { text: "Give all award types" },
-    ],
-    fullFeatures: [
-      { text: "Subscription price: 3 MIRAGE every day." },
-      { text: "Follow up to 50 moderators." },
-      { text: "Follow up to 1000 users." },
-      { text: "Follow up to 1000 topics." },
-      { text: "Block up to 1000 users." },
-      { text: "Block up to 500 posts." },
-      { text: "Mark up to 100 posts as high quality." },
-      { text: "Post titles up to 250 characters." },
-      { text: "Post content up to 25,000 characters." },
-      { text: "Edit posts for up to 720 minutes after publishing." },
-      { text: "Posts are archived after approximately 365 days." },
-      { text: "Vote weight: 1.45x." },
-      { text: "Eligible to be moderator." },
-      { text: "Can change username." },
-      { text: "Profile biography available." },
-      { text: "Profile avatar available." },
-      { text: "Profile banner available." },
-      { text: "Can give all award types." },
-      { text: "No PoW required for posts or votes while subscribed." },
-    ],
-  },
-];
 
 export function PlanCard({
   plan,
   isActive,
   hasInsufficientFunds,
+  isSubscribing,
   onSubscribe,
 }: PlanCardProps) {
   const { theme } = useUnistyles();
@@ -210,7 +61,6 @@ export function PlanCard({
     }
   }, [isActive, hasInsufficientFunds, onSubscribe, plan.id]);
 
-  // Animated styles for expansion
   const expandedContentStyle = useAnimatedStyle(() => {
     return {
       opacity: expandProgress.value,
@@ -250,7 +100,6 @@ export function PlanCard({
     };
   });
 
-  // Button state
   const getButtonConfig = () => {
     if (isActive) {
       return {
@@ -258,21 +107,33 @@ export function PlanCard({
         disabled: true,
         variant: "ghost" as const,
         mode: "secondary" as const,
+        loading: false,
+      };
+    }
+    if (isSubscribing) {
+      return {
+        text: "Subscribing...",
+        disabled: true,
+        variant: undefined,
+        mode: "brand" as const,
+        loading: true,
       };
     }
     if (hasInsufficientFunds) {
       return {
         text: "Insufficient Funds",
         disabled: true,
-        variant: "outline" as const,
+        variant: undefined,
         mode: "error" as const,
+        loading: false,
       };
     }
     return {
       text: "Subscribe",
       disabled: false,
       variant: undefined,
-      mode: "primary" as const,
+      mode: "brand" as const,
+      loading: false,
     };
   };
 
@@ -290,7 +151,6 @@ export function PlanCard({
         },
       ]}
     >
-      {/* Header: Title + Cost */}
       <Box
         direction="row"
         alignItems="center"
@@ -324,7 +184,6 @@ export function PlanCard({
           </Box>
         </Box>
 
-        {/* Active badge */}
         {isActive && (
           <Box
             px="sm"
@@ -339,7 +198,6 @@ export function PlanCard({
         )}
       </Box>
 
-      {/* Divider */}
       <View
         style={[
           styles.divider,
@@ -347,7 +205,6 @@ export function PlanCard({
         ]}
       />
 
-      {/* Short Features (visible when not expanded) */}
       <Animated.View style={[styles.featuresContainer, shortContentStyle]}>
         <Box px="md" pb="sm">
           {plan.shortFeatures.map((feature, index) => (
@@ -362,20 +219,9 @@ export function PlanCard({
                 icon={Entypo}
                 name="check"
                 size={18}
-                color={
-                  feature.isHighlight ? plan.color : theme.colors.success[500]
-                }
+                color={plan.color}
               />
-              <Text
-                size="sm"
-                style={[
-                  styles.featureText,
-                  feature.isHighlight && {
-                    color: plan.color,
-                    fontWeight: "500",
-                  },
-                ]}
-              >
+              <Text size="sm" style={styles.featureText}>
                 {feature.text}
               </Text>
             </Box>
@@ -383,10 +229,8 @@ export function PlanCard({
         </Box>
       </Animated.View>
 
-      {/* Full Features (visible when expanded) */}
       <Animated.View style={[styles.featuresContainer, expandedContentStyle]}>
         <Box px="md" pb="sm">
-          {/* Full features list */}
           {plan.fullFeatures.map((feature, index) => (
             <Box
               key={index}
@@ -399,7 +243,7 @@ export function PlanCard({
                 icon={Entypo}
                 name="check"
                 size={18}
-                color={theme.colors.success[500]}
+                color={plan.color}
               />
               <Text size="sm" style={styles.featureText}>
                 {feature.text}
@@ -409,7 +253,6 @@ export function PlanCard({
         </Box>
       </Animated.View>
 
-      {/* See All Details / Hide Details Button */}
       <Pressable
         onPress={handleToggleExpand}
         style={({ pressed }) => [
@@ -433,7 +276,6 @@ export function PlanCard({
         </Box>
       </Pressable>
 
-      {/* Action Button */}
       <Box px="md" pb="md" pt="sm">
         <Button
           size="md"
@@ -441,6 +283,7 @@ export function PlanCard({
           mode={buttonConfig.mode}
           rounded="lg"
           disabled={buttonConfig.disabled}
+          loading={buttonConfig.loading}
           onPress={handleSubscribe}
           style={[
             styles.actionButton,
@@ -448,6 +291,9 @@ export function PlanCard({
               backgroundColor: `${plan.color}15`,
               borderColor: plan.color,
               borderWidth: 1,
+            },
+            hasInsufficientFunds && {
+              backgroundColor: `${theme.colors.error[500]}15`,
             },
           ]}
         >
@@ -469,9 +315,7 @@ const styles = StyleSheet.create((theme) => ({
   container: {
     overflow: "hidden",
   },
-  header: {
-    // Header styles
-  },
+  header: {},
   iconContainer: {
     width: 44,
     height: 44,

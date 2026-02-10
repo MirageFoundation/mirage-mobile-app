@@ -3,7 +3,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FlatList } from "react-native";
-import { ActivityIndicator, RefreshControl, View } from "react-native";
+import { ActivityIndicator, Linking, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -55,7 +55,9 @@ import {
   useAuthStore,
   useContentModerationStore,
   usePreferencesStore,
+  useSavedPostsStore,
 } from "@/src/stores";
+import { LoggedOutHome } from "./logged-out-home";
 
 export function HomeScreen() {
   const { theme } = useUnistyles();
@@ -103,13 +105,15 @@ export function HomeScreen() {
   const selectedContentTypes = usePreferencesStore(
     (s) => s.selectedContentTypes
   );
-  const shareServer = usePreferencesStore((s) => s.shareServer);
-  const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
-  const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
-  const currentUser = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
+ const shareServer = usePreferencesStore((s) => s.shareServer);
+ const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
+ const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
+  const hideDownvotedPosts = usePreferencesStore((s) => s.hideDownvotedPosts);
+ const currentUser = useAuthStore((s) => s.user);
+ const logout = useAuthStore((s) => s.logout);
+ const isInitializing = useAuthStore((s) => s.isInitializing);
+ const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
 
-  // Network state for video autoplay
   const { networkType } = useNetworkState();
 
   // Fetch user's followed list (for showing "Following" status on posts)
@@ -152,7 +156,6 @@ export function HomeScreen() {
       case "latest":
         return "newest" as const;
       default:
-        // Default to "magic" for algorithm-based feed
         return "magic" as const;
     }
   }, [feedType]);
@@ -188,16 +191,20 @@ export function HomeScreen() {
         uniquePostsMap.set(post.post_id, post);
       }
     }
-    const uniquePosts = Array.from(uniquePostsMap.values());
+   const uniquePosts = Array.from(uniquePostsMap.values());
 
-    const transformedPosts = transformApiPosts(uniquePosts);
+    const filteredPosts = hideDownvotedPosts
+      ? uniquePosts.filter((post) => post.user_vote !== -1)
+      : uniquePosts;
 
-    // Filter out hidden posts and posts from blocked users
-    return transformedPosts.filter(
-      (post) =>
-        !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id)
-    );
-  }, [data, hiddenPostIds, blockedUserIds]);
+    const transformedPosts = transformApiPosts(filteredPosts);
+
+   // Filter out hidden posts and posts from blocked users
+   return transformedPosts.filter(
+     (post) =>
+       !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id)
+   );
+  }, [data, hiddenPostIds, blockedUserIds, hideDownvotedPosts]);
 
  // Revealed posts for content warnings
  const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
@@ -257,9 +264,8 @@ export function HomeScreen() {
   }, [router]);
 
   const handleMenuSaved = useCallback(() => {
-    // TODO: Navigate to saved posts
-    console.log("Navigate to saved");
-  }, []);
+    router.push("/saved-posts");
+  }, [router]);
 
   const handleMenuHistory = useCallback(() => {
     // TODO: Navigate to history
@@ -271,23 +277,27 @@ export function HomeScreen() {
     console.log("Navigate to drafts");
   }, []);
 
-  const handleMenuNetwork = useCallback(() => {
-    // TODO: Navigate to network
-    console.log("Navigate to network");
-  }, []);
+  const handleMenuFollowing = useCallback(() => {
+    const id = currentUser?.walletAddress || currentUser?.username;
+    if (id) {
+      router.push(`/user-following/${id}`);
+    }
+  }, [router, currentUser?.walletAddress, currentUser?.username]);
 
   const handleMenuInvite = useCallback(() => {
     router.push("/invite-and-earn");
   }, [router]);
 
+  const handleMenuTopics = useCallback(() => {
+    router.push("/topics");
+  }, [router]);
+
   const handleMenuHelp = useCallback(() => {
-    // TODO: Navigate to help
-    console.log("Navigate to help");
+    Linking.openURL("https://mirage.foundation/faq");
   }, []);
 
   const handleMenuAbout = useCallback(() => {
-    // TODO: Navigate to about
-    console.log("Navigate to about");
+    Linking.openURL("https://mirage.foundation");
   }, []);
 
   const handleMenuLogout = useCallback(async () => {
@@ -319,6 +329,10 @@ export function HomeScreen() {
   const handleAuthorPress = useCallback((authorId: string) => {
     router.push(`/user/${authorId}`);
   }, [router]);
+
+ const handleTopicPress = useCallback((topic: string) => {
+    router.push(`/topic/${encodeURIComponent(topic)}`);
+ }, [router]);
 
   const postsByIdRef = useRef<Map<string, Post>>(new Map());
 
@@ -450,10 +464,13 @@ export function HomeScreen() {
   }, [selectedPost, deleteHandler]);
 
   const handleSavePost = useCallback(() => {
-    // TODO: Call save API
-    console.log("Save post:", selectedPost?.id);
-    toast.success("Post saved", "You can find it in your saved items.");
-  }, [selectedPost?.id, toast]);
+    if (!selectedPost) return;
+    const saved = useSavedPostsStore.getState().toggleSavePost(selectedPost);
+    toast.success(
+      saved ? "Post saved" : "Post unsaved",
+      saved ? "You can find it in your saved items." : "Removed from saved items.",
+    );
+  }, [selectedPost, toast]);
 
   const handleCopyText = useCallback(() => {
     // Toast will be shown after copy (handled in sheet)
@@ -843,7 +860,7 @@ export function HomeScreen() {
   }, [posts.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const ListEmptyComponent = useCallback(() => {
-    if (isLoading) {
+    if (isLoading || isInitializing) {
       return <PostCardSkeletonList count={5} />;
     }
 
@@ -878,7 +895,7 @@ export function HomeScreen() {
         </Text>
       </Box>
     );
-  }, [isLoading, isError, error]);
+  }, [isLoading, isInitializing, isError, error]);
 
  const ListHeaderComponent = useCallback(() => {
     if (!isManualRefreshing) return null;
@@ -940,6 +957,7 @@ export function HomeScreen() {
   const setShareServer = useHomePostCardStore((state) => state.setShareServer);
   const setAllowAutoplay = useHomePostCardStore((state) => state.setAllowAutoplay);
   const setFeedActive = useHomePostCardStore((state) => state.setFeedActive);
+  const setDisabledTopicName = useHomePostCardStore((state) => state.setDisabledTopicName);
 
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
   const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
@@ -981,16 +999,18 @@ export function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       setFeedActive(true);
+      setDisabledTopicName(undefined);
       return () => {
         setFeedActive(false);
       };
-    }, [setFeedActive])
+    }, [setFeedActive, setDisabledTopicName])
   );
 
 // Store refs to latest handlers - these update without triggering re-renders
 const handlersRef = useRef({
   handlePostPress,
   handleAuthorPress,
+  handleTopicPress,
   handleMorePress,
   handleUpvote,
   handleDownvote,
@@ -1008,6 +1028,7 @@ useEffect(() => {
   handlersRef.current = {
     handlePostPress,
     handleAuthorPress,
+    handleTopicPress,
     handleMorePress,
     handleUpvote,
     handleDownvote,
@@ -1021,28 +1042,34 @@ useEffect(() => {
   };
 });
 
-// Set handlers ONCE on mount with stable wrapper functions that delegate to refs
-useEffect(() => {
-  setHandlers({
-    onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
-    onAuthorPress: (authorId) => handlersRef.current.handleAuthorPress(authorId),
-    onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
-    onLikePress: (postId, liked, disliked, likes) =>
-      handlersRef.current.handleUpvote(postId, liked, disliked, likes),
-    onDislikePress: (postId, liked, disliked, likes) =>
-    handlersRef.current.handleDownvote(postId, liked, disliked, likes),
-  onCommentPress: (postId) => handlersRef.current.handleCommentPress(postId),
-  onFollowUser: (authorId, username, isFollowing) =>
-    handlersRef.current.handleFollowPress(authorId, username, isFollowing),
-  onFollowTopic: (topic, isFollowed) =>
-    handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
-  onRevealContent: (postId) => handlersRef.current.handleRevealContent(postId),
-  onBlockUser: (postId, authorId, authorUsername) =>
-    handlersRef.current.handleBlockUserFromCard(postId, authorId, authorUsername),
-  onBlockPost: (postId) => handlersRef.current.handleBlockPostFromCard(postId),
-  onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
-});
-}, [setHandlers]); // Only run once - setHandlers is stable
+useFocusEffect(
+  useCallback(() => {
+    setHandlers({
+      onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
+      onAuthorPress: (authorId) => handlersRef.current.handleAuthorPress(authorId),
+      onTopicPress: (topic) => handlersRef.current.handleTopicPress(topic),
+      onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
+      onLikePress: (postId, liked, disliked, likes) =>
+        handlersRef.current.handleUpvote(postId, liked, disliked, likes),
+      onDislikePress: (postId, liked, disliked, likes) =>
+        handlersRef.current.handleDownvote(postId, liked, disliked, likes),
+      onCommentPress: (postId) => handlersRef.current.handleCommentPress(postId),
+      onFollowUser: (authorId, username, isFollowing) =>
+        handlersRef.current.handleFollowPress(authorId, username, isFollowing),
+      onFollowTopic: (topic, isFollowed) =>
+        handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
+      onRevealContent: (postId) => handlersRef.current.handleRevealContent(postId),
+      onBlockUser: (postId, authorId, authorUsername) =>
+        handlersRef.current.handleBlockUserFromCard(postId, authorId, authorUsername),
+      onBlockPost: (postId) => handlersRef.current.handleBlockPostFromCard(postId),
+      onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
+    });
+  }, [setHandlers])
+);
+
+  if (!isLoggedIn && !isInitializing) {
+    return <LoggedOutHome />;
+  }
 
   return (
     <Box flex background="base">
@@ -1069,9 +1096,9 @@ useEffect(() => {
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}
         refreshControl={refreshControl}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.3}
-      />
+       onEndReached={handleEndReached}
+        onEndReachedThreshold={1.5}
+     />
 
       {/* Adult Content Permission Popup */}
       <AdultContentPopup
@@ -1099,6 +1126,7 @@ useEffect(() => {
         onFollowUser={handleFollowUserFromSheet}
         onFollowTopic={handleFollowTopic}
         onSave={handleSavePost}
+        isSaved={selectedPost ? useSavedPostsStore.getState().isPostSaved(selectedPost.id) : false}
         onCopyText={handleCopyText}
         onReport={handleReport}
         onBlockUser={handleBlockUser}
@@ -1150,7 +1178,8 @@ useEffect(() => {
         onSaved={handleMenuSaved}
         onHistory={handleMenuHistory}
         onDrafts={handleMenuDrafts}
-        onNetwork={handleMenuNetwork}
+        onFollowing={handleMenuFollowing}
+        onTopics={handleMenuTopics}
         onInviteAndEarn={handleMenuInvite}
         onHelp={handleMenuHelp}
         onAbout={handleMenuAbout}

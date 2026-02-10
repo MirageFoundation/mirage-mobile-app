@@ -16,7 +16,12 @@ import {
 import { useAuthStore, useUIStore } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import { Pressable, StyleSheet as RNStyleSheet, Text, View } from "react-native";
+import {
+  Pressable,
+  StyleSheet as RNStyleSheet,
+  Text,
+  View,
+} from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -148,9 +153,9 @@ const TabBarItem = ({
         );
       case "following":
         return isFocused ? (
-          <FollowingFilledIcon size={iconSize} color={iconColor} />
+          <FollowingFilledIcon size={iconSize + 9.5} color={iconColor} />
         ) : (
-          <FollowingOutlineIcon size={iconSize} color={iconColor} />
+          <FollowingOutlineIcon size={iconSize + 9.5} color={iconColor} />
         );
       case "create":
         return isFocused ? (
@@ -160,9 +165,9 @@ const TabBarItem = ({
         );
       case "inbox":
         return isFocused ? (
-          <InboxFilledIcon size={iconSize} color={iconColor} />
+          <InboxFilledIcon size={iconSize + 2} color={iconColor} />
         ) : (
-          <InboxOutlineIcon size={iconSize} color={iconColor} />
+          <InboxOutlineIcon size={iconSize + 2} color={iconColor} />
         );
       case "profile":
         // Profile still uses Ionicons as we don't have a custom profile icon yet

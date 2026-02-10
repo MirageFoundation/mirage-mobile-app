@@ -3,28 +3,22 @@ import { View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { CommentItem, type Comment } from "./comment-item";
 
+const EMPTY_LOADING_SET = new Set<string>();
+
 type CommentThreadProps = {
-  /** The root comment with its replies */
   comment: Comment;
-  /** Current nesting depth */
   depth?: number;
-  /** Maximum depth before collapsing visually */
   maxDepth?: number;
-  /** Whether the current user ID matches author (for highlighting own comments) */
   currentUserId?: string | null;
-  /** ID of comment to highlight (from navigation) */
   highlightedCommentId?: string | null;
-  /** Callback when author avatar/username is pressed */
   onAuthorPress?: (authorId: string) => void;
-  /** Callback when like is pressed */
   onLikePress?: (commentId: string, hasLiked: boolean, hasDisliked: boolean, likes: number) => void;
-  /** Callback when dislike is pressed */
   onDislikePress?: (commentId: string, hasLiked: boolean, hasDisliked: boolean, likes: number) => void;
-  /** Callback when reply is pressed */
   onReplyPress?: (comment: Comment) => void;
-  /** Callback when more options is pressed */
   onMorePress?: (comment: Comment) => void;
-  /** Whether to show divider below this thread */
+  followedUsers?: string[];
+  followLoadingUsers?: Set<string>;
+  onFollowPress?: (authorId: string, isCurrentlyFollowing: boolean) => void;
   showDivider?: boolean;
 };
 
@@ -39,9 +33,11 @@ export const CommentThread = ({
   onDislikePress,
   onReplyPress,
   onMorePress,
+  followedUsers = [],
+  followLoadingUsers = EMPTY_LOADING_SET,
+  onFollowPress,
   showDivider = true,
 }: CommentThreadProps) => {
-  // Track collapsed state for this comment
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const replies = comment.replies ?? [];
@@ -56,11 +52,13 @@ export const CommentThread = ({
 
   return (
     <View style={styles.container}>
-      {/* Main comment */}
       <CommentItem
         comment={comment}
         isOwnComment={isOwnComment}
         isHighlighted={isHighlighted}
+        isFollowingAuthor={followedUsers.includes(comment.author.id)}
+        isFollowLoading={followLoadingUsers.has(comment.author.id)}
+        onFollowPress={() => onFollowPress?.(comment.author.id, followedUsers.includes(comment.author.id))}
         depth={depth}
         maxDepth={maxDepth}
         isCollapsed={isCollapsed}
@@ -72,7 +70,6 @@ export const CommentThread = ({
         onMorePress={() => onMorePress?.(comment)}
       />
 
-      {/* Nested replies - always shown unless parent is collapsed */}
       {hasReplies && !isCollapsed && (
         <View style={styles.repliesContainer}>
           {replies.map((reply) => (
@@ -88,13 +85,15 @@ export const CommentThread = ({
               onDislikePress={onDislikePress}
               onReplyPress={onReplyPress}
               onMorePress={onMorePress}
+              followedUsers={followedUsers}
+              followLoadingUsers={followLoadingUsers}
+              onFollowPress={onFollowPress}
               showDivider={false}
             />
           ))}
         </View>
       )}
 
-      {/* Divider below the thread (only for top-level comments) */}
       {showDivider && depth === 0 && <View style={styles.divider} />}
     </View>
   );

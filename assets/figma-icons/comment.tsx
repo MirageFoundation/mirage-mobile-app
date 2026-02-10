@@ -6,13 +6,11 @@ type CommentIconProps = {
   color?: string;
 };
 
-function CommentIcon({ size = 19, color = "#000" }: CommentIconProps) {
+function CommentIcon({ size = 18, color = "#000" }: CommentIconProps) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 19 19" fill="none">
+    <Svg width={size} height={size} viewBox="0 0 18 18" fill="none">
       <Path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M0 9.5A9.5 9.5 0 119.5 19H.75a.75.75 0 01-.53-1.28l2.053-2.054A9.47 9.47 0 010 9.5zm9.5-8a8 8 0 00-5.657 13.657.75.75 0 010 1.06L2.561 17.5H9.5a8 8 0 000-16z"
+        d="M2.7 0h12.6A2.7 2.7 0 0118 2.7v9a2.7 2.7 0 01-2.7 2.7H4.869l-3.33 3.339a.899.899 0 01-.639.26.755.755 0 01-.342-.071A.9.9 0 010 17.1V2.7A2.7 2.7 0 012.7 0zm-.9 14.93l2.061-2.07a.9.9 0 01.639-.26h10.8a.9.9 0 00.9-.9v-9a.9.9 0 00-.9-.9H2.7a.9.9 0 00-.9.9v12.23z"
         fill={color}
       />
     </Svg>

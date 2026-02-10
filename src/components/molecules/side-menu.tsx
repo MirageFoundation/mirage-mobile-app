@@ -2,12 +2,12 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, useCallback, useImperativeHandle, useState } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   Modal,
   Pressable,
   ScrollView,
   StyleProp,
-  Switch,
   View,
   ViewStyle,
 } from "react-native";
@@ -22,12 +22,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Divider, Text } from "@/src/components/ui/primitives";
-import { useAuthStore, usePreferencesStore } from "@/src/stores";
+import { Avatar } from "@/src/components/atoms";
+import { useAuthStore } from "@/src/stores";
 import { useRouter } from "expo-router";
 import { LogoutConfirmationPopup } from "./logout-confirmation-popup";
+import { useUserFollowed, useUsernameFromAddress } from "@/src/api/read/hooks";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const MENU_WIDTH = SCREEN_WIDTH * 0.8; // 80% of screen width
+const MENU_WIDTH = SCREEN_WIDTH * 0.8;
 
 type SideMenuProps = {
   onSettings?: () => void;
@@ -35,7 +37,8 @@ type SideMenuProps = {
   onSaved?: () => void;
   onHistory?: () => void;
   onDrafts?: () => void;
-  onNetwork?: () => void;
+  onFollowing?: () => void;
+  onTopics?: () => void;
   onInviteAndEarn?: () => void;
   onHelp?: () => void;
   onAbout?: () => void;
@@ -48,7 +51,6 @@ export type SideMenuRef = {
   dismiss: () => void;
 };
 
-// Menu Item Component
 const MenuItem = ({
   iconName,
   title,
@@ -106,12 +108,19 @@ const MenuItem = ({
   );
 };
 
-// Section Header Component
-const SectionHeader = ({ title }: { title: string }) => {
+const SHOW_MORE_HITSLOP = { top: 12, bottom: 12, left: 16, right: 16 };
+
+const SectionHeader = ({
+  title,
+  onShowMore,
+}: {
+  title: string;
+  onShowMore?: () => void;
+}) => {
   const { theme } = useUnistyles();
 
   return (
-    <View style={styles.sectionHeader}>
+    <View style={styles.sectionHeaderRow}>
       <Text
         style={{ color: theme.colors.text.subtle }}
         size="sm"
@@ -119,6 +128,24 @@ const SectionHeader = ({ title }: { title: string }) => {
       >
         {title.toUpperCase()}
       </Text>
+      {onShowMore && (
+        <Pressable
+          onPress={onShowMore}
+          hitSlop={SHOW_MORE_HITSLOP}
+          style={({ pressed }) => [
+            styles.showMoreButton,
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <Text
+            style={{ color: theme.colors.primary[500] }}
+            size="sm"
+            weight="semibold"
+          >
+            Show More
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 };
@@ -134,86 +161,71 @@ const SectionFooter = ({ style = {} }: { style?: StyleProp<ViewStyle> }) => {
   );
 };
 
-// Theme Toggle Item Component
-const ThemeToggleItem = ({
-  iconName,
-  title,
-  subtitle,
-  value,
-  onValueChange,
+const FollowedUserItem = ({
+  address,
+  onPress,
 }: {
-  iconName: string;
-  title: string;
-  subtitle?: string;
-  value: boolean;
-  onValueChange: (value: boolean) => void;
+  address: string;
+  onPress?: () => void;
 }) => {
   const { theme } = useUnistyles();
-  const activeColor = "rgb(30,67,149)";
-
-  const handleToggle = () => {
-    triggerHaptic("light");
-    onValueChange(!value);
-  };
+  const { data } = useUsernameFromAddress(address);
+  const displayName = data?.username ?? address.slice(0, 10) + "...";
 
   return (
-    <Pressable
-      onPress={handleToggle}
-      style={({ pressed }) => [
-        styles.menuItem,
-        styles.toggleItem,
-        pressed && { opacity: 0.7 },
-      ]}
-    >
-      <View
-        style={[
-          styles.menuIconContainer,
-          { backgroundColor: theme.colors.background.subtle },
-        ]}
+   <Pressable
+     onPress={onPress}
+     style={({ pressed }) => [styles.userListItem, pressed && { opacity: 0.7 }]}
+   >
+      <Avatar size="sm" seed={address} rounded="full" />
+     <Text
+        style={{ color: theme.colors.text.default, flex: 1, marginLeft: 10 }}
+       size="md"
+        weight="medium"
+        numberOfLines={1}
       >
-        <Ionicons
-          name={iconName as any}
-          size={20}
-          color={theme.colors.text.default}
-        />
-      </View>
-      <View style={styles.menuTextContainer}>
-        <Text
-          style={{ color: theme.colors.text.default }}
-          size="md"
-          weight="medium"
-        >
-          {title}
-        </Text>
-        {subtitle && (
-          <Text
-            style={{ color: theme.colors.text.subtle }}
-            size="sm"
-            weight="light"
-          >
-            {subtitle}
-          </Text>
-        )}
-      </View>
-      <View style={styles.switchContainer}>
-        <Switch
-          value={value}
-          onValueChange={(val) => {
-            triggerHaptic("light");
-            onValueChange(val);
-          }}
-          trackColor={{
-            false: theme.colors.background.emphasis,
-            true: activeColor,
-          }}
-          thumbColor="#FFFFFF"
-        />
-      </View>
+        {displayName}
+      </Text>
+      <Ionicons
+        name="chevron-forward"
+        size={18}
+        color={theme.colors.text.subtle}
+      />
     </Pressable>
   );
 };
 
-// Logout Menu Item Component
+const FollowedTopicItem = ({
+  topic,
+  onPress,
+}: {
+  topic: string;
+  onPress?: () => void;
+}) => {
+  const { theme } = useUnistyles();
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.topicListItem, pressed && { opacity: 0.7 }]}
+    >
+      <Text
+        style={{ color: theme.colors.text.default, flex: 1 }}
+        size="md"
+        weight="medium"
+        numberOfLines={1}
+      >
+        #{topic}
+      </Text>
+      <Ionicons
+        name="chevron-forward"
+        size={18}
+        color={theme.colors.text.subtle}
+      />
+    </Pressable>
+  );
+};
+
 const LogoutMenuItem = ({ onPress }: { onPress?: () => void }) => {
   const { theme } = useUnistyles();
 
@@ -260,7 +272,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       onSaved,
       onHistory,
       onDrafts,
-      onNetwork,
+      onFollowing,
+      onTopics,
       onInviteAndEarn,
       onHelp,
       onAbout,
@@ -276,12 +289,14 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     const [showLogoutPopup, setShowLogoutPopup] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-    // Auth state
     const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+    const walletAddress = useAuthStore((s) => s.user?.walletAddress);
 
-    // Theme state from preferences store
-    const themeMode = usePreferencesStore((s) => s.theme);
-    const setTheme = usePreferencesStore((s) => s.setTheme);
+    const { data: followedData, isLoading: isLoadingFollowed } =
+      useUserFollowed();
+
+    const followedUsers = followedData?.followed_users?.slice(0, 5) ?? [];
+    const followedTopics = followedData?.followed_topics?.slice(0, 5) ?? [];
 
     const translateX = useSharedValue(-MENU_WIDTH);
     const backdropOpacity = useSharedValue(0);
@@ -336,33 +351,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       [close],
     );
 
-    // Theme handlers
-    const isAutomatic = themeMode === "system";
-    const isDarkMode = themeMode === "dark";
-
-    const handleAutomaticToggle = useCallback(
-      (enabled: boolean) => {
-        if (enabled) {
-          setTheme("system");
-        } else {
-          setTheme("light");
-        }
-      },
-      [setTheme],
-    );
-
-    const handleDarkModeToggle = useCallback(
-      (enabled: boolean) => {
-        if (enabled) {
-          setTheme("dark");
-        } else {
-          setTheme("light");
-        }
-      },
-      [setTheme],
-    );
-
-    // Logout handlers
     const handleLogoutPress = useCallback(() => {
       triggerHaptic("light");
       setShowLogoutPopup(true);
@@ -372,7 +360,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       setShowLogoutPopup(false);
     }, []);
 
-    // Auth handlers for logged out state
     const handleCreateAccount = useCallback(() => {
       triggerHaptic("light");
       close();
@@ -402,6 +389,38 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       }
     }, [close, onLogout]);
 
+    const handleShowMoreFollowing = useCallback(() => {
+      triggerHaptic("light");
+      close();
+      setTimeout(() => {
+        if (walletAddress) {
+          router.push(`/user-following/${walletAddress}`);
+        }
+      }, 300);
+    }, [close, router, walletAddress]);
+
+    const handleUserPress = useCallback(
+      (address: string) => {
+        triggerHaptic("light");
+        close();
+        setTimeout(() => {
+          router.push(`/user/${address}`);
+        }, 300);
+      },
+      [close, router],
+    );
+
+    const handleTopicPress = useCallback(
+      (topic: string) => {
+        triggerHaptic("light");
+        close();
+        setTimeout(() => {
+          router.push(`/topic/${topic}`);
+        }, 300);
+      },
+      [close, router],
+    );
+
     if (!visible) return null;
 
     return (
@@ -413,7 +432,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
         onRequestClose={close}
       >
         <View style={styles.container}>
-          {/* Backdrop */}
           <Animated.View style={[styles.backdrop, backdropAnimatedStyle]}>
             <Pressable
               style={styles.backdropPressable}
@@ -421,7 +439,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
             />
           </Animated.View>
 
-          {/* Menu Panel */}
           <Animated.View
             style={[
               styles.menuPanel,
@@ -429,7 +446,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
               menuAnimatedStyle,
             ]}
           >
-            {/* Header */}
             <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
               <Text size="xl" weight="bold">
                 Menu
@@ -449,7 +465,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
               </Pressable>
             </View>
 
-            {/* Scrollable Menu Content */}
             <ScrollView
               style={styles.scrollView}
               contentContainerStyle={[
@@ -460,6 +475,16 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
             >
               {isLoggedIn ? (
                 <>
+                  {/* Subscription at top */}
+                  <SectionHeader title="Subscription" />
+                  <MenuItem
+                    iconName="card-outline"
+                    title="Subscription"
+                    subtitle="Manage your plan"
+                    onPress={createHandler(onSubscription)}
+                  />
+                  <SectionFooter />
+
                   {/* Content Section */}
                   <SectionHeader title="Content" />
                   <MenuItem
@@ -481,13 +506,14 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     onPress={createHandler(onDrafts)}
                   />
                   <SectionFooter />
+
                   {/* Social Section */}
                   <SectionHeader title="Social" />
                   <MenuItem
-                    iconName="globe-outline"
-                    title="Network"
-                    subtitle="Your connections"
-                    onPress={createHandler(onNetwork)}
+                    iconName="people-outline"
+                    title="Following"
+                    subtitle="Users and topics you follow"
+                    onPress={createHandler(onFollowing)}
                   />
                   <MenuItem
                     iconName="gift-outline"
@@ -495,7 +521,76 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     subtitle="Get rewards"
                     onPress={createHandler(onInviteAndEarn)}
                   />
+                  <MenuItem
+                    iconName="pricetags-outline"
+                    title="Topics"
+                    subtitle="Explore all topics"
+                    onPress={createHandler(onTopics)}
+                  />
                   <SectionFooter />
+
+                  {/* Followed Users */}
+                  <SectionHeader
+                    title="Followed Users"
+                    onShowMore={
+                      followedUsers.length > 0
+                        ? handleShowMoreFollowing
+                        : undefined
+                    }
+                  />
+                  {isLoadingFollowed ? (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="small" color={theme.colors.text.subtle} />
+                    </View>
+                  ) : followedUsers.length > 0 ? (
+                    followedUsers.map((address) => (
+                      <FollowedUserItem
+                        key={address}
+                        address={address}
+                        onPress={() => handleUserPress(address)}
+                      />
+                    ))
+                  ) : (
+                    <Text
+                      style={{ color: theme.colors.text.subtle, paddingVertical: 8 }}
+                      size="sm"
+                    >
+                      Not following anyone yet
+                    </Text>
+                  )}
+                  <SectionFooter />
+
+                  {/* Followed Topics */}
+                  <SectionHeader
+                    title="Followed Topics"
+                    onShowMore={
+                      followedTopics.length > 0
+                        ? handleShowMoreFollowing
+                        : undefined
+                    }
+                  />
+                  {isLoadingFollowed ? (
+                    <View style={styles.loadingContainer}>
+                      <ActivityIndicator size="small" color={theme.colors.text.subtle} />
+                    </View>
+                  ) : followedTopics.length > 0 ? (
+                    followedTopics.map((topic) => (
+                      <FollowedTopicItem
+                        key={topic}
+                        topic={topic}
+                        onPress={() => handleTopicPress(topic)}
+                      />
+                    ))
+                  ) : (
+                    <Text
+                      style={{ color: theme.colors.text.subtle, paddingVertical: 8 }}
+                      size="sm"
+                    >
+                      No followed topics yet
+                    </Text>
+                  )}
+                  <SectionFooter />
+
                   {/* App Section */}
                   <SectionHeader title="App" />
                   <MenuItem
@@ -503,12 +598,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     title="Settings"
                     subtitle="App preferences"
                     onPress={createHandler(onSettings)}
-                  />
-                  <MenuItem
-                    iconName="card-outline"
-                    title="Subscription"
-                    subtitle="Manage your plan"
-                    onPress={createHandler(onSubscription)}
                   />
                   <MenuItem
                     iconName="help-circle-outline"
@@ -524,30 +613,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   />
                   <SectionFooter />
 
-                  {/* Theme Section */}
-                  <SectionHeader title="Theme" />
-                  <ThemeToggleItem
-                    iconName="phone-portrait-outline"
-                    title="Automatic"
-                    subtitle="Follow system setting"
-                    value={isAutomatic}
-                    onValueChange={handleAutomaticToggle}
-                  />
-                  <ThemeToggleItem
-                    iconName="moon-outline"
-                    title="Dark Mode"
-                    value={isDarkMode}
-                    onValueChange={handleDarkModeToggle}
-                  />
-                  <SectionFooter />
-
                   {/* Account Section */}
                   <SectionHeader title="Account" />
                   <LogoutMenuItem onPress={handleLogoutPress} />
                 </>
               ) : (
                 <>
-                  {/* Logged out state - only show Create Account and Login */}
                   <SectionHeader title="Get Started" />
                   <MenuItem
                     iconName="person-add-outline"
@@ -566,7 +637,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
             </ScrollView>
           </Animated.View>
 
-          {/* Logout Confirmation Popup */}
           <LogoutConfirmationPopup
             visible={showLogoutPopup}
             onCancel={handleLogoutCancel}
@@ -631,6 +701,17 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: theme.spacing.md,
     paddingBottom: theme.spacing.md,
   },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.md,
+  },
+  showMoreButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -658,5 +739,20 @@ const styles = StyleSheet.create((theme) => ({
     marginVertical: theme.spacing.sm,
     width: SCREEN_WIDTH,
     alignSelf: "center",
+  },
+  userListItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: theme.spacing.sm,
+  },
+  topicListItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: theme.spacing.sm + 2,
+    gap: theme.spacing.sm,
+  },
+  loadingContainer: {
+    paddingVertical: theme.spacing.md,
+    alignItems: "center",
   },
 }));

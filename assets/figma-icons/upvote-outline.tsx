@@ -11,15 +11,12 @@ function UpvoteOutlineIcon({
   color = "#000",
 }: UpvoteOutlineIconProps) {
   // Original viewBox is 18x20, we maintain aspect ratio
-  const height = size * (20 / 18);
+  const height = size * (15 / 20);
   return (
-    <Svg width={size} height={height} viewBox="0 0 18 20" fill="none">
+    <Svg width={size} height={height} viewBox="0 0 20 15" fill="none">
       <Path
-        d="M5.586 17.586v-8H2a1 1 0 01-.707-1.707l6.586-6.586a1 1 0 011.414 0l6.586 6.586a1 1 0 01-.707 1.707h-3.586v8a1 1 0 01-1 1h-4a1 1 0 01-1-1z"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        d="M1 15h18.001a1 1 0 00.997-1.063 1.003 1.003 0 00-.174-.509l-9-13.023c-.373-.54-1.271-.54-1.645 0l-9 13.023A1.002 1.002 0 001 15zm9-12.265l7.093 10.261H2.91L10 2.736z"
+        fill={color}
       />
     </Svg>
   );

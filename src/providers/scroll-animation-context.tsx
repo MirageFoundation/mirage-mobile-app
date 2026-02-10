@@ -50,9 +50,10 @@ export const ScrollAnimationProvider = ({
   children: React.ReactNode;
 }) => {
   const insets = useSafeAreaInsets();
-  const lastScrollY = useSharedValue(0);
-  const headerTranslateY = useSharedValue(0);
-  const tabBarTranslateY = useSharedValue(0);
+ const lastScrollY = useSharedValue(0);
+ const headerTranslateY = useSharedValue(0);
+ const tabBarTranslateY = useSharedValue(0);
+  const isHidden = useSharedValue(false);
 
   // Refs for scroll-to-top functionality (home)
   const scrollRef = useRef<ScrollableRef>(null);
@@ -70,28 +71,28 @@ export const ScrollAnimationProvider = ({
   const fullHeaderHeight = HEADER_HEIGHT + insets.top;
   const fullTabBarHeight = TAB_BAR_HEIGHT + insets.bottom;
 
-  const scrollHandler = useAnimatedScrollHandler({
-    onScroll: (event) => {
-      const currentY = event.contentOffset.y;
-      const diff = currentY - lastScrollY.value;
+ const scrollHandler = useAnimatedScrollHandler({
+   onScroll: (event) => {
+     const currentY = event.contentOffset.y;
+     const diff = currentY - lastScrollY.value;
 
-      if (diff > 0 && currentY > SCROLL_THRESHOLD) {
-        // Scrolling down - hide completely
-        headerTranslateY.value = withTiming(-fullHeaderHeight, {
-          duration: 200,
-        });
-        tabBarTranslateY.value = withTiming(fullTabBarHeight, {
-          duration: 200,
-        });
-      } else if (diff < -5) {
-        // Scrolling up - show
-        headerTranslateY.value = withTiming(0, { duration: 200 });
-        tabBarTranslateY.value = withTiming(0, { duration: 200 });
-      }
+      if (diff > 0 && currentY > SCROLL_THRESHOLD && !isHidden.value) {
+       headerTranslateY.value = withTiming(-fullHeaderHeight, {
+         duration: 200,
+       });
+       tabBarTranslateY.value = withTiming(fullTabBarHeight, {
+         duration: 200,
+       });
+        isHidden.value = true;
+      } else if (diff < -5 && isHidden.value) {
+       headerTranslateY.value = withTiming(0, { duration: 200 });
+       tabBarTranslateY.value = withTiming(0, { duration: 200 });
+        isHidden.value = false;
+     }
 
-      lastScrollY.value = currentY;
-    },
-  });
+     lastScrollY.value = currentY;
+   },
+ });
 
   const headerAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: headerTranslateY.value }],
@@ -112,10 +113,10 @@ export const ScrollAnimationProvider = ({
   }, []);
 
   // Scroll to top and trigger refresh
-  const scrollToTopAndRefresh = useCallback(() => {
-    // Show header and tab bar
-    headerTranslateY.value = withTiming(0, { duration: 200 });
-    tabBarTranslateY.value = withTiming(0, { duration: 200 });
+ const scrollToTopAndRefresh = useCallback(() => {
+   headerTranslateY.value = withTiming(0, { duration: 200 });
+   tabBarTranslateY.value = withTiming(0, { duration: 200 });
+    isHidden.value = false;
 
     // Scroll to top
     if (scrollRef.current) {
@@ -143,9 +144,10 @@ export const ScrollAnimationProvider = ({
     followingRefreshCallbackRef.current = callback;
   }, []);
 
-  const scrollToTopAndRefreshFollowing = useCallback(() => {
-    headerTranslateY.value = withTiming(0, { duration: 200 });
-    tabBarTranslateY.value = withTiming(0, { duration: 200 });
+ const scrollToTopAndRefreshFollowing = useCallback(() => {
+   headerTranslateY.value = withTiming(0, { duration: 200 });
+   tabBarTranslateY.value = withTiming(0, { duration: 200 });
+    isHidden.value = false;
 
     if (followingScrollRef.current) {
       if ("scrollToOffset" in followingScrollRef.current) {
@@ -169,10 +171,10 @@ export const ScrollAnimationProvider = ({
     profileRefreshCallbackRef.current = callback;
   }, []);
 
-  const scrollToTopAndRefreshProfile = useCallback(() => {
-    // Show header and tab bar
-    headerTranslateY.value = withTiming(0, { duration: 200 });
-    tabBarTranslateY.value = withTiming(0, { duration: 200 });
+ const scrollToTopAndRefreshProfile = useCallback(() => {
+   headerTranslateY.value = withTiming(0, { duration: 200 });
+   tabBarTranslateY.value = withTiming(0, { duration: 200 });
+    isHidden.value = false;
 
     // Scroll to top
     if (profileScrollRef.current) {

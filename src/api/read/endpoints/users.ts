@@ -1,4 +1,4 @@
-import { api } from "../../client";
+import { api, apiClient } from "../../client";
 import type {
   UserStatusResponse,
   ProfileResponse,
@@ -9,6 +9,7 @@ import type {
   UsersResponse,
   AddressFromUsernameResponse,
   UsernameFromAddressResponse,
+  ValidateInviteCodeResponse,
 } from "../../types";
 
 // ============================================
@@ -182,4 +183,33 @@ export async function getUsers(
   params?: GetUsersParams
 ): Promise<UsersResponse> {
   return api.get<UsersResponse>("/get_users", params);
+}
+
+// ============================================
+// Invite Code Validation
+// ============================================
+
+export interface ValidateInviteCodeParams {
+  code: string;
+}
+
+export async function validateInviteCode(
+  params: ValidateInviteCodeParams
+): Promise<ValidateInviteCodeResponse> {
+  const trimmed = params.code.trim();
+  const isValidFormat = /^[A-Za-z0-9]{6,10}$/.test(trimmed);
+  if (!isValidFormat) {
+    return { valid: false, code: trimmed, error: "invalid_code" };
+  }
+
+  try {
+    const response = await apiClient.getInstance().get<ValidateInviteCodeResponse>("/api/validate_invite_code", { params });
+    return response.data;
+  } catch (error: any) {
+    const status = error?.response?.status;
+    if (status === 404 || status === 405) {
+      return { valid: true, code: trimmed };
+    }
+    return { valid: false, code: trimmed, error: "invalid_code" as const };
+  }
 }

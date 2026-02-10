@@ -23,6 +23,7 @@ import { useDebouncedSearch, usePosts, useTopics } from "@/src/api/read";
 import type { Post, TopicInfo, UserInfo } from "@/src/api/types";
 import { TimeAgo } from "@/src/components/atoms/time-ago";
 import { Box, Text } from "@/src/components/ui/primitives";
+import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useSearchStore, type RecentSearch } from "@/src/stores";
 
@@ -169,12 +170,14 @@ export function SearchScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const inputRef = useRef<TextInput>(null);
-  const { q } = useLocalSearchParams<{ q?: string }>();
+  const { q, tab } = useLocalSearchParams<{ q?: string; tab?: string }>();
 
   // Local state
   const [searchQuery, setSearchQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
-  const [activeTab, setActiveTab] = useState<SearchTab>("posts");
+  const [activeTab, setActiveTab] = useState<SearchTab>(
+    tab === "topics" || tab === "users" ? tab : "posts",
+  );
 
   // State for viewing posts within a specific topic
   const [selectedTopic, setSelectedTopic] = useState<TopicInfo | null>(null);
@@ -220,6 +223,9 @@ export function SearchScreen() {
   useEffect(() => {
     if (q) {
       setSearchQuery(q);
+    }
+    if (tab === "topics" || tab === "users") {
+      setActiveTab(tab);
     }
     const timer = setTimeout(() => {
       inputRef.current?.focus();
@@ -276,26 +282,25 @@ export function SearchScreen() {
     clearRecentSearches();
   }, [clearRecentSearches]);
 
-  const handleTrendingTopicPress = useCallback(
-    (topic: TopicInfo) => {
-      triggerHaptic("light");
-      setSearchQuery(topic.topic);
-      addRecentSearch(topic.topic);
-      Keyboard.dismiss();
-    },
-    [addRecentSearch],
-  );
+ const handleTrendingTopicPress = useCallback(
+   (topic: TopicInfo) => {
+     triggerHaptic("light");
+     addRecentSearch(topic.topic);
+     Keyboard.dismiss();
+      router.push(`/topic/${encodeURIComponent(topic.topic)}`);
+   },
+    [addRecentSearch, router],
+ );
 
-  const handleTopicResultPress = useCallback(
-    (topic: TopicInfo) => {
-      triggerHaptic("light");
-      addRecentSearch(topic.topic);
-      Keyboard.dismiss();
-      // Set selected topic to show posts within topics tab
-      setSelectedTopic(topic);
-    },
-    [addRecentSearch],
-  );
+ const handleTopicResultPress = useCallback(
+   (topic: TopicInfo) => {
+     triggerHaptic("light");
+     addRecentSearch(topic.topic);
+     Keyboard.dismiss();
+      router.push(`/topic/${encodeURIComponent(topic.topic)}`);
+   },
+    [addRecentSearch, router],
+ );
 
   const handleBackFromTopic = useCallback(() => {
     triggerHaptic("light");
@@ -521,9 +526,9 @@ export function SearchScreen() {
                   {item.title}
                 </Text>
               ) : item.content ? (
-                <Text size="md" numberOfLines={2} style={styles.postTitle}>
-                  {item.content}
-                </Text>
+                <View>
+                  <MarkdownContent content={item.content} />
+                </View>
               ) : null}
 
               {/* Upvotes + dot + comments */}
@@ -1301,7 +1306,7 @@ const styles = StyleSheet.create((theme) => ({
   topicResultItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm + 4,
     paddingHorizontal: theme.spacing.md,
     gap: theme.spacing.sm,
   },
@@ -1342,7 +1347,7 @@ const styles = StyleSheet.create((theme) => ({
   userResultItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm + 4,
     paddingHorizontal: theme.spacing.md,
     gap: theme.spacing.md,
   },

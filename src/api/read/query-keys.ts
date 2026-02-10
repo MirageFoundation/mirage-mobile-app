@@ -50,6 +50,7 @@ export const queryKeys = {
   networkStats: () => ["stats", "network"] as const,
   circulationStats: () => ["stats", "circulation"] as const,
   appStats: () => ["stats", "app"] as const,
+  welcomeStats: () => ["stats", "welcome"] as const,
   leaderboard: (days?: number, page?: number) =>
     ["leaderboard", days, page] as const,
 
@@ -58,4 +59,7 @@ export const queryKeys = {
 
   // Peers
   peers: () => ["peers"] as const,
+
+  // Invite Code
+  inviteCode: (code: string) => ["inviteCode", code] as const,
 } as const;

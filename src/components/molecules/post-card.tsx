@@ -1,10 +1,13 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Text } from "@/src/components/ui/primitives";
+import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { logPress } from "@/src/utils/press-logger";
-import { memo, useCallback, useMemo, useState } from "react";
+import { setLastPressedPostY } from "@/src/utils/post-transition";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   Linking,
   Pressable,
+  View,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
@@ -27,13 +30,14 @@ type PostCardProps = {
   /** Whether to show the follow button (default: true) */
   showFollowButton?: boolean;
   /** Whether the topic is followed */
-  isTopicFollowed?: boolean;
-  /** Whether video autoplay is allowed based on user settings and network */
+isTopicFollowed?: boolean;
+/** Whether video autoplay is allowed based on user settings and network */
   allowAutoplay?: boolean;
   /** Whether the screen/feed is active (for pausing videos) */
   screenActive?: boolean;
   onPress?: () => void;
   onAuthorPress?: () => void;
+  onTopicPress?: () => void;
   onFollowUser?: () => void;
   onFollowTopic?: () => void;
   onMorePress?: () => void;
@@ -45,10 +49,13 @@ type PostCardProps = {
   onBlockPost?: () => void;
   onReport?: () => void;
   onRevealContent?: () => void;
+  onMediaPress?: () => void;
   contentRevealed?: boolean;
   shareUrl?: string;
   /** Whether to show the URL card/Play Now row (default: true) */
   showUrlCard?: boolean;
+  hideCommentAction?: boolean;
+  topicDisabled?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -70,12 +77,13 @@ function arePostCardPropsEqual(
   if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
   if (prevProps.isVisible !== nextProps.isVisible) return false;
   if (prevProps.showFollowButton !== nextProps.showFollowButton) return false;
-  if (prevProps.isTopicFollowed !== nextProps.isTopicFollowed) return false;
-  if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
+ if (prevProps.isTopicFollowed !== nextProps.isTopicFollowed) return false;
+if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
   if (prevProps.screenActive !== nextProps.screenActive) return false;
   if (prevProps.contentRevealed !== nextProps.contentRevealed) return false;
   if (prevProps.shareUrl !== nextProps.shareUrl) return false;
   if (prevProps.showUrlCard !== nextProps.showUrlCard) return false;
+  if (prevProps.topicDisabled !== nextProps.topicDisabled) return false;
 
   return true;
 }
@@ -85,11 +93,12 @@ export const PostCard = memo(function PostCard({
   isOwnPost = false,
   isVisible = false,
   showFollowButton = true,
-  isTopicFollowed = false,
-  allowAutoplay = true,
+isTopicFollowed = false,
+allowAutoplay = true,
   screenActive = true,
   onPress,
   onAuthorPress,
+  onTopicPress,
   onFollowUser,
   onFollowTopic,
   onMorePress,
@@ -101,9 +110,12 @@ export const PostCard = memo(function PostCard({
   onBlockPost,
   onReport,
   onRevealContent,
+  onMediaPress: onMediaPressProp,
   contentRevealed = false,
   shareUrl,
   showUrlCard = true,
+  hideCommentAction = false,
+  topicDisabled = false,
   style,
 }: PostCardProps) {
   if (__DEV__) {
@@ -132,10 +144,19 @@ export const PostCard = memo(function PostCard({
     [body, media],
   );
 
+  const containerRef = useRef<View>(null);
+
   const handlePress = useCallback(() => {
     triggerHaptic("selection");
     logPress({ name: "post_card", postId: post.id });
-    onPress?.();
+    if (containerRef.current) {
+      containerRef.current.measureInWindow((_x, y) => {
+        setLastPressedPostY(y);
+        onPress?.();
+      });
+    } else {
+      onPress?.();
+    }
   }, [onPress, post.id]);
 
   const handlePlayNowPress = useCallback(() => {
@@ -147,24 +168,30 @@ export const PostCard = memo(function PostCard({
   const [showMediaPreview, setShowMediaPreview] = useState(false);
 
   const handleMediaPress = useCallback(() => {
-    setShowMediaPreview(true);
-  }, []);
+    if (onMediaPressProp) {
+      onMediaPressProp();
+    } else {
+      setShowMediaPreview(true);
+    }
+  }, [onMediaPressProp]);
 
   const handleCloseMediaPreview = useCallback(() => {
     setShowMediaPreview(false);
   }, []);
 
   return (
-    <Pressable onPress={handlePress} style={[styles.container, style]}>
+    <Pressable ref={containerRef} onPress={handlePress} style={[styles.container, style]}>
       <PostCardHeader
         author={author}
         topic={topic}
         createdAt={createdAt}
         isOwnPost={isOwnPost}
         isFollowing={isFollowing}
-        isTopicFollowed={isTopicFollowed}
-        showFollowButton={showFollowButton}
-        onAuthorPress={onAuthorPress}
+      isTopicFollowed={isTopicFollowed}
+      showFollowButton={showFollowButton}
+       onAuthorPress={onAuthorPress}
+        onTopicPress={topicDisabled ? undefined : onTopicPress}
+        topicDisabled={topicDisabled}
         onFollowUser={onFollowUser}
         onFollowTopic={onFollowTopic}
         onMorePress={onMorePress}
@@ -194,10 +221,10 @@ export const PostCard = memo(function PostCard({
         onMediaPress={handleMediaPress}
       />
 
-      {resolvedContent.bodyWithoutUrl && !shouldBlurContent && (
-        <Text size="md" style={styles.body}>
-          {resolvedContent.bodyWithoutUrl}
-        </Text>
+     {resolvedContent.bodyWithoutUrl && !shouldBlurContent && (
+        <View style={styles.body}>
+          <MarkdownContent content={resolvedContent.bodyWithoutUrl} />
+        </View>
       )}
 
       <PostActions
@@ -217,6 +244,7 @@ export const PostCard = memo(function PostCard({
         onBlockUser={onBlockUser}
         onBlockPost={onBlockPost}
         onReport={onReport}
+        hideCommentAction={hideCommentAction}
         style={styles.actions}
       />
 

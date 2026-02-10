@@ -7,15 +7,15 @@ type DownvoteFilledIconProps = {
 };
 
 function DownvoteFilledIcon({
-  size = 18,
+  size = 20,
   color = "#000",
 }: DownvoteFilledIconProps) {
   // Original viewBox is 18x20, we maintain aspect ratio
-  const height = size * (20 / 18);
+  const height = size * (15 / 20);
   return (
-    <Svg width={size} height={height} viewBox="0 0 18 20" fill="none">
+    <Svg width={size} height={height} viewBox="0 0 20 15" fill="none">
       <Path
-        d="M6.586 0l-.15.005A2 2 0 004.586 2v6.999L2 9a2 2 0 00-1.414 3.414L7.172 19A2 2 0 0010 19l6.586-6.586a2 2 0 00.434-2.18l-.068-.145A2 2 0 0015.172 9l-2.586-.001V2a2 2 0 00-2-2h-4z"
+        d="M9.176 14.569a.998.998 0 001.644 0l9-13A1 1 0 0018.998 0h-18a1.002 1.002 0 00-.822 1.569l9 13z"
         fill={color}
       />
     </Svg>

@@ -1,13 +1,12 @@
 import { EvilIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import { Pressable, SectionList, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import {
   ContentTypeSheet,
-  LogoutConfirmationPopup,
   SettingRow,
   ThemeSelector,
   ValuePickerSheet,
@@ -17,10 +16,9 @@ import {
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { useQueryClear } from "@/src/providers/query-clear-provider";
 import { useApiServer } from "@/src/providers/api-server-provider";
 import { useToast } from "@/src/providers/toast-provider";
-import { useAuthStore, useDraftStore, useSearchStore, usePreferencesStore, type ThemeMode, type ApiServer, type VideoAutoplayNetwork } from "@/src/stores";
+import { usePreferencesStore, type ThemeMode, type ApiServer, type VideoAutoplayNetwork } from "@/src/stores";
 
 // Auto-collapse threshold options
 const collapseThresholdOptions: ValueOption<number | null>[] = [
@@ -65,15 +63,11 @@ type Section = {
 };
 
 export function SettingsScreen() {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { theme } = useUnistyles();
+ const router = useRouter();
+ const insets = useSafeAreaInsets();
+ const { theme } = useUnistyles();
 
- // Stores
-  const logout = useAuthStore((s) => s.logout);
-  const clearDraft = useDraftStore((s) => s.clearDraft);
-  const clearRecentSearches = useSearchStore((s) => s.clearRecentSearches);
-  const { clearQueries } = useQueryClear();
+// Stores
   const { switchServer } = useApiServer();
   const toast = useToast();
   const {
@@ -107,10 +101,6 @@ export function SettingsScreen() {
   const apiServerSheetRef = useRef<ValuePickerSheetRef>(null);
   const videoAutoplayNetworkSheetRef = useRef<ValuePickerSheetRef>(null);
 
-  // Logout popup state
-  const [showLogoutPopup, setShowLogoutPopup] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-
   // Handlers
   const handleBack = useCallback(() => {
     triggerHaptic("light");
@@ -142,38 +132,12 @@ const handleApiServerChange = useCallback(
     [switchServer, apiServer, toast, router, setShareServer]
   );
 
-  const handleLogout = useCallback(async () => {
-    setIsLoggingOut(true);
-    
-    try {
-      // Clear all user data
-      await logout();
-      clearDraft();
-      clearRecentSearches();
-      await clearQueries();
-      
-      setShowLogoutPopup(false);
-      router.replace("/(tabs)");
-    } catch (error) {
-      console.error("[SettingsScreen] Logout failed:", error);
-    } finally {
-      setIsLoggingOut(false);
-    }
-  }, [logout, clearDraft, clearRecentSearches, clearQueries, router]);
-
   // Get display labels
-  const getContentTypeLabel = () => {
-    if (selectedContentTypes.includes("all")) return "All";
-    if (selectedContentTypes.includes("none")) return "None";
-    // Show "None" if only sensitive content is selected (no adult content)
-    if (
-      selectedContentTypes.length === 1 &&
-      selectedContentTypes[0] === "sensitive"
-    ) {
-      return "None";
-    }
-    if (selectedContentTypes.length === 1) {
-      return (
+ const getContentTypeLabel = () => {
+   if (selectedContentTypes.includes("all")) return "All";
+    if (selectedContentTypes.length === 0) return "None";
+   if (selectedContentTypes.length === 1) {
+     return (
         selectedContentTypes[0].charAt(0).toUpperCase() +
         selectedContentTypes[0].slice(1)
       );
@@ -365,22 +329,6 @@ const handleApiServerChange = useCallback(
         },
       ],
     },
-    {
-      title: "Account",
-      data: [
-        {
-          id: "logout",
-          component: (
-            <SettingRow
-              type="navigate"
-              icon="log-out-outline"
-              title="Log Out"
-              onPress={() => setShowLogoutPopup(true)}
-            />
-          ),
-        },
-      ],
-    },
   ];
 
   const renderItem = ({ item }: { item: SettingItem }) => {
@@ -497,13 +445,6 @@ const handleApiServerChange = useCallback(
         onChange={setVideoAutoplayNetwork}
       />
 
-      {/* Logout Confirmation */}
-      <LogoutConfirmationPopup
-        visible={showLogoutPopup}
-        onCancel={() => setShowLogoutPopup(false)}
-        onConfirm={handleLogout}
-        isLoading={isLoggingOut}
-      />
     </Box>
   );
 }

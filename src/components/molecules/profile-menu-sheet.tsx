@@ -269,7 +269,7 @@ export const ProfileMenuSheet = forwardRef<
             <MenuItem
               iconName="bookmark-outline"
               title="Saved"
-              onPress={handleSaved}
+            onPress={handleSaved}
             />
 
             <MenuItem

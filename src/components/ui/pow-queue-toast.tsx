@@ -3,7 +3,8 @@
  *
  * A persistent toast that shows when POW actions are being processed.
  * Displays queue progress (1/3), current action, and POW progress.
- * Shows brief success/error state after each action before continuing.
+ * Shows brief success/error overlay after each action while the next one
+ * starts processing concurrently in the background.
  */
 
 import { Ionicons } from "@expo/vector-icons";
@@ -35,41 +36,38 @@ export const PowQueueToast = () => {
   const { theme, rt } = useUnistyles();
   const insets = useSafeAreaInsets();
 
-  const {
-    isProcessing,
-    currentAction,
-    completedCount,
-    totalCount,
-    currentProgress,
-    lastCompletedAction,
-  } = usePowQueueStore();
+ const {
+   isProcessing,
+   currentAction,
+   completedCount,
+   totalCount,
+   currentProgress,
+   lastCompletedAction,
+   successOverlay,
+   queue,
+ } = usePowQueueStore();
 
   const translateY = useRef(new Animated.Value(-100)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.95)).current;
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
   
   const [elapsedMs, setElapsedMs] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
+  const [overlayData, setOverlayData] = useState<{ type: string; success: boolean } | null>(null);
   
   const isAnimatingOutRef = useRef(false);
   const dismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wasProcessingRef = useRef(false);
 
-  // Determine visual state based on store state
-  // - currentAction exists → processing
-  // - currentAction is null but lastCompletedAction exists → showing result
-  // - neither → idle
   const isShowingResult = currentAction === null && lastCompletedAction !== null;
   const isShowingProcessing = currentAction !== null;
 
-  // Get display label
   const displayLabel = isShowingResult
     ? (lastCompletedAction.success 
         ? getSuccessLabel(lastCompletedAction.type)
         : "Failed")
-    : (currentAction?.label || "Processing...");
+    : (currentAction?.label || queue[0]?.label || "Processing...");
 
-  // Animate in
   const animateIn = () => {
     isAnimatingOutRef.current = false;
     Animated.parallel([
@@ -93,7 +91,6 @@ export const PowQueueToast = () => {
     ]).start();
   };
 
-  // Animate out
   const animateOut = () => {
     if (isAnimatingOutRef.current) return;
     isAnimatingOutRef.current = true;
@@ -120,45 +117,63 @@ export const PowQueueToast = () => {
     });
   };
 
-  // Show toast when processing starts
   useEffect(() => {
     if (isProcessing && !isVisible) {
       setIsVisible(true);
       setElapsedMs(0);
       animateIn();
     }
-    wasProcessingRef.current = isProcessing;
   }, [isProcessing, isVisible]);
 
-  // Reset timer when a new action starts
   useEffect(() => {
     if (currentAction) {
       setElapsedMs(0);
     }
   }, [currentAction?.id]);
 
- // Dismiss when processing ends (after showing final result)
  useEffect(() => {
-    // Dismiss when processing ends and we're showing the final result
-    // Don't wait for lastCompletedAction to clear - dismiss while still showing success/fail
-    if (!isProcessing && !currentAction && lastCompletedAction && isVisible) {
-      // Show the result briefly, then dismiss
-     if (dismissTimeoutRef.current) {
-       clearTimeout(dismissTimeoutRef.current);
-     }
-     dismissTimeoutRef.current = setTimeout(() => {
-       animateOut();
-      }, 1000); // Show result for 1 second before dismissing
+   if (successOverlay) {
+     setOverlayData(successOverlay);
+     overlayOpacity.setValue(0);
+     Animated.sequence([
+       Animated.timing(overlayOpacity, {
+         toValue: 1,
+         duration: 120,
+         useNativeDriver: true,
+       }),
+       Animated.delay(1200),
+       Animated.timing(overlayOpacity, {
+         toValue: 0,
+         duration: 350,
+         useNativeDriver: true,
+       }),
+     ]).start(() => {
+       setOverlayData(null);
+     });
    }
-   
-   return () => {
+ }, [successOverlay]);
+
+  useEffect(() => {
+    if (!isProcessing && !currentAction && isVisible) {
+      if (dismissTimeoutRef.current) {
+        clearTimeout(dismissTimeoutRef.current);
+      }
+      if (lastCompletedAction) {
+        dismissTimeoutRef.current = setTimeout(() => {
+          animateOut();
+        }, 1000);
+      } else {
+        animateOut();
+      }
+    }
+
+    return () => {
       if (dismissTimeoutRef.current) {
         clearTimeout(dismissTimeoutRef.current);
       }
     };
   }, [isProcessing, currentAction, lastCompletedAction, isVisible]);
 
-  // Timer for elapsed time (only when processing)
   useEffect(() => {
     if (isShowingProcessing && isVisible) {
       const interval = setInterval(() => {
@@ -172,9 +187,10 @@ export const PowQueueToast = () => {
 
   const isDark = rt.themeName === "dark";
   
-  const getColors = () => {
-    if (isShowingResult) {
-      if (lastCompletedAction.success) {
+  const getColors = (forOverlay?: { success: boolean }) => {
+    const target = forOverlay || (isShowingResult ? lastCompletedAction : null);
+    if (target) {
+      if (target.success) {
         return {
           icon: theme.colors.success[500],
           border: theme.colors.success[500] + "40",
@@ -193,31 +209,6 @@ export const PowQueueToast = () => {
   };
 
   const colors = getColors();
-
-  const ToastWrapper = Platform.OS === "ios" ? BlurView : View;
-  const wrapperProps =
-    Platform.OS === "ios"
-      ? {
-          intensity: 80,
-          tint: isDark ? ("dark" as const) : ("light" as const),
-          style: [styles.blurContainer, { borderColor: colors.border }],
-        }
-      : {
-          style: [
-            styles.blurContainer,
-            {
-              backgroundColor: isDark
-                ? "rgba(45, 48, 55, 0.92)"
-                : "rgba(255, 255, 255, 0.92)",
-              borderColor: colors.border,
-              elevation: 8,
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.15,
-              shadowRadius: 8,
-            },
-          ],
-        };
 
   const hasMultiple = totalCount > 1;
   const progressPercent = currentProgress > 0 ? `${Math.round(currentProgress)}%` : "";
@@ -257,18 +248,9 @@ export const PowQueueToast = () => {
  const showTimer = isShowingProcessing;
   const currentIndex = Math.min(completedCount + 1, totalCount);
 
- return (
-    <Animated.View
-      pointerEvents="box-none"
-      style={[
-        styles.container,
-        {
-          top: insets.top + 8,
-          transform: [{ translateY }, { scale }],
-          opacity,
-        },
-      ]}
-    >
+  const renderToastContent = (wrapperProps: any) => {
+    const ToastWrapper = Platform.OS === "ios" ? BlurView : View;
+    return (
       <ToastWrapper {...wrapperProps}>
         <View style={styles.content}>
           <View style={styles.iconContainer}>
@@ -301,6 +283,105 @@ export const PowQueueToast = () => {
           </View>
         </View>
       </ToastWrapper>
+    );
+  };
+
+  const renderOverlay = () => {
+    if (!overlayData) return null;
+
+    const overlayColors = getColors(overlayData);
+    const overlayLabel = overlayData.success
+      ? getSuccessLabel(overlayData.type as any)
+      : "Failed";
+
+    const overlayWrapperProps =
+      Platform.OS === "ios"
+        ? {
+            intensity: 80,
+            tint: isDark ? ("dark" as const) : ("light" as const),
+            style: [styles.blurContainer, { borderColor: overlayColors.border }],
+          }
+        : {
+            style: [
+              styles.blurContainer,
+              {
+                backgroundColor: isDark
+                  ? "rgba(45, 48, 55, 0.97)"
+                  : "rgba(255, 255, 255, 0.97)",
+                borderColor: overlayColors.border,
+                elevation: 10,
+              },
+            ],
+          };
+
+    const ToastWrapper = Platform.OS === "ios" ? BlurView : View;
+
+    return (
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.overlayContainer,
+          { opacity: overlayOpacity },
+        ]}
+      >
+        <ToastWrapper {...overlayWrapperProps}>
+          <View style={styles.content}>
+            <View style={styles.iconContainer}>
+              <Ionicons
+                name={overlayData.success ? "checkmark-circle" : "alert-circle"}
+                size={20}
+                color={overlayColors.icon}
+              />
+            </View>
+            <View style={styles.textContainer}>
+              <Text size="sm" weight="semibold" numberOfLines={1}>
+                {overlayLabel}
+              </Text>
+            </View>
+          </View>
+        </ToastWrapper>
+      </Animated.View>
+    );
+  };
+
+  const wrapperProps =
+    Platform.OS === "ios"
+      ? {
+          intensity: 80,
+          tint: isDark ? ("dark" as const) : ("light" as const),
+          style: [styles.blurContainer, { borderColor: colors.border }],
+        }
+      : {
+          style: [
+            styles.blurContainer,
+            {
+              backgroundColor: isDark
+                ? "rgba(45, 48, 55, 0.92)"
+                : "rgba(255, 255, 255, 0.92)",
+              borderColor: colors.border,
+              elevation: 8,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.15,
+              shadowRadius: 8,
+            },
+          ],
+        };
+
+ return (
+    <Animated.View
+      pointerEvents="box-none"
+      style={[
+        styles.container,
+        {
+          top: insets.top + 8,
+          transform: [{ translateY }, { scale }],
+          opacity,
+        },
+      ]}
+    >
+      {renderToastContent(wrapperProps)}
+      {renderOverlay()}
     </Animated.View>
   );
 };
@@ -358,5 +439,12 @@ const styles = StyleSheet.create((theme) => ({
   timerText: {
     color: theme.colors.text.subtle,
     fontVariant: ["tabular-nums"],
+  },
+  overlayContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
 }));

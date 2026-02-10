@@ -1,5 +1,6 @@
 import { TimeAgo } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
+import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { memo, useCallback } from "react";
@@ -20,12 +21,13 @@ type PostCardHeaderProps = {
   isOwnPost: boolean;
   isFollowing?: boolean;
   isTopicFollowed?: boolean;
-  /** Whether to show the follow button (default: true) */
   showFollowButton?: boolean;
   onAuthorPress?: () => void;
+  onTopicPress?: () => void;
   onFollowUser?: () => void;
   onFollowTopic?: () => void;
   onMorePress?: () => void;
+  topicDisabled?: boolean;
 };
 
 export const PostCardHeader = memo(function PostCardHeader({
@@ -37,16 +39,27 @@ export const PostCardHeader = memo(function PostCardHeader({
   isTopicFollowed,
   showFollowButton = true,
   onAuthorPress,
+  onTopicPress,
   onFollowUser,
   onFollowTopic,
   onMorePress,
+  topicDisabled = false,
 }: PostCardHeaderProps) {
   const { theme } = useUnistyles();
+
+  const isFollowingAll = topic
+    ? !!(isFollowing && isTopicFollowed)
+    : !!isFollowing;
 
   const handleAuthorPress = useCallback(() => {
     triggerHaptic("selection");
     onAuthorPress?.();
   }, [onAuthorPress]);
+
+  const handleTopicPress = useCallback(() => {
+    triggerHaptic("selection");
+    onTopicPress?.();
+  }, [onTopicPress]);
 
   const handleMorePress = useCallback(() => {
     triggerHaptic("selection");
@@ -67,12 +80,28 @@ export const PostCardHeader = memo(function PostCardHeader({
     <View style={styles.header}>
       <View style={styles.authorSection}>
         <View style={styles.authorRow}>
-          {topic && (
-            <Text size="md" weight="bold" numberOfLines={1}>
+          {topic && !topicDisabled && (
+            <Pressable
+              onPress={handleTopicPress}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+              style={({ pressed }) => [pressed && styles.usernameButtonPressed]}
+            >
+              <Text size="md" weight="bold" numberOfLines={1}>
+                #{topic}
+              </Text>
+            </Pressable>
+          )}
+          {topic && topicDisabled && (
+            <Text
+              size="md"
+              weight="bold"
+              numberOfLines={1}
+              style={{ color: theme.colors.text.subtle }}
+            >
               #{topic}
             </Text>
           )}
-          {topic && (
+          {topic && !topicDisabled && (
             <Text size="sm" style={{ color: theme.colors.text.subtle }}>
               •
             </Text>
@@ -80,7 +109,7 @@ export const PostCardHeader = memo(function PostCardHeader({
           <TimeAgo
             timestamp={createdAt}
             showSuffix={false}
-            size="sm"
+            size="md"
             style={{ color: theme.colors.text.subtle }}
           />
           <Text size="sm" style={{ color: theme.colors.text.subtle }}>
@@ -121,17 +150,25 @@ export const PostCardHeader = memo(function PostCardHeader({
                 style={[
                   styles.followButton,
                   {
-                    backgroundColor: theme.colors.primary[500],
-                    borderColor: theme.colors.primary[500],
+                    backgroundColor: isFollowingAll
+                      ? "transparent"
+                      : theme.colors.primary[500],
+                    borderColor: isFollowingAll
+                      ? theme.colors.border.default
+                      : theme.colors.primary[500],
                   },
                 ]}
               >
                 <Text
                   size="xs"
                   weight="semibold"
-                  style={{ color: theme.colors.background.default }}
+                  style={{
+                    color: isFollowingAll
+                      ? theme.colors.text.default
+                      : theme.colors.background.default,
+                  }}
                 >
-                  Follow
+                  {isFollowingAll ? "Unfollow" : "Follow"}
                 </Text>
               </View>
             </MenuTrigger>
@@ -153,7 +190,6 @@ export const PostCardHeader = memo(function PostCardHeader({
                 },
               }}
             >
-              {/* Follow/Unfollow Topic Option */}
               {topic && (
                 <MenuOption onSelect={handleFollowTopic}>
                   <View style={styles.menuOption}>
@@ -167,7 +203,7 @@ export const PostCardHeader = memo(function PostCardHeader({
                       }
                     />
                     <Text
-                      size="sm"
+                      size="md"
                       weight={isTopicFollowed ? "semibold" : "medium"}
                       style={
                         isTopicFollowed
@@ -181,7 +217,6 @@ export const PostCardHeader = memo(function PostCardHeader({
                 </MenuOption>
               )}
 
-              {/* Follow/Unfollow User Option */}
               <MenuOption onSelect={handleFollowUser}>
                 <View style={styles.menuOption}>
                   <Ionicons
@@ -194,7 +229,7 @@ export const PostCardHeader = memo(function PostCardHeader({
                     }
                   />
                   <Text
-                    size="sm"
+                    size="md"
                     weight={isFollowing ? "semibold" : "medium"}
                     style={
                       isFollowing
@@ -209,7 +244,8 @@ export const PostCardHeader = memo(function PostCardHeader({
             </MenuOptions>
           </Menu>
         )}
-        <Pressable
+        <AnimatedPressable
+          scaleAmount={0.85}
           hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
           onPress={handleMorePress}
           style={styles.moreButton}
@@ -219,7 +255,7 @@ export const PostCardHeader = memo(function PostCardHeader({
             size={18}
             color={theme.colors.text.default}
           />
-        </Pressable>
+        </AnimatedPressable>
       </View>
     </View>
   );
@@ -258,7 +294,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     borderRadius: theme.radius.full,
     minWidth: 54,
-    height: 28,
+    height: 22,
     paddingHorizontal: 10,
     borderWidth: 1,
   },

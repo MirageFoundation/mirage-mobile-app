@@ -3,6 +3,8 @@
  *
  * Provides optimistic voting with POW queue integration.
  * Shows immediate UI feedback and queues POW actions in the background.
+ * Supports cancelling in-flight votes when user changes their mind
+ * (e.g., upvote then immediately downvote, or undo before POW finishes).
  */
 
 import { useCallback, useEffect, useRef } from "react";
@@ -48,6 +50,12 @@ export interface UseVoteHandlerReturn {
     currentLikes: number
   ) => void;
   isPending: boolean;
+}
+
+interface PendingVoteInfo {
+  actionId: string;
+  previousState: VoteState;
+  optimisticResult: VoteResult;
 }
 
 function calculateVoteResult(
@@ -110,6 +118,12 @@ function getVoteActionType(direction: VoteDirection): PowActionType {
   return "remove_vote";
 }
 
+function getDirectionFromState(hasLiked: boolean, hasDisliked: boolean): number {
+  if (hasLiked) return 1;
+  if (hasDisliked) return -1;
+  return 0;
+}
+
 export function useVoteHandler(
   options: UseVoteHandlerOptions = {}
 ): UseVoteHandlerReturn {
@@ -117,8 +131,9 @@ export function useVoteHandler(
 
   const { requireAuth } = useAuthGuard();
   const enqueue = usePowQueueStore((state) => state.enqueue);
+  const cancelAction = usePowQueueStore((state) => state.cancelAction);
 
-  const pendingVotes = useRef<Set<string>>(new Set());
+  const pendingVotes = useRef<Map<string, PendingVoteInfo>>(new Map());
   const voteMutation = useVote();
   const voteAsyncRef = useRef(voteMutation.mutateAsync);
 
@@ -134,13 +149,82 @@ export function useVoteHandler(
       currentlyDisliked: boolean,
       currentLikes: number
     ) => {
-      if (pendingVotes.current.has(targetId)) {
+      const pending = pendingVotes.current.get(targetId);
+
+      if (pending) {
+        cancelAction(pending.actionId);
+
+        pendingVotes.current.delete(targetId);
+        onRollback?.(targetId, pending.previousState);
+
+        const desiredResult = calculateVoteResult(
+          action,
+          pending.optimisticResult.hasLiked,
+          pending.optimisticResult.hasDisliked
+        );
+
+        const desiredDirection = getDirectionFromState(
+          desiredResult.hasLiked,
+          desiredResult.hasDisliked
+        );
+        const originalDirection = getDirectionFromState(
+          pending.previousState.hasLiked,
+          pending.previousState.hasDisliked
+        );
+
+        if (desiredDirection === originalDirection) {
+          return;
+        }
+
+        requireAuth(() => {
+          const likeDelta = desiredDirection - originalDirection;
+          const newResult: VoteResult = {
+            hasLiked: desiredDirection === 1,
+            hasDisliked: desiredDirection === -1,
+            likeDelta,
+            direction: desiredDirection as VoteDirection,
+          };
+
+          const actionType = getVoteActionType(newResult.direction);
+          const newActionId = generateActionId();
+
+          pendingVotes.current.set(targetId, {
+            actionId: newActionId,
+            previousState: pending.previousState,
+            optimisticResult: newResult,
+          });
+
+          enqueue({
+            id: newActionId,
+            type: actionType,
+            label: getActionLabel(actionType),
+            execute: async () => {
+              return voteAsyncRef.current({
+                target: targetId,
+                direction: newResult.direction,
+              });
+            },
+            onOptimisticUpdate: () => {
+              onOptimisticUpdate?.(targetId, newResult);
+            },
+            onSuccess: () => {
+              pendingVotes.current.delete(targetId);
+              onSuccess?.(targetId);
+            },
+            onError: () => {
+              pendingVotes.current.delete(targetId);
+            },
+            onRollback: () => {
+              pendingVotes.current.delete(targetId);
+              onRollback?.(targetId, pending.previousState);
+            },
+          });
+        });
+
         return;
       }
 
       requireAuth(() => {
-        pendingVotes.current.add(targetId);
-
         const result = calculateVoteResult(
           action,
           currentlyLiked,
@@ -155,6 +239,12 @@ export function useVoteHandler(
 
         const actionType = getVoteActionType(result.direction);
         const actionId = generateActionId();
+
+        pendingVotes.current.set(targetId, {
+          actionId,
+          previousState,
+          optimisticResult: result,
+        });
 
         enqueue({
           id: actionId,
@@ -183,7 +273,7 @@ export function useVoteHandler(
         });
       });
     },
-    [requireAuth, onOptimisticUpdate, onRollback, onSuccess, enqueue]
+    [requireAuth, onOptimisticUpdate, onRollback, onSuccess, enqueue, cancelAction]
   );
 
   const handleUpvote = useCallback(

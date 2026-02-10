@@ -64,55 +64,52 @@ const formatNumber = (num: number): string => {
 };
 
 type ProfileContentAnimatedProps = {
- username: string;
- avatarSeed?: string;
- avatarUrl?: string;
-walletAddress: string;
-balance: number;
- reserve: number;
- accountAgeDays: number;
- gradientColors: readonly string[];
- scrollY?: SharedValue<number>;
- onFollowersPress?: () => void;
- isLoading?: boolean;
+  username: string;
+  avatarSeed?: string;
+  avatarUrl?: string;
+  walletAddress: string;
+  balance: number;
+  reserve: number;
+  accountAgeDays: number;
+  gradientColors: readonly string[];
+  scrollY?: SharedValue<number>;
+  onFollowersPress?: () => void;
+  isLoading?: boolean;
 };
 
 export const ProfileContentAnimated = memo(function ProfileContentAnimated({
- username,
- avatarSeed,
-avatarUrl,
-walletAddress,
-balance,
- reserve,
- accountAgeDays,
- gradientColors,
- scrollY,
- onFollowersPress,
- isLoading = false,
+  username,
+  avatarSeed,
+  avatarUrl,
+  walletAddress,
+  balance,
+  reserve,
+  accountAgeDays,
+  gradientColors,
+  scrollY,
+  onFollowersPress,
+  isLoading = false,
 }: ProfileContentAnimatedProps) {
-  const [copied, setCopied] = useState(false);
-  const walletScale = useRef(new RNAnimated.Value(1)).current;
+ const [copied, setCopied] = useState(false);
+ const walletScale = useRef(new RNAnimated.Value(1)).current;
+  const followingScale = useRef(new RNAnimated.Value(1)).current;
 
-  const gradientAnimation = useSharedValue(0);
+ const gradientAnimation = useSharedValue(0);
 
   useEffect(() => {
     gradientAnimation.value = withRepeat(
       withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.ease) }),
       -1,
-      true
+      true,
     );
   }, [gradientAnimation]);
 
   const gradientAnimatedStyle = useAnimatedStyle(() => {
-    const translateY = interpolate(
-      gradientAnimation.value,
-      [0, 1],
-      [0, -20]
-    );
+    const translateY = interpolate(gradientAnimation.value, [0, 1], [0, -20]);
     const scale = interpolate(
       gradientAnimation.value,
       [0, 0.5, 1],
-      [1, 1.05, 1]
+      [1, 1.05, 1],
     );
     return {
       transform: [{ translateY }, { scale }],
@@ -124,7 +121,7 @@ balance,
     if (walletAddress.length <= 13) return walletAddress;
     return `${walletAddress.slice(
       0,
-      6
+      6,
     )}.....................${walletAddress.slice(-4)}`;
   }, [walletAddress]);
 
@@ -155,13 +152,31 @@ balance,
   }, [walletScale]);
 
   const handleWalletPressOut = useCallback(() => {
-    RNAnimated.spring(walletScale, {
+   RNAnimated.spring(walletScale, {
+     toValue: 1,
+     useNativeDriver: true,
+     friction: 8,
+     tension: 100,
+   }).start();
+ }, [walletScale]);
+
+  const handleFollowingPressIn = useCallback(() => {
+    RNAnimated.spring(followingScale, {
+      toValue: 0.92,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 100,
+    }).start();
+  }, [followingScale]);
+
+  const handleFollowingPressOut = useCallback(() => {
+    RNAnimated.spring(followingScale, {
       toValue: 1,
       useNativeDriver: true,
       friction: 8,
       tension: 100,
     }).start();
-  }, [walletScale]);
+  }, [followingScale]);
 
   const contentFadeStyle = useAnimatedStyle(() => {
     if (!scrollY) return { opacity: 1 };
@@ -170,7 +185,7 @@ balance,
       scrollY.value,
       [0, SCROLL_THRESHOLD * 0.6, SCROLL_THRESHOLD],
       [1, 0.3, 0],
-      "clamp"
+      "clamp",
     );
 
     return { opacity };
@@ -178,7 +193,7 @@ balance,
 
   const gradientColorsArray = useMemo(
     () => [...gradientColors] as [string, string, ...string[]],
-    [gradientColors]
+    [gradientColors],
   );
 
   return (
@@ -209,20 +224,26 @@ balance,
             )}
           </Box>
 
-        <Pressable onPress={onFollowersPress}>
-          <Box direction="row" alignItems="center" mt="xs">
-              <Text size="sm" weight="medium" style={styles.whiteText}>
-                following
-              </Text>
-              <Icon
-                icon={Ionicons}
-                name="chevron-forward"
-                size={14}
-                color="rgba(255,255,255,0.8)"
-                style={{ marginLeft: 2 }}
-              />
-           </Box>
-         </Pressable>
+          <RNAnimated.View style={{ transform: [{ scale: followingScale }], alignSelf: "flex-start" }}>
+            <Pressable
+              onPress={onFollowersPress}
+              onPressIn={handleFollowingPressIn}
+              onPressOut={handleFollowingPressOut}
+            >
+              <Box direction="row" alignItems="center" mt="xs">
+                <Text size="md" weight="medium" style={styles.whiteText}>
+                  following
+                </Text>
+                <Icon
+                  icon={Ionicons}
+                  name="chevron-forward"
+                  size={14}
+                  color="rgba(255,255,255,0.8)"
+                  style={{ marginLeft: 2 }}
+                />
+              </Box>
+            </Pressable>
+          </RNAnimated.View>
 
           <RNAnimated.View
             style={[
@@ -340,16 +361,16 @@ const styles = StyleSheet.create((theme) => ({
   profileContentInner: {
     paddingBottom: theme.spacing.lg,
   },
- whiteText: {
-   color: "#FFFFFF",
- },
- usernameContentSkeleton: {
-   width: 120,
-   height: 24,
-   borderRadius: 4,
-   backgroundColor: "rgba(255,255,255,0.2)",
- },
- walletAnimatedContainer: {
+  whiteText: {
+    color: "#FFFFFF",
+  },
+  usernameContentSkeleton: {
+    width: 120,
+    height: 24,
+    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.2)",
+  },
+  walletAnimatedContainer: {
     alignSelf: "flex-start",
     marginTop: theme.spacing.sm,
   },

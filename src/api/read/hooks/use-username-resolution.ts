@@ -31,20 +31,21 @@ export function useAddressFromUsername(username: string | undefined | null) {
  */
 export function useUsernameAvailability(username: string | undefined | null) {
   const isEnabled = !!username && username.length >= 2;
-  const anonUsername = username ? `anon-${username}` : null;
+  const safeUsername = username ?? "__disabled__";
+  const anonUsername = `anon-${safeUsername}`;
 
   const results = useQueries({
     queries: [
       {
-        queryKey: queryKeys.addressFromUsername(username!),
-        queryFn: () => getAddressFromUsername({ username: username! }),
+        queryKey: queryKeys.addressFromUsername(safeUsername),
+        queryFn: () => getAddressFromUsername({ username: safeUsername }),
         enabled: isEnabled,
         staleTime: 1000 * 60 * 5,
         gcTime: 1000 * 60 * 60,
       },
       {
-        queryKey: queryKeys.addressFromUsername(anonUsername!),
-        queryFn: () => getAddressFromUsername({ username: anonUsername! }),
+        queryKey: queryKeys.addressFromUsername(anonUsername),
+        queryFn: () => getAddressFromUsername({ username: anonUsername }),
         enabled: isEnabled,
         staleTime: 1000 * 60 * 5,
         gcTime: 1000 * 60 * 60,

@@ -22,6 +22,7 @@ src/api/write/
 │   ├── use-block.ts
 │   ├── use-send-tokens.ts
 │   ├── use-subscription.ts
+│   ├── use-bridge-burn.ts
 │   └── use-report.ts
 │
 ├── endpoints/
@@ -32,7 +33,8 @@ src/api/write/
 │   ├── social.ts
 │   ├── moderation.ts
 │   ├── tokens.ts
-│   └── subscription.ts
+│   ├── subscription.ts
+│   └── bridge.ts
 │
 └── signing/
     ├── index.ts
@@ -81,10 +83,22 @@ src/api/write/
 - Tag 5 (pow) is only in signed bytes, not base bytes
 - Tag 10 (signature) is NOT included
 
+### On-Chain Envelope Fields
+
+The on-chain message uses these field names for the envelope. The relay API body uses shorter names:
+
+| On-chain Field | Type | Relay API Body Field |
+|----------------|------|---------------------|
+| `envelope_pubkey` | `bytes` (33-byte compressed secp256k1) | `pubkey` (base64) |
+| `envelope_block_hash` | `bytes` (recent block hash) | `last_block_hash` (hex) |
+| `envelope_difficulty` | `uint64` | `pow_difficulty` |
+| `envelope_pow` | `uint64` | `pow` |
+| `envelope_timestamp` | `uint64` (unix ms) | `timestamp` |
+| `envelope_signature` | `bytes` (64-byte compact secp256k1) | `signature` (base64) |
+
 ---
 
 ## Canonical Byte Builders (`src/wallet/canonical.ts`)
-
 ### Core Utilities
 
 ```typescript
@@ -499,6 +513,63 @@ interface ReportParams {
 
 ---
 
+### `MsgBridgeBurn`
+
+**Endpoint:** `POST /core/bridge_burn`
+
+**Purpose**: Burns MIRAGE tokens to bridge them to an external chain (e.g., Solana). Orchestrators pick up the burn event and mint on the destination chain.
+
+**Canonical Tags:**
+- 100: `destination_chain` (string, e.g. "solana")
+- 101: `destination_address` (string, recipient on destination chain)
+- 102: `amount` (uvarint, integer umirage — must be > bridge fee)
+
+```typescript
+interface BridgeBurnParams {
+  pubkey33: Uint8Array;
+  lastBlockHashBytes: Uint8Array;
+  difficulty: number;
+  timestampMs: number;
+  destination_chain: string;    // e.g. "solana"
+  destination_address: string;  // Recipient on destination chain
+  amount: number;               // umirage (integer, must be > bridge fee)
+}
+
+function canonBaseBridgeBurn(params: BridgeBurnParams): Uint8Array
+```
+
+**API Body:**
+```typescript
+{
+  pubkey: string;              // base64
+  signature: string;           // base64
+  timestamp: number;           // ms
+  last_block_hash: string;     // hex
+  pow_difficulty: number;
+  pow: number;
+  destination_chain: string;
+  destination_address: string;
+  amount: number;              // umirage
+}
+```
+
+**Response:**
+```typescript
+interface BridgeBurnResponse {
+  tx_hash: string;
+  code: number;
+  height: number;
+  raw_log: string;
+  burn_id: number;  // Sequence number used by orchestrators to attest the mint
+}
+```
+
+> **Note**: `BridgeAttestBurned` and `BridgeAttestMinted` are **validator-only** messages
+> (signed directly by the validator operator key, no envelope). These are NOT user-facing
+> and should not be implemented in the mobile app.
+
+---
+
 ## Proof of Work Implementation (`src/wallet/pow.ts`)
 
 ### Argon2id Parameters
@@ -732,6 +803,7 @@ export function useVoteWithConfirmation() {
 | `POST /core/send_tokens` | MsgSendTokens | Level 0 only | |
 | `POST /core/upgrade_level` | MsgUpgradeLevel | **Never** | pow=0, difficulty=0 |
 | `POST /core/set_auto_renewal` | MsgSetAutoRenewal | **Never** | pow=0, difficulty=0 |
+| `POST /core/bridge_burn` | MsgBridgeBurn | Level 0 only | Burns tokens to bridge to external chain |
 | `POST /core/report` | - | Level 0 only | DB-backed, not on-chain |
 
 ---
@@ -800,6 +872,7 @@ If signatures fail:
 | `useSendTokens` | `/core/send_tokens` | |
 | `useUpgradeLevel` | `/core/upgrade_level` | No PoW |
 | `useSetAutoRenewal` | `/core/set_auto_renewal` | No PoW |
+| `useBridgeBurn` | `/core/bridge_burn` | Bridges tokens to external chain |
 | `useReport` | `/core/report` | DB-backed |
 
 ---
@@ -816,3 +889,6 @@ If signatures fail:
 - [ ] Mutations invalidate correct queries
 - [ ] Error messages display properly
 - [ ] Optimistic updates work for votes
+- [ ] BridgeBurn canonical bytes encode destination_chain, destination_address, amount correctly
+- [ ] BridgeBurn response includes burn_id for tracking
+- [ ] On-chain envelope field names map correctly to relay API body fields

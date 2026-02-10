@@ -30,6 +30,8 @@ type PostOptionsSheetProps = {
   isTopicFollowed?: boolean;
   /** Whether the user is currently followed */
   isFollowingUser?: boolean;
+  /** Whether the post is currently saved */
+  isSaved?: boolean;
   /** Callback when show fewer is pressed */
   onShowFewer?: () => void;
   /** Callback when follow/unfollow user is pressed */
@@ -166,8 +168,8 @@ const MenuItem = ({
   const color = disabled
     ? theme.colors.text.muted
     : isDestructive
-    ? theme.colors.error[500]
-    : theme.colors.text.subtle;
+      ? theme.colors.error[500]
+      : theme.colors.text.subtle;
 
   return (
     <Pressable
@@ -200,6 +202,7 @@ export const PostOptionsSheet = forwardRef<
       isOwnPost = false,
       isTopicFollowed = false,
       isFollowingUser = false,
+      isSaved = false,
       onShowFewer,
       onFollowUser,
       onFollowTopic,
@@ -212,7 +215,7 @@ export const PostOptionsSheet = forwardRef<
       onReport,
       onDismiss,
     },
-    ref
+    ref,
   ) => {
     const bottomSheetRef = useRef<BottomSheetModal>(null);
     const { theme } = useUnistyles();
@@ -238,7 +241,7 @@ export const PostOptionsSheet = forwardRef<
           onDismiss?.();
         }
       },
-      [onDismiss]
+      [onDismiss],
     );
 
     const renderBackdrop = useCallback(
@@ -250,18 +253,18 @@ export const PostOptionsSheet = forwardRef<
           opacity={0.5}
         />
       ),
-      []
+      [],
     );
 
     const getShareUrl = useCallback(() => {
       if (!post?.id) return "";
-      return `${getShareBaseUrl(shareServer)}/post/${post.id}`;
+      return `${getShareBaseUrl(shareServer)}/view_post?post_id=${post.id}`;
     }, [post?.id, shareServer]);
 
     const getShareMessage = useCallback(() => {
       const url = getShareUrl();
-      return post?.title ? `${post.title}\n${url}` : url;
-    }, [post?.title, getShareUrl]);
+      return `What do you think about this? 🗳️\n${url}`;
+    }, [getShareUrl]);
 
     // Share handlers
     const handleShareApp = useCallback(
@@ -271,14 +274,14 @@ export const PostOptionsSheet = forwardRef<
         switch (appId) {
           case "whatsapp": {
             const url = `whatsapp://send?text=${encodeURIComponent(
-              getShareMessage()
+              getShareMessage(),
             )}`;
             const canOpen = await Linking.canOpenURL(url);
             if (canOpen) {
               await Linking.openURL(url);
             } else {
               await Linking.openURL(
-                `https://wa.me/?text=${encodeURIComponent(getShareMessage())}`
+                `https://wa.me/?text=${encodeURIComponent(getShareMessage())}`,
               );
             }
             break;
@@ -299,7 +302,7 @@ export const PostOptionsSheet = forwardRef<
           }
           case "telegram": {
             const url = `tg://msg_url?url=${encodeURIComponent(
-              getShareUrl()
+              getShareUrl(),
             )}&text=${encodeURIComponent(post?.title || "")}`;
             const canOpen = await Linking.canOpenURL(url);
             if (canOpen) {
@@ -307,8 +310,8 @@ export const PostOptionsSheet = forwardRef<
             } else {
               await Linking.openURL(
                 `https://t.me/share/url?url=${encodeURIComponent(
-                  getShareUrl()
-                )}&text=${encodeURIComponent(post?.title || "")}`
+                  getShareUrl(),
+                )}&text=${encodeURIComponent(post?.title || "")}`,
               );
             }
             break;
@@ -333,7 +336,7 @@ export const PostOptionsSheet = forwardRef<
         }
         dismiss();
       },
-      [getShareMessage, getShareUrl, post?.title, dismiss]
+      [getShareMessage, getShareUrl, post?.title, dismiss],
     );
 
     // Menu handlers
@@ -398,7 +401,7 @@ export const PostOptionsSheet = forwardRef<
       ({ item }: { item: ShareApp }) => (
         <ShareAppButton item={item} onPress={handleShareApp} />
       ),
-      [handleShareApp]
+      [handleShareApp],
     );
 
     return (
@@ -450,8 +453,8 @@ export const PostOptionsSheet = forwardRef<
             {/* Save Post */}
             <MenuItem
               iconComponent={Feather}
-              iconName="bookmark"
-              title="Save"
+              iconName={isSaved ? "bookmark" : "bookmark"}
+              title={isSaved ? "Unsave" : "Save"}
               onPress={handleSave}
             />
 
@@ -477,7 +480,7 @@ export const PostOptionsSheet = forwardRef<
               />
             )}
 
-            {/* Follow/Unfollow Topic (only if post has a topic) */}
+           {/* Follow/Unfollow Topic (only if post has a topic) */}
             {post?.topic && (
               <MenuItem
                 iconComponent={Ionicons}
@@ -488,24 +491,6 @@ export const PostOptionsSheet = forwardRef<
                     : `Follow #${post.topic}`
                 }
                 onPress={handleFollowTopic}
-              />
-            )}
-
-            {/* Show Fewer Posts Like This (only for other users' posts) */}
-            {!isOwnPost && (
-              <MenuItem
-                iconName="eye-outline"
-                title="Show fewer posts like this"
-                onPress={handleShowFewer}
-              />
-            )}
-
-            {/* Hide Post (only for other users' posts) */}
-            {!isOwnPost && (
-              <MenuItem
-                iconName="eye-off-outline"
-                title="Hide"
-                onPress={handleHidePost}
               />
             )}
 
@@ -551,7 +536,7 @@ export const PostOptionsSheet = forwardRef<
         </BottomSheetView>
       </BottomSheetModal>
     );
-  }
+  },
 );
 
 PostOptionsSheet.displayName = "PostOptionsSheet";
@@ -606,9 +591,9 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm + 3,
   },
   menuItemIOS: {
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm + 3,
   },
 }));

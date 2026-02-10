@@ -14,6 +14,7 @@ import {
   useIsPostVisible,
   useShareServer,
   useVoteOverride,
+  useIsTopicDisabled,
 } from "./home-post-card-store";
 
 type HomePostCardItemProps = {
@@ -48,6 +49,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   const contentRevealed = useIsPostRevealed(post.id);
   const voteOverride = useVoteOverride(post.id);
   const isOwnPost = useIsOwnPost(post.author.id);
+  const isTopicDisabled = useIsTopicDisabled(post.topic);
   const shareServer = useShareServer();
   const allowAutoplay = useAllowAutoplay();
   const feedActive = useFeedActive();
@@ -74,6 +76,13 @@ export const HomePostCardItem = memo(function HomePostCardItem({
 
   const handleAuthorPress = useCallback(() => {
     getHandlers().onAuthorPress?.(postRef.current.author.id);
+  }, []);
+
+  const handleTopicPress = useCallback(() => {
+    const p = postRef.current;
+    if (!p.topic) return;
+    if (useHomePostCardStore.getState().disabledTopicName === p.topic) return;
+    getHandlers().onTopicPress?.(p.topic);
   }, []);
 
   const handleMorePress = useCallback(() => {
@@ -180,18 +189,21 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       screenActive={feedActive}
       onPress={handlePostPress}
       onAuthorPress={handleAuthorPress}
+      onTopicPress={handleTopicPress}
+      topicDisabled={isTopicDisabled}
       onMorePress={handleMorePress}
       onLikePress={handleLikePress}
       onDislikePress={handleDislikePress}
       onCommentPress={handleCommentPress}
-      onFollowUser={handleFollowUser}
-      onFollowTopic={handleFollowTopic}
-      onRevealContent={handleRevealContent}
-      onBlockUser={handleBlockUser}
-      onBlockPost={handleBlockPost}
-      onReport={handleReport}
-      contentRevealed={contentRevealed}
-      shareUrl={`${getShareBaseUrl(shareServer)}/post/${post.id}`}
-    />
+     onFollowUser={handleFollowUser}
+     onFollowTopic={handleFollowTopic}
+     onRevealContent={handleRevealContent}
+     onBlockUser={handleBlockUser}
+     onBlockPost={handleBlockPost}
+     onReport={handleReport}
+    onMediaPress={handlePostPress}
+    contentRevealed={contentRevealed}
+      shareUrl={`${getShareBaseUrl(shareServer)}/view_post?post_id=${post.id}`}
+  />
   );
 }, areHomePostCardItemPropsEqual);

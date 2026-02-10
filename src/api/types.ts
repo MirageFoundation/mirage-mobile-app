@@ -19,7 +19,7 @@ export interface PostFilters {
   address?: string;
   allowed_tags?: string;
   feed?: "home" | "following";
-  by?: "magic" | "new" | "top";
+  by?: "magic" | "newest" | "top";
 }
 
 export interface UserFilters {
@@ -39,10 +39,24 @@ export interface ParametersResponse {
 }
 
 export interface TierInfo {
-  level: number;
-  name: string;
-  price: number;
-  features: string[];
+  period_fee: string;
+  vote_weight: number;
+  max_content_length: string;
+  max_title_length: string;
+  max_followed_users: string;
+  max_followed_topics: string;
+  max_followed_mods: string;
+  max_blocked_users: string;
+  max_blocked_posts: string;
+  max_quality_posts: string;
+  editing_time_mins: string;
+  archive_duration_days: string;
+  award_permissions: number;
+  eligible_for_mod: boolean;
+  can_change_name: boolean;
+  can_have_biography: boolean;
+  can_have_avatar: boolean;
+  can_have_banner: boolean;
 }
 
 export interface ConfigResponse {
@@ -68,6 +82,9 @@ export interface ConfigResponse {
   validator_operator_address: string;
   validator_consensus_address: string;
   validator_moniker: string;
+
+  // Misc
+  giphy_api_key: string;
 }
 
 // ============================================
@@ -237,7 +254,8 @@ export interface TopicInfo {
   topic: string;
   post_count?: number;
   count?: number;
-  flags?: string[];
+  comment_count?: number;
+  flags?: Record<string, boolean>;
   dominant_tag?: string;
   dominant_ratio?: number;
 }
@@ -321,6 +339,12 @@ export interface TxStatusResponse {
 // ============================================
 // Stats & Network
 // ============================================
+
+export interface WelcomeStatsResponse {
+  registered_users: number;
+  posts_24h: number;
+  active_24h: number;
+}
 
 export interface DifficultyHistory {
   height: number;
@@ -426,6 +450,17 @@ export interface ReferralStatsResponse {
   referred_by?: string;
   last_update_ts: number;
   next_update_ts: number;
+}
+
+// ============================================
+// Invite Code
+// ============================================
+
+export interface ValidateInviteCodeResponse {
+  valid: boolean;
+  code: string;
+  error?: "invalid_code" | "already_used" | "expired";
+  message?: string;
 }
 
 // ============================================

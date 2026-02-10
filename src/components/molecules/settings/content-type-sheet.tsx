@@ -10,7 +10,10 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { ContentType, isAdultContentEnabled } from "@/src/stores/preferences-store";
+import {
+  ContentType,
+  isAdultContentEnabled,
+} from "@/src/stores/preferences-store";
 
 type ContentTypeOption = {
   value: ContentType;
@@ -18,14 +21,12 @@ type ContentTypeOption = {
   icon: string;
 };
 
-const contentTypeOptions: ContentTypeOption[] = [
-  { value: "none", label: "None", icon: "shield-checkmark-outline" },
+const individualOptions: ContentTypeOption[] = [
   { value: "sensitive", label: "Sensitive", icon: "warning-outline" },
   { value: "porn", label: "Porn", icon: "eye-off-outline" },
   { value: "violence", label: "Violence", icon: "flash-outline" },
   { value: "gore", label: "Gore", icon: "skull-outline" },
   { value: "death", label: "Death", icon: "alert-circle-outline" },
-  { value: "all", label: "All Content", icon: "globe-outline" },
 ];
 
 type ContentTypeSheetProps = {
@@ -66,7 +67,7 @@ export const ContentTypeSheet = forwardRef<
         onDismiss?.();
       }
     },
-    [onDismiss]
+    [onDismiss],
   );
 
   const renderBackdrop = useCallback(
@@ -78,7 +79,7 @@ export const ContentTypeSheet = forwardRef<
         opacity={0.5}
       />
     ),
-    []
+    [],
   );
 
   const handleSelect = useCallback(
@@ -86,14 +87,14 @@ export const ContentTypeSheet = forwardRef<
       triggerHaptic("light");
       onToggle(type);
     },
-    [onToggle]
+    [onToggle],
   );
 
-  const isSelected = (type: ContentType) => {
-    // "None" means no adult content - show as selected when only sensitive is enabled
-    if (type === "none") {
-      return !isAdultContentEnabled(selectedTypes) && !selectedTypes.includes("all");
-    }
+  const isAllSelected = selectedTypes.includes("all");
+  const isNoneSelected = selectedTypes.length === 0;
+
+  const isIndividualSelected = (type: ContentType) => {
+    if (isAllSelected) return true;
     return selectedTypes.includes(type);
   };
 
@@ -111,7 +112,6 @@ export const ContentTypeSheet = forwardRef<
       <BottomSheetView
         style={[styles.content, { paddingBottom: insets.bottom + 16 }]}
       >
-        {/* Header */}
         <View style={styles.header}>
           <Box flex>
             <Text size="lg" weight="bold">
@@ -136,10 +136,71 @@ export const ContentTypeSheet = forwardRef<
           </Pressable>
         </View>
 
-        {/* Options */}
+        <View style={styles.quickRow}>
+          <Pressable
+            onPress={() => handleSelect("all")}
+            style={[
+              styles.quickButton,
+              {
+                backgroundColor: isAllSelected
+                  ? "rgb(30,67,150)"
+                  : theme.colors.background.subtle,
+                borderColor: isAllSelected
+                  ? "rgb(30,67,150)"
+                  : theme.colors.border.default,
+              },
+            ]}
+          >
+            <Ionicons
+              name="globe-outline"
+              size={16}
+              color={isAllSelected ? "#FFFFFF" : theme.colors.text.default}
+            />
+            <Text
+              size="sm"
+              weight="medium"
+              style={{
+                color: isAllSelected ? "#FFFFFF" : theme.colors.text.default,
+              }}
+            >
+              All
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => handleSelect("none")}
+            style={[
+              styles.quickButton,
+              {
+                backgroundColor: isNoneSelected
+                  ? "rgb(30,67,150)"
+                  : theme.colors.background.subtle,
+                borderColor: isNoneSelected
+                  ? "rgb(30,67,150)"
+                  : theme.colors.border.default,
+              },
+            ]}
+          >
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={16}
+              color={isNoneSelected ? "#FFFFFF" : theme.colors.text.default}
+            />
+            <Text
+              size="sm"
+              weight="medium"
+              style={{
+                color: isNoneSelected ? "#FFFFFF" : theme.colors.text.default,
+              }}
+            >
+              None
+            </Text>
+          </Pressable>
+        </View>
+
         <View style={styles.optionsList}>
-          {contentTypeOptions.map((option) => {
-            const selected = isSelected(option.value);
+          {individualOptions.map((option) => {
+            const selected = isIndividualSelected(option.value);
 
             return (
               <Pressable
@@ -205,8 +266,24 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
+  quickRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: theme.spacing.md,
+    paddingBottom: theme.spacing.md,
+  },
+  quickButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: theme.spacing.xs,
+    flex: 1,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
   optionsList: {
-    paddingTop: theme.spacing.xs,
+    // paddingTop: theme.spacing.xs,
   },
   optionItem: {
     flexDirection: "row",

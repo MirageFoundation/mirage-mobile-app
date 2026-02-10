@@ -15,6 +15,7 @@ export {
   bulkGetAddressFromUsername,
   bulkGetUsernameFromAddress,
   getUsers,
+  validateInviteCode,
 } from "./users";
 export type {
   GetUserStatusParams,
@@ -26,6 +27,7 @@ export type {
   GetAddressFromUsernameParams,
   GetUsernameFromAddressParams,
   GetUsersParams,
+  ValidateInviteCodeParams,
 } from "./users";
 
 // Posts

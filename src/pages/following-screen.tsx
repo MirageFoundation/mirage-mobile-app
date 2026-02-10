@@ -40,6 +40,7 @@ import {
   useAuthStore,
   useContentModerationStore,
   usePreferencesStore,
+  useSavedPostsStore,
 } from "@/src/stores";
 import { HomePostList } from "./home/home-post-list";
 import { useHomePostCardStore } from "./home/home-post-card-store";
@@ -58,10 +59,24 @@ export function FollowingScreen() {
   const toast = useToast();
 
   const currentUser = useAuthStore((s) => s.user);
+  const followingFeedType = usePreferencesStore((s) => s.followingFeedType);
+  const setFollowingFeedType = usePreferencesStore(
+    (s) => s.setFollowingFeedType
+  );
   const selectedContentTypes = usePreferencesStore(
     (s) => s.selectedContentTypes
   );
-  const shareServer = usePreferencesStore((s) => s.shareServer);
+ const shareServer = usePreferencesStore((s) => s.shareServer);
+  const hideDownvotedPosts = usePreferencesStore((s) => s.hideDownvotedPosts);
+
+ const sortBy = useMemo(() => {
+    switch (followingFeedType) {
+      case "latest":
+        return "newest" as const;
+      default:
+        return "magic" as const;
+    }
+  }, [followingFeedType]);
 
   const allowedTags = useMemo(
     () => getAllowedTagsFromContentTypes(selectedContentTypes),
@@ -77,6 +92,9 @@ export function FollowingScreen() {
   // Refs for sheets
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
+
+  const lastFetchTime = useRef(0);
+  const isFetchingRef = useRef(false);
 
   // Selected post for options
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -128,7 +146,7 @@ export function FollowingScreen() {
   } = useInfinitePosts({
     limit: 20,
     feed: "following",
-    by: "magic",
+    by: sortBy,
     allowed_tags: allowedTags || undefined,
   });
 
@@ -144,17 +162,21 @@ export function FollowingScreen() {
         uniquePostsMap.set(post.post_id, post);
       }
     }
-    const uniquePosts = Array.from(uniquePostsMap.values());
+   const uniquePosts = Array.from(uniquePostsMap.values());
 
-    // Note: isFollowing is handled by HomePostCardItem via the store, not here
-    const transformedPosts = transformApiPosts(uniquePosts);
+   // Note: isFollowing is handled by HomePostCardItem via the store, not here
+    const filteredPosts = hideDownvotedPosts
+      ? uniquePosts.filter((post) => post.user_vote !== -1)
+      : uniquePosts;
 
-    // Filter out hidden posts and posts from blocked users
-    return transformedPosts.filter(
-      (post) =>
-        !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id)
-    );
-  }, [data, hiddenPostIds, blockedUserIds]);
+    const transformedPosts = transformApiPosts(filteredPosts);
+
+   // Filter out hidden posts and posts from blocked users
+   return transformedPosts.filter(
+     (post) =>
+       !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id)
+   );
+  }, [data, hiddenPostIds, blockedUserIds, hideDownvotedPosts]);
 
   // Revealed posts for content warnings
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
@@ -190,6 +212,10 @@ export function FollowingScreen() {
   const handleAuthorPress = useCallback((authorId: string) => {
     router.push(`/user/${authorId}`);
   }, [router]);
+
+ const handleTopicPress = useCallback((topic: string) => {
+    router.push(`/topic/${encodeURIComponent(topic)}`);
+ }, [router]);
 
   // Create a ref map for posts by ID for quick lookup
   const postsByIdRef = useRef<Map<string, Post>>(new Map());
@@ -404,9 +430,13 @@ export function FollowingScreen() {
   }, [selectedPost, deleteHandler]);
 
   const handleSavePost = useCallback(() => {
-    console.log("Save post:", selectedPost?.id);
-    toast.success("Post saved", "You can find it in your saved items.");
-  }, [selectedPost?.id, toast]);
+    if (!selectedPost) return;
+    const saved = useSavedPostsStore.getState().toggleSavePost(selectedPost);
+    toast.success(
+      saved ? "Post saved" : "Post unsaved",
+      saved ? "You can find it in your saved items." : "Removed from saved items.",
+    );
+  }, [selectedPost, toast]);
 
   const handleCopyText = useCallback(() => {
     toast.success("Copied", "Text copied to clipboard.");
@@ -577,8 +607,18 @@ export function FollowingScreen() {
   }, [followLoadingUsers]);
 
   const handleEndReached = useCallback(() => {
-    if (hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
+    const now = Date.now();
+    if (
+      hasNextPage &&
+      !isFetchingNextPage &&
+      !isFetchingRef.current &&
+      now - lastFetchTime.current > 1000
+    ) {
+      lastFetchTime.current = now;
+      isFetchingRef.current = true;
+      fetchNextPage().finally(() => {
+        isFetchingRef.current = false;
+      });
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
@@ -688,6 +728,7 @@ export function FollowingScreen() {
   const setHandlers = useHomePostCardStore((state) => state.setHandlers);
   const setShareServer = useHomePostCardStore((state) => state.setShareServer);
   const setFeedActive = useHomePostCardStore((state) => state.setFeedActive);
+  const setDisabledTopicName = useHomePostCardStore((state) => state.setDisabledTopicName);
 
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
   const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
@@ -719,16 +760,18 @@ export function FollowingScreen() {
   useFocusEffect(
     useCallback(() => {
       setFeedActive(true);
+      setDisabledTopicName(undefined);
       return () => {
         setFeedActive(false);
       };
-    }, [setFeedActive])
+    }, [setFeedActive, setDisabledTopicName])
   );
 
   // Store refs to latest handlers
   const handlersRef = useRef({
     handlePostPress,
     handleAuthorPress,
+    handleTopicPress,
     handleMorePress,
     handleUpvote,
     handleDownvote,
@@ -745,6 +788,7 @@ export function FollowingScreen() {
     handlersRef.current = {
       handlePostPress,
       handleAuthorPress,
+      handleTopicPress,
       handleMorePress,
       handleUpvote,
       handleDownvote,
@@ -758,28 +802,30 @@ export function FollowingScreen() {
     };
   });
 
-  // Set handlers ONCE on mount with stable wrapper functions
-  useEffect(() => {
-    setHandlers({
-      onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
-      onAuthorPress: (authorId) => handlersRef.current.handleAuthorPress(authorId),
-      onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
-      onLikePress: (postId, liked, disliked, likes) =>
-        handlersRef.current.handleUpvote(postId, liked, disliked, likes),
-      onDislikePress: (postId, liked, disliked, likes) =>
-        handlersRef.current.handleDownvote(postId, liked, disliked, likes),
-      onCommentPress: (postId) => handlersRef.current.handleCommentPress(postId),
-      onFollowUser: (authorId, username, isFollowing) =>
-        handlersRef.current.handleFollowPress(authorId, username, isFollowing),
-      onFollowTopic: (topic, isFollowed) =>
-        handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
-      onRevealContent: (postId) => handlersRef.current.handleRevealContent(postId),
-      onBlockUser: (postId, authorId, authorUsername) =>
-        handlersRef.current.handleBlockUserFromCard(postId, authorId, authorUsername),
-      onBlockPost: (postId) => handlersRef.current.handleBlockPostFromCard(postId),
-      onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
-    });
-  }, [setHandlers]);
+  useFocusEffect(
+    useCallback(() => {
+      setHandlers({
+        onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
+        onAuthorPress: (authorId) => handlersRef.current.handleAuthorPress(authorId),
+        onTopicPress: (topic) => handlersRef.current.handleTopicPress(topic),
+        onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
+        onLikePress: (postId, liked, disliked, likes) =>
+          handlersRef.current.handleUpvote(postId, liked, disliked, likes),
+        onDislikePress: (postId, liked, disliked, likes) =>
+          handlersRef.current.handleDownvote(postId, liked, disliked, likes),
+        onCommentPress: (postId) => handlersRef.current.handleCommentPress(postId),
+        onFollowUser: (authorId, username, isFollowing) =>
+          handlersRef.current.handleFollowPress(authorId, username, isFollowing),
+        onFollowTopic: (topic, isFollowed) =>
+          handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
+        onRevealContent: (postId) => handlersRef.current.handleRevealContent(postId),
+        onBlockUser: (postId, authorId, authorUsername) =>
+          handlersRef.current.handleBlockUserFromCard(postId, authorId, authorUsername),
+        onBlockPost: (postId) => handlersRef.current.handleBlockPostFromCard(postId),
+        onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
+      });
+    }, [setHandlers])
+  );
 
   return (
     <Box flex background="base">
@@ -787,7 +833,13 @@ export function FollowingScreen() {
       <View style={[styles.statusBarBackground, { height: insets.top }]} />
 
       {/* Animated Header */}
-      <FeedHeader title="Following" animatedStyle={headerAnimatedStyle} />
+      <FeedHeader
+        title="Following"
+        feedType={followingFeedType}
+        onFeedTypeChange={setFollowingFeedType}
+        onSearchPress={() => router.push("/search")}
+        animatedStyle={headerAnimatedStyle}
+      />
 
       {/* Scrollable Feed - using HomePostList for consistency with home screen */}
       <HomePostList
@@ -799,9 +851,9 @@ export function FollowingScreen() {
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}
         refreshControl={refreshControl}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.3}
-      />
+       onEndReached={handleEndReached}
+        onEndReachedThreshold={1.5}
+     />
 
       {/* Post Options Sheet */}
       <PostOptionsSheet
@@ -822,6 +874,7 @@ export function FollowingScreen() {
         onFollowUser={handleFollowUserFromSheet}
         onFollowTopic={handleFollowTopic}
         onSave={handleSavePost}
+        isSaved={selectedPost ? useSavedPostsStore.getState().isPostSaved(selectedPost.id) : false}
         onCopyText={handleCopyText}
         onReport={handleReport}
         onBlockUser={handleBlockUser}
