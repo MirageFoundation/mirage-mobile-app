@@ -36,8 +36,13 @@ import { useHomePostCardStore } from "./home/home-post-card-store";
 
 import { CommunitySelectionModal } from "./create/community-selection-modal";
 
-const URL_REGEX =
-  /^(https?:\/\/)?([‌\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
+// Strict URL validation - requires protocol (http:// or https://)
+const URL_REGEX = /^https?:\/\/[^\s<>"{}|\\^`\[\]]+$/i;
+
+// Helper to check if input looks like a URL attempt (has dot but no protocol)
+function looksLikeUrlWithoutProtocol(text: string): boolean {
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z]{2,})+/i.test(text) && !text.startsWith('http');
+}
 
 const CONTENT_WARNING_OPTIONS: { value: ContentTag; label: string }[] = [
   { value: "sensitive", label: "Sensitive" },
@@ -70,7 +75,7 @@ export function CreateScreen() {
   const [showCommunityModal, setShowCommunityModal] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
-  const [linkError, setLinkError] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [imageDimensions, setImageDimensions] = useState<{
@@ -127,11 +132,9 @@ export function CreateScreen() {
   const hasAttachment = useMemo(() => {
     return (
       showLinkInput ||
-      draft.attachmentType !== null ||
-      draft.mediaUris.length > 0 ||
-      draft.linkUrl !== null
+      draft.attachmentType !== null
     );
-  }, [showLinkInput, draft.attachmentType, draft.mediaUris, draft.linkUrl]);
+  }, [showLinkInput, draft.attachmentType]);
 
   useEffect(() => {
     const showSubscription = Keyboard.addListener("keyboardDidShow", () => {
@@ -145,6 +148,19 @@ export function CreateScreen() {
       showSubscription.remove();
       hideSubscription.remove();
     };
+  }, []);
+
+  // Clean up stale attachment state on mount
+  useEffect(() => {
+    // If attachmentType is set but there's no actual content, clear it
+    if (draft.attachmentType === "link" && !draft.linkUrl) {
+      removeAttachment();
+    } else if (
+      (draft.attachmentType === "image" || draft.attachmentType === "video") &&
+      draft.mediaUris.length === 0
+    ) {
+      removeAttachment();
+    }
   }, []);
 
   // Handle video returned from editor
@@ -282,7 +298,7 @@ export function CreateScreen() {
       setSelectedContentWarning("");
       setShowLinkInput(false);
       setLinkUrl("");
-      setLinkError(false);
+      setLinkError(null);
       setImageDimensions(null);
       setUploadedVideoUrl(null);
       setVideoDimensions(null);
@@ -352,19 +368,29 @@ export function CreateScreen() {
     if (hasAttachment && !showLinkInput) return;
     triggerHaptic("selection");
     setShowLinkInput(true);
-    setAttachment("link", "");
     setTimeout(() => linkInputRef.current?.focus(), 100);
-  }, [hasAttachment, showLinkInput, setAttachment]);
+  }, [hasAttachment, showLinkInput]);
 
   const handleLinkChange = useCallback((text: string) => {
     setLinkUrl(text);
-    if (text.length > 0) {
+    const trimmed = text.trim();
+    if (trimmed.length > 0) {
+      // Check if it's a valid URL with protocol
       const isValid = URL_REGEX.test(text);
-      setLinkError(!isValid);
+      if (isValid) {
+        setLinkError(null);
+        setAttachment("link", text);
+        updateDraft({ linkUrl: text });
+      } else if (looksLikeUrlWithoutProtocol(trimmed)) {
+        // User typed something like "google.com" - show hint to add protocol
+        setLinkError("Add https:// to the beginning of your link");
+      } else {
+        setLinkError("Please enter a valid URL (e.g., https://example.com)");
+      }
     } else {
-      setLinkError(false);
+      setLinkError(null);
     }
-  }, []);
+  }, [setAttachment, updateDraft]);
 
   const handleLinkSubmit = useCallback(() => {
     if (linkUrl && !linkError) {
@@ -376,7 +402,7 @@ export function CreateScreen() {
   const handleRemoveLink = useCallback(() => {
     setShowLinkInput(false);
     setLinkUrl("");
-    setLinkError(false);
+    setLinkError(null);
     removeAttachment();
   }, [removeAttachment]);
 
@@ -807,7 +833,7 @@ export function CreateScreen() {
                     size="xs"
                     style={{ color: theme.colors.error[500], marginLeft: 4 }}
                   >
-                    Oops, the link is not valid. Double-check, and try again.
+                    {linkError}
                   </Text>
                 </View>
               )}
