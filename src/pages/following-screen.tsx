@@ -1,18 +1,11 @@
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FlatList } from "react-native";
-import {
-  ActivityIndicator,
-  RefreshControl,
-  View,
-} from "react-native";
+import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import {
-  transformApiPosts,
-  useInfinitePosts,
   useToggleFollowUser,
   useToggleFollowTopic,
   useUserFollowed,
@@ -20,7 +13,6 @@ import {
 import {
   ConfirmationPopup,
   FeedHeader,
-  PostCardSkeletonList,
   PostOptionsSheet,
   type PostOptionsSheetRef,
   ReportSheet,
@@ -30,19 +22,16 @@ import {
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useAuthGuard, useBlockHandler, useReportHandler, useDeleteHandler, useVoteHandler, type VoteResult } from "@/src/hooks";
 import {
-  HEADER_HEIGHT,
-  TAB_BAR_HEIGHT,
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
 import { useToast } from "@/src/providers/toast-provider";
 import {
-  getAllowedTagsFromContentTypes,
   useAuthStore,
   useContentModerationStore,
   usePreferencesStore,
   useSavedPostsStore,
 } from "@/src/stores";
-import { HomePostList } from "./home/home-post-list";
+import { HomeTabbedFeed, type HomeTabbedFeedRef } from "./home/home-tabbed-feed";
 import { useHomePostCardStore } from "./home/home-post-card-store";
 
 export function FollowingScreen() {
@@ -50,63 +39,27 @@ export function FollowingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const {
-    scrollHandler,
     headerAnimatedStyle,
-    registerFollowingScrollRef,
     registerFollowingRefreshCallback,
   } = useScrollAnimationContext();
   const { requireAuth, isLoggedIn } = useAuthGuard();
   const toast = useToast();
 
   const currentUser = useAuthStore((s) => s.user);
-  const followingFeedType = usePreferencesStore((s) => s.followingFeedType);
-  const setFollowingFeedType = usePreferencesStore(
-    (s) => s.setFollowingFeedType
-  );
-  const selectedContentTypes = usePreferencesStore(
-    (s) => s.selectedContentTypes
-  );
- const shareServer = usePreferencesStore((s) => s.shareServer);
-  const hideDownvotedPosts = usePreferencesStore((s) => s.hideDownvotedPosts);
+  const shareServer = usePreferencesStore((s) => s.shareServer);
 
- const sortBy = useMemo(() => {
-    switch (followingFeedType) {
-      case "latest":
-        return "newest" as const;
-      default:
-        return "magic" as const;
-    }
-  }, [followingFeedType]);
-
-  const allowedTags = useMemo(
-    () => getAllowedTagsFromContentTypes(selectedContentTypes),
-    [selectedContentTypes]
-  );
-
-  // Ref for FlatList to enable scroll-to-top
-  const flatListRef = useRef<FlatList<Post>>(null);
-
-  // Track user-initiated refresh (tab press or pull-to-refresh)
-  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
-
-  // Refs for sheets
+  const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
 
-  const lastFetchTime = useRef(0);
-  const isFetchingRef = useRef(false);
-
-  // Selected post for options
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
-  // Global content moderation state
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
   const hidePost = useContentModerationStore((s) => s.hidePost);
   const unhidePost = useContentModerationStore((s) => s.unhidePost);
   const blockUser = useContentModerationStore((s) => s.blockUser);
 
-  // Fetch user's followed list (for showing "Following" status on posts)
   const { data: followedData } = useUserFollowed();
   const followedUsers = useMemo(
     () => followedData?.followed_users ?? [],
@@ -118,7 +71,6 @@ export function FollowingScreen() {
     [followedData]
   );
 
-  // Follow/unfollow mutation
   const toggleFollowMutation = useToggleFollowUser();
   const toggleFollowTopicMutation = useToggleFollowTopic();
   const toggleFollowAsyncRef = useRef(toggleFollowMutation.mutateAsync);
@@ -127,65 +79,14 @@ export function FollowingScreen() {
     toggleFollowAsyncRef.current = toggleFollowMutation.mutateAsync;
   }, [toggleFollowMutation.mutateAsync]);
 
-  // Track which users are currently being followed/unfollowed (for loading state)
   const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(
     new Set()
   );
   const followLoadingUsersRef = useRef<Set<string>>(new Set());
 
-  // Fetch posts from API
-  const {
-    data,
-    isLoading,
-    isError,
-    error,
-    refetch,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useInfinitePosts({
-    limit: 20,
-    feed: "following",
-    by: sortBy,
-    allowed_tags: allowedTags || undefined,
-  });
-
-  // Transform API data to UI format (includes following status)
-  const posts = useMemo(() => {
-    if (!data?.pages) return [];
-    const allPosts = data.pages.flatMap((page) => page.posts);
-
-    // Deduplicate posts by post_id (in case same post appears in multiple pages)
-    const uniquePostsMap = new Map<string, (typeof allPosts)[0]>();
-    for (const post of allPosts) {
-      if (!uniquePostsMap.has(post.post_id)) {
-        uniquePostsMap.set(post.post_id, post);
-      }
-    }
-   const uniquePosts = Array.from(uniquePostsMap.values());
-
-   // Note: isFollowing is handled by HomePostCardItem via the store, not here
-    const filteredPosts = hideDownvotedPosts
-      ? uniquePosts.filter((post) => post.user_vote !== -1)
-      : uniquePosts;
-
-    const transformedPosts = transformApiPosts(filteredPosts);
-
-   // Filter out hidden posts and posts from blocked users
-   return transformedPosts.filter(
-     (post) =>
-       !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id)
-   );
-  }, [data, hiddenPostIds, blockedUserIds, hideDownvotedPosts]);
-
-  // Revealed posts for content warnings
-  const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
-
-  // Vote overrides stored in the home post card store (shared with home)
   const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
   const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
 
-  // Vote handler with toast notifications
   const { handleUpvote, handleDownvote } = useVoteHandler({
     onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
       setVoteOverride(targetId, {
@@ -213,20 +114,11 @@ export function FollowingScreen() {
     router.push(`/user/${authorId}`);
   }, [router]);
 
- const handleTopicPress = useCallback((topic: string) => {
+  const handleTopicPress = useCallback((topic: string) => {
     router.push(`/topic/${encodeURIComponent(topic)}`);
- }, [router]);
+  }, [router]);
 
-  // Create a ref map for posts by ID for quick lookup
   const postsByIdRef = useRef<Map<string, Post>>(new Map());
-
-  useEffect(() => {
-    const map = new Map<string, Post>();
-    for (const post of posts) {
-      map.set(post.id, post);
-    }
-    postsByIdRef.current = map;
-  }, [posts]);
 
   const handleMorePress = useCallback((postId: string) => {
     const post = postsByIdRef.current.get(postId);
@@ -243,13 +135,9 @@ export function FollowingScreen() {
     [router]
   );
 
-  // Block handler with API integration
   const blockHandler = useBlockHandler({});
-
-  // Report handler with API integration
   const reportHandler = useReportHandler({});
 
-  // Delete handler with API integration
   const deleteHandler = useDeleteHandler({
     onRollback: (targetId, targetType) => {
       if (targetType === "post") {
@@ -258,7 +146,6 @@ export function FollowingScreen() {
     },
   });
 
-  // Optimistic confirm handlers
   const handleConfirmBlock = useCallback(() => {
     const pending = blockHandler.pendingBlock;
     if (pending) {
@@ -291,7 +178,6 @@ export function FollowingScreen() {
     [reportHandler, hidePost]
   );
 
-  // Sync report sheet with hook state
   useEffect(() => {
     if (reportHandler.showReportSheet) {
       reportSheetRef.current?.present();
@@ -380,7 +266,6 @@ export function FollowingScreen() {
     [requireAuth, toast]
   );
 
-  // Post options handlers
   const handleReport = useCallback(() => {
     if (selectedPost) {
       reportHandler.requestReport(selectedPost.id, "post");
@@ -577,6 +462,8 @@ export function FollowingScreen() {
     toast.success("Got it", "We'll show fewer posts like this.");
   }, [selectedPost?.id, toast]);
 
+  const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
+
   const handleRevealContent = useCallback((postId: string) => {
     setRevealedPosts((prev) => {
       const newSet = new Set(prev);
@@ -586,149 +473,26 @@ export function FollowingScreen() {
   }, []);
 
   const handleRefresh = useCallback(async () => {
-    setIsManualRefreshing(true);
-    try {
-      await refetch();
-    } catch (error) {
-      console.error("Failed to refresh following feed:", error);
-    } finally {
-      setIsManualRefreshing(false);
-    }
-  }, [refetch]);
+    await tabbedFeedRef.current?.refresh();
+  }, []);
 
-  // Register scroll ref and refresh callback for tab press scroll-to-top
   useEffect(() => {
-    registerFollowingScrollRef(flatListRef.current);
     registerFollowingRefreshCallback(handleRefresh);
-  }, [registerFollowingScrollRef, registerFollowingRefreshCallback, handleRefresh]);
+  }, [registerFollowingRefreshCallback, handleRefresh]);
 
   useEffect(() => {
     followLoadingUsersRef.current = followLoadingUsers;
   }, [followLoadingUsers]);
 
-  const handleEndReached = useCallback(() => {
-    const now = Date.now();
-    if (
-      hasNextPage &&
-      !isFetchingNextPage &&
-      !isFetchingRef.current &&
-      now - lastFetchTime.current > 1000
-    ) {
-      lastFetchTime.current = now;
-      isFetchingRef.current = true;
-      fetchNextPage().finally(() => {
-        isFetchingRef.current = false;
-      });
-    }
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
-
-  const ListEmptyComponent = useCallback(() => {
-    if (isLoading) {
-      return <PostCardSkeletonList count={5} />;
-    }
-
-    if (!isLoggedIn) {
-      return (
-        <Box flex center p="lg" style={styles.emptyContainer}>
-          <Text size="xl" weight="semibold" style={{ marginTop: 16 }}>
-            Follow people and topics
-          </Text>
-          <Text
-            size="md"
-            mode="subtle"
-            style={{ marginTop: 8, textAlign: "center", maxWidth: 280 }}
-          >
-            Sign in and follow creators or topics to build your feed.
-          </Text>
-        </Box>
-      );
-    }
-
-    if (isError) {
-      return (
-        <Box flex center p="lg" style={{ paddingTop: 100 }}>
-          <Text size="lg" weight="medium" mode="subtle">
-            Failed to load posts
-          </Text>
-          <Text
-            size="sm"
-            mode="subtle"
-            style={{ marginTop: 8, textAlign: "center" }}
-          >
-            {error?.message || "Something went wrong. Pull to refresh."}
-          </Text>
-        </Box>
-      );
-    }
-
-    return (
-      <Box flex center p="lg" style={styles.emptyContainer}>
-        <Text size="xl" weight="semibold" style={{ marginTop: 16 }}>
-          No posts yet
-        </Text>
-        <Text
-          size="md"
-          mode="subtle"
-          style={{ marginTop: 8, textAlign: "center", maxWidth: 280 }}
-        >
-          Follow some people or topics to see posts here
-        </Text>
-      </Box>
-    );
-  }, [isLoading, isLoggedIn, isError, error]);
-
-  const ListHeaderComponent = useCallback(() => {
-    if (!isManualRefreshing) return null;
-    return (
-      <Box center p="md">
-        <ActivityIndicator
-          size="small"
-          color={theme.colors.background.emphasis}
-        />
-      </Box>
-    );
-  }, [isManualRefreshing, theme.colors.background.emphasis]);
-
-  const ListFooterComponent = useCallback(() => {
-    if (!isFetchingNextPage) return null;
-    return (
-      <Box center p="md">
-        <ActivityIndicator size="small" color={theme.colors.brand[500]} />
-      </Box>
-    );
-  }, [isFetchingNextPage, theme.colors.brand]);
-
-  const listContentStyle = useMemo(
-    () => ({
-      paddingTop: insets.top + HEADER_HEIGHT,
-      paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16,
-      flexGrow: posts.length === 0 ? 1 : undefined,
-    }),
-    [insets.bottom, insets.top, posts.length]
-  );
-
-  const refreshControl = useMemo(
-    () => (
-      <RefreshControl
-        refreshing={false}
-        onRefresh={handleRefresh}
-        tintColor="transparent"
-        progressViewOffset={insets.top + HEADER_HEIGHT}
-      />
-    ),
-    [handleRefresh, insets.top]
-  );
-
-  // Set up store state (same pattern as home screen)
   const setCurrentUserId = useHomePostCardStore((state) => state.setCurrentUserId);
   const setFollowedUsers = useHomePostCardStore((state) => state.setFollowedUsers);
   const setFollowedTopicsStore = useHomePostCardStore((state) => state.setFollowedTopics);
   const setFollowLoadingUsersStore = useHomePostCardStore((state) => state.setFollowLoadingUsers);
   const setRevealedPostsStore = useHomePostCardStore((state) => state.setRevealedPosts);
- const setHandlers = useHomePostCardStore((state) => state.setHandlers);
- const setShareServer = useHomePostCardStore((state) => state.setShareServer);
+  const setHandlers = useHomePostCardStore((state) => state.setHandlers);
+  const setShareServer = useHomePostCardStore((state) => state.setShareServer);
   const setActiveFeedScreen = useHomePostCardStore((state) => state.setActiveFeedScreen);
- const setDisabledTopicName = useHomePostCardStore((state) => state.setDisabledTopicName);
+  const setDisabledTopicName = useHomePostCardStore((state) => state.setDisabledTopicName);
 
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
   const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
@@ -753,20 +517,19 @@ export function FollowingScreen() {
     setRevealedPostsStore(revealedPosts);
   }, [revealedPosts, setRevealedPostsStore]);
 
- useEffect(() => {
-   setShareServer(shareServer);
- }, [shareServer, setShareServer]);
+  useEffect(() => {
+    setShareServer(shareServer);
+  }, [shareServer, setShareServer]);
 
- const isFocused = useIsFocused();
+  const isFocused = useIsFocused();
 
- useEffect(() => {
+  useEffect(() => {
     setActiveFeedScreen(isFocused ? 'following' : null);
-   if (isFocused) {
-     setDisabledTopicName(undefined);
-   }
+    if (isFocused) {
+      setDisabledTopicName(undefined);
+    }
   }, [isFocused, setActiveFeedScreen, setDisabledTopicName]);
 
-// Store refs to latest handlers
   const handlersRef = useRef({
     handlePostPress,
     handleAuthorPress,
@@ -828,34 +591,16 @@ export function FollowingScreen() {
 
   return (
     <Box flex background="base">
-      {/* Fixed Status Bar Background */}
       <View style={[styles.statusBarBackground, { height: insets.top }]} />
 
-      {/* Animated Header */}
       <FeedHeader
         title="Following"
-        feedType={followingFeedType}
-        onFeedTypeChange={setFollowingFeedType}
         onSearchPress={() => router.push("/search")}
         animatedStyle={headerAnimatedStyle}
       />
 
-      {/* Scrollable Feed - using HomePostList for consistency with home screen */}
-     <HomePostList
-       ref={flatListRef}
-       data={posts}
-       contentContainerStyle={listContentStyle}
-       onScroll={scrollHandler}
-       ListHeaderComponent={ListHeaderComponent}
-       ListEmptyComponent={ListEmptyComponent}
-       ListFooterComponent={ListFooterComponent}
-       refreshControl={refreshControl}
-      onEndReached={handleEndReached}
-       onEndReachedThreshold={1.5}
-        feedScreen="following"
-    />
+      <HomeTabbedFeed ref={tabbedFeedRef} feedType="following" />
 
-      {/* Post Options Sheet */}
       <PostOptionsSheet
         ref={postOptionsSheetRef}
         post={selectedPost}
@@ -883,7 +628,6 @@ export function FollowingScreen() {
         onDismiss={() => setSelectedPost(null)}
       />
 
-      {/* Report Sheet */}
       <ReportSheet
         ref={reportSheetRef}
         targetType="post"
@@ -892,7 +636,6 @@ export function FollowingScreen() {
         isLoading={reportHandler.isReporting}
       />
 
-      {/* Block User Confirmation Popup */}
       <ConfirmationPopup
         visible={blockHandler.showConfirmation}
         title={`Block ${blockHandler.pendingBlock?.label || "user"}?`}
@@ -905,7 +648,6 @@ export function FollowingScreen() {
         onCancel={blockHandler.cancelBlock}
       />
 
-      {/* Delete Post Confirmation Popup */}
       <ConfirmationPopup
         visible={deleteHandler.showConfirmation}
         title="Delete this post?"
@@ -929,9 +671,5 @@ const styles = StyleSheet.create((theme) => ({
     right: 0,
     backgroundColor: theme.colors.background.default,
     zIndex: 101,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
   },
 }));

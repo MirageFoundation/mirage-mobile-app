@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const HEADER_HEIGHT = 44;
+const FEED_TAB_BAR_HEIGHT = 44;
 const TAB_BAR_HEIGHT = 56;
 const SCROLL_THRESHOLD = 50;
 
@@ -25,6 +26,7 @@ type ScrollAnimationContextType = {
   scrollHandler: ReturnType<typeof useAnimatedScrollHandler>;
   headerAnimatedStyle: ReturnType<typeof useAnimatedStyle>;
   tabBarAnimatedStyle: ReturnType<typeof useAnimatedStyle>;
+  subTabBarAnimatedStyle: ReturnType<typeof useAnimatedStyle>;
   headerTranslateY: SharedValue<number>;
   tabBarTranslateY: SharedValue<number>;
   registerScrollRef: (ref: ScrollableRef) => void;
@@ -198,6 +200,7 @@ export const ScrollAnimationProvider = ({
       scrollHandler,
       headerAnimatedStyle,
       tabBarAnimatedStyle,
+      subTabBarAnimatedStyle: headerAnimatedStyle,
       headerTranslateY,
       tabBarTranslateY,
       registerScrollRef,
@@ -246,3 +249,4 @@ export const useScrollAnimationContext = () => {
 };
 
 export { HEADER_HEIGHT, TAB_BAR_HEIGHT };
+export { FEED_TAB_BAR_HEIGHT };
