@@ -261,7 +261,7 @@ function TopicPreferenceItem({
 
   return (
     <Pressable
-      onPress={() => router.push(`/search?q=${encodeURIComponent(topic)}`)}
+      onPress={() => router.push(`/topic/${encodeURIComponent(topic)}`)}
       style={[
         styles.preferenceRow,
         { borderBottomColor: theme.colors.border.subtle },
@@ -381,7 +381,7 @@ function SimilarUserItem({ user }: { user: SimilarUser }) {
         { borderBottomColor: theme.colors.border.subtle },
       ]}
     >
-      <Avatar size="md" seed={user.address} rounded="full" />
+      <Avatar size="sm" seed={user.address} rounded="full" />
      <View style={{ flex: 1, marginLeft: 12 }}>
        <Text
           size="md"
