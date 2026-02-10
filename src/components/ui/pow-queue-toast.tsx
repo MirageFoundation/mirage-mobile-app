@@ -1,18 +1,10 @@
-/**
- * POW Queue Toast
- *
- * A persistent toast that shows when POW actions are being processed.
- * Displays queue progress (1/3), current action, and POW progress.
- * Shows brief success/error overlay after each action while the next one
- * starts processing concurrently in the background.
- */
-
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Dimensions,
   Platform,
   View,
 } from "react-native";
@@ -22,6 +14,17 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { usePowQueueStore, getSuccessLabel } from "@/src/services/pow-queue";
 import { getPowProgress } from "@/src/wallet";
 import { Text } from "./primitives";
+
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const TOAST_WIDTH = Math.round(SCREEN_WIDTH * 0.42);
+
+type PowPhase = "preparing" | "solving" | "submitting";
+
+const PHASE_LABEL: Record<PowPhase, string> = {
+  preparing: "Preparing…",
+  solving: "Solving PoW…",
+  submitting: "Submitting…",
+};
 
 const formatElapsedTime = (ms: number): string => {
   const seconds = ms / 1000;
@@ -35,47 +38,52 @@ const formatElapsedTime = (ms: number): string => {
 
 const formatHashRate = (rate: number): string => {
   if (rate >= 1000) {
-    return `${(rate / 1000).toFixed(1)}k`;
+    return `${(rate / 1000).toFixed(1)}k h/s`;
   }
-  return `${Math.round(rate)}`;
+  return `${Math.round(rate)} h/s`;
 };
 
 export const PowQueueToast = () => {
   const { theme, rt } = useUnistyles();
   const insets = useSafeAreaInsets();
 
- const {
-   isProcessing,
-   currentAction,
-   completedCount,
-   totalCount,
-   currentProgress,
-   lastCompletedAction,
-   successOverlay,
-   queue,
- } = usePowQueueStore();
+  const {
+    isProcessing,
+    currentAction,
+    completedCount,
+    totalCount,
+    lastCompletedAction,
+    successOverlay,
+    queue,
+  } = usePowQueueStore();
 
   const translateY = useRef(new Animated.Value(-100)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.95)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
-  
+
   const [elapsedMs, setElapsedMs] = useState(0);
   const [hashRate, setHashRate] = useState(0);
+  const [phase, setPhase] = useState<PowPhase>("preparing");
   const [isVisible, setIsVisible] = useState(false);
-  const [overlayData, setOverlayData] = useState<{ type: string; success: boolean } | null>(null);
-  
+  const [overlayData, setOverlayData] = useState<{
+    type: string;
+    success: boolean;
+  } | null>(null);
+
   const isAnimatingOutRef = useRef(false);
   const dismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const powStartedRef = useRef(false);
 
-  const isShowingResult = currentAction === null && lastCompletedAction !== null;
+  const isShowingResult =
+    currentAction === null && lastCompletedAction !== null;
   const isShowingProcessing = currentAction !== null;
 
   const displayLabel = isShowingResult
-    ? (lastCompletedAction.success 
-        ? getSuccessLabel(lastCompletedAction.type)
-        : "Failed")
-    : (currentAction?.label || queue[0]?.label || "Processing...");
+    ? lastCompletedAction.success
+      ? getSuccessLabel(lastCompletedAction.type)
+      : "Failed"
+    : currentAction?.label || queue[0]?.label || "Processing…";
 
   const animateIn = () => {
     isAnimatingOutRef.current = false;
@@ -103,7 +111,7 @@ export const PowQueueToast = () => {
   const animateOut = () => {
     if (isAnimatingOutRef.current) return;
     isAnimatingOutRef.current = true;
-    
+
     Animated.parallel([
       Animated.timing(translateY, {
         toValue: -100,
@@ -131,6 +139,8 @@ export const PowQueueToast = () => {
       setIsVisible(true);
       setElapsedMs(0);
       setHashRate(0);
+      setPhase("preparing");
+      powStartedRef.current = false;
       animateIn();
     }
   }, [isProcessing, isVisible]);
@@ -139,30 +149,32 @@ export const PowQueueToast = () => {
     if (currentAction) {
       setElapsedMs(0);
       setHashRate(0);
+      setPhase("preparing");
+      powStartedRef.current = false;
     }
   }, [currentAction?.id]);
 
- useEffect(() => {
-   if (successOverlay) {
-     setOverlayData(successOverlay);
-     overlayOpacity.setValue(0);
-     Animated.sequence([
-       Animated.timing(overlayOpacity, {
-         toValue: 1,
-         duration: 120,
-         useNativeDriver: true,
-       }),
-       Animated.delay(1200),
-       Animated.timing(overlayOpacity, {
-         toValue: 0,
-         duration: 350,
-         useNativeDriver: true,
-       }),
-     ]).start(() => {
-       setOverlayData(null);
-     });
-   }
- }, [successOverlay]);
+  useEffect(() => {
+    if (successOverlay) {
+      setOverlayData(successOverlay);
+      overlayOpacity.setValue(0);
+      Animated.sequence([
+        Animated.timing(overlayOpacity, {
+          toValue: 1,
+          duration: 120,
+          useNativeDriver: true,
+        }),
+        Animated.delay(1200),
+        Animated.timing(overlayOpacity, {
+          toValue: 0,
+          duration: 350,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setOverlayData(null);
+      });
+    }
+  }, [successOverlay]);
 
   useEffect(() => {
     if (!isProcessing && !currentAction && isVisible) {
@@ -190,13 +202,25 @@ export const PowQueueToast = () => {
       const interval = setInterval(async () => {
         try {
           const progress = await getPowProgress();
-          setElapsedMs(progress.elapsedMs);
-          if (progress.elapsedMs > 0 && progress.attempts > 0) {
-            const rate = progress.attempts / (progress.elapsedMs / 1000);
-            setHashRate(rate);
+          const { elapsedMs: elapsed, attempts: att } = progress;
+
+          if (att > 0 && !powStartedRef.current) {
+            powStartedRef.current = true;
+            setPhase("solving");
+          }
+
+          if (powStartedRef.current) {
+            setElapsedMs(elapsed);
+
+            if (elapsed > 0 && att > 0) {
+              const rate = att / (elapsed / 1000);
+              setHashRate(rate);
+            }
           }
         } catch {
-          setElapsedMs((prev) => prev + 200);
+          if (powStartedRef.current) {
+            setElapsedMs((prev) => prev + 200);
+          }
         }
       }, 200);
       return () => clearInterval(interval);
@@ -206,7 +230,7 @@ export const PowQueueToast = () => {
   if (!isVisible) return null;
 
   const isDark = rt.themeName === "dark";
-  
+
   const getColors = (forOverlay?: { success: boolean }) => {
     const target = forOverlay || (isShowingResult ? lastCompletedAction : null);
     if (target) {
@@ -231,84 +255,74 @@ export const PowQueueToast = () => {
   const colors = getColors();
 
   const hasMultiple = totalCount > 1;
-  const progressPercent = currentProgress > 0 ? `${Math.round(currentProgress)}%` : "";
 
-  const badgeBackground = isDark
-    ? "rgba(255, 255, 255, 0.15)"
-    : "rgba(0, 0, 0, 0.08)";
+  const statColor = isDark ? "rgba(255, 255, 255, 0.5)" : "rgba(0, 0, 0, 0.4)";
 
-  const timerBackground = isDark
-    ? "rgba(255, 255, 255, 0.1)"
-    : "rgba(0, 0, 0, 0.06)";
+  const currentIndex = Math.min(completedCount + 1, totalCount);
 
   const renderIcon = () => {
     if (isShowingResult) {
       if (lastCompletedAction.success) {
         return (
-          <Ionicons
-            name="checkmark-circle"
-            size={16}
-            color={colors.icon}
-          />
+          <Ionicons name="checkmark-circle" size={14} color={colors.icon} />
         );
       } else {
-        return (
-          <Ionicons
-            name="alert-circle"
-            size={16}
-            color={colors.icon}
-          />
-        );
+        return <Ionicons name="alert-circle" size={14} color={colors.icon} />;
       }
     }
-    return <ActivityIndicator size="small" color={colors.icon} />;
+    return <ActivityIndicator size={12} color={colors.icon} />;
   };
 
- const showCounter = hasMultiple && isShowingProcessing;
- const showTimer = isShowingProcessing;
-  const currentIndex = Math.min(completedCount + 1, totalCount);
+  const showStats = isShowingProcessing && phase === "solving" && elapsedMs > 0;
 
   const renderToastContent = (wrapperProps: any) => {
     const ToastWrapper = Platform.OS === "ios" ? BlurView : View;
     return (
       <ToastWrapper {...wrapperProps}>
         <View style={styles.content}>
-          <View style={styles.iconContainer}>
-            {renderIcon()}
-          </View>
-
-          <View style={styles.textContainer}>
-            <Text size="xs" weight="semibold" numberOfLines={1}>
+          <View style={styles.headerRow}>
+            <View style={styles.iconContainer}>{renderIcon()}</View>
+            <Text
+              size="xs"
+              weight="semibold"
+              numberOfLines={1}
+              style={styles.labelText}
+            >
               {displayLabel}
-              {isShowingProcessing && progressPercent ? ` ${progressPercent}` : ""}
             </Text>
-          </View>
-
-          <View style={styles.rightSection}>
-            {showCounter && (
-              <View style={[styles.counterBadge, { backgroundColor: badgeBackground }]}>
-                <Text size="xs" weight="bold" style={styles.counterText}>
-                  {currentIndex}/{totalCount}
-                </Text>
-              </View>
-            )}
-
-            {showTimer && hashRate > 0 && (
-              <View style={[styles.hashRateContainer, { backgroundColor: timerBackground }]}>
-                <Text size="xs" weight="medium" style={styles.timerText}>
-                  {formatHashRate(hashRate)} h/s
-                </Text>
-              </View>
-            )}
-
-            {showTimer && (
-              <View style={[styles.timerContainer, { backgroundColor: timerBackground }]}>
-                <Text size="xs" weight="medium" style={styles.timerText}>
-                  {formatElapsedTime(elapsedMs)}
-                </Text>
-              </View>
+            {hasMultiple && isShowingProcessing && (
+              <Text
+                size="xs"
+                weight="bold"
+                style={{
+                  color: statColor,
+                  fontSize: 9,
+                  fontVariant: ["tabular-nums"] as any,
+                }}
+              >
+                {currentIndex}/{totalCount}
+              </Text>
             )}
           </View>
+
+          {isShowingProcessing && !overlayData && (
+            <Text style={[styles.phaseText, { color: statColor }]}>
+              {PHASE_LABEL[phase]}
+            </Text>
+          )}
+
+          {showStats && !overlayData && (
+            <View style={styles.statsRow}>
+              <Text style={[styles.statText, { color: statColor }]}>
+                {formatElapsedTime(elapsedMs)}
+              </Text>
+              {hashRate > 0 && (
+                <Text style={[styles.statText, { color: statColor }]}>
+                  {formatHashRate(hashRate)}
+                </Text>
+              )}
+            </View>
+          )}
         </View>
       </ToastWrapper>
     );
@@ -322,52 +336,44 @@ export const PowQueueToast = () => {
       ? getSuccessLabel(overlayData.type as any)
       : "Failed";
 
-    const overlayWrapperProps =
-      Platform.OS === "ios"
-        ? {
-            intensity: 80,
-            tint: isDark ? ("dark" as const) : ("light" as const),
-            style: [styles.blurContainer, { borderColor: overlayColors.border }],
-          }
-        : {
-            style: [
-              styles.blurContainer,
-              {
-                backgroundColor: isDark
-                  ? "rgba(45, 48, 55, 0.97)"
-                  : "rgba(255, 255, 255, 0.97)",
-                borderColor: overlayColors.border,
-                elevation: 10,
-              },
-            ],
-          };
-
-    const ToastWrapper = Platform.OS === "ios" ? BlurView : View;
-
     return (
       <Animated.View
         pointerEvents="none"
         style={[
           styles.overlayContainer,
-          { opacity: overlayOpacity },
+          {
+            opacity: overlayOpacity,
+            backgroundColor: isDark
+              ? "rgba(45, 48, 55, 1)"
+              : "rgba(255, 255, 255, 1)",
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: overlayColors.border,
+            overflow: "hidden",
+          },
         ]}
       >
-        <ToastWrapper {...overlayWrapperProps}>
-          <View style={styles.content}>
+        <View style={styles.overlayContent}>
+          <View style={styles.headerRow}>
             <View style={styles.iconContainer}>
               <Ionicons
-                name={overlayData.success ? "checkmark-circle" : "alert-circle"}
-                size={16}
+                name={
+                  overlayData.success ? "checkmark-circle" : "alert-circle"
+                }
+                size={14}
                 color={overlayColors.icon}
               />
             </View>
-            <View style={styles.textContainer}>
-              <Text size="xs" weight="semibold" numberOfLines={1}>
-                {overlayLabel}
-              </Text>
-            </View>
+            <Text
+              size="xs"
+              weight="semibold"
+              numberOfLines={1}
+              style={styles.labelText}
+            >
+              {overlayLabel}
+            </Text>
           </View>
-        </ToastWrapper>
+        </View>
       </Animated.View>
     );
   };
@@ -396,7 +402,7 @@ export const PowQueueToast = () => {
           ],
         };
 
- return (
+  return (
     <Animated.View
       pointerEvents="box-none"
       style={[
@@ -417,62 +423,50 @@ export const PowQueueToast = () => {
 const styles = StyleSheet.create((theme) => ({
   container: {
     position: "absolute",
-    left: 48,
-    right: 48,
+    width: TOAST_WIDTH,
+    alignSelf: "center",
+    left: (SCREEN_WIDTH - TOAST_WIDTH) / 2,
     zIndex: 9999,
   },
   blurContainer: {
     overflow: "hidden",
-    borderRadius: 9999,
+    borderRadius: 12,
     borderWidth: 1,
   },
   content: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    gap: 4,
+  },
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
     gap: 6,
   },
   iconContainer: {
-    width: 18,
-    height: 18,
+    width: 14,
+    height: 14,
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 5,
   },
-  textContainer: {
+  labelText: {
     flex: 1,
+    fontSize: 11,
   },
-  rightSection: {
+  phaseText: {
+    fontSize: 9,
+    marginLeft: 25,
+  },
+  statsRow: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 4,
+    marginTop: 1,
   },
-  counterBadge: {
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  counterText: {
-    color: theme.colors.text.default,
+  statText: {
+    fontSize: 8,
     fontVariant: ["tabular-nums"],
-    fontSize: 10,
-  },
-  hashRateContainer: {
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  timerContainer: {
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 8,
-    minWidth: 36,
-    alignItems: "center",
-  },
-  timerText: {
-    color: theme.colors.text.subtle,
-    fontVariant: ["tabular-nums"],
-    fontSize: 10,
   },
   overlayContainer: {
     position: "absolute",
@@ -480,5 +474,10 @@ const styles = StyleSheet.create((theme) => ({
     left: 0,
     right: 0,
     bottom: 0,
+    justifyContent: "center",
+  },
+  overlayContent: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
   },
 }));
