@@ -68,6 +68,7 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
     const scrollProgress = useSharedValue(0);
 
     const currentUser = useAuthStore((s) => s.user);
+   const isInitializing = useAuthStore((s) => s.isInitializing);
     const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
     const hideDownvotedPosts = usePreferencesStore((s) => s.hideDownvotedPosts);
     const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
@@ -255,7 +256,7 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
 
     const createListEmptyComponent = useCallback(
       (isLoading: boolean, isError: boolean, errorMessage?: string) => {
-        if (isLoading) {
+       if (isLoading || isInitializing) {
           return <PostCardSkeletonList count={5} />;
         }
 
@@ -291,7 +292,7 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
           </Box>
         );
       },
-      []
+     [isInitializing]
     );
 
     const MagicListHeader = useCallback(() => {
