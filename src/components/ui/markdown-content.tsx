@@ -4,14 +4,25 @@ import * as Linking from "expo-linking";
 import { memo, useCallback, useMemo } from "react";
 import { useUnistyles } from "react-native-unistyles";
 
-// Regex to match URLs that are not already in markdown link format
-const URL_REGEX = /(?<!\]\()(?<!\[)(https?:\/\/[^\s<>"\[\]]+)/gi;
+// Regex to match plain URLs (excluding trailing punctuation that might be markdown syntax)
+const PLAIN_URL_REGEX = /https?:\/\/[^\s<>"]+/g;
+
+// Regex to detect markdown links: [text](url) or ![alt](url)
+const MARKDOWN_LINK_REGEX = /!?\[[^\]]*\]\([^)]+\)/g;
 
 // Convert plain URLs to markdown links
 function autoLinkUrls(content: string): string {
-  // Don't convert URLs that are already inside markdown links [text](url) or images ![alt](url)
-  return content.replace(URL_REGEX, (url) => {
-    // Check if this URL is already part of a markdown link by looking at surrounding context
+  // First, find all existing markdown links and their positions
+  const markdownLinks: { start: number; end: number }[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = MARKDOWN_LINK_REGEX.exec(content)) !== null) {
+    markdownLinks.push({ start: match.index, end: match.index + match[0].length });
+  }
+
+  // Replace plain URLs only if they're not inside an existing markdown link
+  return content.replace(PLAIN_URL_REGEX, (url, offset) => {
+    const isInsideMarkdownLink = markdownLinks.some(link => offset >= link.start && offset < link.end);
+    if (isInsideMarkdownLink) return url;
     return `[${url}](${url})`;
   });
 }

@@ -1,6 +1,9 @@
 import type { PostMedia } from "./post-card-types";
 
 const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
+const MARKDOWN_LINK_REGEX = /!?\[[^\]]*\]\([^)]+\)/g;
+// Regex to find standalone URLs (not inside markdown links)
+const STANDALONE_URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]()]+/gi;
 
 const VIDEO_EXTENSIONS = new Set([
   "mp4",
@@ -42,15 +45,40 @@ export function extractDomain(url: string): string {
   }
 }
 
-export function extractFirstUrl(text?: string): string | null {
-  if (!text) return null;
-  const matches = text.match(URL_REGEX);
-  return matches ? matches[0] : null;
+// Find positions of all markdown links in text
+function findMarkdownLinkPositions(text: string): { start: number; end: number }[] {
+  const positions: { start: number; end: number }[] = [];
+  let match: RegExpExecArray | null;
+  const regex = new RegExp(MARKDOWN_LINK_REGEX.source, 'g');
+  while ((match = regex.exec(text)) !== null) {
+    positions.push({ start: match.index, end: match.index + match[0].length });
+  }
+  return positions;
 }
 
-export function removeUrls(text?: string): string | undefined {
+// Check if a position is inside any markdown link
+function isInsideMarkdownLink(offset: number, positions: { start: number; end: number }[]): boolean {
+  return positions.some(link => offset >= link.start && offset < link.end);
+}
+
+export function extractFirstUrl(text?: string): string | null {
+  if (!text) return null;
+  const mdPositions = findMarkdownLinkPositions(text);
+  let match: RegExpExecArray | null;
+  const regex = new RegExp(STANDALONE_URL_REGEX.source, 'gi');
+  while ((match = regex.exec(text)) !== null) {
+    if (!isInsideMarkdownLink(match.index, mdPositions)) {
+      return match[0];
+    }
+  }
+  return null;
+}
+
+export function removeFirstUrl(text?: string): string | undefined {
   if (!text) return undefined;
-  return text.replace(URL_REGEX, "").trim() || undefined;
+  const firstUrl = extractFirstUrl(text);
+  if (!firstUrl) return text;
+  return text.replace(firstUrl, "").trim() || undefined;
 }
 
 export function normalizeVideoUrl(url: string): string {
@@ -117,7 +145,7 @@ export function resolvePostContent(
   if (__DEV__ && body?.includes("cloudflarestream")) {
     console.log("[resolvePostContent] body:", body, "extractedUrl:", extractedUrl);
   }
-  const bodyWithoutUrl = removeUrls(body);
+  const bodyWithoutUrl = removeFirstUrl(body);
   const displayDomain = extractedUrl ? extractDomain(extractedUrl) : null;
   const bodyVideoUrl =
     extractedUrl && getMediaTypeFromUrl(extractedUrl) === "video"
