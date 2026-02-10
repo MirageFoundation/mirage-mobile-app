@@ -467,35 +467,44 @@ export const PostCardMedia = memo(
             </View>
           )}
 
-          {/* Blur overlay with reveal button */}
-          {shouldBlurContent && (
-            <Pressable onPress={onRevealContent} style={styles.blurOverlay}>
-              {Platform.OS === "ios" ? (
-                <BlurView
-                  intensity={80}
-                  tint="dark"
-                  style={styles.blurViewFill}
-                >
-                  <View style={styles.revealTextContainer}>
-                    <Ionicons name="eye-outline" size={24} color="#fff" />
-                    <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                      Tap to reveal
-                    </Text>
-                  </View>
-                </BlurView>
-              ) : (
-                <View style={styles.androidBlurOverlay}>
-                  <Ionicons name="eye-outline" size={24} color="#fff" />
-                  <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                    Tap to reveal
-                  </Text>
-                </View>
-              )}
-            </Pressable>
+         {/* Blur overlay with reveal button */}
+         {shouldBlurContent && (
+           <Pressable onPress={onRevealContent} style={styles.blurOverlay}>
+             {Platform.OS === "ios" ? (
+               <BlurView
+                 intensity={80}
+                 tint="dark"
+                 style={styles.blurViewFill}
+               >
+                 <View style={styles.revealTextContainer}>
+                   <Ionicons name="eye-outline" size={24} color="#fff" />
+                   <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
+                     Tap to reveal
+                   </Text>
+                 </View>
+               </BlurView>
+             ) : (
+               <View style={styles.androidBlurOverlay}>
+                 <Ionicons name="eye-outline" size={24} color="#fff" />
+                 <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
+                   Tap to reveal
+                 </Text>
+               </View>
+             )}
+           </Pressable>
+         )}
+
+          {/* Video badge - placed after blur so it's always visible */}
+          {media.type === "video" && (
+            <View style={styles.videoBadge}>
+              <Text size="xs" weight="bold" style={{ color: "#fff" }}>
+                VIDEO
+              </Text>
+            </View>
           )}
-        </View>
-      </View>
-    );
+       </View>
+     </View>
+   );
   }),
 );
 
@@ -561,16 +570,26 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  gifBadge: {
+ gifBadge: {
+   position: "absolute",
+   bottom: theme.spacing.sm,
+   left: theme.spacing.sm,
+   backgroundColor: "rgba(0, 0, 0, 0.7)",
+   paddingHorizontal: theme.spacing.xs,
+   paddingVertical: 2,
+   borderRadius: theme.radius.sm,
+ },
+  videoBadge: {
     position: "absolute",
-    bottom: theme.spacing.sm,
+    top: theme.spacing.sm,
     left: theme.spacing.sm,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    backgroundColor: theme.colors.primary.main,
     paddingHorizontal: theme.spacing.xs,
     paddingVertical: 2,
     borderRadius: theme.radius.sm,
+    zIndex: 20,
   },
-  multiMediaBadge: {
+ multiMediaBadge: {
     position: "absolute",
     top: theme.spacing.sm,
     right: theme.spacing.sm,

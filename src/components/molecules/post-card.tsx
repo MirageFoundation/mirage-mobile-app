@@ -137,9 +137,9 @@ allowAutoplay = true,
     topic,
   } = post;
 
-  const shouldBlurContent = !!contentWarnings?.length && !contentRevealed;
+ const shouldBlurContent = !!contentWarnings?.length && !contentRevealed;
 
-  const resolvedContent = useMemo(
+ const resolvedContent = useMemo(
     () => resolvePostContent(body, media),
     [body, media],
   );
@@ -179,9 +179,9 @@ allowAutoplay = true,
     setShowMediaPreview(false);
   }, []);
 
-  return (
-    <Pressable ref={containerRef} onPress={handlePress} style={[styles.container, style]}>
-      <PostCardHeader
+ return (
+   <Pressable ref={containerRef} onPress={handlePress} style={[styles.container, style]}>
+     <PostCardHeader
         author={author}
         topic={topic}
         createdAt={createdAt}
@@ -268,8 +268,8 @@ const styles = StyleSheet.create((theme) => ({
   actions: {
     marginTop: theme.spacing.sm,
   },
-  body: {
-    marginTop: theme.spacing.sm,
-    lineHeight: 18,
-  },
+ body: {
+   marginTop: theme.spacing.sm,
+   lineHeight: 18,
+ },
 }));
