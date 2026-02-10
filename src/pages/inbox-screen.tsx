@@ -1,10 +1,11 @@
 import { useRouter } from "expo-router";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 
 import { useInfiniteInbox } from "@/src/api/read/hooks/use-inbox";
 import type { InboxReply } from "@/src/api/types";
@@ -32,6 +33,12 @@ export function InboxScreen() {
     isRefetching,
     refetch,
   } = useInfiniteInbox({ limit: 25 });
+
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch]),
+  );
 
   const replies = useMemo(
     () => data?.pages.flatMap((page) => page.replies) ?? [],
