@@ -13,19 +13,9 @@ import { StyleSheet } from "react-native-unistyles";
 import { Avatar } from "@/src/components/atoms";
 import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { getTierName } from "@/src/utils/tiers";
 
 import { SCROLL_THRESHOLD } from "./profile-header";
-
-const TIER_NAMES: Record<number, string> = {
-  0: "Free",
-  1: "Basic",
-  2: "Pro",
-  3: "Premium",
-};
-
-const getTierName = (level: number): string => {
-  return TIER_NAMES[level] ?? "Free";
-};
 
 const formatAccountAge = (days: number): string => {
   const totalMinutes = days * 24 * 60;

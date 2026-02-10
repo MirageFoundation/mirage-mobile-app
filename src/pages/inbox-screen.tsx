@@ -1,20 +1,212 @@
+import { useRouter } from "expo-router";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { FlatList, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { Image } from "expo-image";
+import { Ionicons } from "@expo/vector-icons";
 
+import { useInfiniteInbox } from "@/src/api/read/hooks/use-inbox";
+import type { InboxReply } from "@/src/api/types";
+import { InboxItem } from "@/src/components/molecules/inbox-item";
+import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { Box, Text } from "@/src/components/ui/primitives";
+import { useAuthStore } from "@/src/stores";
+
+const emptyInfoImage = require("@/assets/images/empty-info.png");
+
+const MemoizedInboxItem = memo(InboxItem);
 
 export function InboxScreen() {
   const insets = useSafeAreaInsets();
+  const { theme } = useUnistyles();
+  const router = useRouter();
+  const isLoggedIn = !!useAuthStore((s) => s.user);
+
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+    isRefetching,
+    refetch,
+  } = useInfiniteInbox({ limit: 25 });
+
+  const replies = useMemo(
+    () => data?.pages.flatMap((page) => page.replies) ?? [],
+    [data],
+  );
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refetch();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refetch]);
+
+  const handleItemPress = useCallback(
+    (rootPostId: string, replyId: string) => {
+      router.push(`/post/${rootPostId}?highlight=${replyId}`);
+    },
+    [router],
+  );
+
+  const lastFetchTime = useRef(0);
+  const isFetchingRef = useRef(false);
+
+  const handleEndReached = useCallback(() => {
+    const now = Date.now();
+    if (
+      hasNextPage &&
+      !isFetchingNextPage &&
+      !isFetchingRef.current &&
+      now - lastFetchTime.current > 1000
+    ) {
+      lastFetchTime.current = now;
+      isFetchingRef.current = true;
+      fetchNextPage().finally(() => {
+        isFetchingRef.current = false;
+      });
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const keyExtractor = useCallback((item: InboxReply) => item.reply_id, []);
+
+  const renderItem = useCallback(
+    ({ item }: { item: InboxReply }) => (
+      <MemoizedInboxItem reply={item} onPress={handleItemPress} />
+    ),
+    [handleItemPress],
+  );
+
+  const ListEmptyComponent = useCallback(() => {
+    if (isLoading) {
+      return <ProfilePostsSkeleton count={6} type="comments" />;
+    }
+
+    if (!isLoggedIn) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Ionicons
+            name="log-in-outline"
+            size={48}
+            color={theme.colors.text.subtle}
+          />
+          <Text
+            size="md"
+            weight="medium"
+            mode="subtle"
+            style={styles.emptyTitle}
+          >
+            Sign in to see your inbox
+          </Text>
+          <Text size="sm" mode="subtle" style={styles.emptySubtitle}>
+            Replies to your posts and comments will appear here
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.emptyContainer}>
+        <Image
+          source={emptyInfoImage}
+          style={styles.emptyImage}
+          contentFit="contain"
+        />
+        <Text size="md" weight="medium" mode="subtle" style={styles.emptyTitle}>
+          No replies yet
+        </Text>
+        <Text size="sm" mode="subtle" style={styles.emptySubtitle}>
+          When someone replies to your posts or comments, it will show up here
+        </Text>
+      </View>
+    );
+  }, [isLoading, isLoggedIn, theme.colors.text.subtle]);
+
+  const ListFooterComponent = useCallback(() => {
+    if (isFetchingNextPage) {
+      return <ProfilePostsSkeleton count={2} type="comments" />;
+    }
+    return <View style={{ height: 80 }} />;
+  }, [isFetchingNextPage]);
 
   return (
     <Box flex background="base" style={{ paddingTop: insets.top }}>
-      <Box p="md">
+      <View style={styles.header}>
+        <Ionicons
+          name="mail-outline"
+          size={22}
+          color={theme.colors.text.default}
+        />
         <Text size="xl" weight="bold">
           Inbox
         </Text>
-        <Text size="sm" mode="subtle" style={{ marginTop: 8 }}>
-          Your notifications will appear here
-        </Text>
-      </Box>
+      </View>
+
+      <FlatList
+        data={replies}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        ListEmptyComponent={ListEmptyComponent}
+        ListFooterComponent={ListFooterComponent}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.5}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingBottom: insets.bottom + 20,
+          flexGrow: 1,
+        }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={theme.colors.primary[500]}
+          />
+        }
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+        initialNumToRender={10}
+      />
     </Box>
   );
 }
+
+const styles = StyleSheet.create((theme) => ({
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border.subtle,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: 120,
+  },
+  emptyImage: {
+    width: 120,
+    height: 120,
+    marginBottom: theme.spacing.md,
+  },
+  emptyTitle: {
+    marginTop: theme.spacing.sm,
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    marginTop: theme.spacing.xs,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+}));

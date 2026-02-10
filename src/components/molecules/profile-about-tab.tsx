@@ -12,6 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { TIER_NAMES } from "@/src/utils/tiers";
 
 import {
   usePreferences,
@@ -73,13 +74,6 @@ const formatBalance = (umirage: number): string => {
   if (mirage >= 1_000_000) return `${(mirage / 1_000_000).toFixed(1)}M`;
   if (mirage >= 1_000) return `${(mirage / 1_000).toFixed(1)}K`;
   return mirage.toFixed(0);
-};
-
-const TIER_NAMES: Record<number, string> = {
-  0: "Free",
-  1: "Basic",
-  2: "Pro",
-  3: "Premium",
 };
 
 function SkeletonBox({

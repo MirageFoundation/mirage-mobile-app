@@ -232,6 +232,7 @@ export interface InboxReply {
   reply_username: string;
   reply_content: string;
   reply_timestamp: number;
+  reply_author_level: number;
   parent_id: string;
   parent_content: string;
   parent_owner: string;

@@ -27,20 +27,10 @@ import { ShareIcon } from "@/assets/figma-icons";
 import { Avatar, IconButton } from "@/src/components/atoms";
 import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { getTierName } from "@/src/utils/tiers";
 
 export const PROFILE_CONTENT_HEIGHT = 280;
 export const SCROLL_THRESHOLD = PROFILE_CONTENT_HEIGHT;
-
-const TIER_NAMES: Record<number, string> = {
-  0: "Free",
-  1: "Basic",
-  2: "Pro",
-  3: "Premium",
-};
-
-const getTierName = (level: number): string => {
-  return TIER_NAMES[level] ?? "Free";
-};
 
 type ProfileHeaderBarProps = {
   username: string;
