@@ -309,9 +309,18 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
             </Box>
           )}
           {baseFeed === "home" && <QuestsSummaryCard />}
+          {baseFeed === "home" && (
+            <View
+              style={{
+                height: 1,
+                backgroundColor: theme.colors.border.subtle,
+                marginTop: theme.spacing.sm,
+              }}
+            />
+          )}
         </>
       );
-    }, [isManualRefreshing, activeTabIndex, theme.colors.background.emphasis, baseFeed]);
+    }, [isManualRefreshing, activeTabIndex, theme.colors.background.emphasis, theme.colors.border.subtle, theme.spacing.sm, baseFeed]);
 
     const LatestListHeader = useCallback(() => {
       const showRefreshIndicator =
