@@ -321,7 +321,7 @@ export function SearchScreen() {
       triggerHaptic("light");
       addRecentSearch(`@${user.username}`);
       Keyboard.dismiss();
-      router.push(`/profile/${user.address}`);
+      router.push(`/user/${user.address}`);
     },
     [router, addRecentSearch],
   );
