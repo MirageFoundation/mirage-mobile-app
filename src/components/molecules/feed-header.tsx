@@ -8,9 +8,11 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Text } from "@/src/components/ui/primitives";
 import { HEADER_HEIGHT } from "@/src/hooks/use-scroll-animation";
+import { formatCompactNumber } from "@/src/utils/format-number";
 
 type FeedHeaderProps = {
   title: string;
+  balance?: number | null;
   onMenuPress?: () => void;
   onSearchPress?: () => void;
   animatedStyle?: any;
@@ -18,6 +20,7 @@ type FeedHeaderProps = {
 
 export const FeedHeader = ({
   title,
+  balance,
   onMenuPress,
   onSearchPress,
   animatedStyle,
@@ -48,7 +51,11 @@ export const FeedHeader = ({
       <View style={styles.content}>
         <View style={styles.leftSection}>
           {onMenuPress && (
-            <AnimatedPressable scaleAmount={0.85} onPress={onMenuPress} style={styles.iconButton}>
+            <AnimatedPressable
+              scaleAmount={0.85}
+              onPress={onMenuPress}
+              style={styles.iconButton}
+            >
               <MenuIcon size={18} color={theme.colors.text.default} />
             </AnimatedPressable>
           )}
@@ -61,13 +68,24 @@ export const FeedHeader = ({
           </View>
         </View>
 
-        <AnimatedPressable scaleAmount={0.85} onPress={onSearchPress} style={styles.iconButton}>
-          <Ionicons
-            name="search-outline"
-            size={20}
-            color={theme.colors.text.default}
-          />
-        </AnimatedPressable>
+        <View style={styles.rightSection}>
+          {balance != null && (
+            <Text size="xl" weight="bold" style={styles.balanceText}>
+              {formatCompactNumber(Math.floor(balance / 1_000_000))}
+            </Text>
+          )}
+          <AnimatedPressable
+            scaleAmount={0.85}
+            onPress={onSearchPress}
+            style={styles.iconButton}
+          >
+            <Ionicons
+              name="search-outline"
+              size={20}
+              color={theme.colors.text.default}
+            />
+          </AnimatedPressable>
+        </View>
       </View>
     </Animated.View>
   );
@@ -94,6 +112,14 @@ const styles = StyleSheet.create((theme) => ({
   leftSection: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  rightSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  balanceText: {
+    // opacity: 0.7,
   },
   iconButton: {
     width: 40,

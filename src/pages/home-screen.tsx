@@ -11,6 +11,7 @@ import {
   useToggleFollowTopic,
   useToggleFollowUser,
   useUserFollowed,
+  useUserStatus,
 } from "@/src/api";
 import {
 AdultContentPopup,
@@ -61,6 +62,8 @@ export function HomeScreen() {
   } = useScrollAnimationContext();
   const { requireAuth } = useAuthGuard();
   const toast = useToast();
+
+  const { data: userStatus } = useUserStatus();
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
 
@@ -747,6 +750,7 @@ export function HomeScreen() {
 
       <FeedHeader
         title="Mirage"
+        balance={userStatus?.balance}
         onMenuPress={handleMenuPress}
         onSearchPress={() => router.push("/search")}
         animatedStyle={headerAnimatedStyle}
