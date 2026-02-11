@@ -2,11 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, forwardRef, useImper
 import type { FlatList } from "react-native";
 import { ActivityIndicator, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import PagerView, { type PagerViewOnPageSelectedEvent } from "react-native-pager-view";
-import type { PagerViewOnPageScrollEvent } from "react-native-pager-view";
-import Animated, {
-  useSharedValue,
-} from "react-native-reanimated";
+import Animated from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import {
@@ -16,8 +12,6 @@ import {
   useInfinitePosts,
 } from "@/src/api";
 import {
-  FeedTypeTabBar,
-  FEED_TAB_BAR_HEIGHT,
   PostCardSkeleton,
   PostCardSkeletonList,
   QuestsSummaryCard,
@@ -39,8 +33,6 @@ import {
 } from "@/src/stores";
 import { useQueryClient } from "@tanstack/react-query";
 
-const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
-
 export type HomeTabbedFeedRef = {
   scrollToTop: (tabIndex?: number) => void;
   refresh: () => Promise<void>;
@@ -48,24 +40,21 @@ export type HomeTabbedFeedRef = {
 
 type HomeTabbedFeedProps = {
   feedType: "home" | "following";
+  activeTabIndex?: number;
 };
 
 export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>(
-  ({ feedType: baseFeed }, ref) => {
+  ({ feedType: baseFeed, activeTabIndex = 0 }, ref) => {
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
     const queryClient = useQueryClient();
     const {
       scrollHandler,
-      headerAnimatedStyle,
     } = useScrollAnimationContext();
 
-    const [activeTabIndex, setActiveTabIndex] = useState(0);
     const [isManualRefreshing, setIsManualRefreshing] = useState(false);
-    const pagerRef = useRef<PagerView>(null);
     const magicListRef = useRef<FlatList<Post>>(null);
     const latestListRef = useRef<FlatList<Post>>(null);
-    const scrollProgress = useSharedValue(0);
 
     const currentUser = useAuthStore((s) => s.user);
    const isInitializing = useAuthStore((s) => s.isInitializing);
@@ -152,31 +141,9 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
       [latestQuery.data, transformPosts]
     );
 
-   const handleTabChange = useCallback((index: number) => {
-     setActiveTabIndex(index);
-      scrollProgress.value = index;
-     pagerRef.current?.setPage(index);
-    }, [scrollProgress]);
-
-   const handlePageSelected = useCallback(
-     (e: PagerViewOnPageSelectedEvent) => {
-       setActiveTabIndex(e.nativeEvent.position);
-     },
-      []
-   );
-
-    const handlePageScroll = useCallback(
-      (e: PagerViewOnPageScrollEvent) => {
-        const { position, offset } = e.nativeEvent;
-        scrollProgress.value = position + offset;
-      },
-      [scrollProgress]
-    );
-
     const handleRefresh = useCallback(async () => {
       setIsManualRefreshing(true);
       try {
-        const query = activeTabIndex === 0 ? magicQuery : latestQuery;
         const sortBy = activeTabIndex === 0 ? "magic" : "newest";
 
         const newFirstPage = await getPosts({
@@ -221,7 +188,7 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
       } finally {
         setIsManualRefreshing(false);
       }
-    }, [activeTabIndex, magicQuery, latestQuery, baseFeed, allowedTags, currentUser?.walletAddress, queryClient]);
+    }, [activeTabIndex, baseFeed, allowedTags, currentUser?.walletAddress, queryClient]);
 
     useImperativeHandle(ref, () => ({
       scrollToTop: (tabIndex?: number) => {
@@ -334,9 +301,8 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
      [isInitializing]
     );
 
-    const MagicListHeader = useCallback(() => {
-      const showRefreshIndicator =
-        isManualRefreshing && activeTabIndex === 0;
+    const ListHeader = useCallback(() => {
+      const showRefreshIndicator = isManualRefreshing;
       return (
         <>
           {showRefreshIndicator && (
@@ -347,41 +313,22 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
               />
             </Box>
           )}
-          {baseFeed === "home" && <QuestsSummaryCard />}
+          {baseFeed === "home" && activeTabIndex === 0 && <QuestsSummaryCard />}
         </>
       );
-   }, [isManualRefreshing, activeTabIndex, theme.colors.background.emphasis, baseFeed]);
+   }, [isManualRefreshing, theme.colors.background.emphasis, baseFeed, activeTabIndex]);
 
-    const LatestListHeader = useCallback(() => {
-      const showRefreshIndicator =
-        isManualRefreshing && activeTabIndex === 1;
-      return showRefreshIndicator ? (
-        <Box center p="md">
-          <ActivityIndicator
-            size="small"
-            color={theme.colors.background.emphasis}
-          />
-        </Box>
-      ) : null;
-    }, [isManualRefreshing, activeTabIndex, theme.colors.background.emphasis]);
-
-    const MagicListFooter = useCallback(() => {
-      if (magicQuery.isFetchingNextPage) {
+    const ListFooter = useCallback(() => {
+      const query = activeTabIndex === 0 ? magicQuery : latestQuery;
+      if (query.isFetchingNextPage) {
         return <PostCardSkeleton showMedia={false} showBody={true} />;
       }
       return <Box p="sm" />;
-    }, [magicQuery.isFetchingNextPage]);
-
-    const LatestListFooter = useCallback(() => {
-      if (latestQuery.isFetchingNextPage) {
-        return <PostCardSkeleton showMedia={false} showBody={true} />;
-      }
-      return <Box p="sm" />;
-    }, [latestQuery.isFetchingNextPage]);
+    }, [activeTabIndex, magicQuery.isFetchingNextPage, latestQuery.isFetchingNextPage]);
 
     const listContentStyle = useMemo(
       () => ({
-        paddingTop: insets.top + HEADER_HEIGHT + FEED_TAB_BAR_HEIGHT,
+        paddingTop: insets.top + HEADER_HEIGHT,
         paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16,
         flexGrow: 1,
       }),
@@ -394,95 +341,38 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
           refreshing={false}
           onRefresh={handleRefresh}
           tintColor="transparent"
-          progressViewOffset={insets.top + HEADER_HEIGHT + FEED_TAB_BAR_HEIGHT}
+          progressViewOffset={insets.top + HEADER_HEIGHT}
         />
       ),
       [handleRefresh, insets.top]
     );
 
-    return (
-      <>
-       <Animated.View
-         style={[
-           styles.tabBarContainer,
-           { top: insets.top + HEADER_HEIGHT },
-            headerAnimatedStyle as any,
-         ]}
-       >
-          <FeedTypeTabBar
-            selectedIndex={activeTabIndex}
-            onTabChange={handleTabChange}
-            scrollProgress={scrollProgress}
-          />
-        </Animated.View>
+    const posts = activeTabIndex === 0 ? magicPosts : latestPosts;
+    const query = activeTabIndex === 0 ? magicQuery : latestQuery;
+    const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
+    const onItemVisible = activeTabIndex === 0 ? handleMagicItemVisible : handleLatestItemVisible;
 
-       <AnimatedPagerView
-         ref={pagerRef}
-         style={styles.pager}
-         initialPage={0}
-         onPageSelected={handlePageSelected}
-          onPageScroll={handlePageScroll}
-         overdrag={true}
-       >
-          <View key="magic" style={styles.page}>
-            <HomePostList
-              ref={magicListRef}
-              data={magicPosts}
-              contentContainerStyle={listContentStyle}
-              onScroll={scrollHandler}
-              ListHeaderComponent={MagicListHeader}
-              ListEmptyComponent={() =>
-                createListEmptyComponent(
-                  magicQuery.isLoading,
-                  magicQuery.isError,
-                  magicQuery.error?.message
-                )
-              }
-              ListFooterComponent={MagicListFooter}
-              refreshControl={refreshControl}
-              feedScreen={baseFeed}
-              onItemVisible={handleMagicItemVisible}
-            />
-          </View>
-          <View key="latest" style={styles.page}>
-            <HomePostList
-              ref={latestListRef}
-              data={latestPosts}
-              contentContainerStyle={listContentStyle}
-              onScroll={scrollHandler}
-              ListHeaderComponent={LatestListHeader}
-              ListEmptyComponent={() =>
-                createListEmptyComponent(
-                  latestQuery.isLoading,
-                  latestQuery.isError,
-                  latestQuery.error?.message
-                )
-              }
-              ListFooterComponent={LatestListFooter}
-              refreshControl={refreshControl}
-              feedScreen={baseFeed}
-              onItemVisible={handleLatestItemVisible}
-            />
-          </View>
-        </AnimatedPagerView>
-      </>
+    return (
+      <HomePostList
+        ref={listRef}
+        data={posts}
+        contentContainerStyle={listContentStyle}
+        onScroll={scrollHandler}
+        ListHeaderComponent={ListHeader}
+        ListEmptyComponent={() =>
+          createListEmptyComponent(
+            query.isLoading,
+            query.isError,
+            query.error?.message
+          )
+        }
+        ListFooterComponent={ListFooter}
+        refreshControl={refreshControl}
+        feedScreen={baseFeed}
+        onItemVisible={onItemVisible}
+      />
     );
   }
 );
 
 HomeTabbedFeed.displayName = "HomeTabbedFeed";
-
-const styles = StyleSheet.create((theme) => ({
-  tabBarContainer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    zIndex: 99,
-  },
-  pager: {
-    flex: 1,
-  },
-  page: {
-    flex: 1,
-  },
-}));

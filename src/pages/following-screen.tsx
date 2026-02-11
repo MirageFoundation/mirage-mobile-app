@@ -54,6 +54,16 @@ export function FollowingScreen() {
   const reportSheetRef = useRef<ReportSheetRef>(null);
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [feedTabIndex, setFeedTabIndex] = useState(0);
+
+  const FEED_OPTIONS = useMemo(() => [
+    { label: "Magic", value: "magic" },
+    { label: "Latest", value: "latest" },
+  ], []);
+
+  const handleFeedTypeChange = useCallback((value: string) => {
+    setFeedTabIndex(value === "magic" ? 0 : 1);
+  }, []);
 
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
@@ -606,9 +616,12 @@ export function FollowingScreen() {
         title="Following"
         onSearchPress={() => router.push("/search")}
         animatedStyle={headerAnimatedStyle}
+        feedType={feedTabIndex === 0 ? "magic" : "latest"}
+        feedOptions={FEED_OPTIONS}
+        onFeedTypeChange={handleFeedTypeChange}
       />
 
-      <HomeTabbedFeed ref={tabbedFeedRef} feedType="following" />
+      <HomeTabbedFeed ref={tabbedFeedRef} feedType="following" activeTabIndex={feedTabIndex} />
 
       <PostOptionsSheet
         ref={postOptionsSheetRef}
