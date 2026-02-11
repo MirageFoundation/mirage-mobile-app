@@ -282,25 +282,25 @@ export function SearchScreen() {
     clearRecentSearches();
   }, [clearRecentSearches]);
 
- const handleTrendingTopicPress = useCallback(
-   (topic: TopicInfo) => {
-     triggerHaptic("light");
-     addRecentSearch(topic.topic);
-     Keyboard.dismiss();
+  const handleTrendingTopicPress = useCallback(
+    (topic: TopicInfo) => {
+      triggerHaptic("light");
+      addRecentSearch(topic.topic);
+      Keyboard.dismiss();
       router.push(`/topic/${encodeURIComponent(topic.topic)}`);
-   },
+    },
     [addRecentSearch, router],
- );
+  );
 
- const handleTopicResultPress = useCallback(
-   (topic: TopicInfo) => {
-     triggerHaptic("light");
-     addRecentSearch(topic.topic);
-     Keyboard.dismiss();
+  const handleTopicResultPress = useCallback(
+    (topic: TopicInfo) => {
+      triggerHaptic("light");
+      addRecentSearch(topic.topic);
+      Keyboard.dismiss();
       router.push(`/topic/${encodeURIComponent(topic.topic)}`);
-   },
+    },
     [addRecentSearch, router],
- );
+  );
 
   const handleBackFromTopic = useCallback(() => {
     triggerHaptic("light");
@@ -632,13 +632,13 @@ export function SearchScreen() {
           color={theme.colors.text.subtle}
           style={{ marginBottom: 12 }}
         />
-        <Text size="md" mode="subtle" weight="medium">
+        <Text size="lg" mode="subtle" weight="semibold">
           No posts found
         </Text>
         <Text
-          size="sm"
+          size="md"
           mode="subtle"
-          style={{ marginTop: 4, textAlign: "center" }}
+          style={{ marginTop: 2, textAlign: "center" }}
         >
           Try searching with different keywords
         </Text>
@@ -657,11 +657,11 @@ export function SearchScreen() {
           color={theme.colors.text.subtle}
           style={{ marginBottom: 12 }}
         />
-        <Text size="md" mode="subtle" weight="medium">
+        <Text size="lg" mode="subtle" weight="semibold">
           No topics found
         </Text>
         <Text
-          size="sm"
+          size="md"
           mode="subtle"
           style={{ marginTop: 4, textAlign: "center" }}
         >
@@ -682,11 +682,11 @@ export function SearchScreen() {
           color={theme.colors.text.subtle}
           style={{ marginBottom: 12 }}
         />
-        <Text size="md" mode="subtle" weight="medium">
+        <Text size="lg" mode="subtle" weight="semibold">
           No users found
         </Text>
         <Text
-          size="sm"
+          size="md"
           mode="subtle"
           style={{ marginTop: 4, textAlign: "center" }}
         >

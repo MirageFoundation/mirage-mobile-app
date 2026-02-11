@@ -126,10 +126,10 @@ export function InboxScreen() {
           style={styles.emptyImage}
           contentFit="contain"
         />
-        <Text size="md" weight="medium" mode="subtle" style={styles.emptyTitle}>
+        <Text size="xxl" weight="bold" style={styles.emptyTitle}>
           No replies yet
         </Text>
-        <Text size="sm" mode="subtle" style={styles.emptySubtitle}>
+        <Text size="lg" mode="subtle" style={styles.emptySubtitle}>
           When someone replies to your posts or comments, it will show up here
         </Text>
       </View>
@@ -200,12 +200,10 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: theme.spacing.xl,
-    paddingTop: 120,
   },
   emptyImage: {
-    width: 120,
-    height: 120,
-    marginBottom: theme.spacing.md,
+    width: 180,
+    height: 180,
   },
   emptyTitle: {
     marginTop: theme.spacing.sm,
