@@ -293,7 +293,7 @@ function ClaimSuccessModal({
               weight="bold"
               style={{ color: theme.colors.warning[500] }}
             >
-              +{rewardAmount.toLocaleString()} MRG
+              +{rewardAmount.toLocaleString()} MIRAGE
             </Text>
           </Box>
 
@@ -850,17 +850,17 @@ function ClaimAllButton({
         colors={[...BUTTON_GRADIENT_COLORS]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
-       style={styles.gradientButton}
+        style={styles.gradientButton}
       >
         {isClaiming ? (
           <>
-           <Text size="lg" weight="bold" style={{ color: "#fff" }}>
-             Claiming
-           </Text>
+            <Text size="lg" weight="bold" style={{ color: "#fff" }}>
+              Claiming
+            </Text>
             <ActivityIndicator
               size="small"
               color="#fff"
-             style={{ marginLeft: 8 }}
+              style={{ marginLeft: 8 }}
             />
           </>
         ) : hasClaimed ? (
@@ -915,9 +915,9 @@ export function QuestsScreen() {
 
   const { data, isLoading, error, refetch } = useDailyQuests();
   const { data: pendingData, refetch: refetchPending } = usePendingRewards();
- const [timeRemaining, setTimeRemaining] = useState<number>(0);
+  const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [isClaiming, setIsClaiming] = useState(false);
- const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const claimMutation = useClaimReward({
     onSuccess: (response) => {
