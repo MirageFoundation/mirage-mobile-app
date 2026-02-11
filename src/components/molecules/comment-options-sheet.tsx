@@ -143,7 +143,7 @@ export const CommentOptionsSheet = forwardRef<
         const root = rootPostId || "";
         const url = `${getShareBaseUrl(shareServer)}/p/${commentId}`;
         await Share.share({
-          message: `What do you think about this? 🗳️\n${url}`,
+          message: url,
         });
       } catch {
         // User cancelled

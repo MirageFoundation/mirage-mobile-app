@@ -201,7 +201,7 @@ export const PostActions = memo(function PostActions({
     if (shareUrl) {
       try {
         await Share.share({
-          message: `What do you think about this? 🗳️\n${shareUrl}`,
+          message: shareUrl,
           url: shareUrl,
           title: shareTitle,
         });

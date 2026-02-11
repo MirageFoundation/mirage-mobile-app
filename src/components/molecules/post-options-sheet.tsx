@@ -263,7 +263,7 @@ export const PostOptionsSheet = forwardRef<
 
     const getShareMessage = useCallback(() => {
       const url = getShareUrl();
-      return `What do you think about this? 🗳️\n${url}`;
+      return url;
     }, [getShareUrl]);
 
     // Share handlers
