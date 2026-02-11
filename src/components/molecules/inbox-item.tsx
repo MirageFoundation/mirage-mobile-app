@@ -112,11 +112,13 @@ const ReplyImage = ({
 interface InboxItemProps {
   reply: InboxReply;
   onPress: (rootPostId: string, replyId: string) => void;
+  isUnread?: boolean;
 }
 
 export const InboxItem = memo(function InboxItem({
   reply,
   onPress,
+  isUnread,
 }: InboxItemProps) {
   const { theme } = useUnistyles();
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
@@ -146,7 +148,13 @@ export const InboxItem = memo(function InboxItem({
 
   return (
     <>
-      <Pressable onPress={handlePress} style={styles.container}>
+      <Pressable
+        onPress={handlePress}
+        style={[
+          styles.container,
+          isUnread && styles.unreadContainer,
+        ]}
+      >
         <View style={styles.headerTextRow}>
           <View style={styles.headerLeft}>
             <Ionicons
@@ -214,6 +222,20 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border.subtle,
+  },
+  unreadContainer: {
+    backgroundColor: `${theme.colors.primary[500]}08`,
+    borderLeftWidth: 3,
+    borderLeftColor: theme.colors.primary[500],
+  },
+  unreadDot: {
+    position: "absolute",
+    top: theme.spacing.md,
+    right: theme.spacing.md,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: theme.colors.primary[500],
   },
   headerTextRow: {
     flexDirection: "row",

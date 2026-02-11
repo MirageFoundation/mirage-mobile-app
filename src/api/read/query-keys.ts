@@ -26,6 +26,8 @@ export const queryKeys = {
   // Inbox
   inbox: (address: string, page?: number) =>
     ["inbox", address, page] as const,
+  inboxInfinite: (address: string) =>
+    ["inbox", "infinite", address] as const,
 
   // Topics
   topics: (limit?: number) => ["topics", limit] as const,

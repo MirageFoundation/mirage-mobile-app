@@ -7,11 +7,13 @@ import { api } from "@/src/api/client";
 import type { InboxResponse } from "@/src/api/types";
 import { storage } from "@/src/stores/mmkv-storage";
 import { useAuthStore } from "@/src/stores/auth-store";
+import { useInboxStore } from "@/src/stores/inbox-store";
 
 const TASK_NAME = "INBOX_NOTIFICATION_CHECK";
 const NOTIFIED_IDS_KEY = "inbox-notified-ids";
 const LAST_CHECK_KEY = "inbox-last-check-ts";
 const SEEDED_KEY = "inbox-notified-seeded";
+const SEED_TIMESTAMP_KEY = "inbox-seed-timestamp";
 const MAX_NOTIFIED_IDS = 500;
 const FETCH_INTERVAL_SECONDS = 15 * 60;
 
@@ -27,7 +29,7 @@ Notifications.setNotificationHandler({
   },
 });
 
-function getNotifiedIds(): Set<string> {
+export function getNotifiedIds(): Set<string> {
   const raw = storage.getString(NOTIFIED_IDS_KEY);
   if (!raw) return new Set();
   try {
@@ -35,6 +37,12 @@ function getNotifiedIds(): Set<string> {
   } catch {
     return new Set();
   }
+}
+
+export function getSeedTimestamp(): number {
+  const raw = storage.getString(SEED_TIMESTAMP_KEY);
+  if (!raw) return 0;
+  return parseInt(raw, 10) || 0;
 }
 
 function saveNotifiedIds(ids: Set<string>): void {
@@ -63,6 +71,7 @@ async function seedExistingReplies(walletAddress: string): Promise<void> {
     }
 
     storage.set(SEEDED_KEY, "true");
+    storage.set(SEED_TIMESTAMP_KEY, Math.floor(Date.now() / 1000).toString());
     console.log("[InboxNotifications] Seeded existing replies, won't spam on first run");
   } catch (error) {
     console.error("[InboxNotifications] Seed failed:", error);
@@ -134,6 +143,7 @@ async function checkAndNotify(): Promise<BackgroundFetch.BackgroundFetchResult> 
     }
 
     saveNotifiedIds(notifiedIds);
+    useInboxStore.getState().addUnreadReplyIds(newReplies.map((r) => r.reply_id));
     storage.set(LAST_CHECK_KEY, Date.now().toString());
 
     return BackgroundFetch.BackgroundFetchResult.NewData;

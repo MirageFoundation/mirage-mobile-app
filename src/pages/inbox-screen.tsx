@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -13,6 +13,8 @@ import { InboxItem } from "@/src/components/molecules/inbox-item";
 import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useAuthStore } from "@/src/stores";
+import { useInboxStore } from "@/src/stores/inbox-store";
+import { getNotifiedIds, getSeedTimestamp } from "@/src/services/inbox-notifications";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
@@ -23,6 +25,8 @@ export function InboxScreen() {
   const { theme } = useUnistyles();
   const router = useRouter();
   const isLoggedIn = !!useAuthStore((s) => s.user);
+  const unreadReplyIds = useInboxStore((s) => s.unreadReplyIds);
+  const markAllAsRead = useInboxStore((s) => s.markAllAsRead);
 
   const {
     data,
@@ -34,15 +38,32 @@ export function InboxScreen() {
     refetch,
   } = useInfiniteInbox({ limit: 25 });
 
+  const replies = useMemo(
+    () => data?.pages?.flatMap((page) => page?.replies ?? []) ?? [],
+    [data],
+  );
+
+  const visibleReplies = useMemo(() => {
+    const notified = getNotifiedIds();
+    const seedTs = getSeedTimestamp();
+    if (seedTs === 0) return replies;
+    return replies.filter(
+      (r) => r.reply_timestamp <= seedTs || notified.has(r.reply_id),
+    );
+  }, [replies]);
+
   useFocusEffect(
     useCallback(() => {
       refetch();
-    }, [refetch]),
+      return () => {
+        markAllAsRead();
+      };
+    }, [refetch, markAllAsRead]),
   );
 
-  const replies = useMemo(
-    () => data?.pages.flatMap((page) => page.replies) ?? [],
-    [data],
+  const unreadSet = useMemo(
+    () => new Set(unreadReplyIds),
+    [unreadReplyIds],
   );
 
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -85,10 +106,17 @@ export function InboxScreen() {
   const keyExtractor = useCallback((item: InboxReply) => item.reply_id, []);
 
   const renderItem = useCallback(
-    ({ item }: { item: InboxReply }) => (
-      <MemoizedInboxItem reply={item} onPress={handleItemPress} />
-    ),
-    [handleItemPress],
+    ({ item }: { item: InboxReply }) => {
+      const isUnread = unreadSet.has(item.reply_id);
+      return (
+        <MemoizedInboxItem
+          reply={item}
+          onPress={handleItemPress}
+          isUnread={isUnread}
+        />
+      );
+    },
+    [handleItemPress, unreadSet],
   );
 
   const ListEmptyComponent = useCallback(() => {
@@ -157,7 +185,7 @@ export function InboxScreen() {
       </View>
 
       <FlatList
-        data={replies}
+        data={visibleReplies}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         ListEmptyComponent={ListEmptyComponent}

@@ -14,6 +14,7 @@ import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
 import { useAuthStore, useUIStore } from "@/src/stores";
+import { useInboxStore } from "@/src/stores/inbox-store";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import {
@@ -45,6 +46,7 @@ const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
   // Auth state
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
+  const hasUnreadInbox = useInboxStore((s) => s.hasUnread);
 
   return (
     <Animated.View
@@ -103,6 +105,7 @@ const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
               label={options.title || route.name}
               isFocused={isFocused}
               onPress={onPress}
+              showBadge={route.name === "inbox" && hasUnreadInbox}
             />
           );
         })}
@@ -116,11 +119,13 @@ const TabBarItem = ({
   label,
   isFocused,
   onPress,
+  showBadge,
 }: {
   routeName: string;
   label: string;
   isFocused: boolean;
   onPress: () => void;
+  showBadge?: boolean;
 }) => {
   const scale = useSharedValue(1);
   const { theme } = useUnistyles();
@@ -193,7 +198,22 @@ const TabBarItem = ({
       onPress={onPress}
     >
       <Animated.View style={[styles.tabItemInner, animatedStyle]}>
-        {renderIcon()}
+        <View style={{ position: "relative" }}>
+          {renderIcon()}
+          {showBadge && (
+            <View
+              style={{
+                position: "absolute",
+                top: -3,
+                right: -5,
+                width: 10,
+                height: 10,
+                borderRadius: 6,
+                backgroundColor: "#EF4444",
+              }}
+            />
+          )}
+        </View>
         <Text
           style={{
             fontSize: 9,
