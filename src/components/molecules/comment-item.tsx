@@ -93,7 +93,7 @@ type CommentItemProps = {
 };
 
 const SIZE_CONFIG = {
-  iconSize: 16,
+  iconSize: 18,
   avatarSize: "sm" as const,
 };
 
@@ -138,12 +138,18 @@ function extractImageUrls(content: string): {
 }
 
 /**
-* Component to render an image in comment
-*/
-const CommentImage = ({ url, onPress }: { url: string; onPress?: () => void }) => {
-const { theme } = useUnistyles();
-const [hasError, setHasError] = useState(false);
- const [aspectRatio, setAspectRatio] = useState(16 / 9);
+ * Component to render an image in comment
+ */
+const CommentImage = ({
+  url,
+  onPress,
+}: {
+  url: string;
+  onPress?: () => void;
+}) => {
+  const { theme } = useUnistyles();
+  const [hasError, setHasError] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState(16 / 9);
 
   const MEDIA_MAX_HEIGHT = 450;
   const containerWidth = 350;
@@ -153,60 +159,60 @@ const [hasError, setHasError] = useState(false);
     ? { height: MEDIA_MAX_HEIGHT }
     : { aspectRatio };
 
-if (hasError) {
-  return (
-    <View
-      style={[
-        commentImageStyles.errorContainer,
-        { backgroundColor: theme.colors.background.subtle },
-      ]}
-    >
-      <Text size="xs" mode="subtle">
-        Failed to load image
-      </Text>
-    </View>
-  );
-}
+  if (hasError) {
+    return (
+      <View
+        style={[
+          commentImageStyles.errorContainer,
+          { backgroundColor: theme.colors.background.subtle },
+        ]}
+      >
+        <Text size="xs" mode="subtle">
+          Failed to load image
+        </Text>
+      </View>
+    );
+  }
 
-return (
-  <Pressable 
+  return (
+    <Pressable
       style={[commentImageStyles.container, containerStyle]}
-    onPress={() => {
-       if (onPress) {
-         triggerHaptic("selection");
-         onPress();
-       }
-     }}
-   >
-    <Image
-      source={{ uri: url }}
-      style={commentImageStyles.image}
-      contentFit="cover"
-      transition={200}
-       onLoad={({ source }) => {
-         if (source?.width && source?.height) {
-           setAspectRatio(source.width / source.height);
-         }
-       }}
-      onError={() => setHasError(true)}
-    />
-   </Pressable>
-);
+      onPress={() => {
+        if (onPress) {
+          triggerHaptic("selection");
+          onPress();
+        }
+      }}
+    >
+      <Image
+        source={{ uri: url }}
+        style={commentImageStyles.image}
+        contentFit="cover"
+        transition={200}
+        onLoad={({ source }) => {
+          if (source?.width && source?.height) {
+            setAspectRatio(source.width / source.height);
+          }
+        }}
+        onError={() => setHasError(true)}
+      />
+    </Pressable>
+  );
 };
 const commentImageStyles = StyleSheet.create((theme) => ({
-container: {
-  marginTop: theme.spacing.sm,
-  marginBottom: theme.spacing.xs,
-  borderRadius: theme.radius.md,
-  overflow: "hidden",
-  backgroundColor: theme.colors.background.subtle,
-},
-image: {
- width: "100%",
- height: "100%",
- borderRadius: theme.radius.md,
-},
-errorContainer: {
+  container: {
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+    borderRadius: theme.radius.md,
+    overflow: "hidden",
+    backgroundColor: theme.colors.background.subtle,
+  },
+  image: {
+    width: "100%",
+    height: "100%",
+    borderRadius: theme.radius.md,
+  },
+  errorContainer: {
     width: "100%",
     height: 100,
     borderRadius: theme.radius.md,
@@ -220,19 +226,19 @@ errorContainer: {
 const CommentContent = ({ content }: { content: string }) => {
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
- const { text, imageUrls } = useMemo(
-   () => extractImageUrls(content),
-   [content],
- );
+  const { text, imageUrls } = useMemo(
+    () => extractImageUrls(content),
+    [content],
+  );
 
- const handleLinkPress = useCallback((url: string) => {
-   triggerHaptic("light");
-   const fullUrl =
-     url.startsWith("http://") || url.startsWith("https://")
-       ? url
-       : `https://${url}`;
-   Linking.openURL(fullUrl).catch(() => {});
- }, []);
+  const handleLinkPress = useCallback((url: string) => {
+    triggerHaptic("light");
+    const fullUrl =
+      url.startsWith("http://") || url.startsWith("https://")
+        ? url
+        : `https://${url}`;
+    Linking.openURL(fullUrl).catch(() => {});
+  }, []);
 
   const handleImagePress = useCallback((url: string) => {
     setPreviewImageUrl(url);
@@ -242,7 +248,7 @@ const CommentContent = ({ content }: { content: string }) => {
     setPreviewImageUrl(null);
   }, []);
 
- return (
+  return (
     <>
       <View style={styles.content}>
         {text.length > 0 && (
@@ -250,9 +256,9 @@ const CommentContent = ({ content }: { content: string }) => {
         )}
 
         {imageUrls.map((url, index) => (
-          <CommentImage 
-            key={`img-${index}`} 
-            url={url} 
+          <CommentImage
+            key={`img-${index}`}
+            url={url}
             onPress={() => handleImagePress(url)}
           />
         ))}
@@ -264,7 +270,7 @@ const CommentContent = ({ content }: { content: string }) => {
         onClose={handleClosePreview}
       />
     </>
- );
+  );
 };
 
 export const CommentItem = ({
@@ -472,11 +478,11 @@ export const CommentItem = ({
                 )}
               </View>
             </View>
-         </View>
+          </View>
           {!isCollapsed && (
             <Pressable onPress={handlePress} style={styles.expandArea} />
           )}
-         {!isOwnComment && !isCollapsed && (
+          {!isOwnComment && !isCollapsed && (
             <FollowButton
               isFollowing={isFollowingAuthor}
               onPress={onFollowPress}
@@ -494,7 +500,7 @@ export const CommentItem = ({
           {/* Actions below content on the right */}
           <View style={styles.actionsRow}>
             <View style={styles.actions}>
-             {/* More options (three dots) */}
+              {/* More options (three dots) */}
               <AnimatedPressable
                 scaleAmount={0.85}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -524,72 +530,78 @@ export const CommentItem = ({
                   }
                   color={iconColor}
                 />
-               {depth === 0 && (
-                 <Text
-                    size="xs"
-                   mode="subtle"
-                   weight="semibold"
-                   style={styles.actionText}
-                 >
-                   Reply
-                 </Text>
-               )}
-              </AnimatedPressable>
-
-              {/* Like */}
-              <Pressable
-                onPress={handleLikePress}
-                style={styles.actionButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <RNAnimated.View
-                  style={{ transform: [{ translateY: upArrowTranslateY }] }}
-                >
-                  {hasLiked ? (
-                    <UpvoteFilledIcon
-                      size={SIZE_CONFIG.iconSize}
-                      color={upvoteColor}
-                    />
-                  ) : (
-                    <UpvoteOutlineIcon
-                      size={SIZE_CONFIG.iconSize}
-                      color={upvoteColor}
-                    />
-                  )}
-                </RNAnimated.View>
-                {likes > 0 && (
+                {depth === 0 && (
                   <Text
-                    size="xs"
+                    size="sm"
+                    mode="subtle"
                     weight="bold"
-                    style={[styles.actionText, { color: upvoteColor }]}
+                    style={styles.actionText}
                   >
-                    {formatCount(likes)}
+                    Reply
                   </Text>
                 )}
-              </Pressable>
+              </AnimatedPressable>
 
-              {/* Dislike */}
-              <Pressable
-                onPress={handleDislikePress}
-                style={[styles.actionButton, { marginRight: 8 }]}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <RNAnimated.View
-                  style={{ transform: [{ translateY: downArrowTranslateY }] }}
+              {/* Vote group: upvote + count + downvote */}
+              <View style={styles.voteGroup}>
+                <Pressable
+                  onPress={handleLikePress}
+                  style={styles.voteButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  {hasDisliked ? (
-                    <DownvoteFilledIcon
-                      size={SIZE_CONFIG.iconSize}
-                      color={downvoteColor}
-                    />
-                  ) : (
-                    <DownvoteOutlineIcon
-                      size={SIZE_CONFIG.iconSize}
-                      color={downvoteColor}
-                    />
-                  )}
-                </RNAnimated.View>
-              </Pressable>
+                  <RNAnimated.View
+                    style={{ transform: [{ translateY: upArrowTranslateY }] }}
+                  >
+                    {hasLiked ? (
+                      <UpvoteFilledIcon
+                        size={SIZE_CONFIG.iconSize}
+                        color={upvoteColor}
+                      />
+                    ) : (
+                      <UpvoteOutlineIcon
+                        size={SIZE_CONFIG.iconSize}
+                        color={upvoteColor}
+                      />
+                    )}
+                  </RNAnimated.View>
+                </Pressable>
+
+                <Text
+                  size="sm"
+                  weight="bold"
+                  style={{
+                    color: hasLiked
+                      ? upvoteColor
+                      : hasDisliked
+                        ? downvoteColor
+                        : iconColor,
+                  }}
+                >
+                  {formatCount(likes)}
+                </Text>
+
+                <Pressable
+                  onPress={handleDislikePress}
+                  style={styles.voteButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <RNAnimated.View
+                    style={{ transform: [{ translateY: downArrowTranslateY }] }}
+                  >
+                    {hasDisliked ? (
+                      <DownvoteFilledIcon
+                        size={SIZE_CONFIG.iconSize}
+                        color={downvoteColor}
+                      />
+                    ) : (
+                      <DownvoteOutlineIcon
+                        size={SIZE_CONFIG.iconSize}
+                        color={downvoteColor}
+                      />
+                    )}
+                  </RNAnimated.View>
+                </Pressable>
+              </View>
             </View>
           </View>
         </Animated.View>
@@ -630,9 +642,9 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     flex: 1,
   },
- authorInfo: {
-   flex: 1,
- },
+  authorInfo: {
+    flex: 1,
+  },
   usernameButton: {
     paddingVertical: 2,
     paddingHorizontal: 2,
@@ -648,12 +660,12 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 1,
     marginLeft: theme.spacing.xs,
   },
- authorRow: {
-   flexDirection: "row",
-   alignItems: "center",
+  authorRow: {
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
-   gap: theme.spacing.xs,
- },
+    gap: theme.spacing.xs,
+  },
   content: {
     marginTop: theme.spacing.xs,
     lineHeight: 18,
@@ -666,7 +678,7 @@ const styles = StyleSheet.create((theme) => ({
   actions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.md + 2,
+    gap: theme.spacing.md + 4,
   },
   actionButton: {
     flexDirection: "row",
@@ -675,5 +687,16 @@ const styles = StyleSheet.create((theme) => ({
   },
   actionText: {
     marginLeft: 5,
+  },
+  voteGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginRight: 8,
+  },
+  voteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 4,
   },
 }));
