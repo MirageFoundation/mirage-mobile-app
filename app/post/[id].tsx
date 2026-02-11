@@ -5,6 +5,8 @@ import {
   useUserFollowed,
   uploadImageAndGetUrl,
 } from "@/src/api/read";
+import { LinearGradient } from "expo-linear-gradient";
+import { getGradientColor } from "@/src/components/molecules/profile-header";
 import {
   useToggleFollowUser,
   useToggleFollowTopic,
@@ -113,19 +115,7 @@ export default function PostDetailScreen() {
   const { theme } = useUnistyles();
   const { requireAuth, isLoggedIn } = useAuthGuard();
 
-  const { rt } = useUnistyles();
-  const isDark = rt.themeName === "dark";
-  const HEADER_COLORS_LIGHT = ["#0071cf", "#000000"];
-  const HEADER_COLORS_DARK = ["#fff", "#86daff", "#c5bfee", "#0e315c", "#0000ff"];
-  const headerBgColor = useMemo(() => {
-    const colors = isDark ? HEADER_COLORS_DARK : HEADER_COLORS_LIGHT;
-    let hash = 0;
-    const seed = id ?? "";
-    for (let i = 0; i < seed.length; i++) {
-      hash = (hash * 31 + seed.charCodeAt(i)) | 0;
-    }
-    return colors[Math.abs(hash) % colors.length];
-  }, [id, isDark]);
+ const gradientColors = useMemo(() => getGradientColor().filter(c => c !== "#000000"), []);
 
   const currentUser = useAuthStore((s) => s.user);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
@@ -1621,15 +1611,20 @@ const handleToggleFollowCommentAuthor = useCallback(() => {
   // Render header (close button + right icons)
   const renderHeader = useMemo(
     () => (
-      <View style={[styles.header, { paddingTop: insets.top, backgroundColor: headerBgColor }]}>
+      <LinearGradient
+        colors={[...gradientColors] as [string, string, ...string[]]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.header, { paddingTop: insets.top }]}
+      >
         <Pressable onPress={handleBack} style={styles.headerButton}>
-          <AntDesign name="close" size={22} color={headerBgColor === "#fff" || headerBgColor === "#86daff" || headerBgColor === "#c5bfee" ? "#000000" : "#FFFFFF"} />
+          <AntDesign name="close" size={22} color="#FFFFFF" />
         </Pressable>
 
         <View style={styles.headerSpacer} />
-      </View>
+      </LinearGradient>
     ),
-    [insets.top, handleBack, headerBgColor],
+    [insets.top, handleBack, gradientColors],
   );
 
   // Render list header (post + divider)
