@@ -137,6 +137,26 @@ export function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
   return "image";
 }
 
+const IMAGE_EXTENSIONS = new Set([
+  "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "ico", "avif",
+]);
+
+export function isDirectMediaUrl(url: string): boolean {
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.hostname.includes("cloudflarestream.com")) return true;
+    if (parsedUrl.hostname.includes("videodelivery.net")) return true;
+    const ext = parsedUrl.pathname.toLowerCase().split(".").pop() ?? "";
+    return IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
+  } catch {
+    const path = url.toLowerCase().split("?")[0];
+    const ext = path.split(".").pop() ?? "";
+    if (url.includes("cloudflarestream.com")) return true;
+    if (url.includes("videodelivery.net")) return true;
+    return IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
+  }
+}
+
 export function resolvePostContent(
   body: string | undefined,
   media: PostMedia[] | undefined
@@ -160,7 +180,19 @@ export function resolvePostContent(
   const hasMultipleMedia = mediaCount > 1;
   const extraMediaCount = mediaCount > 0 ? mediaCount - 1 : 0;
 
-  const resolvedMedia = bodyVideoUrl
+  const isOgThumbnail =
+    extractedUrl &&
+    !isDirectMediaUrl(extractedUrl) &&
+    mediaCount === 1 &&
+    primaryMedia?.type === "image" &&
+    primaryMedia?.uri &&
+    !primaryMedia.uri.includes("imagedelivery.net") &&
+    !primaryMedia.uri.includes("cloudflarestream.com") &&
+    !primaryMedia.uri.includes("videodelivery.net");
+
+  const resolvedMedia = isOgThumbnail
+    ? undefined
+    : bodyVideoUrl
     ? ({ uri: bodyVideoUrl, type: "video" } as const)
     : primaryMedia
     ? {
@@ -174,11 +206,11 @@ export function resolvePostContent(
 
   return {
     extractedUrl,
-    bodyWithoutUrl,
+    bodyWithoutUrl: isOgThumbnail ? body : bodyWithoutUrl,
     displayDomain,
     bodyVideoUrl,
     resolvedMedia,
-    hasMultipleMedia,
-    extraMediaCount,
+    hasMultipleMedia: isOgThumbnail ? false : hasMultipleMedia,
+    extraMediaCount: isOgThumbnail ? 0 : extraMediaCount,
   };
 }
