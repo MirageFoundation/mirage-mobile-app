@@ -41,6 +41,7 @@ export function FollowingScreen() {
   const {
     headerAnimatedStyle,
     registerFollowingRefreshCallback,
+   registerFollowingScrollToTopCallback,
   } = useScrollAnimationContext();
   const { requireAuth, isLoggedIn } = useAuthGuard();
   const toast = useToast();
@@ -479,6 +480,14 @@ export function FollowingScreen() {
   useEffect(() => {
     registerFollowingRefreshCallback(handleRefresh);
   }, [registerFollowingRefreshCallback, handleRefresh]);
+
+  const handleScrollToTop = useCallback(() => {
+    tabbedFeedRef.current?.scrollToTop();
+  }, []);
+
+  useEffect(() => {
+    registerFollowingScrollToTopCallback(handleScrollToTop);
+  }, [registerFollowingScrollToTopCallback, handleScrollToTop]);
 
   useEffect(() => {
     followLoadingUsersRef.current = followLoadingUsers;

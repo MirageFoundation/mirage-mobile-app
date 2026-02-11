@@ -59,6 +59,7 @@ export function HomeScreen() {
     headerAnimatedStyle,
     registerScrollRef,
     registerRefreshCallback,
+    registerScrollToTopCallback,
   } = useScrollAnimationContext();
   const { requireAuth } = useAuthGuard();
   const toast = useToast();
@@ -603,6 +604,14 @@ export function HomeScreen() {
   useEffect(() => {
     registerRefreshCallback(handleRefresh);
   }, [registerRefreshCallback, handleRefresh]);
+
+  const handleScrollToTop = useCallback(() => {
+    tabbedFeedRef.current?.scrollToTop();
+  }, []);
+
+  useEffect(() => {
+    registerScrollToTopCallback(handleScrollToTop);
+  }, [registerScrollToTopCallback, handleScrollToTop]);
 
   useEffect(() => {
     if (shouldScrollToTop) {

@@ -31,10 +31,12 @@ type ScrollAnimationContextType = {
   tabBarTranslateY: SharedValue<number>;
   registerScrollRef: (ref: ScrollableRef) => void;
   registerRefreshCallback: (callback: () => void) => void;
+  registerScrollToTopCallback: (callback: () => void) => void;
   scrollToTopAndRefresh: () => void;
   // Following-specific
   registerFollowingScrollRef: (ref: ScrollableRef) => void;
   registerFollowingRefreshCallback: (callback: () => void) => void;
+  registerFollowingScrollToTopCallback: (callback: () => void) => void;
   scrollToTopAndRefreshFollowing: () => void;
   // Profile-specific
   registerProfileScrollRef: (ref: ScrollableRef) => void;
@@ -60,10 +62,12 @@ export const ScrollAnimationProvider = ({
   // Refs for scroll-to-top functionality (home)
   const scrollRef = useRef<ScrollableRef>(null);
   const refreshCallbackRef = useRef<(() => void) | null>(null);
+  const scrollToTopCallbackRef = useRef<(() => void) | null>(null);
 
   // Refs for following scroll-to-top functionality
   const followingScrollRef = useRef<ScrollableRef>(null);
   const followingRefreshCallbackRef = useRef<(() => void) | null>(null);
+  const followingScrollToTopCallbackRef = useRef<(() => void) | null>(null);
 
   // Refs for profile scroll-to-top functionality
   const profileScrollRef = useRef<ScrollableRef>(null);
@@ -114,6 +118,10 @@ export const ScrollAnimationProvider = ({
     refreshCallbackRef.current = callback;
   }, []);
 
+  const registerScrollToTopCallback = useCallback((callback: () => void) => {
+    scrollToTopCallbackRef.current = callback;
+  }, []);
+
   // Scroll to top and trigger refresh
  const scrollToTopAndRefresh = useCallback(() => {
    headerTranslateY.value = withTiming(0, { duration: 200 });
@@ -121,12 +129,12 @@ export const ScrollAnimationProvider = ({
     isHidden.value = false;
 
     // Scroll to top
-    if (scrollRef.current) {
+    if (scrollToTopCallbackRef.current) {
+      scrollToTopCallbackRef.current();
+    } else if (scrollRef.current) {
       if ("scrollToOffset" in scrollRef.current) {
-        // FlatList
         scrollRef.current.scrollToOffset({ offset: 0, animated: true });
       } else if ("scrollTo" in scrollRef.current) {
-        // ScrollView
         scrollRef.current.scrollTo({ y: 0, animated: true });
       }
     }
@@ -146,12 +154,18 @@ export const ScrollAnimationProvider = ({
     followingRefreshCallbackRef.current = callback;
   }, []);
 
+  const registerFollowingScrollToTopCallback = useCallback((callback: () => void) => {
+    followingScrollToTopCallbackRef.current = callback;
+  }, []);
+
  const scrollToTopAndRefreshFollowing = useCallback(() => {
    headerTranslateY.value = withTiming(0, { duration: 200 });
    tabBarTranslateY.value = withTiming(0, { duration: 200 });
     isHidden.value = false;
 
-    if (followingScrollRef.current) {
+    if (followingScrollToTopCallbackRef.current) {
+      followingScrollToTopCallbackRef.current();
+    } else if (followingScrollRef.current) {
       if ("scrollToOffset" in followingScrollRef.current) {
         followingScrollRef.current.scrollToOffset({ offset: 0, animated: true });
       } else if ("scrollTo" in followingScrollRef.current) {
@@ -205,9 +219,11 @@ export const ScrollAnimationProvider = ({
       tabBarTranslateY,
       registerScrollRef,
       registerRefreshCallback,
+      registerScrollToTopCallback,
       scrollToTopAndRefresh,
       registerFollowingScrollRef,
       registerFollowingRefreshCallback,
+      registerFollowingScrollToTopCallback,
       scrollToTopAndRefreshFollowing,
       registerProfileScrollRef,
       registerProfileRefreshCallback,
@@ -221,9 +237,11 @@ export const ScrollAnimationProvider = ({
       tabBarTranslateY,
       registerScrollRef,
       registerRefreshCallback,
+      registerScrollToTopCallback,
       scrollToTopAndRefresh,
       registerFollowingScrollRef,
       registerFollowingRefreshCallback,
+      registerFollowingScrollToTopCallback,
       scrollToTopAndRefreshFollowing,
       registerProfileScrollRef,
       registerProfileRefreshCallback,
