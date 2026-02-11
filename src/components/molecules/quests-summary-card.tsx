@@ -1,12 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { Pressable, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useDerivedValue,
   withTiming,
+  useSharedValue,
+  withRepeat,
+  interpolate,
 } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -23,6 +26,88 @@ function formatTimeShort(seconds: number): string {
     return `${hours}h ${minutes}m`;
   }
   return `${minutes}m`;
+}
+
+function SkeletonBox({
+  width,
+  height,
+  borderRadius,
+  style,
+}: {
+  width: number | `${number}%`;
+  height: number;
+  borderRadius?: number;
+  style?: object;
+}) {
+  const { theme } = useUnistyles();
+  const shimmer = useSharedValue(0);
+
+  useEffect(() => {
+    shimmer.value = withRepeat(withTiming(1, { duration: 1200 }), -1, false);
+  }, [shimmer]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(shimmer.value, [0, 0.5, 1], [0.3, 0.6, 0.3]),
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        {
+          width,
+          height,
+          backgroundColor: theme.colors.background.subtle,
+          borderRadius: borderRadius ?? theme.radius.sm,
+        },
+        animatedStyle,
+        style,
+      ]}
+    />
+  );
+}
+
+function QuestsSummarySkeleton() {
+  const { theme, rt } = useUnistyles();
+  const isLightTheme = rt.themeName !== "dark";
+
+  return (
+    <>
+      <View
+        style={[
+          styles.container,
+          {
+            backgroundColor: theme.colors.background.default,
+            borderColor: theme.colors.border.subtle,
+          },
+          isLightTheme && {
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.08,
+            shadowRadius: 8,
+            elevation: 4,
+          },
+        ]}
+      >
+        <View style={styles.header}>
+          <View style={styles.titleRow}>
+            <SkeletonBox width={36} height={36} borderRadius={10} />
+            <View style={styles.titleContent}>
+              <SkeletonBox width={100} height={16} />
+              <SkeletonBox width={140} height={12} style={{ marginTop: 4 }} />
+            </View>
+          </View>
+          <SkeletonBox width={20} height={20} borderRadius={10} />
+        </View>
+      </View>
+      <View
+        style={{
+          height: 1,
+          backgroundColor: theme.colors.border.subtle,
+          marginTop: theme.spacing.sm,
+        }}
+      />
+    </>
+  );
 }
 
 export function QuestsSummaryCard() {
@@ -82,10 +167,12 @@ export function QuestsSummaryCard() {
     setQuestsCardExpanded(!questsCardExpanded);
   }, [questsCardExpanded, setQuestsCardExpanded]);
 
-  if (!isLoggedIn || (isLoading && !data)) return null;
+  if (!isLoggedIn) return null;
+  if (isLoading && !data) return <QuestsSummarySkeleton />;
   if (!data?.daily_quests?.length) return null;
 
   return (
+   <>
     <View
       style={[
         styles.container,
@@ -241,6 +328,14 @@ export function QuestsSummaryCard() {
         </View>
       )}
     </View>
+   <View
+     style={{
+       height: 1,
+       backgroundColor: theme.colors.border.subtle,
+       marginTop: theme.spacing.sm,
+     }}
+   />
+  </>
   );
 }
 

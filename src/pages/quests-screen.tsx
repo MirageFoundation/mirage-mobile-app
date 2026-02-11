@@ -820,7 +820,6 @@ function ClaimAllButton({
   onClaim,
   isClaiming,
   hasClaimed,
-  powStatus,
 }: {
   completedQuests: DailyQuest[];
   totalQuests: number;
@@ -828,7 +827,6 @@ function ClaimAllButton({
   onClaim: () => void;
   isClaiming: boolean;
   hasClaimed: boolean;
-  powStatus: string | null;
 }) {
   const canClaim = completedQuests.length > 0 && !hasClaimed;
 
@@ -852,28 +850,17 @@ function ClaimAllButton({
         colors={[...BUTTON_GRADIENT_COLORS]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
-        style={[styles.gradientButton, isClaiming && styles.claimingGradient]}
+       style={styles.gradientButton}
       >
         {isClaiming ? (
           <>
-            <View style={{ flex: 1, alignItems: "center" }}>
-              <Text size="lg" weight="bold" style={{ color: "#fff" }}>
-                Claiming
-              </Text>
-              {powStatus && (
-                <Text
-                  size="xs"
-                  weight="medium"
-                  style={{ color: "#fff", opacity: 0.8 }}
-                >
-                  {powStatus}
-                </Text>
-              )}
-            </View>
+           <Text size="lg" weight="bold" style={{ color: "#fff" }}>
+             Claiming
+           </Text>
             <ActivityIndicator
               size="small"
               color="#fff"
-              style={{ position: "absolute", right: 16 }}
+             style={{ marginLeft: 8 }}
             />
           </>
         ) : hasClaimed ? (
@@ -931,12 +918,10 @@ export function QuestsScreen() {
  const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [isClaiming, setIsClaiming] = useState(false);
  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [powStatus, setPowStatus] = useState<string | null>(null);
 
   const claimMutation = useClaimReward({
     onSuccess: (response) => {
       setIsClaiming(false);
-      setPowStatus(null);
       triggerHaptic("success");
       setShowSuccessModal(true);
       refetch();
@@ -944,21 +929,12 @@ export function QuestsScreen() {
     },
     onError: (error) => {
       setIsClaiming(false);
-      setPowStatus(null);
       triggerHaptic("error");
       Alert.alert(
         "Claim Failed",
         error.message || "Failed to claim rewards. Please try again.",
         [{ text: "OK" }],
       );
-    },
-    onPoWProgress: (progress) => {
-      const elapsed = Math.round(progress.elapsedMs / 1000);
-      const hashRate =
-        progress.elapsedMs > 0
-          ? Math.round(progress.attempts / (progress.elapsedMs / 1000))
-          : 0;
-      setPowStatus(`POW: ${elapsed}s • ${hashRate.toLocaleString()} H/s`);
     },
   });
 
@@ -1006,7 +982,6 @@ export function QuestsScreen() {
   const handleClaimAll = useCallback(() => {
     if (completedQuests.length === 0) return;
     setIsClaiming(true);
-    setPowStatus("Preparing...");
     claimMutation.mutate({ questId: "all" });
   }, [completedQuests, claimMutation]);
 
@@ -1150,7 +1125,6 @@ export function QuestsScreen() {
               onClaim={handleClaimAll}
               isClaiming={isClaiming}
               hasClaimed={hasClaimed}
-              powStatus={powStatus}
             />
           </Box>
         </View>
@@ -1286,8 +1260,5 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-  },
-  claimingGradient: {
-    paddingVertical: 11,
   },
 }));
