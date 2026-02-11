@@ -62,7 +62,7 @@ async function seedExistingReplies(walletAddress: string): Promise<void> {
   try {
     const inbox = await api.get<InboxResponse>("/get_inbox", {
       address: walletAddress,
-      limit: 50,
+      limit: 500,
     });
 
     if (inbox.replies && inbox.replies.length > 0) {
@@ -189,6 +189,9 @@ export async function initInboxNotifications(): Promise<void> {
       const isSeeded = storage.getString(SEEDED_KEY);
       if (!isSeeded) {
         await seedExistingReplies(walletAddress);
+      }
+      if (!storage.getString(SEED_TIMESTAMP_KEY)) {
+        storage.set(SEED_TIMESTAMP_KEY, Math.floor(Date.now() / 1000).toString());
       }
     }
 

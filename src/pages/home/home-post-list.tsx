@@ -54,6 +54,9 @@ const HomePostListInner = function HomePostListInner(
     (state) => state.setVisiblePostIds
   );
 
+  const onItemVisibleRef = useRef(onItemVisible);
+  onItemVisibleRef.current = onItemVisible;
+
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 50,
     minimumViewTime: 100,
@@ -71,7 +74,7 @@ const HomePostListInner = function HomePostListInner(
        if (item.isViewable && item.index != null && item.index > max) return item.index;
        return max;
      }, -1);
-     if (maxIndex >= 0) onItemVisible?.(maxIndex);
+     if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
     }
   ).current;
 

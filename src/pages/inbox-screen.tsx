@@ -14,7 +14,7 @@ import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-s
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useAuthStore } from "@/src/stores";
 import { useInboxStore } from "@/src/stores/inbox-store";
-import { getNotifiedIds, getSeedTimestamp } from "@/src/services/inbox-notifications";
+import { getNotifiedIds } from "@/src/services/inbox-notifications";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
@@ -45,11 +45,7 @@ export function InboxScreen() {
 
   const visibleReplies = useMemo(() => {
     const notified = getNotifiedIds();
-    const seedTs = getSeedTimestamp();
-    if (seedTs === 0) return replies;
-    return replies.filter(
-      (r) => r.reply_timestamp <= seedTs || notified.has(r.reply_id),
-    );
+    return replies.filter((r) => notified.has(r.reply_id));
   }, [replies]);
 
   useFocusEffect(

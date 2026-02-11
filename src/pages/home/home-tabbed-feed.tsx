@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, forwardRef, useImperativeHandle } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import type { FlatList } from "react-native";
 import { ActivityIndicator, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -78,6 +78,28 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
       () => getAllowedTagsFromContentTypes(selectedContentTypes),
       [selectedContentTypes]
     );
+
+    useEffect(() => {
+      const trimCache = (by: string) => {
+        const key = queryKeys.posts({
+          limit: 20,
+          feed: baseFeed,
+          by: by as any,
+          allowed_tags: allowedTags || undefined,
+          address: currentUser?.walletAddress ?? undefined,
+          page: undefined,
+        });
+        queryClient.setQueryData(key, (old: any) => {
+          if (!old?.pages || old.pages.length <= 1) return old;
+          return {
+            pages: old.pages.slice(0, 1),
+            pageParams: old.pageParams.slice(0, 1),
+          };
+        });
+      };
+      trimCache("magic");
+      trimCache("newest");
+    }, []);
 
     const magicQuery = useInfinitePosts({
       limit: 20,
@@ -217,40 +239,59 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
     const isLatestFetching = useRef(false);
 
     const PREFETCH_THRESHOLD = 14;
+    const PAGE_SIZE = 20;
+
+    const magicQueryRef = useRef(magicQuery);
+    magicQueryRef.current = magicQuery;
+    const magicPostsLengthRef = useRef(magicPosts.length);
+    magicPostsLengthRef.current = magicPosts.length;
+
+    const latestQueryRef = useRef(latestQuery);
+    latestQueryRef.current = latestQuery;
+    const latestPostsLengthRef = useRef(latestPosts.length);
+    latestPostsLengthRef.current = latestPosts.length;
 
     const handleMagicItemVisible = useCallback((index: number) => {
-      if (index < PREFETCH_THRESHOLD) return;
+      const totalLoaded = magicPostsLengthRef.current;
+      const currentPageStart = Math.max(0, totalLoaded - PAGE_SIZE);
+      const indexInCurrentPage = index - currentPageStart;
+      if (indexInCurrentPage < PREFETCH_THRESHOLD) return;
       const now = Date.now();
+      const q = magicQueryRef.current;
       if (
-        magicQuery.hasNextPage &&
-        !magicQuery.isFetchingNextPage &&
+        q.hasNextPage &&
+        !q.isFetchingNextPage &&
         !isMagicFetching.current &&
         now - lastMagicFetchTime.current > 1000
       ) {
         lastMagicFetchTime.current = now;
         isMagicFetching.current = true;
-        magicQuery.fetchNextPage().finally(() => {
+        q.fetchNextPage().finally(() => {
           isMagicFetching.current = false;
         });
       }
-    }, [magicQuery]);
+    }, []);
 
     const handleLatestItemVisible = useCallback((index: number) => {
-      if (index < PREFETCH_THRESHOLD) return;
+      const totalLoaded = latestPostsLengthRef.current;
+      const currentPageStart = Math.max(0, totalLoaded - PAGE_SIZE);
+      const indexInCurrentPage = index - currentPageStart;
+      if (indexInCurrentPage < PREFETCH_THRESHOLD) return;
       const now = Date.now();
+      const q = latestQueryRef.current;
       if (
-        latestQuery.hasNextPage &&
-        !latestQuery.isFetchingNextPage &&
+        q.hasNextPage &&
+        !q.isFetchingNextPage &&
         !isLatestFetching.current &&
         now - lastLatestFetchTime.current > 1000
       ) {
         lastLatestFetchTime.current = now;
         isLatestFetching.current = true;
-        latestQuery.fetchNextPage().finally(() => {
+        q.fetchNextPage().finally(() => {
           isLatestFetching.current = false;
         });
       }
-    }, [latestQuery]);
+    }, []);
 
     const createListEmptyComponent = useCallback(
       (isLoading: boolean, isError: boolean, errorMessage?: string) => {
