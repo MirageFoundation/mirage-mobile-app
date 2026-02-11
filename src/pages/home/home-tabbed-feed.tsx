@@ -212,17 +212,16 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
 
     const lastMagicFetchTime = useRef(0);
     const isMagicFetching = useRef(false);
-    const magicInitialLoadComplete = useRef(false);
 
     const lastLatestFetchTime = useRef(0);
     const isLatestFetching = useRef(false);
-    const latestInitialLoadComplete = useRef(false);
 
-    const handleMagicEndReached = useCallback(() => {
+    const PREFETCH_THRESHOLD = 14;
+
+    const handleMagicItemVisible = useCallback((index: number) => {
+      if (index < PREFETCH_THRESHOLD) return;
       const now = Date.now();
       if (
-        magicInitialLoadComplete.current &&
-        magicPosts.length >= 15 &&
         magicQuery.hasNextPage &&
         !magicQuery.isFetchingNextPage &&
         !isMagicFetching.current &&
@@ -234,13 +233,12 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
           isMagicFetching.current = false;
         });
       }
-    }, [magicPosts.length, magicQuery]);
+    }, [magicQuery]);
 
-    const handleLatestEndReached = useCallback(() => {
+    const handleLatestItemVisible = useCallback((index: number) => {
+      if (index < PREFETCH_THRESHOLD) return;
       const now = Date.now();
       if (
-        latestInitialLoadComplete.current &&
-        latestPosts.length >= 15 &&
         latestQuery.hasNextPage &&
         !latestQuery.isFetchingNextPage &&
         !isLatestFetching.current &&
@@ -252,7 +250,7 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
           isLatestFetching.current = false;
         });
       }
-    }, [latestPosts.length, latestQuery]);
+    }, [latestQuery]);
 
     const createListEmptyComponent = useCallback(
       (isLoading: boolean, isError: boolean, errorMessage?: string) => {
@@ -410,9 +408,8 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
               }
               ListFooterComponent={MagicListFooter}
               refreshControl={refreshControl}
-              onEndReached={handleMagicEndReached}
-              onEndReachedThreshold={1.5}
               feedScreen={baseFeed}
+              onItemVisible={handleMagicItemVisible}
             />
           </View>
           <View key="latest" style={styles.page}>
@@ -431,9 +428,8 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
               }
               ListFooterComponent={LatestListFooter}
               refreshControl={refreshControl}
-              onEndReached={handleLatestEndReached}
-              onEndReachedThreshold={1.5}
               feedScreen={baseFeed}
+              onItemVisible={handleLatestItemVisible}
             />
           </View>
         </AnimatedPagerView>
