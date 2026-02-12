@@ -11,6 +11,13 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import {
+  Menu,
+  MenuOption,
+  MenuOptions,
+  MenuTrigger,
+} from "react-native-popup-menu";
+import { triggerHaptic } from "@/src/components/utils/haptics";
 
 import {
   transformApiPosts,
@@ -64,6 +71,17 @@ export function TopicFeedScreen() {
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const [sortBy, setSortBy] = useState<"magic" | "newest">("magic");
+
+  const SORT_OPTIONS = useMemo(() => [
+    { label: "Magic", value: "magic" as const },
+    { label: "Latest", value: "newest" as const },
+  ], []);
+
+  const handleSortChange = useCallback((value: "magic" | "newest") => {
+    triggerHaptic("light");
+    setSortBy(value);
+  }, []);
 
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
@@ -125,6 +143,7 @@ export function TopicFeedScreen() {
     limit: 20,
     topic: topicName,
     allowed_tags: allowedTags || undefined,
+    by: sortBy,
   });
 
   const posts = useMemo(() => {
@@ -861,15 +880,102 @@ const handlersRef = useRef({
             color={theme.colors.text.default}
           />
         </Pressable>
-        <Text
-          size="xl"
-          weight="bold"
-          numberOfLines={1}
-          style={styles.headerTitle}
-        >
-          #{topicName}
-        </Text>
-        <View style={styles.headerRight} />
+        <Menu style={styles.headerTitleMenu}>
+          <MenuTrigger
+            customStyles={{
+              triggerTouchable: {
+                hitSlop: { top: 8, bottom: 8, left: 4, right: 4 },
+              },
+            }}
+          >
+            <View style={styles.titleButton}>
+              <Text
+                size="xl"
+                weight="bold"
+                numberOfLines={1}
+                style={{ flexShrink: 1 }}
+              >
+                #{topicName}
+              </Text>
+              <Text
+                size="xl"
+                weight="medium"
+                style={{
+                  color: theme.colors.text.subtle,
+                  marginLeft: 6,
+                }}
+              >
+                ǀ {SORT_OPTIONS.find((o) => o.value === sortBy)?.label}
+              </Text>
+              <Ionicons
+                name="chevron-down"
+                size={14}
+                color={theme.colors.text.subtle}
+                style={{ marginLeft: 2, marginTop: 4 }}
+              />
+            </View>
+          </MenuTrigger>
+          <MenuOptions
+            customStyles={{
+              optionsContainer: {
+                backgroundColor: theme.colors.background.default,
+                borderRadius: theme.radius.lg,
+                minWidth: 160,
+                shadowColor: theme.colors.contrast.base,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.15,
+                shadowRadius: 12,
+                elevation: 8,
+                borderWidth: 1,
+                borderColor: theme.colors.border.subtle,
+                marginTop: 4,
+                paddingVertical: 4,
+              },
+            }}
+          >
+            {SORT_OPTIONS.map((option, index) => {
+              const isActive = option.value === sortBy;
+              return (
+                <View key={option.value}>
+                  {index > 0 && (
+                    <View
+                      style={{
+                        height: 1,
+                        backgroundColor: theme.colors.border.subtle,
+                        marginHorizontal: theme.spacing.md,
+                        marginVertical: 2,
+                      }}
+                    />
+                  )}
+                  <MenuOption onSelect={() => handleSortChange(option.value)}>
+                    <View style={styles.menuOption}>
+                      <Ionicons
+                        name={isActive ? "checkmark-circle" : "ellipse-outline"}
+                        size={16}
+                        color={
+                          isActive
+                            ? theme.colors.primary[500]
+                            : theme.colors.text.subtle
+                        }
+                      />
+                      <Text
+                        size="md"
+                        weight={isActive ? "semibold" : "medium"}
+                        style={
+                          isActive
+                            ? { color: theme.colors.primary[500] }
+                            : undefined
+                        }
+                      >
+                        {option.label}
+                      </Text>
+                    </View>
+                  </MenuOption>
+                </View>
+              );
+            })}
+          </MenuOptions>
+        </Menu>
       </View>
 
      <HomePostList
@@ -976,7 +1082,20 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     marginHorizontal: theme.spacing.sm,
   },
-  headerRight: {
-    width: 40,
+  headerTitleMenu: {
+    flex: 1,
+  },
+  titleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  menuOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
   },
 }));
