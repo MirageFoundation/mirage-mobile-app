@@ -199,7 +199,6 @@ export interface PostsResponse {
   page: number;
   limit: number;
   has_more: boolean;
-  latest_inbox_timestamp?: number;
 }
 
 export interface PostWithChildren extends Post {
@@ -209,7 +208,6 @@ export interface PostWithChildren extends Post {
 export interface CommentsResponse {
   root: PostWithChildren;
   children: PostWithChildren[];
-  latest_inbox_timestamp?: number;
 }
 
 export interface RootPostIdResponse {
