@@ -77,14 +77,6 @@ function QuestsSummarySkeleton() {
           styles.container,
           {
             backgroundColor: theme.colors.background.default,
-            borderColor: theme.colors.border.subtle,
-          },
-          isLightTheme && {
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.08,
-            shadowRadius: 8,
-            elevation: 4,
           },
         ]}
       >
@@ -169,187 +161,174 @@ export function QuestsSummaryCard() {
   if (!data?.daily_quests?.length) return null;
 
   return (
-   <>
-    <View
-      style={[
-        styles.container,
-        {
-          backgroundColor: theme.colors.background.default,
-          borderColor: theme.colors.border.subtle,
-        },
-        isLightTheme && {
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.08,
-          shadowRadius: 8,
-          elevation: 4,
-        },
-      ]}
-    >
-      <Pressable onPress={handleToggleExpand} style={styles.header}>
-        <View style={styles.titleRow}>
-          <View
-            style={[
-              styles.iconContainer,
-              { backgroundColor: theme.colors.warning[500] + "20" },
-            ]}
-          >
-            <Ionicons
-              name="trophy"
-              size={18}
-              color={theme.colors.warning[500]}
-            />
-          </View>
-          <View style={styles.titleContent}>
-            <Text size="md" weight="semibold">
-              Daily Quests
-            </Text>
-            <Text size="xs" mode="subtle">
-              {completedCount}/{totalQuests} completed
-              {data?.seconds_until_reset && (
-                <Text size="xs" mode="subtle">
-                  {" "}
-                  • {formatTimeShort(data.seconds_until_reset)} left
-                </Text>
-              )}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.headerRight}>
-          {hasRewardsToClaim && (
+    <>
+      <View
+        style={[
+          styles.container,
+          {
+            backgroundColor: theme.colors.background.default,
+          },
+        ]}
+      >
+        <Pressable onPress={handleToggleExpand} style={styles.header}>
+          <View style={styles.titleRow}>
             <View
               style={[
-                styles.rewardBadge,
-                { backgroundColor: theme.colors.success[500] + "20" },
+                styles.iconContainer,
+                { backgroundColor: theme.colors.warning[500] + "20" },
               ]}
             >
               <Ionicons
-                name="sparkles"
-                size={12}
-                color={theme.colors.success[500]}
+                name="trophy"
+                size={18}
+                color={theme.colors.warning[500]}
               />
-              <Text
-                size="xs"
-                weight="bold"
-                style={{ color: theme.colors.success[500] }}
-              >
-                +{totalReward.toLocaleString()}
+            </View>
+            <View style={styles.titleContent}>
+              <Text size="md" weight="semibold">
+                Daily Quests
+              </Text>
+              <Text size="xs" mode="subtle">
+                {completedCount}/{totalQuests} completed
+                {data?.seconds_until_reset && (
+                  <Text size="xs" mode="subtle">
+                    {" "}
+                    • {formatTimeShort(data.seconds_until_reset)} left
+                  </Text>
+                )}
               </Text>
             </View>
-          )}
-          <Animated.View style={chevronStyle}>
-            <Ionicons
-              name="chevron-up"
-              size={20}
-              color={theme.colors.text.subtle}
-            />
-          </Animated.View>
-        </View>
-      </Pressable>
-
-      {questsCardExpanded && (
-        <View style={styles.content}>
-          <View
-            style={[
-              styles.progressContainer,
-              { backgroundColor: theme.colors.background.subtle },
-            ]}
-          >
-            <View
-              style={[
-                styles.progressFill,
-                {
-                  backgroundColor: allComplete
-                    ? theme.colors.success[500]
-                    : theme.colors.warning[500],
-                  width: `${progress * 100}%`,
-                },
-              ]}
-            />
           </View>
-
-          <View style={styles.questsList}>
-            {data?.daily_quests.slice(0, 3).map((quest) => (
-              <View key={quest.id} style={styles.questItem}>
+          <View style={styles.headerRight}>
+            {hasRewardsToClaim && (
+              <View
+                style={[
+                  styles.rewardBadge,
+                  { backgroundColor: theme.colors.success[500] + "20" },
+                ]}
+              >
                 <Ionicons
-                  name={
-                    quest.completed ? "checkmark-circle" : "ellipse-outline"
-                  }
-                  size={16}
-                  color={
-                    quest.completed
-                      ? theme.colors.success[500]
-                      : theme.colors.text.subtle
-                  }
+                  name="sparkles"
+                  size={12}
+                  color={theme.colors.success[500]}
                 />
                 <Text
-                  size="sm"
-                  style={
-                    quest.completed ? { flex: 1 } : { flex: 1, opacity: 0.6 }
-                  }
-                  numberOfLines={1}
+                  size="xs"
+                  weight="bold"
+                  style={{ color: theme.colors.success[500] }}
                 >
-                  {quest.title}
-                </Text>
-                <Text size="xs" mode="subtle">
-                  {quest.progress}/{quest.target}
+                  +{totalReward.toLocaleString()}
                 </Text>
               </View>
-            ))}
+            )}
+            <Animated.View style={chevronStyle}>
+              <Ionicons
+                name="chevron-up"
+                size={20}
+                color={theme.colors.text.subtle}
+              />
+            </Animated.View>
           </View>
+        </Pressable>
 
-          <Pressable
-            onPress={handleViewQuests}
-            disabled={hasClaimed}
-            style={({ pressed }) => [
-              styles.gradientButtonContainer,
-              pressed && !hasClaimed && { opacity: 0.9 },
-              hasClaimed && { opacity: 0.5 },
-            ]}
-          >
-            <LinearGradient
-              colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.gradientButton}
+        {questsCardExpanded && (
+          <View style={styles.content}>
+            <View
+              style={[
+                styles.progressContainer,
+                { backgroundColor: theme.colors.background.subtle },
+              ]}
             >
-              <Text size="sm" weight="semibold" style={{ color: "#FFFFFF" }}>
-                {hasRewardsToClaim
-                  ? "Claim Rewards"
-                  : hasClaimed
-                    ? "Claimed"
-                    : "View All Quests"}
-              </Text>
-            </LinearGradient>
-          </Pressable>
-        </View>
-      )}
-    </View>
-   <View
-     style={{
-       height: 1,
-       backgroundColor: theme.colors.border.subtle,
-       marginTop: theme.spacing.sm,
-     }}
-   />
-  </>
+              <View
+                style={[
+                  styles.progressFill,
+                  {
+                    backgroundColor: allComplete
+                      ? theme.colors.success[500]
+                      : theme.colors.warning[500],
+                    width: `${progress * 100}%`,
+                  },
+                ]}
+              />
+            </View>
+
+            <View style={styles.questsList}>
+              {data?.daily_quests.slice(0, 3).map((quest) => (
+                <View key={quest.id} style={styles.questItem}>
+                  <Ionicons
+                    name={
+                      quest.completed ? "checkmark-circle" : "ellipse-outline"
+                    }
+                    size={16}
+                    color={
+                      quest.completed
+                        ? theme.colors.success[500]
+                        : theme.colors.text.subtle
+                    }
+                  />
+                  <Text
+                    size="sm"
+                    style={
+                      quest.completed ? { flex: 1 } : { flex: 1, opacity: 0.6 }
+                    }
+                    numberOfLines={1}
+                  >
+                    {quest.title}
+                  </Text>
+                  <Text size="xs" mode="subtle">
+                    {quest.progress}/{quest.target}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            <Pressable
+              onPress={handleViewQuests}
+              disabled={hasClaimed}
+              style={({ pressed }) => [
+                styles.gradientButtonContainer,
+                pressed && !hasClaimed && { opacity: 0.9 },
+                hasClaimed && { opacity: 0.5 },
+              ]}
+            >
+              <LinearGradient
+                colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.gradientButton}
+              >
+                <Text size="sm" weight="semibold" style={{ color: "#FFFFFF" }}>
+                  {hasRewardsToClaim
+                    ? "Claim Rewards"
+                    : hasClaimed
+                      ? "Claimed"
+                      : "View All Quests"}
+                </Text>
+              </LinearGradient>
+            </Pressable>
+          </View>
+        )}
+      </View>
+      <View
+        style={{
+          height: 1,
+          backgroundColor: theme.colors.border.subtle,
+          // marginTop: theme.spacing.sm,
+        }}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create((theme) => ({
   container: {
-    marginHorizontal: theme.spacing.md,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
     overflow: "hidden",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: theme.spacing.md,
+    padding: theme.spacing.md + 2,
   },
   titleRow: {
     flexDirection: "row",
@@ -382,7 +361,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   content: {
     paddingHorizontal: theme.spacing.md,
-    paddingBottom: theme.spacing.md,
+    paddingBottom: theme.spacing.md + 2,
     gap: theme.spacing.md,
   },
   progressContainer: {
