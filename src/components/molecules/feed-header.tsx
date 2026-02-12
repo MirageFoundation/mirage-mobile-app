@@ -159,7 +159,7 @@ export const FeedHeader = ({
                             name={
                               isActive ? "checkmark-circle" : "ellipse-outline"
                             }
-                            size={16}
+                            size={18}
                             color={
                               isActive
                                 ? theme.colors.primary[500]
@@ -167,7 +167,7 @@ export const FeedHeader = ({
                             }
                           />
                           <Text
-                            size="md"
+                            size="lg"
                             weight={isActive ? "semibold" : "medium"}
                             style={
                               isActive

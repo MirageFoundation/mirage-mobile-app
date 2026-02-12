@@ -203,13 +203,15 @@ export const PostCardHeader = memo(function PostCardHeader({
                       }
                     />
                     <Text
-                      size="md"
+                      size="lg"
                       weight={isTopicFollowed ? "semibold" : "medium"}
-                      style={
+                      numberOfLines={2}
+                      style={[
+                        { flexShrink: 1 },
                         isTopicFollowed
                           ? { color: theme.colors.primary[500] }
-                          : undefined
-                      }
+                          : undefined,
+                      ]}
                     >
                       {isTopicFollowed ? "Unfollow" : "Follow"} #{topic}
                     </Text>
@@ -229,13 +231,15 @@ export const PostCardHeader = memo(function PostCardHeader({
                     }
                   />
                   <Text
-                    size="md"
+                    size="lg"
                     weight={isFollowing ? "semibold" : "medium"}
-                    style={
+                    numberOfLines={2}
+                    style={[
+                      { flexShrink: 1 },
                       isFollowing
                         ? { color: theme.colors.primary[500] }
-                        : undefined
-                    }
+                        : undefined,
+                    ]}
                   >
                     {isFollowing ? "Unfollow" : "Follow"} @{author.username}
                   </Text>
@@ -304,6 +308,7 @@ const styles = StyleSheet.create((theme) => ({
     gap: 10,
     paddingVertical: theme.spacing.xs + 2,
     paddingHorizontal: theme.spacing.md,
+    maxWidth: 250,
   },
   moreButton: {
     width: 32,
