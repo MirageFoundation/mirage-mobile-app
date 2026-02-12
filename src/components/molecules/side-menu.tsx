@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleProp,
@@ -31,6 +32,7 @@ import {
   useUsernameFromAddress,
   useUserStatus,
 } from "@/src/api/read/hooks";
+import Constants from "expo-constants";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MENU_WIDTH = SCREEN_WIDTH * 0.8;
@@ -668,6 +670,26 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   {/* Account Section */}
                   <SectionHeader title="Account" />
                   <LogoutMenuItem onPress={handleLogoutPress} />
+
+                  <View style={styles.versionContainer}>
+                    <Text
+                      style={{ color: theme.colors.text.subtle }}
+                      size="sm"
+                      weight="light"
+                    >
+                      v{Constants.expoConfig?.version ?? "1.0.0"} ({Platform.OS}
+                      )
+                    </Text>
+                    {__DEV__ && (
+                      <Text
+                        style={{ color: theme.colors.text.subtle }}
+                        size="sm"
+                        weight="light"
+                      >
+                        update 1
+                      </Text>
+                    )}
+                  </View>
                 </>
               ) : (
                 <>
@@ -684,6 +706,26 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     subtitle="I already have an account"
                     onPress={handleLogin}
                   />
+
+                  <View style={styles.versionContainer}>
+                    <Text
+                      style={{ color: theme.colors.text.subtle }}
+                      size="sm"
+                      weight="light"
+                    >
+                      v{Constants.expoConfig?.version ?? "1.0.0"} ({Platform.OS}
+                      )
+                    </Text>
+                    {__DEV__ && (
+                      <Text
+                        style={{ color: theme.colors.text.subtle }}
+                        size="sm"
+                        weight="light"
+                      >
+                        update 1
+                      </Text>
+                    )}
+                  </View>
                 </>
               )}
             </ScrollView>
@@ -812,5 +854,10 @@ const styles = StyleSheet.create((theme) => ({
     marginTop: theme.spacing.sm,
     borderRadius: 16,
     gap: theme.spacing.xs,
+  },
+  versionContainer: {
+    alignItems: "center",
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.sm,
   },
 }));
