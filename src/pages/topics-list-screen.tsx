@@ -20,15 +20,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { useTopics, useUserFollowed } from "@/src/api/read";
-import { useToggleFollowTopic } from "@/src/api/write";
 import type { TopicInfo } from "@/src/api/types";
 import { Box, Text } from "@/src/components/ui/primitives";
 import {
   ContentWarningBadge,
   type ContentWarningType,
 } from "@/src/components/atoms";
-import { useAuthGuard } from "@/src/hooks";
-import { useToast } from "@/src/providers/toast-provider";
+import { useAuthGuard, useFollowHandler } from "@/src/hooks";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
@@ -226,14 +224,12 @@ export function TopicsListScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const { requireAuth } = useAuthGuard();
-  const toast = useToast();
 
   const { data, isLoading, refetch } = useTopics(200);
   const { data: followedData } = useUserFollowed();
-  const toggleFollowTopicMutation = useToggleFollowTopic();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [loadingTopics, setLoadingTopics] = useState<Set<string>>(new Set());
+  const { handleFollowTopic } = useFollowHandler({});
 
   const followedTopics = useMemo(
     () => new Set(followedData?.followed_topics ?? []),
@@ -260,76 +256,10 @@ export function TopicsListScreen() {
 
   const handleFollowToggle = useCallback(
     (topicName: string, isCurrentlyFollowing: boolean) => {
-      if (loadingTopics.has(topicName)) return;
-
-      requireAuth(async () => {
-        triggerHaptic("light");
-        const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
-        const actionPast = isCurrentlyFollowing
-          ? "Unfollowed"
-          : "Now following";
-
-        const toastId = toast.loading(
-          `${action} #${topicName}`,
-          "Computing proof of work...",
-        );
-
-        setLoadingTopics((prev) => new Set(prev).add(topicName));
-
-        setTimeout(async () => {
-          try {
-            await toggleFollowTopicMutation.mutateAsync({
-              topic: topicName,
-              isCurrentlyFollowing,
-            });
-
-            toast.update(toastId, {
-              type: "success",
-              title: `${actionPast} #${topicName}`,
-              description: undefined,
-              duration: 3000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } catch (error: unknown) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error);
-            const isAlreadyFollowed = errorMessage
-              .toLowerCase()
-              .includes("already follow");
-            const isNotFollowing =
-              errorMessage.toLowerCase().includes("not following") ||
-              errorMessage.includes("not in followed");
-
-            if (isAlreadyFollowed || isNotFollowing) {
-              toast.update(toastId, {
-                type: "success",
-                title: isAlreadyFollowed
-                  ? `Already following #${topicName}`
-                  : `Already not following #${topicName}`,
-                description: undefined,
-                duration: 3000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 3000);
-            } else {
-              toast.update(toastId, {
-                type: "error",
-                title: `Failed to ${action.toLowerCase()} #${topicName}`,
-                description: "Please try again",
-                duration: 4000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 4000);
-            }
-          } finally {
-            setLoadingTopics((prev) => {
-              const newSet = new Set(prev);
-              newSet.delete(topicName);
-              return newSet;
-            });
-          }
-        }, 0);
-      });
+      triggerHaptic("light");
+      handleFollowTopic(topicName, isCurrentlyFollowing);
     },
-    [loadingTopics, requireAuth, toast, toggleFollowTopicMutation],
+    [handleFollowTopic],
   );
 
   const handleRefresh = useCallback(async () => {
@@ -346,14 +276,14 @@ export function TopicsListScreen() {
       <TopicRow
         topic={item}
         isFollowing={followedTopics.has(item.topic)}
-        isLoading={loadingTopics.has(item.topic)}
+        isLoading={false}
         onPress={() => handleTopicPress(item.topic)}
         onFollowToggle={() =>
           handleFollowToggle(item.topic, followedTopics.has(item.topic))
         }
       />
     ),
-    [followedTopics, loadingTopics, handleTopicPress, handleFollowToggle],
+    [followedTopics, handleTopicPress, handleFollowToggle],
   );
 
   const keyExtractor = useCallback((item: TopicInfo) => item.topic, []);

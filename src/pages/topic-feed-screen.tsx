@@ -22,8 +22,6 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import {
   transformApiPosts,
   useInfinitePosts,
-  useToggleFollowUser,
-  useToggleFollowTopic,
   useUserFollowed,
 } from "@/src/api";
 import {
@@ -40,6 +38,7 @@ import {
   useAuthGuard,
   useBlockHandler,
   useDeleteHandler,
+  useFollowHandler,
   useNetworkState,
   useReportHandler,
   useVoteHandler,
@@ -112,18 +111,7 @@ export function TopicFeedScreen() {
     [followedData],
   );
 
-  const toggleFollowMutation = useToggleFollowUser();
-  const toggleFollowTopicMutation = useToggleFollowTopic();
-  const toggleFollowAsyncRef = useRef(toggleFollowMutation.mutateAsync);
-
-  useEffect(() => {
-    toggleFollowAsyncRef.current = toggleFollowMutation.mutateAsync;
-  }, [toggleFollowMutation.mutateAsync]);
-
-  const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(
-    new Set(),
-  );
-  const followLoadingUsersRef = useRef<Set<string>>(new Set());
+  const { handleFollowUser: handleFollowPress, handleFollowTopic: handleFollowTopicFromCard } = useFollowHandler({});
 
   const allowedTags = useMemo(
     () => getAllowedTagsFromContentTypes(selectedContentTypes),
@@ -292,90 +280,6 @@ export function TopicFeedScreen() {
     }
   }, [reportHandler.showReportSheet]);
 
-  const handleFollowPress = useCallback(
-    (
-      authorId: string,
-      authorUsername: string,
-      isCurrentlyFollowing: boolean,
-    ) => {
-      if (followLoadingUsersRef.current.has(authorId)) {
-        return;
-      }
-
-      requireAuth(async () => {
-        const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
-        const actionPast = isCurrentlyFollowing ? "Unfollowed" : "Followed";
-
-        const toastId = toast.loading(
-          `${action} @${authorUsername}`,
-          "Computing proof of work...",
-        );
-
-        setTimeout(async () => {
-          setFollowLoadingUsers((prev) => new Set(prev).add(authorId));
-
-          try {
-            await toggleFollowAsyncRef.current({
-              userAddress: authorId,
-              isCurrentlyFollowing,
-            });
-
-            toast.update(toastId, {
-              type: "success",
-              title: `${actionPast} @${authorUsername}`,
-              description: undefined,
-              duration: 3000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } catch (error: unknown) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error);
-            const isAlreadyFollowed = errorMessage
-              .toLowerCase()
-              .includes("already follow");
-            const isNotFollowing =
-              errorMessage.toLowerCase().includes("not following") ||
-              errorMessage.includes("not in followed");
-
-            if (isAlreadyFollowed) {
-              toast.update(toastId, {
-                type: "success",
-                title: `Already following @${authorUsername}`,
-                description: undefined,
-                duration: 3000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 3000);
-            } else if (isNotFollowing) {
-              toast.update(toastId, {
-                type: "success",
-                title: `Already not following @${authorUsername}`,
-                description: undefined,
-                duration: 3000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 3000);
-            } else {
-              console.error("Follow/unfollow failed:", error);
-              toast.update(toastId, {
-                type: "error",
-                title: `Failed to ${action.toLowerCase()} @${authorUsername}`,
-                description: "Please try again",
-                duration: 4000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 4000);
-            }
-          } finally {
-            setFollowLoadingUsers((prev) => {
-              const newSet = new Set(prev);
-              newSet.delete(authorId);
-              return newSet;
-            });
-          }
-        }, 0);
-      });
-    },
-    [requireAuth, toast],
-  );
-
   const handleReport = useCallback(() => {
     if (selectedPost) {
       reportHandler.requestReport(selectedPost.id, "post");
@@ -441,73 +345,10 @@ export function TopicFeedScreen() {
 
   const handleFollowTopic = useCallback(() => {
     if (!selectedPost?.topic) return;
-
     const topic = selectedPost.topic;
     const isCurrentlyFollowed = followedTopics.includes(topic);
-
-    requireAuth(async () => {
-      const action = isCurrentlyFollowed ? "Unfollowing" : "Following";
-      const actionPast = isCurrentlyFollowed ? "Unfollowed" : "Now following";
-
-      const toastId = toast.loading(
-        `${action} #${topic}`,
-        "Computing proof of work...",
-      );
-
-      setTimeout(async () => {
-        try {
-          await toggleFollowTopicMutation.mutateAsync({
-            topic,
-            isCurrentlyFollowing: isCurrentlyFollowed,
-          });
-
-          toast.update(toastId, {
-            type: "success",
-            title: `${actionPast} #${topic}`,
-            description: undefined,
-            duration: 3000,
-          });
-          setTimeout(() => toast.dismiss(toastId), 3000);
-        } catch (error: unknown) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          const isAlreadyFollowed = errorMessage
-            .toLowerCase()
-            .includes("already follow");
-          const isNotFollowing =
-            errorMessage.toLowerCase().includes("not following") ||
-            errorMessage.includes("not in followed");
-
-          if (isAlreadyFollowed || isNotFollowing) {
-            toast.update(toastId, {
-              type: "success",
-              title: isAlreadyFollowed
-                ? `Already following #${topic}`
-                : `Already not following #${topic}`,
-              description: undefined,
-              duration: 3000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } else {
-            console.error("Follow/unfollow topic failed:", error);
-            toast.update(toastId, {
-              type: "error",
-              title: `Failed to ${action.toLowerCase()} #${topic}`,
-              description: "Please try again",
-              duration: 4000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 4000);
-          }
-        }
-      }, 0);
-    });
-  }, [
-    selectedPost?.topic,
-    followedTopics,
-    toggleFollowTopicMutation,
-    toast,
-    requireAuth,
-  ]);
+    handleFollowTopicFromCard(topic, isCurrentlyFollowed);
+  }, [selectedPost?.topic, followedTopics, handleFollowTopicFromCard]);
 
   const handleFollowUserFromSheet = useCallback(() => {
     if (!selectedPost) return;
@@ -516,68 +357,6 @@ export function TopicFeedScreen() {
     const isCurrentlyFollowing = followedUsers.includes(authorId);
     handleFollowPress(authorId, authorUsername, isCurrentlyFollowing);
   }, [selectedPost, followedUsers, handleFollowPress]);
-
-  const handleFollowTopicFromCard = useCallback(
-    (topic: string, isCurrentlyFollowed: boolean) => {
-      requireAuth(async () => {
-        const action = isCurrentlyFollowed ? "Unfollowing" : "Following";
-        const actionPast = isCurrentlyFollowed ? "Unfollowed" : "Now following";
-
-        const toastId = toast.loading(
-          `${action} #${topic}`,
-          "Computing proof of work...",
-        );
-
-        setTimeout(async () => {
-          try {
-            await toggleFollowTopicMutation.mutateAsync({
-              topic,
-              isCurrentlyFollowing: isCurrentlyFollowed,
-            });
-
-            toast.update(toastId, {
-              type: "success",
-              title: `${actionPast} #${topic}`,
-              description: undefined,
-              duration: 3000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } catch (error: unknown) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error);
-            const isAlreadyFollowed = errorMessage
-              .toLowerCase()
-              .includes("already follow");
-            const isNotFollowing =
-              errorMessage.toLowerCase().includes("not following") ||
-              errorMessage.includes("not in followed");
-
-            if (isAlreadyFollowed || isNotFollowing) {
-              toast.update(toastId, {
-                type: "success",
-                title: isAlreadyFollowed
-                  ? `Already following #${topic}`
-                  : `Already not following #${topic}`,
-                description: undefined,
-                duration: 3000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 3000);
-            } else {
-              console.error("Follow/unfollow topic failed:", error);
-              toast.update(toastId, {
-                type: "error",
-                title: `Failed to ${action.toLowerCase()} #${topic}`,
-                description: "Please try again",
-                duration: 4000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 4000);
-            }
-          }
-        }, 0);
-      });
-    },
-    [requireAuth, toast, toggleFollowTopicMutation],
-  );
 
   const handleShowFewer = useCallback(() => {
     toast.success("Got it", "We'll show fewer posts like this.");
@@ -604,10 +383,6 @@ export function TopicFeedScreen() {
       setIsManualRefreshing(false);
     }
   }, [refetch]);
-
-  useEffect(() => {
-    followLoadingUsersRef.current = followLoadingUsers;
-  }, [followLoadingUsers]);
 
   const handleEndReached = useCallback(() => {
     const now = Date.now();
@@ -760,10 +535,6 @@ export function TopicFeedScreen() {
   useEffect(() => {
     setFollowedTopicsStore(followedTopicsSet);
   }, [followedTopicsSet, setFollowedTopicsStore]);
-
-  useEffect(() => {
-    setFollowLoadingUsersStore(followLoadingUsers);
-  }, [followLoadingUsers, setFollowLoadingUsersStore]);
 
   useEffect(() => {
     setRevealedPostsStore(revealedPosts);

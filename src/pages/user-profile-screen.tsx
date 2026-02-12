@@ -31,7 +31,6 @@ import {
 import { transformApiPost } from "@/src/api/read/utils";
 import type { Post as ApiPost } from "@/src/api/types";
 import {
-  useToggleFollowUser,
   useBlockUser,
   useUnblockUser,
 } from "@/src/api/write";
@@ -61,6 +60,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import {
   useBlockHandler,
   useDeleteHandler,
+  useFollowHandler,
   useReportHandler,
   useVoteHandler,
   type VoteResult,
@@ -195,9 +195,16 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     },
   });
 
- const toggleFollowMutation = useToggleFollowUser();
   const blockUserMutation = useBlockUser();
   const unblockUserMutation = useUnblockUser();
+  const { handleFollowUser } = useFollowHandler({
+    onOptimisticFollowUser: useCallback((_userId: string, isFollowing: boolean) => {
+      setOptimisticFollowing(isFollowing);
+    }, []),
+    onRollbackFollowUser: useCallback(() => {
+      setOptimisticFollowing(null);
+    }, []),
+  });
 
  const isFollowing = useMemo(() => {
     if (optimisticFollowing !== null) return optimisticFollowing;
@@ -315,49 +322,15 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     }
   }, [router, userAddress, id]);
 
-const handleFollow = useCallback(() => {
-  if (!userAddress) return;
-   setOptimisticFollowing(true);
-    toast.promise(
-      toggleFollowMutation.mutateAsync({
-        userAddress,
-        isCurrentlyFollowing: false,
-      }),
-      {
-        loading: `Following @${displayUsername || "user"}...`,
-        success: `Followed @${displayUsername || "user"}`,
-        error: () => {
-          setOptimisticFollowing(null);
-          return "Failed to follow user";
-        },
-      }
-    ).catch(() => {
-      // Error already handled by toast.promise
-        setOptimisticFollowing(null);
-    });
- }, [userAddress, displayUsername, toggleFollowMutation, toast]);
+  const handleFollow = useCallback(() => {
+    if (!userAddress) return;
+    handleFollowUser(userAddress, displayUsername || "user", false);
+  }, [userAddress, displayUsername, handleFollowUser]);
 
-const handleUnfollow = useCallback(() => {
-  if (!userAddress) return;
-   setOptimisticFollowing(false);
-    toast.promise(
-      toggleFollowMutation.mutateAsync({
-        userAddress,
-        isCurrentlyFollowing: true,
-      }),
-      {
-        loading: `Unfollowing @${displayUsername || "user"}...`,
-        success: `Unfollowed @${displayUsername || "user"}`,
-        error: () => {
-          setOptimisticFollowing(null);
-          return "Failed to unfollow user";
-        },
-      }
-    ).catch(() => {
-      // Error already handled by toast.promise
-        setOptimisticFollowing(null);
-    });
- }, [userAddress, displayUsername, toggleFollowMutation, toast]);
+  const handleUnfollow = useCallback(() => {
+    if (!userAddress) return;
+    handleFollowUser(userAddress, displayUsername || "user", true);
+  }, [userAddress, displayUsername, handleFollowUser]);
 
   const handleRequestBlockUser = useCallback(() => {
     setShowBlockUserConfirmation(true);

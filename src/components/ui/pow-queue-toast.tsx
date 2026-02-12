@@ -69,6 +69,8 @@ export const PowQueueToast = () => {
   const [overlayData, setOverlayData] = useState<{
     type: string;
     success: boolean;
+   elapsedMs: number;
+   hashRate: number;
   } | null>(null);
 
   const isAnimatingOutRef = useRef(false);
@@ -158,7 +160,11 @@ export const PowQueueToast = () => {
 
   useEffect(() => {
     if (successOverlay) {
-      setOverlayData(successOverlay);
+     setOverlayData({
+       ...successOverlay,
+       elapsedMs: lastElapsedMsRef.current,
+       hashRate: lastHashRateRef.current,
+     });
       overlayOpacity.setValue(0);
       Animated.sequence([
         Animated.timing(overlayOpacity, {
@@ -388,14 +394,14 @@ export const PowQueueToast = () => {
           <Text style={[styles.phaseText, { color: statColor }]}>
             {overlayData.success ? "PoW Solved" : "PoW Failed"}
           </Text>
-          {lastElapsedMsRef.current > 0 && (
+          {overlayData.elapsedMs > 0 && (
             <View style={styles.statsRow}>
               <Text style={[styles.statText, { color: statColor }]}>
-                {formatElapsedTime(lastElapsedMsRef.current)}
+                {formatElapsedTime(overlayData.elapsedMs)}
               </Text>
-              {lastHashRateRef.current > 0 && (
+              {overlayData.hashRate > 0 && (
                 <Text style={[styles.statText, { color: statColor }]}>
-                  {formatHashRate(lastHashRateRef.current)}
+                  {formatHashRate(overlayData.hashRate)}
                 </Text>
               )}
             </View>

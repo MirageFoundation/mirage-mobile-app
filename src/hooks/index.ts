@@ -14,6 +14,11 @@ export {
   type UseDeleteHandlerReturn,
 } from "./use-delete-handler";
 export {
+  useFollowHandler,
+  type UseFollowHandlerOptions,
+  type UseFollowHandlerReturn,
+} from "./use-follow-handler";
+export {
   useGiphy,
   type UseGiphyOptions,
   type UseGiphyReturn,

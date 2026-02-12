@@ -12,6 +12,11 @@ import {
   useToggleFollowTopic,
   useComment,
 } from "@/src/api/write";
+import {
+  usePowQueueStore,
+  generateActionId,
+  getActionLabel,
+} from "@/src/services/pow-queue";
 import { useEdit } from "@/src/api/write";
 import type { PoWProgress } from "@/src/api/write/signing";
 import { Avatar } from "@/src/components/atoms";
@@ -377,31 +382,12 @@ export default function PostDetailScreen() {
     }
   }, [reportHandler.showReportSheet]);
 
-  // Comment mutation with PoW progress tracking
-  const [commentToastId, setCommentToastId] = useState<string | null>(null);
-  const handlePoWProgress = useCallback(
-    (progress: PoWProgress) => {
-      if (commentToastId) {
-        const progressPercent =
-          progress.estimatedTotalMs > 0
-            ? Math.min(
-                99,
-                Math.round(
-                  (progress.elapsedMs / progress.estimatedTotalMs) * 100,
-                ),
-              )
-            : 0;
-        toast.update(commentToastId, {
-          description: `Computing proof of work... ${progressPercent}%`,
-        });
-      }
-    },
-    [commentToastId, toast],
-  );
-
-  const commentMutation = useComment({
-    onPoWProgress: handlePoWProgress,
-  });
+  const commentMutation = useComment({});
+  const commentMutateAsyncRef = useRef(commentMutation.mutateAsync);
+  useEffect(() => {
+    commentMutateAsyncRef.current = commentMutation.mutateAsync;
+  }, [commentMutation.mutateAsync]);
+  const enqueue = usePowQueueStore((state) => state.enqueue);
 
   const editToastIdRef = useRef<string | null>(null);
   const handleEditPoWProgress = useCallback(
@@ -1171,32 +1157,15 @@ export default function PostDetailScreen() {
       const parentId = replyingTo?.id ?? id;
       const replyingToUsername = replyingTo?.author.username;
 
-      // Show loading toast
-      const hasMedia = imageUri || gifUrl;
-      const toastId = toast.loading(
-        replyingToUsername
-          ? `Replying to @${replyingToUsername}`
-          : "Posting comment",
-        hasMedia ? "Uploading media..." : "Computing proof of work...",
-      );
-      setCommentToastId(toastId);
-
-      // Handle media upload if present
       let mediaUrl: string | null = null;
       if (imageUri) {
         try {
-          toast.update(toastId, { description: "Uploading image..." });
           mediaUrl = await uploadImageAndGetUrl(imageUri);
         } catch (error) {
-          toast.update(toastId, {
-            type: "error",
-            title: "Image upload failed",
-            description:
-              error instanceof Error ? error.message : "Please try again",
-            duration: 4000,
-          });
-          setTimeout(() => toast.dismiss(toastId), 4000);
-          setCommentToastId(null);
+          toast.error(
+            "Image upload failed",
+            error instanceof Error ? error.message : "Please try again",
+          );
           return;
         }
       } else if (gifUrl) {
@@ -1205,12 +1174,9 @@ export default function PostDetailScreen() {
 
       let finalContent = text;
       if (mediaUrl) {
-        // Append media URL on a new line if there's text, or just the URL if no text
         finalContent = text.trim() ? `${text.trim()}\n\n${mediaUrl}` : mediaUrl;
       }
-      toast.update(toastId, { description: "Computing proof of work..." });
 
-      // Create optimistic comment for immediate UI update
       const optimisticCommentId = `optimistic-${Date.now()}`;
       const optimisticComment: Comment = {
         id: optimisticCommentId,
@@ -1229,118 +1195,83 @@ export default function PostDetailScreen() {
         parentId: replyingTo?.id ?? null,
       };
 
-      // Store replyingTo reference before clearing it
       const replyTarget = replyingTo;
 
-      // Apply optimistic update immediately
-      if (replyTarget) {
-        // Add as a reply to the parent comment
-        setOptimisticReplies((prev) => ({
-          ...prev,
-          [replyTarget.id]: [
-            ...(prev[replyTarget.id] ?? []),
-            optimisticComment,
-          ],
-        }));
-      } else {
-        // Add as top-level comment
-        setLocalComments((prev) => [optimisticComment, ...prev]);
-      }
-
-      setLocalPostUpdates((prev) => ({
-        ...prev,
-        comments: (prev.comments ?? displayPost?.comments ?? 0) + 1,
-      }));
-
-      // Also update shared store (syncs with home/following screens)
-      if (id) {
-        incrementCommentCount(id);
-      }
-
-      // Clear reply state immediately so UI updates
       setReplyingTo(null);
       setIsSubmitting(false);
 
-      // Submit to API in background (don't block UI)
-      try {
-        const result = await commentMutation.mutateAsync({
-          parentId,
-          content: finalContent,
-        });
-
-        // Update toast to success
-        toast.update(toastId, {
-          type: "success",
-          title: replyingToUsername
-            ? `Replied to @${replyingToUsername}`
-            : "Comment posted!",
-          description: undefined,
-          duration: 3000,
-        });
-        setTimeout(() => toast.dismiss(toastId), 3000);
-
-        // Don't refetch immediately - the server may not have indexed the comment yet
-        // The optimistic comment will persist until the user manually refreshes
-        // This prevents the comment from disappearing after successful submission
-      } catch (error: unknown) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to post comment";
-
-        // Revert optimistic update on error
-        if (replyTarget) {
-          setOptimisticReplies((prev) => {
-            const updated = { ...prev };
-            if (updated[replyTarget.id]) {
-              updated[replyTarget.id] = updated[replyTarget.id].filter(
-                (c) => c.id !== optimisticCommentId,
-              );
-              if (updated[replyTarget.id].length === 0) {
-                delete updated[replyTarget.id];
-              }
-            }
-            return updated;
+      const actionId = generateActionId();
+      enqueue({
+        id: actionId,
+        type: "comment",
+        label: getActionLabel("comment"),
+        execute: async () => {
+          return commentMutateAsyncRef.current({
+            parentId,
+            content: finalContent,
           });
-        } else {
-          setLocalComments((prev) =>
-            prev.filter((c) => c.id !== optimisticCommentId),
-          );
-        }
-
-        setLocalPostUpdates((prev) => ({
-          ...prev,
-          comments: Math.max(
-            0,
-            (prev.comments ?? displayPost?.comments ?? 0) - 1,
-          ),
-        }));
-
-        // Also revert shared store (syncs with home/following screens)
-        if (id) {
-          decrementCommentCount(id);
-        }
-
-        // Update toast to error
-        toast.update(toastId, {
-          type: "error",
-          title: "Failed to post comment",
-          description: errorMessage,
-          duration: 5000,
-        });
-        setTimeout(() => toast.dismiss(toastId), 5000);
-
-        console.error("Comment submission failed:", error);
-      } finally {
-        setCommentToastId(null);
-      }
+        },
+        onOptimisticUpdate: () => {
+          if (replyTarget) {
+            setOptimisticReplies((prev) => ({
+              ...prev,
+              [replyTarget.id]: [
+                ...(prev[replyTarget.id] ?? []),
+                optimisticComment,
+              ],
+            }));
+          } else {
+            setLocalComments((prev) => [optimisticComment, ...prev]);
+          }
+          setLocalPostUpdates((prev) => ({
+            ...prev,
+            comments: (prev.comments ?? displayPost?.comments ?? 0) + 1,
+          }));
+          if (id) {
+            incrementCommentCount(id);
+          }
+        },
+        onSuccess: () => {},
+        onError: () => {},
+        onRollback: () => {
+          if (replyTarget) {
+            setOptimisticReplies((prev) => {
+              const updated = { ...prev };
+              if (updated[replyTarget.id]) {
+                updated[replyTarget.id] = updated[replyTarget.id].filter(
+                  (c) => c.id !== optimisticCommentId,
+                );
+                if (updated[replyTarget.id].length === 0) {
+                  delete updated[replyTarget.id];
+                }
+              }
+              return updated;
+            });
+          } else {
+            setLocalComments((prev) =>
+              prev.filter((c) => c.id !== optimisticCommentId),
+            );
+          }
+          setLocalPostUpdates((prev) => ({
+            ...prev,
+            comments: Math.max(
+              0,
+              (prev.comments ?? displayPost?.comments ?? 0) - 1,
+            ),
+          }));
+          if (id) {
+            decrementCommentCount(id);
+          }
+        },
+      });
     },
     [
       currentUser,
       id,
       replyingTo,
-      refetchComments,
       displayPost,
+      enqueue,
       toast,
-      commentMutation,
     ],
   );
 
