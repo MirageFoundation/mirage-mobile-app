@@ -74,6 +74,8 @@ export const PowQueueToast = () => {
   const isAnimatingOutRef = useRef(false);
   const dismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const powStartedRef = useRef(false);
+  const lastElapsedMsRef = useRef(0);
+  const lastHashRateRef = useRef(0);
 
   const isShowingResult =
     currentAction === null && lastCompletedAction !== null;
@@ -211,10 +213,12 @@ export const PowQueueToast = () => {
 
           if (powStartedRef.current) {
             setElapsedMs(elapsed);
+            lastElapsedMsRef.current = elapsed;
 
             if (elapsed > 0 && att > 0) {
               const rate = att / (elapsed / 1000);
               setHashRate(rate);
+              lastHashRateRef.current = rate;
             }
           }
         } catch {
@@ -264,16 +268,18 @@ export const PowQueueToast = () => {
     if (isShowingResult) {
       if (lastCompletedAction.success) {
         return (
-          <Ionicons name="checkmark-circle" size={14} color={colors.icon} />
+          <Ionicons name="checkmark-circle" size={18} color={colors.icon} />
         );
       } else {
-        return <Ionicons name="alert-circle" size={14} color={colors.icon} />;
+        return <Ionicons name="alert-circle" size={18} color={colors.icon} />;
       }
     }
     return <ActivityIndicator size={12} color={colors.icon} />;
   };
 
-  const showStats = isShowingProcessing && phase === "solving" && elapsedMs > 0;
+  const showStats =
+    (isShowingProcessing && phase === "solving" && elapsedMs > 0) ||
+    (isShowingResult && lastElapsedMsRef.current > 0);
 
   const renderToastContent = (wrapperProps: any) => {
     const ToastWrapper = Platform.OS === "ios" ? BlurView : View;
@@ -305,20 +311,28 @@ export const PowQueueToast = () => {
             )}
           </View>
 
-          {isShowingProcessing && !overlayData && (
+          {(isShowingProcessing || isShowingResult) && !overlayData && (
             <Text style={[styles.phaseText, { color: statColor }]}>
-              {PHASE_LABEL[phase]}
+              {isShowingResult
+                ? lastCompletedAction.success
+                  ? "PoW Solved"
+                  : "PoW Failed"
+                : PHASE_LABEL[phase]}
             </Text>
           )}
 
           {showStats && !overlayData && (
             <View style={styles.statsRow}>
               <Text style={[styles.statText, { color: statColor }]}>
-                {formatElapsedTime(elapsedMs)}
+                {formatElapsedTime(
+                  isShowingResult ? lastElapsedMsRef.current : elapsedMs,
+                )}
               </Text>
-              {hashRate > 0 && (
+              {(isShowingResult ? lastHashRateRef.current : hashRate) > 0 && (
                 <Text style={[styles.statText, { color: statColor }]}>
-                  {formatHashRate(hashRate)}
+                  {formatHashRate(
+                    isShowingResult ? lastHashRateRef.current : hashRate,
+                  )}
                 </Text>
               )}
             </View>
@@ -357,9 +371,7 @@ export const PowQueueToast = () => {
           <View style={styles.headerRow}>
             <View style={styles.iconContainer}>
               <Ionicons
-                name={
-                  overlayData.success ? "checkmark-circle" : "alert-circle"
-                }
+                name={overlayData.success ? "checkmark-circle" : "alert-circle"}
                 size={14}
                 color={overlayColors.icon}
               />
@@ -373,6 +385,21 @@ export const PowQueueToast = () => {
               {overlayLabel}
             </Text>
           </View>
+          <Text style={[styles.phaseText, { color: statColor }]}>
+            {overlayData.success ? "PoW Solved" : "PoW Failed"}
+          </Text>
+          {lastElapsedMsRef.current > 0 && (
+            <View style={styles.statsRow}>
+              <Text style={[styles.statText, { color: statColor }]}>
+                {formatElapsedTime(lastElapsedMsRef.current)}
+              </Text>
+              {lastHashRateRef.current > 0 && (
+                <Text style={[styles.statText, { color: statColor }]}>
+                  {formatHashRate(lastHashRateRef.current)}
+                </Text>
+              )}
+            </View>
+          )}
         </View>
       </Animated.View>
     );
@@ -383,7 +410,7 @@ export const PowQueueToast = () => {
       ? {
           intensity: 80,
           tint: isDark ? ("dark" as const) : ("light" as const),
-          style: [styles.blurContainer, { borderColor: colors.border }],
+          style: [styles.blurInner],
         }
       : {
           style: [
@@ -414,7 +441,13 @@ export const PowQueueToast = () => {
         },
       ]}
     >
-      {renderToastContent(wrapperProps)}
+      {Platform.OS === "ios" ? (
+        <View style={[styles.borderWrap, { borderColor: colors.border }]}>
+          {renderToastContent(wrapperProps)}
+        </View>
+      ) : (
+        renderToastContent(wrapperProps)
+      )}
       {renderOverlay()}
     </Animated.View>
   );
@@ -432,6 +465,15 @@ const styles = StyleSheet.create((theme) => ({
     overflow: "hidden",
     borderRadius: 12,
     borderWidth: 1,
+  },
+  blurInner: {
+    overflow: "hidden",
+    borderRadius: 11,
+  },
+  borderWrap: {
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: "hidden",
   },
   content: {
     paddingVertical: 8,
@@ -455,7 +497,7 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: 11,
   },
   phaseText: {
-    fontSize: 9,
+    fontSize: 12,
     marginLeft: 25,
   },
   statsRow: {
@@ -465,7 +507,7 @@ const styles = StyleSheet.create((theme) => ({
     marginTop: 1,
   },
   statText: {
-    fontSize: 8,
+    fontSize: 12,
     fontVariant: ["tabular-nums"],
   },
   overlayContainer: {
@@ -473,8 +515,6 @@ const styles = StyleSheet.create((theme) => ({
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
-    justifyContent: "center",
   },
   overlayContent: {
     paddingVertical: 8,
