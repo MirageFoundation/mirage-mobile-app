@@ -46,7 +46,7 @@ const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
   // Auth state
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
-  const hasUnreadInbox = useInboxStore((s) => s.hasUnread);
+  const inboxUnreadCount = useInboxStore((s) => s.unreadCount);
 
   return (
     <Animated.View
@@ -105,7 +105,7 @@ const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
               label={options.title || route.name}
               isFocused={isFocused}
               onPress={onPress}
-              showBadge={route.name === "inbox" && hasUnreadInbox}
+              badgeCount={route.name === "inbox" ? inboxUnreadCount : 0}
             />
           );
         })}
@@ -119,13 +119,13 @@ const TabBarItem = ({
   label,
   isFocused,
   onPress,
-  showBadge,
+  badgeCount,
 }: {
   routeName: string;
   label: string;
   isFocused: boolean;
   onPress: () => void;
-  showBadge?: boolean;
+  badgeCount?: number;
 }) => {
   const scale = useSharedValue(1);
   const { theme } = useUnistyles();
@@ -200,18 +200,32 @@ const TabBarItem = ({
       <Animated.View style={[styles.tabItemInner, animatedStyle]}>
         <View style={{ position: "relative" }}>
           {renderIcon()}
-          {showBadge && (
+          {(badgeCount ?? 0) > 0 && (
             <View
               style={{
                 position: "absolute",
                 top: -3,
-                right: -5,
-                width: 10,
-                height: 10,
-                borderRadius: 6,
+                right: -10,
+                minWidth: 16,
+                height: 16,
+                borderRadius: 8,
                 backgroundColor: "#EF4444",
+                alignItems: "center",
+                justifyContent: "center",
+                paddingHorizontal: 3,
               }}
-            />
+            >
+              <Text
+                style={{
+                  color: "#FFFFFF",
+                  fontSize: 9,
+                  fontWeight: "700",
+                  lineHeight: 12,
+                }}
+              >
+                {(badgeCount ?? 0) > 99 ? "99+" : badgeCount}
+              </Text>
+            </View>
           )}
         </View>
         <Text

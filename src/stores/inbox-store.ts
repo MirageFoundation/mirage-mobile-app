@@ -3,40 +3,43 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { mmkvStorage } from "./mmkv-storage";
 
 interface InboxState {
-  unreadReplyIds: string[];
+  unreadCount: number;
   hasUnread: boolean;
-  addUnreadReplyIds: (ids: string[]) => void;
-  markAllAsRead: () => void;
+  lastViewedAt: number;
+  setUnreadCount: (count: number) => void;
+  markAsViewed: (serverTimestamp?: number) => void;
 }
 
 export const useInboxStore = create<InboxState>()(
   persist(
     (set) => ({
-      unreadReplyIds: [],
+      unreadCount: 0,
       hasUnread: false,
+      lastViewedAt: 0,
 
-      addUnreadReplyIds: (ids: string[]) =>
-        set((state) => {
-          const existing = new Set(state.unreadReplyIds);
-          const newIds = ids.filter((id) => !existing.has(id));
-          if (newIds.length === 0) return state;
-          const updated = [...state.unreadReplyIds, ...newIds];
-          return { unreadReplyIds: updated, hasUnread: updated.length > 0 };
+      setUnreadCount: (count: number) =>
+        set({ unreadCount: count, hasUnread: count > 0 }),
+
+      markAsViewed: (serverTimestamp?: number) =>
+        set({
+          unreadCount: 0,
+          hasUnread: false,
+          lastViewedAt: serverTimestamp ?? Math.floor(Date.now() / 1000),
         }),
-
-      markAllAsRead: () => set({ unreadReplyIds: [], hasUnread: false }),
     }),
     {
       name: "inbox-store",
-      version: 1,
+      version: 3,
       storage: createJSONStorage(() => mmkvStorage),
       partialize: (state) => ({
-        unreadReplyIds: state.unreadReplyIds,
+        unreadCount: state.unreadCount,
         hasUnread: state.hasUnread,
+        lastViewedAt: state.lastViewedAt,
       }),
       migrate: () => ({
-        unreadReplyIds: [],
+        unreadCount: 0,
         hasUnread: false,
+        lastViewedAt: 0,
       }),
     },
   ),

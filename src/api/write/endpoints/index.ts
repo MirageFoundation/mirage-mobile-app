@@ -52,3 +52,7 @@ export type { ReportInput } from "./moderation";
 // Rewards
 export { claimReward } from "./rewards";
 export type { ClaimRewardInput, ClaimRewardResponse } from "./rewards";
+
+// Inbox
+export { markInboxViewed } from "./inbox";
+export type { MarkInboxViewedResponse } from "./inbox";

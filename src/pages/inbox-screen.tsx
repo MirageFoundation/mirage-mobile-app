@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -14,7 +14,8 @@ import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-s
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useAuthStore } from "@/src/stores";
 import { useInboxStore } from "@/src/stores/inbox-store";
-import { getNotifiedIds } from "@/src/services/inbox-notifications";
+import { markRepliesAsNotified } from "@/src/services/inbox-notifications";
+import { markInboxViewed } from "@/src/api/write/endpoints/inbox";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
@@ -25,8 +26,10 @@ export function InboxScreen() {
   const { theme } = useUnistyles();
   const router = useRouter();
   const isLoggedIn = !!useAuthStore((s) => s.user);
-  const unreadReplyIds = useInboxStore((s) => s.unreadReplyIds);
-  const markAllAsRead = useInboxStore((s) => s.markAllAsRead);
+  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const markAsViewed = useInboxStore((s) => s.markAsViewed);
+  const lastViewedAt = useInboxStore((s) => s.lastViewedAt);
+  const viewedAtOnEntry = useRef(lastViewedAt);
 
   const {
     data,
@@ -43,24 +46,29 @@ export function InboxScreen() {
     [data],
   );
 
-  const visibleReplies = useMemo(() => {
-    const notified = getNotifiedIds();
-    return replies.filter((r) => notified.has(r.reply_id));
-  }, [replies]);
-
   useFocusEffect(
     useCallback(() => {
+      viewedAtOnEntry.current = useInboxStore.getState().lastViewedAt;
       refetch();
+      if (walletAddress) {
+        markInboxViewed(walletAddress)
+          .then((res) => {
+            markAsViewed(res.inbox_last_viewed_at);
+          })
+          .catch(() => {
+            markAsViewed();
+          });
+      }
       return () => {
-        markAllAsRead();
       };
-    }, [refetch, markAllAsRead]),
+    }, [refetch, walletAddress, markAsViewed]),
   );
 
-  const unreadSet = useMemo(
-    () => new Set(unreadReplyIds),
-    [unreadReplyIds],
-  );
+  useEffect(() => {
+    if (replies.length > 0) {
+      markRepliesAsNotified(replies.map((r) => r.reply_id));
+    }
+  }, [replies]);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -103,7 +111,7 @@ export function InboxScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: InboxReply }) => {
-      const isUnread = unreadSet.has(item.reply_id);
+      const isUnread = item.reply_timestamp > viewedAtOnEntry.current;
       return (
         <MemoizedInboxItem
           reply={item}
@@ -112,7 +120,7 @@ export function InboxScreen() {
         />
       );
     },
-    [handleItemPress, unreadSet],
+    [handleItemPress],
   );
 
   const ListEmptyComponent = useCallback(() => {
@@ -181,7 +189,7 @@ export function InboxScreen() {
       </View>
 
       <FlatList
-        data={visibleReplies}
+        data={replies}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         ListEmptyComponent={ListEmptyComponent}

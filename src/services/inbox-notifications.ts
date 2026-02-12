@@ -7,7 +7,6 @@ import { api } from "@/src/api/client";
 import type { InboxResponse } from "@/src/api/types";
 import { storage } from "@/src/stores/mmkv-storage";
 import { useAuthStore } from "@/src/stores/auth-store";
-import { useInboxStore } from "@/src/stores/inbox-store";
 
 const TASK_NAME = "INBOX_NOTIFICATION_CHECK";
 const NOTIFIED_IDS_KEY = "inbox-notified-ids";
@@ -51,6 +50,15 @@ function saveNotifiedIds(ids: Set<string>): void {
     ? arr.slice(arr.length - MAX_NOTIFIED_IDS)
     : arr;
   storage.set(NOTIFIED_IDS_KEY, JSON.stringify(trimmed));
+}
+
+export function markRepliesAsNotified(replyIds: string[]): void {
+  if (replyIds.length === 0) return;
+  const existing = getNotifiedIds();
+  for (const id of replyIds) {
+    existing.add(id);
+  }
+  saveNotifiedIds(existing);
 }
 
 function truncate(text: string, maxLen: number): string {
@@ -143,7 +151,6 @@ async function checkAndNotify(): Promise<BackgroundFetch.BackgroundFetchResult> 
     }
 
     saveNotifiedIds(notifiedIds);
-    useInboxStore.getState().addUnreadReplyIds(newReplies.map((r) => r.reply_id));
     storage.set(LAST_CHECK_KEY, Date.now().toString());
 
     return BackgroundFetch.BackgroundFetchResult.NewData;
