@@ -49,15 +49,14 @@ export function InboxScreen() {
   useFocusEffect(
     useCallback(() => {
       viewedAtOnEntry.current = useInboxStore.getState().lastViewedAt;
+     markAsViewed();
       refetch();
       if (walletAddress) {
         markInboxViewed(walletAddress)
           .then((res) => {
             markAsViewed(res.inbox_last_viewed_at);
           })
-          .catch(() => {
-            markAsViewed();
-          });
+         .catch(() => {});
       }
       return () => {
       };
