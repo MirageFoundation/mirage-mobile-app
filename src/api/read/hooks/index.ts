@@ -92,10 +92,10 @@ export type { UploadMediaInput, UseUploadMediaOptions } from "./use-upload-media
 export { useValidateInviteCode } from "./use-invite-code";
 export { useInviteCodes, useInviteCodesByAddress } from "./use-invite-codes";
 
-// Daily Quests
+// Rewards
 export {
-  useDailyQuests,
-  useDailyQuestsByAddress,
-  usePendingRewards,
-  usePendingRewardsByAddress,
-} from "./use-daily-quests";
+  useRewardSummary,
+  useRewardSummaryByAddress,
+  useAchievements,
+  useAchievementsByAddress,
+} from "./use-reward-summary";

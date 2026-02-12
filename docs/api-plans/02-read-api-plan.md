@@ -52,6 +52,8 @@ const queryClient = new QueryClient({
 | Comments      | 30 sec    | 1 hr   | On navigate     |
 | Static Lists  | 10 min    | 24 hrs | Manual          |
 | Bridge        | 30 sec    | 1 hr   | On navigate     |
+| Rewards       | 1 min     | 5 min  | After mutations |
+| Achievements  | 5 min     | 1 hr   | On navigate     |
 
 ---
 
@@ -114,6 +116,8 @@ Most endpoints work without authentication. The `address` parameter enables pers
 | `GET /get_similar_users` | Similar user recommendations         |
 | `GET /get_user_posts`    | User's own posts (owner param)       |
 | `GET /referral/stats`    | Referral earnings                    |
+| `GET /rewards/summary`   | Quests, flash quest, pending rewards |
+| `GET /rewards/achievements` | Achievement unlock status         |
 
 ### Address Optional (Enhanced)
 
@@ -154,7 +158,9 @@ src/api/read/
 │   ├── use-bridge-config.ts
 │   ├── use-bridge-attestation.ts
 │   ├── use-bridge-mint.ts
-│   └── use-bridge-burn.ts
+│   ├── use-bridge-burn.ts
+│   ├── use-reward-summary.ts
+│   └── use-achievements.ts
 │
 └── endpoints/
     ├── index.ts
@@ -168,6 +174,7 @@ src/api/read/
     ├── social.ts
     ├── stats.ts
     ├── bridge.ts
+    ├── rewards.ts
     └── types.ts
 ```
 
@@ -232,6 +239,10 @@ export const queryKeys = {
 
   // Peers
   peers: () => ["peers"] as const,
+
+  // Rewards (consolidated)
+  rewardSummary: (address: string) => ["rewards", "summary", address] as const,
+  achievements: (address: string) => ["rewards", "achievements", address] as const,
 
   // Bridge
   bridgeStatus: () => ["bridge", "status"] as const,
@@ -1075,7 +1086,164 @@ interface VideoUploadResponse {
 
 ---
 
-### 13. Bridge Endpoints (On-chain)
+### 13. Rewards (Consolidated)
+
+> **Breaking change**: The old `GET /rewards/daily`, `GET /rewards/flash`, and `GET /rewards/pending`
+> endpoints have been **removed** and replaced by a single `GET /rewards/summary` endpoint.
+
+#### `GET /rewards/summary`
+
+**Purpose**: Returns all reward data in one call — daily quests, flash quest, pending rewards, multiplier, totals.
+
+```typescript
+interface GetRewardSummaryParams {
+  owner: string; // Required — user address
+}
+
+interface RewardSummaryResponse {
+  suspended: boolean;
+  daily_quests: DailyQuest[];
+  flash_quest: FlashQuest | null;
+  pending_rewards: PendingRewardRow[];
+  seconds_until_reset: number;
+  reward_multiplier: number;
+  total_mirage: number;
+  total_mirage_after_multiplier: number;
+  pending_invite_codes: number;
+  claiming_available: boolean;
+  debug: boolean;
+  // Present when suspended=true:
+  suspension?: { /* details */ };
+  // Present when quest system is off:
+  disabled?: boolean;
+}
+
+interface DailyQuest {
+  id: string;
+  title: string;
+  description: string;
+  action_type: "comment" | "vote" | "post" | "follow" | "share";
+  progress: number;
+  target: number;
+  completed: boolean;
+  rewards: QuestReward[];
+  min_content_length: number | null;
+  time_spacing_minutes: number | null;
+  unique_target: boolean;
+  unique_topics_min: number | null;
+  quality_threshold: number | null;
+  count_vote_changes: boolean;
+}
+
+interface FlashQuest {
+  id: string;
+  title: string;
+  description: string;
+  action_type: string;
+  progress: number;
+  target: number;
+  completed: boolean;
+  starts_at: number;
+  ends_at: number;
+  seconds_remaining: number;
+  rewards: QuestReward[];
+}
+
+interface QuestReward {
+  type: "mirage";
+  amount: number;
+  apply_multiplier: boolean;
+}
+
+interface PendingRewardRow {
+  id: number;
+  type: "mirage";
+  data: { amount: number; apply_multiplier: boolean };
+  reason: string;
+  created_at: number;
+}
+
+// Hook: useRewardSummary
+// staleTime: 1 minute
+// Invalidate: After claim mutation
+```
+
+#### `GET /rewards/achievements`
+
+**Purpose**: Returns all achievements with user's unlock status. Loaded on its own page, not part of `/summary`.
+
+```typescript
+interface GetAchievementsParams {
+  owner: string; // Required
+}
+
+interface AchievementsResponse {
+  achievements: Achievement[];
+}
+
+interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  progress: number;
+  target: number;
+  unlocked: boolean;
+  unlocked_at: number | null;
+  badge_icon: string;
+  rewards: QuestReward[];
+}
+
+// Hook: useAchievements
+// staleTime: 5 minutes
+```
+
+#### Deprecated Endpoints (REMOVED)
+
+| Old Endpoint | Replacement |
+|---|---|
+| `GET /rewards/daily` | `GET /rewards/summary` → `.daily_quests`, `.seconds_until_reset`, `.reward_multiplier` |
+| `GET /rewards/flash` | `GET /rewards/summary` → `.flash_quest` |
+| `GET /rewards/pending` | `GET /rewards/summary` → `.pending_rewards`, `.total_mirage`, `.claiming_available` |
+
+---
+
+### 14. Inbox Unread Count (Middleware)
+
+> **New**: The server now injects a `new_inbox_items` field into **every** JSON API response
+> for authenticated requests (any request with an `address` query param).
+
+This is **not a separate endpoint** — it's middleware. The app should read this field from
+any API response to update the inbox badge.
+
+```typescript
+// Present on every API response when address is provided
+interface AnyApiResponse {
+  // ... normal fields ...
+  new_inbox_items?: number; // 0 = no unread, absent for guests
+}
+```
+
+#### `POST /mark_inbox_viewed`
+
+**Purpose**: Resets the unread count to 0 when user opens the inbox screen.
+
+```typescript
+interface MarkInboxViewedParams {
+  address: string;
+}
+
+interface MarkInboxViewedResponse {
+  ok: boolean;
+  inbox_last_viewed_at: number;
+}
+
+// Call this when inbox screen mounts
+// After this, next API response will have new_inbox_items: 0
+```
+
+---
+
+### 15. Bridge Endpoints (On-chain)
 
 All bridge query endpoints are served by the Mirage node via gRPC-gateway. They are public (no address required).
 
@@ -1278,6 +1446,12 @@ queryClient.invalidateQueries({ queryKey: queryKeys.profile(address) });
 // After bridge burn
 queryClient.invalidateQueries({ queryKey: ["bridge"] });
 queryClient.invalidateQueries({ queryKey: queryKeys.userStatus(address) });
+
+// After reward claim
+queryClient.invalidateQueries({ queryKey: queryKeys.rewardSummary(address) });
+
+// After any write action (vote, post, comment) — refresh quest progress
+queryClient.invalidateQueries({ queryKey: queryKeys.rewardSummary(address) });
 ```
 
 ---

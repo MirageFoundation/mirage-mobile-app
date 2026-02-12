@@ -27,10 +27,9 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { useDailyQuests } from "@/src/api/read/hooks";
-import { usePendingRewards } from "@/src/api/read/hooks";
+import { useRewardSummary } from "@/src/api/read/hooks";
 import { useClaimReward } from "@/src/api/write/hooks";
-import type { DailyQuest } from "@/src/api/read/endpoints/quests";
+import type { DailyQuest } from "@/src/api/read/endpoints/rewards";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
@@ -913,8 +912,7 @@ export function QuestsScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
 
-  const { data, isLoading, error, refetch } = useDailyQuests();
-  const { data: pendingData, refetch: refetchPending } = usePendingRewards();
+  const { data, isLoading, error, refetch } = useRewardSummary();
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [isClaiming, setIsClaiming] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -925,7 +923,6 @@ export function QuestsScreen() {
       triggerHaptic("success");
       setShowSuccessModal(true);
       refetch();
-      refetchPending();
     },
     onError: (error) => {
       setIsClaiming(false);
@@ -941,8 +938,7 @@ export function QuestsScreen() {
   useFocusEffect(
     useCallback(() => {
       refetch();
-      refetchPending();
-    }, [refetch, refetchPending]),
+    }, [refetch]),
   );
 
   useEffect(() => {
@@ -973,11 +969,11 @@ export function QuestsScreen() {
   }, [completedQuests, data?.reward_multiplier]);
 
   const hasClaimed = useMemo(() => {
-    if (!pendingData) return false;
+    if (!data) return false;
     return (
-      completedQuests.length > 0 && pendingData.pending_rewards.length === 0
+      completedQuests.length > 0 && data.pending_rewards.length === 0
     );
-  }, [completedQuests.length, pendingData]);
+  }, [completedQuests.length, data]);
 
   const handleClaimAll = useCallback(() => {
     if (completedQuests.length === 0) return;

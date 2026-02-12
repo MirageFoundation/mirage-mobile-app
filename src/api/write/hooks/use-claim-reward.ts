@@ -24,7 +24,7 @@ export function useClaimReward(options?: UseClaimRewardOptions) {
     onSuccess: (data) => {
       if (walletAddress) {
         queryClient.invalidateQueries({
-          queryKey: queryKeys.dailyQuests(walletAddress),
+          queryKey: queryKeys.rewardSummary(walletAddress),
         });
         queryClient.invalidateQueries({
           queryKey: queryKeys.userStatus(walletAddress),

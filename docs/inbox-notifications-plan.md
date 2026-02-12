@@ -4,6 +4,23 @@
 
 Background job that periodically fetches the user's inbox and sends local push notifications for new/unread replies.
 
+### Inbox Unread Count — Server-Side Middleware (NEW)
+
+The server now injects a `new_inbox_items` integer into **every** JSON API response for
+authenticated requests (any request with an `address` query param). This replaces the need
+for a dedicated polling endpoint for the badge count.
+
+- The count is based on a per-user `inbox_last_viewed_at` timestamp in the DB.
+- Cached server-side for 60 seconds per user, so it's cheap.
+- Call `POST /mark_inbox_viewed` when the user opens the inbox screen to reset the count.
+- After marking, the next API response returns `new_inbox_items: 0`.
+
+**In-app badge**: Read `new_inbox_items` from any API response to update the tab badge.
+Cap display at "99+" for counts over 99. Hide badge when count is 0.
+
+This means the foreground badge can be updated passively from any API call the app already
+makes (feed fetches, status checks, etc.) — no separate polling needed while the app is active.
+
 ## Libraries
 
 | Package | Purpose | Why |
