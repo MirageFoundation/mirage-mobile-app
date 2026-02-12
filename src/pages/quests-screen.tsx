@@ -36,6 +36,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 const ACTION_ICONS: Record<string, string> = {
   comment: "chatbubble-outline",
   vote: "thumbs-up-outline",
+  balanced_vote: "swap-vertical-outline",
   post: "create-outline",
   follow: "person-add-outline",
   share: "share-outline",
@@ -44,6 +45,7 @@ const ACTION_ICONS: Record<string, string> = {
 const ACTION_COLORS: Record<string, string> = {
   comment: "#3B82F6",
   vote: "#10B981",
+  balanced_vote: "#06B6D4",
   post: "#8B5CF6",
   follow: "#F59E0B",
   share: "#EC4899",
@@ -551,6 +553,11 @@ function CountdownTimer({
 function QuestRequirements({ quest }: { quest: DailyQuest }) {
   const { theme } = useUnistyles();
   const requirements: string[] = [];
+  const hasVoteProgress =
+    quest.target_upvotes != null &&
+    quest.upvotes != null &&
+    quest.target_downvotes != null &&
+    quest.downvotes != null;
 
   if (quest.min_content_length && quest.min_content_length > 0) {
     requirements.push(`Minimum ${quest.min_content_length} characters`);
@@ -572,10 +579,62 @@ function QuestRequirements({ quest }: { quest: DailyQuest }) {
     requirements.push(`At least ${quest.unique_topics_min} different topics`);
   }
 
-  if (requirements.length === 0) return null;
+  if (requirements.length === 0 && !hasVoteProgress) return null;
 
   return (
     <Box mt="sm" gap="xs">
+      {hasVoteProgress && (
+        <Box direction="row" gap="sm" mt="xs">
+          <Box flex direction="row" alignItems="center" gap="xs">
+            <Ionicons name="arrow-up" size={14} color="#10B981" />
+            <Box
+              flex
+              style={{
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: "rgba(255,255,255,0.1)",
+                overflow: "hidden",
+              }}
+            >
+              <View
+                style={{
+                  height: "100%",
+                  borderRadius: 3,
+                  backgroundColor: "#10B981",
+                  width: `${quest.target_upvotes! > 0 ? (quest.upvotes! / quest.target_upvotes!) * 100 : 0}%`,
+                }}
+              />
+            </Box>
+            <Text size="xs" mode="subtle">
+              {quest.upvotes}/{quest.target_upvotes}
+            </Text>
+          </Box>
+          <Box flex direction="row" alignItems="center" gap="xs">
+            <Ionicons name="arrow-down" size={14} color="#8B5CF6" />
+            <Box
+              flex
+              style={{
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: "rgba(255,255,255,0.1)",
+                overflow: "hidden",
+              }}
+            >
+              <View
+                style={{
+                  height: "100%",
+                  borderRadius: 3,
+                  backgroundColor: "#8B5CF6",
+                  width: `${quest.target_downvotes! > 0 ? (quest.downvotes! / quest.target_downvotes!) * 100 : 0}%`,
+                }}
+              />
+            </Box>
+            <Text size="xs" mode="subtle">
+              {quest.downvotes}/{quest.target_downvotes}
+            </Text>
+          </Box>
+        </Box>
+      )}
       {requirements.map((req, index) => (
         <Box key={index} direction="row" alignItems="center" gap="xs">
           <View

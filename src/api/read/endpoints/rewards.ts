@@ -10,7 +10,7 @@ export interface DailyQuest {
   id: string;
   title: string;
   description: string;
-  action_type: "comment" | "vote" | "post" | "follow" | "share";
+  action_type: "comment" | "vote" | "post" | "follow" | "share" | "balanced_vote";
   progress: number;
   target: number;
   completed: boolean;
@@ -21,6 +21,10 @@ export interface DailyQuest {
   unique_topics_min: number | null;
   quality_threshold: number | null;
   count_vote_changes: boolean;
+  upvotes?: number;
+  downvotes?: number;
+  target_upvotes?: number;
+  target_downvotes?: number;
 }
 
 export interface FlashQuest {
