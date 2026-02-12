@@ -5,6 +5,12 @@ import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import {
+  Menu,
+  MenuOption,
+  MenuOptions,
+  MenuTrigger,
+} from "react-native-popup-menu";
 
 import { Text } from "@/src/components/ui/primitives";
 import { HEADER_HEIGHT } from "@/src/hooks/use-scroll-animation";
@@ -41,8 +47,24 @@ export const FeedHeader = ({
   const { theme, rt } = useUnistyles();
   const isDark = rt.themeName === "dark";
 
+  const currentFeedLabel = feedOptions?.find(
+    (o) => o.value === feedType,
+  )?.label;
+
   const hasFeedOptions =
     feedOptions && feedOptions.length > 0 && onFeedTypeChange;
+
+  const AppIcon = () => (
+    <Image
+      source={
+        isDark
+          ? require("@/assets/images/app-dark-icon.png")
+          : require("@/assets/images/app-icon.png")
+      }
+      style={styles.appIcon}
+      resizeMode="contain"
+    />
+  );
 
   return (
     <Animated.View
@@ -60,64 +82,119 @@ export const FeedHeader = ({
             </AnimatedPressable>
           )}
 
-          <Image
-            source={
-              isDark
-                ? require("@/assets/images/app-dark-icon.png")
-                : require("@/assets/images/app-icon.png")
-            }
-            style={styles.appIcon}
-            resizeMode="contain"
-          />
-
-          {hasFeedOptions && (
-            <View style={[styles.toggleContainer]}>
-              {feedOptions.map((option, index) => {
-                const isActive = option.value === feedType;
-                return (
-                  <View key={option.value} style={styles.toggleRow}>
-                    {index > 0 && (
-                      <View
-                        style={{
-                          width: 1,
-                          height: 14,
-                          backgroundColor: theme.colors.border.default,
-                        }}
-                      />
-                    )}
-                    <AnimatedPressable
-                      scaleAmount={0.9}
-                      onPress={() => {
-                        triggerHaptic("light");
-                        onFeedTypeChange(option.value);
+          {hasFeedOptions ? (
+            <Menu>
+              <MenuTrigger
+                customStyles={{
+                  triggerTouchable: {
+                    hitSlop: { top: 8, bottom: 8, left: 4, right: 4 },
+                  },
+                }}
+              >
+                <View style={styles.titleButton}>
+                  <AppIcon />
+                  <Text size="xl" weight="bold">
+                    {title}
+                  </Text>
+                  {currentFeedLabel && (
+                    <Text
+                      size="xl"
+                      weight="medium"
+                      style={{
+                        color: theme.colors.text.subtle,
+                        marginLeft: 6,
                       }}
-                      style={styles.toggleButton}
                     >
-                      <Text
-                        size="xl"
-                        weight={isActive ? "bold" : "medium"}
-                        style={{
-                          color: isActive
-                            ? theme.colors.text.default
-                            : theme.colors.text.subtle,
+                      ǀ {currentFeedLabel}
+                    </Text>
+                  )}
+                  <Ionicons
+                    name="chevron-down"
+                    size={14}
+                    color={theme.colors.text.subtle}
+                    style={{ marginLeft: 2, marginTop: 4 }}
+                  />
+                </View>
+              </MenuTrigger>
+              <MenuOptions
+                customStyles={{
+                  optionsContainer: {
+                    backgroundColor: theme.colors.background.default,
+                    borderRadius: theme.radius.lg,
+                    minWidth: 180,
+                    shadowColor: theme.colors.contrast.base,
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.15,
+                    shadowRadius: 12,
+                    elevation: 8,
+                    borderWidth: 1,
+                    borderColor: theme.colors.border.subtle,
+                    marginTop: 4,
+                    paddingVertical: 4,
+                  },
+                }}
+              >
+                {feedOptions?.map((option, index) => {
+                  const isActive = option.value === feedType;
+                  return (
+                    <View key={option.value}>
+                      {index > 0 && (
+                        <View
+                          style={{
+                            height: 1,
+                            backgroundColor: theme.colors.border.subtle,
+                            marginHorizontal: theme.spacing.md,
+                            marginVertical: 2,
+                          }}
+                        />
+                      )}
+                      <MenuOption
+                        onSelect={() => {
+                          triggerHaptic("light");
+                          onFeedTypeChange?.(option.value);
                         }}
                       >
-                        {option.label}
-                      </Text>
-                    </AnimatedPressable>
-                  </View>
-                );
-              })}
+                        <View style={styles.menuOption}>
+                          <Ionicons
+                            name={
+                              isActive ? "checkmark-circle" : "ellipse-outline"
+                            }
+                            size={16}
+                            color={
+                              isActive
+                                ? theme.colors.primary[500]
+                                : theme.colors.text.subtle
+                            }
+                          />
+                          <Text
+                            size="md"
+                            weight={isActive ? "semibold" : "medium"}
+                            style={
+                              isActive
+                                ? { color: theme.colors.primary[500] }
+                                : undefined
+                            }
+                          >
+                            {option.label}
+                          </Text>
+                        </View>
+                      </MenuOption>
+                    </View>
+                  );
+                })}
+              </MenuOptions>
+            </Menu>
+          ) : (
+            <View style={styles.titleButton}>
+              <AppIcon />
+              <Text size="xl" weight="bold">
+                {title}
+              </Text>
             </View>
           )}
         </View>
 
         <View style={styles.rightSection}>
-          {balance != null && (
-            <Text size="xl" weight="bold" style={styles.balanceText}>
-              {formatCompactNumber(Math.floor(balance / 1_000_000))}
-            </Text>
-          )}
           <AnimatedPressable
             scaleAmount={0.85}
             onPress={onSearchPress}
@@ -156,7 +233,6 @@ const styles = StyleSheet.create((theme) => ({
   leftSection: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
   },
   rightSection: {
     flexDirection: "row",
@@ -171,20 +247,22 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     borderRadius: theme.radius.full,
   },
+  titleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
   appIcon: {
     width: 22,
     height: 22,
+    marginRight: 6,
   },
-  toggleContainer: {
+  menuOption: {
     flexDirection: "row",
     alignItems: "center",
-  },
-  toggleButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  toggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
+    gap: 10,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
   },
 }));
