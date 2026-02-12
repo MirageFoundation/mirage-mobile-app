@@ -24,12 +24,14 @@ type Post,
  type ReportSheetRef,
  SideMenu,
  type SideMenuRef,
+UpdateBanner,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import {
   useAuthGuard,
   useBlockHandler,
   useDeleteHandler,
+  useEasUpdate,
   useNetworkState,
   useReportHandler,
   useVoteHandler,
@@ -63,6 +65,7 @@ export function HomeScreen() {
   } = useScrollAnimationContext();
   const { requireAuth } = useAuthGuard();
   const toast = useToast();
+  const easUpdate = useEasUpdate();
 
   const { data: userStatus } = useUserStatus();
 
@@ -777,7 +780,17 @@ export function HomeScreen() {
         onFeedTypeChange={handleFeedTypeChange}
       />
 
-      <HomeTabbedFeed ref={tabbedFeedRef} feedType="home" activeTabIndex={feedTabIndex} />
+      <HomeTabbedFeed
+        ref={tabbedFeedRef}
+        feedType="home"
+        activeTabIndex={feedTabIndex}
+      />
+
+      <UpdateBanner
+        status={easUpdate.status}
+        onInstall={easUpdate.install}
+        onDismiss={easUpdate.dismiss}
+      />
 
       <AdultContentPopup
         visible={showAdultPopup}

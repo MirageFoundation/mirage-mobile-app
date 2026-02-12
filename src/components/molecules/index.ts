@@ -63,6 +63,7 @@ export {
   type UserProfileMenuSheetRef,
 } from "./user-profile-menu-sheet";
 export { SideMenu, type SideMenuRef } from "./side-menu";
+export { UpdateBanner } from "./update-banner";
 export {
   ProfileEmptyState,
   ProfileTabBar,

@@ -24,6 +24,7 @@ interface ToastOptions {
   title: string;
   description?: string;
   duration?: number;
+  action?: () => void;
 }
 
 interface ToastContextValue {
@@ -96,6 +97,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         title: options.title,
         description: options.description,
         duration: options.duration ?? (type === "loading" ? 0 : DEFAULT_DURATION),
+        action: options.action,
       };
 
       setToasts((prev) => [...prev, toast]);
@@ -219,4 +221,3 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     </ToastContext.Provider>
   );
 }
-

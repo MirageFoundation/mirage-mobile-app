@@ -680,15 +680,14 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       v{Constants.expoConfig?.version ?? "1.0.0"} ({Platform.OS}
                       )
                     </Text>
-                    {(__DEV__ || process.env.EXPO_PUBLIC_ENV === "preview") && (
-                      <Text
-                        style={{ color: theme.colors.text.subtle }}
-                        size="sm"
-                        weight="light"
-                      >
-                        update 1
-                      </Text>
-                    )}
+
+                    <Text
+                      style={{ color: theme.colors.text.subtle }}
+                      size="sm"
+                      weight="light"
+                    >
+                      update 7
+                    </Text>
                   </View>
                 </>
               ) : (
@@ -716,15 +715,14 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       v{Constants.expoConfig?.version ?? "1.0.0"} ({Platform.OS}
                       )
                     </Text>
-                    {(__DEV__ || process.env.EXPO_PUBLIC_ENV === "preview") && (
-                      <Text
-                        style={{ color: theme.colors.text.subtle }}
-                        size="sm"
-                        weight="light"
-                      >
-                        update 1
-                      </Text>
-                    )}
+
+                    <Text
+                      style={{ color: theme.colors.text.subtle }}
+                      size="sm"
+                      weight="light"
+                    >
+                      update 7
+                    </Text>
                   </View>
                 </>
               )}

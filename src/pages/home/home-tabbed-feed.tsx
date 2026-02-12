@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, forwardRef, useImperativeHandle } from "react";
-import type { FlatList } from "react-native";
+import type { FlatList, ReactNode } from "react-native";
 import { ActivityIndicator, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated from "react-native-reanimated";
@@ -41,10 +41,11 @@ export type HomeTabbedFeedRef = {
 type HomeTabbedFeedProps = {
   feedType: "home" | "following";
   activeTabIndex?: number;
+  ListHeaderExtra?: ReactNode;
 };
 
 export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>(
-  ({ feedType: baseFeed, activeTabIndex = 0 }, ref) => {
+  ({ feedType: baseFeed, activeTabIndex = 0, ListHeaderExtra }, ref) => {
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
     const queryClient = useQueryClient();
@@ -304,6 +305,7 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
       const showRefreshIndicator = isManualRefreshing;
       return (
         <>
+          {ListHeaderExtra}
           {showRefreshIndicator && (
             <Box center p="md">
               <ActivityIndicator
@@ -315,7 +317,7 @@ export const HomeTabbedFeed = forwardRef<HomeTabbedFeedRef, HomeTabbedFeedProps>
           {baseFeed === "home" && activeTabIndex === 0 && <QuestsSummaryCard />}
         </>
       );
-   }, [isManualRefreshing, theme.colors.background.emphasis, baseFeed, activeTabIndex]);
+   }, [isManualRefreshing, theme.colors.background.emphasis, baseFeed, activeTabIndex, ListHeaderExtra]);
 
     const ListFooter = useCallback(() => {
       const query = activeTabIndex === 0 ? magicQuery : latestQuery;

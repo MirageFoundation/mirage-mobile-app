@@ -57,3 +57,4 @@ export {
   useAppState,
   type AppStateInfo,
 } from "./use-app-state";
+export { useEasUpdate } from "./use-eas-update";
