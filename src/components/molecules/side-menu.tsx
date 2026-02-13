@@ -1,10 +1,14 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
-import { forwardRef, useCallback, useImperativeHandle, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Dimensions,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -362,12 +366,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     const createHandler = useCallback(
       (handler?: () => void) => () => {
         triggerHaptic("light");
-        close();
-        setTimeout(() => {
-          handler?.();
-        }, 300);
+        handler?.();
       },
-      [close],
+      [],
     );
 
     const handleLogoutPress = useCallback(() => {
@@ -381,19 +382,13 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
 
     const handleCreateAccount = useCallback(() => {
       triggerHaptic("light");
-      close();
-      setTimeout(() => {
-        router.push("/(auth)/username");
-      }, 300);
-    }, [close, router]);
+      router.push("/(auth)/username");
+    }, [router]);
 
     const handleLogin = useCallback(() => {
       triggerHaptic("light");
-      close();
-      setTimeout(() => {
-        router.push("/(auth)/login");
-      }, 300);
-    }, [close, router]);
+      router.push("/(auth)/login");
+    }, [router]);
 
     const handleLogoutConfirm = useCallback(async () => {
       setIsLoggingOut(true);
@@ -410,46 +405,31 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
 
     const handleShowMoreFollowing = useCallback(() => {
       triggerHaptic("light");
-      close();
-      setTimeout(() => {
-        if (walletAddress) {
-          router.push(`/user-following/${walletAddress}`);
-        }
-      }, 300);
-    }, [close, router, walletAddress]);
+      if (walletAddress) {
+        router.push(`/user-following/${walletAddress}`);
+      }
+    }, [router, walletAddress]);
 
     const handleUserPress = useCallback(
       (address: string) => {
         triggerHaptic("light");
-        close();
-        setTimeout(() => {
-          router.push(`/user/${address}`);
-        }, 300);
+        router.push(`/user/${address}`);
       },
-      [close, router],
+      [router],
     );
 
     const handleTopicPress = useCallback(
       (topic: string) => {
         triggerHaptic("light");
-        close();
-        setTimeout(() => {
-          router.push(`/topic/${topic}`);
-        }, 300);
+        router.push(`/topic/${topic}`);
       },
-      [close, router],
+      [router],
     );
 
     if (!visible) return null;
 
     return (
-      <Modal
-        visible={visible}
-        transparent
-        animationType="none"
-        statusBarTranslucent
-        onRequestClose={close}
-      >
+      <View style={styles.overlay}>
         <View style={styles.container}>
           <Animated.View style={[styles.backdrop, backdropAnimatedStyle]}>
             <Pressable
@@ -496,7 +476,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                 <>
                   <View style={styles.balanceCard}>
                     <Text
-                      style={{ color: theme.colors.text.subtle }}
+                      style={{ color: theme.colors.text.subtle, marginTop: 2 }}
                       size="sm"
                       weight="semibold"
                     >
@@ -736,7 +716,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
             isLoading={isLoggingOut}
           />
         </View>
-      </Modal>
+      </View>
     );
   },
 );
@@ -746,6 +726,11 @@ SideMenu.displayName = "SideMenu";
 const styles = StyleSheet.create((theme) => ({
   container: {
     flex: 1,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
+    elevation: 1000,
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -849,9 +834,10 @@ const styles = StyleSheet.create((theme) => ({
   },
   balanceCard: {
     paddingVertical: theme.spacing.md,
-    marginTop: theme.spacing.sm,
     borderRadius: 16,
-    gap: theme.spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   versionContainer: {
     alignItems: "center",

@@ -1029,9 +1029,7 @@ export function QuestsScreen() {
 
   const hasClaimed = useMemo(() => {
     if (!data) return false;
-    return (
-      completedQuests.length > 0 && data.pending_rewards.length === 0
-    );
+    return completedQuests.length > 0 && data.pending_rewards.length === 0;
   }, [completedQuests.length, data]);
 
   const handleClaimAll = useCallback(() => {
