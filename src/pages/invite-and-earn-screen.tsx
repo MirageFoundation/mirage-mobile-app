@@ -448,7 +448,7 @@ export function InviteAndEarnScreen() {
           <EvilIcons name="close" size={28} color={theme.colors.text.default} />
         </Pressable>
         <Text size="lg" weight="medium">
-          Invite & Earn
+          Invite
         </Text>
         <View style={styles.placeholder} />
       </View>

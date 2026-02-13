@@ -153,7 +153,7 @@ const SectionHeader = ({
             size="sm"
             weight="semibold"
           >
-            Show More
+            Show All
           </Text>
         </Pressable>
       )}
@@ -495,7 +495,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   <SectionHeader title="Rewards & Plans" />
                   <MenuItem
                     iconName="gift-outline"
-                    title="Invite & Earn"
+                    title="Invite a Friend"
                     subtitle="Get rewards"
                     onPress={createHandler(onInviteAndEarn)}
                   />
