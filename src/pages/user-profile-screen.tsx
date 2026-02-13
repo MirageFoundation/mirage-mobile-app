@@ -775,7 +775,10 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
       [0, 1],
       "clamp"
     );
-    return { opacity };
+    return {
+      opacity,
+      pointerEvents: scrollY.value >= stickyThreshold ? "auto" : "none",
+    } as any;
   });
 
   const contentContainerStyle = useMemo(
@@ -815,7 +818,6 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           },
           stickyTabsAnimatedStyle,
         ]}
-        pointerEvents={scrollY.value >= stickyThreshold ? "auto" : "none"}
       >
         <ProfileTabBar
           activeTab={activeTab}

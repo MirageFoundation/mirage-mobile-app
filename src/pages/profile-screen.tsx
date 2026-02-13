@@ -729,7 +729,10 @@ useEffect(() => {
       [0, 1],
       "clamp",
     );
-    return { opacity };
+    return {
+      opacity,
+      pointerEvents: scrollY.value >= stickyThreshold ? "auto" : "none",
+    } as any;
   });
 
   const contentContainerStyle = useMemo(
@@ -766,7 +769,6 @@ useEffect(() => {
           },
           stickyTabsAnimatedStyle,
         ]}
-        pointerEvents={scrollY.value >= stickyThreshold ? "auto" : "none"}
       >
         <ProfileTabBar
           activeTab={activeTab}
