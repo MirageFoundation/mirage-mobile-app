@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
+import { AppState } from "react-native";
 import { Text, type TextProps } from "@/src/components/ui/primitives";
 
 type TimeAgoProps = Omit<TextProps, "children"> & {
@@ -20,6 +21,77 @@ const TIME_UNITS = [
   { unit: "s", full: "second", seconds: 1 },
 ] as const;
 
+function formatTimeAgo(
+  timestamp: Date | string | number,
+  showSuffix: boolean,
+  verbose: boolean,
+): string {
+  const date = timestamp instanceof Date
+    ? timestamp
+    : new Date(timestamp);
+
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 0) {
+    return verbose ? "just now" : "now";
+  }
+
+  if (diffInSeconds < 10) {
+    return verbose ? "just now" : "now";
+  }
+
+  for (const { unit, full, seconds } of TIME_UNITS) {
+    const value = Math.floor(diffInSeconds / seconds);
+    if (value >= 1) {
+      if (verbose) {
+        const suffix = showSuffix ? " ago" : "";
+        const plural = value === 1 ? "" : "s";
+        return `${value} ${full}${plural}${suffix}`;
+      }
+      return `${value}${unit}${showSuffix ? " ago" : ""}`;
+    }
+  }
+
+  return verbose ? "just now" : "now";
+}
+
+function getRefreshInterval(timestamp: Date | string | number): number {
+  const date = timestamp instanceof Date
+    ? timestamp
+    : new Date(timestamp);
+  const diffInSeconds = Math.floor((Date.now() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return 10_000;
+  if (diffInSeconds < 3600) return 60_000;
+  return 300_000;
+}
+
+function useTick(timestamp: Date | string | number) {
+  const [, setTick] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startTimer = useCallback(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    const ms = getRefreshInterval(timestamp);
+    intervalRef.current = setInterval(() => setTick((t) => t + 1), ms);
+  }, [timestamp]);
+
+  useEffect(() => {
+    startTimer();
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        setTick((t) => t + 1);
+        startTimer();
+      }
+    });
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      sub.remove();
+    };
+  }, [startTimer]);
+}
+
 export const TimeAgo = ({
   timestamp,
   showSuffix = true,
@@ -28,39 +100,8 @@ export const TimeAgo = ({
   mode = "subtle",
   ...textProps
 }: TimeAgoProps) => {
-  const timeAgoText = useMemo(() => {
-    const date = timestamp instanceof Date 
-      ? timestamp 
-      : new Date(timestamp);
-    
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-    // Handle future dates
-    if (diffInSeconds < 0) {
-      return verbose ? "just now" : "now";
-    }
-
-    // Handle "just now" case
-    if (diffInSeconds < 10) {
-      return verbose ? "just now" : "now";
-    }
-
-    // Find the appropriate time unit
-    for (const { unit, full, seconds } of TIME_UNITS) {
-      const value = Math.floor(diffInSeconds / seconds);
-      if (value >= 1) {
-        if (verbose) {
-          const suffix = showSuffix ? " ago" : "";
-          const plural = value === 1 ? "" : "s";
-          return `${value} ${full}${plural}${suffix}`;
-        }
-        return `${value}${unit}${showSuffix ? " ago" : ""}`;
-      }
-    }
-
-    return verbose ? "just now" : "now";
-  }, [timestamp, showSuffix, verbose]);
+  useTick(timestamp);
+  const timeAgoText = formatTimeAgo(timestamp, showSuffix, verbose);
 
   return (
     <Text size={size} mode={mode} {...textProps}>
@@ -77,36 +118,6 @@ export const useTimeAgo = (
   options?: { showSuffix?: boolean; verbose?: boolean }
 ): string => {
   const { showSuffix = true, verbose = false } = options ?? {};
-
-  return useMemo(() => {
-    const date = timestamp instanceof Date 
-      ? timestamp 
-      : new Date(timestamp);
-    
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-    if (diffInSeconds < 0) {
-      return verbose ? "just now" : "now";
-    }
-
-    if (diffInSeconds < 10) {
-      return verbose ? "just now" : "now";
-    }
-
-    for (const { unit, full, seconds } of TIME_UNITS) {
-      const value = Math.floor(diffInSeconds / seconds);
-      if (value >= 1) {
-        if (verbose) {
-          const suffix = showSuffix ? " ago" : "";
-          const plural = value === 1 ? "" : "s";
-          return `${value} ${full}${plural}${suffix}`;
-        }
-        return `${value}${unit}${showSuffix ? " ago" : ""}`;
-      }
-    }
-
-    return verbose ? "just now" : "now";
-  }, [timestamp, showSuffix, verbose]);
+  useTick(timestamp);
+  return formatTimeAgo(timestamp, showSuffix, verbose);
 };
-
