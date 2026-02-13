@@ -159,15 +159,18 @@ export function ActivePlanCard({
           hitSlop={4}
         >
           <Box flex>
-            <Text size="xs" mode="subtle" style={styles.statLabel}>
-              Balance
-            </Text>
-            <Box direction="row" alignItems="center" gap="xs">
+            <Box
+              direction="row"
+              alignItems="center"
+              justifyContent="space-between"
+            >
+              <Text size="xs" mode="subtle" style={styles.statLabel}>
+                Balance (MIRAGE)
+              </Text>
+            </Box>
+            <Box direction="row" alignItems="center">
               <Text size="xxl" weight="semibold">
                 {balance.toLocaleString()}
-              </Text>
-              <Text size="md" mode="subtle" style={{ marginTop: 2 }}>
-                MIRAGE
               </Text>
             </Box>
           </Box>
@@ -188,15 +191,18 @@ export function ActivePlanCard({
           hitSlop={4}
         >
           <Box flex>
-            <Text size="xs" mode="subtle" style={styles.statLabel}>
-              Reserve
-            </Text>
-            <Box direction="row" alignItems="center" gap="xs">
+            <Box
+              direction="row"
+              alignItems="center"
+              justifyContent="space-between"
+            >
+              <Text size="xs" mode="subtle" style={styles.statLabel}>
+                Reserve (MIRAGE)
+              </Text>
+            </Box>
+            <Box direction="row" alignItems="center">
               <Text size="xxl" weight="semibold">
                 {reserve.toLocaleString()}
-              </Text>
-              <Text size="md" mode="subtle" style={{ marginTop: 2 }}>
-                MIRAGE
               </Text>
             </Box>
           </Box>
