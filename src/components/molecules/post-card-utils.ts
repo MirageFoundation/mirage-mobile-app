@@ -112,6 +112,20 @@ export function normalizeVideoUrl(url: string): string {
   return url;
 }
 
+export function resolveRedgifsVideoUrl(posterUrl: string): string | null {
+  try {
+    const parsedUrl = new URL(posterUrl);
+    if (parsedUrl.hostname.includes("redgifs.com") && /\.(jpg|jpeg|png|webp|gif)$/i.test(parsedUrl.pathname)) {
+      return posterUrl.replace(/-poster(\.\w+)$/, "-mobile.mp4").replace(/\.(jpg|jpeg|png|webp|gif)$/i, ".mp4");
+    }
+  } catch {
+    if (posterUrl.includes("redgifs.com") && /\.(jpg|jpeg|png|webp|gif)/i.test(posterUrl)) {
+      return posterUrl.replace(/-poster(\.\w+)$/, "-mobile.mp4").replace(/\.(jpg|jpeg|png|webp|gif)$/i, ".mp4");
+    }
+  }
+  return null;
+}
+
 export function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
   try {
     const parsedUrl = new URL(url);
@@ -120,6 +134,9 @@ export function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
     }
     if (parsedUrl.hostname.includes("videodelivery.net")) {
       return "video";
+    }
+    if (parsedUrl.hostname.includes("redgifs.com")) {
+      return "gif";
     }
     const path = parsedUrl.pathname.toLowerCase();
     const extension = path.split(".").pop() ?? "";
@@ -130,6 +147,7 @@ export function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
     const extension = path.split(".").pop() ?? "";
     if (url.includes("cloudflarestream.com")) return "video";
     if (url.includes("videodelivery.net")) return "video";
+    if (url.includes("redgifs.com")) return "gif";
     if (extension === "gif") return "gif";
     if (VIDEO_EXTENSIONS.has(extension)) return "video";
   }
@@ -146,6 +164,7 @@ export function isDirectMediaUrl(url: string): boolean {
     const parsedUrl = new URL(url);
     if (parsedUrl.hostname.includes("cloudflarestream.com")) return true;
     if (parsedUrl.hostname.includes("videodelivery.net")) return true;
+    if (parsedUrl.hostname.includes("redgifs.com")) return true;
     const ext = parsedUrl.pathname.toLowerCase().split(".").pop() ?? "";
     return IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
   } catch {
@@ -153,6 +172,7 @@ export function isDirectMediaUrl(url: string): boolean {
     const ext = path.split(".").pop() ?? "";
     if (url.includes("cloudflarestream.com")) return true;
     if (url.includes("videodelivery.net")) return true;
+    if (url.includes("redgifs.com")) return true;
     return IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
   }
 }
@@ -197,6 +217,11 @@ export function resolvePostContent(
     : primaryMedia
     ? {
         ...primaryMedia,
+        type: extractedUrl
+          ? getMediaTypeFromUrl(extractedUrl) !== "image"
+            ? getMediaTypeFromUrl(extractedUrl)
+            : primaryMedia.type
+          : primaryMedia.type,
         uri:
           primaryMedia.type === "video"
             ? normalizeVideoUrl(primaryMedia.uri)
@@ -204,12 +229,19 @@ export function resolvePostContent(
       }
     : undefined;
 
+  const redgifsVideoUrl = resolvedMedia?.type === "gif"
+    ? resolveRedgifsVideoUrl(resolvedMedia.uri)
+    : null;
+  const finalMedia = redgifsVideoUrl && resolvedMedia
+    ? { ...resolvedMedia, uri: redgifsVideoUrl, type: "video" as const }
+    : resolvedMedia;
+
   return {
     extractedUrl,
     bodyWithoutUrl: isOgThumbnail ? body : bodyWithoutUrl,
     displayDomain,
     bodyVideoUrl,
-    resolvedMedia,
+    resolvedMedia: finalMedia,
     hasMultipleMedia: isOgThumbnail ? false : hasMultipleMedia,
     extraMediaCount: isOgThumbnail ? 0 : extraMediaCount,
   };

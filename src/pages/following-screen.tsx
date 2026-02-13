@@ -270,7 +270,8 @@ export function FollowingScreen() {
       newSet.add(postId);
       return newSet;
     });
-  }, []);
+    router.push(`/post/${postId}?reveal=true`);
+  }, [router]);
 
   const handleRefresh = useCallback(async () => {
     await tabbedFeedRef.current?.refresh();

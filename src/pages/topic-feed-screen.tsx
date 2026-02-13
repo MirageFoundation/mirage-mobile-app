@@ -55,7 +55,7 @@ import {
   usePreferencesStore,
   useSavedPostsStore,
 } from "@/src/stores";
-import { is } from "drizzle-orm";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function TopicFeedScreen() {
   const { id: topicName } = useLocalSearchParams<{ id: string }>();
@@ -84,6 +84,7 @@ export function TopicFeedScreen() {
   const handleSortChange = useCallback((value: "magic" | "newest") => {
     triggerHaptic("light");
     setSortBy(value);
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, []);
 
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
@@ -385,10 +386,16 @@ export function TopicFeedScreen() {
       newSet.add(postId);
       return newSet;
     });
-  }, []);
+    router.push(`/post/${postId}?reveal=true`);
+  }, [router]);
 
   const lastFetchTime = useRef(0);
   const isFetchingRef = useRef(false);
+
+  const queryRef = useRef({ hasNextPage, isFetchingNextPage, fetchNextPage });
+  queryRef.current = { hasNextPage, isFetchingNextPage, fetchNextPage };
+  const postsLengthRef = useRef(posts.length);
+  postsLengthRef.current = posts.length;
 
   const handleRefresh = useCallback(async () => {
     setIsManualRefreshing(true);
@@ -401,21 +408,24 @@ export function TopicFeedScreen() {
     }
   }, [refetch]);
 
-  const handleEndReached = useCallback(() => {
+  const handleItemVisible = useCallback((index: number) => {
+    const totalLoaded = postsLengthRef.current;
+    if (index < totalLoaded - 5) return;
     const now = Date.now();
+    const q = queryRef.current;
     if (
-      hasNextPage &&
-      !isFetchingNextPage &&
+      q.hasNextPage &&
+      !q.isFetchingNextPage &&
       !isFetchingRef.current &&
       now - lastFetchTime.current > 1000
     ) {
       lastFetchTime.current = now;
       isFetchingRef.current = true;
-      fetchNextPage().finally(() => {
+      q.fetchNextPage().finally(() => {
         isFetchingRef.current = false;
       });
     }
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  }, []);
 
   const ListEmptyComponent = useCallback(() => {
     if (isLoading) {
@@ -809,9 +819,8 @@ export function TopicFeedScreen() {
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}
         refreshControl={refreshControl}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={1.5}
         feedScreen="topic"
+        onItemVisible={handleItemVisible}
       />
 
       <PostOptionsSheet

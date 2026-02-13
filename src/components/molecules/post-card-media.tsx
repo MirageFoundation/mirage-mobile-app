@@ -22,12 +22,21 @@ import {
   View,
   type GestureResponderEvent,
 } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+  Easing,
+} from "react-native-reanimated";
+import { LinearGradient } from "expo-linear-gradient";
 import type { ResolvedMedia } from "./post-card-utils";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEDIA_MAX_HEIGHT = 450;
 const MEDIA_HORIZONTAL_PADDING = 32; // md padding * 2
+const SHIMMER_WIDTH = SCREEN_WIDTH * 0.7;
 
 export type PostCardMediaRef = {
   pauseVideo: () => void;
@@ -79,7 +88,23 @@ export const PostCardMedia = memo(
     const [isVideoLoading, setIsVideoLoading] = useState(false);
     const [isVideoProcessing, setIsVideoProcessing] = useState(false);
     const [isMuted, setIsMuted] = useState(true);
+    const [mediaLoaded, setMediaLoaded] = useState(false);
     const videoRef = useRef<Video | null>(null);
+    const shimmerTranslateX = useSharedValue(-SHIMMER_WIDTH);
+    const { theme: skeletonTheme } = useUnistyles();
+
+    useEffect(() => {
+      shimmerTranslateX.value = withRepeat(
+        withTiming(SCREEN_WIDTH, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        false,
+      );
+    }, [shimmerTranslateX]);
+
+    const shimmerAnimatedStyle = useAnimatedStyle(() => ({
+      transform: [{ translateX: shimmerTranslateX.value }],
+    }));
+
     const aspectRatioLockedRef = useRef(false);
     // Track if user manually initiated playback (vs autoplay)
     const userInitiatedPlayRef = useRef(false);
@@ -96,6 +121,11 @@ export const PostCardMedia = memo(
     }));
 
     const resolvedMediaUri = media?.uri;
+
+    useEffect(() => {
+      setMediaLoaded(false);
+    }, [resolvedMediaUri]);
+
     const cachedAspectRatio = resolvedMediaUri
       ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
       : undefined;
@@ -331,6 +361,7 @@ export const PostCardMedia = memo(
                 onReadyForDisplay={(event) => {
                   const { width, height } = event.naturalSize ?? {};
                   updateMediaAspectRatioFromSize(width, height);
+                  setMediaLoaded(true);
                   // Video is ready to display - hide loading if user initiated
                   if (userInitiatedPlayRef.current) {
                     setIsVideoLoading(false);
@@ -375,11 +406,39 @@ export const PostCardMedia = memo(
                 cachePolicy="memory-disk"
                 onLoad={({ source }) => {
                   updateMediaAspectRatioFromSize(source?.width, source?.height);
+                  setMediaLoaded(true);
                 }}
                 onError={() => setImageError(true)}
                 blurRadius={shouldBlurContent ? 30 : 0}
               />
             </Pressable>
+          )}
+
+          {!mediaLoaded && !shouldBlurContent && (
+            <View
+              style={[
+                styles.skeletonOverlay,
+                { backgroundColor: skeletonTheme.colors.background.subtle },
+              ]}
+            >
+              <Animated.View
+                style={[
+                  {
+                    width: SHIMMER_WIDTH,
+                    height: "100%",
+                    position: "absolute",
+                  },
+                  shimmerAnimatedStyle,
+                ]}
+              >
+                <LinearGradient
+                  colors={["transparent", "rgba(255,255,255,0.15)", "transparent"]}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={{ width: "100%", height: "100%" }}
+                />
+              </Animated.View>
+            </View>
           )}
 
           {media.type === "video" &&
@@ -531,6 +590,11 @@ const styles = StyleSheet.create((theme) => ({
     overflow: "hidden",
     borderWidth: 0.3,
     borderColor: theme.colors.border.subtle,
+  },
+  skeletonOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.md,
+    zIndex: 10,
   },
   media: {
     width: "100%",

@@ -90,9 +90,10 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { getLastPressedPostY } from "@/src/utils/post-transition";
 
 export default function PostDetailScreen() {
-  const { id, highlight } = useLocalSearchParams<{
+  const { id, highlight, reveal } = useLocalSearchParams<{
     id: string;
     highlight?: string;
+    reveal?: string;
   }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -625,7 +626,7 @@ export default function PostDetailScreen() {
 
     return result;
   }, [post, localPostUpdates, sharedVoteOverride, sharedCommentCountOverride]);
-  const [revealedContent, setRevealedContent] = useState(false);
+  const [revealedContent, setRevealedContent] = useState(reveal === "true");
   const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1604,6 +1605,7 @@ export default function PostDetailScreen() {
         <PostCard
           post={displayPost}
           isOwnPost={currentUser?.id === displayPost.author.id}
+          isVisible={true}
           isTopicFollowed={
             localTopicFollowed ??
             (displayPost?.topic
