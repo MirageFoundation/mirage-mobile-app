@@ -160,8 +160,8 @@ export const PostCardHeader = memo(function PostCardHeader({
                 ]}
               >
                 <Text
-                  size="xs"
-                  weight="semibold"
+                  size="sm"
+                  weight="bold"
                   style={{
                     color: isFollowingAll
                       ? theme.colors.text.default
@@ -298,8 +298,8 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     borderRadius: theme.radius.full,
     minWidth: 54,
-    height: 22,
-    paddingHorizontal: 10,
+    height: 20,
+    paddingHorizontal: 6,
     borderWidth: 1,
   },
   menuOption: {
