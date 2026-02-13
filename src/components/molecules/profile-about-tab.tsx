@@ -230,14 +230,14 @@ function ExpandableSection({
           onPress={() => setExpanded(!expanded)}
           style={styles.showMoreButton}
         >
-          <Text size="md" weight="medium" style={{ color: "rgb(29, 68, 150)" }}>
+          <Text size="md" weight="medium" style={{ color: theme.colors.brand[500] }}>
             {expanded ? "Show Less" : `Show All (${totalCount})`}
           </Text>
           <Icon
             icon={Ionicons}
             name={expanded ? "chevron-up" : "chevron-down"}
             size={16}
-            color="rgb(29, 68, 150)"
+            color={theme.colors.brand[500]}
           />
         </Pressable>
       )}
@@ -287,7 +287,7 @@ function TopicPreferenceItem({
             styles.weightBar,
             {
               width: normalizedWidth,
-              backgroundColor: "rgba(29, 68, 150, 0.3)",
+              backgroundColor: `${theme.colors.brand[500]}B3`,
             },
           ]}
         />
@@ -352,7 +352,7 @@ function AuthorPreferenceItem({
             styles.weightBar,
             {
               width: normalizedWidth,
-              backgroundColor: "rgba(29, 68, 150, 0.3)",
+              backgroundColor: `${theme.colors.brand[500]}B3`,
             },
           ]}
         />
