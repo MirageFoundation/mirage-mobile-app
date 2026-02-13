@@ -30,10 +30,18 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Divider, Text } from "@/src/components/ui/primitives";
 import { Avatar } from "@/src/components/atoms";
-import { useAuthStore, usePreferencesStore, type ApiServer } from "@/src/stores";
+import {
+  useAuthStore,
+  usePreferencesStore,
+  type ApiServer,
+} from "@/src/stores";
 import { useRouter } from "expo-router";
 import { LogoutConfirmationPopup } from "./logout-confirmation-popup";
-import { ValuePickerSheet, type ValuePickerSheetRef, type ValueOption } from "./settings";
+import {
+  ValuePickerSheet,
+  type ValuePickerSheetRef,
+  type ValueOption,
+} from "./settings";
 import { useApiServer } from "@/src/providers/api-server-provider";
 import { useToast } from "@/src/providers/toast-provider";
 import {
@@ -497,19 +505,19 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     {apiServer}
                   </Text>
                 </Pressable>
-              <Pressable
-                onPress={close}
-                style={[
-                  styles.closeButton,
-                  { backgroundColor: theme.colors.background.subtle },
-                ]}
-              >
-                <Ionicons
-                  name="close"
-                  size={20}
-                  color={theme.colors.text.default}
-                />
-              </Pressable>
+                <Pressable
+                  onPress={close}
+                  style={[
+                    styles.closeButton,
+                    { backgroundColor: theme.colors.background.subtle },
+                  ]}
+                >
+                  <Ionicons
+                    name="close"
+                    size={20}
+                    color={theme.colors.text.default}
+                  />
+                </Pressable>
               </View>
             </View>
 
@@ -715,7 +723,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      update 9
+                      update 10
                     </Text>
                   </View>
                 </>
@@ -750,7 +758,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      update 9
+                      update 10
                     </Text>
                   </View>
                 </>
