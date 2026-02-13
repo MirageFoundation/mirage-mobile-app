@@ -139,6 +139,8 @@ export const PostActions = memo(function PostActions({
   const { theme } = useUnistyles();
   const { iconSize, gap, pillHeight, voteTextSize } = SIZE_CONFIG[size];
 
+  const blockMenuMinWidth = Math.max(180, `Block @${authorUsername || ""}`.length * 10 + 60);
+
   // Animation values for arrow movement
   const upArrowTranslateY = useRef(new Animated.Value(0)).current;
   const downArrowTranslateY = useRef(new Animated.Value(0)).current;
@@ -380,7 +382,7 @@ export const PostActions = memo(function PostActions({
               optionsContainer: {
                 backgroundColor: theme.colors.background.default,
                 borderRadius: theme.radius.lg,
-                minWidth: 180,
+                minWidth: blockMenuMinWidth,
                 shadowColor: theme.colors.contrast.base,
                 shadowOffset: { width: 0, height: 4 },
                 shadowOpacity: 0.15,
@@ -401,8 +403,9 @@ export const PostActions = memo(function PostActions({
                   color={theme.colors.error[500]}
                 />
                 <Text
-                  size="sm"
+                  size="lg"
                   weight="medium"
+                  numberOfLines={1}
                   style={{ color: theme.colors.error[500] }}
                 >
                   Block @{authorUsername}
@@ -417,8 +420,9 @@ export const PostActions = memo(function PostActions({
                   color={theme.colors.error[500]}
                 />
                 <Text
-                  size="sm"
+                  size="lg"
                   weight="medium"
+                  numberOfLines={1}
                   style={{ color: theme.colors.error[500] }}
                 >
                   Block Post
@@ -433,8 +437,9 @@ export const PostActions = memo(function PostActions({
                   color={theme.colors.error[500]}
                 />
                 <Text
-                  size="sm"
+                  size="lg"
                   weight="medium"
+                  numberOfLines={1}
                   style={{ color: theme.colors.error[500] }}
                 >
                   Report Post

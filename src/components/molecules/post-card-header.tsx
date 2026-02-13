@@ -51,6 +51,11 @@ export const PostCardHeader = memo(function PostCardHeader({
     ? !!(isFollowing && isTopicFollowed)
     : !!isFollowing;
 
+  const followMenuMinWidth = Math.max(180, Math.max(
+    topic ? `${isTopicFollowed ? "Unfollow" : "Follow"} #${topic}`.length : 0,
+    `${isFollowing ? "Unfollow" : "Follow"} @${author.username}`.length,
+  ) * 10 + 60);
+
   const handleAuthorPress = useCallback(() => {
     triggerHaptic("selection");
     onAuthorPress?.();
@@ -177,7 +182,7 @@ export const PostCardHeader = memo(function PostCardHeader({
                 optionsContainer: {
                   backgroundColor: theme.colors.background.default,
                   borderRadius: theme.radius.lg,
-                  minWidth: 180,
+                  minWidth: followMenuMinWidth,
                   shadowColor: theme.colors.contrast.base,
                   shadowOffset: { width: 0, height: 4 },
                   shadowOpacity: 0.15,
@@ -205,13 +210,8 @@ export const PostCardHeader = memo(function PostCardHeader({
                     <Text
                       size="lg"
                       weight={isTopicFollowed ? "semibold" : "medium"}
-                      numberOfLines={2}
-                      style={[
-                        { flexShrink: 1 },
-                        isTopicFollowed
-                          ? { color: theme.colors.primary[500] }
-                          : undefined,
-                      ]}
+                      numberOfLines={1}
+                      style={isTopicFollowed ? { color: theme.colors.primary[500] } : undefined}
                     >
                       {isTopicFollowed ? "Unfollow" : "Follow"} #{topic}
                     </Text>
@@ -233,13 +233,8 @@ export const PostCardHeader = memo(function PostCardHeader({
                   <Text
                     size="lg"
                     weight={isFollowing ? "semibold" : "medium"}
-                    numberOfLines={2}
-                    style={[
-                      { flexShrink: 1 },
-                      isFollowing
-                        ? { color: theme.colors.primary[500] }
-                        : undefined,
-                    ]}
+                    numberOfLines={1}
+                    style={isFollowing ? { color: theme.colors.primary[500] } : undefined}
                   >
                     {isFollowing ? "Unfollow" : "Follow"} @{author.username}
                   </Text>
@@ -308,7 +303,6 @@ const styles = StyleSheet.create((theme) => ({
     gap: 10,
     paddingVertical: theme.spacing.xs + 2,
     paddingHorizontal: theme.spacing.md,
-    maxWidth: 250,
   },
   moreButton: {
     width: 32,
