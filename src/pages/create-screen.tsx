@@ -41,7 +41,10 @@ const URL_REGEX = /^https?:\/\/[^\s<>"{}|\\^`\[\]]+$/i;
 
 // Helper to check if input looks like a URL attempt (has dot but no protocol)
 function looksLikeUrlWithoutProtocol(text: string): boolean {
-  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z]{2,})+/i.test(text) && !text.startsWith('http');
+  return (
+    /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z]{2,})+/i.test(text) &&
+    !text.startsWith("http")
+  );
 }
 
 const CONTENT_WARNING_OPTIONS: { value: ContentTag; label: string }[] = [
@@ -130,10 +133,7 @@ export function CreateScreen() {
   }, [draft.title, draft.community, draft.attachmentType, isUploadingVideo]);
 
   const hasAttachment = useMemo(() => {
-    return (
-      showLinkInput ||
-      draft.attachmentType !== null
-    );
+    return showLinkInput || draft.attachmentType !== null;
   }, [showLinkInput, draft.attachmentType]);
 
   useEffect(() => {
@@ -371,26 +371,29 @@ export function CreateScreen() {
     setTimeout(() => linkInputRef.current?.focus(), 100);
   }, [hasAttachment, showLinkInput]);
 
-  const handleLinkChange = useCallback((text: string) => {
-    setLinkUrl(text);
-    const trimmed = text.trim();
-    if (trimmed.length > 0) {
-      // Check if it's a valid URL with protocol
-      const isValid = URL_REGEX.test(text);
-      if (isValid) {
-        setLinkError(null);
-        setAttachment("link", text);
-        updateDraft({ linkUrl: text });
-      } else if (looksLikeUrlWithoutProtocol(trimmed)) {
-        // User typed something like "google.com" - show hint to add protocol
-        setLinkError("Add https:// to the beginning of your link");
+  const handleLinkChange = useCallback(
+    (text: string) => {
+      setLinkUrl(text);
+      const trimmed = text.trim();
+      if (trimmed.length > 0) {
+        // Check if it's a valid URL with protocol
+        const isValid = URL_REGEX.test(text);
+        if (isValid) {
+          setLinkError(null);
+          setAttachment("link", text);
+          updateDraft({ linkUrl: text });
+        } else if (looksLikeUrlWithoutProtocol(trimmed)) {
+          // User typed something like "google.com" - show hint to add protocol
+          setLinkError("Add https:// to the beginning of your link");
+        } else {
+          setLinkError("Please enter a valid URL (e.g., https://example.com)");
+        }
       } else {
-        setLinkError("Please enter a valid URL (e.g., https://example.com)");
+        setLinkError(null);
       }
-    } else {
-      setLinkError(null);
-    }
-  }, [setAttachment, updateDraft]);
+    },
+    [setAttachment, updateDraft],
+  );
 
   const handleLinkSubmit = useCallback(() => {
     if (linkUrl && !linkError) {
@@ -748,7 +751,7 @@ export function CreateScreen() {
             {selectedContentWarning ? (
               <View style={styles.contentWarningSelected}>
                 <Text
-                  size="sm"
+                  size="md"
                   weight="semibold"
                   style={{ color: theme.colors.warning[500] }}
                 >

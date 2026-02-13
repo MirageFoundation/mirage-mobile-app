@@ -6,7 +6,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 export type ContentWarningType = 
   | "sensitive" 
-  | "adult" 
+  | "porn" 
   | "violence" 
   | "gore" 
   | "death"
@@ -25,7 +25,7 @@ type ContentWarningBadgeProps = {
 
 const WARNING_CONFIG: Record<ContentWarningType, { label: string; icon: keyof typeof Ionicons.glyphMap; color: string }> = {
   sensitive: { label: "Sensitive", icon: "alert-circle", color: "warning" },
-  adult: { label: "Adult", icon: "eye-off", color: "error" },
+  porn: { label: "Porn", icon: "eye-off", color: "error" },
   violence: { label: "Violence", icon: "warning", color: "error" },
   gore: { label: "Gore", icon: "skull", color: "error" },
   death: { label: "Death", icon: "skull-outline", color: "error" },

@@ -110,9 +110,9 @@ function TopicRow({
     const warnings: ContentWarningType[] = [];
     const tagMap: Record<string, ContentWarningType> = {
       sensitive: "sensitive",
-      adult: "adult",
+      adult: "porn",
       nsfw: "nsfw",
-      porn: "adult",
+      porn: "porn",
       violence: "violence",
       gore: "gore",
       death: "death",
