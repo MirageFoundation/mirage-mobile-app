@@ -22,22 +22,13 @@ import {
   View,
   type GestureResponderEvent,
 } from "react-native";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-  Easing,
-} from "react-native-reanimated";
-import { LinearGradient } from "expo-linear-gradient";
+import { StyleSheet } from "react-native-unistyles";
 import YoutubePlayer from "react-native-youtube-iframe";
 import { extractYouTubeVideoId, type ResolvedMedia } from "./post-card-utils";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEDIA_MAX_HEIGHT = 450;
 const MEDIA_HORIZONTAL_PADDING = 32; // md padding * 2
-const SHIMMER_WIDTH = SCREEN_WIDTH * 0.7;
 
 export type PostCardMediaRef = {
   pauseVideo: () => void;
@@ -91,20 +82,6 @@ export const PostCardMedia = memo(
     const [isMuted, setIsMuted] = useState(true);
     const [mediaLoaded, setMediaLoaded] = useState(false);
     const videoRef = useRef<Video | null>(null);
-    const shimmerTranslateX = useSharedValue(-SHIMMER_WIDTH);
-    const { theme: skeletonTheme } = useUnistyles();
-
-    useEffect(() => {
-      shimmerTranslateX.value = withRepeat(
-        withTiming(SCREEN_WIDTH, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
-        -1,
-        false,
-      );
-    }, [shimmerTranslateX]);
-
-    const shimmerAnimatedStyle = useAnimatedStyle(() => ({
-      transform: [{ translateX: shimmerTranslateX.value }],
-    }));
 
     const aspectRatioLockedRef = useRef(false);
     // Track if user manually initiated playback (vs autoplay)
@@ -429,26 +406,9 @@ export const PostCardMedia = memo(
             <View
               style={[
                 styles.skeletonOverlay,
-                { backgroundColor: skeletonTheme.colors.background.subtle },
               ]}
             >
-              <Animated.View
-                style={[
-                  {
-                    width: SHIMMER_WIDTH,
-                    height: "100%",
-                    position: "absolute",
-                  },
-                  shimmerAnimatedStyle,
-                ]}
-              >
-                <LinearGradient
-                  colors={["transparent", "rgba(255,255,255,0.15)", "transparent"]}
-                  start={{ x: 0, y: 0.5 }}
-                  end={{ x: 1, y: 0.5 }}
-                  style={{ width: "100%", height: "100%" }}
-                />
-              </Animated.View>
+              <ActivityIndicator size="small" color="rgba(150,150,150,0.6)" />
             </View>
           )}
 
@@ -606,6 +566,8 @@ const styles = StyleSheet.create((theme) => ({
     ...StyleSheet.absoluteFillObject,
     borderRadius: theme.radius.md,
     zIndex: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   media: {
     width: "100%",

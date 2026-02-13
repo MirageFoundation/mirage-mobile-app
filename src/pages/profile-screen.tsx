@@ -1,15 +1,12 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
-  ListRenderItem,
   Share,
   View,
-  ViewToken,
 } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -91,8 +88,71 @@ const calculateAccountAgeDays = (
 
 type TabType = "posts" | "comments" | "about";
 
-const MemoizedPostCardItem = memo(PostCardItem);
-const MemoizedProfileCommentItem = memo(ProfileCommentItem);
+const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
+ const p = prev.post;
+ const n = next.post;
+ if (p.id !== n.id) return false;
+ if (p.likes !== n.likes) return false;
+ if (p.dislikes !== n.dislikes) return false;
+ if (p.comments !== n.comments) return false;
+ if (p.hasLiked !== n.hasLiked) return false;
+ if (p.hasDisliked !== n.hasDisliked) return false;
+ return true;
+});
+const MemoizedProfileCommentItem = memo(ProfileCommentItem, (prev, next) => {
+ return prev.comment.post_id === next.comment.post_id
+  && prev.comment.content === next.comment.content
+  && prev.comment.points === next.comment.points;
+});
+
+const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
+ post,
+ contentAnimatedStyle,
+ onPostPress,
+ onAuthorPress,
+ onCommentPress,
+ onMorePress,
+}: {
+ post: Post;
+ contentAnimatedStyle: any;
+ onPostPress: (postId: string) => void;
+ onAuthorPress: (authorId: string) => void;
+ onCommentPress: (postId: string) => void;
+ onMorePress: (postId: string) => void;
+}) {
+ return (
+  <Animated.View style={contentAnimatedStyle}>
+   <MemoizedPostCardItem
+    post={post}
+    isOwnPost={true}
+    showUrlCard={false}
+    onPostPress={onPostPress}
+    onAuthorPress={onAuthorPress}
+    onCommentPress={onCommentPress}
+    onMorePress={onMorePress}
+   />
+  </Animated.View>
+ );
+});
+
+const AnimatedCommentWrapper = memo(function AnimatedCommentWrapper({
+ comment,
+ contentAnimatedStyle,
+ onPress,
+}: {
+ comment: ApiPost;
+ contentAnimatedStyle: any;
+ onPress: (commentId: string, rootPostId: string) => void;
+}) {
+ return (
+  <Animated.View style={contentAnimatedStyle}>
+   <MemoizedProfileCommentItem
+    comment={comment}
+    onPress={onPress}
+   />
+  </Animated.View>
+ );
+});
 
 export function ProfileScreen() {
   const router = useRouter();
@@ -602,7 +662,7 @@ useEffect(() => {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, activeTab]);
 
   const keyExtractor = useCallback(
-    (item: Post | ApiPost | "header" | "tabs", index: number) => {
+    (item: Post | ApiPost | "header" | "tabs") => {
       if (item === "header") return "header";
       if (item === "tabs") return "tabs";
       return "id" in item ? item.id : item.post_id;
@@ -610,9 +670,16 @@ useEffect(() => {
     [],
   );
 
-  const renderItem: ListRenderItem<Post | ApiPost | "header" | "tabs"> =
-    useCallback(
-      ({ item, index }) => {
+  const postsWithoutWarnings = useMemo(() => {
+   const map = new Map<string, Post>();
+   for (const post of uiPosts) {
+    map.set(post.id, { ...post, contentWarnings: undefined });
+   }
+   return map;
+  }, [uiPosts]);
+
+  const renderItem = useCallback(
+      ({ item }: { item: Post | ApiPost | "header" | "tabs" }) => {
         if (item === "header") {
          return (
            <ProfileContentAnimated
@@ -634,7 +701,7 @@ useEffect(() => {
 
         if (item === "tabs") {
           return (
-            <View style={{ backgroundColor: theme.colors.background.default }}>
+            <View>
               <ProfileTabBar
                 activeTab={activeTab}
                 onTabChange={handleTabChange}
@@ -647,33 +714,26 @@ useEffect(() => {
         }
 
         if (activeTab === 0 && "id" in item) {
-          const postWithoutWarnings = {
-            ...item,
-            contentWarnings: undefined,
-          };
+          const cleanPost = postsWithoutWarnings.get(item.id) || item;
           return (
-            <Animated.View style={contentAnimatedStyle}>
-              <MemoizedPostCardItem
-                post={postWithoutWarnings}
-                isOwnPost={true}
-                showUrlCard={false}
-                onPostPress={handlePostPress}
-                onAuthorPress={handleAuthorPress}
-                onCommentPress={handlePostPress}
-                onMorePress={handlePostMorePress}
-              />
-            </Animated.View>
+            <AnimatedPostWrapper
+             post={cleanPost}
+             contentAnimatedStyle={contentAnimatedStyle}
+             onPostPress={handlePostPress}
+             onAuthorPress={handleAuthorPress}
+             onCommentPress={handlePostPress}
+             onMorePress={handlePostMorePress}
+            />
           );
         }
 
        if (activeTab === 1 && "post_id" in item) {
          return (
-           <Animated.View style={contentAnimatedStyle}>
-             <MemoizedProfileCommentItem
-               comment={item}
-               onPress={handleCommentPress}
-             />
-           </Animated.View>
+           <AnimatedCommentWrapper
+            comment={item}
+            contentAnimatedStyle={contentAnimatedStyle}
+            onPress={handleCommentPress}
+           />
          );
        }
 
@@ -689,7 +749,6 @@ useEffect(() => {
        handleFollowersPress,
         isLoading,
        headerHeight,
-        theme.colors.background.default,
         activeTab,
         handleTabChange,
         handleTabDoubleTap,
@@ -699,6 +758,7 @@ useEffect(() => {
        handleCommentPress,
       animatedTabIndex,
       contentAnimatedStyle,
+      postsWithoutWarnings,
       ],
     );
 
@@ -827,11 +887,11 @@ useEffect(() => {
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.5}
           ListFooterComponent={ListFooterComponent}
-          removeClippedSubviews={true}
-          maxToRenderPerBatch={10}
-          windowSize={10}
-          initialNumToRender={5}
-          updateCellsBatchingPeriod={50}
+          removeClippedSubviews={false}
+          maxToRenderPerBatch={5}
+          windowSize={5}
+          initialNumToRender={7}
+          updateCellsBatchingPeriod={100}
           bounces={true}
         />
       </GestureDetector>
