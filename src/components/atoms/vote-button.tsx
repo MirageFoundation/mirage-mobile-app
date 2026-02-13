@@ -1,8 +1,6 @@
 import {
   DownvoteFilledIcon,
-  DownvoteOutlineIcon,
   UpvoteFilledIcon,
-  UpvoteOutlineIcon,
 } from "@/assets/figma-icons";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
@@ -117,17 +115,9 @@ export const VoteButton = ({
 
   const renderIcon = () => {
     if (type === "like") {
-      return isActive ? (
-        <UpvoteFilledIcon size={iconSize} color={iconColor} />
-      ) : (
-        <UpvoteOutlineIcon size={iconSize} color={iconColor} />
-      );
+      return <UpvoteFilledIcon size={iconSize} color={iconColor} />;
     }
-    return isActive ? (
-      <DownvoteFilledIcon size={iconSize} color={iconColor} />
-    ) : (
-      <DownvoteOutlineIcon size={iconSize} color={iconColor} />
-    );
+    return <DownvoteFilledIcon size={iconSize} color={iconColor} />;
   };
 
   return (

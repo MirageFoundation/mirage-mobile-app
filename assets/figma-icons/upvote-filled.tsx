@@ -11,13 +11,10 @@ function UpvoteFilledIcon({
   color = "#000",
 }: UpvoteFilledIconProps) {
   // Original viewBox is 18x20, we maintain aspect ratio
-  const height = size * (15 / 20);
+  const height = size * (11 / 16);
   return (
-    <Svg width={size} height={height} viewBox="0 0 20 15" fill="none">
-      <Path
-        d="M1 15h18.001a1 1 0 00.997-1.063 1.003 1.003 0 00-.174-.509l-9-13.023c-.373-.54-1.271-.54-1.645 0l-9 13.023A1.002 1.002 0 001 15z"
-        fill={color}
-      />
+    <Svg width={size} height={height} viewBox="0 0 16 11" fill="none">
+      <Path d="M0 10.167h15.341L7.671 0 0 10.167z" fill={color} />
     </Svg>
   );
 }

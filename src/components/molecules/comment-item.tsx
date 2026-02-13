@@ -1,8 +1,6 @@
 import {
   DownvoteFilledIcon,
-  DownvoteOutlineIcon,
   UpvoteFilledIcon,
-  UpvoteOutlineIcon,
 } from "@/assets/figma-icons";
 import { TimeAgo, FollowButton } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
@@ -30,8 +28,8 @@ import Animated, {
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 // Vote colors (same as post-actions)
-const UPVOTE_COLOR = "#FF4757"; // Red shade for upvote
-const DOWNVOTE_COLOR = "#8B5CF6"; // Purple shade for downvote
+const UPVOTE_COLOR = "#22C55E"; // Green for upvote
+const DOWNVOTE_COLOR = "#EF4444"; // Red for downvote
 
 export type CommentAuthor = {
   id: string;
@@ -546,7 +544,7 @@ export const CommentItem = ({
                         color={upvoteColor}
                       />
                     ) : (
-                      <UpvoteOutlineIcon
+                      <UpvoteFilledIcon
                         size={SIZE_CONFIG.iconSize}
                         color={upvoteColor}
                       />
@@ -582,7 +580,7 @@ export const CommentItem = ({
                         color={downvoteColor}
                       />
                     ) : (
-                      <DownvoteOutlineIcon
+                      <DownvoteFilledIcon
                         size={SIZE_CONFIG.iconSize}
                         color={downvoteColor}
                       />

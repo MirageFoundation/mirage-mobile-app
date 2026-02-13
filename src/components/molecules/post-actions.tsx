@@ -1,10 +1,8 @@
 import {
   CommentIcon,
   DownvoteFilledIcon,
-  DownvoteOutlineIcon,
   ShareIcon,
   UpvoteFilledIcon,
-  UpvoteOutlineIcon,
 } from "@/assets/figma-icons";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
@@ -27,8 +25,8 @@ import {
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 // Vote colors
-const UPVOTE_COLOR = "#FF4757"; // Red shade for upvote
-const DOWNVOTE_COLOR = "#8B5CF6"; // Purple shade for downvote
+const UPVOTE_COLOR = "#22C55E"; // Green for upvote
+const DOWNVOTE_COLOR = "#EF4444"; // Red for downvote
 
 type PostActionsProps = {
   /** Number of likes */
@@ -267,7 +265,7 @@ export const PostActions = memo(function PostActions({
             {hasLiked ? (
               <UpvoteFilledIcon size={iconSize} color={upvoteColor} />
             ) : (
-              <UpvoteOutlineIcon size={iconSize} color={upvoteColor} />
+              <UpvoteFilledIcon size={iconSize} color={upvoteColor} />
             )}
           </Animated.View>
         </Pressable>
@@ -309,7 +307,7 @@ export const PostActions = memo(function PostActions({
             {hasDisliked ? (
               <DownvoteFilledIcon size={iconSize} color={downvoteColor} />
             ) : (
-              <DownvoteOutlineIcon size={iconSize} color={downvoteColor} />
+              <DownvoteFilledIcon size={iconSize} color={downvoteColor} />
             )}
           </Animated.View>
         </Pressable>
