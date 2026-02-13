@@ -380,14 +380,17 @@ export function TopicFeedScreen() {
     toast.success("Got it", "We'll show fewer posts like this.");
   }, [toast]);
 
-  const handleRevealContent = useCallback((postId: string) => {
-    setRevealedPosts((prev) => {
-      const newSet = new Set(prev);
-      newSet.add(postId);
-      return newSet;
-    });
-    router.push(`/post/${postId}?reveal=true`);
-  }, [router]);
+  const handleRevealContent = useCallback(
+    (postId: string) => {
+      setRevealedPosts((prev) => {
+        const newSet = new Set(prev);
+        newSet.add(postId);
+        return newSet;
+      });
+      router.push(`/post/${postId}?reveal=true`);
+    },
+    [router],
+  );
 
   const lastFetchTime = useRef(0);
   const isFetchingRef = useRef(false);
@@ -479,12 +482,8 @@ export function TopicFeedScreen() {
 
   const ListFooterComponent = useCallback(() => {
     if (!isFetchingNextPage) return null;
-    return (
-      <Box center p="md">
-        <ActivityIndicator size="small" color={theme.colors.brand[500]} />
-      </Box>
-    );
-  }, [isFetchingNextPage, theme.colors.brand]);
+    return <PostCardSkeletonList count={1} />;
+  }, [isFetchingNextPage]);
 
   const HEADER_HEIGHT = 52;
 
