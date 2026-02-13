@@ -29,6 +29,7 @@ type PostCardHeaderProps = {
   onMorePress?: () => void;
   topicDisabled?: boolean;
   directFollowUser?: boolean;
+  showMoreButton?: boolean;
 };
 
 export const PostCardHeader = memo(function PostCardHeader({
@@ -46,6 +47,7 @@ export const PostCardHeader = memo(function PostCardHeader({
   onMorePress,
   topicDisabled = false,
   directFollowUser = false,
+  showMoreButton = false,
 }: PostCardHeaderProps) {
   const { theme } = useUnistyles();
 
@@ -293,6 +295,7 @@ export const PostCardHeader = memo(function PostCardHeader({
             </MenuOptions>
           </Menu>
         )}
+      {showMoreButton && (
         <AnimatedPressable
           scaleAmount={0.85}
           hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
@@ -305,6 +308,7 @@ export const PostCardHeader = memo(function PostCardHeader({
             color={theme.colors.text.default}
           />
         </AnimatedPressable>
+      )}
       </View>
     </View>
   );

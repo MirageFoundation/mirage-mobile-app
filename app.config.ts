@@ -27,6 +27,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         UIBackgroundModes: ["fetch", "remote-notification"],
+        LSApplicationQueriesSchemes: [
+          "whatsapp",
+          "tg",
+          "instagram",
+          "sms",
+        ],
       },
     },
     android: {

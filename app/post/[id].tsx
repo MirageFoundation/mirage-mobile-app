@@ -1626,6 +1626,7 @@ export default function PostDetailScreen() {
           shareUrl={`${getShareBaseUrl(shareServer)}/p/${id}`}
           showUrlCard={false}
           hideCommentAction
+          showMoreButton
         />
         <View style={styles.divider} />
       </Animated.View>
