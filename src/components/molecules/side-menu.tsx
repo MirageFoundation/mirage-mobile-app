@@ -1,4 +1,5 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { formatCompactNumber } from "@/src/utils/format-number";
 import { Ionicons } from "@expo/vector-icons";
 import {
   forwardRef,
@@ -487,7 +488,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="xl"
                       weight="bold"
                     >
-                      {balance.toLocaleString()} MIRAGE
+                      {formatCompactNumber(balance)} MIRAGE
                     </Text>
                   </View>
                   <SectionFooter />

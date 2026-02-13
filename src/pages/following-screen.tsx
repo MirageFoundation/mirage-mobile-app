@@ -7,6 +7,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import {
   useUserFollowed,
+  useUserStatus,
 } from "@/src/api";
 import {
   ConfirmationPopup,
@@ -54,6 +55,13 @@ export function FollowingScreen() {
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
   const sideMenuRef = useRef<SideMenuRef>(null);
+
+  const { refetch: refetchUserStatus } = useUserStatus();
+
+  const handleMenuPress = useCallback(() => {
+    refetchUserStatus();
+    sideMenuRef.current?.present();
+  }, [refetchUserStatus]);
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [feedTabIndex, setFeedTabIndex] = useState(0);
@@ -396,7 +404,7 @@ export function FollowingScreen() {
 
       <FeedHeader
         title="Following"
-        onMenuPress={() => sideMenuRef.current?.present()}
+        onMenuPress={handleMenuPress}
         onSearchPress={() => router.push("/search")}
         animatedStyle={headerAnimatedStyle}
         feedType={feedTabIndex === 0 ? "magic" : "latest"}

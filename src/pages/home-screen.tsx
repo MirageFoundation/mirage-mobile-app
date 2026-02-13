@@ -66,7 +66,7 @@ export function HomeScreen() {
   const toast = useToast();
   const easUpdate = useEasUpdate();
 
-  const { data: userStatus } = useUserStatus();
+  const { data: userStatus, refetch: refetchUserStatus } = useUserStatus();
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
 
@@ -160,8 +160,9 @@ export function HomeScreen() {
   }, [setAdultContent, setHasSeenAdultPrompt]);
 
   const handleMenuPress = useCallback(() => {
+    refetchUserStatus();
     sideMenuRef.current?.present();
-  }, []);
+  }, [refetchUserStatus]);
 
   const handleMenuSettings = useCallback(() => {
     router.push("/settings");
