@@ -229,14 +229,9 @@ export function HomeScreen() {
     router.push(`/topic/${encodeURIComponent(topic)}`);
   }, [router]);
 
-  const postsByIdRef = useRef<Map<string, Post>>(new Map());
-
-  const handleMorePress = useCallback((postId: string) => {
-    const post = postsByIdRef.current.get(postId);
-    if (post) {
-      setSelectedPost(post);
-      postOptionsSheetRef.current?.present();
-    }
+  const handleMorePress = useCallback((post: Post) => {
+    setSelectedPost(post);
+    postOptionsSheetRef.current?.present();
   }, []);
 
   const blockHandler = useBlockHandler({});
@@ -511,7 +506,7 @@ export function HomeScreen() {
         onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
         onAuthorPress: (authorId) => handlersRef.current.handleAuthorPress(authorId),
         onTopicPress: (topic) => handlersRef.current.handleTopicPress(topic),
-        onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
+        onMorePress: (post) => handlersRef.current.handleMorePress(post),
         onLikePress: (postId, liked, disliked, likes) =>
           handlersRef.current.handleUpvote(postId, liked, disliked, likes),
         onDislikePress: (postId, liked, disliked, likes) =>

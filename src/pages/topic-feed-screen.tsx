@@ -207,22 +207,9 @@ export function TopicFeedScreen() {
     [router],
   );
 
-  const postsByIdRef = useRef<Map<string, Post>>(new Map());
-
-  useEffect(() => {
-    const map = new Map<string, Post>();
-    for (const post of posts) {
-      map.set(post.id, post);
-    }
-    postsByIdRef.current = map;
-  }, [posts]);
-
-  const handleMorePress = useCallback((postId: string) => {
-    const post = postsByIdRef.current.get(postId);
-    if (post) {
-      setSelectedPost(post);
-      postOptionsSheetRef.current?.present();
-    }
+  const handleMorePress = useCallback((post: Post) => {
+    setSelectedPost(post);
+    postOptionsSheetRef.current?.present();
   }, []);
 
   const handleCommentPress = useCallback(
@@ -600,7 +587,7 @@ const handlersRef = useRef({
         onAuthorPress: (authorId) =>
           handlersRef.current.handleAuthorPress(authorId),
         onTopicPress: (topic) => handlersRef.current.handleTopicPress(topic),
-        onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
+        onMorePress: (post) => handlersRef.current.handleMorePress(post),
         onLikePress: (postId, liked, disliked, likes) =>
           handlersRef.current.handleUpvote(postId, liked, disliked, likes),
         onDislikePress: (postId, liked, disliked, likes) =>

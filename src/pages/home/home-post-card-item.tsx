@@ -91,7 +91,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   }, []);
 
   const handleMorePress = useCallback(() => {
-    getHandlers().onMorePress?.(postRef.current.id);
+    getHandlers().onMorePress?.(postRef.current);
   }, []);
 
  const handleLikePress = useCallback(() => {
