@@ -5,6 +5,7 @@ import {
   forwardRef,
   useCallback,
   useImperativeHandle,
+  useRef,
   useState,
 } from "react";
 import {
@@ -29,9 +30,12 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Divider, Text } from "@/src/components/ui/primitives";
 import { Avatar } from "@/src/components/atoms";
-import { useAuthStore } from "@/src/stores";
+import { useAuthStore, usePreferencesStore, type ApiServer } from "@/src/stores";
 import { useRouter } from "expo-router";
 import { LogoutConfirmationPopup } from "./logout-confirmation-popup";
+import { ValuePickerSheet, type ValuePickerSheetRef, type ValueOption } from "./settings";
+import { useApiServer } from "@/src/providers/api-server-provider";
+import { useToast } from "@/src/providers/toast-provider";
 import {
   useUserFollowed,
   useUsernameFromAddress,
@@ -41,6 +45,11 @@ import Constants from "expo-constants";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MENU_WIDTH = SCREEN_WIDTH * 0.8;
+
+const apiServerOptions: ValueOption<ApiServer>[] = [
+  { value: "mirage.talk", label: "mirage.talk" },
+  { value: "mirage.vote", label: "mirage.vote" },
+];
 
 type SideMenuProps = {
   onSettings?: () => void;
@@ -307,6 +316,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     const [visible, setVisible] = useState(false);
     const [showLogoutPopup, setShowLogoutPopup] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const apiServerSheetRef = useRef<ValuePickerSheetRef>(null);
+
+    const { switchServer } = useApiServer();
+    const toast = useToast();
+    const { apiServer, setShareServer } = usePreferencesStore();
 
     const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
     const walletAddress = useAuthStore((s) => s.user?.walletAddress);
@@ -404,6 +418,26 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       }
     }, [close, onLogout]);
 
+    const handleServerPress = useCallback(() => {
+      apiServerSheetRef.current?.present();
+    }, []);
+
+    const handleApiServerChange = useCallback(
+      async (server: ApiServer) => {
+        if (server === apiServer) return;
+        try {
+          await switchServer(server);
+          setShareServer(server);
+          toast.success(`Switched to ${server}`);
+          close();
+          router.replace("/(tabs)");
+        } catch {
+          toast.error("Failed to switch server");
+        }
+      },
+      [switchServer, apiServer, toast, router, setShareServer, close],
+    );
+
     const handleShowMoreFollowing = useCallback(() => {
       triggerHaptic("light");
       if (walletAddress) {
@@ -450,6 +484,19 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
               <Text size="xl" weight="bold">
                 Menu
               </Text>
+              <View style={styles.headerRight}>
+                <Pressable onPress={handleServerPress}>
+                  <Text
+                    size="sm"
+                    weight="semibold"
+                    style={{
+                      color: theme.colors.primary[500],
+                      textDecorationLine: "underline",
+                    }}
+                  >
+                    {apiServer}
+                  </Text>
+                </Pressable>
               <Pressable
                 onPress={close}
                 style={[
@@ -463,6 +510,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   color={theme.colors.text.default}
                 />
               </Pressable>
+              </View>
             </View>
 
             <ScrollView
@@ -716,6 +764,14 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
             onConfirm={handleLogoutConfirm}
             isLoading={isLoggingOut}
           />
+
+          <ValuePickerSheet
+            ref={apiServerSheetRef}
+            title="Server"
+            options={apiServerOptions}
+            value={apiServer}
+            onChange={handleApiServerChange}
+          />
         </View>
       </View>
     );
@@ -760,6 +816,11 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: theme.spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border.subtle,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
   },
   closeButton: {
     width: 32,
