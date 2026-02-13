@@ -1629,6 +1629,7 @@ export default function PostDetailScreen() {
           showUrlCard={false}
           hideCommentAction
           showMoreButton
+          isPostDetail
         />
         <View style={styles.divider} />
       </Animated.View>
