@@ -31,7 +31,8 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
-import type { ResolvedMedia } from "./post-card-utils";
+import YoutubePlayer from "react-native-youtube-iframe";
+import { extractYouTubeVideoId, type ResolvedMedia } from "./post-card-utils";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEDIA_MAX_HEIGHT = 450;
@@ -151,8 +152,8 @@ export const PostCardMedia = memo(
     }, [media, resolvedMediaUri]);
 
     useEffect(() => {
-      const isVideo = media?.type === "video";
-      if (!isVideo || shouldBlurContent) {
+      const isPlayable = media?.type === "video" || media?.type === "youtube";
+      if (!isPlayable || shouldBlurContent) {
         setIsVideoPlaying(false);
         setIsVideoLoading(false);
         userInitiatedPlayRef.current = false;
@@ -343,7 +344,17 @@ export const PostCardMedia = memo(
     return (
       <View style={styles.mediaContainer}>
         <View style={[styles.mediaWrapper, mediaWrapperStyle]}>
-          {media.type === "video" ? (
+          {media.type === "youtube" ? (
+            <YoutubePlayer
+              height={exceedsMaxHeight ? MEDIA_MAX_HEIGHT : calculatedHeight}
+              videoId={extractYouTubeVideoId(media.uri) ?? ""}
+              play={isVideoPlaying && isVisible && screenActive}
+              onReady={() => setMediaLoaded(true)}
+              webViewProps={{
+                allowsInlineMediaPlayback: true,
+              }}
+            />
+          ) : media.type === "video" ? (
             <Pressable onPress={handleMediaPress} style={styles.media}>
               <Video
                 ref={videoRef}
