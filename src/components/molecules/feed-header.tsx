@@ -83,6 +83,11 @@ export const FeedHeader = ({
           )}
 
           {hasFeedOptions ? (
+            <View style={styles.titleButton}>
+              <AppIcon />
+              <Text size="xl" weight="bold">
+                {title}
+              </Text>
             <Menu>
               <MenuTrigger
                 customStyles={{
@@ -91,11 +96,7 @@ export const FeedHeader = ({
                   },
                 }}
               >
-                <View style={styles.titleButton}>
-                  <AppIcon />
-                  <Text size="xl" weight="bold">
-                    {title}
-                  </Text>
+                <View style={styles.feedSelector}>
                   {currentFeedLabel && (
                     <Text
                       size="xl"
@@ -184,6 +185,7 @@ export const FeedHeader = ({
                 })}
               </MenuOptions>
             </Menu>
+            </View>
           ) : (
             <View style={styles.titleButton}>
               <AppIcon />
@@ -252,6 +254,10 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     paddingVertical: 8,
     paddingHorizontal: 4,
+  },
+  feedSelector: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   appIcon: {
     width: 18,
