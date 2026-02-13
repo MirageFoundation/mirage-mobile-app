@@ -78,7 +78,7 @@ export const FeedHeader = ({
               onPress={onMenuPress}
               style={styles.iconButton}
             >
-              <MenuIcon size={18} color={theme.colors.text.default} />
+              <MenuIcon size={22} color={theme.colors.text.default} />
             </AnimatedPressable>
           )}
 
@@ -202,7 +202,7 @@ export const FeedHeader = ({
           >
             <Ionicons
               name="search-outline"
-              size={20}
+              size={22}
               color={theme.colors.text.default}
             />
           </AnimatedPressable>
@@ -254,8 +254,8 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: 4,
   },
   appIcon: {
-    width: 22,
-    height: 22,
+    width: 18,
+    height: 18,
     marginRight: 6,
   },
   menuOption: {

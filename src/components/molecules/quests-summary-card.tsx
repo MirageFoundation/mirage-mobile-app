@@ -188,10 +188,10 @@ export function QuestsSummaryCard() {
               <Text size="md" weight="semibold">
                 Daily Quests
               </Text>
-              <Text size="xs" mode="subtle">
+              <Text size="sm" mode="subtle">
                 {completedCount}/{totalQuests} completed
                 {data?.seconds_until_reset && (
-                  <Text size="xs" mode="subtle">
+                  <Text size="sm" mode="subtle">
                     {" "}
                     • {formatTimeShort(data.seconds_until_reset)} left
                   </Text>
@@ -267,7 +267,7 @@ export function QuestsSummaryCard() {
                     }
                   />
                   <Text
-                    size="sm"
+                    size="md"
                     style={
                       quest.completed ? { flex: 1 } : { flex: 1, opacity: 0.6 }
                     }
@@ -275,7 +275,7 @@ export function QuestsSummaryCard() {
                   >
                     {quest.title}
                   </Text>
-                  <Text size="xs" mode="subtle">
+                  <Text size="sm" mode="subtle">
                     {quest.progress}/{quest.target}
                   </Text>
                 </View>
@@ -297,7 +297,7 @@ export function QuestsSummaryCard() {
                 end={{ x: 1, y: 0 }}
                 style={styles.gradientButton}
               >
-                <Text size="sm" weight="semibold" style={{ color: "#FFFFFF" }}>
+                <Text size="md" weight="bold" style={{ color: "#FFFFFF" }}>
                   {hasRewardsToClaim
                     ? "Claim Rewards"
                     : hasClaimed
