@@ -291,7 +291,7 @@ const styles = StyleSheet.create((theme) => ({
   headerActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
   },
   followButton: {
     alignItems: "center",
@@ -316,5 +316,6 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: theme.radius.full,
+    marginRight: -5,
   },
 }));

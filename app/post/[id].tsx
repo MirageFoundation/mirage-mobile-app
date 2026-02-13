@@ -2234,7 +2234,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   stickyHeaderInfo: {
     flex: 1,
-    paddingLeft: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     justifyContent: "center",
   },

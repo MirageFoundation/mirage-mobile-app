@@ -179,7 +179,7 @@ CommentInput.displayName = "CommentInput";
 const styles = StyleSheet.create((theme) => ({
   inactiveContainer: {
     backgroundColor: theme.colors.background.default,
-    paddingHorizontal: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
     paddingTop: theme.spacing.sm,
     borderTopWidth: 1,
     borderTopColor: theme.colors.border.subtle,

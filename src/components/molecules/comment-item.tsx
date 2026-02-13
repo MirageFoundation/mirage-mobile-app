@@ -692,7 +692,6 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginRight: 8,
   },
   voteButton: {
     flexDirection: "row",
