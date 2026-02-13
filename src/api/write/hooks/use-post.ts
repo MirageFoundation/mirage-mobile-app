@@ -103,7 +103,7 @@ const buildOptimisticPost = (
     thumbnail: mediaUrl ?? "",
     points: 0,
     comments: 0,
-    user_vote: 0,
+    user_vote: 1,
     user_weight: 0,
   };
 };
