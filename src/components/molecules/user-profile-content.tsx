@@ -94,11 +94,7 @@ export const UserProfileContent = ({
 
   const truncatedAddress = useMemo(() => {
     if (!walletAddress) return "";
-    if (walletAddress.length <= 13) return walletAddress;
-    return `${walletAddress.slice(
-      0,
-      6
-    )}.....................${walletAddress.slice(-4)}`;
+    return walletAddress;
   }, [walletAddress]);
 
   useEffect(() => {

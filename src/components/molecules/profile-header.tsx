@@ -211,7 +211,7 @@ export const ProfileHeaderBar = ({
                 },
               ]}
             >
-              <Text size="sm" weight="semibold" style={styles.followButtonText}>
+              <Text size="md" weight="semibold" style={styles.followButtonText}>
                 {isFollowing ? "Following" : "Follow"}
               </Text>
             </AnimatedPressable>
@@ -249,11 +249,7 @@ export const ProfileContent = ({
 
   const truncatedAddress = useMemo(() => {
     if (!walletAddress) return "";
-    if (walletAddress.length <= 13) return walletAddress;
-    return `${walletAddress.slice(
-      0,
-      6,
-    )}.....................${walletAddress.slice(-4)}`;
+    return walletAddress;
   }, [walletAddress]);
 
   useEffect(() => {
@@ -522,6 +518,10 @@ const styles = StyleSheet.create((theme) => ({
   iconButton: {
     backgroundColor: "rgba(0,0,0,0.3)",
     borderRadius: theme.radius.full,
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
   },
   shareButton: {
     width: 40,
@@ -532,8 +532,8 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   followButton: {
-    height: 32,
-    paddingHorizontal: 16,
+    height: 38,
+    paddingHorizontal: 14,
     borderRadius: theme.radius.full,
     backgroundColor: "rgba(0,0,0,0.3)",
     alignItems: "center",
@@ -544,8 +544,8 @@ const styles = StyleSheet.create((theme) => ({
     color: "#FFFFFF",
   },
   refreshIndicator: {
-    width: 32,
-    height: 32,
+    width: 40,
+    height: 40,
     borderRadius: theme.radius.full,
     backgroundColor: "rgba(0,0,0,0.3)",
     alignItems: "center",
