@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   Image as RNImage,
   Keyboard,
+  Platform,
   Pressable,
   ScrollView,
   TextInput,
@@ -133,7 +134,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
     query: gifSearch,
     setQuery: setGifSearch,
     isConfigured: isGiphyConfigured,
-  } = useGiphy({ debounceMs: 300, limit: 20 });
+  } = useGiphy({ debounceMs: 300, limit: 20, enabled: inputMode === "gif" });
 
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(
     initialAttachment?.type === "image" ? initialAttachment.url : null,
@@ -150,10 +151,12 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   useEffect(() => {
-    const showSub = Keyboard.addListener("keyboardWillShow", () =>
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, () =>
       setIsKeyboardVisible(true),
     );
-    const hideSub = Keyboard.addListener("keyboardWillHide", () =>
+    const hideSub = Keyboard.addListener(hideEvent, () =>
       setIsKeyboardVisible(false),
     );
     return () => {

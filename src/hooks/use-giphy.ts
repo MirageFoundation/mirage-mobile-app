@@ -17,6 +17,8 @@ export interface UseGiphyOptions {
   debounceMs?: number;
   /** Number of results per page (default: 20) */
   limit?: number;
+  /** Whether to enable fetching (default: true) */
+  enabled?: boolean;
 }
 
 export interface UseGiphyReturn {
@@ -44,7 +46,7 @@ export interface UseGiphyReturn {
  * Hook for searching and displaying Giphy GIFs with debounced search
  */
 export function useGiphy(options: UseGiphyOptions = {}): UseGiphyReturn {
-  const { debounceMs = 300, limit = 20 } = options;
+  const { debounceMs = 300, limit = 20, enabled = true } = options;
 
   // Check if Giphy is configured
   const isConfigured = isGiphyConfigured();
@@ -135,7 +137,7 @@ export function useGiphy(options: UseGiphyOptions = {}): UseGiphyReturn {
 
   // Load trending GIFs on mount (only if configured)
   useEffect(() => {
-    if (isConfigured) {
+    if (isConfigured && enabled) {
       fetchGifs("", 0, false);
     }
 
@@ -145,7 +147,7 @@ export function useGiphy(options: UseGiphyOptions = {}): UseGiphyReturn {
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [isConfigured]);
+  }, [isConfigured, enabled]);
 
   return {
     gifs,
