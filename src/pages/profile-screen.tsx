@@ -13,8 +13,6 @@ import {
 } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  interpolate,
-  interpolateColor,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
@@ -77,7 +75,6 @@ const AnimatedFlatList = Animated.createAnimatedComponent(
 );
 
 const HEADER_BAR_HEIGHT = 56;
-const TAB_BAR_INDEX = 1;
 
 const formatMirageBalance = (umirage: number): number => {
   return Math.floor(umirage / 1_000_000);
@@ -768,15 +765,10 @@ useEffect(() => {
   ]);
 
   const stickyTabsAnimatedStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(
-      scrollY.value,
-      [stickyThreshold - 20, stickyThreshold],
-      [0, 1],
-      "clamp",
-    );
+    const isSticky = scrollY.value >= stickyThreshold;
     return {
-      opacity,
-      pointerEvents: scrollY.value >= stickyThreshold ? "auto" : "none",
+      opacity: isSticky ? 1 : 0,
+      pointerEvents: isSticky ? "auto" : "none",
     } as any;
   });
 
@@ -788,8 +780,6 @@ useEffect(() => {
     }),
     [headerHeight, insets.bottom],
   );
-
-  const stickyHeaderIndices = useMemo(() => [TAB_BAR_INDEX], []);
 
   return (
     <Box flex background="base">
@@ -830,7 +820,6 @@ useEffect(() => {
           data={listData}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
-          stickyHeaderIndices={stickyHeaderIndices}
           onScroll={scrollHandler}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
