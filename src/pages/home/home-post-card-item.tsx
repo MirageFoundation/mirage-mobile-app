@@ -201,6 +201,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       onTopicPress={handleTopicPress}
       topicDisabled={isTopicDisabled}
       onMorePress={handleMorePress}
+     directFollowUser={feedScreen === 'topic'}
       onLikePress={handleLikePress}
       onDislikePress={handleDislikePress}
       onCommentPress={handleCommentPress}

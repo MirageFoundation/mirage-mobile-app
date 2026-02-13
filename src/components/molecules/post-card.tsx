@@ -56,6 +56,7 @@ isTopicFollowed?: boolean;
   showUrlCard?: boolean;
   hideCommentAction?: boolean;
   topicDisabled?: boolean;
+ directFollowUser?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -84,6 +85,7 @@ if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
   if (prevProps.shareUrl !== nextProps.shareUrl) return false;
   if (prevProps.showUrlCard !== nextProps.showUrlCard) return false;
   if (prevProps.topicDisabled !== nextProps.topicDisabled) return false;
+ if (prevProps.directFollowUser !== nextProps.directFollowUser) return false;
 
   return true;
 }
@@ -116,6 +118,7 @@ allowAutoplay = true,
   showUrlCard = true,
   hideCommentAction = false,
   topicDisabled = false,
+ directFollowUser = false,
   style,
 }: PostCardProps) {
   if (__DEV__) {
@@ -195,6 +198,7 @@ allowAutoplay = true,
         onFollowUser={onFollowUser}
         onFollowTopic={onFollowTopic}
         onMorePress={onMorePress}
+       directFollowUser={directFollowUser}
       />
 
       <PostCardContent

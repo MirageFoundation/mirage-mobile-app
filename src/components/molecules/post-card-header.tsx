@@ -28,6 +28,7 @@ type PostCardHeaderProps = {
   onFollowTopic?: () => void;
   onMorePress?: () => void;
   topicDisabled?: boolean;
+  directFollowUser?: boolean;
 };
 
 export const PostCardHeader = memo(function PostCardHeader({
@@ -44,6 +45,7 @@ export const PostCardHeader = memo(function PostCardHeader({
   onFollowTopic,
   onMorePress,
   topicDisabled = false,
+  directFollowUser = false,
 }: PostCardHeaderProps) {
   const { theme } = useUnistyles();
 
@@ -51,10 +53,15 @@ export const PostCardHeader = memo(function PostCardHeader({
     ? !!(isFollowing && isTopicFollowed)
     : !!isFollowing;
 
-  const followMenuMinWidth = Math.max(180, Math.max(
-    topic ? `${isTopicFollowed ? "Unfollow" : "Follow"} #${topic}`.length : 0,
-    `${isFollowing ? "Unfollow" : "Follow"} @${author.username}`.length,
-  ) * 10 + 60);
+  const followMenuMinWidth = Math.max(
+    180,
+    Math.max(
+      topic ? `${isTopicFollowed ? "Unfollow" : "Follow"} #${topic}`.length : 0,
+      `${isFollowing ? "Unfollow" : "Follow"} @${author.username}`.length,
+    ) *
+      10 +
+      60,
+  );
 
   const handleAuthorPress = useCallback(() => {
     triggerHaptic("selection");
@@ -141,7 +148,41 @@ export const PostCardHeader = memo(function PostCardHeader({
       </View>
 
       <View style={styles.headerActions}>
-        {!isOwnPost && showFollowButton && (
+        {!isOwnPost && showFollowButton && directFollowUser && (
+          <Pressable
+            onPress={handleFollowUser}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={{ padding: 4 }}
+          >
+            <View
+              style={[
+                styles.followButton,
+                {
+                  backgroundColor: isFollowing
+                    ? "transparent"
+                    : theme.colors.primary[500],
+                  borderColor: isFollowing
+                    ? theme.colors.border.default
+                    : theme.colors.primary[500],
+                 height: isFollowing ? 22 : 20,
+                },
+              ]}
+            >
+              <Text
+                size="sm"
+                weight="bold"
+                style={{
+                  color: isFollowing
+                    ? theme.colors.text.default
+                    : theme.colors.background.default,
+                }}
+              >
+                {isFollowing ? "Following" : "Follow"}
+              </Text>
+            </View>
+          </Pressable>
+        )}
+        {!isOwnPost && showFollowButton && !directFollowUser && (
           <Menu>
             <MenuTrigger
               customStyles={{
@@ -161,6 +202,7 @@ export const PostCardHeader = memo(function PostCardHeader({
                     borderColor: isFollowingAll
                       ? theme.colors.border.default
                       : theme.colors.primary[500],
+                   height: isFollowingAll ? 22 : 20,
                   },
                 ]}
               >
@@ -211,7 +253,11 @@ export const PostCardHeader = memo(function PostCardHeader({
                       size="lg"
                       weight={isTopicFollowed ? "semibold" : "medium"}
                       numberOfLines={1}
-                      style={isTopicFollowed ? { color: theme.colors.primary[500] } : undefined}
+                      style={
+                        isTopicFollowed
+                          ? { color: theme.colors.primary[500] }
+                          : undefined
+                      }
                     >
                       {isTopicFollowed ? "Unfollow" : "Follow"} #{topic}
                     </Text>
@@ -234,7 +280,11 @@ export const PostCardHeader = memo(function PostCardHeader({
                     size="lg"
                     weight={isFollowing ? "semibold" : "medium"}
                     numberOfLines={1}
-                    style={isFollowing ? { color: theme.colors.primary[500] } : undefined}
+                    style={
+                      isFollowing
+                        ? { color: theme.colors.primary[500] }
+                        : undefined
+                    }
                   >
                     {isFollowing ? "Unfollow" : "Follow"} @{author.username}
                   </Text>

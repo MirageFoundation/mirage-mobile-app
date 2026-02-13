@@ -44,6 +44,7 @@ import {
   useVoteHandler,
   type VoteResult,
 } from "@/src/hooks";
+import { useFollowHandler } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
 import {
   useAuthStore,
@@ -184,6 +185,8 @@ export default function PostDetailScreen() {
   const toggleFollowMutation = useToggleFollowUser();
   const toggleFollowTopicMutation = useToggleFollowTopic();
   const toast = useToast();
+
+ const { handleFollowUser: handleFollowUserViaQueue } = useFollowHandler({});
 
   // Shared store for vote and comment count overrides (syncs with home/following screens)
   const setVoteOverride = useHomePostCardStore(
@@ -1455,103 +1458,22 @@ export default function PostDetailScreen() {
   }, [selectedComment, reportHandler]);
 
   const handleToggleFollowCommentAuthor = useCallback(() => {
-    if (
-      !selectedComment ||
-      followLoadingRef.current.has(selectedComment.author.id)
-    )
-      return;
+    if (!selectedComment) return;
     const authorId = selectedComment.author.id;
     const authorUsername = selectedComment.author.username;
     const isCurrentlyFollowing = followedUsers.includes(authorId);
-
-    requireAuth(async () => {
-      const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
-      const actionPast = isCurrentlyFollowing ? "Unfollowed" : "Followed";
-      const toastId = toast.loading(
-        `${action} @${authorUsername}`,
-        "Computing proof of work...",
-      );
-
-      setTimeout(async () => {
-        followLoadingRef.current.add(authorId);
-        setFollowLoadingUsers((prev) => new Set(prev).add(authorId));
-        try {
-          await toggleFollowMutation.mutateAsync({
-            userAddress: authorId,
-            isCurrentlyFollowing,
-          });
-          toast.update(toastId, {
-            type: "success",
-            title: `${actionPast} @${authorUsername}`,
-          });
-          setTimeout(() => toast.dismiss(toastId), 3000);
-        } catch {
-          toast.update(toastId, {
-            type: "error",
-            title: `Failed to ${action.toLowerCase()} @${authorUsername}`,
-          });
-          setTimeout(() => toast.dismiss(toastId), 4000);
-        } finally {
-          followLoadingRef.current.delete(authorId);
-          setFollowLoadingUsers((prev) => {
-            const next = new Set(prev);
-            next.delete(authorId);
-            return next;
-          });
-        }
-      }, 50);
-    });
+    handleFollowUserViaQueue(authorId, authorUsername, isCurrentlyFollowing);
   }, [
     selectedComment,
     followedUsers,
-    requireAuth,
-    toast,
-    toggleFollowMutation,
+    handleFollowUserViaQueue,
   ]);
 
   const handleFollowCommentAuthor = useCallback(
     (authorId: string, isCurrentlyFollowing: boolean) => {
-      if (followLoadingRef.current.has(authorId)) return;
-
-      requireAuth(async () => {
-        const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
-        const actionPast = isCurrentlyFollowing ? "Unfollowed" : "Followed";
-        const toastId = toast.loading(
-          `${action} user`,
-          "Computing proof of work...",
-        );
-
-        setTimeout(async () => {
-          followLoadingRef.current.add(authorId);
-          setFollowLoadingUsers((prev) => new Set(prev).add(authorId));
-          try {
-            await toggleFollowMutation.mutateAsync({
-              userAddress: authorId,
-              isCurrentlyFollowing,
-            });
-            toast.update(toastId, {
-              type: "success",
-              title: `${actionPast} user`,
-            });
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } catch {
-            toast.update(toastId, {
-              type: "error",
-              title: `Failed to ${action.toLowerCase()} user`,
-            });
-            setTimeout(() => toast.dismiss(toastId), 4000);
-          } finally {
-            followLoadingRef.current.delete(authorId);
-            setFollowLoadingUsers((prev) => {
-              const next = new Set(prev);
-              next.delete(authorId);
-              return next;
-            });
-          }
-        }, 50);
-      });
+      handleFollowUserViaQueue(authorId, "", isCurrentlyFollowing);
     },
-    [requireAuth, toast, toggleFollowMutation],
+    [handleFollowUserViaQueue],
   );
 
   // Handler for opening post options sheet

@@ -55,6 +55,7 @@ import {
   usePreferencesStore,
   useSavedPostsStore,
 } from "@/src/stores";
+import { is } from "drizzle-orm";
 
 export function TopicFeedScreen() {
   const { id: topicName } = useLocalSearchParams<{ id: string }>();
@@ -72,10 +73,13 @@ export function TopicFeedScreen() {
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const [sortBy, setSortBy] = useState<"magic" | "newest">("magic");
 
-  const SORT_OPTIONS = useMemo(() => [
-    { label: "Magic", value: "magic" as const },
-    { label: "Latest", value: "newest" as const },
-  ], []);
+  const SORT_OPTIONS = useMemo(
+    () => [
+      { label: "Magic", value: "magic" as const },
+      { label: "Latest", value: "newest" as const },
+    ],
+    [],
+  );
 
   const handleSortChange = useCallback((value: "magic" | "newest") => {
     triggerHaptic("light");
@@ -111,7 +115,33 @@ export function TopicFeedScreen() {
     [followedData],
   );
 
-  const { handleFollowUser: handleFollowPress, handleFollowTopic: handleFollowTopicFromCard } = useFollowHandler({});
+  const [optimisticFollowedTopic, setOptimisticFollowedTopic] = useState<
+    boolean | null
+  >(null);
+
+  const isTopicFollowed =
+    optimisticFollowedTopic ?? followedTopics.includes(topicName ?? "");
+
+  useEffect(() => {
+    setOptimisticFollowedTopic(null);
+  }, [followedTopics]);
+
+  const {
+    handleFollowUser: handleFollowPress,
+    handleFollowTopic: handleFollowTopicFromCard,
+  } = useFollowHandler({
+    onOptimisticFollowTopic: (_topic, isFollowing) => {
+      setOptimisticFollowedTopic(isFollowing);
+    },
+    onRollbackFollowTopic: () => {
+      setOptimisticFollowedTopic(null);
+    },
+  });
+
+  const handleHeaderFollowTopic = useCallback(() => {
+    if (!topicName) return;
+    handleFollowTopicFromCard(topicName, isTopicFollowed);
+  }, [topicName, isTopicFollowed, handleFollowTopicFromCard]);
 
   const allowedTags = useMemo(
     () => getAllowedTagsFromContentTypes(selectedContentTypes),
@@ -488,13 +518,15 @@ export function TopicFeedScreen() {
   const setShareServerStore = useHomePostCardStore(
     (state) => state.setShareServer,
   );
- const setAllowAutoplay = useHomePostCardStore(
-   (state) => state.setAllowAutoplay,
- );
-  const setActiveFeedScreen = useHomePostCardStore((state) => state.setActiveFeedScreen);
- const setDisabledTopicName = useHomePostCardStore(
-   (state) => state.setDisabledTopicName,
- );
+  const setAllowAutoplay = useHomePostCardStore(
+    (state) => state.setAllowAutoplay,
+  );
+  const setActiveFeedScreen = useHomePostCardStore(
+    (state) => state.setActiveFeedScreen,
+  );
+  const setDisabledTopicName = useHomePostCardStore(
+    (state) => state.setDisabledTopicName,
+  );
 
   const followedUsersSet = useMemo(
     () => new Set(followedUsers),
@@ -531,22 +563,22 @@ export function TopicFeedScreen() {
     setShareServerStore(shareServer);
   }, [shareServer, setShareServerStore]);
 
- useEffect(() => {
-   setAllowAutoplay(allowAutoplay);
- }, [allowAutoplay, setAllowAutoplay]);
+  useEffect(() => {
+    setAllowAutoplay(allowAutoplay);
+  }, [allowAutoplay, setAllowAutoplay]);
 
- const isFocused = useIsFocused();
+  const isFocused = useIsFocused();
 
- useEffect(() => {
-    setActiveFeedScreen(isFocused ? 'topic' : null);
-   if (isFocused) {
-     setDisabledTopicName(topicName);
-   } else {
-     setDisabledTopicName(undefined);
-   }
+  useEffect(() => {
+    setActiveFeedScreen(isFocused ? "topic" : null);
+    if (isFocused) {
+      setDisabledTopicName(topicName);
+    } else {
+      setDisabledTopicName(undefined);
+    }
   }, [isFocused, setActiveFeedScreen, setDisabledTopicName, topicName]);
 
-const handlersRef = useRef({
+  const handlersRef = useRef({
     handlePostPress,
     handleAuthorPress,
     handleTopicPress,
@@ -595,7 +627,11 @@ const handlersRef = useRef({
         onCommentPress: (postId) =>
           handlersRef.current.handleCommentPress(postId),
         onFollowUser: (authorId, username, isFollowing) =>
-          handlersRef.current.handleFollowPress(authorId, username, isFollowing),
+          handlersRef.current.handleFollowPress(
+            authorId,
+            username,
+            isFollowing,
+          ),
         onFollowTopic: (topic, isFollowed) =>
           handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
         onRevealContent: (postId) =>
@@ -610,7 +646,7 @@ const handlersRef = useRef({
           handlersRef.current.handleBlockPostFromCard(postId),
         onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
       });
-    }, [setHandlers])
+    }, [setHandlers]),
   );
 
   return (
@@ -734,21 +770,49 @@ const handlersRef = useRef({
             })}
           </MenuOptions>
         </Menu>
+        <Pressable
+          onPress={handleHeaderFollowTopic}
+          style={[
+            styles.headerFollowButton,
+            {
+              backgroundColor: isTopicFollowed
+                ? "transparent"
+                : theme.colors.primary[500],
+              borderColor: isTopicFollowed
+                ? theme.colors.border.default
+                : theme.colors.primary[500],
+              paddingVertical: 2,
+              // height: isTopicFollowed ? 28 : 24,
+            },
+          ]}
+        >
+          <Text
+            size="md"
+            weight="bold"
+            style={{
+              color: isTopicFollowed
+                ? theme.colors.text.default
+                : theme.colors.background.default,
+            }}
+          >
+            {isTopicFollowed ? "Following" : "Follow"}
+          </Text>
+        </Pressable>
       </View>
 
-     <HomePostList
-       ref={flatListRef}
-       data={posts}
-       contentContainerStyle={listContentStyle}
-       onScroll={() => {}}
-       ListHeaderComponent={ListHeaderComponent}
-       ListEmptyComponent={ListEmptyComponent}
-       ListFooterComponent={ListFooterComponent}
-       refreshControl={refreshControl}
-       onEndReached={handleEndReached}
-       onEndReachedThreshold={1.5}
+      <HomePostList
+        ref={flatListRef}
+        data={posts}
+        contentContainerStyle={listContentStyle}
+        onScroll={() => {}}
+        ListHeaderComponent={ListHeaderComponent}
+        ListEmptyComponent={ListEmptyComponent}
+        ListFooterComponent={ListFooterComponent}
+        refreshControl={refreshControl}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={1.5}
         feedScreen="topic"
-     />
+      />
 
       <PostOptionsSheet
         ref={postOptionsSheetRef}
@@ -855,5 +919,13 @@ const styles = StyleSheet.create((theme) => ({
     gap: 10,
     paddingVertical: theme.spacing.xs,
     paddingHorizontal: theme.spacing.md,
+  },
+  headerFollowButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.radius.full,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    marginRight: theme.spacing.xs,
   },
 }));

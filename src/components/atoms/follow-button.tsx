@@ -94,7 +94,7 @@ export const FollowButton = ({
         disabled={disabled}
         style={[
           styles.container,
-          { height, paddingHorizontal },
+          { height: isFollowing ? height + 2 : height, paddingHorizontal },
           disabled && styles.disabled,
         ]}
       >
