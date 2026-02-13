@@ -6,6 +6,7 @@ import { getUserStatus } from "@/src/api/read/endpoints/users";
 import type { WalletMetadata } from "@/src/wallet";
 import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 import { useContentModerationStore } from "./content-moderation-store";
+import { getTierName } from "@/src/utils/tiers";
 
 // ============================================
 // Types
@@ -150,10 +151,9 @@ export const useAuthStore = create<AuthState>()(
 
             getUserStatus({ address: metadata.address })
               .then((userStatus) => {
-                const tierNames = ["Free", "Basic", "Premium", "Pro"];
                 const newUserLevel = userStatus.user_level;
                 const newHasUsername = !!userStatus.username;
-                const newTier = tierNames[userStatus.user_level] || "Free";
+                const newTier = getTierName(userStatus.user_level);
 
                 if (userStatus.username) {
                   walletService.updateMetadata({ hasUsername: true });
@@ -311,9 +311,8 @@ export const useAuthStore = create<AuthState>()(
 
         const { user } = get();
         if (user) {
-          const tierNames = ["Free", "Basic", "Premium", "Pro"];
           set({
-            user: { ...user, tier: tierNames[level] || "Free" },
+            user: { ...user, tier: getTierName(level) },
           });
         }
       },

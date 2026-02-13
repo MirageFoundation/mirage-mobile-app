@@ -160,10 +160,10 @@ export const MarkdownContent = memo(function MarkdownContent({
       },
       listBullet: {
         color: theme.colors.text.subtle,
-        fontSize: theme.typography.size.xl,
+        fontSize: theme.typography.size.md,
         lineHeight: theme.typography.size.md * theme.typography.leading.normal,
-        marginRight: theme.spacing.xs,
-        top: -3,
+        width: 18,
+        textAlign: "center",
       },
       listItemContent: {
         flex: 1,

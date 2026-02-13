@@ -3,6 +3,7 @@ export const TIER_NAMES: Record<number, string> = {
   1: "Basic",
   2: "Pro",
   3: "Premium",
+  100: "God",
 };
 
 export const getTierName = (level: number): string => {
