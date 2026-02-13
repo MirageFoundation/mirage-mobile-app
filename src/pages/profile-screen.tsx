@@ -11,12 +11,15 @@ import {
   View,
   ViewToken,
 } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   interpolate,
   interpolateColor,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
+  withTiming,
+  runOnJS,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -54,6 +57,7 @@ import {
   useBlockHandler,
   useDeleteHandler,
   useReportHandler,
+  useTabSwipeGesture,
 } from "@/src/hooks";
 import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
 import {
@@ -123,6 +127,7 @@ export function ProfileScreen() {
   }, [registerProfileScrollRef]);
 
   const scrollY = useSharedValue(0);
+  const animatedTabIndex = useSharedValue(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
 
@@ -537,9 +542,29 @@ useEffect(() => {
     }
   }, [reportHandler.showReportSheet]);
 
-  const handleTabChange = useCallback((index: number) => {
+  const handleSwipeTabChange = useCallback((index: number) => {
     setActiveTab(index);
   }, []);
+
+  const { swipeGesture, contentAnimatedStyle, fadeOpacity, completeTransition } = useTabSwipeGesture({
+    onTabChange: handleSwipeTabChange,
+    animatedIndex: animatedTabIndex,
+  });
+
+  const handleTabChange = useCallback((index: number) => {
+    if (index === activeTab) return;
+    animatedTabIndex.value = withTiming(index, { duration: 200 });
+    fadeOpacity.value = withTiming(
+      0,
+      { duration: 100 },
+      (finished) => {
+        "worklet";
+        if (finished) {
+          runOnJS(completeTransition)(index);
+        }
+      },
+    );
+  }, [activeTab, animatedTabIndex, fadeOpacity, completeTransition]);
 
   const handleTabDoubleTap = useCallback(
     async (index: number) => {
@@ -618,6 +643,7 @@ useEffect(() => {
                 onTabChange={handleTabChange}
                 onTabDoubleTap={handleTabDoubleTap}
                 tabWidth={SCREEN_WIDTH}
+                animatedIndex={animatedTabIndex}
               />
             </View>
           );
@@ -629,24 +655,28 @@ useEffect(() => {
             contentWarnings: undefined,
           };
           return (
-            <MemoizedPostCardItem
-              post={postWithoutWarnings}
-              isOwnPost={true}
-              showUrlCard={false}
-              onPostPress={handlePostPress}
-              onAuthorPress={handleAuthorPress}
-              onCommentPress={handlePostPress}
-              onMorePress={handlePostMorePress}
-            />
+            <Animated.View style={contentAnimatedStyle}>
+              <MemoizedPostCardItem
+                post={postWithoutWarnings}
+                isOwnPost={true}
+                showUrlCard={false}
+                onPostPress={handlePostPress}
+                onAuthorPress={handleAuthorPress}
+                onCommentPress={handlePostPress}
+                onMorePress={handlePostMorePress}
+              />
+            </Animated.View>
           );
         }
 
        if (activeTab === 1 && "post_id" in item) {
          return (
-           <MemoizedProfileCommentItem
-             comment={item}
-             onPress={handleCommentPress}
-           />
+           <Animated.View style={contentAnimatedStyle}>
+             <MemoizedProfileCommentItem
+               comment={item}
+               onPress={handleCommentPress}
+             />
+           </Animated.View>
          );
        }
 
@@ -670,44 +700,58 @@ useEffect(() => {
         handleAuthorPress,
         handlePostMorePress,
        handleCommentPress,
+      animatedTabIndex,
+      contentAnimatedStyle,
       ],
     );
 
  const ListFooterComponent = useCallback(() => {
     if (activeTab === 2) {
       return (
-        <ProfileAboutTab
-          userAddress={user?.walletAddress}
-          isOwnProfile={true}
-          onBlockedPress={handleBlockedPress}
-        />
+        <Animated.View style={contentAnimatedStyle}>
+          <ProfileAboutTab
+            userAddress={user?.walletAddress}
+            isOwnProfile={true}
+            onBlockedPress={handleBlockedPress}
+          />
+        </Animated.View>
       );
     }
 
     if (isLoadingPosts) {
-      return activeTab === 0 ? (
-        <PostCardSkeletonList count={3} />
-      ) : (
-        <ProfilePostsSkeleton count={5} type="comments" />
+      return (
+        <Animated.View style={contentAnimatedStyle}>
+          {activeTab === 0 ? (
+            <PostCardSkeletonList count={3} />
+          ) : (
+            <ProfilePostsSkeleton count={5} type="comments" />
+          )}
+        </Animated.View>
       );
     }
 
     if (listData.length <= 2) {
       const tabType = activeTab === 0 ? "posts" : "comments";
       return (
-        <ProfileEmptyState
-          tabType={tabType}
-          onSettingsPress={handleSettingsPress}
-          isOwnProfile={true}
-        />
+        <Animated.View style={contentAnimatedStyle}>
+          <ProfileEmptyState
+            tabType={tabType}
+            onSettingsPress={handleSettingsPress}
+            isOwnProfile={true}
+          />
+        </Animated.View>
       );
     }
 
     if (isFetchingNextPage) {
-      return activeTab === 0 ? (
-        <PostCardSkeletonList count={1} />
-      ) : (
-        <ProfilePostsSkeleton count={2} type="comments" />
+      return (
+        <Animated.View style={contentAnimatedStyle}>
+          {activeTab === 0 ? (
+            <PostCardSkeletonList count={1} />
+          ) : (
+            <ProfilePostsSkeleton count={2} type="comments" />
+          )}
+        </Animated.View>
       );
     }
 
@@ -720,6 +764,7 @@ useEffect(() => {
     handleSettingsPress,
     user?.walletAddress,
     handleBlockedPress,
+    contentAnimatedStyle,
   ]);
 
   const stickyTabsAnimatedStyle = useAnimatedStyle(() => {
@@ -775,29 +820,32 @@ useEffect(() => {
           onTabChange={handleTabChange}
           onTabDoubleTap={handleTabDoubleTap}
           tabWidth={SCREEN_WIDTH}
+          animatedIndex={animatedTabIndex}
         />
       </Animated.View>
 
-      <AnimatedFlatList
-        ref={flatListRef as any}
-        data={listData}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        stickyHeaderIndices={stickyHeaderIndices}
-        onScroll={scrollHandler}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={contentContainerStyle}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.5}
-        ListFooterComponent={ListFooterComponent}
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        windowSize={10}
-        initialNumToRender={5}
-        updateCellsBatchingPeriod={50}
-        bounces={true}
-      />
+      <GestureDetector gesture={swipeGesture}>
+        <AnimatedFlatList
+          ref={flatListRef as any}
+          data={listData}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          stickyHeaderIndices={stickyHeaderIndices}
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={contentContainerStyle}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={ListFooterComponent}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={10}
+          initialNumToRender={5}
+          updateCellsBatchingPeriod={50}
+          bounces={true}
+        />
+      </GestureDetector>
 
       <ProfileMenuSheet
         ref={menuSheetRef}

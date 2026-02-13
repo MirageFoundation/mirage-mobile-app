@@ -11,11 +11,14 @@ import {
   Share,
   View,
 } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   interpolate,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
+  withTiming,
+  runOnJS,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -65,6 +68,7 @@ import {
   useVoteHandler,
   type VoteResult,
 } from "@/src/hooks";
+import { useTabSwipeGesture } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
 import {
   useAuthStore,
@@ -136,6 +140,7 @@ export function UserProfileScreen() {
 
   const scrollY = useSharedValue(0);
   const hasUserScrolled = useSharedValue(false);
+  const animatedTabIndex = useSharedValue(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
 
@@ -536,9 +541,29 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     }
   }, [reportHandler.showReportSheet, showReportUserSheet]);
 
-  const handleTabChange = useCallback((index: number) => {
+  const handleSwipeTabChange = useCallback((index: number) => {
     setActiveTab(index);
   }, []);
+
+  const { swipeGesture, contentAnimatedStyle, fadeOpacity, completeTransition } = useTabSwipeGesture({
+    onTabChange: handleSwipeTabChange,
+    animatedIndex: animatedTabIndex,
+  });
+
+  const handleTabChange = useCallback((index: number) => {
+    if (index === activeTab) return;
+    animatedTabIndex.value = withTiming(index, { duration: 200 });
+    fadeOpacity.value = withTiming(
+      0,
+      { duration: 100 },
+      (finished) => {
+        "worklet";
+        if (finished) {
+          runOnJS(completeTransition)(index);
+        }
+      },
+    );
+  }, [activeTab, animatedTabIndex, fadeOpacity, completeTransition]);
 
   const handleTabDoubleTap = useCallback(
     async (index: number) => {
@@ -626,6 +651,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
                 onTabChange={handleTabChange}
                 onTabDoubleTap={handleTabDoubleTap}
                 tabWidth={SCREEN_WIDTH}
+                animatedIndex={animatedTabIndex}
               />
             </View>
           );
@@ -643,16 +669,17 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
             }),
           };
         return (
-          <MemoizedPostCardItem
-             post={postWithVotes}
-            isOwnPost={isOwnProfile}
-            showUrlCard={false}
-            showFollowButton={false}
-            shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
-         onPostPress={handlePostPress}
-             onAuthorPress={handleAuthorPress}
-             onCommentPress={handlePostPress}
-             onMorePress={handlePostMorePress}
+          <Animated.View style={contentAnimatedStyle}>
+            <MemoizedPostCardItem
+               post={postWithVotes}
+              isOwnPost={isOwnProfile}
+              showUrlCard={false}
+              showFollowButton={false}
+              shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
+              onPostPress={handlePostPress}
+              onAuthorPress={handleAuthorPress}
+              onCommentPress={handlePostPress}
+              onMorePress={handlePostMorePress}
               onLikePress={(postId, liked, disliked, likes) =>
                 handleUpvote(postId, liked, disliked, likes)
               }
@@ -662,16 +689,19 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
               onBlockUser={handleBlockUserFromCard}
               onBlockPost={handleBlockPostFromCard}
               onReport={handleReportFromCard}
-           />
+            />
+          </Animated.View>
          );
        }
 
         if (activeTab === 1 && "post_id" in item) {
           return (
-            <MemoizedProfileCommentItem
-              comment={item}
-              onPress={handleCommentPress}
-            />
+            <Animated.View style={contentAnimatedStyle}>
+              <MemoizedProfileCommentItem
+                comment={item}
+                onPress={handleCommentPress}
+              />
+            </Animated.View>
           );
         }
 
@@ -703,6 +733,8 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
        handleBlockUserFromCard,
        handleBlockPostFromCard,
        handleReportFromCard,
+      animatedTabIndex,
+      contentAnimatedStyle,
     ]
   );
 
@@ -710,48 +742,62 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     if (isBlocked) {
       const tabType = activeTab === 0 ? "posts" : activeTab === 1 ? "comments" : "about";
       return (
-        <ProfileEmptyState
-          tabType={tabType}
-          isOwnProfile={false}
-          isBlocked={true}
-          onUnblock={handleUnblockUser}
-        />
+        <Animated.View style={contentAnimatedStyle}>
+          <ProfileEmptyState
+            tabType={tabType}
+            isOwnProfile={false}
+            isBlocked={true}
+            onUnblock={handleUnblockUser}
+          />
+        </Animated.View>
       );
    }
 
     if (activeTab === 2) {
       return (
-        <ProfileAboutTab
-          userAddress={userAddress}
-          isOwnProfile={isOwnProfile}
-        />
+        <Animated.View style={contentAnimatedStyle}>
+          <ProfileAboutTab
+            userAddress={userAddress}
+            isOwnProfile={isOwnProfile}
+          />
+        </Animated.View>
       );
     }
 
     if (isLoadingPosts) {
-      return activeTab === 0 ? (
-        <PostCardSkeletonList count={3} />
-      ) : (
-        <ProfilePostsSkeleton count={5} type="comments" />
+      return (
+        <Animated.View style={contentAnimatedStyle}>
+          {activeTab === 0 ? (
+            <PostCardSkeletonList count={3} />
+          ) : (
+            <ProfilePostsSkeleton count={5} type="comments" />
+          )}
+        </Animated.View>
       );
     }
 
     if (listData.length <= 2) {
       const tabType = activeTab === 0 ? "posts" : "comments";
       return (
-        <ProfileEmptyState
-          tabType={tabType}
-          onSettingsPress={handleSettingsPress}
-          isOwnProfile={isOwnProfile}
-        />
+        <Animated.View style={contentAnimatedStyle}>
+          <ProfileEmptyState
+            tabType={tabType}
+            onSettingsPress={handleSettingsPress}
+            isOwnProfile={isOwnProfile}
+          />
+        </Animated.View>
       );
     }
 
     if (isFetchingNextPage) {
-      return activeTab === 0 ? (
-        <PostCardSkeletonList count={1} />
-      ) : (
-        <ProfilePostsSkeleton count={2} type="comments" />
+      return (
+        <Animated.View style={contentAnimatedStyle}>
+          {activeTab === 0 ? (
+            <PostCardSkeletonList count={1} />
+          ) : (
+            <ProfilePostsSkeleton count={2} type="comments" />
+          )}
+        </Animated.View>
       );
     }
 
@@ -766,6 +812,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     isBlocked,
     handleUnblockUser,
     userAddress,
+    contentAnimatedStyle,
   ]);
 
   const stickyTabsAnimatedStyle = useAnimatedStyle(() => {
@@ -824,29 +871,32 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           onTabChange={handleTabChange}
           onTabDoubleTap={handleTabDoubleTap}
           tabWidth={SCREEN_WIDTH}
+          animatedIndex={animatedTabIndex}
         />
       </Animated.View>
 
-      <AnimatedFlatList
-        ref={flatListRef as any}
-        data={listData}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        stickyHeaderIndices={stickyHeaderIndices}
-        onScroll={scrollHandler}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={contentContainerStyle}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.3}
-        ListFooterComponent={ListFooterComponent}
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        windowSize={10}
-        initialNumToRender={5}
-        updateCellsBatchingPeriod={50}
-        bounces={true}
-      />
+      <GestureDetector gesture={swipeGesture}>
+        <AnimatedFlatList
+          ref={flatListRef as any}
+          data={listData}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          stickyHeaderIndices={stickyHeaderIndices}
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={contentContainerStyle}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={ListFooterComponent}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={10}
+          initialNumToRender={5}
+          updateCellsBatchingPeriod={50}
+          bounces={true}
+        />
+      </GestureDetector>
 
       {!isOwnProfile && (
         <UserProfileMenuSheet

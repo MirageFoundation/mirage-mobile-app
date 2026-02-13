@@ -63,3 +63,4 @@ export {
   type AppStateInfo,
 } from "./use-app-state";
 export { useEasUpdate } from "./use-eas-update";
+export { useTabSwipeGesture } from "./use-tab-swipe-gesture";
