@@ -23,10 +23,8 @@ import {
 } from "react-native";
 import Animated, {
   Easing,
-  interpolate,
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -309,36 +307,26 @@ export const CommentItem = ({
 
   useEffect(() => {
     if (isCollapsed) {
-      // Collapse: quick timing
       animationProgress.value = withTiming(0, {
-        duration: 200,
-        easing: Easing.out(Easing.cubic),
+        duration: 150,
+        easing: Easing.out(Easing.quad),
       });
     } else {
-      // Expand: spring for bounce
-      animationProgress.value = withSpring(1, {
-        damping: 20,
-        stiffness: 300,
-        mass: 0.5,
+      animationProgress.value = withTiming(1, {
+        duration: 200,
+        easing: Easing.out(Easing.cubic),
       });
     }
   }, [isCollapsed, animationProgress]);
 
   const animatedContentStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(
-      animationProgress.value,
-      [0, 0.5, 1],
-      [0, 0.5, 1],
-    );
-    const translateY = interpolate(animationProgress.value, [0, 1], [-8, 0]);
-    const scale = interpolate(animationProgress.value, [0, 1], [0.97, 1]);
-    const maxHeight = interpolate(animationProgress.value, [0, 1], [0, 500]);
+    const opacity = animationProgress.value;
 
     return {
       opacity,
-      transform: [{ translateY }, { scale }],
-      maxHeight: animationProgress.value === 0 ? 0 : maxHeight,
-      overflow: "hidden",
+      transform: [{ scaleY: animationProgress.value }],
+      height: animationProgress.value === 0 ? 0 : "auto",
+      overflow: "hidden" as const,
     };
   });
 
