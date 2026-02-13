@@ -752,7 +752,7 @@ export function CreateScreen() {
               <View style={styles.contentWarningSelected}>
                 <Text
                   size="md"
-                  weight="semibold"
+                  weight="bold"
                   style={{ color: theme.colors.warning[500] }}
                 >
                   ⚠️{" "}
