@@ -6,7 +6,9 @@ import {
 import { Image } from "expo-image";
 import * as Linking from "expo-linking";
 import { memo, useCallback, useMemo } from "react";
+import { Text } from "react-native";
 import { useUnistyles } from "react-native-unistyles";
+import { hasSpoilers, parseSpoilers } from "@/src/utils/spoiler-parser";
 
 // Regex to match plain URLs (excluding trailing punctuation that might be markdown syntax)
 const PLAIN_URL_REGEX = /https?:\/\/[^\s<>"]+/g;
@@ -186,6 +188,22 @@ export const MarkdownContent = memo(function MarkdownContent({
 
   const renderRules = useMemo<RenderRules>(
     () => ({
+      text: ({ node, styles: s }) => {
+        const value = (node as any).value as string;
+        const textStyle = s.text as any;
+        if (hasSpoilers(value)) {
+          return (
+            <Text key={(node as any).key} style={textStyle}>
+              {parseSpoilers(value, textStyle)}
+            </Text>
+          );
+        }
+        return (
+          <Text key={(node as any).key} style={textStyle} maxFontSizeMultiplier={1.2}>
+            {value}
+          </Text>
+        );
+      },
       image: ({ node }) => (
         <Image
           key={(node as any).key}

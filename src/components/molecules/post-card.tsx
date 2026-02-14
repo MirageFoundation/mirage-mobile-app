@@ -3,6 +3,7 @@ import { Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { logPress } from "@/src/utils/press-logger";
 import { setLastPressedPostY } from "@/src/utils/post-transition";
+import { hasSpoilers, parseSpoilers } from "@/src/utils/spoiler-parser";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   Linking,
@@ -261,7 +262,7 @@ export const PostCard = memo(function PostCard({
                 color: theme.colors.text.default,
               }}
             >
-              {truncatedBody}
+              {hasSpoilers(truncatedBody) ? parseSpoilers(truncatedBody) : truncatedBody}
               <Text style={{ color: "#3B82F6" }}>…</Text>
             </Text>
           ) : (
