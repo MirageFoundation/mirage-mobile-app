@@ -19,6 +19,7 @@ import { walletService } from "@/src/services/wallet-service";
 import { useAuthStore, useUIStore, type ApiServer } from "@/src/stores";
 import { apiClient } from "@/src/api/client";
 import { usePreferencesStore } from "@/src/stores";
+import { useToast } from "@/src/providers/toast-provider";
 import { useQueryClient } from "@tanstack/react-query";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -70,7 +71,7 @@ export default function UsernameScreen() {
   const [activeServer, setActiveServer] = useState<ApiServer>(savedServer);
   const [showServerModal, setShowServerModal] = useState(false);
   const [switchingServer, setSwitchingServer] = useState<ApiServer | null>(null);
-  const [switchBanner, setSwitchBanner] = useState<string | null>(null);
+  const toast = useToast();
 
   const walletConfirmedRef = useRef(false);
   const txProgress = useTransactionProgress();
@@ -676,11 +677,16 @@ export default function UsernameScreen() {
                           setShowServerModal(false);
                           setApiServer(server);
                           apiClient.setBaseUrl(`https://${server}`);
+                          toast.success(`Switched to ${server}`);
                           router.back();
                           return;
                         }
+                        toast.success(`Switched to ${server}`);
                       } catch (e) {
                         console.error("[UsernameScreen] Failed to fetch nodeConfig after switch:", e);
+                        setActiveServer(activeServer);
+                        apiClient.setBaseUrl(`https://${activeServer}`);
+                        toast.error(`Failed to connect to ${server}`);
                       }
                       setSwitchingServer(null);
                     }

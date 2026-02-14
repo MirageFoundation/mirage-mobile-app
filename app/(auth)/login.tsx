@@ -1,15 +1,20 @@
 import { getUserStatus } from "@/src/api/read/endpoints/users";
+import { getNodeConfig } from "@/src/api/read/endpoints/parameters";
 import { RecoveryPhraseInput } from "@/src/components/molecules";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { useAuthStore, useUIStore } from "@/src/stores";
+import { useAuthStore, useUIStore, usePreferencesStore, type ApiServer } from "@/src/stores";
+import { apiClient } from "@/src/api/client";
+import { useToast } from "@/src/providers/toast-provider";
 import { isValidMnemonic } from "@/src/wallet";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Keyboard,
+  Modal,
   Platform,
   Pressable,
   View,
@@ -28,18 +33,32 @@ export default function LoginScreen() {
   const setHasUsername = useAuthStore((s) => s.setHasUsername);
   const setUser = useAuthStore((s) => s.setUser);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
+  const toast = useToast();
 
   const [words, setWords] = useState<string[]>(Array(12).fill(""));
   const [errors, setErrors] = useState<Record<number, boolean>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const savedServer = usePreferencesStore((s) => s.apiServer);
+  const setApiServer = usePreferencesStore((s) => s.setApiServer);
+  const [activeServer, setActiveServer] = useState<ApiServer>(savedServer);
+  const [showServerModal, setShowServerModal] = useState(false);
+  const [switchingServer, setSwitchingServer] = useState<ApiServer | null>(null);
 
   const isComplete = words.every((w) => w.length > 0);
 
+  useEffect(() => {
+    apiClient.setBaseUrl(`https://${activeServer}`);
+    return () => {
+      apiClient.setBaseUrl(`https://${savedServer}`);
+    };
+  }, [activeServer]);
+
   const handleBack = useCallback(() => {
     triggerHaptic("selection");
+    apiClient.setBaseUrl(`https://${savedServer}`);
     router.back();
-  }, [router]);
+  }, [router, savedServer]);
 
   const handleWordsChange = useCallback((newWords: string[]) => {
     setWords(newWords);
@@ -169,6 +188,19 @@ export default function LoginScreen() {
         <Pressable onPress={handleBack} style={styles.closeButton}>
           <EvilIcons name="close" size={36} color={theme.colors.text.default} />
         </Pressable>
+        <Pressable onPress={() => setShowServerModal(true)}>
+          <Text
+            size="lg"
+            weight="semibold"
+            style={{
+              color: "#3B82F6",
+              textDecorationLine: "underline",
+              marginRight: 8,
+            }}
+          >
+            {activeServer}
+          </Text>
+        </Pressable>
       </View>
 
       {/* Content */}
@@ -234,6 +266,84 @@ export default function LoginScreen() {
           </Button.Text>
         </Button>
       </View>
+
+      <Modal
+        visible={showServerModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowServerModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowServerModal(false)}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.colors.background.default },
+            ]}
+          >
+            <Text size="lg" weight="bold" style={{ marginBottom: 16, textAlign: "center" }}>
+              Switch Node
+            </Text>
+            {(["mirage.talk", "mirage.vote"] as ApiServer[]).map((server) => {
+              const isActive = server === activeServer;
+              const isSwitching = switchingServer === server;
+              return (
+                <Pressable
+                  key={server}
+                  disabled={!!switchingServer}
+                  onPress={async () => {
+                    if (!isActive) {
+                      setSwitchingServer(server);
+                      try {
+                        apiClient.setBaseUrl(`https://${server}`);
+                        await getNodeConfig();
+                        setActiveServer(server);
+                        setApiServer(server);
+                        toast.success(`Switched to ${server}`);
+                      } catch (e) {
+                        apiClient.setBaseUrl(`https://${activeServer}`);
+                        toast.error(`Failed to connect to ${server}`);
+                      } finally {
+                        setSwitchingServer(null);
+                      }
+                    }
+                    setShowServerModal(false);
+                  }}
+                  style={[
+                    styles.modalOption,
+                    {
+                      backgroundColor: isActive
+                        ? `${theme.colors.primary[500]}10`
+                        : "transparent",
+                      opacity: switchingServer && !isSwitching ? 0.5 : 1,
+                    },
+                  ]}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                    <Ionicons
+                      name={isActive ? "radio-button-on" : "radio-button-off"}
+                      size={20}
+                      color={isActive ? theme.colors.primary[500] : theme.colors.text.subtle}
+                    />
+                    <Text
+                      size="md"
+                      weight={isActive ? "semibold" : "regular"}
+                      style={isActive ? { color: theme.colors.primary[500] } : undefined}
+                    >
+                      {server}
+                    </Text>
+                  </View>
+                  {isSwitching && (
+                    <ActivityIndicator size="small" color={theme.colors.primary[500]} />
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
 
       {/* Footer */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
@@ -319,5 +429,31 @@ const styles = StyleSheet.create((theme) => ({
     color: "rgb(34,74,154)",
     fontSize: 13,
     fontWeight: "500",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "75%",
+    borderRadius: 14,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  modalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 4,
   },
 }));
