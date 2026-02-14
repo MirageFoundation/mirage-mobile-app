@@ -1,5 +1,11 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { CommentItem, type Comment } from "./comment-item";
 
@@ -39,9 +45,37 @@ export const CommentThread = ({
   showDivider = true,
 }: CommentThreadProps) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [showReplies, setShowReplies] = useState(true);
 
   const replies = comment.replies ?? [];
   const hasReplies = replies.length > 0;
+
+  const repliesProgress = useSharedValue(1);
+
+  useEffect(() => {
+    if (isCollapsed) {
+      repliesProgress.value = withTiming(0, {
+        duration: 150,
+        easing: Easing.out(Easing.quad),
+      });
+      const timer = setTimeout(() => setShowReplies(false), 160);
+      return () => clearTimeout(timer);
+    } else {
+      setShowReplies(true);
+      repliesProgress.value = withTiming(1, {
+        duration: 200,
+        easing: Easing.out(Easing.cubic),
+      });
+    }
+  }, [isCollapsed, repliesProgress]);
+
+  const repliesAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: repliesProgress.value,
+    transform: [{ scaleY: repliesProgress.value }],
+    height: repliesProgress.value === 0 ? 0 : "auto",
+    overflow: "hidden" as const,
+    transformOrigin: "top",
+  }));
 
   const handleToggleCollapse = useCallback(() => {
     setIsCollapsed((prev) => !prev);
@@ -70,8 +104,8 @@ export const CommentThread = ({
         onMorePress={() => onMorePress?.(comment)}
       />
 
-      {hasReplies && !isCollapsed && (
-        <View style={styles.repliesContainer}>
+      {hasReplies && showReplies && (
+        <Animated.View style={[styles.repliesContainer, repliesAnimatedStyle]}>
           {replies.map((reply) => (
             <CommentThread
               key={reply.id}
@@ -91,7 +125,7 @@ export const CommentThread = ({
               showDivider={false}
             />
           ))}
-        </View>
+        </Animated.View>
       )}
 
       {showDivider && depth === 0 && <View style={styles.divider} />}

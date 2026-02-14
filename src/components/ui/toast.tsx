@@ -41,6 +41,7 @@ export interface ToastData {
   title: string;
   description?: string;
   duration?: number;
+  action?: () => void;
 }
 
 interface ToastProps {
@@ -217,7 +218,7 @@ export const Toast = ({
       ]}
     >
       <Pressable
-        onPress={toast.type !== "loading" ? handleDismiss : undefined}
+        onPress={toast.action ? toast.action : toast.type !== "loading" ? handleDismiss : undefined}
         onLongPress={hasMultiple ? onNext : undefined}
       >
         <ToastWrapper {...wrapperProps}>

@@ -95,13 +95,15 @@ export type {
  UploadImageResult,
 } from "./media";
 
-// Quests
-export { getDailyQuests, getPendingRewards } from "./quests";
+// Rewards
+export { getRewardSummary, getAchievements } from "./rewards";
 export type {
- DailyQuest,
- DailyQuestsResponse,
- QuestReward,
- GetDailyQuestsParams,
-  PendingReward,
-  PendingRewardsResponse,
-} from "./quests";
+  DailyQuest,
+  FlashQuest,
+  PendingRewardRow,
+  QuestReward,
+  RewardSummaryResponse,
+  Achievement,
+  AchievementsResponse,
+  GetRewardSummaryParams,
+} from "./rewards";

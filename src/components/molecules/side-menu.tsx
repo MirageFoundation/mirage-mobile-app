@@ -1,10 +1,17 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { formatCompactNumber } from "@/src/utils/format-number";
 import { Ionicons } from "@expo/vector-icons";
-import { forwardRef, useCallback, useImperativeHandle, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Dimensions,
-  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleProp,
@@ -23,32 +30,49 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Divider, Text } from "@/src/components/ui/primitives";
 import { Avatar } from "@/src/components/atoms";
-import { useAuthStore } from "@/src/stores";
+import {
+  useAuthStore,
+  usePreferencesStore,
+  type ApiServer,
+} from "@/src/stores";
 import { useRouter } from "expo-router";
 import { LogoutConfirmationPopup } from "./logout-confirmation-popup";
+import {
+  ValuePickerSheet,
+  type ValuePickerSheetRef,
+  type ValueOption,
+} from "./settings";
+import { useApiServer } from "@/src/providers/api-server-provider";
+import { useToast } from "@/src/providers/toast-provider";
 import {
   useUserFollowed,
   useUsernameFromAddress,
   useUserStatus,
 } from "@/src/api/read/hooks";
+import Constants from "expo-constants";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MENU_WIDTH = SCREEN_WIDTH * 0.8;
 
+const apiServerOptions: ValueOption<ApiServer>[] = [
+  { value: "mirage.talk", label: "mirage.talk" },
+  { value: "mirage.vote", label: "mirage.vote" },
+];
+
 type SideMenuProps = {
- onSettings?: () => void;
- onSubscription?: () => void;
- onSaved?: () => void;
- onHistory?: () => void;
- onDrafts?: () => void;
- onFollowing?: () => void;
- onTopics?: () => void;
- onInviteAndEarn?: () => void;
+  onSettings?: () => void;
+  onSubscription?: () => void;
+  onSaved?: () => void;
+  onHistory?: () => void;
+  onDrafts?: () => void;
+  onFollowing?: () => void;
+  onTopics?: () => void;
+  onInviteAndEarn?: () => void;
   onQuests?: () => void;
- onHelp?: () => void;
- onAbout?: () => void;
- onLogout?: () => Promise<void>;
- onDismiss?: () => void;
+  onHelp?: () => void;
+  onAbout?: () => void;
+  onLogout?: () => Promise<void>;
+  onDismiss?: () => void;
 };
 
 export type SideMenuRef = {
@@ -147,7 +171,7 @@ const SectionHeader = ({
             size="sm"
             weight="semibold"
           >
-            Show More
+            Show All
           </Text>
         </Pressable>
       )}
@@ -276,30 +300,35 @@ const LogoutMenuItem = ({ onPress }: { onPress?: () => void }) => {
 };
 
 export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
- (
-   {
-     onSettings,
-     onSubscription,
-     onSaved,
-     onHistory,
-     onDrafts,
-     onFollowing,
-     onTopics,
-     onInviteAndEarn,
+  (
+    {
+      onSettings,
+      onSubscription,
+      onSaved,
+      onHistory,
+      onDrafts,
+      onFollowing,
+      onTopics,
+      onInviteAndEarn,
       onQuests,
-     onHelp,
-     onAbout,
-     onLogout,
-     onDismiss,
-   },
-   ref,
- ) => {
+      onHelp,
+      onAbout,
+      onLogout,
+      onDismiss,
+    },
+    ref,
+  ) => {
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
     const router = useRouter();
     const [visible, setVisible] = useState(false);
     const [showLogoutPopup, setShowLogoutPopup] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const apiServerSheetRef = useRef<ValuePickerSheetRef>(null);
+
+    const { switchServer } = useApiServer();
+    const toast = useToast();
+    const { apiServer, setShareServer } = usePreferencesStore();
 
     const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
     const walletAddress = useAuthStore((s) => s.user?.walletAddress);
@@ -360,12 +389,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     const createHandler = useCallback(
       (handler?: () => void) => () => {
         triggerHaptic("light");
-        close();
-        setTimeout(() => {
-          handler?.();
-        }, 300);
+        handler?.();
       },
-      [close],
+      [],
     );
 
     const handleLogoutPress = useCallback(() => {
@@ -379,19 +405,13 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
 
     const handleCreateAccount = useCallback(() => {
       triggerHaptic("light");
-      close();
-      setTimeout(() => {
-        router.push("/(auth)/username");
-      }, 300);
-    }, [close, router]);
+      router.push("/(auth)/username");
+    }, [router]);
 
     const handleLogin = useCallback(() => {
       triggerHaptic("light");
-      close();
-      setTimeout(() => {
-        router.push("/(auth)/login");
-      }, 300);
-    }, [close, router]);
+      router.push("/(auth)/login");
+    }, [router]);
 
     const handleLogoutConfirm = useCallback(async () => {
       setIsLoggingOut(true);
@@ -406,48 +426,53 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       }
     }, [close, onLogout]);
 
+    const handleServerPress = useCallback(() => {
+      apiServerSheetRef.current?.present();
+    }, []);
+
+    const handleApiServerChange = useCallback(
+      async (server: ApiServer) => {
+        if (server === apiServer) return;
+        try {
+          await switchServer(server);
+          setShareServer(server);
+          toast.success(`Switched to ${server}`);
+          close();
+          router.replace("/(tabs)");
+        } catch {
+          toast.error("Failed to switch server");
+        }
+      },
+      [switchServer, apiServer, toast, router, setShareServer, close],
+    );
+
     const handleShowMoreFollowing = useCallback(() => {
       triggerHaptic("light");
-      close();
-      setTimeout(() => {
-        if (walletAddress) {
-          router.push(`/user-following/${walletAddress}`);
-        }
-      }, 300);
-    }, [close, router, walletAddress]);
+      if (walletAddress) {
+        router.push(`/user-following/${walletAddress}`);
+      }
+    }, [router, walletAddress]);
 
     const handleUserPress = useCallback(
       (address: string) => {
         triggerHaptic("light");
-        close();
-        setTimeout(() => {
-          router.push(`/user/${address}`);
-        }, 300);
+        router.push(`/user/${address}`);
       },
-      [close, router],
+      [router],
     );
 
     const handleTopicPress = useCallback(
       (topic: string) => {
         triggerHaptic("light");
-        close();
-        setTimeout(() => {
-          router.push(`/topic/${topic}`);
-        }, 300);
+        router.push(`/topic/${topic}`);
       },
-      [close, router],
+      [router],
     );
 
     if (!visible) return null;
 
     return (
-      <Modal
-        visible={visible}
-        transparent
-        animationType="none"
-        statusBarTranslucent
-        onRequestClose={close}
-      >
+      <View style={styles.overlay}>
         <View style={styles.container}>
           <Animated.View style={[styles.backdrop, backdropAnimatedStyle]}>
             <Pressable
@@ -467,19 +492,33 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
               <Text size="xl" weight="bold">
                 Menu
               </Text>
-              <Pressable
-                onPress={close}
-                style={[
-                  styles.closeButton,
-                  { backgroundColor: theme.colors.background.subtle },
-                ]}
-              >
-                <Ionicons
-                  name="close"
-                  size={20}
-                  color={theme.colors.text.default}
-                />
-              </Pressable>
+              <View style={styles.headerRight}>
+                <Pressable onPress={handleServerPress}>
+                  <Text
+                    size="sm"
+                    weight="semibold"
+                    style={{
+                      color: theme.colors.primary[500],
+                      textDecorationLine: "underline",
+                    }}
+                  >
+                    {apiServer}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={close}
+                  style={[
+                    styles.closeButton,
+                    { backgroundColor: theme.colors.background.subtle },
+                  ]}
+                >
+                  <Ionicons
+                    name="close"
+                    size={20}
+                    color={theme.colors.text.default}
+                  />
+                </Pressable>
+              </View>
             </View>
 
             <ScrollView
@@ -492,28 +531,28 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
             >
               {isLoggedIn ? (
                 <>
-                 <View style={styles.balanceCard}>
-                   <Text
-                     style={{ color: theme.colors.text.subtle }}
+                  <View style={styles.balanceCard}>
+                    <Text
+                      style={{ color: theme.colors.text.subtle, marginTop: 2 }}
                       size="sm"
                       weight="semibold"
-                   >
-                     BALANCE
-                   </Text>
-                   <Text
-                     style={{ color: theme.colors.text.default }}
+                    >
+                      BALANCE
+                    </Text>
+                    <Text
+                      style={{ color: theme.colors.text.default }}
                       size="xl"
-                     weight="bold"
-                   >
-                     {balance.toLocaleString()} MRG
-                   </Text>
-                </View>
-                <SectionFooter />
+                      weight="bold"
+                    >
+                      {formatCompactNumber(balance)} MIRAGE
+                    </Text>
+                  </View>
+                  <SectionFooter />
 
                   <SectionHeader title="Rewards & Plans" />
-                 <MenuItem
-                   iconName="gift-outline"
-                   title="Invite & Earn"
+                  <MenuItem
+                    iconName="gift-outline"
+                    title="Invite a Friend"
                     subtitle="Get rewards"
                     onPress={createHandler(onInviteAndEarn)}
                   />
@@ -523,13 +562,13 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     subtitle="Complete tasks for rewards"
                     onPress={createHandler(onQuests)}
                   />
-                 <MenuItem
-                   iconName="card-outline"
-                   title="Subscription"
-                   subtitle="Manage your plan"
-                   onPress={createHandler(onSubscription)}
-                 />
-                 <SectionFooter />
+                  <MenuItem
+                    iconName="card-outline"
+                    title="Subscription"
+                    subtitle="Manage your plan"
+                    onPress={createHandler(onSubscription)}
+                  />
+                  <SectionFooter />
 
                   {/* Content Section */}
                   <SectionHeader title="Content" />
@@ -554,20 +593,20 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   <SectionFooter />
 
                   {/* Social Section */}
-                 <SectionHeader title="Social" />
-                 <MenuItem
-                   iconName="people-outline"
-                   title="Following"
-                   subtitle="Users and topics you follow"
-                   onPress={createHandler(onFollowing)}
-                 />
-                <MenuItem
-                  iconName="pricetags-outline"
-                  title="Topics"
-                  subtitle="Explore all topics"
-                  onPress={createHandler(onTopics)}
-                />
-                 <SectionFooter />
+                  <SectionHeader title="Social" />
+                  <MenuItem
+                    iconName="people-outline"
+                    title="Following"
+                    subtitle="Users and topics you follow"
+                    onPress={createHandler(onFollowing)}
+                  />
+                  <MenuItem
+                    iconName="pricetags-outline"
+                    title="Topics"
+                    subtitle="Explore all topics"
+                    onPress={createHandler(onTopics)}
+                  />
+                  <SectionFooter />
 
                   {/* Followed Users */}
                   <SectionHeader
@@ -668,6 +707,25 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   {/* Account Section */}
                   <SectionHeader title="Account" />
                   <LogoutMenuItem onPress={handleLogoutPress} />
+
+                  <View style={styles.versionContainer}>
+                    <Text
+                      style={{ color: theme.colors.text.subtle }}
+                      size="sm"
+                      weight="light"
+                    >
+                      v{Constants.expoConfig?.version ?? "1.0.0"} ({Platform.OS}
+                      )
+                    </Text>
+
+                    <Text
+                      style={{ color: theme.colors.text.subtle }}
+                      size="sm"
+                      weight="light"
+                    >
+                      update 10
+                    </Text>
+                  </View>
                 </>
               ) : (
                 <>
@@ -684,6 +742,25 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     subtitle="I already have an account"
                     onPress={handleLogin}
                   />
+
+                  <View style={styles.versionContainer}>
+                    <Text
+                      style={{ color: theme.colors.text.subtle }}
+                      size="sm"
+                      weight="light"
+                    >
+                      v{Constants.expoConfig?.version ?? "1.0.0"} ({Platform.OS}
+                      )
+                    </Text>
+
+                    <Text
+                      style={{ color: theme.colors.text.subtle }}
+                      size="sm"
+                      weight="light"
+                    >
+                      update 10
+                    </Text>
+                  </View>
                 </>
               )}
             </ScrollView>
@@ -695,8 +772,16 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
             onConfirm={handleLogoutConfirm}
             isLoading={isLoggingOut}
           />
+
+          <ValuePickerSheet
+            ref={apiServerSheetRef}
+            title="Server"
+            options={apiServerOptions}
+            value={apiServer}
+            onChange={handleApiServerChange}
+          />
         </View>
-      </Modal>
+      </View>
     );
   },
 );
@@ -706,6 +791,11 @@ SideMenu.displayName = "SideMenu";
 const styles = StyleSheet.create((theme) => ({
   container: {
     flex: 1,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
+    elevation: 1000,
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -734,6 +824,11 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: theme.spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border.subtle,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
   },
   closeButton: {
     width: 32,
@@ -809,8 +904,14 @@ const styles = StyleSheet.create((theme) => ({
   },
   balanceCard: {
     paddingVertical: theme.spacing.md,
-    marginTop: theme.spacing.sm,
     borderRadius: 16,
-    gap: theme.spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  versionContainer: {
+    alignItems: "center",
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.sm,
   },
 }));

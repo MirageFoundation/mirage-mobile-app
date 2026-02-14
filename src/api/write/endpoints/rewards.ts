@@ -19,7 +19,9 @@ export interface ClaimRewardInput {
 
 export interface ClaimRewardResponse {
   success: boolean;
-  amount?: number;
+  rewards?: { type: string; amount: number }[];
+  tx_hash?: string;
+  error?: string;
   message?: string;
 }
 

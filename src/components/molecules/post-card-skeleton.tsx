@@ -1,18 +1,20 @@
 import { useEffect } from "react";
-import { View } from "react-native";
+import { Dimensions, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
   withTiming,
-  interpolate,
+  Easing,
 } from "react-native-reanimated";
+import { LinearGradient } from "expo-linear-gradient";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const SHIMMER_WIDTH = SCREEN_WIDTH * 0.7;
+
 type PostCardSkeletonProps = {
-  /** Whether to show the media placeholder */
   showMedia?: boolean;
-  /** Whether to show the body text placeholder */
   showBody?: boolean;
 };
 
@@ -28,29 +30,52 @@ const SkeletonBox = ({
   borderRadius?: number;
 }) => {
   const { theme } = useUnistyles();
-  const shimmer = useSharedValue(0);
+  const translateX = useSharedValue(-SHIMMER_WIDTH);
 
   useEffect(() => {
-    shimmer.value = withRepeat(withTiming(1, { duration: 1200 }), -1, false);
-  }, [shimmer]);
+    translateX.value = withRepeat(
+      withTiming(SCREEN_WIDTH, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      false,
+    );
+  }, [translateX]);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(shimmer.value, [0, 0.5, 1], [0.3, 0.6, 0.3]),
+  const shimmerAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
   }));
 
   return (
-    <Animated.View
+    <View
       style={[
         {
           width,
           height,
           backgroundColor: theme.colors.background.subtle,
           borderRadius: borderRadius ?? theme.radius.sm,
+          overflow: "hidden",
+          opacity: 0.5,
         },
-        animatedStyle,
         style,
       ]}
-    />
+    >
+      <Animated.View
+        style={[
+          {
+            width: SHIMMER_WIDTH,
+            height: "100%",
+            position: "absolute",
+          },
+          shimmerAnimatedStyle,
+        ]}
+      >
+        <LinearGradient
+          colors={["transparent", "rgba(255,255,255,0.15)", "transparent"]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={{ width: "100%", height: "100%" }}
+        />
+      </Animated.View>
+    </View>
   );
 };
 
@@ -62,27 +87,21 @@ export const PostCardSkeleton = ({
 
   return (
     <View style={styles.container}>
-      {/* Header: Avatar, Username, Time, Follow, More */}
       <View style={styles.header}>
         <View style={styles.authorSection}>
-          {/* Avatar */}
           <SkeletonBox width={36} height={36} borderRadius={18} />
-          {/* Username and time */}
           <View style={styles.authorInfo}>
             <SkeletonBox width={100} height={14} />
           </View>
         </View>
-        {/* Follow button placeholder */}
         <SkeletonBox width={70} height={28} borderRadius={theme.radius.full} />
       </View>
 
-      {/* Title - 2 lines */}
       <View style={styles.titleContainer}>
         <SkeletonBox width="100%" height={18} style={{ marginBottom: 6 }} />
         <SkeletonBox width="75%" height={18} />
       </View>
 
-      {/* Media placeholder */}
       {showMedia && (
         <View style={styles.mediaContainer}>
           <SkeletonBox
@@ -93,7 +112,6 @@ export const PostCardSkeleton = ({
         </View>
       )}
 
-      {/* Body text - 2 lines */}
       {showBody && !showMedia && (
         <View style={styles.bodyContainer}>
           <SkeletonBox width="100%" height={14} style={{ marginBottom: 4 }} />
@@ -101,7 +119,6 @@ export const PostCardSkeleton = ({
         </View>
       )}
 
-      {/* Actions */}
       <View style={styles.actions}>
         <View style={styles.actionGroup}>
           <SkeletonBox width={50} height={24} borderRadius={12} />
@@ -114,11 +131,7 @@ export const PostCardSkeleton = ({
   );
 };
 
-/**
- * Multiple skeleton cards for loading state
- */
 export const PostCardSkeletonList = ({ count = 5 }: { count?: number }) => {
-  // Alternate between different skeleton layouts for variety
   const patterns = [
     { showMedia: true, showBody: false },
     { showMedia: false, showBody: true },

@@ -11,11 +11,13 @@ import {
   Share,
   View,
 } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  interpolate,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
+  withTiming,
+  runOnJS,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -31,7 +33,6 @@ import {
 import { transformApiPost } from "@/src/api/read/utils";
 import type { Post as ApiPost } from "@/src/api/types";
 import {
-  useToggleFollowUser,
   useBlockUser,
   useUnblockUser,
 } from "@/src/api/write";
@@ -61,10 +62,12 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import {
   useBlockHandler,
   useDeleteHandler,
+  useFollowHandler,
   useReportHandler,
   useVoteHandler,
   type VoteResult,
 } from "@/src/hooks";
+import { useTabSwipeGesture } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
 import {
   useAuthStore,
@@ -79,7 +82,6 @@ const AnimatedFlatList = Animated.createAnimatedComponent(
 );
 
 const HEADER_BAR_HEIGHT = 56;
-const TAB_BAR_INDEX = 1;
 
 const formatMirageBalance = (umirage: number): number => {
   return Math.floor(umirage / 1_000_000);
@@ -136,6 +138,7 @@ export function UserProfileScreen() {
 
   const scrollY = useSharedValue(0);
   const hasUserScrolled = useSharedValue(false);
+  const animatedTabIndex = useSharedValue(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
 
@@ -195,9 +198,16 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     },
   });
 
- const toggleFollowMutation = useToggleFollowUser();
   const blockUserMutation = useBlockUser();
   const unblockUserMutation = useUnblockUser();
+  const { handleFollowUser } = useFollowHandler({
+    onOptimisticFollowUser: useCallback((_userId: string, isFollowing: boolean) => {
+      setOptimisticFollowing(isFollowing);
+    }, []),
+    onRollbackFollowUser: useCallback(() => {
+      setOptimisticFollowing(null);
+    }, []),
+  });
 
  const isFollowing = useMemo(() => {
     if (optimisticFollowing !== null) return optimisticFollowing;
@@ -315,49 +325,15 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     }
   }, [router, userAddress, id]);
 
-const handleFollow = useCallback(() => {
-  if (!userAddress) return;
-   setOptimisticFollowing(true);
-    toast.promise(
-      toggleFollowMutation.mutateAsync({
-        userAddress,
-        isCurrentlyFollowing: false,
-      }),
-      {
-        loading: `Following @${displayUsername || "user"}...`,
-        success: `Followed @${displayUsername || "user"}`,
-        error: () => {
-          setOptimisticFollowing(null);
-          return "Failed to follow user";
-        },
-      }
-    ).catch(() => {
-      // Error already handled by toast.promise
-        setOptimisticFollowing(null);
-    });
- }, [userAddress, displayUsername, toggleFollowMutation, toast]);
+  const handleFollow = useCallback(() => {
+    if (!userAddress) return;
+    handleFollowUser(userAddress, displayUsername || "user", false);
+  }, [userAddress, displayUsername, handleFollowUser]);
 
-const handleUnfollow = useCallback(() => {
-  if (!userAddress) return;
-   setOptimisticFollowing(false);
-    toast.promise(
-      toggleFollowMutation.mutateAsync({
-        userAddress,
-        isCurrentlyFollowing: true,
-      }),
-      {
-        loading: `Unfollowing @${displayUsername || "user"}...`,
-        success: `Unfollowed @${displayUsername || "user"}`,
-        error: () => {
-          setOptimisticFollowing(null);
-          return "Failed to unfollow user";
-        },
-      }
-    ).catch(() => {
-      // Error already handled by toast.promise
-        setOptimisticFollowing(null);
-    });
- }, [userAddress, displayUsername, toggleFollowMutation, toast]);
+  const handleUnfollow = useCallback(() => {
+    if (!userAddress) return;
+    handleFollowUser(userAddress, displayUsername || "user", true);
+  }, [userAddress, displayUsername, handleFollowUser]);
 
   const handleRequestBlockUser = useCallback(() => {
     setShowBlockUserConfirmation(true);
@@ -563,9 +539,29 @@ const handleUnfollow = useCallback(() => {
     }
   }, [reportHandler.showReportSheet, showReportUserSheet]);
 
-  const handleTabChange = useCallback((index: number) => {
+  const handleSwipeTabChange = useCallback((index: number) => {
     setActiveTab(index);
   }, []);
+
+  const { swipeGesture, contentAnimatedStyle, fadeOpacity, completeTransition } = useTabSwipeGesture({
+    onTabChange: handleSwipeTabChange,
+    animatedIndex: animatedTabIndex,
+  });
+
+  const handleTabChange = useCallback((index: number) => {
+    if (index === activeTab) return;
+    animatedTabIndex.value = withTiming(index, { duration: 200 });
+    fadeOpacity.value = withTiming(
+      0,
+      { duration: 100 },
+      (finished) => {
+        "worklet";
+        if (finished) {
+          runOnJS(completeTransition)(index);
+        }
+      },
+    );
+  }, [activeTab, animatedTabIndex, fadeOpacity, completeTransition]);
 
   const handleTabDoubleTap = useCallback(
     async (index: number) => {
@@ -640,6 +636,7 @@ const handleUnfollow = useCallback(() => {
              scrollY={scrollY}
              onFollowersPress={handleFollowersPress}
              isLoading={isLoading}
+            headerHeight={headerHeight}
            />
           );
         }
@@ -652,6 +649,7 @@ const handleUnfollow = useCallback(() => {
                 onTabChange={handleTabChange}
                 onTabDoubleTap={handleTabDoubleTap}
                 tabWidth={SCREEN_WIDTH}
+                animatedIndex={animatedTabIndex}
               />
             </View>
           );
@@ -669,16 +667,17 @@ const handleUnfollow = useCallback(() => {
             }),
           };
         return (
-          <MemoizedPostCardItem
-             post={postWithVotes}
-            isOwnPost={isOwnProfile}
-            showUrlCard={false}
-            showFollowButton={false}
-            shareUrl={`${getShareBaseUrl(shareServer)}/view_post?post_id=${item.id}`}
-         onPostPress={handlePostPress}
-             onAuthorPress={handleAuthorPress}
-             onCommentPress={handlePostPress}
-             onMorePress={handlePostMorePress}
+          <Animated.View style={contentAnimatedStyle}>
+            <MemoizedPostCardItem
+               post={postWithVotes}
+              isOwnPost={isOwnProfile}
+              showUrlCard={false}
+              showFollowButton={false}
+              shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
+              onPostPress={handlePostPress}
+              onAuthorPress={handleAuthorPress}
+              onCommentPress={handlePostPress}
+              onMorePress={handlePostMorePress}
               onLikePress={(postId, liked, disliked, likes) =>
                 handleUpvote(postId, liked, disliked, likes)
               }
@@ -688,16 +687,19 @@ const handleUnfollow = useCallback(() => {
               onBlockUser={handleBlockUserFromCard}
               onBlockPost={handleBlockPostFromCard}
               onReport={handleReportFromCard}
-           />
+            />
+          </Animated.View>
          );
        }
 
         if (activeTab === 1 && "post_id" in item) {
           return (
-            <MemoizedProfileCommentItem
-              comment={item}
-              onPress={handleCommentPress}
-            />
+            <Animated.View style={contentAnimatedStyle}>
+              <MemoizedProfileCommentItem
+                comment={item}
+                onPress={handleCommentPress}
+              />
+            </Animated.View>
           );
         }
 
@@ -712,6 +714,7 @@ const handleUnfollow = useCallback(() => {
       scrollY,
       handleFollowersPress,
        isLoading,
+      headerHeight,
        theme.colors.background.default,
        activeTab,
        handleTabChange,
@@ -728,6 +731,8 @@ const handleUnfollow = useCallback(() => {
        handleBlockUserFromCard,
        handleBlockPostFromCard,
        handleReportFromCard,
+      animatedTabIndex,
+      contentAnimatedStyle,
     ]
   );
 
@@ -735,48 +740,62 @@ const handleUnfollow = useCallback(() => {
     if (isBlocked) {
       const tabType = activeTab === 0 ? "posts" : activeTab === 1 ? "comments" : "about";
       return (
-        <ProfileEmptyState
-          tabType={tabType}
-          isOwnProfile={false}
-          isBlocked={true}
-          onUnblock={handleUnblockUser}
-        />
+        <Animated.View style={contentAnimatedStyle}>
+          <ProfileEmptyState
+            tabType={tabType}
+            isOwnProfile={false}
+            isBlocked={true}
+            onUnblock={handleUnblockUser}
+          />
+        </Animated.View>
       );
    }
 
     if (activeTab === 2) {
       return (
-        <ProfileAboutTab
-          userAddress={userAddress}
-          isOwnProfile={isOwnProfile}
-        />
+        <Animated.View style={contentAnimatedStyle}>
+          <ProfileAboutTab
+            userAddress={userAddress}
+            isOwnProfile={isOwnProfile}
+          />
+        </Animated.View>
       );
     }
 
     if (isLoadingPosts) {
-      return activeTab === 0 ? (
-        <PostCardSkeletonList count={3} />
-      ) : (
-        <ProfilePostsSkeleton count={5} type="comments" />
+      return (
+        <Animated.View style={contentAnimatedStyle}>
+          {activeTab === 0 ? (
+            <PostCardSkeletonList count={3} />
+          ) : (
+            <ProfilePostsSkeleton count={5} type="comments" />
+          )}
+        </Animated.View>
       );
     }
 
     if (listData.length <= 2) {
       const tabType = activeTab === 0 ? "posts" : "comments";
       return (
-        <ProfileEmptyState
-          tabType={tabType}
-          onSettingsPress={handleSettingsPress}
-          isOwnProfile={isOwnProfile}
-        />
+        <Animated.View style={contentAnimatedStyle}>
+          <ProfileEmptyState
+            tabType={tabType}
+            onSettingsPress={handleSettingsPress}
+            isOwnProfile={isOwnProfile}
+          />
+        </Animated.View>
       );
     }
 
     if (isFetchingNextPage) {
-      return activeTab === 0 ? (
-        <PostCardSkeletonList count={1} />
-      ) : (
-        <ProfilePostsSkeleton count={2} type="comments" />
+      return (
+        <Animated.View style={contentAnimatedStyle}>
+          {activeTab === 0 ? (
+            <PostCardSkeletonList count={1} />
+          ) : (
+            <ProfilePostsSkeleton count={2} type="comments" />
+          )}
+        </Animated.View>
       );
     }
 
@@ -791,16 +810,15 @@ const handleUnfollow = useCallback(() => {
     isBlocked,
     handleUnblockUser,
     userAddress,
+    contentAnimatedStyle,
   ]);
 
   const stickyTabsAnimatedStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(
-      scrollY.value,
-      [stickyThreshold - 20, stickyThreshold],
-      [0, 1],
-      "clamp"
-    );
-    return { opacity };
+    const isSticky = scrollY.value >= stickyThreshold;
+    return {
+      opacity: isSticky ? 1 : 0,
+      pointerEvents: isSticky ? "auto" : "none",
+    } as any;
   });
 
   const contentContainerStyle = useMemo(
@@ -811,8 +829,6 @@ const handleUnfollow = useCallback(() => {
     }),
     [headerHeight, insets.bottom]
   );
-
-  const stickyHeaderIndices = useMemo(() => [TAB_BAR_INDEX], []);
 
   return (
     <Box flex background="base">
@@ -840,36 +856,37 @@ const handleUnfollow = useCallback(() => {
           },
           stickyTabsAnimatedStyle,
         ]}
-        pointerEvents={scrollY.value >= stickyThreshold ? "auto" : "none"}
       >
         <ProfileTabBar
           activeTab={activeTab}
           onTabChange={handleTabChange}
           onTabDoubleTap={handleTabDoubleTap}
           tabWidth={SCREEN_WIDTH}
+          animatedIndex={animatedTabIndex}
         />
       </Animated.View>
 
-      <AnimatedFlatList
-        ref={flatListRef as any}
-        data={listData}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        stickyHeaderIndices={stickyHeaderIndices}
-        onScroll={scrollHandler}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={contentContainerStyle}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.3}
-        ListFooterComponent={ListFooterComponent}
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        windowSize={10}
-        initialNumToRender={5}
-        updateCellsBatchingPeriod={50}
-        bounces={true}
-      />
+      <GestureDetector gesture={swipeGesture}>
+        <AnimatedFlatList
+          ref={flatListRef as any}
+          data={listData}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={contentContainerStyle}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={ListFooterComponent}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={10}
+          initialNumToRender={5}
+          updateCellsBatchingPeriod={50}
+          bounces={true}
+        />
+      </GestureDetector>
 
       {!isOwnProfile && (
         <UserProfileMenuSheet

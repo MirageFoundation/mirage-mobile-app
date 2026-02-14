@@ -1,4 +1,5 @@
 import axios, { type AxiosError, type AxiosInstance } from "axios";
+import { useInboxStore } from "@/src/stores/inbox-store";
 
 const DEFAULT_NODES = [
   "https://mirage.vote",
@@ -24,7 +25,13 @@ class ApiClient {
 
     // Response interceptor for error handling and failover
     this.client.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        const data = response.data;
+        if (data && typeof data === "object" && "new_inbox_items" in data) {
+          useInboxStore.getState().setUnreadCount((data as any).new_inbox_items);
+        }
+        return response;
+      },
       async (error: AxiosError) => {
         // On network error, try failover to next node
         if (

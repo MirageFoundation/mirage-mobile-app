@@ -2,6 +2,7 @@ import { RootProvider } from "@/src/providers/root-provider";
 import { Stack } from "expo-router";
 import { AuthSheet } from "@/src/components/molecules";
 import { ThemedStatusBar } from "@/src/components/ui/themed-status-bar";
+import { Platform } from "react-native";
 
 export default function RootLayout() {
   return (
@@ -57,7 +58,9 @@ export default function RootLayout() {
         name="comment-compose"
         options={{
           animation: "slide_from_bottom",
-           presentation: "fullScreenModal",
+          ...(Platform.OS === "android"
+            ? { animationDuration: 200 }
+            : { presentation: "fullScreenModal" as const }),
         }}
       />
        <Stack.Screen

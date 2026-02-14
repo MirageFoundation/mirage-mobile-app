@@ -13,7 +13,7 @@ export function useInbox(params?: Omit<GetInboxParams, "address">) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
 
   return useQuery({
-    queryKey: queryKeys.inbox(walletAddress!, params?.page),
+    queryKey: queryKeys.inbox(walletAddress ?? "", params?.page),
     queryFn: () =>
       getInbox({
         address: walletAddress!,
@@ -34,7 +34,7 @@ export function useInfiniteInbox(
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
 
   return useInfiniteQuery({
-    queryKey: queryKeys.inbox(walletAddress!, undefined),
+    queryKey: queryKeys.inboxInfinite(walletAddress ?? ""),
     queryFn: ({ pageParam = 1 }) =>
       getInbox({
         address: walletAddress!,
@@ -43,8 +43,8 @@ export function useInfiniteInbox(
       }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
-      if (!lastPage.has_more) return undefined;
-      return lastPage.page + 1;
+      if (!lastPage?.has_more) return undefined;
+      return (lastPage?.page ?? 0) + 1;
     },
     enabled: !!walletAddress,
     staleTime: 1000 * 30, // 30 seconds

@@ -282,25 +282,25 @@ export function SearchScreen() {
     clearRecentSearches();
   }, [clearRecentSearches]);
 
- const handleTrendingTopicPress = useCallback(
-   (topic: TopicInfo) => {
-     triggerHaptic("light");
-     addRecentSearch(topic.topic);
-     Keyboard.dismiss();
+  const handleTrendingTopicPress = useCallback(
+    (topic: TopicInfo) => {
+      triggerHaptic("light");
+      addRecentSearch(topic.topic);
+      Keyboard.dismiss();
       router.push(`/topic/${encodeURIComponent(topic.topic)}`);
-   },
+    },
     [addRecentSearch, router],
- );
+  );
 
- const handleTopicResultPress = useCallback(
-   (topic: TopicInfo) => {
-     triggerHaptic("light");
-     addRecentSearch(topic.topic);
-     Keyboard.dismiss();
+  const handleTopicResultPress = useCallback(
+    (topic: TopicInfo) => {
+      triggerHaptic("light");
+      addRecentSearch(topic.topic);
+      Keyboard.dismiss();
       router.push(`/topic/${encodeURIComponent(topic.topic)}`);
-   },
+    },
     [addRecentSearch, router],
- );
+  );
 
   const handleBackFromTopic = useCallback(() => {
     triggerHaptic("light");
@@ -321,7 +321,7 @@ export function SearchScreen() {
       triggerHaptic("light");
       addRecentSearch(`@${user.username}`);
       Keyboard.dismiss();
-      router.push(`/profile/${user.address}`);
+      router.push(`/user/${user.address}`);
     },
     [router, addRecentSearch],
   );
@@ -632,13 +632,13 @@ export function SearchScreen() {
           color={theme.colors.text.subtle}
           style={{ marginBottom: 12 }}
         />
-        <Text size="md" mode="subtle" weight="medium">
+        <Text size="lg" mode="subtle" weight="semibold">
           No posts found
         </Text>
         <Text
-          size="sm"
+          size="md"
           mode="subtle"
-          style={{ marginTop: 4, textAlign: "center" }}
+          style={{ marginTop: 2, textAlign: "center" }}
         >
           Try searching with different keywords
         </Text>
@@ -657,11 +657,11 @@ export function SearchScreen() {
           color={theme.colors.text.subtle}
           style={{ marginBottom: 12 }}
         />
-        <Text size="md" mode="subtle" weight="medium">
+        <Text size="lg" mode="subtle" weight="semibold">
           No topics found
         </Text>
         <Text
-          size="sm"
+          size="md"
           mode="subtle"
           style={{ marginTop: 4, textAlign: "center" }}
         >
@@ -682,11 +682,11 @@ export function SearchScreen() {
           color={theme.colors.text.subtle}
           style={{ marginBottom: 12 }}
         />
-        <Text size="md" mode="subtle" weight="medium">
+        <Text size="lg" mode="subtle" weight="semibold">
           No users found
         </Text>
         <Text
-          size="sm"
+          size="md"
           mode="subtle"
           style={{ marginTop: 4, textAlign: "center" }}
         >
@@ -1018,6 +1018,7 @@ export function SearchScreen() {
             keyExtractor={(item) => `post-${item.post_id}`}
             renderItem={renderPostResult}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={[
               styles.listContent,
@@ -1033,6 +1034,7 @@ export function SearchScreen() {
               keyExtractor={(item) => `topic-post-${item.post_id}`}
               renderItem={renderPostResult}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               showsVerticalScrollIndicator={false}
               contentContainerStyle={[
                 styles.listContent,
@@ -1058,6 +1060,7 @@ export function SearchScreen() {
               keyExtractor={(item) => `topic-${item.topic}`}
               renderItem={renderTopicResult}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               showsVerticalScrollIndicator={false}
               contentContainerStyle={[
                 styles.listContent,
@@ -1073,6 +1076,7 @@ export function SearchScreen() {
             keyExtractor={(item) => `user-${item.address}`}
             renderItem={renderUserResult}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
             contentContainerStyle={[
               styles.listContent,
@@ -1087,6 +1091,7 @@ export function SearchScreen() {
           data={[]}
           renderItem={null}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.listContent,

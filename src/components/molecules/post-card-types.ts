@@ -9,7 +9,7 @@ export type PostAuthor = {
 
 export type PostMedia = {
   uri: string;
-  type: "image" | "video" | "gif";
+  type: "image" | "video" | "gif" | "youtube";
   width?: number;
   height?: number;
   aspectRatio?: number;

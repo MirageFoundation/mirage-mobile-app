@@ -250,7 +250,7 @@ export const ProfileMenuSheet = forwardRef<
 
             <MenuItem
               iconName="gift-outline"
-              title="Invite and Earn"
+              title="Invite a Friend"
               onPress={handleInviteAndEarn}
             />
 

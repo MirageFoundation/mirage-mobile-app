@@ -146,7 +146,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       shareServer: "mirage.talk",
 
       // API Server
-      apiServer: "mirage.vote",
+      apiServer: "mirage.talk",
 
      // Video
      autoPlayVideos: true,

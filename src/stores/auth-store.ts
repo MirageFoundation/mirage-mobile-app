@@ -6,6 +6,7 @@ import { getUserStatus } from "@/src/api/read/endpoints/users";
 import type { WalletMetadata } from "@/src/wallet";
 import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 import { useContentModerationStore } from "./content-moderation-store";
+import { getTierName } from "@/src/utils/tiers";
 
 // ============================================
 // Types
@@ -102,114 +103,108 @@ export const useAuthStore = create<AuthState>()(
       // Initialization
       // ============================================
 
-      /**
-       * Initialize wallet on app startup
-       * Checks for existing wallet and loads metadata
-       * Fetches user status from API to sync username and subscription level
-       */
-     initializeWallet: async () => {
-       if (USE_MOCK_USER) {
-         set({ isInitializing: false });
-         return;
-       }
+      initializeWallet: async () => {
+        if (USE_MOCK_USER) {
+          set({ isInitializing: false });
+          return;
+        }
 
-       try {
-         set({ isInitializing: true });
-         
-         const cleanedUp = await walletService.cleanupPendingWallet();
-         if (cleanedUp) {
-           console.log("[AuthStore] Cleaned up pending wallet from incomplete signup");
-         }
+        try {
+          set({ isInitializing: true });
 
-         const hasWallet = await walletService.hasWallet();
+          const cleanedUp = await walletService.cleanupPendingWallet();
+          if (cleanedUp) {
+            console.log("[AuthStore] Cleaned up pending wallet from incomplete signup");
+          }
 
-         if (!hasWallet) {
-           set({
-             isLoggedIn: false,
-             walletAddress: null,
-             publicKeyBase64: null,
-             hasOnboarded: false,
-             isInitializing: false,
-           });
-           return;
-         }
+          const hasWallet = await walletService.hasWallet();
 
-         const metadata = walletService.getWalletMetadata();
+          if (!hasWallet) {
+            set({
+              isLoggedIn: false,
+              walletAddress: null,
+              publicKeyBase64: null,
+              hasOnboarded: false,
+              isInitializing: false,
+            });
+            return;
+          }
 
-         if (metadata) {
-            let userLevel = 0;
-            let hasUsername = metadata.hasUsername;
-            let username: string | null = null;
-            let tier = "Free";
+          const metadata = walletService.getWalletMetadata();
 
-           try {
-             const userStatus = await getUserStatus({ address: metadata.address });
-              const tierNames = ["Free", "Basic", "Premium", "Pro"];
-
-              userLevel = userStatus.user_level;
-              hasUsername = !!userStatus.username;
-              username = userStatus.username;
-              tier = tierNames[userStatus.user_level] || "Free";
-
-              if (userStatus.username) {
-               walletService.updateMetadata({ hasUsername: true });
-             }
-           } catch (apiError) {
-              console.warn("[AuthStore] Failed to fetch user status from API:", apiError);
-           }
-
+          if (metadata) {
             set({
               isLoggedIn: true,
               walletAddress: metadata.address,
               publicKeyBase64: metadata.publicKeyBase64,
-              hasUsername,
+              hasUsername: metadata.hasUsername,
               hasOnboarded: true,
-              userLevel,
+              userLevel: get().userLevel,
               user: {
                 id: metadata.address,
-                username,
+                username: null,
                 walletAddress: metadata.address,
-                tier,
+                tier: "Free",
               },
               isInitializing: false,
             });
+
+            getUserStatus({ address: metadata.address })
+              .then((userStatus) => {
+                const newUserLevel = userStatus.user_level;
+                const newHasUsername = !!userStatus.username;
+                const newTier = getTierName(userStatus.user_level);
+
+                if (userStatus.username) {
+                  walletService.updateMetadata({ hasUsername: true });
+                }
+
+                set({
+                  hasUsername: newHasUsername,
+                  userLevel: newUserLevel,
+                  user: {
+                    id: metadata.address,
+                    username: userStatus.username,
+                    walletAddress: metadata.address,
+                    tier: newTier,
+                  },
+                });
+              })
+              .catch((apiError) => {
+                console.warn("[AuthStore] Failed to fetch user status from API:", apiError);
+              });
+
             return;
-         }
-       } catch (error) {
-         console.error("[AuthStore] Failed to initialize wallet:", error);
-         set({
-           isLoggedIn: false,
-           walletAddress: null,
-           publicKeyBase64: null,
+          }
+        } catch (error) {
+          console.error("[AuthStore] Failed to initialize wallet:", error);
+          set({
+            isLoggedIn: false,
+            walletAddress: null,
+            publicKeyBase64: null,
             isInitializing: false,
-         });
+          });
           return;
-       }
+        }
         set({ isInitializing: false });
-     },
+      },
 
       // ============================================
       // Wallet Creation & Import
       // ============================================
 
-      /**
-       * Create a new wallet
-       * Returns the mnemonic for the user to back up
-       */
       createNewWallet: async () => {
         set({ isCreatingWallet: true });
 
         try {
           const metadata = await walletService.createWallet();
 
-          // Get mnemonic for display (user needs to back it up)
           const mnemonic = await walletService.exportMnemonic();
 
           if (!mnemonic) {
             throw new Error("Failed to retrieve mnemonic after wallet creation");
           }
 
-          // Store mnemonic temporarily for the onboarding flow
           set({
             recoveryPhrase: mnemonic,
             walletAddress: metadata.address,
@@ -225,18 +220,15 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      /**
-       * Import wallet from mnemonic
-       */
-     importWallet: async (mnemonic: string) => {
-       set({ isCreatingWallet: true });
+      importWallet: async (mnemonic: string) => {
+        set({ isCreatingWallet: true });
 
-       try {
+        try {
           if (await walletService.hasWallet()) {
             await walletService.clearWallet();
           }
 
-         const metadata = await walletService.importWallet(mnemonic);
+          const metadata = await walletService.importWallet(mnemonic);
 
           set({
             isLoggedIn: true,
@@ -259,10 +251,6 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      /**
-       * Confirm wallet creation after user has backed up recovery phrase
-       * This also marks the wallet as no longer pending in storage
-       */
       confirmWalletCreation: async () => {
         const { walletAddress, publicKeyBase64 } = get();
 
@@ -270,13 +258,12 @@ export const useAuthStore = create<AuthState>()(
           throw new Error("No wallet to confirm");
         }
 
-        // Mark wallet as confirmed (removes pending flag)
         walletService.confirmWallet();
 
         set({
           isLoggedIn: true,
           hasOnboarded: true,
-          recoveryPhrase: null, // Clear from memory
+          recoveryPhrase: null,
           user: {
             id: walletAddress,
             username: null,
@@ -286,9 +273,6 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
-      /**
-       * Logout and clear all wallet data
-       */
       logout: async () => {
         try {
           await walletService.clearWallet();
@@ -325,12 +309,10 @@ export const useAuthStore = create<AuthState>()(
       setUserLevel: (level) => {
         set({ userLevel: level });
 
-        // Update user tier string
         const { user } = get();
         if (user) {
-          const tierNames = ["Free", "Basic", "Premium", "Pro"];
           set({
-            user: { ...user, tier: tierNames[level] || "Free" },
+            user: { ...user, tier: getTierName(level) },
           });
         }
       },
@@ -338,7 +320,6 @@ export const useAuthStore = create<AuthState>()(
       setHasUsername: (has) => {
         set({ hasUsername: has });
 
-        // Update wallet metadata
         walletService.updateMetadata({ hasUsername: has });
       },
 
@@ -349,12 +330,10 @@ export const useAuthStore = create<AuthState>()(
     {
       name: "auth-storage",
       storage: createJSONStorage(() => mmkvStorage),
-      // Only persist these fields
       partialize: (state) => ({
         hasOnboarded: state.hasOnboarded,
         userLevel: state.userLevel,
         hasUsername: state.hasUsername,
-        // Don't persist: user, isLoggedIn, wallet details (loaded from secure store)
       }),
       merge: (persistedState, currentState) => {
         if (USE_MOCK_USER) {

@@ -11,7 +11,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { MediaPreviewModal } from "./media-preview-modal";
 import { PostActions } from "./post-actions";
@@ -30,8 +30,8 @@ type PostCardProps = {
   /** Whether to show the follow button (default: true) */
   showFollowButton?: boolean;
   /** Whether the topic is followed */
-isTopicFollowed?: boolean;
-/** Whether video autoplay is allowed based on user settings and network */
+  isTopicFollowed?: boolean;
+  /** Whether video autoplay is allowed based on user settings and network */
   allowAutoplay?: boolean;
   /** Whether the screen/feed is active (for pausing videos) */
   screenActive?: boolean;
@@ -56,6 +56,9 @@ isTopicFollowed?: boolean;
   showUrlCard?: boolean;
   hideCommentAction?: boolean;
   topicDisabled?: boolean;
+  directFollowUser?: boolean;
+  showMoreButton?: boolean;
+  isPostDetail?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -77,13 +80,16 @@ function arePostCardPropsEqual(
   if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
   if (prevProps.isVisible !== nextProps.isVisible) return false;
   if (prevProps.showFollowButton !== nextProps.showFollowButton) return false;
- if (prevProps.isTopicFollowed !== nextProps.isTopicFollowed) return false;
-if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
+  if (prevProps.isTopicFollowed !== nextProps.isTopicFollowed) return false;
+  if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
   if (prevProps.screenActive !== nextProps.screenActive) return false;
   if (prevProps.contentRevealed !== nextProps.contentRevealed) return false;
   if (prevProps.shareUrl !== nextProps.shareUrl) return false;
   if (prevProps.showUrlCard !== nextProps.showUrlCard) return false;
   if (prevProps.topicDisabled !== nextProps.topicDisabled) return false;
+  if (prevProps.directFollowUser !== nextProps.directFollowUser) return false;
+  if (prevProps.showMoreButton !== nextProps.showMoreButton) return false;
+  if (prevProps.isPostDetail !== nextProps.isPostDetail) return false;
 
   return true;
 }
@@ -93,8 +99,8 @@ export const PostCard = memo(function PostCard({
   isOwnPost = false,
   isVisible = false,
   showFollowButton = true,
-isTopicFollowed = false,
-allowAutoplay = true,
+  isTopicFollowed = false,
+  allowAutoplay = true,
   screenActive = true,
   onPress,
   onAuthorPress,
@@ -116,6 +122,9 @@ allowAutoplay = true,
   showUrlCard = true,
   hideCommentAction = false,
   topicDisabled = false,
+  directFollowUser = false,
+  showMoreButton = false,
+  isPostDetail = false,
   style,
 }: PostCardProps) {
   if (__DEV__) {
@@ -137,9 +146,9 @@ allowAutoplay = true,
     topic,
   } = post;
 
- const shouldBlurContent = !!contentWarnings?.length && !contentRevealed;
+  const shouldBlurContent = !!contentWarnings?.length && !contentRevealed;
 
- const resolvedContent = useMemo(
+  const resolvedContent = useMemo(
     () => resolvePostContent(body, media),
     [body, media],
   );
@@ -175,26 +184,45 @@ allowAutoplay = true,
     }
   }, [onMediaPressProp]);
 
+  const { theme } = useUnistyles();
+  const MAX_BODY_LENGTH = 700;
+  const [expanded, setExpanded] = useState(false);
+  const bodyText = resolvedContent.bodyWithoutUrl ?? "";
+  const isTruncated = bodyText.length > MAX_BODY_LENGTH;
+  const truncatedBody = isTruncated
+    ? bodyText.slice(0, MAX_BODY_LENGTH)
+    : bodyText;
+
+  const toggleExpanded = useCallback(() => {
+    setExpanded((prev) => !prev);
+  }, []);
+
   const handleCloseMediaPreview = useCallback(() => {
     setShowMediaPreview(false);
   }, []);
 
- return (
-   <Pressable ref={containerRef} onPress={handlePress} style={[styles.container, style]}>
-     <PostCardHeader
+  return (
+    <Pressable
+      ref={containerRef}
+      onPress={handlePress}
+      style={[styles.container, style]}
+    >
+      <PostCardHeader
         author={author}
         topic={topic}
         createdAt={createdAt}
         isOwnPost={isOwnPost}
         isFollowing={isFollowing}
-      isTopicFollowed={isTopicFollowed}
-      showFollowButton={showFollowButton}
-       onAuthorPress={onAuthorPress}
+        isTopicFollowed={isTopicFollowed}
+        showFollowButton={showFollowButton}
+        onAuthorPress={onAuthorPress}
         onTopicPress={topicDisabled ? undefined : onTopicPress}
         topicDisabled={topicDisabled}
         onFollowUser={onFollowUser}
         onFollowTopic={onFollowTopic}
         onMorePress={onMorePress}
+        directFollowUser={directFollowUser}
+        showMoreButton={showMoreButton}
       />
 
       <PostCardContent
@@ -221,9 +249,39 @@ allowAutoplay = true,
         onMediaPress={handleMediaPress}
       />
 
-     {resolvedContent.bodyWithoutUrl && !shouldBlurContent && (
+      {bodyText && !shouldBlurContent && (
         <View style={styles.body}>
-          <MarkdownContent content={resolvedContent.bodyWithoutUrl} />
+          {!isPostDetail && isTruncated ? (
+            <Text
+              style={{
+                fontFamily: theme.typography.family.mono,
+                fontSize: theme.typography.size.md,
+                lineHeight:
+                  theme.typography.size.md * theme.typography.leading.normal,
+                color: theme.colors.text.default,
+              }}
+            >
+              {truncatedBody}
+              <Text style={{ color: "#3B82F6" }}>…</Text>
+            </Text>
+          ) : (
+            <MarkdownContent
+              content={
+                expanded || !isTruncated
+                  ? bodyText
+                  : bodyText.slice(0, MAX_BODY_LENGTH)
+              }
+            />
+          )}
+          {isPostDetail && isTruncated && (
+            <Pressable onPress={toggleExpanded} style={styles.showMoreButton}>
+              <Text
+                style={{ color: "#3B82F6", fontSize: theme.typography.size.sm }}
+              >
+                {expanded ? "Show less" : "Show more"}
+              </Text>
+            </Pressable>
+          )}
         </View>
       )}
 
@@ -268,8 +326,12 @@ const styles = StyleSheet.create((theme) => ({
   actions: {
     marginTop: theme.spacing.sm,
   },
- body: {
-   marginTop: theme.spacing.sm,
-   lineHeight: 18,
- },
+  body: {
+    marginTop: theme.spacing.sm,
+    lineHeight: 18,
+  },
+  showMoreButton: {
+    alignSelf: "flex-end",
+    marginBottom: theme.spacing.xs,
+  },
 }));

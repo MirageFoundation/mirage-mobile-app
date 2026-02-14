@@ -14,6 +14,11 @@ export {
   type UseDeleteHandlerReturn,
 } from "./use-delete-handler";
 export {
+  useFollowHandler,
+  type UseFollowHandlerOptions,
+  type UseFollowHandlerReturn,
+} from "./use-follow-handler";
+export {
   useGiphy,
   type UseGiphyOptions,
   type UseGiphyReturn,
@@ -57,3 +62,5 @@ export {
   useAppState,
   type AppStateInfo,
 } from "./use-app-state";
+export { useEasUpdate } from "./use-eas-update";
+export { useTabSwipeGesture } from "./use-tab-swipe-gesture";

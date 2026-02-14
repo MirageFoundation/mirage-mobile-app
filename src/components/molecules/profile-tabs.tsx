@@ -10,7 +10,11 @@ import {
 } from "react-native";
 import PagerView from "react-native-pager-view";
 import Animated, {
+  interpolate,
+  interpolateColor,
+  SharedValue,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
@@ -26,19 +30,16 @@ type ProfileTabsProps = {
   onSettingsPress?: () => void;
 };
 
-// Tab configuration
 const TABS: { key: TabType; label: string }[] = [
   { key: "posts", label: "Posts" },
   { key: "comments", label: "Comments" },
   { key: "about", label: "About" },
 ];
 
-// Import images
 const emptyPostImage = require("@/assets/images/empty-post.png");
 const emptyCommentsImage = require("@/assets/images/empty-comments.png");
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
-// Empty state configuration per tab with images
 const EMPTY_STATE_CONFIG: Record<
  TabType,
  {
@@ -83,7 +84,6 @@ const EMPTY_STATE_CONFIG: Record<
  },
 };
 
-// Empty State Component - reusable for all tabs
 export const ProfileEmptyState = ({
  tabType,
  onSettingsPress,
@@ -119,33 +119,28 @@ export const ProfileEmptyState = ({
        { paddingBottom: insets.bottom + 100 },
      ]}
    >
-     {/* Image */}
      <Image
        source={config.image}
        style={styles.emptyImage}
        contentFit="contain"
      />
 
-     {/* Title */}
      <RNText style={[styles.emptyTitle, { color: theme.colors.text.default }]}>
        {title}
      </RNText>
 
-     {/* Subtitle */}
      <RNText
        style={[styles.emptySubtitle, { color: theme.colors.text.subtle }]}
      >
        {subtitle}
      </RNText>
 
-      {/* Unblock Button - show when blocked */}
       {isBlocked && onUnblock && (
         <Pressable onPress={onUnblock} style={styles.settingsButton}>
           <RNText style={styles.settingsButtonText}>Unblock User</RNText>
         </Pressable>
       )}
 
-      {/* Settings Button - only show for own profile when not blocked */}
       {!isBlocked && isOwnProfile && (
        <Pressable onPress={onSettingsPress} style={styles.settingsButton}>
          <RNText style={styles.settingsButtonText}>Update Settings</RNText>
@@ -168,7 +163,6 @@ interface ProfileTabContentProps {
   onUnblock?: () => void;
 }
 
-// Tab Content Component - renders posts list or empty state
 export const ProfileTabContent = ({
  tabType,
  owner,
@@ -181,7 +175,6 @@ export const ProfileTabContent = ({
   isBlocked = false,
   onUnblock,
 }: ProfileTabContentProps) => {
-  // If user is blocked, show blocked state
   if (isBlocked) {
     return (
       <ProfileEmptyState
@@ -193,21 +186,18 @@ export const ProfileTabContent = ({
     );
   }
 
- // About tab - show empty state (for now)
  if (tabType === "about") {
    return (
      <ProfileEmptyState tabType={tabType} onSettingsPress={onSettingsPress} isOwnProfile={isOwnProfile} />
    );
  }
 
-  // No owner - show empty state
   if (!owner) {
     return (
       <ProfileEmptyState tabType={tabType} onSettingsPress={onSettingsPress} isOwnProfile={isOwnProfile} />
     );
   }
 
-  // Posts and Comments tabs
   const type = tabType === "posts" ? "submissions" : "comments";
 
   return (
@@ -225,92 +215,120 @@ export const ProfileTabContent = ({
   );
 };
 
-// Double tap detection threshold in ms
 const DOUBLE_TAP_DELAY = 300;
 
-// Tab Bar Component - exported for use in ProfileScreen
+const AnimatedTabLabel = ({
+  label,
+  index,
+  animatedIndex,
+  activeColor,
+  inactiveColor,
+}: {
+  label: string;
+  index: number;
+  animatedIndex: SharedValue<number>;
+  activeColor: string;
+  inactiveColor: string;
+}) => {
+  const animStyle = useAnimatedStyle(() => {
+    const distance = Math.abs(animatedIndex.value - index);
+    const opacity = interpolate(distance, [0, 0.5, 1], [1, 0.6, 0.5], "clamp");
+    const scale = interpolate(distance, [0, 1], [1, 0.97], "clamp");
+    const color = interpolateColor(
+      distance,
+      [0, 0.5],
+      [activeColor, inactiveColor],
+    );
+    return {
+      opacity,
+      transform: [{ scale }],
+      color,
+      fontWeight: distance < 0.5 ? "700" : "500",
+    } as any;
+  });
+
+  return (
+    <Animated.Text style={[styles.tabLabel, animStyle]}>
+      {label}
+    </Animated.Text>
+  );
+};
+
 export const ProfileTabBar = ({
   activeTab,
   onTabChange,
   onTabDoubleTap,
   tabWidth,
+  animatedIndex,
 }: {
   activeTab: number;
   onTabChange: (index: number) => void;
   onTabDoubleTap?: (index: number) => void;
   tabWidth: number;
+  animatedIndex?: SharedValue<number>;
 }) => {
   const { theme } = useUnistyles();
-  const indicatorPosition = useSharedValue(0);
+  const internalPosition = useSharedValue(activeTab);
   const lastTapTimeRef = useRef<{ [key: number]: number }>({});
+
+  const effectiveAnimatedIndex = animatedIndex ?? internalPosition;
 
   const handleTabPress = useCallback(
     (index: number) => {
       const now = Date.now();
       const lastTap = lastTapTimeRef.current[index] || 0;
 
-      // Check for double tap on the same tab
       if (now - lastTap < DOUBLE_TAP_DELAY && activeTab === index) {
-        // Double tap detected on active tab - trigger refresh
         onTabDoubleTap?.(index);
-        lastTapTimeRef.current[index] = 0; // Reset to prevent triple tap
+        lastTapTimeRef.current[index] = 0;
       } else {
-        // Single tap - switch tab
-        indicatorPosition.value = withTiming(index, { duration: 200 });
+        if (!animatedIndex) {
+          internalPosition.value = withTiming(index, { duration: 200 });
+        }
         onTabChange(index);
         lastTapTimeRef.current[index] = now;
       }
     },
-    [onTabChange, onTabDoubleTap, indicatorPosition, activeTab]
+    [onTabChange, onTabDoubleTap, internalPosition, activeTab, animatedIndex]
   );
 
-  // Update indicator when activeTab changes (from swipe)
   useEffect(() => {
-    indicatorPosition.value = withTiming(activeTab, { duration: 200 });
-  }, [activeTab, indicatorPosition]);
+    if (!animatedIndex) {
+      internalPosition.value = withTiming(activeTab, { duration: 200 });
+    }
+  }, [activeTab, internalPosition, animatedIndex]);
 
   const singleTabWidth = tabWidth / TABS.length;
 
   const indicatorStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: indicatorPosition.value * singleTabWidth }],
+    transform: [{ translateX: effectiveAnimatedIndex.value * singleTabWidth }],
   }));
 
   return (
     <View style={styles.tabBarContainer}>
-      {/* Tabs */}
       <View
         style={[
           styles.tabBar,
           { backgroundColor: theme.colors.background.default },
         ]}
       >
-        {TABS.map((tab, index) => {
-          const isActive = activeTab === index;
-          return (
-            <Pressable
-              key={tab.key}
-              onPress={() => handleTabPress(index)}
-              style={styles.tab}
-            >
-              <RNText
-                style={[
-                  styles.tabLabel,
-                  {
-                    color: isActive
-                      ? theme.colors.text.default
-                      : theme.colors.text.subtle,
-                    fontWeight: isActive ? "700" : "500",
-                  },
-                ]}
-              >
-                {tab.label}
-              </RNText>
-            </Pressable>
-          );
-        })}
+        {TABS.map((tab, index) => (
+          <Pressable
+            key={tab.key}
+            onPress={() => handleTabPress(index)}
+            style={styles.tab}
+          >
+            <AnimatedTabLabel
+              label={tab.label}
+              index={index}
+              animatedIndex={effectiveAnimatedIndex}
+              activeColor={theme.colors.text.default}
+              inactiveColor={theme.colors.text.subtle}
+            />
+          </Pressable>
+        ))}
       </View>
 
-      {/* Animated Indicator */}
       <Animated.View
         style={[
           styles.indicator,
@@ -319,7 +337,6 @@ export const ProfileTabBar = ({
         ]}
       />
 
-      {/* Bottom Border */}
       <View
         style={[
           styles.tabBarBorder,
@@ -330,7 +347,6 @@ export const ProfileTabBar = ({
   );
 };
 
-// Full ProfileTabs component (for standalone use)
 export const ProfileTabs = ({ onSettingsPress }: ProfileTabsProps) => {
   const [activeTab, setActiveTab] = useState(0);
   const pagerRef = useRef<PagerView>(null);
@@ -346,14 +362,12 @@ export const ProfileTabs = ({ onSettingsPress }: ProfileTabsProps) => {
 
   return (
     <View style={styles.container}>
-      {/* Tab Bar */}
       <ProfileTabBar
         activeTab={activeTab}
         onTabChange={handleTabChange}
         tabWidth={SCREEN_WIDTH}
       />
 
-      {/* Swipeable Content */}
       <PagerView
         ref={pagerRef}
         style={styles.pagerView}

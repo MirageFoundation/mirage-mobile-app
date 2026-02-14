@@ -31,6 +31,7 @@ type HomePostListProps = {
  onEndReached?: () => void;
  onEndReachedThreshold?: number;
   feedScreen: 'home' | 'following' | 'topic';
+ onItemVisible?: (index: number) => void;
 };
 
 const HomePostListInner = function HomePostListInner(
@@ -45,12 +46,16 @@ const HomePostListInner = function HomePostListInner(
    onEndReached,
    onEndReachedThreshold,
     feedScreen,
+   onItemVisible,
  }: HomePostListProps,
  ref: Ref<FlatList<Post>>
 ) {
   const setVisiblePostIds = useHomePostCardStore(
     (state) => state.setVisiblePostIds
   );
+
+  const onItemVisibleRef = useRef(onItemVisible);
+  onItemVisibleRef.current = onItemVisible;
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 50,
@@ -65,6 +70,11 @@ const HomePostListInner = function HomePostListInner(
           .map((item) => item.item.id)
       );
       setVisiblePostIds(visibleIds);
+     const maxIndex = viewableItems.reduce((max, item) => {
+       if (item.isViewable && item.index != null && item.index > max) return item.index;
+       return max;
+     }, -1);
+     if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
     }
   ).current;
 

@@ -258,12 +258,12 @@ export const PostOptionsSheet = forwardRef<
 
     const getShareUrl = useCallback(() => {
       if (!post?.id) return "";
-      return `${getShareBaseUrl(shareServer)}/view_post?post_id=${post.id}`;
+      return `${getShareBaseUrl(shareServer)}/p/${post.id}`;
     }, [post?.id, shareServer]);
 
     const getShareMessage = useCallback(() => {
       const url = getShareUrl();
-      return `What do you think about this? 🗳️\n${url}`;
+      return url;
     }, [getShareUrl]);
 
     // Share handlers
@@ -273,47 +273,61 @@ export const PostOptionsSheet = forwardRef<
 
         switch (appId) {
           case "whatsapp": {
-            const url = `whatsapp://send?text=${encodeURIComponent(
-              getShareMessage(),
-            )}`;
-            const canOpen = await Linking.canOpenURL(url);
-            if (canOpen) {
-              await Linking.openURL(url);
-            } else {
+            try {
+              const url = `whatsapp://send?text=${encodeURIComponent(
+                getShareMessage(),
+              )}`;
+              const canOpen = await Linking.canOpenURL(url);
+              if (canOpen) {
+                await Linking.openURL(url);
+                break;
+              }
+            } catch {
+            }
               await Linking.openURL(
                 `https://wa.me/?text=${encodeURIComponent(getShareMessage())}`,
               );
-            }
             break;
           }
           case "messages": {
-            const url = `sms:&body=${encodeURIComponent(getShareMessage())}`;
-            await Linking.openURL(url);
-            break;
-          }
-          case "instagram": {
-            const url = "instagram://app";
-            const canOpen = await Linking.canOpenURL(url);
-            if (canOpen) {
+            try {
+              const url = `sms:&body=${encodeURIComponent(getShareMessage())}`;
               await Linking.openURL(url);
-              await Clipboard.setStringAsync(getShareUrl());
+            } catch {
             }
             break;
           }
+          case "instagram": {
+            await Clipboard.setStringAsync(getShareUrl());
+            try {
+              const appUrl = "instagram://app";
+              const canOpen = await Linking.canOpenURL(appUrl);
+              if (canOpen) {
+                await Linking.openURL(appUrl);
+                break;
+              }
+            } catch {
+            }
+            await Linking.openURL("https://www.instagram.com/");
+            break;
+          }
           case "telegram": {
-            const url = `tg://msg_url?url=${encodeURIComponent(
-              getShareUrl(),
-            )}&text=${encodeURIComponent(post?.title || "")}`;
-            const canOpen = await Linking.canOpenURL(url);
-            if (canOpen) {
-              await Linking.openURL(url);
-            } else {
+            try {
+              const url = `tg://msg_url?url=${encodeURIComponent(
+                getShareUrl(),
+              )}&text=${encodeURIComponent(post?.title || "")}`;
+              const canOpen = await Linking.canOpenURL(url);
+              if (canOpen) {
+                await Linking.openURL(url);
+                break;
+              }
+            } catch {
+            }
               await Linking.openURL(
                 `https://t.me/share/url?url=${encodeURIComponent(
                   getShareUrl(),
                 )}&text=${encodeURIComponent(post?.title || "")}`,
               );
-            }
             break;
           }
           case "copy": {
@@ -396,6 +410,19 @@ export const PostOptionsSheet = forwardRef<
       onReport?.();
     }, [dismiss, onReport]);
 
+    const handleShare = useCallback(async () => {
+      triggerHaptic("light");
+      dismiss();
+      try {
+        await Share.share(
+          Platform.OS === "ios"
+            ? { url: getShareUrl(), title: post?.title }
+            : { message: getShareUrl(), title: post?.title },
+        );
+      } catch {
+      }
+    }, [dismiss, getShareUrl, post?.title]);
+
     // Render share app item for FlatList
     const renderShareApp = useCallback(
       ({ item }: { item: ShareApp }) => (
@@ -466,53 +493,12 @@ export const PostOptionsSheet = forwardRef<
               onPress={handleCopyText}
             />
 
-            {/* Follow/Unfollow User (only for other users' posts) */}
-            {!isOwnPost && (
-              <MenuItem
-                iconComponent={Ionicons}
-                iconName={isFollowingUser ? "person" : "person-outline"}
-                title={
-                  isFollowingUser
-                    ? `Unfollow @${post?.author.username}`
-                    : `Follow @${post?.author.username}`
-                }
-                onPress={handleFollowUser}
-              />
-            )}
-
-           {/* Follow/Unfollow Topic (only if post has a topic) */}
-            {post?.topic && (
-              <MenuItem
-                iconComponent={Ionicons}
-                iconName={isTopicFollowed ? "pricetag" : "pricetag-outline"}
-                title={
-                  isTopicFollowed
-                    ? `Unfollow #${post.topic}`
-                    : `Follow #${post.topic}`
-                }
-                onPress={handleFollowTopic}
-              />
-            )}
-
-            {/* Block User (only for other users' posts) - RED */}
-            {!isOwnPost && (
-              <MenuItem
-                iconName="ban-outline"
-                title={`Block @${post?.author.username}`}
-                onPress={handleBlockUser}
-                isDestructive
-              />
-            )}
-
-            {/* Report (only for other users' posts) - RED */}
-            {!isOwnPost && (
-              <MenuItem
-                iconName="flag-outline"
-                title="Report"
-                onPress={handleReport}
-                isDestructive
-              />
-            )}
+            <MenuItem
+              iconComponent={Feather}
+              iconName="share"
+              title="Share"
+              onPress={handleShare}
+            />
 
             {/* Delete (only for own posts) - RED */}
             {isOwnPost && (

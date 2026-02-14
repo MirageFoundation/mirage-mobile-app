@@ -28,6 +28,8 @@ type PostCardHeaderProps = {
   onFollowTopic?: () => void;
   onMorePress?: () => void;
   topicDisabled?: boolean;
+  directFollowUser?: boolean;
+  showMoreButton?: boolean;
 };
 
 export const PostCardHeader = memo(function PostCardHeader({
@@ -44,12 +46,24 @@ export const PostCardHeader = memo(function PostCardHeader({
   onFollowTopic,
   onMorePress,
   topicDisabled = false,
+  directFollowUser = false,
+  showMoreButton = false,
 }: PostCardHeaderProps) {
   const { theme } = useUnistyles();
 
   const isFollowingAll = topic
     ? !!(isFollowing && isTopicFollowed)
     : !!isFollowing;
+
+  const followMenuMinWidth = Math.max(
+    180,
+    Math.max(
+      topic ? `${isTopicFollowed ? "Unfollow" : "Follow"} #${topic}`.length : 0,
+      `${isFollowing ? "Unfollow" : "Follow"} @${author.username}`.length,
+    ) *
+      10 +
+      60,
+  );
 
   const handleAuthorPress = useCallback(() => {
     triggerHaptic("selection");
@@ -86,14 +100,14 @@ export const PostCardHeader = memo(function PostCardHeader({
               hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
               style={({ pressed }) => [pressed && styles.usernameButtonPressed]}
             >
-              <Text size="md" weight="bold" numberOfLines={1}>
+              <Text size="lg" weight="bold" numberOfLines={1}>
                 #{topic}
               </Text>
             </Pressable>
           )}
           {topic && topicDisabled && (
             <Text
-              size="md"
+              size="lg"
               weight="bold"
               numberOfLines={1}
               style={{ color: theme.colors.text.subtle }}
@@ -136,7 +150,41 @@ export const PostCardHeader = memo(function PostCardHeader({
       </View>
 
       <View style={styles.headerActions}>
-        {!isOwnPost && showFollowButton && (
+        {!isOwnPost && showFollowButton && directFollowUser && (
+          <Pressable
+            onPress={handleFollowUser}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={{ padding: 4 }}
+          >
+            <View
+              style={[
+                styles.followButton,
+                {
+                  backgroundColor: isFollowing
+                    ? "transparent"
+                    : theme.colors.primary[500],
+                  borderColor: isFollowing
+                    ? theme.colors.border.default
+                    : theme.colors.primary[500],
+                 height: isFollowing ? 22 : 20,
+                },
+              ]}
+            >
+              <Text
+                size="sm"
+                weight="bold"
+                style={{
+                  color: isFollowing
+                    ? theme.colors.text.default
+                    : theme.colors.background.default,
+                }}
+              >
+                {isFollowing ? "Following" : "Follow"}
+              </Text>
+            </View>
+          </Pressable>
+        )}
+        {!isOwnPost && showFollowButton && !directFollowUser && (
           <Menu>
             <MenuTrigger
               customStyles={{
@@ -156,12 +204,13 @@ export const PostCardHeader = memo(function PostCardHeader({
                     borderColor: isFollowingAll
                       ? theme.colors.border.default
                       : theme.colors.primary[500],
+                   height: isFollowingAll ? 22 : 20,
                   },
                 ]}
               >
                 <Text
-                  size="xs"
-                  weight="semibold"
+                  size="sm"
+                  weight="bold"
                   style={{
                     color: isFollowingAll
                       ? theme.colors.text.default
@@ -177,7 +226,7 @@ export const PostCardHeader = memo(function PostCardHeader({
                 optionsContainer: {
                   backgroundColor: theme.colors.background.default,
                   borderRadius: theme.radius.lg,
-                  minWidth: 180,
+                  minWidth: followMenuMinWidth,
                   shadowColor: theme.colors.contrast.base,
                   shadowOffset: { width: 0, height: 4 },
                   shadowOpacity: 0.15,
@@ -203,8 +252,9 @@ export const PostCardHeader = memo(function PostCardHeader({
                       }
                     />
                     <Text
-                      size="md"
+                      size="lg"
                       weight={isTopicFollowed ? "semibold" : "medium"}
+                      numberOfLines={1}
                       style={
                         isTopicFollowed
                           ? { color: theme.colors.primary[500] }
@@ -229,8 +279,9 @@ export const PostCardHeader = memo(function PostCardHeader({
                     }
                   />
                   <Text
-                    size="md"
+                    size="lg"
                     weight={isFollowing ? "semibold" : "medium"}
+                    numberOfLines={1}
                     style={
                       isFollowing
                         ? { color: theme.colors.primary[500] }
@@ -244,6 +295,7 @@ export const PostCardHeader = memo(function PostCardHeader({
             </MenuOptions>
           </Menu>
         )}
+      {showMoreButton && (
         <AnimatedPressable
           scaleAmount={0.85}
           hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
@@ -256,6 +308,7 @@ export const PostCardHeader = memo(function PostCardHeader({
             color={theme.colors.text.default}
           />
         </AnimatedPressable>
+      )}
       </View>
     </View>
   );
@@ -287,15 +340,15 @@ const styles = StyleSheet.create((theme) => ({
   headerActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
   },
   followButton: {
     alignItems: "center",
     justifyContent: "center",
     borderRadius: theme.radius.full,
     minWidth: 54,
-    height: 22,
-    paddingHorizontal: 10,
+    height: 20,
+    paddingHorizontal: 6,
     borderWidth: 1,
   },
   menuOption: {
@@ -311,5 +364,6 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: theme.radius.full,
+    marginRight: -5,
   },
 }));

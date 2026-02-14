@@ -201,14 +201,14 @@ function FollowingEmptyState({ tab }: { tab: FollowingTab }) {
         contentFit="contain"
       />
       <Text
-        size="lg"
+        size="xxl"
         weight="bold"
         style={{ color: theme.colors.text.default, textAlign: "center" }}
       >
         {title}
       </Text>
       <Text
-        size="sm"
+        size="lg"
         mode="subtle"
         style={{ marginTop: 8, textAlign: "center", maxWidth: 280 }}
       >
@@ -231,12 +231,12 @@ function UserRow({
   const { data } = useUsernameFromAddress(address);
   const displayName = data?.username ?? address.slice(0, 10) + "...";
 
- return (
-   <Pressable onPress={() => onPress(address)} style={styles.row}>
+  return (
+    <Pressable onPress={() => onPress(address)} style={styles.row}>
       <Avatar size="sm" seed={address} rounded="full" />
-     <Text
-       size="md"
-       weight="medium"
+      <Text
+        size="md"
+        weight="medium"
         style={{ marginLeft: 12, color: theme.colors.text.default, flex: 1 }}
         numberOfLines={1}
       >
@@ -292,10 +292,10 @@ function ModeratorRow({
   const { data } = useUsernameFromAddress(address);
   const displayName = data?.username ?? address.slice(0, 10) + "...";
 
- return (
-   <Pressable onPress={() => onPress(address)} style={styles.row}>
+  return (
+    <Pressable onPress={() => onPress(address)} style={styles.row}>
       <Avatar size="sm" seed={address} rounded="full" />
-     <Box style={{ marginLeft: 12, flex: 1 }}>
+      <Box style={{ marginLeft: 12, flex: 1 }}>
         <Text
           size="md"
           weight="medium"
@@ -456,9 +456,12 @@ export function UserFollowingScreen() {
     [router],
   );
 
- const handleTopicPress = useCallback((topic: string) => {
-    router.push(`/topic/${encodeURIComponent(topic)}`);
-  }, [router]);
+  const handleTopicPress = useCallback(
+    (topic: string) => {
+      router.push(`/topic/${encodeURIComponent(topic)}`);
+    },
+    [router],
+  );
 
   const handleBackFromTopic = useCallback(() => {
     setSelectedTopic(null);
@@ -599,34 +602,34 @@ export function UserFollowingScreen() {
         </View>
 
         <View style={styles.tabBar}>
-         {TABS.map((tab) => {
-           const isActive = activeTab === tab.key;
-           const count = tabCounts[tab.key];
-           const hasCount = !isLoading && followedData;
-           return (
-             <Pressable
-               key={tab.key}
-               onPress={() => handleTabPress(tab.key)}
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.key;
+            const count = tabCounts[tab.key];
+            const hasCount = !isLoading && followedData;
+            return (
+              <Pressable
+                key={tab.key}
+                onPress={() => handleTabPress(tab.key)}
                 style={[
                   styles.tab,
                   isActive && {
                     borderBottomColor: theme.colors.primary[500],
                   },
                 ]}
-             >
-               <Text
+              >
+                <Text
                   size="md"
                   weight={isActive ? "semibold" : "regular"}
-                 style={{
-                   color: isActive
+                  style={{
+                    color: isActive
                       ? theme.colors.primary[500]
-                     : theme.colors.text.subtle,
-                 }}
-               >
-                 {tab.label}
-                 {hasCount ? ` (${count})` : ""}
-               </Text>
-             </Pressable>
+                      : theme.colors.text.subtle,
+                  }}
+                >
+                  {tab.label}
+                  {hasCount ? ` (${count})` : ""}
+                </Text>
+              </Pressable>
             );
           })}
         </View>
@@ -733,7 +736,6 @@ const styles = StyleSheet.create((theme) => ({
   emptyImage: {
     width: 180,
     height: 180,
-    marginBottom: 16,
   },
   topicHeader: {
     flexDirection: "row",

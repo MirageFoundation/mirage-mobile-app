@@ -5,11 +5,18 @@ import {
   useUserFollowed,
   uploadImageAndGetUrl,
 } from "@/src/api/read";
+import { LinearGradient } from "expo-linear-gradient";
+import { getGradientColor } from "@/src/components/molecules/profile-header";
 import {
   useToggleFollowUser,
   useToggleFollowTopic,
   useComment,
 } from "@/src/api/write";
+import {
+  usePowQueueStore,
+  generateActionId,
+  getActionLabel,
+} from "@/src/services/pow-queue";
 import { useEdit } from "@/src/api/write";
 import type { PoWProgress } from "@/src/api/write/signing";
 import { Avatar } from "@/src/components/atoms";
@@ -37,6 +44,7 @@ import {
   useVoteHandler,
   type VoteResult,
 } from "@/src/hooks";
+import { useFollowHandler } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
 import {
   useAuthStore,
@@ -79,13 +87,13 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { LinearGradient } from "expo-linear-gradient";
 import { getLastPressedPostY } from "@/src/utils/post-transition";
 
 export default function PostDetailScreen() {
-  const { id, highlight } = useLocalSearchParams<{
+  const { id, highlight, reveal } = useLocalSearchParams<{
     id: string;
     highlight?: string;
+    reveal?: string;
   }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -113,6 +121,11 @@ export default function PostDetailScreen() {
   }));
   const { theme } = useUnistyles();
   const { requireAuth, isLoggedIn } = useAuthGuard();
+
+  const gradientColors = useMemo(
+    () => getGradientColor().filter((c) => c !== "#000000"),
+    [],
+  );
 
   const currentUser = useAuthStore((s) => s.user);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
@@ -174,14 +187,26 @@ export default function PostDetailScreen() {
   const toggleFollowTopicMutation = useToggleFollowTopic();
   const toast = useToast();
 
+ const { handleFollowUser: handleFollowUserViaQueue } = useFollowHandler({});
+
   // Shared store for vote and comment count overrides (syncs with home/following screens)
-  const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
-  const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
-  const incrementCommentCount = useHomePostCardStore((state) => state.incrementCommentCount);
-  const decrementCommentCount = useHomePostCardStore((state) => state.decrementCommentCount);
+  const setVoteOverride = useHomePostCardStore(
+    (state) => state.setVoteOverride,
+  );
+  const clearVoteOverride = useHomePostCardStore(
+    (state) => state.clearVoteOverride,
+  );
+  const incrementCommentCount = useHomePostCardStore(
+    (state) => state.incrementCommentCount,
+  );
+  const decrementCommentCount = useHomePostCardStore(
+    (state) => state.decrementCommentCount,
+  );
 
   // Track follow loading state
-const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Set());
+  const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(
+    new Set(),
+  );
   const followLoadingRef = useRef<Set<string>>(new Set());
 
   // Global content moderation state (syncs to home screen)
@@ -257,7 +282,7 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
           router.back();
         }
       } else {
-      globalHideComment(pending.id);
+        globalHideComment(pending.id);
         setHiddenCommentIds((prev) => new Set(prev).add(pending.id));
         removeCommentFromState(pending.id);
 
@@ -298,7 +323,7 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
         }
       } else if (pending.type === "user") {
         // Block user in global store (syncs to home screen)
-      globalBlockUser(pending.id);
+        globalBlockUser(pending.id);
         // Check if the blocked user is the post author
         const isPostAuthor = commentsData?.root?.user_id === pending.id;
         if (isPostAuthor) {
@@ -361,31 +386,12 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
     }
   }, [reportHandler.showReportSheet]);
 
-  // Comment mutation with PoW progress tracking
-  const [commentToastId, setCommentToastId] = useState<string | null>(null);
-  const handlePoWProgress = useCallback(
-    (progress: PoWProgress) => {
-      if (commentToastId) {
-        const progressPercent =
-          progress.estimatedTotalMs > 0
-            ? Math.min(
-                99,
-                Math.round(
-                  (progress.elapsedMs / progress.estimatedTotalMs) * 100,
-                ),
-              )
-            : 0;
-        toast.update(commentToastId, {
-          description: `Computing proof of work... ${progressPercent}%`,
-        });
-      }
-    },
-    [commentToastId, toast],
-  );
-
- const commentMutation = useComment({
-   onPoWProgress: handlePoWProgress,
- });
+  const commentMutation = useComment({});
+  const commentMutateAsyncRef = useRef(commentMutation.mutateAsync);
+  useEffect(() => {
+    commentMutateAsyncRef.current = commentMutation.mutateAsync;
+  }, [commentMutation.mutateAsync]);
+  const enqueue = usePowQueueStore((state) => state.enqueue);
 
   const editToastIdRef = useRef<string | null>(null);
   const handleEditPoWProgress = useCallback(
@@ -425,9 +431,11 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
   }, [commentsData]);
 
   // Local state for optimistic updates
- const [localPostUpdates, setLocalPostUpdates] = useState<Partial<Post>>({});
-  const [localTopicFollowed, setLocalTopicFollowed] = useState<boolean | null>(null);
- const [localComments, setLocalComments] = useState<Comment[]>([]);
+  const [localPostUpdates, setLocalPostUpdates] = useState<Partial<Post>>({});
+  const [localTopicFollowed, setLocalTopicFollowed] = useState<boolean | null>(
+    null,
+  );
+  const [localComments, setLocalComments] = useState<Comment[]>([]);
   // Track optimistic replies to API comments (parentId -> optimistic comments)
   const [optimisticReplies, setOptimisticReplies] = useState<
     Record<string, Comment[]>
@@ -506,12 +514,12 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
       return hasChanges ? updated : prev;
     });
   }, [commentsData?.children, comments]);
- const [commentVoteOverrides, setCommentVoteOverrides] = useState<
-   Record<
-     string,
-     { hasLiked?: boolean; hasDisliked?: boolean; likeDelta?: number }
-   >
- >({});
+  const [commentVoteOverrides, setCommentVoteOverrides] = useState<
+    Record<
+      string,
+      { hasLiked?: boolean; hasDisliked?: boolean; likeDelta?: number }
+    >
+  >({});
 
   const [commentEditOverrides, setCommentEditOverrides] = useState<
     Record<string, string>
@@ -521,12 +529,10 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
   const postVoteHandler = useVoteHandler({
     onOptimisticUpdate: useCallback(
       (targetId: string, result: VoteResult) => {
-        // Only update shared store - don't use local state for votes
-        // This ensures consistency between home/following and post detail screens
         setVoteOverride(targetId, {
           hasLiked: result.hasLiked,
           hasDisliked: result.hasDisliked,
-          likeDelta: result.likeDelta,
+          likes: result.newLikes,
         });
       },
       [setVoteOverride],
@@ -584,41 +590,43 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
 
   // Merge post data with local updates (for optimistic UI)
   // Read vote override from shared store (in case vote was made on home/following)
-  const sharedVoteOverride = useHomePostCardStore((state) => 
-    id ? state.voteOverrides[id] : undefined
+  const sharedVoteOverride = useHomePostCardStore((state) =>
+    id ? state.voteOverrides[id] : undefined,
   );
   const sharedCommentCountOverride = useHomePostCardStore((state) =>
-    id ? state.commentCountOverrides[id] : undefined
+    id ? state.commentCountOverrides[id] : undefined,
   );
 
   // Merge post data with local updates and shared store overrides (for optimistic UI)
   const displayPost = useMemo(() => {
     if (!post) return null;
-    
+
     // Start with base post data and local updates (for non-vote fields like comments, isFollowing)
     let result = { ...post, ...localPostUpdates };
-    
+
     // Always apply shared store vote override (votes only use shared store, not local state)
     if (sharedVoteOverride) {
       result = {
         ...result,
-        likes: (post.likes ?? 0) + (sharedVoteOverride.likeDelta ?? 0),
+        likes: sharedVoteOverride.likes ?? post.likes ?? 0,
         hasLiked: sharedVoteOverride.hasLiked ?? result.hasLiked,
         hasDisliked: sharedVoteOverride.hasDisliked ?? result.hasDisliked,
       };
     }
-    
+
     // Apply shared store comment count override if present (and not already overridden locally)
     if (sharedCommentCountOverride && localPostUpdates.comments === undefined) {
       result = {
         ...result,
-        comments: (result.comments ?? 0) + (sharedCommentCountOverride.commentDelta ?? 0),
+        comments:
+          (result.comments ?? 0) +
+          (sharedCommentCountOverride.commentDelta ?? 0),
       };
     }
-    
+
     return result;
   }, [post, localPostUpdates, sharedVoteOverride, sharedCommentCountOverride]);
-  const [revealedContent, setRevealedContent] = useState(false);
+  const [revealedContent, setRevealedContent] = useState(reveal === "true");
   const [replyingTo, setReplyingTo] = useState<Comment | null>(null);
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -646,15 +654,16 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
 
       return updatedComment;
     },
-   [commentVoteOverrides],
- );
+    [commentVoteOverrides],
+  );
 
   const applyEditOverridesToComment = useCallback(
     (comment: Comment): Comment => {
       const editedContent = commentEditOverrides[comment.id];
-      const updatedComment: Comment = editedContent !== undefined
-        ? { ...comment, content: editedContent }
-        : comment;
+      const updatedComment: Comment =
+        editedContent !== undefined
+          ? { ...comment, content: editedContent }
+          : comment;
 
       if (updatedComment.replies && updatedComment.replies.length > 0) {
         return {
@@ -710,29 +719,32 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
 
   // Merge API comments with locally added comments and apply vote overrides + optimistic replies
   // Filter hidden/blocked and sort by createdAt descending (latest first)
- const allComments = useMemo(() => {
-   const merged = [...localComments, ...comments];
-   return filterComments(
-      merged.map(applyOptimisticReplies).map(applyVoteOverridesToComment).map(applyEditOverridesToComment),
-   ).sort((a, b) => {
-     const timeA =
-       a.createdAt instanceof Date
-         ? a.createdAt.getTime()
-         : Number(a.createdAt);
-     const timeB =
-       b.createdAt instanceof Date
-         ? b.createdAt.getTime()
-         : Number(b.createdAt);
-     return timeB - timeA; // Descending order (latest first)
-   });
- }, [
-   localComments,
-   comments,
-   applyOptimisticReplies,
-   applyVoteOverridesToComment,
+  const allComments = useMemo(() => {
+    const merged = [...localComments, ...comments];
+    return filterComments(
+      merged
+        .map(applyOptimisticReplies)
+        .map(applyVoteOverridesToComment)
+        .map(applyEditOverridesToComment),
+    ).sort((a, b) => {
+      const timeA =
+        a.createdAt instanceof Date
+          ? a.createdAt.getTime()
+          : Number(a.createdAt);
+      const timeB =
+        b.createdAt instanceof Date
+          ? b.createdAt.getTime()
+          : Number(b.createdAt);
+      return timeB - timeA; // Descending order (latest first)
+    });
+  }, [
+    localComments,
+    comments,
+    applyOptimisticReplies,
+    applyVoteOverridesToComment,
     applyEditOverridesToComment,
-   filterComments,
- ]);
+    filterComments,
+  ]);
 
   // Helper to find if a comment or its nested replies contain the target ID
   const findCommentInTree = useCallback(
@@ -871,19 +883,20 @@ const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(new Se
     );
   }, [displayPost, postVoteHandler]);
 
-const handleAuthorPress = useCallback(() => {
-  if (!displayPost) return;
-  router.push(`/user/${displayPost.author.id}`);
-}, [displayPost, router]);
+  const handleAuthorPress = useCallback(() => {
+    if (!displayPost) return;
+    router.push(`/user/${displayPost.author.id}`);
+  }, [displayPost, router]);
 
-const handleTopicPress = useCallback(() => {
-  if (!displayPost?.topic) return;
-  router.push(`/topic/${encodeURIComponent(displayPost.topic)}`);
-}, [displayPost, router]);
+  const handleTopicPress = useCallback(() => {
+    if (!displayPost?.topic) return;
+    router.push(`/topic/${encodeURIComponent(displayPost.topic)}`);
+  }, [displayPost, router]);
 
-const handleFollowPost = useCallback(() => {
- const currentPost = displayPost;
-    if (!currentPost || followLoadingRef.current.has(currentPost.author.id)) return;
+  const handleFollowPost = useCallback(() => {
+    const currentPost = displayPost;
+    if (!currentPost || followLoadingRef.current.has(currentPost.author.id))
+      return;
 
     const authorId = currentPost.author.id;
     const authorUsername = currentPost.author.username;
@@ -908,12 +921,12 @@ const handleFollowPost = useCallback(() => {
 
       setTimeout(async () => {
         try {
-         await toggleFollowMutation.mutateAsync({
-           userAddress: authorId,
-           isCurrentlyFollowing,
-         });
+          await toggleFollowMutation.mutateAsync({
+            userAddress: authorId,
+            isCurrentlyFollowing,
+          });
 
-         toast.update(toastId, {
+          toast.update(toastId, {
             type: "success",
             title: `${actionPast} @${authorUsername}`,
             description: undefined,
@@ -965,23 +978,24 @@ const handleFollowPost = useCallback(() => {
         }
       }, 0);
     });
-}, [
-  requireAuth,
-  displayPost,
-  localPostUpdates.isFollowing,
-  toggleFollowMutation,
-  toast,
-]);
+  }, [
+    requireAuth,
+    displayPost,
+    localPostUpdates.isFollowing,
+    toggleFollowMutation,
+    toast,
+  ]);
 
- const handleFollowTopic = useCallback(() => {
-   if (!displayPost?.topic) return;
-   const topic = displayPost.topic;
-    const isCurrentlyFollowed = localTopicFollowed ?? followedTopics.includes(topic);
+  const handleFollowTopic = useCallback(() => {
+    if (!displayPost?.topic) return;
+    const topic = displayPost.topic;
+    const isCurrentlyFollowed =
+      localTopicFollowed ?? followedTopics.includes(topic);
 
     setLocalTopicFollowed(!isCurrentlyFollowed);
 
-   requireAuth(async () => {
-     const action = isCurrentlyFollowed ? "Unfollowing" : "Following";
+    requireAuth(async () => {
+      const action = isCurrentlyFollowed ? "Unfollowing" : "Following";
       const actionPast = isCurrentlyFollowed ? "Unfollowed" : "Now following";
 
       // Show loading toast
@@ -1032,9 +1046,9 @@ const handleFollowPost = useCallback(() => {
               duration: 3000,
             });
             setTimeout(() => toast.dismiss(toastId), 3000);
-         } else {
+          } else {
             setLocalTopicFollowed(isCurrentlyFollowed);
-           console.error("Follow/unfollow topic failed:", error);
+            console.error("Follow/unfollow topic failed:", error);
             toast.update(toastId, {
               type: "error",
               title: `Failed to ${action.toLowerCase()} #${topic}`,
@@ -1046,14 +1060,14 @@ const handleFollowPost = useCallback(() => {
         }
       }, 0);
     });
- }, [
-   requireAuth,
-   displayPost?.topic,
-   followedTopics,
+  }, [
+    requireAuth,
+    displayPost?.topic,
+    followedTopics,
     localTopicFollowed,
-   toggleFollowTopicMutation,
-   toast,
- ]);
+    toggleFollowTopicMutation,
+    toast,
+  ]);
 
   const handleRevealContent = useCallback(() => {
     setRevealedContent(true);
@@ -1147,32 +1161,15 @@ const handleFollowPost = useCallback(() => {
       const parentId = replyingTo?.id ?? id;
       const replyingToUsername = replyingTo?.author.username;
 
-      // Show loading toast
-      const hasMedia = imageUri || gifUrl;
-      const toastId = toast.loading(
-        replyingToUsername
-          ? `Replying to @${replyingToUsername}`
-          : "Posting comment",
-        hasMedia ? "Uploading media..." : "Computing proof of work...",
-      );
-      setCommentToastId(toastId);
-
-      // Handle media upload if present
       let mediaUrl: string | null = null;
       if (imageUri) {
         try {
-          toast.update(toastId, { description: "Uploading image..." });
           mediaUrl = await uploadImageAndGetUrl(imageUri);
         } catch (error) {
-          toast.update(toastId, {
-            type: "error",
-            title: "Image upload failed",
-            description:
-              error instanceof Error ? error.message : "Please try again",
-            duration: 4000,
-          });
-          setTimeout(() => toast.dismiss(toastId), 4000);
-          setCommentToastId(null);
+          toast.error(
+            "Image upload failed",
+            error instanceof Error ? error.message : "Please try again",
+          );
           return;
         }
       } else if (gifUrl) {
@@ -1181,12 +1178,9 @@ const handleFollowPost = useCallback(() => {
 
       let finalContent = text;
       if (mediaUrl) {
-        // Append media URL on a new line if there's text, or just the URL if no text
         finalContent = text.trim() ? `${text.trim()}\n\n${mediaUrl}` : mediaUrl;
       }
-      toast.update(toastId, { description: "Computing proof of work..." });
 
-      // Create optimistic comment for immediate UI update
       const optimisticCommentId = `optimistic-${Date.now()}`;
       const optimisticComment: Comment = {
         id: optimisticCommentId,
@@ -1195,7 +1189,7 @@ const handleFollowPost = useCallback(() => {
           username: currentUser.username,
           avatarSeed: currentUser.username,
         },
-       content: finalContent,
+        content: finalContent,
         likes: 1,
         dislikes: 0,
         hasLiked: true,
@@ -1205,125 +1199,90 @@ const handleFollowPost = useCallback(() => {
         parentId: replyingTo?.id ?? null,
       };
 
-      // Store replyingTo reference before clearing it
       const replyTarget = replyingTo;
 
-      // Apply optimistic update immediately
-      if (replyTarget) {
-        // Add as a reply to the parent comment
-        setOptimisticReplies((prev) => ({
-          ...prev,
-          [replyTarget.id]: [
-            ...(prev[replyTarget.id] ?? []),
-            optimisticComment,
-          ],
-        }));
-      } else {
-        // Add as top-level comment
-        setLocalComments((prev) => [optimisticComment, ...prev]);
-      }
-
-      setLocalPostUpdates((prev) => ({
-        ...prev,
-        comments: (prev.comments ?? displayPost?.comments ?? 0) + 1,
-      }));
-
-      // Also update shared store (syncs with home/following screens)
-      if (id) {
-        incrementCommentCount(id);
-      }
-
-      // Clear reply state immediately so UI updates
       setReplyingTo(null);
       setIsSubmitting(false);
 
-      // Submit to API in background (don't block UI)
-      try {
-        const result = await commentMutation.mutateAsync({
-          parentId,
-          content: finalContent,
-        });
-
-        // Update toast to success
-        toast.update(toastId, {
-          type: "success",
-          title: replyingToUsername
-            ? `Replied to @${replyingToUsername}`
-            : "Comment posted!",
-          description: undefined,
-          duration: 3000,
-        });
-        setTimeout(() => toast.dismiss(toastId), 3000);
-
-        // Don't refetch immediately - the server may not have indexed the comment yet
-        // The optimistic comment will persist until the user manually refreshes
-        // This prevents the comment from disappearing after successful submission
-      } catch (error: unknown) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to post comment";
-
-        // Revert optimistic update on error
-        if (replyTarget) {
-          setOptimisticReplies((prev) => {
-            const updated = { ...prev };
-            if (updated[replyTarget.id]) {
-              updated[replyTarget.id] = updated[replyTarget.id].filter(
-                (c) => c.id !== optimisticCommentId,
-              );
-              if (updated[replyTarget.id].length === 0) {
-                delete updated[replyTarget.id];
-              }
-            }
-            return updated;
+      const actionId = generateActionId();
+      enqueue({
+        id: actionId,
+        type: "comment",
+        label: getActionLabel("comment"),
+        execute: async () => {
+          return commentMutateAsyncRef.current({
+            parentId,
+            content: finalContent,
           });
-        } else {
-          setLocalComments((prev) =>
-            prev.filter((c) => c.id !== optimisticCommentId),
-          );
-        }
-
-        setLocalPostUpdates((prev) => ({
-          ...prev,
-          comments: Math.max(
-            0,
-            (prev.comments ?? displayPost?.comments ?? 0) - 1,
-          ),
-        }));
-
-        // Also revert shared store (syncs with home/following screens)
-        if (id) {
-          decrementCommentCount(id);
-        }
-
-        // Update toast to error
-        toast.update(toastId, {
-          type: "error",
-          title: "Failed to post comment",
-          description: errorMessage,
-          duration: 5000,
-        });
-        setTimeout(() => toast.dismiss(toastId), 5000);
-
-        console.error("Comment submission failed:", error);
-      } finally {
-        setCommentToastId(null);
-      }
+        },
+        onOptimisticUpdate: () => {
+          if (replyTarget) {
+            setOptimisticReplies((prev) => ({
+              ...prev,
+              [replyTarget.id]: [
+                ...(prev[replyTarget.id] ?? []),
+                optimisticComment,
+              ],
+            }));
+          } else {
+            setLocalComments((prev) => [optimisticComment, ...prev]);
+          }
+          setLocalPostUpdates((prev) => ({
+            ...prev,
+            comments: (prev.comments ?? displayPost?.comments ?? 0) + 1,
+          }));
+          if (id) {
+            incrementCommentCount(id);
+          }
+        },
+        onSuccess: () => {},
+        onError: () => {},
+        onRollback: () => {
+          if (replyTarget) {
+            setOptimisticReplies((prev) => {
+              const updated = { ...prev };
+              if (updated[replyTarget.id]) {
+                updated[replyTarget.id] = updated[replyTarget.id].filter(
+                  (c) => c.id !== optimisticCommentId,
+                );
+                if (updated[replyTarget.id].length === 0) {
+                  delete updated[replyTarget.id];
+                }
+              }
+              return updated;
+            });
+          } else {
+            setLocalComments((prev) =>
+              prev.filter((c) => c.id !== optimisticCommentId),
+            );
+          }
+          setLocalPostUpdates((prev) => ({
+            ...prev,
+            comments: Math.max(
+              0,
+              (prev.comments ?? displayPost?.comments ?? 0) - 1,
+            ),
+          }));
+          if (id) {
+            decrementCommentCount(id);
+          }
+        },
+      });
     },
     [
       currentUser,
       id,
       replyingTo,
-      refetchComments,
       displayPost,
+      enqueue,
       toast,
-      commentMutation,
     ],
   );
 
   const pendingComment = useCommentComposeStore((s) => s.pendingComment);
- const clearPendingComment = useCommentComposeStore(
-   (s) => s.clearPendingComment,
- );
+  const clearPendingComment = useCommentComposeStore(
+    (s) => s.clearPendingComment,
+  );
   const pendingEdit = useCommentComposeStore((s) => s.pendingEdit);
   const clearPendingEdit = useCommentComposeStore((s) => s.clearPendingEdit);
 
@@ -1348,82 +1307,96 @@ const handleFollowPost = useCallback(() => {
     }
   }, [pendingComment, handleSubmitComment, clearPendingComment]);
 
-useEffect(() => {
- if (pendingEdit) {
-   const { commentId, parentId, text, imageUri, gifUrl } = pendingEdit;
-   clearPendingEdit();
+  useEffect(() => {
+    if (pendingEdit) {
+      const { commentId, parentId, text, imageUri, gifUrl } = pendingEdit;
+      clearPendingEdit();
 
-    if (!commentId || commentId.startsWith("optimistic-")) return;
+      if (!commentId || commentId.startsWith("optimistic-")) return;
 
-   let finalContent = text;
-    if (imageUri) {
-      finalContent = text.trim() ? `${text.trim()}\n\n${imageUri}` : imageUri;
-    } else if (gifUrl) {
-      finalContent = text.trim() ? `${text.trim()}\n\n${gifUrl}` : gifUrl;
-    }
+      let finalContent = text;
+      if (imageUri) {
+        finalContent = text.trim() ? `${text.trim()}\n\n${imageUri}` : imageUri;
+      } else if (gifUrl) {
+        finalContent = text.trim() ? `${text.trim()}\n\n${gifUrl}` : gifUrl;
+      }
 
-      setCommentEditOverrides((prev) => ({ ...prev, [commentId]: finalContent }));
+      setCommentEditOverrides((prev) => ({
+        ...prev,
+        [commentId]: finalContent,
+      }));
 
-     toast.dismissAll();
-     const toastId = toast.loading("Editing comment", "Computing proof of work...");
-     editToastIdRef.current = toastId;
+      toast.dismissAll();
+      const toastId = toast.loading(
+        "Editing comment",
+        "Computing proof of work...",
+      );
+      editToastIdRef.current = toastId;
 
-    (async () => {
-      try {
-        await editMutation.mutateAsync({
-          postId: commentId,
-          parentId,
-          title: "",
-          content: finalContent,
-          tag: "",
-        });
+      (async () => {
+        try {
+          await editMutation.mutateAsync({
+            postId: commentId,
+            parentId,
+            title: "",
+            content: finalContent,
+            tag: "",
+          });
 
-        toast.update(toastId, {
-          type: "success",
-          title: "Comment edited!",
-          description: undefined,
-          duration: 3000,
-        });
-      setTimeout(() => toast.dismiss(toastId), 3000);
+          toast.update(toastId, {
+            type: "success",
+            title: "Comment edited!",
+            description: undefined,
+            duration: 3000,
+          });
+          setTimeout(() => toast.dismiss(toastId), 3000);
 
-        setTimeout(async () => {
-          await refetchComments();
+          setTimeout(async () => {
+            await refetchComments();
+            setCommentEditOverrides((prev) => {
+              const next = { ...prev };
+              delete next[commentId];
+              return next;
+            });
+          }, 3000);
+        } catch (error: unknown) {
           setCommentEditOverrides((prev) => {
             const next = { ...prev };
             delete next[commentId];
             return next;
           });
-        }, 3000);
-      } catch (error: unknown) {
-          setCommentEditOverrides((prev) => {
-            const next = { ...prev };
-            delete next[commentId];
-            return next;
+          const errorMessage =
+            error instanceof Error ? error.message : "Failed to edit comment";
+          toast.update(toastId, {
+            type: "error",
+            title: "Failed to edit comment",
+            description: errorMessage,
+            duration: 5000,
           });
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to edit comment";
-         toast.update(toastId, {
-           type: "error",
-           title: "Failed to edit comment",
-           description: errorMessage,
-           duration: 5000,
-         });
-         setTimeout(() => toast.dismiss(toastId), 5000);
-       } finally {
+          setTimeout(() => toast.dismiss(toastId), 5000);
+        } finally {
           editToastIdRef.current = null;
-       }
-     })();
-   }
-  }, [pendingEdit, clearPendingEdit, editMutation, toast, refetchComments, editToastIdRef]);
+        }
+      })();
+    }
+  }, [
+    pendingEdit,
+    clearPendingEdit,
+    editMutation,
+    toast,
+    refetchComments,
+    editToastIdRef,
+  ]);
 
   const handleDeleteComment = useCallback(() => {
     if (!selectedComment) return;
     deleteHandler.requestDelete(selectedComment.id, "comment");
   }, [selectedComment, deleteHandler]);
 
- const handleEditComment = useCallback(() => {
-    if (!selectedComment || !id || selectedComment.id.startsWith("optimistic-")) return;
-   const params: Record<string, string> = {
+  const handleEditComment = useCallback(() => {
+    if (!selectedComment || !id || selectedComment.id.startsWith("optimistic-"))
+      return;
+    const params: Record<string, string> = {
       postId: id,
       postTitle: displayPost?.title ?? "",
       postAuthorUsername: displayPost?.author.username ?? "",
@@ -1485,101 +1458,24 @@ useEffect(() => {
     reportHandler.requestReport(selectedComment.id, "comment");
   }, [selectedComment, reportHandler]);
 
-const handleToggleFollowCommentAuthor = useCallback(() => {
-    if (!selectedComment || followLoadingRef.current.has(selectedComment.author.id)) return;
- const authorId = selectedComment.author.id;
+  const handleToggleFollowCommentAuthor = useCallback(() => {
+    if (!selectedComment) return;
+    const authorId = selectedComment.author.id;
     const authorUsername = selectedComment.author.username;
     const isCurrentlyFollowing = followedUsers.includes(authorId);
+    handleFollowUserViaQueue(authorId, authorUsername, isCurrentlyFollowing);
+  }, [
+    selectedComment,
+    followedUsers,
+    handleFollowUserViaQueue,
+  ]);
 
-    requireAuth(async () => {
-      const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
-      const actionPast = isCurrentlyFollowing ? "Unfollowed" : "Followed";
-      const toastId = toast.loading(
-        `${action} @${authorUsername}`,
-        "Computing proof of work...",
-      );
-
-   setTimeout(async () => {
-        followLoadingRef.current.add(authorId);
-       setFollowLoadingUsers((prev) => new Set(prev).add(authorId));
-     try {
-          await toggleFollowMutation.mutateAsync({
-            userAddress: authorId,
-            isCurrentlyFollowing,
-          });
-         toast.update(toastId, {
-            type: "success",
-            title: `${actionPast} @${authorUsername}`,
-          });
-          setTimeout(() => toast.dismiss(toastId), 3000);
-        } catch {
-          toast.update(toastId, {
-            type: "error",
-            title: `Failed to ${action.toLowerCase()} @${authorUsername}`,
-          });
-          setTimeout(() => toast.dismiss(toastId), 4000);
-     } finally {
-          followLoadingRef.current.delete(authorId);
-         setFollowLoadingUsers((prev) => {
-           const next = new Set(prev);
-           next.delete(authorId);
-           return next;
-         });
-     }
-     }, 50);
-   });
-}, [
- selectedComment,
- followedUsers,
-  requireAuth,
-  toast,
-  toggleFollowMutation,
-]);
-
- const handleFollowCommentAuthor = useCallback(
-(authorId: string, isCurrentlyFollowing: boolean) => {
-      if (followLoadingRef.current.has(authorId)) return;
-
-     requireAuth(async () => {
-        const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
-        const actionPast = isCurrentlyFollowing ? "Unfollowed" : "Followed";
-        const toastId = toast.loading(
-          `${action} user`,
-          "Computing proof of work...",
-        );
-
-     setTimeout(async () => {
-          followLoadingRef.current.add(authorId);
-         setFollowLoadingUsers((prev) => new Set(prev).add(authorId));
-       try {
-            await toggleFollowMutation.mutateAsync({
-              userAddress: authorId,
-              isCurrentlyFollowing,
-            });
-           toast.update(toastId, {
-              type: "success",
-              title: `${actionPast} user`,
-            });
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } catch {
-            toast.update(toastId, {
-              type: "error",
-              title: `Failed to ${action.toLowerCase()} user`,
-            });
-            setTimeout(() => toast.dismiss(toastId), 4000);
-       } finally {
-            followLoadingRef.current.delete(authorId);
-           setFollowLoadingUsers((prev) => {
-              const next = new Set(prev);
-              next.delete(authorId);
-              return next;
-            });
-        }
-        }, 50);
-      });
-  },
-    [requireAuth, toast, toggleFollowMutation],
- );
+  const handleFollowCommentAuthor = useCallback(
+    (authorId: string, isCurrentlyFollowing: boolean) => {
+      handleFollowUserViaQueue(authorId, "", isCurrentlyFollowing);
+    },
+    [handleFollowUserViaQueue],
+  );
 
   // Handler for opening post options sheet
   const handlePostMorePress = useCallback(() => {
@@ -1611,21 +1507,19 @@ const handleToggleFollowCommentAuthor = useCallback(() => {
   const renderHeader = useMemo(
     () => (
       <LinearGradient
-        colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
+        colors={[...gradientColors] as [string, string, ...string[]]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[styles.header, { paddingTop: insets.top }]}
       >
-        {/* Left: Close button */}
         <Pressable onPress={handleBack} style={styles.headerButton}>
           <AntDesign name="close" size={22} color="#FFFFFF" />
         </Pressable>
 
-        {/* Spacer */}
         <View style={styles.headerSpacer} />
       </LinearGradient>
     ),
-    [insets.top, handleBack],
+    [insets.top, handleBack, gradientColors],
   );
 
   // Render list header (post + divider)
@@ -1711,15 +1605,17 @@ const handleToggleFollowCommentAuthor = useCallback(() => {
         <PostCard
           post={displayPost}
           isOwnPost={currentUser?.id === displayPost.author.id}
-         isTopicFollowed={
-            localTopicFollowed ?? (displayPost?.topic
+          isVisible={true}
+          isTopicFollowed={
+            localTopicFollowed ??
+            (displayPost?.topic
               ? followedTopics.includes(displayPost.topic)
               : false)
-         }
-        screenActive={screenActive}
-        onAuthorPress={handleAuthorPress}
-        onTopicPress={handleTopicPress}
-        onLikePress={handleLikePost}
+          }
+          screenActive={screenActive}
+          onAuthorPress={handleAuthorPress}
+          onTopicPress={handleTopicPress}
+          onLikePress={handleLikePost}
           onDislikePress={handleDislikePost}
           onFollowUser={handleFollowPost}
           onFollowTopic={handleFollowTopic}
@@ -1729,9 +1625,11 @@ const handleToggleFollowCommentAuthor = useCallback(() => {
           onReport={handleReportPost}
           onRevealContent={handleRevealContent}
           contentRevealed={revealedContent}
-          shareUrl={`${getShareBaseUrl(shareServer)}/view_post?post_id=${id}`}
+          shareUrl={`${getShareBaseUrl(shareServer)}/p/${id}`}
           showUrlCard={false}
           hideCommentAction
+          showMoreButton
+          isPostDetail
         />
         <View style={styles.divider} />
       </Animated.View>
@@ -1743,12 +1641,12 @@ const handleToggleFollowCommentAuthor = useCallback(() => {
     handleDislikePost,
     handleFollowPost,
     handleFollowTopic,
-   followedTopics,
+    followedTopics,
     localTopicFollowed,
-  handlePostMorePress,
- handleRevealContent,
- revealedContent,
- id,
+    handlePostMorePress,
+    handleRevealContent,
+    revealedContent,
+    id,
     screenActive,
     theme.colors.background.subtle,
     handlePostHeaderLayout,
@@ -1773,9 +1671,9 @@ const handleToggleFollowCommentAuthor = useCallback(() => {
           }
           onReplyPress={handleReplyToComment}
           onMorePress={handleMoreOptions}
-       followedUsers={followedUsers}
+          followedUsers={followedUsers}
           followLoadingUsers={followLoadingUsers}
-        onFollowPress={handleFollowCommentAuthor}
+          onFollowPress={handleFollowCommentAuthor}
           showDivider={true}
         />
       </Animated.View>
@@ -1787,9 +1685,9 @@ const handleToggleFollowCommentAuthor = useCallback(() => {
       handleDislikeComment,
       handleReplyToComment,
       handleMoreOptions,
-    followedUsers,
+      followedUsers,
       followLoadingUsers,
-    handleFollowCommentAuthor,
+      handleFollowCommentAuthor,
     ],
   );
 
@@ -1958,13 +1856,18 @@ const handleToggleFollowCommentAuthor = useCallback(() => {
           size={48}
           color={theme.colors.text.subtle}
         />
-        <Text size="md" weight="medium" mode="subtle" style={{ marginTop: 12 }}>
+        <Text
+          size="lg"
+          weight="semibold"
+          mode="subtle"
+          style={{ marginTop: 12 }}
+        >
           No comments yet
         </Text>
         <Text
-          size="sm"
+          size="md"
           mode="subtle"
-          style={{ marginTop: 4, textAlign: "center" }}
+          style={{ marginTop: 2, textAlign: "center" }}
         >
           Be the first to share your thoughts!
         </Text>
@@ -2073,19 +1976,19 @@ const handleToggleFollowCommentAuthor = useCallback(() => {
           initialNumToRender={5}
         />
 
-       {/* Comment input */}
-      <CommentInput
-        ref={commentInputRef}
-        isLoggedIn={isLoggedIn}
-        onAuthRequired={showAuthSheet}
-        replyingTo={replyingTo?.author.username}
-         replyingToId={replyingTo?.id}
+        {/* Comment input */}
+        <CommentInput
+          ref={commentInputRef}
+          isLoggedIn={isLoggedIn}
+          onAuthRequired={showAuthSheet}
+          replyingTo={replyingTo?.author.username}
+          replyingToId={replyingTo?.id}
           replyingToContent={replyingTo?.content}
-        onCancelReply={handleCancelReply}
+          onCancelReply={handleCancelReply}
           postId={id}
           postTitle={displayPost?.title}
           postAuthorUsername={displayPost?.author.username}
-         postThumbnail={postThumbnail}
+          postThumbnail={postThumbnail}
           postContent={displayPost?.body}
         />
 
@@ -2257,7 +2160,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   stickyHeaderInfo: {
     flex: 1,
-    paddingLeft: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     justifyContent: "center",
   },

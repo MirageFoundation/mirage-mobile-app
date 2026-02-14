@@ -8,9 +8,8 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import {
   queryKeys,
-  useToggleFollowTopic,
-  useToggleFollowUser,
   useUserFollowed,
+  useUserStatus,
 } from "@/src/api";
 import {
 AdultContentPopup,
@@ -23,12 +22,15 @@ type Post,
  type ReportSheetRef,
  SideMenu,
  type SideMenuRef,
+UpdateBanner,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import {
   useAuthGuard,
   useBlockHandler,
   useDeleteHandler,
+  useEasUpdate,
+  useFollowHandler,
   useNetworkState,
   useReportHandler,
   useVoteHandler,
@@ -58,9 +60,13 @@ export function HomeScreen() {
     headerAnimatedStyle,
     registerScrollRef,
     registerRefreshCallback,
+    registerScrollToTopCallback,
   } = useScrollAnimationContext();
   const { requireAuth } = useAuthGuard();
   const toast = useToast();
+  const easUpdate = useEasUpdate();
+
+  const { data: userStatus, refetch: refetchUserStatus } = useUserStatus();
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
 
@@ -69,6 +75,16 @@ export function HomeScreen() {
   const sideMenuRef = useRef<SideMenuRef>(null);
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [feedTabIndex, setFeedTabIndex] = useState(0);
+
+  const FEED_OPTIONS = useMemo(() => [
+    { label: "Magic", value: "magic" },
+    { label: "Latest", value: "latest" },
+  ], []);
+
+  const handleFeedTypeChange = useCallback((value: string) => {
+    setFeedTabIndex(value === "magic" ? 0 : 1);
+  }, []);
 
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
@@ -101,18 +117,7 @@ export function HomeScreen() {
     [followedData]
   );
 
-  const toggleFollowMutation = useToggleFollowUser();
-  const toggleFollowTopicMutation = useToggleFollowTopic();
-  const toggleFollowAsyncRef = useRef(toggleFollowMutation.mutateAsync);
-
-  useEffect(() => {
-    toggleFollowAsyncRef.current = toggleFollowMutation.mutateAsync;
-  }, [toggleFollowMutation.mutateAsync]);
-
-  const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(
-    new Set()
-  );
-  const followLoadingUsersRef = useRef<Set<string>>(new Set());
+  const { handleFollowUser: handleFollowPress, handleFollowTopic: handleFollowTopicFromCard } = useFollowHandler({});
 
   const showAdultPopup = !!currentUser && !hasSeenAdultPrompt;
 
@@ -126,7 +131,7 @@ export function HomeScreen() {
       setVoteOverride(targetId, {
         hasLiked: result.hasLiked,
         hasDisliked: result.hasDisliked,
-        likeDelta: result.likeDelta,
+        likes: result.newLikes,
       });
     }, [setVoteOverride]),
     onRollback: useCallback(
@@ -155,8 +160,9 @@ export function HomeScreen() {
   }, [setAdultContent, setHasSeenAdultPrompt]);
 
   const handleMenuPress = useCallback(() => {
+    refetchUserStatus();
     sideMenuRef.current?.present();
-  }, []);
+  }, [refetchUserStatus]);
 
   const handleMenuSettings = useCallback(() => {
     router.push("/settings");
@@ -224,14 +230,9 @@ export function HomeScreen() {
     router.push(`/topic/${encodeURIComponent(topic)}`);
   }, [router]);
 
-  const postsByIdRef = useRef<Map<string, Post>>(new Map());
-
-  const handleMorePress = useCallback((postId: string) => {
-    const post = postsByIdRef.current.get(postId);
-    if (post) {
-      setSelectedPost(post);
-      postOptionsSheetRef.current?.present();
-    }
+  const handleMorePress = useCallback((post: Post) => {
+    setSelectedPost(post);
+    postOptionsSheetRef.current?.present();
   }, []);
 
   const blockHandler = useBlockHandler({});
@@ -346,78 +347,10 @@ export function HomeScreen() {
 
   const handleFollowTopic = useCallback(() => {
     if (!selectedPost?.topic) return;
-
     const topic = selectedPost.topic;
     const isCurrentlyFollowed = followedTopics.includes(topic);
-
-    requireAuth(async () => {
-      const action = isCurrentlyFollowed ? "Unfollowing" : "Following";
-      const actionPast = isCurrentlyFollowed ? "Unfollowed" : "Now following";
-
-      const toastId = toast.loading(
-        `${action} #${topic}`,
-        "Computing proof of work..."
-      );
-
-      setTimeout(async () => {
-        try {
-          await toggleFollowTopicMutation.mutateAsync({
-            topic,
-            isCurrentlyFollowing: isCurrentlyFollowed,
-          });
-
-          toast.update(toastId, {
-            type: "success",
-            title: `${actionPast} #${topic}`,
-            description: undefined,
-            duration: 3000,
-          });
-
-          setTimeout(() => toast.dismiss(toastId), 3000);
-        } catch (error: unknown) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
-          const isNotFollowing =
-            errorMessage.toLowerCase().includes("not following") ||
-            errorMessage.includes("not in followed");
-
-          if (isAlreadyFollowed) {
-            toast.update(toastId, {
-              type: "success",
-              title: `Already following #${topic}`,
-              description: undefined,
-              duration: 3000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } else if (isNotFollowing) {
-            toast.update(toastId, {
-              type: "success",
-              title: `Already not following #${topic}`,
-              description: undefined,
-              duration: 3000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } else {
-            console.error("Follow/unfollow topic failed:", error);
-            toast.update(toastId, {
-              type: "error",
-              title: `Failed to ${action.toLowerCase()} #${topic}`,
-              description: "Please try again",
-              duration: 4000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 4000);
-          }
-        }
-      }, 0);
-    });
-  }, [
-    selectedPost?.topic,
-    followedTopics,
-    toggleFollowTopicMutation,
-    toast,
-    requireAuth,
-  ]);
+    handleFollowTopicFromCard(topic, isCurrentlyFollowed);
+  }, [selectedPost?.topic, followedTopics, handleFollowTopicFromCard]);
 
   const handleShowFewer = useCallback(() => {
     console.log("Show fewer posts like:", selectedPost?.id);
@@ -431,89 +364,6 @@ export function HomeScreen() {
     [router]
   );
 
-  const handleFollowPress = useCallback(
-    (
-      authorId: string,
-      authorUsername: string,
-      isCurrentlyFollowing: boolean
-    ) => {
-      if (followLoadingUsersRef.current.has(authorId)) {
-        return;
-      }
-
-      requireAuth(async () => {
-        const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
-        const actionPast = isCurrentlyFollowing ? "Unfollowed" : "Followed";
-
-        const toastId = toast.loading(
-          `${action} @${authorUsername}`,
-          "Computing proof of work..."
-        );
-
-        setTimeout(async () => {
-          setFollowLoadingUsers((prev) => new Set(prev).add(authorId));
-
-          try {
-            await toggleFollowAsyncRef.current({
-              userAddress: authorId,
-              isCurrentlyFollowing,
-            });
-
-            toast.update(toastId, {
-              type: "success",
-              title: `${actionPast} @${authorUsername}`,
-              description: undefined,
-              duration: 3000,
-            });
-
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } catch (error: unknown) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error);
-            const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
-            const isNotFollowing =
-              errorMessage.toLowerCase().includes("not following") ||
-              errorMessage.includes("not in followed");
-
-            if (isAlreadyFollowed) {
-              toast.update(toastId, {
-                type: "success",
-                title: `Already following @${authorUsername}`,
-                description: undefined,
-                duration: 3000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 3000);
-            } else if (isNotFollowing) {
-              toast.update(toastId, {
-                type: "success",
-                title: `Already not following @${authorUsername}`,
-                description: undefined,
-                duration: 3000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 3000);
-            } else {
-              console.error("Follow/unfollow failed:", error);
-              toast.update(toastId, {
-                type: "error",
-                title: `Failed to ${action.toLowerCase()} @${authorUsername}`,
-                description: "Please try again",
-                duration: 4000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 4000);
-            }
-          } finally {
-            setFollowLoadingUsers((prev) => {
-              const newSet = new Set(prev);
-              newSet.delete(authorId);
-              return newSet;
-            });
-          }
-        }, 0);
-      });
-    },
-    [requireAuth, toast]
-  );
-
   const handleFollowUserFromSheet = useCallback(() => {
     if (!selectedPost) return;
     const authorId = selectedPost.author.id;
@@ -521,67 +371,6 @@ export function HomeScreen() {
     const isCurrentlyFollowing = followedUsers.includes(authorId);
     handleFollowPress(authorId, authorUsername, isCurrentlyFollowing);
   }, [selectedPost, followedUsers, handleFollowPress]);
-
-  const handleFollowTopicFromCard = useCallback(
-    (topic: string, isCurrentlyFollowed: boolean) => {
-      requireAuth(async () => {
-        const action = isCurrentlyFollowed ? "Unfollowing" : "Following";
-        const actionPast = isCurrentlyFollowed ? "Unfollowed" : "Now following";
-
-        const toastId = toast.loading(
-          `${action} #${topic}`,
-          "Computing proof of work..."
-        );
-
-        setTimeout(async () => {
-          try {
-            await toggleFollowTopicMutation.mutateAsync({
-              topic,
-              isCurrentlyFollowing: isCurrentlyFollowed,
-            });
-
-            toast.update(toastId, {
-              type: "success",
-              title: `${actionPast} #${topic}`,
-              description: undefined,
-              duration: 3000,
-            });
-
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } catch (error: unknown) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error);
-            const isAlreadyFollowed = errorMessage.toLowerCase().includes("already follow");
-            const isNotFollowing =
-              errorMessage.toLowerCase().includes("not following") ||
-              errorMessage.includes("not in followed");
-
-            if (isAlreadyFollowed || isNotFollowing) {
-              toast.update(toastId, {
-                type: "success",
-                title: isAlreadyFollowed
-                  ? `Already following #${topic}`
-                  : `Already not following #${topic}`,
-                description: undefined,
-                duration: 3000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 3000);
-            } else {
-              console.error("Follow/unfollow topic failed:", error);
-              toast.update(toastId, {
-                type: "error",
-                title: `Failed to ${action.toLowerCase()} #${topic}`,
-                description: "Please try again",
-                duration: 4000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 4000);
-            }
-          }
-        }, 0);
-      });
-    },
-    [requireAuth, toast, toggleFollowTopicMutation]
-  );
 
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
@@ -591,7 +380,8 @@ export function HomeScreen() {
       newSet.add(postId);
       return newSet;
     });
-  }, []);
+    router.push(`/post/${postId}?reveal=true`);
+  }, [router]);
 
   const handleRefresh = useCallback(async () => {
     await tabbedFeedRef.current?.refresh();
@@ -601,16 +391,20 @@ export function HomeScreen() {
     registerRefreshCallback(handleRefresh);
   }, [registerRefreshCallback, handleRefresh]);
 
+  const handleScrollToTop = useCallback(() => {
+    tabbedFeedRef.current?.scrollToTop();
+  }, []);
+
+  useEffect(() => {
+    registerScrollToTopCallback(handleScrollToTop);
+  }, [registerScrollToTopCallback, handleScrollToTop]);
+
   useEffect(() => {
     if (shouldScrollToTop) {
       tabbedFeedRef.current?.scrollToTop();
       clearScrollToTop();
     }
   }, [shouldScrollToTop, clearScrollToTop]);
-
-  useEffect(() => {
-    followLoadingUsersRef.current = followLoadingUsers;
-  }, [followLoadingUsers]);
 
   const setCurrentUserId = useHomePostCardStore(
     (state) => state.setCurrentUserId
@@ -652,10 +446,6 @@ export function HomeScreen() {
   useEffect(() => {
     setFollowedTopicsStore(followedTopicsSet);
   }, [followedTopicsSet, setFollowedTopicsStore]);
-
-  useEffect(() => {
-    setFollowLoadingUsersStore(followLoadingUsers);
-  }, [followLoadingUsers, setFollowLoadingUsersStore]);
 
   useEffect(() => {
     setRevealedPostsStore(revealedPosts);
@@ -718,7 +508,7 @@ export function HomeScreen() {
         onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
         onAuthorPress: (authorId) => handlersRef.current.handleAuthorPress(authorId),
         onTopicPress: (topic) => handlersRef.current.handleTopicPress(topic),
-        onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
+        onMorePress: (post) => handlersRef.current.handleMorePress(post),
         onLikePress: (postId, liked, disliked, likes) =>
           handlersRef.current.handleUpvote(postId, liked, disliked, likes),
         onDislikePress: (postId, liked, disliked, likes) =>
@@ -750,9 +540,22 @@ export function HomeScreen() {
         onMenuPress={handleMenuPress}
         onSearchPress={() => router.push("/search")}
         animatedStyle={headerAnimatedStyle}
+        feedType={feedTabIndex === 0 ? "magic" : "latest"}
+        feedOptions={FEED_OPTIONS}
+        onFeedTypeChange={handleFeedTypeChange}
       />
 
-      <HomeTabbedFeed ref={tabbedFeedRef} feedType="home" />
+      <HomeTabbedFeed
+        ref={tabbedFeedRef}
+        feedType="home"
+        activeTabIndex={feedTabIndex}
+      />
+
+      <UpdateBanner
+        status={easUpdate.status}
+        onInstall={easUpdate.install}
+        onDismiss={easUpdate.dismiss}
+      />
 
       <AdultContentPopup
         visible={showAdultPopup}

@@ -11,12 +11,17 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import {
+  Menu,
+  MenuOption,
+  MenuOptions,
+  MenuTrigger,
+} from "react-native-popup-menu";
+import { triggerHaptic } from "@/src/components/utils/haptics";
 
 import {
   transformApiPosts,
   useInfinitePosts,
-  useToggleFollowUser,
-  useToggleFollowTopic,
   useUserFollowed,
 } from "@/src/api";
 import {
@@ -33,6 +38,7 @@ import {
   useAuthGuard,
   useBlockHandler,
   useDeleteHandler,
+  useFollowHandler,
   useNetworkState,
   useReportHandler,
   useVoteHandler,
@@ -49,6 +55,7 @@ import {
   usePreferencesStore,
   useSavedPostsStore,
 } from "@/src/stores";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function TopicFeedScreen() {
   const { id: topicName } = useLocalSearchParams<{ id: string }>();
@@ -64,6 +71,21 @@ export function TopicFeedScreen() {
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const [sortBy, setSortBy] = useState<"magic" | "newest">("magic");
+
+  const SORT_OPTIONS = useMemo(
+    () => [
+      { label: "Magic", value: "magic" as const },
+      { label: "Latest", value: "newest" as const },
+    ],
+    [],
+  );
+
+  const handleSortChange = useCallback((value: "magic" | "newest") => {
+    triggerHaptic("light");
+    setSortBy(value);
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, []);
 
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
@@ -94,18 +116,33 @@ export function TopicFeedScreen() {
     [followedData],
   );
 
-  const toggleFollowMutation = useToggleFollowUser();
-  const toggleFollowTopicMutation = useToggleFollowTopic();
-  const toggleFollowAsyncRef = useRef(toggleFollowMutation.mutateAsync);
+  const [optimisticFollowedTopic, setOptimisticFollowedTopic] = useState<
+    boolean | null
+  >(null);
+
+  const isTopicFollowed =
+    optimisticFollowedTopic ?? followedTopics.includes(topicName ?? "");
 
   useEffect(() => {
-    toggleFollowAsyncRef.current = toggleFollowMutation.mutateAsync;
-  }, [toggleFollowMutation.mutateAsync]);
+    setOptimisticFollowedTopic(null);
+  }, [followedTopics]);
 
-  const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(
-    new Set(),
-  );
-  const followLoadingUsersRef = useRef<Set<string>>(new Set());
+  const {
+    handleFollowUser: handleFollowPress,
+    handleFollowTopic: handleFollowTopicFromCard,
+  } = useFollowHandler({
+    onOptimisticFollowTopic: (_topic, isFollowing) => {
+      setOptimisticFollowedTopic(isFollowing);
+    },
+    onRollbackFollowTopic: () => {
+      setOptimisticFollowedTopic(null);
+    },
+  });
+
+  const handleHeaderFollowTopic = useCallback(() => {
+    if (!topicName) return;
+    handleFollowTopicFromCard(topicName, isTopicFollowed);
+  }, [topicName, isTopicFollowed, handleFollowTopicFromCard]);
 
   const allowedTags = useMemo(
     () => getAllowedTagsFromContentTypes(selectedContentTypes),
@@ -125,6 +162,7 @@ export function TopicFeedScreen() {
     limit: 20,
     topic: topicName,
     allowed_tags: allowedTags || undefined,
+    by: sortBy,
   });
 
   const posts = useMemo(() => {
@@ -166,7 +204,7 @@ export function TopicFeedScreen() {
         setVoteOverride(targetId, {
           hasLiked: result.hasLiked,
           hasDisliked: result.hasDisliked,
-          likeDelta: result.likeDelta,
+          likes: result.newLikes,
         });
       },
       [setVoteOverride],
@@ -200,22 +238,9 @@ export function TopicFeedScreen() {
     [router],
   );
 
-  const postsByIdRef = useRef<Map<string, Post>>(new Map());
-
-  useEffect(() => {
-    const map = new Map<string, Post>();
-    for (const post of posts) {
-      map.set(post.id, post);
-    }
-    postsByIdRef.current = map;
-  }, [posts]);
-
-  const handleMorePress = useCallback((postId: string) => {
-    const post = postsByIdRef.current.get(postId);
-    if (post) {
-      setSelectedPost(post);
-      postOptionsSheetRef.current?.present();
-    }
+  const handleMorePress = useCallback((post: Post) => {
+    setSelectedPost(post);
+    postOptionsSheetRef.current?.present();
   }, []);
 
   const handleCommentPress = useCallback(
@@ -272,90 +297,6 @@ export function TopicFeedScreen() {
       reportSheetRef.current?.present();
     }
   }, [reportHandler.showReportSheet]);
-
-  const handleFollowPress = useCallback(
-    (
-      authorId: string,
-      authorUsername: string,
-      isCurrentlyFollowing: boolean,
-    ) => {
-      if (followLoadingUsersRef.current.has(authorId)) {
-        return;
-      }
-
-      requireAuth(async () => {
-        const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
-        const actionPast = isCurrentlyFollowing ? "Unfollowed" : "Followed";
-
-        const toastId = toast.loading(
-          `${action} @${authorUsername}`,
-          "Computing proof of work...",
-        );
-
-        setTimeout(async () => {
-          setFollowLoadingUsers((prev) => new Set(prev).add(authorId));
-
-          try {
-            await toggleFollowAsyncRef.current({
-              userAddress: authorId,
-              isCurrentlyFollowing,
-            });
-
-            toast.update(toastId, {
-              type: "success",
-              title: `${actionPast} @${authorUsername}`,
-              description: undefined,
-              duration: 3000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } catch (error: unknown) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error);
-            const isAlreadyFollowed = errorMessage
-              .toLowerCase()
-              .includes("already follow");
-            const isNotFollowing =
-              errorMessage.toLowerCase().includes("not following") ||
-              errorMessage.includes("not in followed");
-
-            if (isAlreadyFollowed) {
-              toast.update(toastId, {
-                type: "success",
-                title: `Already following @${authorUsername}`,
-                description: undefined,
-                duration: 3000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 3000);
-            } else if (isNotFollowing) {
-              toast.update(toastId, {
-                type: "success",
-                title: `Already not following @${authorUsername}`,
-                description: undefined,
-                duration: 3000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 3000);
-            } else {
-              console.error("Follow/unfollow failed:", error);
-              toast.update(toastId, {
-                type: "error",
-                title: `Failed to ${action.toLowerCase()} @${authorUsername}`,
-                description: "Please try again",
-                duration: 4000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 4000);
-            }
-          } finally {
-            setFollowLoadingUsers((prev) => {
-              const newSet = new Set(prev);
-              newSet.delete(authorId);
-              return newSet;
-            });
-          }
-        }, 0);
-      });
-    },
-    [requireAuth, toast],
-  );
 
   const handleReport = useCallback(() => {
     if (selectedPost) {
@@ -422,73 +363,10 @@ export function TopicFeedScreen() {
 
   const handleFollowTopic = useCallback(() => {
     if (!selectedPost?.topic) return;
-
     const topic = selectedPost.topic;
     const isCurrentlyFollowed = followedTopics.includes(topic);
-
-    requireAuth(async () => {
-      const action = isCurrentlyFollowed ? "Unfollowing" : "Following";
-      const actionPast = isCurrentlyFollowed ? "Unfollowed" : "Now following";
-
-      const toastId = toast.loading(
-        `${action} #${topic}`,
-        "Computing proof of work...",
-      );
-
-      setTimeout(async () => {
-        try {
-          await toggleFollowTopicMutation.mutateAsync({
-            topic,
-            isCurrentlyFollowing: isCurrentlyFollowed,
-          });
-
-          toast.update(toastId, {
-            type: "success",
-            title: `${actionPast} #${topic}`,
-            description: undefined,
-            duration: 3000,
-          });
-          setTimeout(() => toast.dismiss(toastId), 3000);
-        } catch (error: unknown) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          const isAlreadyFollowed = errorMessage
-            .toLowerCase()
-            .includes("already follow");
-          const isNotFollowing =
-            errorMessage.toLowerCase().includes("not following") ||
-            errorMessage.includes("not in followed");
-
-          if (isAlreadyFollowed || isNotFollowing) {
-            toast.update(toastId, {
-              type: "success",
-              title: isAlreadyFollowed
-                ? `Already following #${topic}`
-                : `Already not following #${topic}`,
-              description: undefined,
-              duration: 3000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } else {
-            console.error("Follow/unfollow topic failed:", error);
-            toast.update(toastId, {
-              type: "error",
-              title: `Failed to ${action.toLowerCase()} #${topic}`,
-              description: "Please try again",
-              duration: 4000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 4000);
-          }
-        }
-      }, 0);
-    });
-  }, [
-    selectedPost?.topic,
-    followedTopics,
-    toggleFollowTopicMutation,
-    toast,
-    requireAuth,
-  ]);
+    handleFollowTopicFromCard(topic, isCurrentlyFollowed);
+  }, [selectedPost?.topic, followedTopics, handleFollowTopicFromCard]);
 
   const handleFollowUserFromSheet = useCallback(() => {
     if (!selectedPost) return;
@@ -498,82 +376,29 @@ export function TopicFeedScreen() {
     handleFollowPress(authorId, authorUsername, isCurrentlyFollowing);
   }, [selectedPost, followedUsers, handleFollowPress]);
 
-  const handleFollowTopicFromCard = useCallback(
-    (topic: string, isCurrentlyFollowed: boolean) => {
-      requireAuth(async () => {
-        const action = isCurrentlyFollowed ? "Unfollowing" : "Following";
-        const actionPast = isCurrentlyFollowed ? "Unfollowed" : "Now following";
-
-        const toastId = toast.loading(
-          `${action} #${topic}`,
-          "Computing proof of work...",
-        );
-
-        setTimeout(async () => {
-          try {
-            await toggleFollowTopicMutation.mutateAsync({
-              topic,
-              isCurrentlyFollowing: isCurrentlyFollowed,
-            });
-
-            toast.update(toastId, {
-              type: "success",
-              title: `${actionPast} #${topic}`,
-              description: undefined,
-              duration: 3000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } catch (error: unknown) {
-            const errorMessage =
-              error instanceof Error ? error.message : String(error);
-            const isAlreadyFollowed = errorMessage
-              .toLowerCase()
-              .includes("already follow");
-            const isNotFollowing =
-              errorMessage.toLowerCase().includes("not following") ||
-              errorMessage.includes("not in followed");
-
-            if (isAlreadyFollowed || isNotFollowing) {
-              toast.update(toastId, {
-                type: "success",
-                title: isAlreadyFollowed
-                  ? `Already following #${topic}`
-                  : `Already not following #${topic}`,
-                description: undefined,
-                duration: 3000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 3000);
-            } else {
-              console.error("Follow/unfollow topic failed:", error);
-              toast.update(toastId, {
-                type: "error",
-                title: `Failed to ${action.toLowerCase()} #${topic}`,
-                description: "Please try again",
-                duration: 4000,
-              });
-              setTimeout(() => toast.dismiss(toastId), 4000);
-            }
-          }
-        }, 0);
-      });
-    },
-    [requireAuth, toast, toggleFollowTopicMutation],
-  );
-
   const handleShowFewer = useCallback(() => {
     toast.success("Got it", "We'll show fewer posts like this.");
   }, [toast]);
 
-  const handleRevealContent = useCallback((postId: string) => {
-    setRevealedPosts((prev) => {
-      const newSet = new Set(prev);
-      newSet.add(postId);
-      return newSet;
-    });
-  }, []);
+  const handleRevealContent = useCallback(
+    (postId: string) => {
+      setRevealedPosts((prev) => {
+        const newSet = new Set(prev);
+        newSet.add(postId);
+        return newSet;
+      });
+      router.push(`/post/${postId}?reveal=true`);
+    },
+    [router],
+  );
 
   const lastFetchTime = useRef(0);
   const isFetchingRef = useRef(false);
+
+  const queryRef = useRef({ hasNextPage, isFetchingNextPage, fetchNextPage });
+  queryRef.current = { hasNextPage, isFetchingNextPage, fetchNextPage };
+  const postsLengthRef = useRef(posts.length);
+  postsLengthRef.current = posts.length;
 
   const handleRefresh = useCallback(async () => {
     setIsManualRefreshing(true);
@@ -586,25 +411,24 @@ export function TopicFeedScreen() {
     }
   }, [refetch]);
 
-  useEffect(() => {
-    followLoadingUsersRef.current = followLoadingUsers;
-  }, [followLoadingUsers]);
-
-  const handleEndReached = useCallback(() => {
+  const handleItemVisible = useCallback((index: number) => {
+    const totalLoaded = postsLengthRef.current;
+    if (index < totalLoaded - 5) return;
     const now = Date.now();
+    const q = queryRef.current;
     if (
-      hasNextPage &&
-      !isFetchingNextPage &&
+      q.hasNextPage &&
+      !q.isFetchingNextPage &&
       !isFetchingRef.current &&
       now - lastFetchTime.current > 1000
     ) {
       lastFetchTime.current = now;
       isFetchingRef.current = true;
-      fetchNextPage().finally(() => {
+      q.fetchNextPage().finally(() => {
         isFetchingRef.current = false;
       });
     }
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  }, []);
 
   const ListEmptyComponent = useCallback(() => {
     if (isLoading) {
@@ -658,12 +482,8 @@ export function TopicFeedScreen() {
 
   const ListFooterComponent = useCallback(() => {
     if (!isFetchingNextPage) return null;
-    return (
-      <Box center p="md">
-        <ActivityIndicator size="small" color={theme.colors.brand[500]} />
-      </Box>
-    );
-  }, [isFetchingNextPage, theme.colors.brand]);
+    return <PostCardSkeletonList count={1} />;
+  }, [isFetchingNextPage]);
 
   const HEADER_HEIGHT = 52;
 
@@ -707,13 +527,15 @@ export function TopicFeedScreen() {
   const setShareServerStore = useHomePostCardStore(
     (state) => state.setShareServer,
   );
- const setAllowAutoplay = useHomePostCardStore(
-   (state) => state.setAllowAutoplay,
- );
-  const setActiveFeedScreen = useHomePostCardStore((state) => state.setActiveFeedScreen);
- const setDisabledTopicName = useHomePostCardStore(
-   (state) => state.setDisabledTopicName,
- );
+  const setAllowAutoplay = useHomePostCardStore(
+    (state) => state.setAllowAutoplay,
+  );
+  const setActiveFeedScreen = useHomePostCardStore(
+    (state) => state.setActiveFeedScreen,
+  );
+  const setDisabledTopicName = useHomePostCardStore(
+    (state) => state.setDisabledTopicName,
+  );
 
   const followedUsersSet = useMemo(
     () => new Set(followedUsers),
@@ -743,10 +565,6 @@ export function TopicFeedScreen() {
   }, [followedTopicsSet, setFollowedTopicsStore]);
 
   useEffect(() => {
-    setFollowLoadingUsersStore(followLoadingUsers);
-  }, [followLoadingUsers, setFollowLoadingUsersStore]);
-
-  useEffect(() => {
     setRevealedPostsStore(revealedPosts);
   }, [revealedPosts, setRevealedPostsStore]);
 
@@ -754,22 +572,22 @@ export function TopicFeedScreen() {
     setShareServerStore(shareServer);
   }, [shareServer, setShareServerStore]);
 
- useEffect(() => {
-   setAllowAutoplay(allowAutoplay);
- }, [allowAutoplay, setAllowAutoplay]);
+  useEffect(() => {
+    setAllowAutoplay(allowAutoplay);
+  }, [allowAutoplay, setAllowAutoplay]);
 
- const isFocused = useIsFocused();
+  const isFocused = useIsFocused();
 
- useEffect(() => {
-    setActiveFeedScreen(isFocused ? 'topic' : null);
-   if (isFocused) {
-     setDisabledTopicName(topicName);
-   } else {
-     setDisabledTopicName(undefined);
-   }
+  useEffect(() => {
+    setActiveFeedScreen(isFocused ? "topic" : null);
+    if (isFocused) {
+      setDisabledTopicName(topicName);
+    } else {
+      setDisabledTopicName(undefined);
+    }
   }, [isFocused, setActiveFeedScreen, setDisabledTopicName, topicName]);
 
-const handlersRef = useRef({
+  const handlersRef = useRef({
     handlePostPress,
     handleAuthorPress,
     handleTopicPress,
@@ -810,7 +628,7 @@ const handlersRef = useRef({
         onAuthorPress: (authorId) =>
           handlersRef.current.handleAuthorPress(authorId),
         onTopicPress: (topic) => handlersRef.current.handleTopicPress(topic),
-        onMorePress: (postId) => handlersRef.current.handleMorePress(postId),
+        onMorePress: (post) => handlersRef.current.handleMorePress(post),
         onLikePress: (postId, liked, disliked, likes) =>
           handlersRef.current.handleUpvote(postId, liked, disliked, likes),
         onDislikePress: (postId, liked, disliked, likes) =>
@@ -818,7 +636,11 @@ const handlersRef = useRef({
         onCommentPress: (postId) =>
           handlersRef.current.handleCommentPress(postId),
         onFollowUser: (authorId, username, isFollowing) =>
-          handlersRef.current.handleFollowPress(authorId, username, isFollowing),
+          handlersRef.current.handleFollowPress(
+            authorId,
+            username,
+            isFollowing,
+          ),
         onFollowTopic: (topic, isFollowed) =>
           handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
         onRevealContent: (postId) =>
@@ -833,7 +655,7 @@ const handlersRef = useRef({
           handlersRef.current.handleBlockPostFromCard(postId),
         onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
       });
-    }, [setHandlers])
+    }, [setHandlers]),
   );
 
   return (
@@ -861,30 +683,144 @@ const handlersRef = useRef({
             color={theme.colors.text.default}
           />
         </Pressable>
-        <Text
-          size="xl"
-          weight="bold"
-          numberOfLines={1}
-          style={styles.headerTitle}
+        <Menu style={styles.headerTitleMenu}>
+          <MenuTrigger
+            customStyles={{
+              triggerTouchable: {
+                hitSlop: { top: 8, bottom: 8, left: 4, right: 4 },
+              },
+            }}
+          >
+            <View style={styles.titleButton}>
+              <Text
+                size="xl"
+                weight="bold"
+                numberOfLines={1}
+                style={{ flexShrink: 1 }}
+              >
+                #{topicName}
+              </Text>
+              <Text
+                size="xl"
+                weight="medium"
+                style={{
+                  color: theme.colors.text.subtle,
+                  marginLeft: 6,
+                }}
+              >
+                ǀ {SORT_OPTIONS.find((o) => o.value === sortBy)?.label}
+              </Text>
+              <Ionicons
+                name="chevron-down"
+                size={14}
+                color={theme.colors.text.subtle}
+                style={{ marginLeft: 2, marginTop: 4 }}
+              />
+            </View>
+          </MenuTrigger>
+          <MenuOptions
+            customStyles={{
+              optionsContainer: {
+                backgroundColor: theme.colors.background.default,
+                borderRadius: theme.radius.lg,
+                minWidth: 160,
+                shadowColor: theme.colors.contrast.base,
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.15,
+                shadowRadius: 12,
+                elevation: 8,
+                borderWidth: 1,
+                borderColor: theme.colors.border.subtle,
+                marginTop: 4,
+                paddingVertical: 4,
+              },
+            }}
+          >
+            {SORT_OPTIONS.map((option, index) => {
+              const isActive = option.value === sortBy;
+              return (
+                <View key={option.value}>
+                  {index > 0 && (
+                    <View
+                      style={{
+                        height: 1,
+                        backgroundColor: theme.colors.border.subtle,
+                        marginHorizontal: theme.spacing.md,
+                        marginVertical: 2,
+                      }}
+                    />
+                  )}
+                  <MenuOption onSelect={() => handleSortChange(option.value)}>
+                    <View style={styles.menuOption}>
+                      <Ionicons
+                        name={isActive ? "checkmark-circle" : "ellipse-outline"}
+                        size={16}
+                        color={
+                          isActive
+                            ? theme.colors.primary[500]
+                            : theme.colors.text.subtle
+                        }
+                      />
+                      <Text
+                        size="md"
+                        weight={isActive ? "semibold" : "medium"}
+                        style={
+                          isActive
+                            ? { color: theme.colors.primary[500] }
+                            : undefined
+                        }
+                      >
+                        {option.label}
+                      </Text>
+                    </View>
+                  </MenuOption>
+                </View>
+              );
+            })}
+          </MenuOptions>
+        </Menu>
+        <Pressable
+          onPress={handleHeaderFollowTopic}
+          style={[
+            styles.headerFollowButton,
+            {
+              backgroundColor: isTopicFollowed
+                ? "transparent"
+                : theme.colors.primary[500],
+              borderColor: isTopicFollowed
+                ? theme.colors.border.default
+                : theme.colors.primary[500],
+              paddingVertical: 2,
+              // height: isTopicFollowed ? 28 : 24,
+            },
+          ]}
         >
-          #{topicName}
-        </Text>
-        <View style={styles.headerRight} />
+          <Text
+            size="md"
+            weight="bold"
+            style={{
+              color: isTopicFollowed
+                ? theme.colors.text.default
+                : theme.colors.background.default,
+            }}
+          >
+            {isTopicFollowed ? "Following" : "Follow"}
+          </Text>
+        </Pressable>
       </View>
 
-     <HomePostList
-       ref={flatListRef}
-       data={posts}
-       contentContainerStyle={listContentStyle}
-       onScroll={() => {}}
-       ListHeaderComponent={ListHeaderComponent}
-       ListEmptyComponent={ListEmptyComponent}
-       ListFooterComponent={ListFooterComponent}
-       refreshControl={refreshControl}
-       onEndReached={handleEndReached}
-       onEndReachedThreshold={1.5}
+      <HomePostList
+        ref={flatListRef}
+        data={posts}
+        contentContainerStyle={listContentStyle}
+        onScroll={() => {}}
+        ListHeaderComponent={ListHeaderComponent}
+        ListEmptyComponent={ListEmptyComponent}
+        ListFooterComponent={ListFooterComponent}
+        refreshControl={refreshControl}
         feedScreen="topic"
-     />
+        onItemVisible={handleItemVisible}
+      />
 
       <PostOptionsSheet
         ref={postOptionsSheetRef}
@@ -976,7 +912,28 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     marginHorizontal: theme.spacing.sm,
   },
-  headerRight: {
-    width: 40,
+  headerTitleMenu: {
+    flex: 1,
+  },
+  titleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 4,
+    paddingHorizontal: 4,
+  },
+  menuOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+  },
+  headerFollowButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.radius.full,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    marginRight: theme.spacing.xs,
   },
 }));

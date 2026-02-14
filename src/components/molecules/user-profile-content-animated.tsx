@@ -75,6 +75,7 @@ type UserProfileContentAnimatedProps = {
   scrollY?: SharedValue<number>;
   onFollowersPress?: () => void;
   isLoading?: boolean;
+  headerHeight?: number;
 };
 
 export const UserProfileContentAnimated = memo(
@@ -90,6 +91,7 @@ export const UserProfileContentAnimated = memo(
     scrollY,
     onFollowersPress,
     isLoading = false,
+    headerHeight = 0,
   }: UserProfileContentAnimatedProps) {
     const { theme } = useUnistyles();
    const [copied, setCopied] = useState(false);
@@ -120,11 +122,7 @@ export const UserProfileContentAnimated = memo(
 
     const truncatedAddress = useMemo(() => {
       if (!walletAddress) return "";
-      if (walletAddress.length <= 13) return walletAddress;
-      return `${walletAddress.slice(
-        0,
-        6,
-      )}.....................${walletAddress.slice(-4)}`;
+      return walletAddress;
     }, [walletAddress]);
 
     useEffect(() => {
@@ -199,13 +197,16 @@ export const UserProfileContentAnimated = memo(
     );
 
     return (
-      <View style={styles.container}>
-        <AnimatedLinearGradient
-          colors={gradientColorsArray}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={[styles.gradientContent, gradientAnimatedStyle]}
-        />
+      <View style={[styles.container, headerHeight > 0 && { marginTop: -headerHeight, paddingTop: headerHeight }]}>
+        <View style={[styles.overscrollFill, { backgroundColor: gradientColorsArray[0] }]} />
+        <View style={styles.gradientWrapper}>
+          <AnimatedLinearGradient
+            colors={gradientColorsArray}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={[styles.gradientContent, gradientAnimatedStyle]}
+          />
+        </View>
         <Animated.View style={[styles.profileContentInner, contentFadeStyle]}>
           <Box px="md" pt="sm">
             <Avatar
@@ -354,12 +355,22 @@ export const UserProfileContentAnimated = memo(
 const styles = StyleSheet.create((theme) => ({
   container: {
     width: "100%",
-    overflow: "hidden",
   },
   gradientContent: {
     ...StyleSheet.absoluteFillObject,
     width: "100%",
     height: "120%",
+  },
+  overscrollFill: {
+    position: "absolute",
+    top: -1000,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  gradientWrapper: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: "hidden",
   },
   profileContentInner: {
     paddingBottom: theme.spacing.lg,

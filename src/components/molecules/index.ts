@@ -63,6 +63,7 @@ export {
   type UserProfileMenuSheetRef,
 } from "./user-profile-menu-sheet";
 export { SideMenu, type SideMenuRef } from "./side-menu";
+export { UpdateBanner } from "./update-banner";
 export {
   ProfileEmptyState,
   ProfileTabBar,
@@ -71,6 +72,7 @@ export {
   type TabType,
 } from "./profile-tabs";
 export { ProfileCommentItem } from "./profile-comment-item";
+export { InboxItem } from "./inbox-item";
 export { ProfilePostsList } from "./profile-posts-list";
 export { ProfilePostsSkeleton } from "./profile-posts-skeleton";
 export { UserProfileContent } from "./user-profile-content";

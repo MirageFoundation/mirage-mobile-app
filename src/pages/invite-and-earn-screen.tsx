@@ -2,6 +2,7 @@ import { EvilIcons, Ionicons, Feather } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState, useRef } from "react";
 import {
   Pressable,
@@ -186,7 +187,7 @@ const [copiedCode, setCopiedCode] = useState(false);
  const [copiedLink, setCopiedLink] = useState(false);
 
   const shareUrl = code
-    ? `${getShareBaseUrl(shareServer)}/join?code=${code}`
+    ? `${getShareBaseUrl(shareServer)}/create_account?invite=${code}`
     : "";
   const shareMessage = `Join me on Mirage! Use my invite code: ${code}\n\n${shareUrl}`;
 
@@ -217,15 +218,14 @@ const [copiedCode, setCopiedCode] = useState(false);
     try {
       triggerHaptic("light");
       await Share.share({
-        message: Platform.OS === "ios" ? shareMessage : shareUrl,
-        url: Platform.OS === "ios" ? shareUrl : undefined,
+        message: shareUrl,
         title: "Join Mirage",
       });
       sheetRef.current?.dismiss();
     } catch (error) {
       console.error("Share failed:", error);
     }
-  }, [shareMessage, shareUrl, sheetRef]);
+  }, [shareUrl, sheetRef]);
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -372,45 +372,19 @@ export function InviteAndEarnScreen() {
   const sheetRef = useRef<BottomSheetModal>(null);
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
 
-  const { data: inviteCodesData, isLoading } = useInviteCodes();
+  const { data: inviteCodesData, isLoading, refetch } = useInviteCodes();
+
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+    }, [refetch])
+  );
 
   // TODO: Remove mock data before production
-  const USE_MOCK_DATA = true;
-  const mockInviteCodesData = {
-    codes: [
-      {
-        code: "AB12-CD34",
-        used_by: null,
-        created_at: 1768454857,
-        used_at: null,
-        is_used: false,
-      },
-      {
-        code: "EF56-GH78",
-        used_by: null,
-        created_at: 1768454857,
-        used_at: null,
-        is_used: false,
-      },
-      {
-        code: "IJ90-KL12",
-        used_by: "mirage1abc123",
-        created_at: 1768454857,
-        used_at: 1770100000,
-        is_used: true,
-      },
-    ],
-    total: 3,
-    available: 2,
-  };
-
-  const displayData = USE_MOCK_DATA ? mockInviteCodesData : inviteCodesData;
-  const displayLoading = USE_MOCK_DATA ? false : isLoading;
-
-  const availableCodes = displayData?.codes.filter((c) => !c.is_used) ?? [];
-  const usedCodes = displayData?.codes.filter((c) => c.is_used) ?? [];
-  const availableCount = displayData?.available ?? 0;
-  const totalCount = displayData?.total ?? 0;
+  const availableCodes = inviteCodesData?.codes.filter((c) => !c.is_used) ?? [];
+  const usedCodes = inviteCodesData?.codes.filter((c) => c.is_used) ?? [];
+  const availableCount = inviteCodesData?.available ?? 0;
+  const totalCount = inviteCodesData?.total ?? 0;
 
   const handleBack = useCallback(() => {
     triggerHaptic("light");
@@ -448,7 +422,7 @@ export function InviteAndEarnScreen() {
           <EvilIcons name="close" size={28} color={theme.colors.text.default} />
         </Pressable>
         <Text size="lg" weight="medium">
-          Invite & Earn
+          Invite
         </Text>
         <View style={styles.placeholder} />
       </View>
@@ -483,7 +457,7 @@ export function InviteAndEarnScreen() {
               : "Mirage is now invite-only — because great conversations require great people! Unfortunately, you're out of invite codes. But don't worry, we might drop some more soon. Stay tuned!"}
           </Text>
 
-          {displayLoading ? (
+          {isLoading ? (
             <ActivityIndicator
               size="small"
               color={theme.colors.brand[500]}
@@ -492,7 +466,7 @@ export function InviteAndEarnScreen() {
           ) : null}
         </View>
 
-        {displayLoading ? (
+        {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.colors.brand[500]} />
           </View>

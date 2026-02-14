@@ -20,7 +20,7 @@ const VIDEO_EXTENSIONS = new Set([
 
 export type ResolvedMedia = {
   uri: string;
-  type: "image" | "video" | "gif";
+  type: "image" | "video" | "gif" | "youtube";
   width?: number;
   height?: number;
   aspectRatio?: number;
@@ -43,6 +43,36 @@ export function extractDomain(url: string): string {
   } catch {
     return url;
   }
+}
+
+export function extractYouTubeVideoId(url: string): string | null {
+  try {
+    const parsedUrl = new URL(url);
+    if (
+      parsedUrl.hostname === "youtube.com" ||
+      parsedUrl.hostname === "www.youtube.com" ||
+      parsedUrl.hostname === "m.youtube.com"
+    ) {
+      if (parsedUrl.pathname === "/watch") {
+        return parsedUrl.searchParams.get("v");
+      }
+      const shortsMatch = parsedUrl.pathname.match(/^\/shorts\/([a-zA-Z0-9_-]+)/);
+      if (shortsMatch) return shortsMatch[1];
+      const embedMatch = parsedUrl.pathname.match(/^\/embed\/([a-zA-Z0-9_-]+)/);
+      if (embedMatch) return embedMatch[1];
+    }
+    if (parsedUrl.hostname === "youtu.be") {
+      const id = parsedUrl.pathname.slice(1).split("/")[0];
+      return id || null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function isYouTubeUrl(url: string): boolean {
+  return extractYouTubeVideoId(url) !== null;
 }
 
 // Find positions of all markdown links in text
@@ -112,7 +142,22 @@ export function normalizeVideoUrl(url: string): string {
   return url;
 }
 
-export function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
+export function resolveRedgifsVideoUrl(posterUrl: string): string | null {
+  try {
+    const parsedUrl = new URL(posterUrl);
+    if (parsedUrl.hostname.includes("redgifs.com") && /\.(jpg|jpeg|png|webp|gif)$/i.test(parsedUrl.pathname)) {
+      return posterUrl.replace(/-poster(\.\w+)$/, "-mobile.mp4").replace(/\.(jpg|jpeg|png|webp|gif)$/i, ".mp4");
+    }
+  } catch {
+    if (posterUrl.includes("redgifs.com") && /\.(jpg|jpeg|png|webp|gif)/i.test(posterUrl)) {
+      return posterUrl.replace(/-poster(\.\w+)$/, "-mobile.mp4").replace(/\.(jpg|jpeg|png|webp|gif)$/i, ".mp4");
+    }
+  }
+  return null;
+}
+
+export function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" | "youtube" {
+  if (isYouTubeUrl(url)) return "youtube";
   try {
     const parsedUrl = new URL(url);
     if (parsedUrl.hostname.includes("cloudflarestream.com")) {
@@ -120,6 +165,9 @@ export function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
     }
     if (parsedUrl.hostname.includes("videodelivery.net")) {
       return "video";
+    }
+    if (parsedUrl.hostname.includes("redgifs.com")) {
+      return "gif";
     }
     const path = parsedUrl.pathname.toLowerCase();
     const extension = path.split(".").pop() ?? "";
@@ -130,11 +178,35 @@ export function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
     const extension = path.split(".").pop() ?? "";
     if (url.includes("cloudflarestream.com")) return "video";
     if (url.includes("videodelivery.net")) return "video";
+    if (url.includes("redgifs.com")) return "gif";
     if (extension === "gif") return "gif";
     if (VIDEO_EXTENSIONS.has(extension)) return "video";
   }
 
   return "image";
+}
+
+const IMAGE_EXTENSIONS = new Set([
+  "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "ico", "avif",
+]);
+
+export function isDirectMediaUrl(url: string): boolean {
+  if (isYouTubeUrl(url)) return true;
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.hostname.includes("cloudflarestream.com")) return true;
+    if (parsedUrl.hostname.includes("videodelivery.net")) return true;
+    if (parsedUrl.hostname.includes("redgifs.com")) return true;
+    const ext = parsedUrl.pathname.toLowerCase().split(".").pop() ?? "";
+    return IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
+  } catch {
+    const path = url.toLowerCase().split("?")[0];
+    const ext = path.split(".").pop() ?? "";
+    if (url.includes("cloudflarestream.com")) return true;
+    if (url.includes("videodelivery.net")) return true;
+    if (url.includes("redgifs.com")) return true;
+    return IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
+  }
 }
 
 export function resolvePostContent(
@@ -148,7 +220,7 @@ export function resolvePostContent(
   const bodyWithoutUrl = removeFirstUrl(body);
   const displayDomain = extractedUrl ? extractDomain(extractedUrl) : null;
   const bodyVideoUrl =
-    extractedUrl && getMediaTypeFromUrl(extractedUrl) === "video"
+    extractedUrl && (getMediaTypeFromUrl(extractedUrl) === "video" || getMediaTypeFromUrl(extractedUrl) === "youtube")
       ? normalizeVideoUrl(extractedUrl)
       : null;
   if (__DEV__ && extractedUrl?.includes("cloudflarestream")) {
@@ -160,11 +232,30 @@ export function resolvePostContent(
   const hasMultipleMedia = mediaCount > 1;
   const extraMediaCount = mediaCount > 0 ? mediaCount - 1 : 0;
 
-  const resolvedMedia = bodyVideoUrl
-    ? ({ uri: bodyVideoUrl, type: "video" } as const)
+  const isOgThumbnail =
+    extractedUrl &&
+    !isDirectMediaUrl(extractedUrl) &&
+    mediaCount === 1 &&
+    primaryMedia?.type === "image" &&
+    primaryMedia?.uri &&
+    !primaryMedia.uri.includes("imagedelivery.net") &&
+    !primaryMedia.uri.includes("cloudflarestream.com") &&
+    !primaryMedia.uri.includes("videodelivery.net");
+
+  const resolvedMedia = isOgThumbnail
+    ? undefined
+    : bodyVideoUrl
+    ? (getMediaTypeFromUrl(extractedUrl!) === "youtube"
+      ? ({ uri: extractedUrl!, type: "youtube" as const })
+      : ({ uri: bodyVideoUrl, type: "video" as const }))
     : primaryMedia
     ? {
         ...primaryMedia,
+        type: extractedUrl
+          ? getMediaTypeFromUrl(extractedUrl) !== "image"
+            ? getMediaTypeFromUrl(extractedUrl)
+            : primaryMedia.type
+          : primaryMedia.type,
         uri:
           primaryMedia.type === "video"
             ? normalizeVideoUrl(primaryMedia.uri)
@@ -172,13 +263,20 @@ export function resolvePostContent(
       }
     : undefined;
 
+  const redgifsVideoUrl = resolvedMedia?.type === "gif"
+    ? resolveRedgifsVideoUrl(resolvedMedia.uri)
+    : null;
+  const finalMedia = redgifsVideoUrl && resolvedMedia
+    ? { ...resolvedMedia, uri: redgifsVideoUrl, type: "video" as const }
+    : resolvedMedia;
+
   return {
     extractedUrl,
-    bodyWithoutUrl,
+    bodyWithoutUrl: isOgThumbnail ? body : bodyWithoutUrl,
     displayDomain,
     bodyVideoUrl,
-    resolvedMedia,
-    hasMultipleMedia,
-    extraMediaCount,
+    resolvedMedia: finalMedia,
+    hasMultipleMedia: isOgThumbnail ? false : hasMultipleMedia,
+    extraMediaCount: isOgThumbnail ? 0 : extraMediaCount,
   };
 }

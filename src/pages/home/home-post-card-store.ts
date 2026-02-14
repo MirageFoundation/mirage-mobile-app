@@ -5,7 +5,7 @@ import type { ShareServer } from "@/src/stores";
 type VoteOverride = {
   hasLiked?: boolean;
   hasDisliked?: boolean;
-  likeDelta?: number;
+  likes?: number;
 };
 
 type CommentCountOverride = {
@@ -16,7 +16,7 @@ type HomePostCardHandlers = {
   onPostPress?: (postId: string) => void;
   onAuthorPress?: (authorId: string) => void;
   onTopicPress?: (topic: string) => void;
-  onMorePress?: (postId: string) => void;
+  onMorePress?: (post: Post) => void;
   onLikePress?: (
     postId: string,
     currentlyLiked: boolean,
@@ -116,15 +116,13 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
     }),
 setVoteOverride: (postId, override) =>
   set((state) => {
-    const current = state.voteOverrides[postId];
-    const currentDelta = current?.likeDelta ?? 0;
     return {
       voteOverrides: {
         ...state.voteOverrides,
         [postId]: {
           hasLiked: override.hasLiked,
           hasDisliked: override.hasDisliked,
-          likeDelta: currentDelta + (override.likeDelta ?? 0),
+          likes: override.likes,
         },
       },
     };

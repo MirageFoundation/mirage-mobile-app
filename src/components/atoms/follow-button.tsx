@@ -8,11 +8,11 @@ type FollowButtonSize = "sm" | "md" | "lg";
 
 const SIZE_CONFIG: Record<
   FollowButtonSize,
-  { height: number; paddingHorizontal: number; fontSize: "xs" | "sm" | "md" }
+  { height: number; paddingHorizontal: number; fontSize: "sm" | "md" | "lg" }
 > = {
-  sm: { height: 22, paddingHorizontal: 8, fontSize: "xs" },
-  md: { height: 26, paddingHorizontal: 10, fontSize: "xs" },
-  lg: { height: 32, paddingHorizontal: 14, fontSize: "sm" },
+  sm: { height: 20, paddingHorizontal: 6, fontSize: "sm" },
+  md: { height: 22, paddingHorizontal: 10, fontSize: "md" },
+  lg: { height: 30, paddingHorizontal: 12, fontSize: "lg" },
 };
 
 type FollowButtonProps = {
@@ -94,11 +94,11 @@ export const FollowButton = ({
         disabled={disabled}
         style={[
           styles.container,
-          { height, paddingHorizontal },
+          { height: isFollowing ? height + 2 : height, paddingHorizontal },
           disabled && styles.disabled,
         ]}
       >
-        <Text size={fontSize} weight="semibold" style={{ color: textColor }}>
+        <Text size={fontSize} weight="bold" style={{ color: textColor }}>
           {buttonText}
         </Text>
       </Pressable>

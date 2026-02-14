@@ -26,6 +26,9 @@ function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
     if (parsedUrl.hostname.includes("videodelivery.net")) {
       return "video";
     }
+    if (parsedUrl.hostname.includes("redgifs.com")) {
+      return "gif";
+    }
     const path = parsedUrl.pathname.toLowerCase();
     const extension = path.split(".").pop() ?? "";
     if (GIF_EXTENSIONS.has(extension)) return "gif";
@@ -35,6 +38,7 @@ function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
     const extension = path.split(".").pop() ?? "";
     if (url.includes("cloudflarestream.com")) return "video";
     if (url.includes("videodelivery.net")) return "video";
+    if (url.includes("redgifs.com")) return "gif";
     if (GIF_EXTENSIONS.has(extension)) return "gif";
     if (VIDEO_EXTENSIONS.has(extension)) return "video";
   }
@@ -48,9 +52,9 @@ function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
 function mapTagToContentWarning(tag: string): ContentWarningType | null {
   const tagMap: Record<string, ContentWarningType> = {
     sensitive: "sensitive",
-    adult: "adult",
+    adult: "porn",
     nsfw: "nsfw",
-    porn: "adult",
+    porn: "porn",
     violence: "violence",
     gore: "gore",
     death: "death",

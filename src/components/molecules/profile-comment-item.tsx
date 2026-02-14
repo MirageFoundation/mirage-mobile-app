@@ -196,15 +196,8 @@ export const ProfileCommentItem = memo(function ProfileCommentItem({
                 : theme.colors.text.subtle,
             }}
           >
-            {displayPoints}
+            {displayPoints} points
           </Text>
-          <Ionicons
-            name={hasUpvoted ? "arrow-up" : "arrow-up-outline"}
-            size={14}
-            color={
-              hasUpvoted ? theme.colors.success[500] : theme.colors.text.subtle
-            }
-          />
         </View>
 
         {isLoading && (

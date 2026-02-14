@@ -23,7 +23,8 @@ import {
   type GestureResponderEvent,
 } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import type { ResolvedMedia } from "./post-card-utils";
+import YoutubePlayer from "react-native-youtube-iframe";
+import { extractYouTubeVideoId, type ResolvedMedia } from "./post-card-utils";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEDIA_MAX_HEIGHT = 450;
@@ -79,7 +80,9 @@ export const PostCardMedia = memo(
     const [isVideoLoading, setIsVideoLoading] = useState(false);
     const [isVideoProcessing, setIsVideoProcessing] = useState(false);
     const [isMuted, setIsMuted] = useState(true);
+    const [mediaLoaded, setMediaLoaded] = useState(false);
     const videoRef = useRef<Video | null>(null);
+
     const aspectRatioLockedRef = useRef(false);
     // Track if user manually initiated playback (vs autoplay)
     const userInitiatedPlayRef = useRef(false);
@@ -96,6 +99,11 @@ export const PostCardMedia = memo(
     }));
 
     const resolvedMediaUri = media?.uri;
+
+    useEffect(() => {
+      setMediaLoaded(false);
+    }, [resolvedMediaUri]);
+
     const cachedAspectRatio = resolvedMediaUri
       ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
       : undefined;
@@ -121,8 +129,8 @@ export const PostCardMedia = memo(
     }, [media, resolvedMediaUri]);
 
     useEffect(() => {
-      const isVideo = media?.type === "video";
-      if (!isVideo || shouldBlurContent) {
+      const isPlayable = media?.type === "video" || media?.type === "youtube";
+      if (!isPlayable || shouldBlurContent) {
         setIsVideoPlaying(false);
         setIsVideoLoading(false);
         userInitiatedPlayRef.current = false;
@@ -313,7 +321,17 @@ export const PostCardMedia = memo(
     return (
       <View style={styles.mediaContainer}>
         <View style={[styles.mediaWrapper, mediaWrapperStyle]}>
-          {media.type === "video" ? (
+          {media.type === "youtube" ? (
+            <YoutubePlayer
+              height={exceedsMaxHeight ? MEDIA_MAX_HEIGHT : calculatedHeight}
+              videoId={extractYouTubeVideoId(media.uri) ?? ""}
+              play={isVideoPlaying && isVisible && screenActive}
+              onReady={() => setMediaLoaded(true)}
+              webViewProps={{
+                allowsInlineMediaPlayback: true,
+              }}
+            />
+          ) : media.type === "video" ? (
             <Pressable onPress={handleMediaPress} style={styles.media}>
               <Video
                 ref={videoRef}
@@ -331,6 +349,7 @@ export const PostCardMedia = memo(
                 onReadyForDisplay={(event) => {
                   const { width, height } = event.naturalSize ?? {};
                   updateMediaAspectRatioFromSize(width, height);
+                  setMediaLoaded(true);
                   // Video is ready to display - hide loading if user initiated
                   if (userInitiatedPlayRef.current) {
                     setIsVideoLoading(false);
@@ -375,11 +394,22 @@ export const PostCardMedia = memo(
                 cachePolicy="memory-disk"
                 onLoad={({ source }) => {
                   updateMediaAspectRatioFromSize(source?.width, source?.height);
+                  setMediaLoaded(true);
                 }}
                 onError={() => setImageError(true)}
                 blurRadius={shouldBlurContent ? 30 : 0}
               />
             </Pressable>
+          )}
+
+          {!mediaLoaded && !shouldBlurContent && (
+            <View
+              style={[
+                styles.skeletonOverlay,
+              ]}
+            >
+              <ActivityIndicator size="small" color="rgba(150,150,150,0.6)" />
+            </View>
           )}
 
           {media.type === "video" &&
@@ -531,6 +561,13 @@ const styles = StyleSheet.create((theme) => ({
     overflow: "hidden",
     borderWidth: 0.3,
     borderColor: theme.colors.border.subtle,
+  },
+  skeletonOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.md,
+    zIndex: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   media: {
     width: "100%",

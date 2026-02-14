@@ -13,7 +13,8 @@
       },
       "env": {
         "EXPO_PUBLIC_ENV": "dev"
-      }
+      },
+      "channel": "sim"
     },
     "dev": {
       "developmentClient": true,

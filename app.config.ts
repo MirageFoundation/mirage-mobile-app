@@ -26,6 +26,13 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       bundleIdentifier: bundleIdentifier,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
+        UIBackgroundModes: ["fetch", "remote-notification"],
+        LSApplicationQueriesSchemes: [
+          "whatsapp",
+          "tg",
+          "instagram",
+          "sms",
+        ],
       },
     },
     android: {
@@ -93,6 +100,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           photosPermission: "$(PRODUCT_NAME) needs access to your Photos.",
         },
       ],
+      "expo-notifications",
     ],
     experiments: {
       typedRoutes: true,
@@ -102,6 +110,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       eas: {
         projectId: "25839d12-3bbc-4a6a-b1ee-67c4a6de816f",
       },
+    },
+    updates: {
+      url: "https://u.expo.dev/25839d12-3bbc-4a6a-b1ee-67c4a6de816f",
+    },
+    runtimeVersion: {
+      policy: "appVersion",
     },
   };
 };

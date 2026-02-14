@@ -14,15 +14,18 @@ import {
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { executeWithProgress, useTransactionProgress } from "@/src/hooks";
 import { walletService } from "@/src/services/wallet-service";
-import { useAuthStore, useUIStore } from "@/src/stores";
+import { useAuthStore, useUIStore, type ApiServer } from "@/src/stores";
 import { apiClient } from "@/src/api/client";
+import { usePreferencesStore } from "@/src/stores";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated as RNAnimated,
   Image,
   Keyboard,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -59,14 +62,19 @@ export default function UsernameScreen() {
   const [inviteStatus, setInviteStatus] = useState<InviteCodeStatus>("idle");
   const [createError, setCreateError] = useState<string | null>(null);
   const [isSettingUp, setIsSettingUp] = useState(false);
+  const [activeServer, setActiveServer] = useState<ApiServer>("mirage.talk");
+  const [showServerModal, setShowServerModal] = useState(false);
+  const [serverSwitchMsg, setServerSwitchMsg] = useState<string | null>(null);
+  const bannerOpacity = useRef(new RNAnimated.Value(0)).current;
+  const savedServer = usePreferencesStore((s) => s.apiServer);
 
   const walletConfirmedRef = useRef(false);
   const txProgress = useTransactionProgress();
 
   useEffect(() => {
-    apiClient.setBaseUrl("https://mirage.talk");
+    apiClient.setBaseUrl(`https://${activeServer}`);
     return () => {
-      apiClient.setBaseUrl("https://mirage.vote");
+      apiClient.setBaseUrl(`https://${savedServer}`);
     };
   }, []);
 
@@ -267,15 +275,15 @@ export default function UsernameScreen() {
 
   const handleClose = useCallback(() => {
     triggerHaptic("selection");
-    apiClient.setBaseUrl("https://mirage.vote");
+    apiClient.setBaseUrl(`https://${savedServer}`);
     router.back();
-  }, [router]);
+  }, [router, savedServer]);
 
   const handleLogin = useCallback(() => {
     triggerHaptic("selection");
-    apiClient.setBaseUrl("https://mirage.vote");
+    apiClient.setBaseUrl(`https://${savedServer}`);
     router.replace("/(auth)/login");
-  }, [router]);
+  }, [router, savedServer]);
 
   const getStatusIcon = () => {
     switch (status) {
@@ -428,7 +436,39 @@ export default function UsernameScreen() {
         <Pressable onPress={handleClose} style={styles.closeButton}>
           <EvilIcons name="close" size={36} color={theme.colors.text.default} />
         </Pressable>
+        <Pressable onPress={() => setShowServerModal(true)}>
+          <Text
+            size="lg"
+            weight="semibold"
+            style={{
+              color: "#3B82F6",
+              textDecorationLine: "underline",
+              marginRight: 8,
+            }}
+          >
+            {activeServer}
+          </Text>
+        </Pressable>
       </View>
+
+      {serverSwitchMsg && (
+        <RNAnimated.View
+          style={[
+            styles.switchBanner,
+            {
+              opacity: bannerOpacity,
+              top: (Platform.OS === "ios" ? 20 : insets.top) + 48,
+            },
+          ]}
+        >
+          <View style={styles.switchBannerInner}>
+            <Ionicons name="checkmark-circle" size={18} color="#22C55E" />
+            <Text size="md" weight="semibold" style={{ color: "#22C55E", marginLeft: 8 }}>
+              {serverSwitchMsg}
+            </Text>
+          </View>
+        </RNAnimated.View>
+      )}
 
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <ScrollView
@@ -591,6 +631,88 @@ export default function UsernameScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      <Modal
+        visible={showServerModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowServerModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowServerModal(false)}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.colors.background.default },
+            ]}
+          >
+            <Text size="lg" weight="bold" style={{ marginBottom: 16 }}>
+              Select Server
+            </Text>
+            {(["mirage.talk", "mirage.vote"] as ApiServer[]).map((server) => (
+              <Pressable
+                key={server}
+                onPress={() => {
+                  if (server !== activeServer) {
+                    setActiveServer(server);
+                    apiClient.setBaseUrl(`https://${server}`);
+                    setServerSwitchMsg(`Switched to ${server}`);
+                    bannerOpacity.setValue(0);
+                    RNAnimated.timing(bannerOpacity, {
+                      toValue: 1,
+                      duration: 300,
+                      useNativeDriver: true,
+                    }).start(() => {
+                      setTimeout(() => {
+                        RNAnimated.timing(bannerOpacity, {
+                          toValue: 0,
+                          duration: 400,
+                          useNativeDriver: true,
+                        }).start(() => setServerSwitchMsg(null));
+                      }, 2000);
+                    });
+                  }
+                  setShowServerModal(false);
+                }}
+                style={[
+                  styles.modalOption,
+                  {
+                    backgroundColor:
+                      server === activeServer
+                        ? `${theme.colors.primary[500]}15`
+                        : "transparent",
+                    borderColor:
+                      server === activeServer
+                        ? theme.colors.primary[500]
+                        : theme.colors.border.subtle,
+                  },
+                ]}
+              >
+                <Text
+                  size="lg"
+                  weight={server === activeServer ? "bold" : "medium"}
+                  style={
+                    server === activeServer
+                      ? { color: theme.colors.primary[500] }
+                      : undefined
+                  }
+                >
+                  {server}
+                </Text>
+                {server === activeServer && (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={20}
+                    color={theme.colors.primary[500]}
+                  />
+                )}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <Divider size="extraThin" />
         <Pressable onPress={handleLogin} style={styles.loginLink}>
@@ -605,6 +727,7 @@ const styles = StyleSheet.create((theme) => ({
   header: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: theme.spacing.sm,
   },
   closeButton: {
@@ -612,6 +735,25 @@ const styles = StyleSheet.create((theme) => ({
     height: 40,
     alignItems: "center",
     justifyContent: "center",
+  },
+  switchBanner: {
+    alignItems: "center",
+    position: "absolute",
+    left: 24,
+    right: 24,
+    top: 0,
+    zIndex: 50,
+  },
+  switchBannerInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: "rgba(34,197,94,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(34,197,94,0.25)",
   },
   content: {
     flexGrow: 1,
@@ -694,5 +836,31 @@ const styles = StyleSheet.create((theme) => ({
     color: "rgb(34,74,154)",
     fontSize: 13,
     fontWeight: "500",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "80%",
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 16,
   },
 }));

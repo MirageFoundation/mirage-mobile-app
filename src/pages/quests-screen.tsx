@@ -27,16 +27,16 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { useDailyQuests } from "@/src/api/read/hooks";
-import { usePendingRewards } from "@/src/api/read/hooks";
+import { useRewardSummary } from "@/src/api/read/hooks";
 import { useClaimReward } from "@/src/api/write/hooks";
-import type { DailyQuest } from "@/src/api/read/endpoints/quests";
+import type { DailyQuest } from "@/src/api/read/endpoints/rewards";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
 const ACTION_ICONS: Record<string, string> = {
   comment: "chatbubble-outline",
   vote: "thumbs-up-outline",
+  balanced_vote: "swap-vertical-outline",
   post: "create-outline",
   follow: "person-add-outline",
   share: "share-outline",
@@ -45,6 +45,7 @@ const ACTION_ICONS: Record<string, string> = {
 const ACTION_COLORS: Record<string, string> = {
   comment: "#3B82F6",
   vote: "#10B981",
+  balanced_vote: "#06B6D4",
   post: "#8B5CF6",
   follow: "#F59E0B",
   share: "#EC4899",
@@ -293,7 +294,7 @@ function ClaimSuccessModal({
               weight="bold"
               style={{ color: theme.colors.warning[500] }}
             >
-              +{rewardAmount.toLocaleString()} MRG
+              +{rewardAmount.toLocaleString()} MIRAGE
             </Text>
           </Box>
 
@@ -552,6 +553,11 @@ function CountdownTimer({
 function QuestRequirements({ quest }: { quest: DailyQuest }) {
   const { theme } = useUnistyles();
   const requirements: string[] = [];
+  const hasVoteProgress =
+    quest.target_upvotes != null &&
+    quest.upvotes != null &&
+    quest.target_downvotes != null &&
+    quest.downvotes != null;
 
   if (quest.min_content_length && quest.min_content_length > 0) {
     requirements.push(`Minimum ${quest.min_content_length} characters`);
@@ -573,10 +579,62 @@ function QuestRequirements({ quest }: { quest: DailyQuest }) {
     requirements.push(`At least ${quest.unique_topics_min} different topics`);
   }
 
-  if (requirements.length === 0) return null;
+  if (requirements.length === 0 && !hasVoteProgress) return null;
 
   return (
     <Box mt="sm" gap="xs">
+      {hasVoteProgress && (
+        <Box direction="row" gap="sm" mt="xs">
+          <Box flex direction="row" alignItems="center" gap="xs">
+            <Ionicons name="arrow-up" size={14} color="#10B981" />
+            <Box
+              flex
+              style={{
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: "rgba(255,255,255,0.1)",
+                overflow: "hidden",
+              }}
+            >
+              <View
+                style={{
+                  height: "100%",
+                  borderRadius: 3,
+                  backgroundColor: "#10B981",
+                  width: `${quest.target_upvotes! > 0 ? (quest.upvotes! / quest.target_upvotes!) * 100 : 0}%`,
+                }}
+              />
+            </Box>
+            <Text size="xs" mode="subtle">
+              {quest.upvotes}/{quest.target_upvotes}
+            </Text>
+          </Box>
+          <Box flex direction="row" alignItems="center" gap="xs">
+            <Ionicons name="arrow-down" size={14} color="#8B5CF6" />
+            <Box
+              flex
+              style={{
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: "rgba(255,255,255,0.1)",
+                overflow: "hidden",
+              }}
+            >
+              <View
+                style={{
+                  height: "100%",
+                  borderRadius: 3,
+                  backgroundColor: "#8B5CF6",
+                  width: `${quest.target_downvotes! > 0 ? (quest.downvotes! / quest.target_downvotes!) * 100 : 0}%`,
+                }}
+              />
+            </Box>
+            <Text size="xs" mode="subtle">
+              {quest.downvotes}/{quest.target_downvotes}
+            </Text>
+          </Box>
+        </Box>
+      )}
       {requirements.map((req, index) => (
         <Box key={index} direction="row" alignItems="center" gap="xs">
           <View
@@ -820,7 +878,6 @@ function ClaimAllButton({
   onClaim,
   isClaiming,
   hasClaimed,
-  powStatus,
 }: {
   completedQuests: DailyQuest[];
   totalQuests: number;
@@ -828,7 +885,6 @@ function ClaimAllButton({
   onClaim: () => void;
   isClaiming: boolean;
   hasClaimed: boolean;
-  powStatus: string | null;
 }) {
   const canClaim = completedQuests.length > 0 && !hasClaimed;
 
@@ -852,28 +908,17 @@ function ClaimAllButton({
         colors={[...BUTTON_GRADIENT_COLORS]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
-        style={[styles.gradientButton, isClaiming && styles.claimingGradient]}
+        style={styles.gradientButton}
       >
         {isClaiming ? (
           <>
-            <View style={{ flex: 1, alignItems: "center" }}>
-              <Text size="lg" weight="bold" style={{ color: "#fff" }}>
-                Claiming
-              </Text>
-              {powStatus && (
-                <Text
-                  size="xs"
-                  weight="medium"
-                  style={{ color: "#fff", opacity: 0.8 }}
-                >
-                  {powStatus}
-                </Text>
-              )}
-            </View>
+            <Text size="lg" weight="bold" style={{ color: "#fff" }}>
+              Claiming
+            </Text>
             <ActivityIndicator
               size="small"
               color="#fff"
-              style={{ position: "absolute", right: 16 }}
+              style={{ marginLeft: 8 }}
             />
           </>
         ) : hasClaimed ? (
@@ -926,25 +971,20 @@ export function QuestsScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
 
-  const { data, isLoading, error, refetch } = useDailyQuests();
-  const { data: pendingData, refetch: refetchPending } = usePendingRewards();
- const [timeRemaining, setTimeRemaining] = useState<number>(0);
+  const { data, isLoading, error, refetch } = useRewardSummary();
+  const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [isClaiming, setIsClaiming] = useState(false);
- const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [powStatus, setPowStatus] = useState<string | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const claimMutation = useClaimReward({
     onSuccess: (response) => {
       setIsClaiming(false);
-      setPowStatus(null);
       triggerHaptic("success");
       setShowSuccessModal(true);
       refetch();
-      refetchPending();
     },
     onError: (error) => {
       setIsClaiming(false);
-      setPowStatus(null);
       triggerHaptic("error");
       Alert.alert(
         "Claim Failed",
@@ -952,21 +992,12 @@ export function QuestsScreen() {
         [{ text: "OK" }],
       );
     },
-    onPoWProgress: (progress) => {
-      const elapsed = Math.round(progress.elapsedMs / 1000);
-      const hashRate =
-        progress.elapsedMs > 0
-          ? Math.round(progress.attempts / (progress.elapsedMs / 1000))
-          : 0;
-      setPowStatus(`POW: ${elapsed}s • ${hashRate.toLocaleString()} H/s`);
-    },
   });
 
   useFocusEffect(
     useCallback(() => {
       refetch();
-      refetchPending();
-    }, [refetch, refetchPending]),
+    }, [refetch]),
   );
 
   useEffect(() => {
@@ -997,16 +1028,13 @@ export function QuestsScreen() {
   }, [completedQuests, data?.reward_multiplier]);
 
   const hasClaimed = useMemo(() => {
-    if (!pendingData) return false;
-    return (
-      completedQuests.length > 0 && pendingData.pending_rewards.length === 0
-    );
-  }, [completedQuests.length, pendingData]);
+    if (!data) return false;
+    return completedQuests.length > 0 && data.pending_rewards.length === 0;
+  }, [completedQuests.length, data]);
 
   const handleClaimAll = useCallback(() => {
     if (completedQuests.length === 0) return;
     setIsClaiming(true);
-    setPowStatus("Preparing...");
     claimMutation.mutate({ questId: "all" });
   }, [completedQuests, claimMutation]);
 
@@ -1150,7 +1178,6 @@ export function QuestsScreen() {
               onClaim={handleClaimAll}
               isClaiming={isClaiming}
               hasClaimed={hasClaimed}
-              powStatus={powStatus}
             />
           </Box>
         </View>
@@ -1286,8 +1313,5 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-  },
-  claimingGradient: {
-    paddingVertical: 11,
   },
 }));

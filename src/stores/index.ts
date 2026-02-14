@@ -18,3 +18,4 @@ export { useSearchStore, type RecentSearch } from "./search-store";
 export { useContentModerationStore } from "./content-moderation-store";
 export { useCommentComposeStore } from "./comment-compose-store";
 export { useSavedPostsStore, type SavedPost } from "./saved-posts-store";
+export { useInboxStore } from "./inbox-store";

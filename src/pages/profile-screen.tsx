@@ -1,22 +1,20 @@
 import { useFocusEffect } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
-  ListRenderItem,
   Share,
   View,
-  ViewToken,
 } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  interpolate,
-  interpolateColor,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
+  withTiming,
+  runOnJS,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -54,6 +52,7 @@ import {
   useBlockHandler,
   useDeleteHandler,
   useReportHandler,
+  useTabSwipeGesture,
 } from "@/src/hooks";
 import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
 import {
@@ -73,7 +72,6 @@ const AnimatedFlatList = Animated.createAnimatedComponent(
 );
 
 const HEADER_BAR_HEIGHT = 56;
-const TAB_BAR_INDEX = 1;
 
 const formatMirageBalance = (umirage: number): number => {
   return Math.floor(umirage / 1_000_000);
@@ -90,8 +88,71 @@ const calculateAccountAgeDays = (
 
 type TabType = "posts" | "comments" | "about";
 
-const MemoizedPostCardItem = memo(PostCardItem);
-const MemoizedProfileCommentItem = memo(ProfileCommentItem);
+const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
+ const p = prev.post;
+ const n = next.post;
+ if (p.id !== n.id) return false;
+ if (p.likes !== n.likes) return false;
+ if (p.dislikes !== n.dislikes) return false;
+ if (p.comments !== n.comments) return false;
+ if (p.hasLiked !== n.hasLiked) return false;
+ if (p.hasDisliked !== n.hasDisliked) return false;
+ return true;
+});
+const MemoizedProfileCommentItem = memo(ProfileCommentItem, (prev, next) => {
+ return prev.comment.post_id === next.comment.post_id
+  && prev.comment.content === next.comment.content
+  && prev.comment.points === next.comment.points;
+});
+
+const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
+ post,
+ contentAnimatedStyle,
+ onPostPress,
+ onAuthorPress,
+ onCommentPress,
+ onMorePress,
+}: {
+ post: Post;
+ contentAnimatedStyle: any;
+ onPostPress: (postId: string) => void;
+ onAuthorPress: (authorId: string) => void;
+ onCommentPress: (postId: string) => void;
+ onMorePress: (postId: string) => void;
+}) {
+ return (
+  <Animated.View style={contentAnimatedStyle}>
+   <MemoizedPostCardItem
+    post={post}
+    isOwnPost={true}
+    showUrlCard={false}
+    onPostPress={onPostPress}
+    onAuthorPress={onAuthorPress}
+    onCommentPress={onCommentPress}
+    onMorePress={onMorePress}
+   />
+  </Animated.View>
+ );
+});
+
+const AnimatedCommentWrapper = memo(function AnimatedCommentWrapper({
+ comment,
+ contentAnimatedStyle,
+ onPress,
+}: {
+ comment: ApiPost;
+ contentAnimatedStyle: any;
+ onPress: (commentId: string, rootPostId: string) => void;
+}) {
+ return (
+  <Animated.View style={contentAnimatedStyle}>
+   <MemoizedProfileCommentItem
+    comment={comment}
+    onPress={onPress}
+   />
+  </Animated.View>
+ );
+});
 
 export function ProfileScreen() {
   const router = useRouter();
@@ -123,6 +184,7 @@ export function ProfileScreen() {
   }, [registerProfileScrollRef]);
 
   const scrollY = useSharedValue(0);
+  const animatedTabIndex = useSharedValue(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
 
@@ -537,9 +599,29 @@ useEffect(() => {
     }
   }, [reportHandler.showReportSheet]);
 
-  const handleTabChange = useCallback((index: number) => {
+  const handleSwipeTabChange = useCallback((index: number) => {
     setActiveTab(index);
   }, []);
+
+  const { swipeGesture, contentAnimatedStyle, fadeOpacity, completeTransition } = useTabSwipeGesture({
+    onTabChange: handleSwipeTabChange,
+    animatedIndex: animatedTabIndex,
+  });
+
+  const handleTabChange = useCallback((index: number) => {
+    if (index === activeTab) return;
+    animatedTabIndex.value = withTiming(index, { duration: 200 });
+    fadeOpacity.value = withTiming(
+      0,
+      { duration: 100 },
+      (finished) => {
+        "worklet";
+        if (finished) {
+          runOnJS(completeTransition)(index);
+        }
+      },
+    );
+  }, [activeTab, animatedTabIndex, fadeOpacity, completeTransition]);
 
   const handleTabDoubleTap = useCallback(
     async (index: number) => {
@@ -580,7 +662,7 @@ useEffect(() => {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, activeTab]);
 
   const keyExtractor = useCallback(
-    (item: Post | ApiPost | "header" | "tabs", index: number) => {
+    (item: Post | ApiPost | "header" | "tabs") => {
       if (item === "header") return "header";
       if (item === "tabs") return "tabs";
       return "id" in item ? item.id : item.post_id;
@@ -588,9 +670,16 @@ useEffect(() => {
     [],
   );
 
-  const renderItem: ListRenderItem<Post | ApiPost | "header" | "tabs"> =
-    useCallback(
-      ({ item, index }) => {
+  const postsWithoutWarnings = useMemo(() => {
+   const map = new Map<string, Post>();
+   for (const post of uiPosts) {
+    map.set(post.id, { ...post, contentWarnings: undefined });
+   }
+   return map;
+  }, [uiPosts]);
+
+  const renderItem = useCallback(
+      ({ item }: { item: Post | ApiPost | "header" | "tabs" }) => {
         if (item === "header") {
          return (
            <ProfileContentAnimated
@@ -605,46 +694,45 @@ useEffect(() => {
              scrollY={scrollY}
              onFollowersPress={handleFollowersPress}
              isLoading={isLoading}
+            headerHeight={headerHeight}
            />
          );
         }
 
         if (item === "tabs") {
           return (
-            <View style={{ backgroundColor: theme.colors.background.default }}>
+            <View>
               <ProfileTabBar
                 activeTab={activeTab}
                 onTabChange={handleTabChange}
                 onTabDoubleTap={handleTabDoubleTap}
                 tabWidth={SCREEN_WIDTH}
+                animatedIndex={animatedTabIndex}
               />
             </View>
           );
         }
 
         if (activeTab === 0 && "id" in item) {
-          const postWithoutWarnings = {
-            ...item,
-            contentWarnings: undefined,
-          };
+          const cleanPost = postsWithoutWarnings.get(item.id) || item;
           return (
-            <MemoizedPostCardItem
-              post={postWithoutWarnings}
-              isOwnPost={true}
-              showUrlCard={false}
-              onPostPress={handlePostPress}
-              onAuthorPress={handleAuthorPress}
-              onCommentPress={handlePostPress}
-              onMorePress={handlePostMorePress}
+            <AnimatedPostWrapper
+             post={cleanPost}
+             contentAnimatedStyle={contentAnimatedStyle}
+             onPostPress={handlePostPress}
+             onAuthorPress={handleAuthorPress}
+             onCommentPress={handlePostPress}
+             onMorePress={handlePostMorePress}
             />
           );
         }
 
        if (activeTab === 1 && "post_id" in item) {
          return (
-           <MemoizedProfileCommentItem
-             comment={item}
-             onPress={handleCommentPress}
+           <AnimatedCommentWrapper
+            comment={item}
+            contentAnimatedStyle={contentAnimatedStyle}
+            onPress={handleCommentPress}
            />
          );
        }
@@ -660,7 +748,7 @@ useEffect(() => {
        scrollY,
        handleFollowersPress,
         isLoading,
-        theme.colors.background.default,
+       headerHeight,
         activeTab,
         handleTabChange,
         handleTabDoubleTap,
@@ -668,44 +756,59 @@ useEffect(() => {
         handleAuthorPress,
         handlePostMorePress,
        handleCommentPress,
+      animatedTabIndex,
+      contentAnimatedStyle,
+      postsWithoutWarnings,
       ],
     );
 
  const ListFooterComponent = useCallback(() => {
     if (activeTab === 2) {
       return (
-        <ProfileAboutTab
-          userAddress={user?.walletAddress}
-          isOwnProfile={true}
-          onBlockedPress={handleBlockedPress}
-        />
+        <Animated.View style={contentAnimatedStyle}>
+          <ProfileAboutTab
+            userAddress={user?.walletAddress}
+            isOwnProfile={true}
+            onBlockedPress={handleBlockedPress}
+          />
+        </Animated.View>
       );
     }
 
     if (isLoadingPosts) {
-      return activeTab === 0 ? (
-        <PostCardSkeletonList count={3} />
-      ) : (
-        <ProfilePostsSkeleton count={5} type="comments" />
+      return (
+        <Animated.View style={contentAnimatedStyle}>
+          {activeTab === 0 ? (
+            <PostCardSkeletonList count={3} />
+          ) : (
+            <ProfilePostsSkeleton count={5} type="comments" />
+          )}
+        </Animated.View>
       );
     }
 
     if (listData.length <= 2) {
       const tabType = activeTab === 0 ? "posts" : "comments";
       return (
-        <ProfileEmptyState
-          tabType={tabType}
-          onSettingsPress={handleSettingsPress}
-          isOwnProfile={true}
-        />
+        <Animated.View style={contentAnimatedStyle}>
+          <ProfileEmptyState
+            tabType={tabType}
+            onSettingsPress={handleSettingsPress}
+            isOwnProfile={true}
+          />
+        </Animated.View>
       );
     }
 
     if (isFetchingNextPage) {
-      return activeTab === 0 ? (
-        <PostCardSkeletonList count={1} />
-      ) : (
-        <ProfilePostsSkeleton count={2} type="comments" />
+      return (
+        <Animated.View style={contentAnimatedStyle}>
+          {activeTab === 0 ? (
+            <PostCardSkeletonList count={1} />
+          ) : (
+            <ProfilePostsSkeleton count={2} type="comments" />
+          )}
+        </Animated.View>
       );
     }
 
@@ -718,16 +821,15 @@ useEffect(() => {
     handleSettingsPress,
     user?.walletAddress,
     handleBlockedPress,
+    contentAnimatedStyle,
   ]);
 
   const stickyTabsAnimatedStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(
-      scrollY.value,
-      [stickyThreshold - 20, stickyThreshold],
-      [0, 1],
-      "clamp",
-    );
-    return { opacity };
+    const isSticky = scrollY.value >= stickyThreshold;
+    return {
+      opacity: isSticky ? 1 : 0,
+      pointerEvents: isSticky ? "auto" : "none",
+    } as any;
   });
 
   const contentContainerStyle = useMemo(
@@ -738,8 +840,6 @@ useEffect(() => {
     }),
     [headerHeight, insets.bottom],
   );
-
-  const stickyHeaderIndices = useMemo(() => [TAB_BAR_INDEX], []);
 
   return (
     <Box flex background="base">
@@ -764,36 +864,37 @@ useEffect(() => {
           },
           stickyTabsAnimatedStyle,
         ]}
-        pointerEvents={scrollY.value >= stickyThreshold ? "auto" : "none"}
       >
         <ProfileTabBar
           activeTab={activeTab}
           onTabChange={handleTabChange}
           onTabDoubleTap={handleTabDoubleTap}
           tabWidth={SCREEN_WIDTH}
+          animatedIndex={animatedTabIndex}
         />
       </Animated.View>
 
-      <AnimatedFlatList
-        ref={flatListRef as any}
-        data={listData}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        stickyHeaderIndices={stickyHeaderIndices}
-        onScroll={scrollHandler}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={contentContainerStyle}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.5}
-        ListFooterComponent={ListFooterComponent}
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        windowSize={10}
-        initialNumToRender={5}
-        updateCellsBatchingPeriod={50}
-        bounces={true}
-      />
+      <GestureDetector gesture={swipeGesture}>
+        <AnimatedFlatList
+          ref={flatListRef as any}
+          data={listData}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={contentContainerStyle}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={ListFooterComponent}
+          removeClippedSubviews={false}
+          maxToRenderPerBatch={5}
+          windowSize={5}
+          initialNumToRender={7}
+          updateCellsBatchingPeriod={100}
+          bounces={true}
+        />
+      </GestureDetector>
 
       <ProfileMenuSheet
         ref={menuSheetRef}

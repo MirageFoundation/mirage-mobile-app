@@ -1,10 +1,8 @@
 import {
   CommentIcon,
   DownvoteFilledIcon,
-  DownvoteOutlineIcon,
   ShareIcon,
   UpvoteFilledIcon,
-  UpvoteOutlineIcon,
 } from "@/assets/figma-icons";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
@@ -27,8 +25,8 @@ import {
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 // Vote colors
-const UPVOTE_COLOR = "#FF4757"; // Red shade for upvote
-const DOWNVOTE_COLOR = "#8B5CF6"; // Purple shade for downvote
+const UPVOTE_COLOR = "#22C55E"; // Green for upvote
+const DOWNVOTE_COLOR = "#EF4444"; // Red for downvote
 
 type PostActionsProps = {
   /** Number of likes */
@@ -139,6 +137,8 @@ export const PostActions = memo(function PostActions({
   const { theme } = useUnistyles();
   const { iconSize, gap, pillHeight, voteTextSize } = SIZE_CONFIG[size];
 
+  const blockMenuMinWidth = Math.max(180, `Block @${authorUsername || ""}`.length * 10 + 60);
+
   // Animation values for arrow movement
   const upArrowTranslateY = useRef(new Animated.Value(0)).current;
   const downArrowTranslateY = useRef(new Animated.Value(0)).current;
@@ -201,7 +201,7 @@ export const PostActions = memo(function PostActions({
     if (shareUrl) {
       try {
         await Share.share({
-          message: `What do you think about this? 🗳️\n${shareUrl}`,
+          message: shareUrl,
           url: shareUrl,
           title: shareTitle,
         });
@@ -265,7 +265,7 @@ export const PostActions = memo(function PostActions({
             {hasLiked ? (
               <UpvoteFilledIcon size={iconSize} color={upvoteColor} />
             ) : (
-              <UpvoteOutlineIcon size={iconSize} color={upvoteColor} />
+              <UpvoteFilledIcon size={iconSize} color={upvoteColor} />
             )}
           </Animated.View>
         </Pressable>
@@ -307,7 +307,7 @@ export const PostActions = memo(function PostActions({
             {hasDisliked ? (
               <DownvoteFilledIcon size={iconSize} color={downvoteColor} />
             ) : (
-              <DownvoteOutlineIcon size={iconSize} color={downvoteColor} />
+              <DownvoteFilledIcon size={iconSize} color={downvoteColor} />
             )}
           </Animated.View>
         </Pressable>
@@ -380,7 +380,7 @@ export const PostActions = memo(function PostActions({
               optionsContainer: {
                 backgroundColor: theme.colors.background.default,
                 borderRadius: theme.radius.lg,
-                minWidth: 180,
+                minWidth: blockMenuMinWidth,
                 shadowColor: theme.colors.contrast.base,
                 shadowOffset: { width: 0, height: 4 },
                 shadowOpacity: 0.15,
@@ -401,8 +401,9 @@ export const PostActions = memo(function PostActions({
                   color={theme.colors.error[500]}
                 />
                 <Text
-                  size="sm"
+                  size="lg"
                   weight="medium"
+                  numberOfLines={1}
                   style={{ color: theme.colors.error[500] }}
                 >
                   Block @{authorUsername}
@@ -417,8 +418,9 @@ export const PostActions = memo(function PostActions({
                   color={theme.colors.error[500]}
                 />
                 <Text
-                  size="sm"
+                  size="lg"
                   weight="medium"
+                  numberOfLines={1}
                   style={{ color: theme.colors.error[500] }}
                 >
                   Block Post
@@ -433,8 +435,9 @@ export const PostActions = memo(function PostActions({
                   color={theme.colors.error[500]}
                 />
                 <Text
-                  size="sm"
+                  size="lg"
                   weight="medium"
+                  numberOfLines={1}
                   style={{ color: theme.colors.error[500] }}
                 >
                   Report Post
