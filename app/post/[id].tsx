@@ -1178,7 +1178,7 @@ export default function PostDetailScreen() {
 
       let finalContent = text;
       if (mediaUrl) {
-        finalContent = text.trim() ? `${text.trim()}\n\n${mediaUrl}` : mediaUrl;
+        finalContent = text.trim() ? `${mediaUrl}\n\n${text.trim()}` : mediaUrl;
       }
 
       const optimisticCommentId = `optimistic-${Date.now()}`;
@@ -1316,9 +1316,9 @@ export default function PostDetailScreen() {
 
       let finalContent = text;
       if (imageUri) {
-        finalContent = text.trim() ? `${text.trim()}\n\n${imageUri}` : imageUri;
+        finalContent = text.trim() ? `${imageUri}\n\n${text.trim()}` : imageUri;
       } else if (gifUrl) {
-        finalContent = text.trim() ? `${text.trim()}\n\n${gifUrl}` : gifUrl;
+        finalContent = text.trim() ? `${gifUrl}\n\n${text.trim()}` : gifUrl;
       }
 
       setCommentEditOverrides((prev) => ({

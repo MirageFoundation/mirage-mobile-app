@@ -458,9 +458,9 @@ useEffect(() => {
 
    let finalContent = text;
     if (imageUri) {
-      finalContent = text.trim() ? `${text.trim()}\n\n${imageUri}` : imageUri;
+      finalContent = text.trim() ? `${imageUri}\n\n${text.trim()}` : imageUri;
     } else if (gifUrl) {
-      finalContent = text.trim() ? `${text.trim()}\n\n${gifUrl}` : gifUrl;
+      finalContent = text.trim() ? `${gifUrl}\n\n${text.trim()}` : gifUrl;
     }
 
       setCommentEditOverrides((prev) => ({ ...prev, [commentId]: finalContent }));

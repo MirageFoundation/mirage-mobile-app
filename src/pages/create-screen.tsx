@@ -244,17 +244,17 @@ export function CreateScreen() {
       let content = draft.body;
 
       if (imageUrl) {
-        content = content ? `${content}\n\n${imageUrl}` : imageUrl;
+        content = content ? `${imageUrl}\n\n${content}` : imageUrl;
       }
 
       if (uploadedVideoUrl) {
         content = content
-          ? `${content}\n\n${uploadedVideoUrl}`
+          ? `${uploadedVideoUrl}\n\n${content}`
           : uploadedVideoUrl;
       }
 
       if (draft.linkUrl) {
-        content = content ? `${content}\n\n${draft.linkUrl}` : draft.linkUrl;
+        content = content ? `${draft.linkUrl}\n\n${content}` : draft.linkUrl;
       }
 
       const isUserProfile =
