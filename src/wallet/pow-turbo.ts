@@ -1,10 +1,3 @@
-/**
- * Proof of Work computation using react-native-argon2-turbo (TurboModule)
- *
- * This version uses PARALLEL native PoW workers (4 concurrent threads) for 2-4x better performance.
- * The parallelism is handled internally by the native module.
- */
-
 import {
   computePow as computePowNative,
   cancelPow,
@@ -12,6 +5,7 @@ import {
 } from "react-native-argon2-turbo";
 
 import { bytesToHex } from "./crypto";
+import { difficultyFactor, checkPowTarget } from "./pow";
 
 // ============================================
 // Types
@@ -20,7 +14,9 @@ import { bytesToHex } from "./crypto";
 export interface PoWInput {
   base: Uint8Array;
   lastBlockHash: string;
-  requiredBits: number;
+  powDifficulty: number;
+  powBaseBits: number;
+  powFactor: number;
 }
 
 export interface PoWResult {
@@ -31,11 +27,11 @@ export interface PoWResult {
 }
 
 // ============================================
-// Argon2id Parameters (as per spec)
+// Argon2id Parameters
 // ============================================
 
 const ARGON2_TIME_COST = 1;
-const ARGON2_MEMORY_COST = 4096; // 4096 KiB
+const ARGON2_MEMORY_COST = 4096;
 const ARGON2_PARALLELISM = 1;
 const ARGON2_OUTPUT_LENGTH = 32;
 
@@ -56,24 +52,12 @@ function hexToUint8Array(hex: string): Uint8Array {
 // PoW Computation (TurboModule - Parallel Native Workers)
 // ============================================
 
-/**
- * Compute Proof of Work using native TurboModule with parallel workers
- *
- * The native module internally runs 4 parallel workers searching different
- * nonce ranges. First worker to find a valid nonce wins, others are cancelled.
- * 
- * Expected performance: ~320-400 h/s effective rate (4x ~80-100 h/s per worker)
- */
 export async function computePoW(
   input: PoWInput,
   onProgress?: (attempts: number, elapsedMs: number) => void,
   maxAttempts = 10_000_000
 ): Promise<PoWResult> {
-  const { base, lastBlockHash, requiredBits } = input;
-
-  if (requiredBits === 0) {
-    return { pow: 0, digest: new Uint8Array(32), computeTimeMs: 0, attempts: 0 };
-  }
+  const { base, lastBlockHash, powDifficulty, powBaseBits, powFactor } = input;
 
   const baseHex = bytesToHex(base);
   const saltHex = lastBlockHash.startsWith("0x")
@@ -81,9 +65,8 @@ export async function computePoW(
     : lastBlockHash;
   const startNonce = Math.floor(Math.random() * 0xffffffff);
 
-  console.log(`[PoW Turbo] Starting with difficulty=${requiredBits} bits (4 parallel workers)`);
+  console.log(`[PoW Turbo] Starting with powDifficulty=${powDifficulty}, baseBits=${powBaseBits}, factor=${powFactor} (4 parallel workers)`);
 
-  // Set up progress polling if callback provided
   let progressInterval: ReturnType<typeof setInterval> | undefined;
   if (onProgress) {
     progressInterval = setInterval(async () => {
@@ -91,7 +74,6 @@ export async function computePoW(
         const progress = await getPowProgress();
         onProgress(progress.attempts, progress.elapsedMs);
       } catch {
-        // Ignore progress errors
       }
     }, 100);
   }
@@ -100,7 +82,7 @@ export async function computePoW(
     const result = await computePowNative({
       base: baseHex,
       salt: saltHex,
-      difficulty: requiredBits,
+      difficulty: powBaseBits,
       startNonce,
       maxAttempts,
       timeoutMs: 60000,
@@ -108,18 +90,25 @@ export async function computePoW(
       memory: ARGON2_MEMORY_COST,
       parallelism: ARGON2_PARALLELISM,
       hashLength: ARGON2_OUTPUT_LENGTH,
-    });
+    } as any);
+
+    const nonce = result.nonce < 0 ? (result.nonce >>> 0) : result.nonce;
+    const digest = hexToUint8Array(result.digest);
+
+    if (!checkPowTarget(digest, powDifficulty, powBaseBits, powFactor)) {
+      console.log("[PoW Turbo] Native result failed JS target check; this may indicate a native module mismatch");
+    }
 
     const hashRate = Math.round(result.attempts / (result.elapsedMs / 1000));
     console.log(
-      `[PoW Turbo] Found! nonce=${result.nonce}, attempts=${result.attempts}, time=${result.elapsedMs}ms, rate=${hashRate} h/s`
+      `[PoW Turbo] Found! nonce=${nonce}, attempts=${result.attempts}, time=${result.elapsedMs}ms, rate=${hashRate} h/s`
     );
 
-   return {
-     pow: result.nonce < 0 ? (result.nonce >>> 0) : result.nonce,
-     digest: hexToUint8Array(result.digest),
-     computeTimeMs: result.elapsedMs,
-     attempts: result.attempts,
+    return {
+      pow: nonce,
+      digest,
+      computeTimeMs: result.elapsedMs,
+      attempts: result.attempts,
     };
   } finally {
     if (progressInterval) {
@@ -128,23 +117,15 @@ export async function computePoW(
   }
 }
 
-/**
- * Cancel ongoing PoW computation (cancels all parallel workers)
- */
 export { cancelPow, getPowProgress };
 
-/**
- * Estimate time to compute PoW at given difficulty
- *
- * With 4 parallel workers: ~320-400 hashes/sec effective rate on mobile
- * (4 workers * ~80-100 h/s per worker)
- */
-export function estimatePoWTime(difficulty: number): number {
-  if (difficulty === 0) return 0;
-
-  const expectedAttempts = Math.pow(2, difficulty);
-  // With 4 parallel workers: ~320 effective h/s
+export function estimatePoWTime(
+  powDifficulty: number,
+  powBaseBits: number,
+  powFactor: number
+): number {
+  const factor = Number(difficultyFactor(powDifficulty, powFactor));
+  const expectedAttempts = factor * Math.pow(2, powBaseBits) / 1000;
   const hashesPerSecond = 320;
-
   return expectedAttempts / hashesPerSecond;
 }

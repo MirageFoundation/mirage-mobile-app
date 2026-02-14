@@ -35,7 +35,10 @@ export interface UserFilters {
 export interface ParametersResponse {
   last_block_hash: string; // hex
   pow_difficulty: number;
+  pow_base_bits: number;
+  pow_factor: number;
   balance?: number; // umirage, if address provided
+  user_level: number;
 }
 
 export interface TierInfo {

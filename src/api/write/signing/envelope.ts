@@ -1,15 +1,3 @@
-/**
- * Envelope Builder for Mirage Write API
- *
- * Builds signed envelopes for API requests by:
- * 1. Getting fresh parameters from Read API
- * 2. Determining if PoW is needed (free tier only)
- * 3. Building canonical bytes
- * 4. Computing PoW if needed
- * 5. Signing the final bytes
- * 6. Creating the JSON payload
- */
-
 import {
   b64encode,
   computePoW,
@@ -36,15 +24,10 @@ import type {
 export interface BuildEnvelopeOptions<
   TPayload extends Record<string, unknown>
 > {
-  /** Wallet for signing */
   wallet: MirageWallet;
-  /** Function to build canonical base bytes */
   baseBuilder: (params: EnvelopeParams & TPayload) => Uint8Array;
-  /** Message-specific payload fields */
   payloadFields: TPayload;
-  /** Whether to skip PoW (for paid tier operations) */
   skipPoW?: boolean;
-  /** Callback for PoW progress updates */
   onPoWProgress?: PoWProgressCallback;
 }
 
@@ -52,12 +35,6 @@ export interface BuildEnvelopeOptions<
 // Envelope Builder
 // ============================================
 
-/**
- * Build a signed envelope for a write API request
- *
- * This is the main function used by all mutation hooks to create
- * signed payloads for the backend.
- */
 export async function buildSignedEnvelope<
   TPayload extends Record<string, unknown>
 >(options: BuildEnvelopeOptions<TPayload>): Promise<SignedPayload<TPayload>> {
@@ -69,30 +46,21 @@ export async function buildSignedEnvelope<
     onPoWProgress,
   } = options;
 
- // 1. Get fresh parameters from Read API
- const params = await getParameters({ address: wallet.address });
+  const params = await getParameters({ address: wallet.address });
 
- console.log(`[Envelope] Using last_block_hash: ${params.last_block_hash.substring(0, 16)}...`);
+  console.log(`[Envelope] Using last_block_hash: ${params.last_block_hash.substring(0, 16)}...`);
 
- // 2. Determine if PoW is needed
-  // Use cached user level from auth store to avoid extra API call
-  const userLevel = useAuthStore.getState().userLevel;
+  const userLevel = params.user_level ?? useAuthStore.getState().userLevel;
   let difficulty = params.pow_difficulty;
+  const needsPoW = !skipPoW && userLevel === 0;
 
-  if (!skipPoW) {
-    // Paid users (level > 0) don't need PoW
-    if (userLevel > 0) {
-      difficulty = 0;
-    }
-  } else {
-    // Operations like upgrade don't need PoW
+  if (!needsPoW) {
     difficulty = 0;
   }
 
-  // 3. Build canonical base bytes
-  // Use slightly past timestamp to avoid clock-skew rejection like web client (-15s)
   let timestampMs = Math.max(0, Date.now() - 15000);
-  const lastBlockHashBytes = hexToBytes(params.last_block_hash);
+  const effectiveBlockHash = needsPoW ? params.last_block_hash : "";
+  const lastBlockHashBytes = hexToBytes(effectiveBlockHash);
 
   const envelopeParams: EnvelopeParams = {
     pubkey33: wallet.publicKey,
@@ -103,26 +71,21 @@ export async function buildSignedEnvelope<
 
   let base = baseBuilder({ ...envelopeParams, ...payloadFields });
 
-  // 4. Compute PoW if needed
   let pow = 0;
-  if (difficulty > 0) {
-    const estimatedTime = estimatePoWTime(difficulty) * 1000; // Convert to ms
+  if (needsPoW) {
+    const estimatedTime = estimatePoWTime(difficulty, params.pow_base_bits, params.pow_factor) * 1000;
 
     console.log(
-      `[PoW] Starting computation with difficulty=${difficulty} bits`
+      `[PoW] Starting computation with difficulty=${difficulty}, baseBits=${params.pow_base_bits}, factor=${params.pow_factor}`
     );
     console.log(
       `[PoW] Estimated time: ${Math.round(
         estimatedTime / 1000
       )}s (~${Math.round(estimatedTime / 60000)}min)`
     );
-    console.log(
-      `[PoW] Expected attempts: ~${Math.pow(2, difficulty).toLocaleString()}`
-    );
 
     const progressCallback = onPoWProgress
       ? (attempts: number, elapsedMs: number) => {
-          // Log every 100 attempts
           if (attempts % 100 === 0) {
             const rate = attempts / (elapsedMs / 1000);
             console.log(
@@ -139,7 +102,6 @@ export async function buildSignedEnvelope<
         }
       : undefined;
 
-    // Calculate a reasonable cap for attempts (multiple of expected attempts)
     const attemptFactorEnv =
       (typeof process !== "undefined" &&
         (process as any).env?.EXPO_PUBLIC_POW_ATTEMPT_FACTOR) ||
@@ -147,10 +109,14 @@ export async function buildSignedEnvelope<
         (process as any).env?.POW_ATTEMPT_FACTOR);
     const attemptFactor = attemptFactorEnv
       ? Math.max(1, Number(attemptFactorEnv))
-      : 8; // default 8x
+      : 8;
+    const expectedAttempts = Number(
+      BigInt(Math.round(1000 * Math.pow(1 + params.pow_factor, difficulty))) *
+      BigInt(Math.pow(2, params.pow_base_bits)) / 1000n
+    );
     const maxAttempts = Math.max(
       1000,
-      Math.floor(Math.pow(2, difficulty) * attemptFactor)
+      Math.floor(expectedAttempts * attemptFactor)
     );
 
     try {
@@ -158,7 +124,9 @@ export async function buildSignedEnvelope<
         {
           base,
           lastBlockHash: params.last_block_hash,
-          requiredBits: difficulty,
+          powDifficulty: difficulty,
+          powBaseBits: params.pow_base_bits,
+          powFactor: params.pow_factor,
         },
         progressCallback,
         maxAttempts
@@ -175,7 +143,6 @@ export async function buildSignedEnvelope<
           "[PoW] Attempt cap reached; refreshing parameters and retrying once..."
         );
 
-        // Refresh parameters to get a new salt and try again once
         const refreshed = await getParameters({ address: wallet.address });
         timestampMs = Date.now();
         const lastBlockHashBytes2 = hexToBytes(refreshed.last_block_hash);
@@ -191,13 +158,14 @@ export async function buildSignedEnvelope<
           {
             base: base2,
             lastBlockHash: refreshed.last_block_hash,
-            requiredBits: difficulty,
+            powDifficulty: difficulty,
+            powBaseBits: refreshed.pow_base_bits,
+            powFactor: refreshed.pow_factor,
           },
           progressCallback,
           maxAttempts
         );
 
-        // Use refreshed values from now on
         pow = powResult2.pow;
         base = base2;
         (params as any).last_block_hash = refreshed.last_block_hash;
@@ -205,28 +173,24 @@ export async function buildSignedEnvelope<
           `[PoW] Complete (retry)! Found nonce=${pow} after ${powResult2.attempts} attempts in ${powResult2.computeTimeMs}ms`
         );
       } else {
-        // Timed out or other error; rethrow so UI can show a clear error
         throw err;
       }
     }
   } else {
-    console.log(`[PoW] Skipping PoW (difficulty=0, userLevel=${userLevel})`);
+    console.log(`[PoW] Skipping PoW (skipPoW=${skipPoW}, userLevel=${userLevel})`);
   }
 
-  // 5. Build signed bytes (insert tag 5 for PoW)
   console.log("[Envelope] Building signed bytes...");
   const signedBytes = canonSignedWithPow(base, pow);
 
-  // 6. Sign canonical bytes (secp256k1 implementation hashes internally with SHA-256)
   console.log("[Envelope] Signing canonical bytes...");
   const signature = signCanonical(wallet.privateKey, signedBytes);
 
-  // 7. Build and return the envelope
   const envelope = {
     pubkey: b64encode(wallet.publicKey),
     signature: b64encode(signature),
     timestamp: timestampMs,
-    last_block_hash: params.last_block_hash,
+    last_block_hash: effectiveBlockHash,
     pow_difficulty: difficulty,
     pow,
     ...payloadFields,
@@ -236,18 +200,14 @@ export async function buildSignedEnvelope<
   return envelope;
 }
 
-/**
- * Build envelope with explicit parameters (for when you already have fresh params)
- *
- * Use this when you want to control the parameters fetching yourself,
- * or when building multiple envelopes with the same parameters.
- */
 export async function buildEnvelopeWithParams<
   TPayload extends Record<string, unknown>
 >(
   options: BuildEnvelopeOptions<TPayload> & {
     lastBlockHash: string;
     powDifficulty: number;
+    powBaseBits: number;
+    powFactor: number;
     userLevel: number;
   }
 ): Promise<SignedPayload<TPayload>> {
@@ -259,19 +219,20 @@ export async function buildEnvelopeWithParams<
     onPoWProgress,
     lastBlockHash,
     powDifficulty,
+    powBaseBits,
+    powFactor,
     userLevel,
   } = options;
 
-  // Determine actual difficulty
+  const needsPoW = !skipPoW && userLevel === 0;
   let difficulty = powDifficulty;
-  if (skipPoW || userLevel > 0) {
+  if (!needsPoW) {
     difficulty = 0;
   }
 
-  // Build canonical base bytes
-  // Use slightly past timestamp to avoid clock-skew rejection like web client (-15s)
   const timestampMs = Math.max(0, Date.now() - 15000);
-  const lastBlockHashBytes = hexToBytes(lastBlockHash);
+  const effectiveBlockHash = needsPoW ? lastBlockHash : "";
+  const lastBlockHashBytes = hexToBytes(effectiveBlockHash);
 
   const envelopeParams: EnvelopeParams = {
     pubkey33: wallet.publicKey,
@@ -282,10 +243,9 @@ export async function buildEnvelopeWithParams<
 
   const base = baseBuilder({ ...envelopeParams, ...payloadFields });
 
-  // Compute PoW if needed
   let pow = 0;
-  if (difficulty > 0) {
-    const estimatedTime = estimatePoWTime(difficulty) * 1000;
+  if (needsPoW) {
+    const estimatedTime = estimatePoWTime(difficulty, powBaseBits, powFactor) * 1000;
 
     const progressCallback = onPoWProgress
       ? (attempts: number, elapsedMs: number) => {
@@ -305,16 +265,22 @@ export async function buildEnvelopeWithParams<
     const attemptFactor = attemptFactorEnv
       ? Math.max(1, Number(attemptFactorEnv))
       : 8;
+    const expectedAttempts = Number(
+      BigInt(Math.round(1000 * Math.pow(1 + powFactor, difficulty))) *
+      BigInt(Math.pow(2, powBaseBits)) / 1000n
+    );
     const maxAttempts = Math.max(
       1000,
-      Math.floor(Math.pow(2, difficulty) * attemptFactor)
+      Math.floor(expectedAttempts * attemptFactor)
     );
 
     const powResult = await computePoW(
       {
         base,
         lastBlockHash,
-        requiredBits: difficulty,
+        powDifficulty: difficulty,
+        powBaseBits,
+        powFactor,
       },
       progressCallback,
       maxAttempts
@@ -323,17 +289,14 @@ export async function buildEnvelopeWithParams<
     pow = powResult.pow;
   }
 
-  // Build signed bytes
   const signedBytes = canonSignedWithPow(base, pow);
-
-  // Sign canonical bytes (secp256k1 implementation hashes internally with SHA-256)
   const signature = signCanonical(wallet.privateKey, signedBytes);
 
   return {
     pubkey: b64encode(wallet.publicKey),
     signature: b64encode(signature),
     timestamp: timestampMs,
-    last_block_hash: lastBlockHash,
+    last_block_hash: effectiveBlockHash,
     pow_difficulty: difficulty,
     pow,
     ...payloadFields,
