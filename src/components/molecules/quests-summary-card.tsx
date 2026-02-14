@@ -212,6 +212,7 @@ export function QuestsSummaryCard() {
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
   const { data: nodeConfig } = useNodeConfig();
   const questsEnabled = nodeConfig?.quests_enabled ?? true;
+  const payoutsEnabled = nodeConfig?.quest_payouts_enabled ?? true;
   const { data, isLoading } = useRewardSummary();
   const questsCardExpanded = usePreferencesStore((s) => s.questsCardExpanded);
   const setQuestsCardExpanded = usePreferencesStore(
@@ -477,11 +478,11 @@ export function QuestsSummaryCard() {
 
             <Pressable
               onPress={handleViewQuests}
-              disabled={hasClaimed}
+              disabled={hasClaimed || !payoutsEnabled}
               style={({ pressed }) => [
                 styles.gradientButtonContainer,
-                pressed && !hasClaimed && { opacity: 0.9 },
-                hasClaimed && { opacity: 0.5 },
+                pressed && !hasClaimed && payoutsEnabled && { opacity: 0.9 },
+                (hasClaimed || !payoutsEnabled) && { opacity: 0.5 },
               ]}
             >
               <LinearGradient
@@ -491,7 +492,9 @@ export function QuestsSummaryCard() {
                 style={styles.gradientButton}
               >
                 <Text size="md" weight="bold" style={{ color: "#FFFFFF" }}>
-                  {hasRewardsToClaim
+                  {!payoutsEnabled
+                    ? "Payouts Disabled"
+                    : hasRewardsToClaim
                     ? "Claim Rewards"
                     : hasClaimed
                       ? "Claimed"
