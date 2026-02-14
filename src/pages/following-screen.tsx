@@ -1,14 +1,15 @@
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Linking, View } from "react-native";
+import { View } from "react-native";
+
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import {
   useUserFollowed,
-  useUserStatus,
 } from "@/src/api";
+
 import {
   ConfirmationPopup,
   FeedHeader,
@@ -17,10 +18,10 @@ import {
   ReportSheet,
   type ReportSheetRef,
   type Post,
-  SideMenu,
-  type SideMenuRef,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
+import { useSideMenu } from "@/src/providers/side-menu-provider";
+
 import { useAuthGuard, useBlockHandler, useDeleteHandler, useFollowHandler, useReportHandler, useVoteHandler, type VoteResult } from "@/src/hooks";
 import {
   useScrollAnimationContext,
@@ -49,19 +50,12 @@ export function FollowingScreen() {
 
   const currentUser = useAuthStore((s) => s.user);
   const shareServer = usePreferencesStore((s) => s.shareServer);
-  const logout = useAuthStore((s) => s.logout);
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
-  const sideMenuRef = useRef<SideMenuRef>(null);
+  const { openSideMenu } = useSideMenu();
 
-  const { refetch: refetchUserStatus } = useUserStatus();
-
-  const handleMenuPress = useCallback(() => {
-    refetchUserStatus();
-    sideMenuRef.current?.present();
-  }, [refetchUserStatus]);
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [feedTabIndex, setFeedTabIndex] = useState(0);
@@ -404,7 +398,8 @@ export function FollowingScreen() {
 
       <FeedHeader
         title="Following"
-        onMenuPress={handleMenuPress}
+        onMenuPress={openSideMenu}
+
         onSearchPress={() => router.push("/search")}
         animatedStyle={headerAnimatedStyle}
         feedType={feedTabIndex === 0 ? "magic" : "latest"}
@@ -473,24 +468,7 @@ export function FollowingScreen() {
         onCancel={deleteHandler.cancelDelete}
       />
 
-      <SideMenu
-        ref={sideMenuRef}
-        onSettings={() => router.push("/settings")}
-        onSubscription={() => router.push("/subscription")}
-        onSaved={() => router.push("/saved-posts")}
-        onHistory={() => console.log("Navigate to history")}
-        onDrafts={() => console.log("Navigate to drafts")}
-        onFollowing={() => {
-          const id = currentUser?.walletAddress || currentUser?.username;
-          if (id) router.push(`/user-following/${id}`);
-        }}
-        onTopics={() => router.push("/topics")}
-        onInviteAndEarn={() => router.push("/invite-and-earn")}
-        onQuests={() => router.push("/quests")}
-        onHelp={() => Linking.openURL("https://mirage.foundation/faq")}
-        onAbout={() => Linking.openURL("https://mirage.foundation")}
-        onLogout={async () => await logout()}
-      />
+
     </Box>
   );
 }

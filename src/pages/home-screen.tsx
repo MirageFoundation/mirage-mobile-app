@@ -2,15 +2,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Linking, View } from "react-native";
+import { View } from "react-native";
+
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import {
   queryKeys,
   useUserFollowed,
-  useUserStatus,
 } from "@/src/api";
+
 import {
 AdultContentPopup,
 ConfirmationPopup,
@@ -20,11 +21,10 @@ type Post,
  type PostOptionsSheetRef,
  ReportSheet,
  type ReportSheetRef,
- SideMenu,
- type SideMenuRef,
 UpdateBanner,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
+import { useSideMenu } from "@/src/providers/side-menu-provider";
 import {
   useAuthGuard,
   useBlockHandler,
@@ -66,13 +66,14 @@ export function HomeScreen() {
   const toast = useToast();
   const easUpdate = useEasUpdate();
 
-  const { data: userStatus, refetch: refetchUserStatus } = useUserStatus();
+
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
 
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
-  const sideMenuRef = useRef<SideMenuRef>(null);
+
+  const { openSideMenu } = useSideMenu();
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [feedTabIndex, setFeedTabIndex] = useState(0);
@@ -101,7 +102,7 @@ export function HomeScreen() {
   const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
   const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
   const currentUser = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
+
   const isInitializing = useAuthStore((s) => s.isInitializing);
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
 
@@ -158,62 +159,6 @@ export function HomeScreen() {
     setAdultContent(false);
     setHasSeenAdultPrompt();
   }, [setAdultContent, setHasSeenAdultPrompt]);
-
-  const handleMenuPress = useCallback(() => {
-    refetchUserStatus();
-    sideMenuRef.current?.present();
-  }, [refetchUserStatus]);
-
-  const handleMenuSettings = useCallback(() => {
-    router.push("/settings");
-  }, [router]);
-
-  const handleMenuSubscription = useCallback(() => {
-    router.push("/subscription");
-  }, [router]);
-
-  const handleMenuSaved = useCallback(() => {
-    router.push("/saved-posts");
-  }, [router]);
-
-  const handleMenuHistory = useCallback(() => {
-    console.log("Navigate to history");
-  }, []);
-
-  const handleMenuDrafts = useCallback(() => {
-    console.log("Navigate to drafts");
-  }, []);
-
-  const handleMenuFollowing = useCallback(() => {
-    const id = currentUser?.walletAddress || currentUser?.username;
-    if (id) {
-      router.push(`/user-following/${id}`);
-    }
-  }, [router, currentUser?.walletAddress, currentUser?.username]);
-
-  const handleMenuInvite = useCallback(() => {
-    router.push("/invite-and-earn");
-  }, [router]);
-
-  const handleMenuQuests = useCallback(() => {
-    router.push("/quests");
-  }, [router]);
-
-  const handleMenuTopics = useCallback(() => {
-    router.push("/topics");
-  }, [router]);
-
-  const handleMenuHelp = useCallback(() => {
-    Linking.openURL("https://mirage.foundation/faq");
-  }, []);
-
-  const handleMenuAbout = useCallback(() => {
-    Linking.openURL("https://mirage.foundation");
-  }, []);
-
-  const handleMenuLogout = useCallback(async () => {
-    await logout();
-  }, [logout]);
 
   const handlePostPress = useCallback(
     (postId: string) => {
@@ -537,7 +482,7 @@ export function HomeScreen() {
 
       <FeedHeader
         title="Mirage"
-        onMenuPress={handleMenuPress}
+        onMenuPress={openSideMenu}
         onSearchPress={() => router.push("/search")}
         animatedStyle={headerAnimatedStyle}
         feedType={feedTabIndex === 0 ? "magic" : "latest"}
@@ -622,21 +567,6 @@ export function HomeScreen() {
         onCancel={deleteHandler.cancelDelete}
       />
 
-      <SideMenu
-        ref={sideMenuRef}
-        onSettings={handleMenuSettings}
-        onSubscription={handleMenuSubscription}
-        onSaved={handleMenuSaved}
-        onHistory={handleMenuHistory}
-        onDrafts={handleMenuDrafts}
-        onFollowing={handleMenuFollowing}
-        onTopics={handleMenuTopics}
-        onInviteAndEarn={handleMenuInvite}
-        onQuests={handleMenuQuests}
-        onHelp={handleMenuHelp}
-        onAbout={handleMenuAbout}
-        onLogout={handleMenuLogout}
-      />
     </Box>
   );
 }
