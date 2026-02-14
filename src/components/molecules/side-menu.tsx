@@ -513,7 +513,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
               style={styles.scrollView}
               contentContainerStyle={[
                 styles.scrollContent,
-              { paddingBottom: 20 },
+                { paddingBottom: 20 },
               ]}
               showsVerticalScrollIndicator={false}
             >
@@ -711,7 +711,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      update 10
+                      update 11
                     </Text>
                   </View>
                 </>
@@ -746,7 +746,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      update 10
+                      update 11
                     </Text>
                   </View>
                 </>
