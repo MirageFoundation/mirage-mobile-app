@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -15,6 +15,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { useRewardSummary } from "@/src/api/read/hooks";
 import { useNodeConfig } from "@/src/api/read/hooks/use-parameters";
+import type { FlashQuest } from "@/src/api/read/endpoints/rewards";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { usePreferencesStore } from "@/src/stores";
@@ -100,6 +101,108 @@ function QuestsSummarySkeleton() {
         }}
       />
     </>
+  );
+}
+
+function FlashQuestSummaryCountdown({
+  secondsRemaining: initial,
+}: {
+  secondsRemaining: number;
+}) {
+  const [seconds, setSeconds] = useState(initial);
+
+  useEffect(() => {
+    setSeconds(initial);
+  }, [initial]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSeconds((s: number) => Math.max(0, s - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const hours = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m ${secs}s`;
+}
+
+function FlashQuestSummaryItem({ quest }: { quest: FlashQuest }) {
+  const { theme } = useUnistyles();
+  const accentColor = "#F59E0B";
+  const progress = quest.target > 0 ? quest.progress / quest.target : 0;
+
+  return (
+    <View
+      style={{
+        borderWidth: 1,
+        borderColor: accentColor + "30",
+        borderRadius: theme.radius.md,
+        padding: theme.spacing.sm,
+        backgroundColor: accentColor + "08",
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <Ionicons name="flash" size={13} color={accentColor} />
+          <Text size="xs" weight="bold" style={{ color: accentColor, letterSpacing: 0.5 }}>
+            FLASH
+          </Text>
+        </View>
+        {!quest.completed && (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+            <Ionicons name="timer-outline" size={12} color={quest.seconds_remaining < 1800 ? theme.colors.error[500] : accentColor} />
+            <Text
+              size="xs"
+              weight="semibold"
+              style={{
+                color: quest.seconds_remaining < 1800 ? theme.colors.error[500] : accentColor,
+                fontVariant: ["tabular-nums"],
+              }}
+            >
+              <FlashQuestSummaryCountdown secondsRemaining={quest.seconds_remaining} />
+            </Text>
+          </View>
+        )}
+      </View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.sm }}>
+        <Ionicons
+          name={quest.completed ? "checkmark-circle" : "ellipse-outline"}
+          size={16}
+          color={quest.completed ? theme.colors.success[500] : accentColor}
+        />
+        <Text
+          size="md"
+          style={quest.completed ? { flex: 1 } : { flex: 1, opacity: 0.8 }}
+          numberOfLines={1}
+        >
+          {quest.title}
+        </Text>
+        <Text size="sm" style={{ color: accentColor }}>
+          {quest.progress}/{quest.target}
+        </Text>
+      </View>
+      <View
+        style={{
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: accentColor + "15",
+          overflow: "hidden",
+          marginTop: 6,
+        }}
+      >
+        <View
+          style={{
+            height: "100%",
+            borderRadius: 2,
+            backgroundColor: quest.completed ? theme.colors.success[500] : accentColor,
+            width: `${progress * 100}%`,
+          }}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -255,6 +358,10 @@ export function QuestsSummaryCard() {
                 ]}
               />
             </View>
+
+            {data?.flash_quest && (
+              <FlashQuestSummaryItem quest={data.flash_quest} />
+            )}
 
             <View style={styles.questsList}>
               {data?.daily_quests.map((quest) => (

@@ -39,6 +39,12 @@ export interface FlashQuest {
   ends_at: number;
   seconds_remaining: number;
   rewards: QuestReward[];
+  min_content_length: number | null;
+  quality_threshold: number | null;
+  unique_target: boolean;
+  unique_topics_min: number | null;
+  time_spacing_minutes: number | null;
+  count_vote_changes: boolean;
 }
 
 export interface PendingRewardRow {
