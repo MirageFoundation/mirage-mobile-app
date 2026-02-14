@@ -14,7 +14,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { useUserStatus, useConfig } from "@/src/api/read";
 import type { TierInfo, ConfigResponse } from "@/src/api/types";
-import { useUpgradeLevel } from "@/src/api/write/hooks";
+import { useUpgradeLevel, useSetAutoRenewal } from "@/src/api/write/hooks";
 import type { SubscriptionLevel } from "@/src/api/write/endpoints/tokens";
 import {
   ActivePlanCard,
@@ -272,7 +272,11 @@ export function SubscriptionScreen() {
   const { data: userStatus, isLoading: isLoadingStatus, error: statusError } = useUserStatus();
   const { data: config, isLoading: isLoadingConfig, error: configError } = useConfig();
   const upgradeMutation = useUpgradeLevel();
+  const autoRenewalMutation = useSetAutoRenewal();
   const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(null);
+  const [optimisticLevel, setOptimisticLevel] = useState<number | null>(null);
+  const [optimisticAutoRenew, setOptimisticAutoRenew] = useState<boolean | null>(null);
+  const [autoRenewProcessing, setAutoRenewProcessing] = useState(false);
 
   if (statusError) {
     console.error("[SubscriptionScreen] Failed to fetch user status:", statusError);
@@ -281,18 +285,29 @@ export function SubscriptionScreen() {
     console.error("[SubscriptionScreen] Failed to fetch config/tiers:", configError);
   }
 
-  const balance = userStatus ? formatMirageBalance(userStatus.balance) : 0;
-  const reserve = userStatus ? formatMirageBalance(userStatus.reserve_funds) : 0;
-  const userLevel = userStatus?.user_level ?? 0;
-  const currentPlanId = TIER_UI[userLevel]?.id ?? "free";
-
   const plans: Plan[] = useMemo(() => {
     if (!config?.tiers?.length) return [];
     return buildPlansFromConfig(config);
   }, [config]);
 
+  const serverLevel = userStatus?.user_level ?? 0;
+  const userLevel = optimisticLevel ?? serverLevel;
+  const currentPlanId = TIER_UI[userLevel]?.id ?? "free";
+
+  const activePlanIndex = plans.findIndex((p) => p.id === currentPlanId);
+
+  const optimisticCost = optimisticLevel !== null && config?.tiers?.[optimisticLevel]
+    ? Number(config.tiers[optimisticLevel].period_fee)
+    : 0;
+  const balance = userStatus
+    ? formatMirageBalance(userStatus.balance - optimisticCost)
+    : 0;
+  const reserve = userStatus ? formatMirageBalance(userStatus.reserve_funds) : 0;
+
   const currentPlanData = plans.find((p) => p.id === currentPlanId);
   const currentPlanTitle = currentPlanData?.title || TIER_UI[userLevel]?.title || "Free";
+
+  const effectiveAutoRenew = optimisticAutoRenew ?? userStatus?.auto_renew;
 
   const handleBack = useCallback(() => {
     triggerHaptic("light");
@@ -302,45 +317,83 @@ export function SubscriptionScreen() {
   const handleSubscribe = useCallback(
     (planId: string) => {
       const planIndex = plans.findIndex((p) => p.id === planId);
-      if (planIndex <= 0) return;
+      if (planIndex < 0) return;
 
       triggerHaptic("medium");
+      setSubscribingPlanId(planId);
 
-      Alert.alert(
-        "Confirm Subscription",
-        `Subscribe to ${plans[planIndex].title} for ${plans[planIndex].cost}?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Subscribe",
-            onPress: () => {
-              setSubscribingPlanId(planId);
-              upgradeMutation.mutate(planIndex as SubscriptionLevel, {
-                onSuccess: () => {
-                  setSubscribingPlanId(null);
-                  triggerHaptic("success");
-                  Alert.alert(
-                    "Subscription Active",
-                    `You are now subscribed to ${plans[planIndex].title}.`
-                  );
-                },
-                onError: (error) => {
-                  setSubscribingPlanId(null);
-                  console.error("[SubscriptionScreen] Failed to subscribe:", error);
-                  triggerHaptic("error");
-                  Alert.alert(
-                    "Subscription Failed",
-                    error?.message || "Something went wrong. Please try again."
-                  );
-                },
-              });
-            },
+      if (planIndex === 0) {
+        if (!effectiveAutoRenew) return;
+        setAutoRenewProcessing(true);
+        autoRenewalMutation.mutate(false, {
+          onSuccess: () => {
+            setSubscribingPlanId(null);
+            setAutoRenewProcessing(false);
+            setOptimisticAutoRenew(false);
+            triggerHaptic("success");
           },
-        ]
-      );
+          onError: (error) => {
+            setSubscribingPlanId(null);
+            setAutoRenewProcessing(false);
+            console.error("[SubscriptionScreen] Failed to cancel auto-renew:", error);
+            triggerHaptic("error");
+            Alert.alert(
+              "Downgrade Failed",
+              error?.message || "Something went wrong. Please try again."
+            );
+          },
+        });
+        return;
+      }
+
+      setOptimisticLevel(planIndex);
+
+      upgradeMutation.mutate(planIndex as SubscriptionLevel, {
+        onSuccess: () => {
+          setSubscribingPlanId(null);
+          triggerHaptic("success");
+        },
+        onError: (error) => {
+          setSubscribingPlanId(null);
+          setOptimisticLevel(null);
+          console.error("[SubscriptionScreen] Failed to subscribe:", error);
+          triggerHaptic("error");
+          Alert.alert(
+            "Subscription Failed",
+            error?.message || "Something went wrong. Please try again."
+          );
+        },
+      });
     },
-    [plans, upgradeMutation]
+    [plans, upgradeMutation, autoRenewalMutation, effectiveAutoRenew]
   );
+
+  useEffect(() => {
+    if (optimisticLevel !== null && userStatus?.user_level === optimisticLevel) {
+      setOptimisticLevel(null);
+    }
+  }, [userStatus?.user_level, optimisticLevel]);
+
+  const handleToggleAutoRenew = useCallback(() => {
+    const newValue = !effectiveAutoRenew;
+    triggerHaptic("medium");
+    setAutoRenewProcessing(true);
+    autoRenewalMutation.mutate(newValue, {
+      onSuccess: () => {
+        setAutoRenewProcessing(false);
+        setOptimisticAutoRenew(newValue);
+        triggerHaptic("success");
+      },
+      onError: (error) => {
+        setAutoRenewProcessing(false);
+        triggerHaptic("error");
+        Alert.alert(
+          "Failed",
+          error?.message || "Something went wrong. Please try again."
+        );
+      },
+    });
+  }, [autoRenewalMutation, effectiveAutoRenew]);
 
   const hasInsufficientFunds = useCallback(
     (planCostValue: number) => {
@@ -394,6 +447,10 @@ export function SubscriptionScreen() {
               planTitle={currentPlanTitle}
               balance={balance}
               reserve={reserve}
+              autoRenew={effectiveAutoRenew}
+              subscriptionExpiry={userStatus?.subscription_expiry}
+              autoRenewLoading={autoRenewProcessing}
+              onToggleAutoRenew={handleToggleAutoRenew}
             />
           </Box>
 
@@ -404,11 +461,13 @@ export function SubscriptionScreen() {
           </Box>
 
           <Box px="md" gap="md">
-            {plans.map((plan) => (
+            {plans.map((plan, index) => (
               <PlanCard
                 key={plan.id}
                 plan={plan}
                 isActive={plan.id === currentPlanId}
+                isLowerPlan={activePlanIndex > 0 && index < activePlanIndex}
+                isDowngradeDisabled={index === 0 && !effectiveAutoRenew}
                 hasInsufficientFunds={hasInsufficientFunds(plan.costValue)}
                 isSubscribing={subscribingPlanId === plan.id}
                 onSubscribe={handleSubscribe}

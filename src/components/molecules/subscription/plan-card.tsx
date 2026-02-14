@@ -31,6 +31,8 @@ export type Plan = {
 type PlanCardProps = {
   plan: Plan;
   isActive: boolean;
+  isLowerPlan?: boolean;
+  isDowngradeDisabled?: boolean;
   hasInsufficientFunds: boolean;
   isSubscribing?: boolean;
   onSubscribe?: (planId: string) => void;
@@ -39,6 +41,8 @@ type PlanCardProps = {
 export function PlanCard({
   plan,
   isActive,
+  isLowerPlan,
+  isDowngradeDisabled,
   hasInsufficientFunds,
   isSubscribing,
   onSubscribe,
@@ -117,6 +121,7 @@ export function PlanCard({
         variant: undefined,
         mode: "brand" as const,
         loading: true,
+        loadingColor: theme.colors.background.default,
       };
     }
     if (hasInsufficientFunds) {
@@ -128,11 +133,20 @@ export function PlanCard({
         loading: false,
       };
     }
+    if (isLowerPlan && isDowngradeDisabled) {
+      return {
+        text: "Downgrade",
+        disabled: true,
+        variant: "ghost" as const,
+        mode: "secondary" as const,
+        loading: false,
+      };
+    }
     return {
-      text: "Subscribe",
+      text: isLowerPlan ? "Downgrade" : "Subscribe",
       disabled: false,
       variant: undefined,
-      mode: "brand" as const,
+      mode: isLowerPlan ? "secondary" as const : "brand" as const,
       loading: false,
     };
   };
@@ -292,6 +306,9 @@ export function PlanCard({
               borderColor: plan.color,
               borderWidth: 1,
             },
+            isLowerPlan && {
+              backgroundColor: theme.colors.background.subtle,
+            },
             hasInsufficientFunds && {
               backgroundColor: `${theme.colors.error[500]}15`,
             },
@@ -300,6 +317,7 @@ export function PlanCard({
           <Button.Text
             style={[
               isActive && { color: plan.color },
+              isLowerPlan && { color: theme.colors.text.subtle },
               hasInsufficientFunds && { color: theme.colors.error[500] },
             ]}
           >

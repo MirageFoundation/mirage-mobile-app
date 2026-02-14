@@ -51,6 +51,7 @@ export type ButtonProps = PressableProps & {
   gap?: "none" | "sm" | "md" | "lg";
   rounded?: "none" | "sm" | "md" | "lg" | "full";
   loading?: boolean;
+  loadingColor?: string;
   haptics?: HapticFeedbackType | HapticConfig;
   shadow?: "none" | "sm" | "md" | "lg";
   border?: "none" | "subtle" | "thin" | "thick";
@@ -85,6 +86,7 @@ const Button: React.FC<ButtonProps> & {
   disabled,
   rounded,
   loading,
+  loadingColor,
   haptics = "selection",
   shadow,
   border = "none",
@@ -169,7 +171,17 @@ const Button: React.FC<ButtonProps> & {
             {loading ? (
               <ActivityIndicator
                 size="small"
-                color={theme.colors.background.default}
+                color={loadingColor ?? (() => {
+                  if (variant === "outline" || variant === "ghost") {
+                    if (mode === "subtle") return theme.colors.text.default;
+                    return theme.colors[mode || "primary"][500];
+                  }
+                  if (mode === "subtle") return theme.colors.text.default;
+                  const buttonColor = mode !== "disabled"
+                    ? theme.colors[mode || "primary"][500]
+                    : theme.colors.primary[500];
+                  return getContrastColor(buttonColor);
+                })()}
               />
             ) : (
               children
