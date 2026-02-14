@@ -257,7 +257,7 @@ export function QuestsSummaryCard() {
             </View>
 
             <View style={styles.questsList}>
-              {data?.daily_quests.slice(0, 3).map((quest) => (
+              {data?.daily_quests.map((quest) => (
                 <View key={quest.id} style={styles.questItem}>
                   <Ionicons
                     name={

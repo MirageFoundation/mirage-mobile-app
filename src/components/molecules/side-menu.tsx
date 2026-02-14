@@ -493,18 +493,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                 Menu
               </Text>
               <View style={styles.headerRight}>
-                <Pressable onPress={handleServerPress}>
-                  <Text
-                    size="sm"
-                    weight="semibold"
-                    style={{
-                      color: theme.colors.primary[500],
-                      textDecorationLine: "underline",
-                    }}
-                  >
-                    {apiServer}
-                  </Text>
-                </Pressable>
                 <Pressable
                   onPress={close}
                   style={[
