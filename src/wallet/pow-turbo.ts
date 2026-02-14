@@ -49,8 +49,21 @@ function hexToUint8Array(hex: string): Uint8Array {
 }
 
 // ============================================
+// Helpers — effective difficulty for native module
+// ============================================
+
+function computeEffectiveBits(powDifficulty: number, powBaseBits: number, powFactor: number): number {
+  if (powDifficulty === 0) return powBaseBits;
+  const factor = Number(difficultyFactor(powDifficulty, powFactor));
+  const extraBits = Math.ceil(Math.log2(factor / 1000));
+  return powBaseBits + extraBits;
+}
+
+// ============================================
 // PoW Computation (TurboModule - Parallel Native Workers)
 // ============================================
+
+const MAX_NATIVE_RETRIES = 8;
 
 export async function computePoW(
   input: PoWInput,
@@ -63,9 +76,9 @@ export async function computePoW(
   const saltHex = lastBlockHash.startsWith("0x")
     ? lastBlockHash.slice(2)
     : lastBlockHash;
-  const startNonce = Math.floor(Math.random() * 0xffffffff);
 
-  console.log(`[PoW Turbo] Starting with powDifficulty=${powDifficulty}, baseBits=${powBaseBits}, factor=${powFactor} (4 parallel workers)`);
+  const effectiveBits = computeEffectiveBits(powDifficulty, powBaseBits, powFactor);
+  console.log(`[PoW Turbo] Starting with powDifficulty=${powDifficulty}, baseBits=${powBaseBits}, factor=${powFactor}, effectiveBits=${effectiveBits} (4 parallel workers)`);
 
   let progressInterval: ReturnType<typeof setInterval> | undefined;
   if (onProgress) {
@@ -78,38 +91,42 @@ export async function computePoW(
     }, 100);
   }
 
+  const overallStart = Date.now();
+  let totalAttempts = 0;
+
   try {
-    const result = await computePowNative({
-      base: baseHex,
-      salt: saltHex,
-      difficulty: powBaseBits,
-      startNonce,
-      maxAttempts,
-      timeoutMs: 60000,
-      iterations: ARGON2_TIME_COST,
-      memory: ARGON2_MEMORY_COST,
-      parallelism: ARGON2_PARALLELISM,
-      hashLength: ARGON2_OUTPUT_LENGTH,
-    } as any);
+    for (let retry = 0; retry < MAX_NATIVE_RETRIES; retry++) {
+      const startNonce = Math.floor(Math.random() * 0xffffffff);
+      const result = await computePowNative({
+        base: baseHex,
+        salt: saltHex,
+        difficulty: effectiveBits,
+        startNonce,
+        maxAttempts,
+        timeoutMs: 60000,
+        iterations: ARGON2_TIME_COST,
+        memory: ARGON2_MEMORY_COST,
+        parallelism: ARGON2_PARALLELISM,
+        hashLength: ARGON2_OUTPUT_LENGTH,
+      } as any);
 
-    const nonce = result.nonce < 0 ? (result.nonce >>> 0) : result.nonce;
-    const digest = hexToUint8Array(result.digest);
+      const nonce = result.nonce < 0 ? (result.nonce >>> 0) : result.nonce;
+      const digest = hexToUint8Array(result.digest);
+      totalAttempts += result.attempts;
 
-    if (!checkPowTarget(digest, powDifficulty, powBaseBits, powFactor)) {
-      console.log("[PoW Turbo] Native result failed JS target check; this may indicate a native module mismatch");
+      if (checkPowTarget(digest, powDifficulty, powBaseBits, powFactor)) {
+        const computeTimeMs = Date.now() - overallStart;
+        const hashRate = Math.round(totalAttempts / (computeTimeMs / 1000));
+        console.log(
+          `[PoW Turbo] Found! nonce=${nonce}, attempts=${totalAttempts}, time=${computeTimeMs}ms, rate=${hashRate} h/s`
+        );
+        return { pow: nonce, digest, computeTimeMs, attempts: totalAttempts };
+      }
+
+      console.log(`[PoW Turbo] Native result failed JS target check (attempt ${retry + 1}/${MAX_NATIVE_RETRIES}), retrying...`);
     }
 
-    const hashRate = Math.round(result.attempts / (result.elapsedMs / 1000));
-    console.log(
-      `[PoW Turbo] Found! nonce=${nonce}, attempts=${result.attempts}, time=${result.elapsedMs}ms, rate=${hashRate} h/s`
-    );
-
-    return {
-      pow: nonce,
-      digest,
-      computeTimeMs: result.elapsedMs,
-      attempts: result.attempts,
-    };
+    throw new Error(`PoW: native module failed target check after ${MAX_NATIVE_RETRIES} attempts`);
   } finally {
     if (progressInterval) {
       clearInterval(progressInterval);
