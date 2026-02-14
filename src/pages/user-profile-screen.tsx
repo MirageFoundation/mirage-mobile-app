@@ -1,5 +1,4 @@
 import * as Clipboard from "expo-clipboard";
-import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -7,7 +6,6 @@ import {
   Dimensions,
   FlatList,
   ListRenderItem,
-  Pressable,
   Share,
   View,
 } from "react-native";
@@ -96,8 +94,92 @@ const calculateAccountAgeDays = (
   return ageInSeconds / (60 * 60 * 24);
 };
 
-const MemoizedPostCardItem = memo(PostCardItem);
-const MemoizedProfileCommentItem = memo(ProfileCommentItem);
+const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
+ const p = prev.post;
+ const n = next.post;
+ if (p.id !== n.id) return false;
+ if (p.likes !== n.likes) return false;
+ if (p.dislikes !== n.dislikes) return false;
+ if (p.comments !== n.comments) return false;
+ if (p.hasLiked !== n.hasLiked) return false;
+ if (p.hasDisliked !== n.hasDisliked) return false;
+ return true;
+});
+const MemoizedProfileCommentItem = memo(ProfileCommentItem, (prev, next) => {
+ return prev.comment.post_id === next.comment.post_id
+  && prev.comment.content === next.comment.content
+  && prev.comment.points === next.comment.points;
+});
+
+const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
+ post,
+ contentAnimatedStyle,
+ isOwnProfile,
+ shareUrl,
+ onPostPress,
+ onAuthorPress,
+ onCommentPress,
+ onMorePress,
+ onLikePress,
+ onDislikePress,
+ onBlockUser,
+ onBlockPost,
+ onReport,
+}: {
+ post: Post;
+ contentAnimatedStyle: any;
+ isOwnProfile: boolean;
+ shareUrl: string;
+ onPostPress: (postId: string) => void;
+ onAuthorPress: (authorId: string) => void;
+ onCommentPress: (postId: string) => void;
+ onMorePress: (postId: string) => void;
+ onLikePress: (postId: string, liked: boolean, disliked: boolean, likes: number) => void;
+ onDislikePress: (postId: string, liked: boolean, disliked: boolean, likes: number) => void;
+ onBlockUser: (postId: string, authorId: string, authorUsername: string) => void;
+ onBlockPost: (postId: string) => void;
+ onReport: (postId: string) => void;
+}) {
+ return (
+  <Animated.View style={contentAnimatedStyle}>
+   <MemoizedPostCardItem
+    post={post}
+    isOwnPost={isOwnProfile}
+    showUrlCard={false}
+    showFollowButton={false}
+    shareUrl={shareUrl}
+    onPostPress={onPostPress}
+    onAuthorPress={onAuthorPress}
+    onCommentPress={onCommentPress}
+    onMorePress={onMorePress}
+    onLikePress={onLikePress}
+    onDislikePress={onDislikePress}
+    onBlockUser={onBlockUser}
+    onBlockPost={onBlockPost}
+    onReport={onReport}
+   />
+  </Animated.View>
+ );
+});
+
+const AnimatedCommentWrapper = memo(function AnimatedCommentWrapper({
+ comment,
+ contentAnimatedStyle,
+ onPress,
+}: {
+ comment: ApiPost;
+ contentAnimatedStyle: any;
+ onPress: (commentId: string, rootPostId: string) => void;
+}) {
+ return (
+  <Animated.View style={contentAnimatedStyle}>
+   <MemoizedProfileCommentItem
+    comment={comment}
+    onPress={onPress}
+   />
+  </Animated.View>
+ );
+});
 
 export function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -240,11 +322,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     limit: 20,
   });
 
-  const fetchNextPage = useCallback(() => {
-    console.log('[UserProfile] fetchNextPage called - TRACING');
-    console.trace('[UserProfile] Call stack:');
-    return _fetchNextPage();
-  }, [_fetchNextPage]);
+  const fetchNextPage = _fetchNextPage;
 
   const apiPosts = useMemo(() => {
     const allPosts = postsData?.pages.flatMap((page) => page.posts) ?? [];
@@ -259,13 +337,28 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     [apiPosts]
   );
 
+  const postsWithVotes = useMemo(() => {
+    if (voteOverrides.size === 0) return uiPosts;
+    return uiPosts.map((post) => {
+      const override = voteOverrides.get(post.id);
+      if (!override) return post;
+      return {
+        ...post,
+        contentWarnings: undefined,
+        likes: post.likes + override.likeDelta,
+        hasLiked: override.hasLiked,
+        hasDisliked: override.hasDisliked,
+      };
+    });
+  }, [uiPosts, voteOverrides]);
+
  const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
     if (isBlocked || activeTab === 2) {
       return ["header", "tabs"];
     }
-    const posts = activeTab === 0 ? uiPosts : apiPosts;
+    const posts = activeTab === 0 ? postsWithVotes : apiPosts;
     return ["header", "tabs", ...posts];
-  }, [activeTab, uiPosts, apiPosts, isBlocked]);
+  }, [activeTab, postsWithVotes, apiPosts, isBlocked]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -589,23 +682,18 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const isFetchingRef = useRef(false);
 
   const handleEndReached = useCallback(() => {
-    const postsCount = listData.length - 2;
-    console.log('[UserProfile] onEndReached triggered', { activeTab, isBlocked, hasNextPage, isFetchingNextPage, isFetchingRef: isFetchingRef.current, postsCount, hasUserScrolled: hasUserScrolled.value });
     if (activeTab === 2 || isBlocked || !hasUserScrolled.value) return;
     const now = Date.now();
     if (
       hasNextPage &&
       !isFetchingNextPage &&
       !isFetchingRef.current &&
-      now - lastFetchTime.current > 500
+      now - lastFetchTime.current > 1000
     ) {
       lastFetchTime.current = now;
       isFetchingRef.current = true;
-      console.log('[UserProfile] Fetching next page...');
       fetchNextPage().finally(() => {
-        setTimeout(() => {
-          isFetchingRef.current = false;
-        }, 300);
+        isFetchingRef.current = false;
       });
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, activeTab, isBlocked]);
@@ -656,50 +744,32 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         }
 
        if (activeTab === 0 && "id" in item) {
-          const voteOverride = voteOverrides.get(item.id);
-          const postWithVotes = {
-            ...item,
-            contentWarnings: undefined,
-            ...(voteOverride && {
-              likes: item.likes + voteOverride.likeDelta,
-              hasLiked: voteOverride.hasLiked,
-              hasDisliked: voteOverride.hasDisliked,
-            }),
-          };
         return (
-          <Animated.View style={contentAnimatedStyle}>
-            <MemoizedPostCardItem
-               post={postWithVotes}
-              isOwnPost={isOwnProfile}
-              showUrlCard={false}
-              showFollowButton={false}
-              shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
-              onPostPress={handlePostPress}
-              onAuthorPress={handleAuthorPress}
-              onCommentPress={handlePostPress}
-              onMorePress={handlePostMorePress}
-              onLikePress={(postId, liked, disliked, likes) =>
-                handleUpvote(postId, liked, disliked, likes)
-              }
-              onDislikePress={(postId, liked, disliked, likes) =>
-                handleDownvote(postId, liked, disliked, likes)
-              }
-              onBlockUser={handleBlockUserFromCard}
-              onBlockPost={handleBlockPostFromCard}
-              onReport={handleReportFromCard}
-            />
-          </Animated.View>
+          <AnimatedPostWrapper
+           post={item}
+           contentAnimatedStyle={contentAnimatedStyle}
+           isOwnProfile={isOwnProfile}
+           shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
+           onPostPress={handlePostPress}
+           onAuthorPress={handleAuthorPress}
+           onCommentPress={handlePostPress}
+           onMorePress={handlePostMorePress}
+           onLikePress={handleUpvote}
+           onDislikePress={handleDownvote}
+           onBlockUser={handleBlockUserFromCard}
+           onBlockPost={handleBlockPostFromCard}
+           onReport={handleReportFromCard}
+          />
          );
        }
 
         if (activeTab === 1 && "post_id" in item) {
           return (
-            <Animated.View style={contentAnimatedStyle}>
-              <MemoizedProfileCommentItem
-                comment={item}
-                onPress={handleCommentPress}
-              />
-            </Animated.View>
+            <AnimatedCommentWrapper
+             comment={item}
+             contentAnimatedStyle={contentAnimatedStyle}
+             onPress={handleCommentPress}
+            />
           );
         }
 
@@ -724,7 +794,6 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
       handleAuthorPress,
       handlePostMorePress,
       handleCommentPress,
-       voteOverrides,
        handleUpvote,
        handleDownvote,
        shareServer,
@@ -880,10 +949,10 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           onEndReachedThreshold={0.3}
           ListFooterComponent={ListFooterComponent}
           removeClippedSubviews={true}
-          maxToRenderPerBatch={10}
-          windowSize={10}
-          initialNumToRender={5}
-          updateCellsBatchingPeriod={50}
+          maxToRenderPerBatch={5}
+          windowSize={5}
+          initialNumToRender={7}
+          updateCellsBatchingPeriod={100}
           bounces={true}
         />
       </GestureDetector>
