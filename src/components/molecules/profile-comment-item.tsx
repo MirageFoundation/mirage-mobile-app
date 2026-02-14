@@ -8,7 +8,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { memo, useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 const IMAGE_URL_REGEX = /^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp))$/i;
@@ -200,11 +200,7 @@ export const ProfileCommentItem = memo(function ProfileCommentItem({
           </Text>
         </View>
 
-        {isLoading && (
-          <View style={styles.loadingIndicator}>
-            <ActivityIndicator size="small" color={theme.colors.text.subtle} />
-          </View>
-        )}
+
 
         <View style={styles.actionsRow}>
           {onEditPress && (
@@ -283,9 +279,7 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: 2,
   },
-  loadingIndicator: {
-    marginLeft: "auto",
-  },
+
   actionsRow: {
     flexDirection: "row",
     alignItems: "center",
