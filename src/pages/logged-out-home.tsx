@@ -68,12 +68,12 @@ export function LoggedOutHome() {
       const newServer = otherServer;
       console.log("[LoggedOutHome] Switching server to:", newServer);
       apiClient.setBaseUrl(`https://${newServer}`);
-      setApiServer(newServer);
       queryClient.clear();
       await queryClient.invalidateQueries();
 
       const result = await refetchNodeConfig();
 
+      setApiServer(newServer);
       setShowRegPopup(false);
       toast.success(`Switched to ${newServer}`);
 

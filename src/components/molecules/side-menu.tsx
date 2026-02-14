@@ -525,7 +525,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
               style={styles.scrollView}
               contentContainerStyle={[
                 styles.scrollContent,
-                { paddingBottom: insets.bottom + 24 },
+                { paddingBottom: insets.bottom + 80 },
               ]}
               showsVerticalScrollIndicator={false}
             >

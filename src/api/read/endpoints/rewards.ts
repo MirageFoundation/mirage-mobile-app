@@ -88,7 +88,9 @@ export interface GetRewardSummaryParams {
 export async function getRewardSummary(
   params: GetRewardSummaryParams
 ): Promise<RewardSummaryResponse> {
-  return api.get<RewardSummaryResponse>("/rewards/summary", { owner: params.address });
+  const data = await api.get<RewardSummaryResponse>("/rewards/summary", { owner: params.address });
+  console.log("[getRewardSummary] daily_quests:", data.daily_quests?.length, "pending_rewards:", data.pending_rewards?.length, "disabled:", data.disabled, "suspended:", data.suspended);
+  return data;
 }
 
 export async function getAchievements(

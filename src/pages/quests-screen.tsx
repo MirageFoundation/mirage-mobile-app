@@ -978,7 +978,7 @@ export function QuestsScreen() {
   const questsEnabled = nodeConfig?.quests_enabled ?? true;
   const payoutsEnabled = nodeConfig?.quest_payouts_enabled ?? true;
 
-  const { data, isLoading, error, refetch } = useRewardSummary();
+  const { data, isLoading, error, refetch, dataUpdatedAt } = useRewardSummary();
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [isClaiming, setIsClaiming] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -1003,8 +1003,10 @@ export function QuestsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      refetch();
-    }, [refetch]),
+      if (!data || dataUpdatedAt < Date.now() - 30_000) {
+        refetch();
+      }
+    }, [refetch, data, dataUpdatedAt]),
   );
 
   useEffect(() => {

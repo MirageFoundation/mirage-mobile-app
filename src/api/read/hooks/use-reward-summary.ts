@@ -1,18 +1,28 @@
-import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "../query-keys";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "../query-keys"; 
 import { getRewardSummary, getAchievements, type GetRewardSummaryParams } from "../endpoints/rewards";
+import type { RewardSummaryResponse } from "../endpoints/rewards";
 import { useAuthStore } from "@/src/stores";
 
 export function useRewardSummary(params?: Omit<GetRewardSummaryParams, "address">) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const queryClient = useQueryClient();
 
   return useQuery({
     queryKey: queryKeys.rewardSummary(walletAddress!),
-    queryFn: () =>
-      getRewardSummary({
+    queryFn: async () => {
+      const data = await getRewardSummary({
         address: walletAddress!,
         ...params,
-      }),
+      });
+      if (data.disabled) {
+        const cached = queryClient.getQueryData<RewardSummaryResponse>(queryKeys.rewardSummary(walletAddress!));
+        if (cached && (cached.daily_quests?.length ?? 0) > 0) {
+          return cached;
+        }
+      }
+      return data;
+    },
     enabled: !!walletAddress,
     staleTime: 1000 * 60,
     gcTime: 1000 * 60 * 5,
