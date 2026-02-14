@@ -1,7 +1,10 @@
 import { useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   Image,
+  ActivityIndicator,
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   View,
@@ -10,22 +13,77 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useWelcomeStats } from "@/src/api/read/hooks/use-stats";
+import { useNodeConfig } from "@/src/api/read/hooks/use-parameters";
 import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import { useToast } from "@/src/providers/toast-provider";
+import { apiClient } from "@/src/api/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { usePreferencesStore, type ApiServer } from "@/src/stores";
+import { triggerHaptic } from "@/src/components/utils/haptics";
 import {
   HEADER_HEIGHT,
   TAB_BAR_HEIGHT,
 } from "@/src/providers/scroll-animation-context";
+
+const SERVERS: ApiServer[] = ["mirage.talk", "mirage.vote"];
 
 export function LoggedOutHome() {
   const { theme, rt } = useUnistyles();
   const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const toast = useToast();
   const { data: stats } = useWelcomeStats();
+  const { data: nodeConfig, refetch: refetchNodeConfig } = useNodeConfig();
+  const apiServer = usePreferencesStore((s) => s.apiServer);
+  const setApiServer = usePreferencesStore((s) => s.setApiServer);
+
+  const [showRegPopup, setShowRegPopup] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
 
   const totalUsers = stats?.registered_users;
   const activeToday = stats?.active_24h;
   const postsToday = stats?.posts_24h;
+
+  const otherServer = SERVERS.find((s) => s !== apiServer) ?? "mirage.vote";
+
+  const handleCreateAccount = useCallback(async () => {
+    triggerHaptic("selection");
+
+    if (nodeConfig && !nodeConfig.registration_enabled) {
+      setShowRegPopup(true);
+      return;
+    }
+
+    router.push("/(auth)/username");
+  }, [nodeConfig, router]);
+
+  const handleSwitchNode = useCallback(async () => {
+    triggerHaptic("selection");
+    setIsSwitching(true);
+
+    try {
+      const newServer = otherServer;
+      console.log("[LoggedOutHome] Switching server to:", newServer);
+      apiClient.setBaseUrl(`https://${newServer}`);
+      setApiServer(newServer);
+      queryClient.clear();
+      await queryClient.invalidateQueries();
+
+      const result = await refetchNodeConfig();
+
+      setShowRegPopup(false);
+      toast.success(`Switched to ${newServer}`);
+
+      if (result.data?.registration_enabled) {
+        router.push("/(auth)/username");
+      }
+    } finally {
+      setIsSwitching(false);
+    }
+  }, [otherServer, setApiServer, queryClient, refetchNodeConfig, router]);
 
   return (
     <Box flex background="base">
@@ -109,17 +167,25 @@ export function LoggedOutHome() {
               <LinearGradient
                 colors={
                   isDark
-                    ? ["rgba(102,126,234,0.06)", "transparent", "rgba(118,75,162,0.06)"]
-                    : ["rgba(102,126,234,0.04)", "transparent", "rgba(118,75,162,0.04)"]
+                    ? [
+                        "rgba(102,126,234,0.06)",
+                        "transparent",
+                        "rgba(118,75,162,0.06)",
+                      ]
+                    : [
+                        "rgba(102,126,234,0.04)",
+                        "transparent",
+                        "rgba(118,75,162,0.04)",
+                      ]
                 }
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.statsInnerGlow}
-             />
+              />
 
-            <View style={styles.statsRow}>
-               <View style={styles.statItem}>
-                 <Text
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <Text
                     style={[
                       styles.statNumber,
                       { color: isDark ? "#A5B4FC" : "rgb(79,70,229)" },
@@ -141,11 +207,11 @@ export function LoggedOutHome() {
                   ]}
                 />
 
-               <View style={styles.statItem}>
-                 <Text
-                   style={[
-                     styles.statNumber,
-                     { color: isDark ? "#6EE7B7" : "#059669" },
+                <View style={styles.statItem}>
+                  <Text
+                    style={[
+                      styles.statNumber,
+                      { color: isDark ? "#6EE7B7" : "#059669" },
                     ]}
                   >
                     {activeToday != null ? activeToday.toLocaleString() : "-"}
@@ -164,7 +230,7 @@ export function LoggedOutHome() {
                   ]}
                 />
 
-              <View style={styles.statItem}>
+                <View style={styles.statItem}>
                   <Text
                     style={[
                       styles.statNumber,
@@ -195,7 +261,7 @@ export function LoggedOutHome() {
           <View style={styles.buttonRow}>
             <Pressable
               style={styles.createButton}
-              onPress={() => router.push("/(auth)/username")}
+              onPress={handleCreateAccount}
             >
               <LinearGradient
                 colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
@@ -222,6 +288,89 @@ export function LoggedOutHome() {
           </View>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={showRegPopup}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRegPopup(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowRegPopup(false)}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.colors.background.default },
+            ]}
+          >
+            <View style={styles.modalIconContainer}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={48}
+                color={theme.colors.warning[500]}
+              />
+            </View>
+            <Text
+              size="lg"
+              weight="bold"
+              style={{ textAlign: "center", marginBottom: 10 }}
+            >
+              Registration Unavailable
+            </Text>
+            <Text
+              size="md"
+              style={{
+                textAlign: "center",
+                color: theme.colors.text.subtle,
+                marginBottom: 20,
+              }}
+            >
+              Account creation is not available on{" "}
+              <Text size="md" weight="semibold">
+                {apiServer}
+              </Text>
+              . Switch to{" "}
+              <Text size="md" weight="semibold">
+                {otherServer}
+              </Text>{" "}
+              to create an account.
+            </Text>
+            <Pressable
+              onPress={handleSwitchNode}
+              disabled={isSwitching}
+              style={[styles.switchButton, { opacity: isSwitching ? 0.7 : 1 }]}
+            >
+              <LinearGradient
+                colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.switchButtonGradient}
+              >
+                {isSwitching ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text
+                    style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "600" }}
+                  >
+                    Switch to {otherServer}
+                  </Text>
+                )}
+              </LinearGradient>
+            </Pressable>
+            <Pressable
+              onPress={() => setShowRegPopup(false)}
+              disabled={isSwitching}
+              style={{ paddingTop: 12, opacity: isSwitching ? 0.3 : 1 }}
+            >
+              <Text size="md" style={{ color: theme.colors.text.subtle }}>
+                Cancel
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
     </Box>
   );
 }
@@ -412,5 +561,45 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: 16,
     lineHeight: 22,
     fontWeight: "600",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "85%",
+    borderRadius: 20,
+    padding: 28,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalIconContainer: {
+    marginBottom: 12,
+  },
+  switchButton: {
+    width: "100%",
+    marginBottom: 4,
+  },
+  switchButtonGradient: {
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.radius.lg,
+  },
+  cancelButton: {
+    width: "100%",
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.background.subtle,
+    marginTop: 8,
   },
 }));

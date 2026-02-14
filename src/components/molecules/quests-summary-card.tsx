@@ -14,6 +14,7 @@ import Animated, {
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { useRewardSummary } from "@/src/api/read/hooks";
+import { useNodeConfig } from "@/src/api/read/hooks/use-parameters";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { usePreferencesStore } from "@/src/stores";
@@ -105,8 +106,10 @@ function QuestsSummarySkeleton() {
 export function QuestsSummaryCard() {
   const { theme, rt } = useUnistyles();
   const router = useRouter();
-  const { data, isLoading } = useRewardSummary();
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const { data: nodeConfig } = useNodeConfig();
+  const questsEnabled = nodeConfig?.quests_enabled ?? true;
+  const { data, isLoading } = useRewardSummary();
   const questsCardExpanded = usePreferencesStore((s) => s.questsCardExpanded);
   const setQuestsCardExpanded = usePreferencesStore(
     (s) => s.setQuestsCardExpanded,
@@ -157,6 +160,7 @@ export function QuestsSummaryCard() {
   }, [questsCardExpanded, setQuestsCardExpanded]);
 
   if (!isLoggedIn) return null;
+  if (!questsEnabled) return null;
   if (isLoading && !data) return <QuestsSummarySkeleton />;
   if (!data?.daily_quests?.length) return null;
 

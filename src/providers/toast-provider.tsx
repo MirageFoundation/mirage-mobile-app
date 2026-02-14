@@ -13,6 +13,8 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { Platform, StyleSheet, View } from "react-native";
+import { FullWindowOverlay } from "react-native-screens";
 
 import { ToastContainer, type ToastData, type ToastType } from "@/src/components/ui/toast";
 
@@ -214,10 +216,20 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [show, loading, success, error, info, update, dismiss, dismissAll, promiseToast]
   );
 
+  const toastContent = <ToastContainer toasts={toasts} onDismiss={dismiss} />;
+
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <ToastContainer toasts={toasts} onDismiss={dismiss} />
+      {Platform.OS === "ios" ? (
+        <FullWindowOverlay style={StyleSheet.absoluteFill}>
+          <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+            {toastContent}
+          </View>
+        </FullWindowOverlay>
+      ) : (
+        toastContent
+      )}
     </ToastContext.Provider>
   );
 }

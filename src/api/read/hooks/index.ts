@@ -1,5 +1,5 @@
 // Parameters & Config
-export { useParameters, useConfig } from "./use-parameters";
+export { useParameters, useConfig, useChainConfig, useNodeConfig } from "./use-parameters";
 
 // User Status & Profile
 export {

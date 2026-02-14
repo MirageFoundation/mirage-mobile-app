@@ -63,7 +63,7 @@ export interface TierInfo {
 }
 
 export interface ConfigResponse {
-  // Chain params
+  // Chain params (from get_chain_config)
   max_username_size: number;
   min_username_size: number;
   max_topic_size: number;
@@ -88,6 +88,20 @@ export interface ConfigResponse {
 
   // Misc
   giphy_api_key: string;
+}
+
+export type ChainConfigResponse = ConfigResponse;
+
+export interface NodeConfigResponse {
+  giphy_api_key: string;
+  quest_payouts_enabled: boolean;
+  quests_enabled: boolean;
+  registration_enabled: boolean;
+  registration_invite_code_required: boolean;
+  validator_account_address: string;
+  validator_consensus_address: string;
+  validator_moniker: string;
+  validator_operator_address: string;
 }
 
 // ============================================

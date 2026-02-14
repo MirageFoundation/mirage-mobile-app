@@ -28,6 +28,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { useRewardSummary } from "@/src/api/read/hooks";
+import { useNodeConfig } from "@/src/api/read/hooks/use-parameters";
 import { useClaimReward } from "@/src/api/write/hooks";
 import type { DailyQuest } from "@/src/api/read/endpoints/rewards";
 import { Box, Text } from "@/src/components/ui/primitives";
@@ -878,6 +879,7 @@ function ClaimAllButton({
   onClaim,
   isClaiming,
   hasClaimed,
+  payoutsEnabled = true,
 }: {
   completedQuests: DailyQuest[];
   totalQuests: number;
@@ -885,8 +887,9 @@ function ClaimAllButton({
   onClaim: () => void;
   isClaiming: boolean;
   hasClaimed: boolean;
+  payoutsEnabled?: boolean;
 }) {
-  const canClaim = completedQuests.length > 0 && !hasClaimed;
+  const canClaim = completedQuests.length > 0 && !hasClaimed && payoutsEnabled;
 
   const handlePress = useCallback(() => {
     if (canClaim && !isClaiming) {
@@ -970,6 +973,10 @@ export function QuestsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
+
+  const { data: nodeConfig } = useNodeConfig();
+  const questsEnabled = nodeConfig?.quests_enabled ?? true;
+  const payoutsEnabled = nodeConfig?.quest_payouts_enabled ?? true;
 
   const { data, isLoading, error, refetch } = useRewardSummary();
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
@@ -1075,7 +1082,17 @@ export function QuestsScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      {isLoading ? (
+      {!questsEnabled ? (
+        <Box flex center p="lg">
+          <Ionicons name="trophy-outline" size={48} color={theme.colors.text.subtle} style={{ marginBottom: 12 }} />
+          <Text size="lg" weight="semibold" style={{ textAlign: "center", marginBottom: 8 }}>
+            Quests Unavailable
+          </Text>
+          <Text size="md" mode="subtle" style={{ textAlign: "center" }}>
+            Quests are not enabled on this server.
+          </Text>
+        </Box>
+      ) : isLoading ? (
         <QuestsSkeleton />
       ) : !data?.daily_quests?.length ? (
         <EmptyState />
@@ -1160,7 +1177,7 @@ export function QuestsScreen() {
         </ScrollView>
       )}
 
-      {!isLoading && data?.daily_quests?.length && !data.suspended && (
+      {questsEnabled && !isLoading && (data?.daily_quests?.length ?? 0) > 0 && !data.suspended && (
         <View
           style={[
             styles.claimButtonContainer,
@@ -1178,6 +1195,7 @@ export function QuestsScreen() {
               onClaim={handleClaimAll}
               isClaiming={isClaiming}
               hasClaimed={hasClaimed}
+              payoutsEnabled={payoutsEnabled}
             />
           </Box>
         </View>

@@ -90,7 +90,7 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
  voteOverrides: {},
  commentCountOverrides: {},
  handlers: {},
- shareServer: "mirage.talk",
+ shareServer: "mirage.vote",
  allowAutoplay: true,
   activeFeedScreen: null,
  shouldScrollToTop: false,
