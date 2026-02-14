@@ -3,14 +3,13 @@ import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "@react-navigation/native";
-import { useCallback, useState, useRef } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import {
   Pressable,
   ScrollView,
   View,
   Share,
   Platform,
-  ActivityIndicator,
 } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -18,6 +17,8 @@ import Animated, {
   withSequence,
   withTiming,
   FadeIn,
+  withRepeat,
+  interpolate,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -36,6 +37,88 @@ import {
 } from "@/src/stores";
 import { useInviteCodes } from "@/src/api/read/hooks";
 import type { InviteCode } from "@/src/api/types";
+
+const SkeletonBox = ({
+  width,
+  height,
+  style,
+  borderRadius,
+}: {
+  width: number | `${number}%`;
+  height: number;
+  style?: object;
+  borderRadius?: number;
+}) => {
+  const { theme } = useUnistyles();
+  const shimmer = useSharedValue(0);
+
+  useEffect(() => {
+    shimmer.value = withRepeat(withTiming(1, { duration: 1200 }), -1, false);
+  }, [shimmer]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(shimmer.value, [0, 0.5, 1], [0.3, 0.6, 0.3]),
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        {
+          width,
+          height,
+          backgroundColor: theme.colors.background.subtle,
+          borderRadius: borderRadius ?? theme.radius.sm,
+        },
+        animatedStyle,
+        style,
+      ]}
+    />
+  );
+};
+
+const InviteCodeCardSkeleton = () => {
+  const { theme } = useUnistyles();
+
+  return (
+    <View
+      style={[
+        styles.inviteCodeCard,
+        {
+          backgroundColor: theme.colors.background.default,
+          borderColor: theme.colors.border.subtle,
+        },
+      ]}
+    >
+      <View style={styles.codeContent}>
+        <View style={styles.codeHeader}>
+          <SkeletonBox width={6} height={6} borderRadius={3} />
+          <SkeletonBox width={55} height={14} />
+        </View>
+        <SkeletonBox width={140} height={22} style={{ marginTop: 4 }} />
+      </View>
+      <View style={styles.codeActions}>
+        <SkeletonBox width={40} height={40} borderRadius={theme.radius.md} />
+        <SkeletonBox width={40} height={40} borderRadius={theme.radius.md} />
+      </View>
+    </View>
+  );
+};
+
+const InviteCodesSkeleton = ({ count = 3 }: { count?: number }) => {
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <SkeletonBox width={120} height={18} />
+        <SkeletonBox width={20} height={20} borderRadius={10} />
+      </View>
+      <View style={styles.codesGrid}>
+        {Array.from({ length: count }).map((_, i) => (
+          <InviteCodeCardSkeleton key={i} />
+        ))}
+      </View>
+    </View>
+  );
+};
 
 const InviteCodeCard = ({
   code,
@@ -457,19 +540,10 @@ export function InviteAndEarnScreen() {
               : "Mirage is now invite-only — because great conversations require great people! Unfortunately, you're out of invite codes. But don't worry, we might drop some more soon. Stay tuned!"}
           </Text>
 
-          {isLoading ? (
-            <ActivityIndicator
-              size="small"
-              color={theme.colors.brand[500]}
-              style={{ marginTop: 24 }}
-            />
-          ) : null}
         </View>
 
         {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.brand[500]} />
-          </View>
+          <InviteCodesSkeleton count={3} />
         ) : (
           <>
             {availableCodes.length > 0 && (
@@ -607,10 +681,6 @@ const styles = StyleSheet.create((theme) => ({
   heroSubtitle: {
     textAlign: "center",
     paddingHorizontal: theme.spacing.lg,
-  },
-  loadingContainer: {
-    padding: theme.spacing.xxl,
-    alignItems: "center",
   },
   section: {
     marginBottom: theme.spacing.lg,
