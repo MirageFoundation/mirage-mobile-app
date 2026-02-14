@@ -1325,6 +1325,86 @@ export function QuestsScreen() {
         </Box>
       ) : isLoading ? (
         <QuestsSkeleton />
+      ) : data?.suspended && data?.suspension ? (
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: insets.bottom + 40 },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <Box px="md">
+            <Box
+              alignItems="center"
+              p="lg"
+              rounded="lg"
+              style={{
+                backgroundColor: "#EF444410",
+                borderWidth: 1,
+                borderColor: "#EF444425",
+              }}
+            >
+              <View
+                style={{
+                  width: 80,
+                  height: 80,
+                  borderRadius: 40,
+                  backgroundColor: "#EF444420",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 20,
+                }}
+              >
+                <Ionicons name="warning" size={40} color="#EF4444" />
+              </View>
+              <Text
+                size="xl"
+                weight="bold"
+                style={{ color: "#EF4444", textAlign: "center", marginBottom: 8 }}
+              >
+                Your quest rewards have been suspended
+              </Text>
+              <Text
+                size="md"
+                style={{ color: "#F87171", textAlign: "center", marginBottom: 20 }}
+              >
+                {data.suspension.reason}
+              </Text>
+              <View
+                style={{
+                  backgroundColor: "#EF444415",
+                  borderWidth: 1,
+                  borderColor: "#EF444430",
+                  borderRadius: theme.radius.md,
+                  padding: theme.spacing.md,
+                  width: "100%",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: theme.spacing.sm,
+                }}
+              >
+                <Ionicons name="time-outline" size={20} color="#F87171" />
+                <View style={{ flex: 1 }}>
+                  <Text size="xs" weight="semibold" style={{ color: "#F8717180", marginBottom: 2 }}>
+                    SUSPENDED UNTIL
+                  </Text>
+                  <Text size="md" weight="semibold" style={{ color: "#EF4444" }}>
+                    {new Date(data.suspension.suspended_until * 1000).toLocaleDateString(undefined, {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}{" "}
+                    at{" "}
+                    {new Date(data.suspension.suspended_until * 1000).toLocaleTimeString(undefined, {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </Text>
+                </View>
+              </View>
+            </Box>
+          </Box>
+        </ScrollView>
       ) : !data?.daily_quests?.length ? (
         <EmptyState />
       ) : (
@@ -1391,38 +1471,11 @@ export function QuestsScreen() {
               />
             ))}
 
-            {data.suspended && (
-              <Box
-                p="md"
-                rounded="lg"
-                mt="md"
-                style={{
-                  backgroundColor: theme.colors.error[500] + "10",
-                  borderWidth: 1,
-                  borderColor: theme.colors.error[500] + "30",
-                }}
-              >
-                <Box direction="row" alignItems="center" gap="sm">
-                  <Ionicons
-                    name="warning"
-                    size={20}
-                    color={theme.colors.error[500]}
-                  />
-                  <Text
-                    size="sm"
-                    weight="medium"
-                    style={{ color: theme.colors.error[500] }}
-                  >
-                    Quest rewards are currently suspended
-                  </Text>
-                </Box>
-              </Box>
-            )}
           </Box>
         </ScrollView>
       )}
 
-      {questsEnabled && !isLoading && (data?.daily_quests?.length ?? 0) > 0 && !data.suspended && (
+      {questsEnabled && !isLoading && (data?.daily_quests?.length ?? 0) > 0 && !data?.suspended && (
         <View
           style={[
             styles.claimButtonContainer,

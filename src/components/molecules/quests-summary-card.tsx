@@ -265,7 +265,89 @@ export function QuestsSummaryCard() {
   if (!isLoggedIn) return null;
   if (!questsEnabled) return null;
   if (isLoading && !data) return <QuestsSummarySkeleton />;
-  if (!data?.daily_quests?.length) return null;
+  if (!data?.daily_quests?.length && !data?.suspended) return null;
+
+  if (data?.suspended && data?.suspension) {
+    const suspendedUntil = new Date(data.suspension.suspended_until * 1000);
+    const formattedDate = suspendedUntil.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    const formattedTime = suspendedUntil.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    return (
+      <>
+        <Pressable
+          onPress={handleViewQuests}
+          style={[
+            styles.container,
+            {
+              backgroundColor: theme.colors.background.default,
+            },
+          ]}
+        >
+          <View style={styles.header}>
+            <View style={styles.titleRow}>
+              <View
+                style={[
+                  styles.iconContainer,
+                  { backgroundColor: "#EF444420" },
+                ]}
+              >
+                <Ionicons
+                  name="warning"
+                  size={18}
+                  color="#EF4444"
+                />
+              </View>
+              <View style={styles.titleContent}>
+                <Text size="md" weight="semibold" style={{ color: "#EF4444" }}>
+                  Quests Suspended
+                </Text>
+                <Text size="sm" style={{ color: "#F87171" }} numberOfLines={2}>
+                  {data.suspension.reason}
+                </Text>
+              </View>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={theme.colors.text.subtle}
+            />
+          </View>
+          <View style={{ paddingHorizontal: theme.spacing.md + 2, paddingBottom: theme.spacing.md + 2 }}>
+            <View
+              style={{
+                backgroundColor: "#EF444410",
+                borderWidth: 1,
+                borderColor: "#EF444425",
+                borderRadius: theme.radius.md,
+                padding: theme.spacing.sm,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: theme.spacing.sm,
+              }}
+            >
+              <Ionicons name="time-outline" size={16} color="#F87171" />
+              <Text size="sm" style={{ color: "#F87171" }}>
+                Suspended until {formattedDate} at {formattedTime}
+              </Text>
+            </View>
+          </View>
+        </Pressable>
+        <View
+          style={{
+            height: 1,
+            backgroundColor: theme.colors.border.subtle,
+          }}
+        />
+      </>
+    );
+  }
 
   return (
     <>

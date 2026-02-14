@@ -55,6 +55,13 @@ export interface PendingRewardRow {
   created_at: number;
 }
 
+export interface QuestSuspension {
+  reason: string;
+  suspended_by: string;
+  suspended_until: number;
+  updated_at: number;
+}
+
 export interface RewardSummaryResponse {
   suspended: boolean;
   daily_quests: DailyQuest[];
@@ -68,7 +75,7 @@ export interface RewardSummaryResponse {
   claiming_available: boolean;
   debug: boolean;
   disabled?: boolean;
-  suspension?: Record<string, unknown>;
+  suspension?: QuestSuspension;
 }
 
 export interface Achievement {
