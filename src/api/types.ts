@@ -252,6 +252,7 @@ export interface InboxReply {
   parent_content: string;
   parent_owner: string;
   root_post_id: string;
+  type?: "reply" | "mention";
 }
 
 export interface InboxResponse {
