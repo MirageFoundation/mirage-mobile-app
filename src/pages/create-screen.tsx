@@ -72,6 +72,8 @@ export function CreateScreen() {
 
   const titleInputRef = useRef<TextInput>(null);
   const bodyInputRef = useRef<TextInput>(null);
+  const bodySelectionRef = useRef({ start: 0, end: 0 });
+  const [bodySelection, setBodySelection] = useState<{ start: number; end: number } | undefined>(undefined);
   const linkInputRef = useRef<TextInput>(null);
   const videoRef = useRef<Video>(null);
 
@@ -458,6 +460,25 @@ export function CreateScreen() {
     triggerHaptic("selection");
     toast.info("Coming soon", "Polls will be available soon");
   }, [hasAttachment, toast]);
+
+  const handleSpoilerPress = useCallback(() => {
+    triggerHaptic("selection");
+    const { start, end } = bodySelectionRef.current;
+    const body = draft.body;
+    const before = body.slice(0, start);
+    const selected = body.slice(start, end);
+    const after = body.slice(end);
+    const newBody = selected
+      ? `${before}||${selected}||${after}`
+      : `${before}||||${after}`;
+    updateDraft({ body: newBody });
+    const cursorPos = selected ? start + selected.length + 4 : start + 2;
+    setTimeout(() => {
+      bodyInputRef.current?.focus();
+      setBodySelection({ start: cursorPos, end: cursorPos });
+      setTimeout(() => setBodySelection(undefined), 50);
+    }, 50);
+  }, [draft.body, updateDraft]);
 
   const handleRemoveMedia = useCallback(() => {
     triggerHaptic("selection");
@@ -880,6 +901,10 @@ export function CreateScreen() {
             onChangeText={(text) => updateDraft({ body: text })}
             multiline
             textAlignVertical="top"
+            selection={bodySelection}
+            onSelectionChange={(e) => {
+              bodySelectionRef.current = e.nativeEvent.selection;
+            }}
           />
         </ScrollView>
 
@@ -959,21 +984,13 @@ export function CreateScreen() {
             </Pressable>
 
             <Pressable
-              onPress={handlePollPress}
-              disabled={hasAttachment}
-              style={[
-                styles.mediaButton,
-                hasAttachment && styles.mediaButtonDisabled,
-              ]}
+              onPress={handleSpoilerPress}
+              style={styles.mediaButton}
             >
-              <Entypo
-                name="list"
-                size={24}
-                color={
-                  hasAttachment
-                    ? theme.colors.text.subtle
-                    : theme.colors.text.default
-                }
+              <Feather
+                name="eye-off"
+                size={22}
+                color={theme.colors.text.default}
               />
             </Pressable>
           </View>

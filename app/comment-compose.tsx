@@ -69,6 +69,8 @@ export default function CommentComposeScreen() {
  const inputRef = useRef<TextInput>(null);
  const gifSearchRef = useRef<TextInput>(null);
   const linkUrlRef = useRef<TextInput>(null);
+  const selectionRef = useRef({ start: 0, end: 0 });
+  const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined);
 const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const setPendingEdit = useCommentComposeStore((s) => s.setPendingEdit);
 
@@ -281,6 +283,24 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
     setIsMediaLoading(false);
   }, []);
 
+  const handleSpoilerPress = useCallback(() => {
+    triggerHaptic("selection");
+    const { start, end } = selectionRef.current;
+    const before = text.slice(0, start);
+    const selected = text.slice(start, end);
+    const after = text.slice(end);
+    const newText = selected
+      ? `${before}||${selected}||${after}`
+      : `${before}||||${after}`;
+    setText(newText);
+    const cursorPos = selected ? start + selected.length + 4 : start + 2;
+    setTimeout(() => {
+      inputRef.current?.focus();
+      setSelection({ start: cursorPos, end: cursorPos });
+      setTimeout(() => setSelection(undefined), 50);
+    }, 50);
+  }, [text]);
+
   return (
     <KeyboardAvoidingView style={styles.keyboardView} behavior="padding">
       <View
@@ -486,6 +506,10 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
               multiline
               maxLength={2000}
               autoFocus
+              selection={selection}
+              onSelectionChange={(e) => {
+                selectionRef.current = e.nativeEvent.selection;
+              }}
             />
           )}
         </ScrollView>
@@ -666,6 +690,13 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
               <Ionicons
                 name="image-outline"
                 size={18}
+                color={theme.colors.text.subtle}
+              />
+            </Pressable>
+            <Pressable onPress={handleSpoilerPress} style={styles.toolbarButton}>
+              <Feather
+                name="eye-off"
+                size={16}
                 color={theme.colors.text.subtle}
               />
             </Pressable>

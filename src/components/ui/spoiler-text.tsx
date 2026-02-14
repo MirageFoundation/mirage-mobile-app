@@ -1,5 +1,5 @@
 import { memo, useState } from "react";
-import { Pressable, type TextStyle } from "react-native";
+import type { TextStyle } from "react-native";
 import { useUnistyles } from "react-native-unistyles";
 import Animated, {
   useSharedValue,
@@ -31,34 +31,34 @@ export const SpoilerText = memo(function SpoilerText({
     progress.value = withTiming(next ? 1 : 0, { duration: DURATION });
   };
 
-  const bgStyle = useAnimatedStyle(() => ({
+  const animStyle = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(
       progress.value,
       [0, 1],
-      [theme.colors.text.subtle, "transparent"],
+      [theme.colors.text.subtle, theme.colors.background.subtle],
     ),
-    borderRadius: theme.radius.sm,
-    overflow: "hidden" as const,
-    paddingHorizontal: 2,
-  }));
-
-  const textAnimStyle = useAnimatedStyle(() => ({
-    opacity: progress.value,
+    color: interpolateColor(
+      progress.value,
+      [0, 1],
+      ["transparent", theme.colors.text.default],
+    ),
   }));
 
   return (
-    <Pressable onPress={handlePress} style={{ alignSelf: "flex-start" }}>
-      <Animated.View style={bgStyle}>
-        <Animated.Text
-          style={[
-            { color: theme.colors.text.default },
-            textStyle,
-            textAnimStyle,
-          ]}
-        >
-          {children}
-        </Animated.Text>
-      </Animated.View>
-    </Pressable>
+    <Animated.Text
+      onPress={handlePress}
+      suppressHighlighting
+      style={[
+        textStyle,
+        {
+          borderRadius: theme.radius.md,
+          overflow: "hidden",
+          paddingHorizontal: 2,
+        },
+        animStyle,
+      ]}
+    >
+      {children}
+    </Animated.Text>
   );
 });
