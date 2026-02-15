@@ -711,7 +711,14 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      update 11
+                      update 12
+                    </Text>
+                    <Text
+                      style={{ color: theme.colors.text.subtle }}
+                      size="sm"
+                      weight="light"
+                    >
+                      side menu fix
                     </Text>
                   </View>
                 </>
@@ -746,7 +753,14 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      update 11
+                      update 12
+                    </Text>
+                    <Text
+                      style={{ color: theme.colors.text.subtle }}
+                      size="sm"
+                      weight="light"
+                    >
+                      side menu fix
                     </Text>
                   </View>
                 </>
