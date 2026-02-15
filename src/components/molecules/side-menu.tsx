@@ -718,7 +718,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      side menu fix and multi media
+                      side menu fix and multi media and more fixes
                     </Text>
                   </View>
                 </>
