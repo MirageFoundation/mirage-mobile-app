@@ -176,11 +176,13 @@ export const PostCard = memo(function PostCard({
   }, [resolvedContent.extractedUrl]);
 
   const [showMediaPreview, setShowMediaPreview] = useState(false);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
 
   const handleMediaPress = useCallback(() => {
     if (onMediaPressProp) {
       onMediaPressProp();
     } else {
+      setSelectedMediaIndex(0);
       setShowMediaPreview(true);
     }
   }, [onMediaPressProp]);
@@ -240,6 +242,7 @@ export const PostCard = memo(function PostCard({
 
       <PostCardMedia
         media={resolvedContent.resolvedMedia}
+        mediaList={resolvedContent.resolvedMediaList}
         isVisible={isVisible}
         shouldBlurContent={shouldBlurContent}
         hasMultipleMedia={resolvedContent.hasMultipleMedia}
@@ -248,6 +251,10 @@ export const PostCard = memo(function PostCard({
         screenActive={screenActive && !showMediaPreview}
         onRevealContent={onRevealContent}
         onMediaPress={handleMediaPress}
+        onGalleryMediaPress={(index) => {
+          setSelectedMediaIndex(index);
+          setShowMediaPreview(true);
+        }}
       />
 
       {bodyText && !shouldBlurContent && (
@@ -310,6 +317,8 @@ export const PostCard = memo(function PostCard({
       <MediaPreviewModal
         visible={showMediaPreview}
         media={resolvedContent.resolvedMedia ?? null}
+        mediaList={resolvedContent.resolvedMediaList}
+        initialIndex={selectedMediaIndex}
         onClose={handleCloseMediaPreview}
       />
     </Pressable>

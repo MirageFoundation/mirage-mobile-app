@@ -4,6 +4,7 @@ type PendingComment = {
   text: string;
   imageUri?: string | null;
   gifUrl?: string | null;
+  mediaUris?: string[];
 };
 
 type PendingEdit = {
@@ -12,6 +13,7 @@ type PendingEdit = {
   text: string;
   imageUri?: string | null;
   gifUrl?: string | null;
+  mediaUris?: string[];
 };
 
 type CommentComposeState = {

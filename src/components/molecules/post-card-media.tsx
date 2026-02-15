@@ -25,6 +25,7 @@ import {
 import { StyleSheet } from "react-native-unistyles";
 import YoutubePlayer from "react-native-youtube-iframe";
 import { extractYouTubeVideoId, type ResolvedMedia } from "./post-card-utils";
+import { MediaGallery } from "./media-gallery";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEDIA_MAX_HEIGHT = 450;
@@ -36,6 +37,7 @@ export type PostCardMediaRef = {
 
 type PostCardMediaProps = {
   media?: ResolvedMedia;
+  mediaList?: ResolvedMedia[];
   isVisible: boolean;
   shouldBlurContent: boolean;
   hasMultipleMedia: boolean;
@@ -47,6 +49,7 @@ type PostCardMediaProps = {
   onRevealContent?: () => void;
   /** Called when media is pressed (for opening preview) */
   onMediaPress?: () => void;
+  onGalleryMediaPress?: (index: number) => void;
 };
 
 const MEDIA_ASPECT_RATIO_CACHE = new Map<string, number>();
@@ -64,6 +67,7 @@ export const PostCardMedia = memo(
   forwardRef<PostCardMediaRef, PostCardMediaProps>(function PostCardMedia(
     {
       media,
+      mediaList,
       isVisible,
       shouldBlurContent,
       hasMultipleMedia,
@@ -72,6 +76,7 @@ export const PostCardMedia = memo(
       screenActive = true,
       onRevealContent,
       onMediaPress,
+      onGalleryMediaPress,
     },
     ref,
   ) {
@@ -309,6 +314,20 @@ export const PostCardMedia = memo(
       : { aspectRatio: mediaAspectRatio };
 
     if (!media || shouldHideOnError) return null;
+
+    if (mediaList && mediaList.length > 1) {
+      return (
+        <View style={styles.mediaContainer}>
+          <View style={styles.mediaWrapper}>
+            <MediaGallery
+              media={mediaList}
+              onMediaPress={onGalleryMediaPress}
+              screenActive={screenActive}
+            />
+          </View>
+        </View>
+      );
+    }
 
     if (
       __DEV__ &&

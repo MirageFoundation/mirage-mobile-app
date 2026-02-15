@@ -31,6 +31,7 @@ export interface UsePostOptions {
 
 export type CreatePostMutationInput = CreatePostInput & {
   optimisticMediaUrl?: string | null;
+  optimisticMediaUrls?: string[];
 };
 
 const MEDIA_URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
@@ -101,6 +102,7 @@ const buildOptimisticPost = (
     tag: input.tag ?? "",
     edited_at: 0,
     thumbnail: mediaUrl ?? "",
+    media: input.optimisticMediaUrls ?? (mediaUrl ? [mediaUrl] : []),
     points: 0,
     comments: 0,
     user_vote: 1,
@@ -120,7 +122,7 @@ export function usePost(options: UsePostOptions = {}) {
   return useMutation({
     mutationFn: async (input: CreatePostMutationInput) => {
       const wallet = await getWallet();
-      const { optimisticMediaUrl, ...postInput } = input;
+      const { optimisticMediaUrl, optimisticMediaUrls, ...postInput } = input;
       return createPost(wallet, postInput, options.onPoWProgress);
     },
     onSuccess: (data, input) => {

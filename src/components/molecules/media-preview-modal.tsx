@@ -5,6 +5,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
+  FlatList,
   Modal,
   Pressable,
   View,
@@ -27,15 +28,21 @@ import type { ResolvedMedia } from "./post-card-utils";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
+import { Text } from "@/src/components/ui/primitives";
+
 type MediaPreviewModalProps = {
   visible: boolean;
   media: ResolvedMedia | null;
+  mediaList?: ResolvedMedia[];
+  initialIndex?: number;
   onClose: () => void;
 };
 
 export const MediaPreviewModal = memo(function MediaPreviewModal({
   visible,
   media,
+  mediaList,
+  initialIndex = 0,
   onClose,
 }: MediaPreviewModalProps) {
   const insets = useSafeAreaInsets();
@@ -43,6 +50,10 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+
+  const [activeGalleryIndex, setActiveGalleryIndex] = useState(initialIndex);
+  const galleryListRef = useRef<FlatList>(null);
+  const hasGallery = mediaList && mediaList.length > 1;
 
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -170,11 +181,81 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
     ],
   }));
 
-  if (!media) return null;
+  if (!media && !hasGallery) return null;
 
-  const isVideo = media.type === "video";
-  const isGif = media.type === "gif";
-  const isImage = media.type === "image";
+  if (hasGallery) {
+    return (
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleClose}
+        statusBarTranslucent
+      >
+        <View style={styles.container}>
+          <Pressable
+            style={[styles.closeButton, { top: insets.top + 10 }]}
+            onPress={handleClose}
+            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+          >
+            <View style={styles.closeButtonInner}>
+              <Ionicons name="close" size={24} color="#fff" />
+            </View>
+          </Pressable>
+
+          <FlatList
+            ref={galleryListRef}
+            data={mediaList}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            initialScrollIndex={initialIndex}
+            getItemLayout={(_, index) => ({
+              length: SCREEN_WIDTH,
+              offset: SCREEN_WIDTH * index,
+              index,
+            })}
+            onMomentumScrollEnd={(e) => {
+              const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+              setActiveGalleryIndex(idx);
+            }}
+            keyExtractor={(item, index) => `${item.uri}-${index}`}
+            renderItem={({ item }) => (
+              <View style={styles.mediaContainer}>
+                {item.type === "video" ? (
+                  <Video
+                    source={{ uri: item.uri }}
+                    style={styles.fullMedia}
+                    resizeMode={ResizeMode.CONTAIN}
+                    shouldPlay
+                    isLooping
+                    isMuted={false}
+                    useNativeControls={false}
+                  />
+                ) : (
+                  <Image
+                    source={{ uri: item.uri }}
+                    style={styles.fullMedia}
+                    contentFit="contain"
+                  />
+                )}
+              </View>
+            )}
+          />
+
+          <View style={[styles.pageIndicator, { bottom: insets.bottom + 20 }]}>
+            <Text style={styles.pageIndicatorText}>
+              {activeGalleryIndex + 1} / {mediaList!.length}
+            </Text>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
+  const isVideo = media!.type === "video";
+  const isGif = media!.type === "gif";
+  const isImage = media!.type === "image";
 
   return (
     <Modal
@@ -200,7 +281,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
             <GestureDetector gesture={composedGesture}>
               <Animated.View style={[styles.mediaContainer, animatedStyle]}>
                 <Image
-                  source={{ uri: media.uri }}
+                  source={{ uri: media!.uri }}
                   style={styles.fullMedia}
                   contentFit="contain"
                   onLoad={() => setIsLoading(false)}
@@ -212,7 +293,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
           {isGif && (
             <View style={styles.mediaContainer}>
               <Image
-                source={{ uri: media.uri }}
+                source={{ uri: media!.uri }}
                 style={styles.fullMedia}
                 contentFit="contain"
                 onLoad={() => setIsLoading(false)}
@@ -224,7 +305,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
             <Pressable style={styles.mediaContainer} onPress={handleVideoToggle}>
               <Video
                 ref={videoRef}
-                source={{ uri: media.uri }}
+                source={{ uri: media!.uri }}
                 style={styles.fullMedia}
                 resizeMode={ResizeMode.CONTAIN}
                 shouldPlay={isVideoPlaying}
@@ -334,5 +415,18 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  pageIndicator: {
+    position: "absolute",
+    alignSelf: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+  },
+  pageIndicatorText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 }));

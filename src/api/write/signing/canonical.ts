@@ -208,14 +208,16 @@ export interface PostParams extends BaseParams {
   content: string;
   /** Content tag: "", "sensitive", "porn", "gore", "violence", "death" */
   tag: string;
+  /** Media URLs */
+  media?: string[];
 }
 
 /**
  * Build canonical base bytes for MsgPost
- * Tags: 100 (target), 101 (topic), 102 (title), 103 (content), 104 (tag)
+ * Tags: 100 (target), 101 (topic), 102 (title), 103 (content), 104 (tag), 105 (media[])
  */
 export function canonBasePost(params: PostParams): Uint8Array {
-  return concatBytes(
+  const base = concatBytes(
     prefix("MsgPost"),
     encodeHeader(params),
     encString(100, params.target),
@@ -224,6 +226,9 @@ export function canonBasePost(params: PostParams): Uint8Array {
     encString(103, params.content),
     encString(104, params.tag)
   );
+  if (!params.media || params.media.length === 0) return base;
+  const mediaFields = params.media.map((url) => encString(105, url));
+  return concatBytes(base, ...mediaFields);
 }
 
 // --- MsgEdit ---
@@ -241,14 +246,16 @@ export interface EditParams extends BaseParams {
   tag: string;
   /** txhash being edited */
   override: string;
+  /** Media URLs */
+  media?: string[];
 }
 
 /**
  * Build canonical base bytes for MsgEdit
- * Tags: 100 (target), 101 (topic), 102 (title), 103 (content), 104 (tag), 105 (override)
+ * Tags: 100 (target), 101 (topic), 102 (title), 103 (content), 104 (tag), 105 (override), 106 (media[])
  */
 export function canonBaseEdit(params: EditParams): Uint8Array {
-  return concatBytes(
+  const base = concatBytes(
     prefix("MsgEdit"),
     encodeHeader(params),
     encString(100, params.target),
@@ -258,6 +265,9 @@ export function canonBaseEdit(params: EditParams): Uint8Array {
     encString(104, params.tag),
     encString(105, params.override)
   );
+  if (!params.media || params.media.length === 0) return base;
+  const mediaFields = params.media.map((url) => encString(106, url));
+  return concatBytes(base, ...mediaFields);
 }
 
 // --- MsgVote ---

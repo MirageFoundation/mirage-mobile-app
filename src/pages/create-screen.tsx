@@ -225,12 +225,16 @@ export function CreateScreen() {
     triggerHaptic("medium");
 
     try {
-      let imageUrl: string | null = null;
+      const mediaUrls: string[] = [];
+
       if (draft.attachmentType === "image" && draft.mediaUris.length > 0) {
         try {
-          console.log("[CreatePost] Uploading image...", draft.mediaUris[0]);
-          imageUrl = await uploadImageAndGetUrl(draft.mediaUris[0]);
-          console.log("[CreatePost] Image uploaded successfully:", imageUrl);
+          console.log("[CreatePost] Uploading images...", draft.mediaUris.length);
+          const uploads = await Promise.all(
+            draft.mediaUris.map((uri) => uploadImageAndGetUrl(uri))
+          );
+          mediaUrls.push(...uploads);
+          console.log("[CreatePost] Images uploaded successfully:", mediaUrls);
         } catch (error) {
           console.error("[CreatePost] Image upload failed:", error);
           toast.error(
@@ -243,17 +247,11 @@ export function CreateScreen() {
         }
       }
 
-      let content = draft.body;
-
-      if (imageUrl) {
-        content = content ? `${imageUrl}\n\n${content}` : imageUrl;
-      }
-
       if (uploadedVideoUrl) {
-        content = content
-          ? `${uploadedVideoUrl}\n\n${content}`
-          : uploadedVideoUrl;
+        mediaUrls.push(uploadedVideoUrl);
       }
+
+      let content = draft.body;
 
       if (draft.linkUrl) {
         content = content ? `${draft.linkUrl}\n\n${content}` : draft.linkUrl;
@@ -270,7 +268,9 @@ export function CreateScreen() {
         title: draft.title.trim(),
         content: content,
         tag: selectedContentWarning,
-        optimisticMediaUrl: imageUrl ?? uploadedVideoUrl ?? undefined,
+        media: mediaUrls.length > 0 ? mediaUrls : undefined,
+        optimisticMediaUrl: mediaUrls[0] ?? undefined,
+        optimisticMediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
       };
 
       console.log("[CreatePost] Submitting post:", postInput);
@@ -419,16 +419,20 @@ export function CreateScreen() {
       mediaTypes: ["images"],
       allowsEditing: false,
       quality: 0.8,
+      allowsMultipleSelection: true,
+      selectionLimit: 10 - draft.mediaUris.length,
     });
 
     if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      setAttachment("image", asset.uri);
-      if (asset.width && asset.height) {
-        setImageDimensions({ width: asset.width, height: asset.height });
+      for (const asset of result.assets) {
+        setAttachment("image", asset.uri);
+      }
+      const lastAsset = result.assets[result.assets.length - 1];
+      if (lastAsset.width && lastAsset.height) {
+        setImageDimensions({ width: lastAsset.width, height: lastAsset.height });
       }
     }
-  }, [hasAttachment, draft.attachmentType, setAttachment]);
+  }, [hasAttachment, draft.attachmentType, draft.mediaUris.length, setAttachment]);
 
   const handleVideoPress = useCallback(async () => {
     if (hasAttachment && draft.attachmentType !== "video") return;
@@ -870,23 +874,32 @@ export function CreateScreen() {
               exiting={FadeOut.duration(200)}
               style={styles.videoPreviewContainer}
             >
-              <View style={[styles.videoPlayerWrapper, { height: 280 }]}>
-                <Image
-                  source={{ uri: draft.mediaUris[0] }}
-                  style={[styles.videoPlayer, { resizeMode: "contain" }]}
-                />
-
-                {/* Remove Button */}
-                <Pressable
-                  onPress={handleRemoveMedia}
-                  style={styles.videoRemoveButton}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <View style={styles.removeButtonInner}>
-                    <Feather name="x" size={18} color="#fff" />
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}
+              >
+                {draft.mediaUris.map((uri, index) => (
+                  <View key={uri} style={[styles.videoPlayerWrapper, { height: 200, width: 200 }]}>
+                    <Image
+                      source={{ uri }}
+                      style={[styles.videoPlayer, { resizeMode: "cover" }]}
+                    />
+                    <Pressable
+                      onPress={() => {
+                        const { removeMediaUri } = useDraftStore.getState();
+                        removeMediaUri(uri);
+                      }}
+                      style={styles.videoRemoveButton}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <View style={styles.removeButtonInner}>
+                        <Feather name="x" size={18} color="#fff" />
+                      </View>
+                    </Pressable>
                   </View>
-                </Pressable>
-              </View>
+                ))}
+              </ScrollView>
             </Animated.View>
           )}
 
