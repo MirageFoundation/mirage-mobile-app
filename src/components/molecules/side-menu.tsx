@@ -788,6 +788,8 @@ const styles = StyleSheet.create((theme) => ({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "#000",
+    zIndex: 1,
+    elevation: 1,
   },
   backdropPressable: {
     flex: 1,
@@ -802,7 +804,8 @@ const styles = StyleSheet.create((theme) => ({
     shadowOffset: { width: 2, height: 0 },
     shadowOpacity: 0.25,
     shadowRadius: 10,
-    elevation: 10,
+    zIndex: 2,
+    elevation: 20,
   },
   header: {
     flexDirection: "row",
