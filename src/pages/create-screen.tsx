@@ -21,7 +21,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import {
   uploadImageAndGetUrl,
-  useUploadVideo,
+  uploadVideoAndGetUrl,
 } from "@/src/api/read/hooks/use-upload-media";
 import { usePost, type CreatePostMutationInput } from "@/src/api/write";
 import type { ContentTag } from "@/src/api/write/endpoints/posts";
@@ -55,6 +55,9 @@ const CONTENT_WARNING_OPTIONS: { value: ContentTag; label: string }[] = [
   { value: "death", label: "Death" },
 ];
 
+type VideoUploadEntry = { url: string | null; uploading: boolean; progress: number; error: string | null };
+const VIDEO_UPLOADS = new Map<string, VideoUploadEntry>();
+
 export function CreateScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
@@ -62,8 +65,12 @@ export function CreateScreen() {
   // Get params from video editor
   const params = useLocalSearchParams<{
     videoUri?: string;
+    originalVideoUri?: string;
+    replacingUri?: string;
     videoWidth?: string;
     videoHeight?: string;
+    trimStart?: string;
+    trimEnd?: string;
     isMuted?: string;
   }>();
 
@@ -75,7 +82,10 @@ export function CreateScreen() {
   const bodySelectionRef = useRef({ start: 0, end: 0 });
   const [bodySelection, setBodySelection] = useState<{ start: number; end: number } | undefined>(undefined);
   const linkInputRef = useRef<TextInput>(null);
-  const videoRef = useRef<Video>(null);
+  const videoScrollRef = useRef<ScrollView>(null);
+  const editingVideoUriRef = useRef<string | null>(null);
+  const handledVideoParamRef = useRef<string | null>(null);
+  const videoMetaRef = useRef<Map<string, { originalUri: string; width: number; height: number; trimStart: number; trimEnd: number }>>(new Map());
 
   const [showCommunityModal, setShowCommunityModal] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
@@ -91,36 +101,49 @@ export function CreateScreen() {
   const [selectedContentWarning, setSelectedContentWarning] =
     useState<ContentTag>("");
 
-  const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
-  const [videoDimensions, setVideoDimensions] = useState<{
-    width: number;
-    height: number;
-  } | null>(null);
+  const [videoUploadsVersion, setVideoUploadsVersion] = useState(0);
+  const bumpVideoUploads = useCallback(() => setVideoUploadsVersion((v) => v + 1), []);
+  const videoUploads = VIDEO_UPLOADS;
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
 
-  const {
-    uploadVideo,
-    isUploading: isUploadingVideo,
-    progress: videoUploadProgress,
-    cancelUpload: cancelVideoUpload,
-    reset: resetVideoUpload,
-  } = useUploadVideo({
-    onSuccess: (result) => {
-      console.log("[CreatePost] Video uploaded:", result.url);
-      setUploadedVideoUrl(result.url);
-      triggerHaptic("success");
-    },
-    onError: (error) => {
-      console.error("[CreatePost] Video upload failed:", error);
-      toast.error("Video upload failed", error.message);
-      triggerHaptic("error");
-    },
-  });
+  const toast = useToast();
+
+  const isUploadingVideo = useMemo(() => {
+    for (const v of videoUploads.values()) {
+      if (v.uploading) return true;
+    }
+    return false;
+  }, [videoUploadsVersion]);
+
+  const startVideoUpload = useCallback((uri: string) => {
+    VIDEO_UPLOADS.set(uri, { url: null, uploading: true, progress: 0, error: null });
+    bumpVideoUploads();
+    uploadVideoAndGetUrl(uri, (progress) => {
+      const entry = VIDEO_UPLOADS.get(uri);
+      if (entry) {
+        VIDEO_UPLOADS.set(uri, { ...entry, progress: Math.min(100, Math.max(0, progress)) });
+        bumpVideoUploads();
+      }
+    })
+      .then((url) => {
+        console.log("[CreatePost] Video uploaded:", url);
+        VIDEO_UPLOADS.set(uri, { url, uploading: false, progress: 100, error: null });
+        bumpVideoUploads();
+        triggerHaptic("success");
+      })
+      .catch((err) => {
+        console.error("[CreatePost] Video upload failed:", err);
+        const msg = err instanceof Error ? err.message : "Upload failed";
+        VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg });
+        bumpVideoUploads();
+        toast.error("Video upload failed", msg);
+        triggerHaptic("error");
+      });
+  }, [toast, bumpVideoUploads]);
 
   const txProgress = useTransactionProgress();
   const postMutation = usePost({ onPoWProgress: txProgress.updatePoWProgress });
-  const toast = useToast();
   const triggerScrollToTop = useHomePostCardStore((s) => s.triggerScrollToTop);
 
   const screenWidth = Dimensions.get("window").width;
@@ -167,54 +190,46 @@ export function CreateScreen() {
 
   // Handle video returned from editor
   useEffect(() => {
-    if (params.videoUri && !draft.mediaUris.includes(params.videoUri)) {
-      console.log("[CreatePost] Received video from editor:", params.videoUri);
+    if (!params.videoUri) return;
+    if (handledVideoParamRef.current === params.videoUri) return;
 
-      // Set the video attachment
-      setAttachment("video", params.videoUri);
+    handledVideoParamRef.current = params.videoUri;
+    console.log("[CreatePost] Received video from editor:", params.videoUri);
 
-      // Set dimensions if provided
-      if (params.videoWidth && params.videoHeight) {
-        setVideoDimensions({
-          width: parseInt(params.videoWidth),
-          height: parseInt(params.videoHeight),
-        });
-      }
-
-      // Set muted state
-      setIsVideoMuted(params.isMuted === "1");
-
-      // Auto-start upload (video was already processed in editor if muted)
-      uploadVideo({ uri: params.videoUri });
+    const oldUri = params.replacingUri || null;
+    if (oldUri) {
+      const { removeMediaUri } = useDraftStore.getState();
+      removeMediaUri(oldUri);
+      VIDEO_UPLOADS.delete(oldUri);
+      bumpVideoUploads();
+      videoMetaRef.current.delete(oldUri);
     }
-  }, [params.videoUri, params.videoWidth, params.videoHeight, params.isMuted]);
+
+    const origUri = params.originalVideoUri ?? params.videoUri;
+    const w = params.videoWidth ? parseInt(params.videoWidth) : 1920;
+    const h = params.videoHeight ? parseInt(params.videoHeight) : 1080;
+    const ts = params.trimStart ? parseInt(params.trimStart) : 0;
+    const te = params.trimEnd ? parseInt(params.trimEnd) : 0;
+    videoMetaRef.current.set(params.videoUri, { originalUri: origUri, width: w, height: h, trimStart: ts, trimEnd: te });
+
+    setAttachment("video", params.videoUri);
+    setIsVideoMuted(params.isMuted === "1");
+    startVideoUpload(params.videoUri);
+  }, [params.videoUri, params.originalVideoUri, params.replacingUri, params.videoWidth, params.videoHeight, params.trimStart, params.trimEnd, params.isMuted]);
 
   const handleClose = useCallback(() => {
     if (isSubmitting) return;
 
-    if (isUploadingVideo) {
-      cancelVideoUpload();
-    }
-
     triggerHaptic("selection");
-    if (draft.title || draft.body) {
-    }
     clearDraft();
-    setUploadedVideoUrl(null);
-    setVideoDimensions(null);
+    VIDEO_UPLOADS.clear();
+    bumpVideoUploads();
+    videoMetaRef.current.clear();
+    handledVideoParamRef.current = null;
     setIsVideoMuted(false);
     setIsVideoPlaying(false);
-    resetVideoUpload();
     router.back();
-  }, [
-    isSubmitting,
-    isUploadingVideo,
-    cancelVideoUpload,
-    clearDraft,
-    draft.title,
-    draft.body,
-    resetVideoUpload,
-  ]);
+  }, [isSubmitting, clearDraft]);
 
   const handlePost = useCallback(async () => {
     if (!canPost || isSubmitting || txProgress.isVisible) return;
@@ -247,8 +262,12 @@ export function CreateScreen() {
         }
       }
 
-      if (uploadedVideoUrl) {
-        mediaUrls.push(uploadedVideoUrl);
+      if (draft.attachmentType === "video") {
+        for (const [, entry] of videoUploads) {
+          if (entry.url) {
+            mediaUrls.push(entry.url);
+          }
+        }
       }
 
       let content = draft.body;
@@ -302,10 +321,10 @@ export function CreateScreen() {
       setLinkUrl("");
       setLinkError(null);
       setImageDimensions(null);
-      setUploadedVideoUrl(null);
-      setVideoDimensions(null);
+      VIDEO_UPLOADS.clear();
+      videoMetaRef.current.clear();
+      handledVideoParamRef.current = null;
       setIsVideoMuted(false);
-      resetVideoUpload();
 
       clearDraft();
 
@@ -334,9 +353,8 @@ export function CreateScreen() {
     postMutation,
     toast,
     selectedContentWarning,
-    uploadedVideoUrl,
+    videoUploads,
     isVideoMuted,
-    resetVideoUpload,
     router,
     txProgress,
   ]);
@@ -436,6 +454,7 @@ export function CreateScreen() {
 
   const handleVideoPress = useCallback(async () => {
     if (hasAttachment && draft.attachmentType !== "video") return;
+    if (draft.mediaUris.length >= 10) return;
     triggerHaptic("selection");
 
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -447,7 +466,6 @@ export function CreateScreen() {
 
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
-      // Navigate to video editor
       router.push({
         pathname: "/video-editor",
         params: {
@@ -457,7 +475,7 @@ export function CreateScreen() {
         },
       });
     }
-  }, [hasAttachment, draft.attachmentType]);
+  }, [hasAttachment, draft.attachmentType, draft.mediaUris.length]);
 
   const handlePollPress = useCallback(() => {
     if (hasAttachment) return;
@@ -486,36 +504,48 @@ export function CreateScreen() {
 
   const handleRemoveMedia = useCallback(() => {
     triggerHaptic("selection");
-
-    if (draft.attachmentType === "video" && isUploadingVideo) {
-      cancelVideoUpload();
-    }
-
     removeAttachment();
     setImageDimensions(null);
-    setVideoDimensions(null);
-    setUploadedVideoUrl(null);
+    VIDEO_UPLOADS.clear();
+    bumpVideoUploads();
     setIsVideoMuted(false);
     setIsVideoPlaying(false);
-    resetVideoUpload();
-  }, [
-    draft.attachmentType,
-    isUploadingVideo,
-    cancelVideoUpload,
-    removeAttachment,
-    resetVideoUpload,
-  ]);
+  }, [removeAttachment, bumpVideoUploads]);
+
+  const handleRemoveVideo = useCallback((uri: string) => {
+    triggerHaptic("selection");
+    const { removeMediaUri } = useDraftStore.getState();
+    removeMediaUri(uri);
+    VIDEO_UPLOADS.delete(uri);
+    bumpVideoUploads();
+    videoMetaRef.current.delete(uri);
+  }, [bumpVideoUploads]);
+
+  const handleEditVideo = useCallback((uri: string) => {
+    triggerHaptic("selection");
+    editingVideoUriRef.current = uri;
+    const meta = videoMetaRef.current.get(uri);
+    router.push({
+      pathname: "/video-editor",
+      params: {
+        uri: meta?.originalUri ?? uri,
+        width: (meta?.width ?? 1920).toString(),
+        height: (meta?.height ?? 1080).toString(),
+        initialTrimStart: (meta?.trimStart ?? 0).toString(),
+        initialTrimEnd: (meta?.trimEnd ?? 0).toString(),
+        replacingUri: uri,
+      },
+    });
+  }, []);
 
   const handleCancelVideoUpload = useCallback(() => {
     triggerHaptic("selection");
-    cancelVideoUpload();
     removeAttachment();
-    setVideoDimensions(null);
-    setUploadedVideoUrl(null);
+    VIDEO_UPLOADS.clear();
+    bumpVideoUploads();
     setIsVideoMuted(false);
     setIsVideoPlaying(false);
-    resetVideoUpload();
-  }, [cancelVideoUpload, removeAttachment, resetVideoUpload]);
+  }, [removeAttachment, bumpVideoUploads]);
 
   const handleToggleVideoMute = useCallback(() => {
     triggerHaptic("selection");
@@ -529,7 +559,8 @@ export function CreateScreen() {
       return null;
     }
 
-    const VIDEO_HEIGHT = 280;
+    const VIDEO_HEIGHT = 180;
+    const VIDEO_WIDTH = Math.round(VIDEO_HEIGHT * (16 / 9) * 0.6);
 
     return (
       <Animated.View
@@ -537,94 +568,112 @@ export function CreateScreen() {
         exiting={FadeOut.duration(200)}
         style={styles.videoPreviewContainer}
       >
-        {/* Video Player */}
-        <View style={[styles.videoPlayerWrapper, { height: VIDEO_HEIGHT }]}>
-          <Video
-            ref={videoRef}
-            source={{ uri: draft.mediaUris[0] }}
-            style={styles.videoPlayer}
-            resizeMode={ResizeMode.CONTAIN}
-            shouldPlay={isVideoPlaying}
-            isLooping
-            isMuted={isVideoMuted}
-            useNativeControls={false}
-          />
-
-          {/* Play/Pause Overlay */}
-          <Pressable
-            style={styles.videoPlayOverlay}
-            onPress={() => setIsVideoPlaying((prev) => !prev)}
-          >
-            <View style={styles.playPauseButton}>
-              <Feather
-                name={isVideoPlaying ? "pause" : "play"}
-                size={32}
-                color="#fff"
-              />
-            </View>
-          </Pressable>
-
-          {/* Upload Status Overlay */}
-          {isUploadingVideo && (
-            <View style={styles.uploadStatusOverlay}>
-              <View style={styles.uploadStatusBadge}>
-                <Text size="xs" weight="medium" style={{ color: "#fff" }}>
-                  {videoUploadProgress >= 100
-                    ? "Processing..."
-                    : `Uploading ${videoUploadProgress}%`}
-                </Text>
-              </View>
-              <View style={styles.uploadProgressBarOverlay}>
-                <View
-                  style={[
-                    styles.uploadProgressFillOverlay,
-                    { width: `${Math.min(videoUploadProgress, 100)}%` },
-                  ]}
+        <ScrollView
+          ref={videoScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}
+          onContentSizeChange={() => videoScrollRef.current?.scrollToEnd({ animated: true })}
+        >
+          {draft.mediaUris.map((uri) => {
+            const upload = videoUploads.get(uri);
+            return (
+              <Pressable key={uri} onPress={() => handleEditVideo(uri)} style={[styles.videoPlayerWrapper, { height: VIDEO_HEIGHT, width: VIDEO_WIDTH }]}>
+                <Video
+                  source={{ uri }}
+                  style={styles.videoPlayer}
+                  resizeMode={ResizeMode.COVER}
+                  shouldPlay={false}
+                  isMuted
+                  useNativeControls={false}
                 />
-              </View>
-            </View>
-          )}
 
-          {/* Uploaded Badge */}
-          {!isUploadingVideo && uploadedVideoUrl && (
-            <View style={styles.uploadedBadge}>
-              <Feather name="check" size={12} color="#fff" />
-              <Text
-                size="xs"
-                weight="medium"
-                style={{ color: "#fff", marginLeft: 4 }}
-              >
-                Uploaded
+                <View style={styles.mediaTypeBadge}>
+                  <Feather name="video" size={12} color="#fff" />
+                </View>
+
+                {upload?.uploading && (
+                  <View style={styles.uploadStatusOverlay}>
+                    <View style={styles.uploadStatusBadge}>
+                      <Text size="xs" weight="medium" style={{ color: "#fff" }}>
+                        {upload.progress >= 100
+                          ? "Processing..."
+                          : `Uploading ${upload.progress}%`}
+                      </Text>
+                    </View>
+                    <View style={styles.uploadProgressBarOverlay}>
+                      <View
+                        style={[
+                          styles.uploadProgressFillOverlay,
+                          { width: `${Math.min(upload.progress, 100)}%` },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                )}
+
+                {upload && !upload.uploading && upload.url && (
+                  <View style={styles.uploadedBadge}>
+                    <Feather name="check" size={12} color="#fff" />
+                    <Text
+                      size="xs"
+                      weight="medium"
+                      style={{ color: "#fff", marginLeft: 4 }}
+                    >
+                      Uploaded
+                    </Text>
+                  </View>
+                )}
+
+                {upload?.error && (
+                  <View style={[styles.uploadedBadge, { backgroundColor: "rgba(220,50,50,0.8)" }]}>
+                    <Feather name="alert-circle" size={12} color="#fff" />
+                    <Text
+                      size="xs"
+                      weight="medium"
+                      style={{ color: "#fff", marginLeft: 4 }}
+                    >
+                      Failed
+                    </Text>
+                  </View>
+                )}
+
+                <Pressable
+                  onPress={() => handleRemoveVideo(uri)}
+                  style={styles.videoRemoveButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <View style={styles.removeButtonInner}>
+                    <Feather name="x" size={18} color="#fff" />
+                  </View>
+                </Pressable>
+              </Pressable>
+            );
+          })}
+
+          {draft.mediaUris.length < 10 && (
+            <Pressable
+              onPress={handleVideoPress}
+              style={[
+                styles.videoPlayerWrapper,
+                {
+                  height: VIDEO_HEIGHT,
+                  width: VIDEO_WIDTH * 0.5,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 1,
+                  borderColor: "rgba(255,255,255,0.2)",
+                  borderStyle: "dashed",
+                },
+              ]}
+            >
+              <Feather name="plus" size={32} color="rgba(255,255,255,0.5)" />
+              <Text size="xs" style={{ color: "rgba(255,255,255,0.5)", marginTop: 4 }}>
+                Add video
               </Text>
-            </View>
+            </Pressable>
           )}
-
-          {/* Remove Button */}
-          <Pressable
-            onPress={handleRemoveMedia}
-            style={styles.videoRemoveButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <View style={styles.removeButtonInner}>
-              <Feather name="x" size={18} color="#fff" />
-            </View>
-          </Pressable>
-
-          {/* Mute/Unmute Button */}
-          <Pressable
-            onPress={() => setIsVideoMuted((prev) => !prev)}
-            style={styles.videoMuteButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <View style={styles.muteButtonInner}>
-              <Feather
-                name={isVideoMuted ? "volume-x" : "volume-2"}
-                size={16}
-                color="#fff"
-              />
-            </View>
-          </Pressable>
-        </View>
+        </ScrollView>
       </Animated.View>
     );
   };
@@ -885,6 +934,9 @@ export function CreateScreen() {
                       source={{ uri }}
                       style={[styles.videoPlayer, { resizeMode: "cover" }]}
                     />
+                    <View style={styles.mediaTypeBadge}>
+                      <Feather name="image" size={12} color="#fff" />
+                    </View>
                     <Pressable
                       onPress={() => {
                         const { removeMediaUri } = useDraftStore.getState();
@@ -1407,6 +1459,16 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  mediaTypeBadge: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    zIndex: 20,
   },
   uploadStatusOverlay: {
     position: "absolute",

@@ -30,7 +30,7 @@ const MIN_TRIM_DURATION = 1000; // 1 second minimum
 export function VideoEditorScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ uri: string; width?: string; height?: string }>();
+  const params = useLocalSearchParams<{ uri: string; width?: string; height?: string; initialTrimStart?: string; initialTrimEnd?: string; replacingUri?: string }>();
   
   const videoUri = params.uri;
   const videoWidth = params.width ? parseInt(params.width) : 1920;
@@ -43,9 +43,12 @@ export function VideoEditorScreen() {
   const [currentPosition, setCurrentPosition] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   
+  const initialTrimStartMs = params.initialTrimStart ? parseInt(params.initialTrimStart) : 0;
+  const initialTrimEndMs = params.initialTrimEnd ? parseInt(params.initialTrimEnd) : 0;
+
   // Trim state (in milliseconds)
-  const [trimStart, setTrimStart] = useState(0);
-  const [trimEnd, setTrimEnd] = useState(0);
+  const [trimStart, setTrimStart] = useState(initialTrimStartMs);
+  const [trimEnd, setTrimEnd] = useState(initialTrimEndMs);
   
   // Shared values for trim handles
   const leftTrimPosition = useSharedValue(0);
@@ -59,7 +62,13 @@ export function VideoEditorScreen() {
       setTrimEnd(duration);
       rightTrimPosition.value = TIMELINE_WIDTH;
     }
-  }, [duration, trimEnd]);
+    if (duration > 0 && initialTrimStartMs > 0) {
+      leftTrimPosition.value = (initialTrimStartMs / duration) * TIMELINE_WIDTH;
+    }
+    if (duration > 0 && initialTrimEndMs > 0 && initialTrimEndMs < duration) {
+      rightTrimPosition.value = (initialTrimEndMs / duration) * TIMELINE_WIDTH;
+    }
+  }, [duration]);
 
   const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
     if (!status.isLoaded) return;
@@ -74,7 +83,7 @@ export function VideoEditorScreen() {
     
     // Loop within trim region
     if (status.positionMillis >= trimEnd && trimEnd > 0) {
-      videoRef.current?.setPositionAsync(trimStart);
+      videoRef.current?.setPositionAsync(trimStart).catch(() => {});
     }
   }, [duration, trimStart, trimEnd]);
 
@@ -194,10 +203,12 @@ export function VideoEditorScreen() {
       pathname: "/(tabs)/create",
       params: {
         videoUri: processedUri,
+        originalVideoUri: videoUri,
         videoWidth: videoWidth.toString(),
         videoHeight: videoHeight.toString(),
         trimStart: trimStart.toString(),
         trimEnd: trimEnd.toString(),
+        replacingUri: params.replacingUri ?? "",
       },
     });
   }, [videoUri, videoWidth, videoHeight, trimStart, trimEnd]);

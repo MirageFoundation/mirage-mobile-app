@@ -77,7 +77,9 @@ export const useDraftStore = create<DraftState>()(
                   ? [...state.draft.mediaUris, uri].slice(0, MAX_MEDIA_ITEMS)
                   : state.draft.mediaUris
                 : type === "video"
-                  ? uri ? [uri] : []
+                  ? uri
+                    ? [...state.draft.mediaUris, uri].slice(0, MAX_MEDIA_ITEMS)
+                    : state.draft.mediaUris
                   : [],
           },
           hasDraft: true,
