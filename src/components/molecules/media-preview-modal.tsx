@@ -42,6 +42,7 @@ const PreviewVideoItem = memo(function PreviewVideoItem({
 }) {
   const ref = useRef<Video>(null);
   const [playing, setPlaying] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const muted = useVideoMuteStore((s) => s.isMuted);
   const toggleMute = useVideoMuteStore((s) => s.toggleMute);
 
@@ -83,8 +84,19 @@ const PreviewVideoItem = memo(function PreviewVideoItem({
           isLooping
           isMuted={muted}
           useNativeControls={false}
+          onPlaybackStatusUpdate={(status) => {
+            if (status.isLoaded && status.isPlaying && !status.isBuffering) {
+              setIsLoading(false);
+            }
+          }}
+          onLoad={() => setIsLoading(false)}
         />
-        {!playing && (
+        {isLoading && (
+          <View style={previewVideoStyles.playOverlay}>
+            <ActivityIndicator size="large" color="#fff" />
+          </View>
+        )}
+        {!playing && !isLoading && (
           <View style={previewVideoStyles.playOverlay}>
             <View style={previewVideoStyles.playButton}>
               <Ionicons name="play" size={40} color="#fff" />

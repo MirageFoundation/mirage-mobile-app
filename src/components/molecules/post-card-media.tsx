@@ -453,7 +453,7 @@ export const PostCardMedia = memo(
                 />
                 {isVideoLoading ? (
                   <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#fff" />
+                    <ActivityIndicator size="small" color="#fff" />
                   </View>
                 ) : (
                   <Pressable
@@ -622,9 +622,9 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   loadingContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     alignItems: "center",
     justifyContent: "center",
