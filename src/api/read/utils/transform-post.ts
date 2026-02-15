@@ -114,14 +114,12 @@ export function transformApiPost(
       ? apiPost.media.map((url) => ({
           uri: url,
           type: getMediaTypeFromUrl(url),
-          aspectRatio: 16 / 9,
         }))
       : apiPost.thumbnail
         ? [
             {
               uri: apiPost.thumbnail,
               type: getMediaTypeFromUrl(apiPost.thumbnail),
-              aspectRatio: 16 / 9,
             },
           ]
         : undefined,

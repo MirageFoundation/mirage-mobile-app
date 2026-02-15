@@ -30,6 +30,100 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 import { Text } from "@/src/components/ui/primitives";
 
+const PreviewVideoItem = memo(function PreviewVideoItem({
+  item,
+  width,
+}: {
+  item: ResolvedMedia;
+  width: number;
+}) {
+  const ref = useRef<Video>(null);
+  const [playing, setPlaying] = useState(true);
+  const [muted, setMuted] = useState(false);
+
+  const handleTogglePlay = useCallback(() => {
+    setPlaying((p) => !p);
+  }, []);
+
+  const handleToggleMute = useCallback(async () => {
+    const newMuted = !muted;
+    setMuted(newMuted);
+    try {
+      if (ref.current) {
+        if (!newMuted) {
+          await ref.current.pauseAsync();
+          await ref.current.setStatusAsync({ isMuted: false });
+          await ref.current.playAsync();
+        } else {
+          await ref.current.setStatusAsync({ isMuted: true });
+        }
+      }
+    } catch {}
+  }, [muted]);
+
+  return (
+    <View style={{ width, height: SCREEN_HEIGHT, justifyContent: "center", alignItems: "center" }}>
+      <Pressable onPress={handleTogglePlay} style={{ width, height: SCREEN_HEIGHT }}>
+        <Video
+          ref={ref}
+          source={{ uri: item.uri }}
+          style={{ width: "100%", height: "100%" }}
+          resizeMode={ResizeMode.CONTAIN}
+          shouldPlay={playing}
+          isLooping
+          isMuted={muted}
+          useNativeControls={false}
+        />
+        {!playing && (
+          <View style={previewVideoStyles.playOverlay}>
+            <View style={previewVideoStyles.playButton}>
+              <Ionicons name="play" size={40} color="#fff" />
+            </View>
+          </View>
+        )}
+      </Pressable>
+      <Pressable
+        onPress={handleToggleMute}
+        style={previewVideoStyles.muteButton}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <View style={previewVideoStyles.muteButtonInner}>
+          <Ionicons name={muted ? "volume-mute" : "volume-high"} size={20} color="#fff" />
+        </View>
+      </Pressable>
+    </View>
+  );
+});
+
+const previewVideoStyles = StyleSheet.create({
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  muteButton: {
+    position: "absolute",
+    bottom: 80,
+    right: 20,
+  },
+  muteButtonInner: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
+
 type MediaPreviewModalProps = {
   visible: boolean;
   media: ResolvedMedia | null;
@@ -220,27 +314,19 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
               setActiveGalleryIndex(idx);
             }}
             keyExtractor={(item, index) => `${item.uri}-${index}`}
-            renderItem={({ item }) => (
-              <View style={styles.mediaContainer}>
-                {item.type === "video" ? (
-                  <Video
-                    source={{ uri: item.uri }}
-                    style={styles.fullMedia}
-                    resizeMode={ResizeMode.CONTAIN}
-                    shouldPlay
-                    isLooping
-                    isMuted={false}
-                    useNativeControls={false}
-                  />
-                ) : (
+            renderItem={({ item }) =>
+              item.type === "video" ? (
+                <PreviewVideoItem item={item} width={SCREEN_WIDTH} />
+              ) : (
+                <View style={styles.mediaContainer}>
                   <Image
                     source={{ uri: item.uri }}
                     style={styles.fullMedia}
                     contentFit="contain"
                   />
-                )}
-              </View>
-            )}
+                </View>
+              )
+            }
           />
 
           <View style={[styles.pageIndicator, { bottom: insets.bottom + 20 }]}>

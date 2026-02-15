@@ -56,10 +56,13 @@ const MEDIA_ASPECT_RATIO_CACHE = new Map<string, number>();
 
 function getMediaAspectRatio(media?: ResolvedMedia): number {
   if (!media) return 16 / 9;
+  const cached = media.uri ? MEDIA_ASPECT_RATIO_CACHE.get(media.uri) : undefined;
+  if (cached) return cached;
   if (media.aspectRatio) return media.aspectRatio;
   if (media.width && media.height) {
     return media.width / media.height;
   }
+  if (media.type === "video") return 4 / 5;
   return 16 / 9;
 }
 
@@ -323,6 +326,8 @@ export const PostCardMedia = memo(
               media={mediaList}
               onMediaPress={onGalleryMediaPress}
               screenActive={screenActive}
+              allowAutoplay={allowAutoplay}
+              isVisible={isVisible}
             />
           </View>
         </View>
@@ -362,7 +367,6 @@ export const PostCardMedia = memo(
                 isMuted={isMuted}
                 useNativeControls={false}
                 onLoad={() => {
-                  // Ensure mute state is applied when video loads
                   videoRef.current?.setStatusAsync({ isMuted }).catch(() => {});
                 }}
                 onReadyForDisplay={(event) => {
@@ -640,7 +644,7 @@ gifBadge: {
   position: "absolute",
    top: theme.spacing.sm,
   left: theme.spacing.sm,
-   backgroundColor: theme.colors.primary.main,
+   backgroundColor: "rgba(0, 0, 0, 0.6)",
   paddingHorizontal: theme.spacing.xs,
   paddingVertical: 2,
   borderRadius: theme.radius.sm,
@@ -650,7 +654,7 @@ gifBadge: {
    position: "absolute",
    top: theme.spacing.sm,
    left: theme.spacing.sm,
-   backgroundColor: theme.colors.primary.main,
+   backgroundColor: "rgba(0, 0, 0, 0.6)",
    paddingHorizontal: theme.spacing.xs,
    paddingVertical: 2,
    borderRadius: theme.radius.sm,
@@ -660,7 +664,7 @@ gifBadge: {
     position: "absolute",
     top: theme.spacing.sm,
     left: theme.spacing.sm,
-    backgroundColor: theme.colors.primary.main,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
     paddingHorizontal: theme.spacing.xs,
     paddingVertical: 2,
     borderRadius: theme.radius.sm,

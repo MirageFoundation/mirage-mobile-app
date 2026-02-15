@@ -252,8 +252,12 @@ export const PostCard = memo(function PostCard({
         onRevealContent={onRevealContent}
         onMediaPress={handleMediaPress}
         onGalleryMediaPress={(index) => {
-          setSelectedMediaIndex(index);
-          setShowMediaPreview(true);
+          if (!isPostDetail && onMediaPressProp) {
+            onMediaPressProp();
+          } else {
+            setSelectedMediaIndex(index);
+            setShowMediaPreview(true);
+          }
         }}
       />
 
