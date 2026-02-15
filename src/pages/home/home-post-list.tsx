@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   FlatList,
+  Platform,
   type ListRenderItem,
   type ViewToken,
 } from "react-native";
@@ -112,7 +113,7 @@ const HomePostListInner = function HomePostListInner(
       keyboardDismissMode="on-drag"
       viewabilityConfig={viewabilityConfig}
       onViewableItemsChanged={onViewableItemsChanged}
-      removeClippedSubviews={true}
+      removeClippedSubviews={Platform.OS !== "android"}
       maxToRenderPerBatch={5}
       windowSize={11}
       initialNumToRender={7}

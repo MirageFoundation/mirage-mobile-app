@@ -185,14 +185,16 @@ const GalleryImageItem = memo(function GalleryImageItem({
   onPress?: () => void;
   onAspectRatioDetected?: (uri: string, ratio: number) => void;
 }) {
+  const [loaded, setLoaded] = useState(false);
   return (
     <Pressable onPress={onPress} style={{ width, height, overflow: "hidden" }}>
       <Image
         source={{ uri: item.uri }}
         style={{ width, height }}
         contentFit="cover"
-        transition={200}
+        cachePolicy="memory-disk"
         onLoad={({ source }) => {
+          setLoaded(true);
           const w = source?.width;
           const h = source?.height;
           if (w && h) {
@@ -204,6 +206,12 @@ const GalleryImageItem = memo(function GalleryImageItem({
           }
         }}
       />
+
+      {!loaded && (
+        <View style={galleryStyles.loadingOverlay}>
+          <ActivityIndicator size="small" color="rgba(150,150,150,0.6)" />
+        </View>
+      )}
 
       <View style={galleryStyles.typeBadge}>
         <Text size="xs" weight="bold" style={{ color: "#fff" }}>
@@ -416,5 +424,11 @@ const galleryStyles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
     zIndex: 20,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
   },
 });
