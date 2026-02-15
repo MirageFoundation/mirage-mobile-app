@@ -53,6 +53,9 @@ const HomePostListInner = function HomePostListInner(
   const setVisiblePostIds = useHomePostCardStore(
     (state) => state.setVisiblePostIds
   );
+  const setActiveVideoPostId = useHomePostCardStore(
+    (state) => state.setActiveVideoPostId
+  );
 
   const onItemVisibleRef = useRef(onItemVisible);
   onItemVisibleRef.current = onItemVisible;
@@ -70,6 +73,10 @@ const HomePostListInner = function HomePostListInner(
           .map((item) => item.item.id)
       );
       setVisiblePostIds(visibleIds);
+
+      const firstVisible = viewableItems.find((item) => item.isViewable && item.item?.id);
+      setActiveVideoPostId(firstVisible?.item?.id ?? null);
+
      const maxIndex = viewableItems.reduce((max, item) => {
        if (item.isViewable && item.index != null && item.index > max) return item.index;
        return max;

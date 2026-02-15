@@ -29,17 +29,27 @@ import type { ResolvedMedia } from "./post-card-utils";
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 import { Text } from "@/src/components/ui/primitives";
+import { useVideoMuteStore } from "@/src/stores";
 
 const PreviewVideoItem = memo(function PreviewVideoItem({
   item,
   width,
+  isActive,
 }: {
   item: ResolvedMedia;
   width: number;
+  isActive: boolean;
 }) {
   const ref = useRef<Video>(null);
   const [playing, setPlaying] = useState(true);
-  const [muted, setMuted] = useState(false);
+  const muted = useVideoMuteStore((s) => s.isMuted);
+  const toggleMute = useVideoMuteStore((s) => s.toggleMute);
+
+  useEffect(() => {
+    if (!isActive) {
+      ref.current?.pauseAsync().catch(() => {});
+    }
+  }, [isActive]);
 
   const handleTogglePlay = useCallback(() => {
     setPlaying((p) => !p);
@@ -47,7 +57,7 @@ const PreviewVideoItem = memo(function PreviewVideoItem({
 
   const handleToggleMute = useCallback(async () => {
     const newMuted = !muted;
-    setMuted(newMuted);
+    toggleMute();
     try {
       if (ref.current) {
         if (!newMuted) {
@@ -59,7 +69,7 @@ const PreviewVideoItem = memo(function PreviewVideoItem({
         }
       }
     } catch {}
-  }, [muted]);
+  }, [muted, toggleMute]);
 
   return (
     <View style={{ width, height: SCREEN_HEIGHT, justifyContent: "center", alignItems: "center" }}>
@@ -69,7 +79,7 @@ const PreviewVideoItem = memo(function PreviewVideoItem({
           source={{ uri: item.uri }}
           style={{ width: "100%", height: "100%" }}
           resizeMode={ResizeMode.CONTAIN}
-          shouldPlay={playing}
+          shouldPlay={playing && isActive}
           isLooping
           isMuted={muted}
           useNativeControls={false}
@@ -142,7 +152,8 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
   const insets = useSafeAreaInsets();
   const videoRef = useRef<Video | null>(null);
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(false);
+  const isMuted = useVideoMuteStore((s) => s.isMuted);
+  const toggleMute = useVideoMuteStore((s) => s.toggleMute);
   const [isLoading, setIsLoading] = useState(true);
 
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(initialIndex);
@@ -169,7 +180,6 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
     videoRef.current?.pauseAsync().catch(() => {});
     resetTransforms();
     setIsVideoPlaying(false);
-    setIsMuted(false);
     setIsLoading(true);
     onClose();
   }, [onClose, resetTransforms]);
@@ -203,8 +213,8 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
   }, []);
 
   const handleMuteToggle = useCallback(() => {
-    setIsMuted((prev) => !prev);
-  }, []);
+    toggleMute();
+  }, [toggleMute]);
 
   const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
     if (!status.isLoaded) return;
@@ -314,9 +324,9 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
               setActiveGalleryIndex(idx);
             }}
             keyExtractor={(item, index) => `${item.uri}-${index}`}
-            renderItem={({ item }) =>
+            renderItem={({ item, index }) =>
               item.type === "video" ? (
-                <PreviewVideoItem item={item} width={SCREEN_WIDTH} />
+                <PreviewVideoItem item={item} width={SCREEN_WIDTH} isActive={index === activeGalleryIndex} />
               ) : (
                 <View style={styles.mediaContainer}>
                   <Image

@@ -26,6 +26,7 @@ import { StyleSheet } from "react-native-unistyles";
 import YoutubePlayer from "react-native-youtube-iframe";
 import { extractYouTubeVideoId, type ResolvedMedia } from "./post-card-utils";
 import { MediaGallery } from "./media-gallery";
+import { useVideoMuteStore } from "@/src/stores";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEDIA_MAX_HEIGHT = 450;
@@ -87,7 +88,8 @@ export const PostCardMedia = memo(
     const [isVideoPlaying, setIsVideoPlaying] = useState(false);
     const [isVideoLoading, setIsVideoLoading] = useState(false);
     const [isVideoProcessing, setIsVideoProcessing] = useState(false);
-    const [isMuted, setIsMuted] = useState(true);
+    const isMuted = useVideoMuteStore((s) => s.isMuted);
+    const toggleMute = useVideoMuteStore((s) => s.toggleMute);
     const [mediaLoaded, setMediaLoaded] = useState(false);
     const videoRef = useRef<Video | null>(null);
 
@@ -105,6 +107,12 @@ export const PostCardMedia = memo(
         }
       },
     }));
+
+    useEffect(() => {
+      return () => {
+        videoRef.current?.pauseAsync().catch(() => {});
+      };
+    }, []);
 
     const resolvedMediaUri = media?.uri;
 
@@ -266,7 +274,7 @@ export const PostCardMedia = memo(
         event.stopPropagation?.();
         triggerHaptic("light");
         const newMutedState = !isMuted;
-        setIsMuted(newMutedState);
+        toggleMute();
 
         // When unmuting, we need to pause and resume to initialize audio
         if (videoRef.current) {
@@ -283,7 +291,7 @@ export const PostCardMedia = memo(
           } catch {}
         }
       },
-      [isMuted],
+      [isMuted, toggleMute],
     );
 
     const handleMediaPress = useCallback(
@@ -362,7 +370,7 @@ export const PostCardMedia = memo(
                 source={mediaSource}
                 style={styles.media}
                 resizeMode={ResizeMode.COVER}
-                shouldPlay={isVideoPlaying && screenActive}
+                shouldPlay={isVideoPlaying && screenActive && isVisible}
                 isLooping={true}
                 isMuted={isMuted}
                 useNativeControls={false}

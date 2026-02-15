@@ -64,6 +64,7 @@ export function VideoEditorScreen() {
     }
     if (duration > 0 && initialTrimStartMs > 0) {
       leftTrimPosition.value = (initialTrimStartMs / duration) * TIMELINE_WIDTH;
+      videoRef.current?.setPositionAsync(initialTrimStartMs).catch(() => {});
     }
     if (duration > 0 && initialTrimEndMs > 0 && initialTrimEndMs < duration) {
       rightTrimPosition.value = (initialTrimEndMs / duration) * TIMELINE_WIDTH;
@@ -113,11 +114,13 @@ export function VideoEditorScreen() {
       const clampedTime = Math.max(0, Math.min(newTime, maxStart));
       setTrimStart(clampedTime);
       leftTrimPosition.value = (clampedTime / duration) * TIMELINE_WIDTH;
+      videoRef.current?.setPositionAsync(clampedTime).catch(() => {});
     } else {
       const minEnd = trimStart + MIN_TRIM_DURATION;
       const clampedTime = Math.max(minEnd, Math.min(newTime, duration));
       setTrimEnd(clampedTime);
       rightTrimPosition.value = (clampedTime / duration) * TIMELINE_WIDTH;
+      videoRef.current?.setPositionAsync(clampedTime).catch(() => {});
     }
   }, [duration, trimStart, trimEnd]);
 

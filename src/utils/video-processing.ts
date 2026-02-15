@@ -107,9 +107,7 @@ export async function processVideo(
       wasProcessed: true 
     };
   } catch (error) {
-    console.error("[VideoProcessing] Error:", error);
-    // Return original file if processing fails
-    console.log("[VideoProcessing] Falling back to original file");
+    console.warn("[VideoProcessing] Trim failed, using original file:", error);
     return { uri: inputUri, wasProcessed: false };
   }
 }
