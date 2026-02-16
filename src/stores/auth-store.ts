@@ -6,6 +6,7 @@ import { getUserStatus } from "@/src/api/read/endpoints/users";
 import type { WalletMetadata } from "@/src/wallet";
 import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 import { useContentModerationStore } from "./content-moderation-store";
+import { useInboxStore } from "./inbox-store";
 import { getTierName } from "@/src/utils/tiers";
 
 // ============================================
@@ -293,6 +294,7 @@ export const useAuthStore = create<AuthState>()(
 
         useHomePostCardStore.getState().reset();
         useContentModerationStore.getState().clearAll();
+        useInboxStore.getState().resetForLogout();
       },
 
       // ============================================

@@ -11,6 +11,7 @@ interface InboxState {
   setUnreadCount: (count: number) => void;
   setLatestInboxTimestamp: (timestamp: number) => void;
   markAsViewed: (serverTimestamp?: number) => void;
+  resetForLogout: () => void;
 }
 
 export const useInboxStore = create<InboxState>()(
@@ -42,6 +43,14 @@ export const useInboxStore = create<InboxState>()(
           hasUnread: false,
           lastViewedAt: serverTimestamp ?? Math.floor(Date.now() / 1000),
           _suppressUntil: Date.now() + 5_000,
+        }),
+
+      resetForLogout: () =>
+        set({
+          unreadCount: 0,
+          hasUnread: false,
+          latestInboxTimestamp: 0,
+          _suppressUntil: 0,
         }),
     }),
     {

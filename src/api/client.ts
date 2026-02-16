@@ -120,12 +120,13 @@ class ApiClient {
     params?: Record<string, unknown>
   ): Record<string, unknown> | undefined {
     if (!params || typeof params !== "object") return params;
-    const requestAddress = this.getRequestAddress(params);
-    if (!requestAddress) return params;
 
     const currentAddress = this.getCurrentAddress();
+    if (!currentAddress) return params;
+
+    const requestAddress = this.getRequestAddress(params);
     if (
-      !currentAddress ||
+      requestAddress &&
       currentAddress.toLowerCase() !== requestAddress.toLowerCase()
     ) {
       return params;

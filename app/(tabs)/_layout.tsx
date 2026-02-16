@@ -106,7 +106,7 @@ const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
               label={options.title || route.name}
               isFocused={isFocused}
               onPress={onPress}
-              badgeCount={route.name === "inbox" ? inboxUnreadCount : 0}
+              badgeCount={route.name === "inbox" && isLoggedIn ? inboxUnreadCount : 0}
             />
           );
         })}
