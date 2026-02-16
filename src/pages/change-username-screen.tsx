@@ -1,4 +1,6 @@
+import { useFocusEffect } from "@react-navigation/native";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -44,8 +46,10 @@ export function ChangeUsernameScreen() {
 
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
-  const { data: userStatus } = useUserStatus();
-  const userLevel = userStatus?.user_level ?? 0;
+  const storeUserLevel = useAuthStore((s) => s.userLevel);
+  const { data: userStatus, refetch: refetchUserStatus } = useUserStatus();
+  const serverLevel = userStatus?.user_level ?? 0;
+  const userLevel = Math.max(serverLevel, storeUserLevel);
   const currentUsername = userStatus?.username ?? user?.username ?? "";
   const canChangeName = userLevel > 0;
 
@@ -56,6 +60,12 @@ export function ChangeUsernameScreen() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const txProgress = useTransactionProgress();
+
+  useFocusEffect(
+    useCallback(() => {
+      refetchUserStatus();
+    }, [refetchUserStatus]),
+  );
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
@@ -397,9 +407,25 @@ export function ChangeUsernameScreen() {
                   size="sm"
                   style={{ color: theme.colors.warning[500], lineHeight: 20 }}
                 >
-                  Upgrade your subscription to change your username. This feature
-                  is available for Trusted tier and above.
+                  Changing username is not available for the basic tier. Upgrade your plan to change your username.
                 </Text>
+                <Pressable
+                  onPress={() => router.push("/subscription")}
+                  style={({ pressed }) => [
+                    { marginTop: 12, alignSelf: "flex-end", opacity: pressed ? 0.8 : 1 },
+                  ]}
+                >
+                  <LinearGradient
+                    colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={{ borderRadius: 8, paddingVertical: 8, paddingHorizontal: 16 }}
+                  >
+                    <Text size="sm" weight="bold" style={{ color: "#FFFFFF" }}>
+                      Upgrade Plan
+                    </Text>
+                  </LinearGradient>
+                </Pressable>
               </Box>
             )}
           </View>
