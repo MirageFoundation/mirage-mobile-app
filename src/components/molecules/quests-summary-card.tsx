@@ -241,8 +241,8 @@ export function QuestsSummaryCard() {
 
   const hasClaimed = useMemo(() => {
     if (!data) return false;
-    return completedCount > 0 && data.pending_rewards.length === 0;
-  }, [completedCount, data]);
+    return allComplete && data.pending_rewards.length === 0;
+  }, [allComplete, data]);
 
   const hasRewardsToClaim = (data?.pending_rewards?.length ?? 0) > 0;
 

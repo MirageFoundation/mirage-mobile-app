@@ -1267,16 +1267,21 @@ export function QuestsScreen() {
     }, 0);
   }, [completedQuests, data?.reward_multiplier]);
 
+  const allQuestsCompleted = useMemo(() => {
+    if (!data?.daily_quests?.length) return false;
+    return data.daily_quests.every((q) => q.completed);
+  }, [data?.daily_quests]);
+
   const hasClaimed = useMemo(() => {
     if (!data) return false;
-    return completedQuests.length > 0 && data.pending_rewards.length === 0;
-  }, [completedQuests.length, data]);
+    return allQuestsCompleted && data.pending_rewards.length === 0;
+  }, [allQuestsCompleted, data]);
 
   const handleClaimAll = useCallback(() => {
-    if (completedQuests.length === 0) return;
+    if ((data?.pending_rewards?.length ?? 0) === 0) return;
     setIsClaiming(true);
     claimMutation.mutate({ questId: "all" });
-  }, [completedQuests, claimMutation]);
+  }, [data?.pending_rewards, claimMutation]);
 
   const handleCloseSuccessModal = useCallback(() => {
     setShowSuccessModal(false);
