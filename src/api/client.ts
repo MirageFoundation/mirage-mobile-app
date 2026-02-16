@@ -3,8 +3,8 @@ import { walletService } from "@/src/services/wallet-service";
 import { useInboxStore } from "@/src/stores/inbox-store";
 
 const DEFAULT_NODES = [
-  "https://mirage.vote",
-  "https://mirage.vote", // fallback
+  "https://mirage.talk",
+  "https://mirage.talk", // fallback
 ];
 
 class ApiClient {

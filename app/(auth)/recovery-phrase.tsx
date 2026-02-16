@@ -3,7 +3,7 @@ import {
 } from "@/src/components/molecules";
 import { Box, Button, Checkbox, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { useAuthStore } from "@/src/stores";
+import { useAuthStore, usePreferencesStore, getApiBaseUrl } from "@/src/stores";
 import { apiClient } from "@/src/api/client";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter, useNavigation } from "expo-router";
@@ -53,7 +53,8 @@ useEffect(() => {
      // await confirmWalletCreation();
       await confirmWalletCreation();
       triggerHaptic("success");
-     apiClient.setBaseUrl("https://mirage.vote");
+     const currentServer = usePreferencesStore.getState().apiServer;
+     apiClient.setBaseUrl(getApiBaseUrl(currentServer));
       router.dismissAll();
     } catch (error) {
       console.error("[RecoveryPhrase] Failed to confirm wallet:", error);
