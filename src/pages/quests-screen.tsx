@@ -1109,6 +1109,7 @@ function ClaimAllButton({
   isClaiming,
   hasClaimed,
   payoutsEnabled = true,
+  hasRewardsToClaim = false,
 }: {
   completedQuests: DailyQuest[];
   totalQuests: number;
@@ -1117,8 +1118,9 @@ function ClaimAllButton({
   isClaiming: boolean;
   hasClaimed: boolean;
   payoutsEnabled?: boolean;
+  hasRewardsToClaim?: boolean;
 }) {
-  const canClaim = completedQuests.length > 0 && !hasClaimed && payoutsEnabled;
+  const canClaim = hasRewardsToClaim && !hasClaimed && payoutsEnabled;
 
   const handlePress = useCallback(() => {
     if (canClaim && !isClaiming) {
@@ -1494,6 +1496,7 @@ export function QuestsScreen() {
               isClaiming={isClaiming}
               hasClaimed={hasClaimed}
               payoutsEnabled={payoutsEnabled}
+              hasRewardsToClaim={(data?.pending_rewards?.length ?? 0) > 0}
             />
           </Box>
         </View>
