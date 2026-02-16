@@ -74,6 +74,7 @@ type ProfileContentAnimatedProps = {
   gradientColors: readonly string[];
   scrollY?: SharedValue<number>;
   onFollowersPress?: () => void;
+  onEditUsernamePress?: () => void;
   isLoading?: boolean;
   headerHeight?: number;
 };
@@ -90,6 +91,7 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
   gradientColors,
   scrollY,
   onFollowersPress,
+  onEditUsernamePress,
   isLoading = false,
 }: ProfileContentAnimatedProps) {
  const [copied, setCopied] = useState(false);
@@ -219,9 +221,21 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
             {isLoading ? (
               <View style={styles.usernameContentSkeleton} />
             ) : (
-              <Text size="xl" weight="bold" style={styles.whiteText}>
-                {username}
-              </Text>
+              <Box direction="row" alignItems="center" gap="xs">
+                <Text size="xl" weight="bold" style={styles.whiteText}>
+                  {username}
+                </Text>
+                {onEditUsernamePress && (
+                  <Pressable onPress={onEditUsernamePress} hitSlop={8}>
+                    <Icon
+                      icon={Ionicons}
+                      name="pencil"
+                      size={16}
+                      color="rgba(255,255,255,0.7)"
+                    />
+                  </Pressable>
+                )}
+              </Box>
             )}
           </Box>
 

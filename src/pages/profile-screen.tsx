@@ -391,6 +391,10 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
     console.log("Online status changed:", isOnline);
   }, []);
 
+  const handleEditUsernamePress = useCallback(() => {
+    router.push("/change-username");
+  }, [router]);
+
   const handleFollowersPress = useCallback(() => {
     const id = user?.walletAddress || user?.username;
     if (id) {
@@ -693,6 +697,7 @@ useEffect(() => {
              gradientColors={gradientColors}
              scrollY={scrollY}
              onFollowersPress={handleFollowersPress}
+             onEditUsernamePress={handleEditUsernamePress}
              isLoading={isLoading}
             headerHeight={headerHeight}
            />
@@ -747,6 +752,7 @@ useEffect(() => {
        gradientColors,
        scrollY,
        handleFollowersPress,
+       handleEditUsernamePress,
         isLoading,
        headerHeight,
         activeTab,
