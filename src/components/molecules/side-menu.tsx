@@ -711,15 +711,18 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      update 16
+                      update 17
                     </Text>
                     <Text
-                      style={{ color: theme.colors.text.subtle }}
+                      style={{
+                        color: theme.colors.text.subtle,
+                        textAlign: "center",
+                      }}
                       size="sm"
                       weight="light"
                     >
-                      side menu fix, multi media, notifications, inbox, quests
-                      and more fixes
+                      (NEW*: Username change feature), side menu fix, multi
+                      media, notifications, inbox, quests and more fixes
                     </Text>
                   </View>
                 </>
@@ -754,15 +757,18 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      update 16
+                      update 17
                     </Text>
                     <Text
-                      style={{ color: theme.colors.text.subtle }}
+                      style={{
+                        color: theme.colors.text.subtle,
+                        textAlign: "center",
+                      }}
                       size="sm"
                       weight="light"
                     >
-                      side menu fix, multi media, notifications, inbox, quests
-                      and more fixes
+                      (NEW*: Username change feature), side menu fix, multi
+                      media, notifications, inbox, quests and more fixes
                     </Text>
                   </View>
                 </>
