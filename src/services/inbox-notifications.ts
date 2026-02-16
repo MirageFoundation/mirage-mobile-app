@@ -1,10 +1,14 @@
 import * as Notifications from "expo-notifications";
 import * as BackgroundFetch from "expo-background-fetch";
 import * as TaskManager from "expo-task-manager";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
+import { router } from "expo-router";
+import type { InfiniteData } from "@tanstack/react-query";
 
 import { api } from "@/src/api/client";
+import { queryKeys } from "@/src/api/read/query-keys";
 import type { InboxResponse } from "@/src/api/types";
+import { queryClient } from "@/src/providers/query-provider";
 import { storage } from "@/src/stores/mmkv-storage";
 import { useAuthStore } from "@/src/stores/auth-store";
 import { useInboxStore } from "@/src/stores/inbox-store";
@@ -16,11 +20,15 @@ const SEEDED_KEY = "inbox-notified-seeded";
 const SEED_TIMESTAMP_KEY = "inbox-seed-timestamp";
 const MAX_NOTIFIED_IDS = 500;
 const FETCH_INTERVAL_SECONDS = 15 * 60;
+const FOREGROUND_INTERVAL_MS = FETCH_INTERVAL_SECONDS * 1000;
 const SIGNAL_THROTTLE_MS = 15_000;
 
 let isCheckInFlight = false;
 let lastSignalCheckAt = 0;
+let foregroundInterval: ReturnType<typeof setInterval> | null = null;
+let appStateSubscription: { remove(): void } | null = null;
 let unsubscribeInboxSignals: (() => void) | null = null;
+let notificationResponseSubscription: Notifications.Subscription | null = null;
 
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
@@ -56,6 +64,25 @@ function saveNotifiedIds(ids: Set<string>): void {
     ? arr.slice(arr.length - MAX_NOTIFIED_IDS)
     : arr;
   storage.set(NOTIFIED_IDS_KEY, JSON.stringify(trimmed));
+}
+
+function seedInboxCache(walletAddress: string, inbox: InboxResponse): void {
+  const page = inbox.page || 1;
+  queryClient.setQueryData<InfiniteData<InboxResponse>>(
+    queryKeys.inboxInfinite(walletAddress),
+    (current) => {
+      if (!current) {
+        return { pages: [inbox], pageParams: [page] };
+      }
+      const pages = [...current.pages];
+      pages[0] = inbox;
+      const pageParams = current.pageParams.length
+        ? current.pageParams
+        : [page];
+      return { ...current, pages, pageParams };
+    },
+  );
+  queryClient.setQueryData(queryKeys.inbox(walletAddress, page), inbox);
 }
 
 export function markRepliesAsNotified(replyIds: string[]): void {
@@ -127,6 +154,7 @@ async function performInboxCheck(): Promise<BackgroundFetch.BackgroundFetchResul
     });
 
     console.log("[InboxNotifications] Fetched replies:", inbox.replies?.length ?? 0);
+    seedInboxCache(walletAddress, inbox);
 
     if (!inbox.replies || inbox.replies.length === 0) {
       storage.set(LAST_CHECK_KEY, Date.now().toString());
@@ -191,7 +219,7 @@ async function performInboxCheck(): Promise<BackgroundFetch.BackgroundFetchResul
 }
 
 async function runInboxCheck(
-  trigger: "background" | "manual" | "signal"
+  trigger: "background" | "foreground" | "manual" | "signal"
 ): Promise<BackgroundFetch.BackgroundFetchResult> {
   if (isCheckInFlight) {
     return BackgroundFetch.BackgroundFetchResult.NoData;
@@ -211,6 +239,76 @@ async function runInboxCheck(
   } finally {
     isCheckInFlight = false;
   }
+}
+
+function triggerForegroundCheck(): void {
+  runInboxCheck("foreground").catch((error) => {
+    console.error("[InboxNotifications] Foreground check failed:", error);
+  });
+}
+
+function startForegroundPolling(): void {
+  if (foregroundInterval) return;
+  foregroundInterval = setInterval(() => {
+    triggerForegroundCheck();
+  }, FOREGROUND_INTERVAL_MS);
+}
+
+function stopForegroundPolling(): void {
+  if (!foregroundInterval) return;
+  clearInterval(foregroundInterval);
+  foregroundInterval = null;
+}
+
+function subscribeAppState(): void {
+  if (appStateSubscription) return;
+  appStateSubscription = AppState.addEventListener("change", (nextState) => {
+    if (nextState === "active") {
+      triggerForegroundCheck();
+      startForegroundPolling();
+    } else {
+      stopForegroundPolling();
+    }
+  });
+
+  if (AppState.currentState === "active") {
+    triggerForegroundCheck();
+    startForegroundPolling();
+  }
+}
+
+function handleNotificationResponse(
+  response: Notifications.NotificationResponse | null
+): void {
+  if (!response) return;
+  try {
+    const notificationId = response.notification?.request?.identifier ?? `${Date.now()}`;
+    router.push({
+      pathname: "/inbox",
+      params: { fromNotification: notificationId },
+    });
+  } catch (error) {
+    console.error("[InboxNotifications] Failed to navigate from notification:", error);
+  }
+}
+
+function subscribeNotificationResponses(): void {
+  if (notificationResponseSubscription) return;
+  notificationResponseSubscription =
+    Notifications.addNotificationResponseReceivedListener((response) => {
+      handleNotificationResponse(response);
+    });
+
+  Notifications.getLastNotificationResponseAsync()
+    .then((response) => {
+      handleNotificationResponse(response);
+    })
+    .catch((error) => {
+      console.error(
+        "[InboxNotifications] Failed to read last notification response:",
+        error,
+      );
+    });
 }
 
 function subscribeInboxSignals(): void {
@@ -284,6 +382,8 @@ export async function initInboxNotifications(): Promise<void> {
     }
 
     subscribeInboxSignals();
+    subscribeAppState();
+    subscribeNotificationResponses();
 
     console.log("[InboxNotifications] Background fetch registered");
   } catch (error) {
