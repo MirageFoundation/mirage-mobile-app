@@ -874,6 +874,7 @@ useEffect(() => {
           initialNumToRender={7}
           updateCellsBatchingPeriod={100}
           bounces={true}
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         />
       </GestureDetector>
 
