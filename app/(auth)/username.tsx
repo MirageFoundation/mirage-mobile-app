@@ -14,7 +14,7 @@ import {
   Text,
 } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { executeWithProgress, useTransactionProgress } from "@/src/hooks";
+import { executeWithProgress, useTransactionProgress, useServerList } from "@/src/hooks";
 import { walletService } from "@/src/services/wallet-service";
 import { useAuthStore, useUIStore, type ApiServer } from "@/src/stores";
 import { apiClient } from "@/src/api/client";
@@ -72,6 +72,7 @@ export default function UsernameScreen() {
   const [showServerModal, setShowServerModal] = useState(false);
   const [switchingServer, setSwitchingServer] = useState<ApiServer | null>(null);
   const toast = useToast();
+  const { servers } = useServerList();
 
   const walletConfirmedRef = useRef(false);
   const txProgress = useTransactionProgress();
@@ -456,7 +457,7 @@ export default function UsernameScreen() {
             size="lg"
             weight="semibold"
             style={{
-              color: "#3B82F6",
+              color: "#60A5FA",
               textDecorationLine: "underline",
               marginRight: 8,
             }}
@@ -653,7 +654,7 @@ export default function UsernameScreen() {
             <Text size="lg" weight="bold" style={{ marginBottom: 16, textAlign: "center" }}>
               Switch Node
             </Text>
-            {(["mirage.talk", "mirage.vote"] as ApiServer[]).map((server) => {
+            {servers.map((server) => {
               const isActive = server === activeServer;
               const isSwitching = switchingServer === server;
               return (
@@ -827,7 +828,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing.md,
   },
   loginText: {
-    color: "rgb(34,74,154)",
+    color: "#60A5FA",
     fontSize: 13,
     fontWeight: "500",
   },

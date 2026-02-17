@@ -44,6 +44,7 @@ import {
 } from "./settings";
 import { useApiServer } from "@/src/providers/api-server-provider";
 import { useToast } from "@/src/providers/toast-provider";
+import { useServerList } from "@/src/hooks/use-server-list";
 import {
   useUserFollowed,
   useUsernameFromAddress,
@@ -53,11 +54,6 @@ import Constants from "expo-constants";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MENU_WIDTH = SCREEN_WIDTH * 0.8;
-
-const apiServerOptions: ValueOption<ApiServer>[] = [
-  { value: "mirage.talk", label: "mirage.talk" },
-  { value: "mirage.vote", label: "mirage.vote" },
-];
 
 type SideMenuProps = {
   onSettings?: () => void;
@@ -329,6 +325,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     const { switchServer } = useApiServer();
     const toast = useToast();
     const { apiServer, setShareServer } = usePreferencesStore();
+    const { servers } = useServerList();
+    const apiServerOptions = servers.map((s: string) => ({ value: s, label: s }));
 
     const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
     const walletAddress = useAuthStore((s) => s.user?.walletAddress);

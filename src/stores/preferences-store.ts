@@ -4,8 +4,8 @@ import { mmkvStorage } from "./mmkv-storage";
 
 export type FeedType = "home" | "popular" | "news" | "watch" | "latest";
 export type ThemeMode = "light" | "dark" | "system";
-export type ShareServer = "mirage.talk" | "mirage.vote";
-export type ApiServer = "mirage.talk" | "mirage.vote";
+export type ShareServer = string;
+export type ApiServer = string;
 export type VideoAutoplayNetwork = "always" | "wifi_only" | "never";
 export type ContentType =
   | "sensitive"

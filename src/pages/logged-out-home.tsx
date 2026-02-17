@@ -21,12 +21,11 @@ import { apiClient } from "@/src/api/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePreferencesStore, type ApiServer } from "@/src/stores";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useServerList } from "@/src/hooks/use-server-list";
 import {
   HEADER_HEIGHT,
   TAB_BAR_HEIGHT,
 } from "@/src/providers/scroll-animation-context";
-
-const SERVERS: ApiServer[] = ["mirage.talk", "mirage.vote"];
 
 export function LoggedOutHome() {
   const { theme, rt } = useUnistyles();
@@ -39,15 +38,19 @@ export function LoggedOutHome() {
   const { data: nodeConfig, refetch: refetchNodeConfig } = useNodeConfig();
   const apiServer = usePreferencesStore((s) => s.apiServer);
   const setApiServer = usePreferencesStore((s) => s.setApiServer);
+  const { servers } = useServerList();
 
   const [showRegPopup, setShowRegPopup] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
+  const [showServerModal, setShowServerModal] = useState(false);
+  const [switchingServer, setSwitchingServer] = useState<ApiServer | null>(null);
+  const [modalServers, setModalServers] = useState<string[]>([]);
 
   const totalUsers = stats?.registered_users;
   const activeToday = stats?.active_24h;
   const postsToday = stats?.posts_24h;
 
-  const otherServer = SERVERS.find((s) => s !== apiServer) ?? "mirage.vote";
+  const otherServer = servers.find((s) => s !== apiServer) ?? servers[0];
 
   const handleCreateAccount = useCallback(async () => {
     triggerHaptic("selection");
@@ -104,6 +107,19 @@ export function LoggedOutHome() {
             Mirage
           </Text>
         </View>
+        <Pressable onPress={() => { setModalServers(servers); setShowServerModal(true); }}>
+          <Text
+            size="lg"
+            weight="semibold"
+            style={{
+              color: "#60A5FA",
+              textDecorationLine: "underline",
+              marginRight: 8,
+            }}
+          >
+            {apiServer}
+          </Text>
+        </Pressable>
       </View>
 
       <ScrollView
@@ -371,6 +387,85 @@ export function LoggedOutHome() {
           </View>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={showServerModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowServerModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowServerModal(false)}
+        >
+          <View
+            style={[
+              styles.serverModalContent,
+              { backgroundColor: theme.colors.background.default },
+            ]}
+          >
+            <Text size="lg" weight="bold" style={{ marginBottom: 16, textAlign: "center" }}>
+              Switch Node
+            </Text>
+            {modalServers.map((server) => {
+              const isActive = server === apiServer;
+              const isSwitchingThis = switchingServer === server;
+              return (
+                <Pressable
+                  key={server}
+                  disabled={!!switchingServer}
+                  onPress={async () => {
+                    if (!isActive) {
+                      setSwitchingServer(server);
+                      try {
+                        apiClient.setBaseUrl(`https://${server}`);
+                        queryClient.clear();
+                        await queryClient.invalidateQueries();
+                        await refetchNodeConfig();
+                        setApiServer(server);
+                        toast.success(`Switched to ${server}`);
+                      } catch (e) {
+                        apiClient.setBaseUrl(`https://${apiServer}`);
+                        toast.error(`Failed to connect to ${server}`);
+                      } finally {
+                        setSwitchingServer(null);
+                      }
+                    }
+                    setShowServerModal(false);
+                  }}
+                  style={[
+                    styles.serverModalOption,
+                    {
+                      backgroundColor: isActive
+                        ? `${theme.colors.primary[500]}10`
+                        : "transparent",
+                      opacity: switchingServer && !isSwitchingThis ? 0.5 : 1,
+                    },
+                  ]}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                    <Ionicons
+                      name={isActive ? "radio-button-on" : "radio-button-off"}
+                      size={20}
+                      color={isActive ? theme.colors.primary[500] : theme.colors.text.subtle}
+                    />
+                    <Text
+                      size="md"
+                      weight={isActive ? "semibold" : "regular"}
+                      style={isActive ? { color: theme.colors.primary[500] } : undefined}
+                    >
+                      {server}
+                    </Text>
+                  </View>
+                  {isSwitchingThis && (
+                    <ActivityIndicator size="small" color={theme.colors.primary[500]} />
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
     </Box>
   );
 }
@@ -393,12 +488,17 @@ const styles = StyleSheet.create((theme) => ({
     borderBottomWidth: 0.5,
     borderBottomColor: theme.colors.border.subtle,
     zIndex: 100,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingRight: 16,
   },
   headerContent: {
     height: 44,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
+    flex: 1,
   },
   appIcon: {
     width: 22,
@@ -601,5 +701,25 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.radius.lg,
     backgroundColor: theme.colors.background.subtle,
     marginTop: 8,
+  },
+  serverModalContent: {
+    width: "75%",
+    borderRadius: 14,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  serverModalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 4,
   },
 }));

@@ -307,8 +307,9 @@ export const ToastContainer = ({ toasts, onDismiss }: ToastContainerProps) => {
 const styles = StyleSheet.create((theme) => ({
   container: {
     position: "absolute",
-    left: 64,
-    right: 64,
+    left: 0,
+    right: 0,
+    alignItems: "center",
     zIndex: 9999,
   },
   blurContainer: {
@@ -330,7 +331,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   textContainer: {
-    flex: 1,
+    flexShrink: 1,
   },
   rightSection: {
     flexDirection: "row",

@@ -3,6 +3,7 @@ import { getNodeConfig } from "@/src/api/read/endpoints/parameters";
 import { RecoveryPhraseInput } from "@/src/components/molecules";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useServerList } from "@/src/hooks/use-server-list";
 import { useAuthStore, useUIStore, usePreferencesStore, type ApiServer } from "@/src/stores";
 import { apiClient } from "@/src/api/client";
 import { useToast } from "@/src/providers/toast-provider";
@@ -44,6 +45,8 @@ export default function LoginScreen() {
   const [activeServer, setActiveServer] = useState<ApiServer>(savedServer);
   const [showServerModal, setShowServerModal] = useState(false);
   const [switchingServer, setSwitchingServer] = useState<ApiServer | null>(null);
+
+  const { servers } = useServerList();
 
   const isComplete = words.every((w) => w.length > 0);
 
@@ -193,7 +196,7 @@ export default function LoginScreen() {
             size="lg"
             weight="semibold"
             style={{
-              color: "#3B82F6",
+              color: "#60A5FA",
               textDecorationLine: "underline",
               marginRight: 8,
             }}
@@ -286,7 +289,7 @@ export default function LoginScreen() {
             <Text size="lg" weight="bold" style={{ marginBottom: 16, textAlign: "center" }}>
               Switch Node
             </Text>
-            {(["mirage.talk", "mirage.vote"] as ApiServer[]).map((server) => {
+            {servers.map((server) => {
               const isActive = server === activeServer;
               const isSwitching = switchingServer === server;
               return (
@@ -426,7 +429,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: theme.spacing.md,
   },
   createAccountText: {
-    color: "rgb(34,74,154)",
+    color: "#60A5FA",
     fontSize: 13,
     fontWeight: "500",
   },
