@@ -711,7 +711,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      update 18
+                      update 19
                     </Text>
                     <Text
                       style={{
@@ -721,8 +721,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      (NEW*: Username change feature), side menu fix, multi
-                      media, notifications, inbox, quests and more fixes
+                      comments media not loading fix
                     </Text>
                   </View>
                 </>
@@ -757,7 +756,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      update 18
+                      update 19
                     </Text>
                     <Text
                       style={{
@@ -767,8 +766,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      (NEW*: Username change feature), side menu fix, multi
-                      media, notifications, inbox, quests and more fixes
+                      comments media not loading fix
                     </Text>
                   </View>
                 </>
