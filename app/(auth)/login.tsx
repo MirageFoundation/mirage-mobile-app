@@ -406,7 +406,7 @@ const styles = StyleSheet.create((theme) => ({
     textAlign: "center",
     marginVertical: theme.spacing.md,
     fontSize: theme.typography.size.md,
-    color: "rgb(100,100,100)",
+    color: theme.colors.neutral[600],
   },
   inputContainer: {
     marginBottom: theme.spacing.sm,

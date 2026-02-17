@@ -128,7 +128,7 @@ export const RecoveryPhraseInput = ({
     <View style={styles.container}>
       {/* Header with paste button */}
       <View style={styles.header}>
-        <Text size="sm" mode="subtle">
+        <Text size="sm" style={{ color: theme.colors.neutral[600] }}>
           Enter your 12-word recovery phrase
         </Text>
         <Button size="sm" variant="ghost" onPress={handlePaste}>
@@ -180,7 +180,7 @@ export const RecoveryPhraseInput = ({
             ]}
           />
         </View>
-        <Text size="xs" mode="subtle">
+        <Text size="xs" style={{ color: theme.colors.neutral[600] }}>
           {filledCount}/12 words
         </Text>
         {filledCount > 0 && (
@@ -190,7 +190,7 @@ export const RecoveryPhraseInput = ({
               size={16}
               color={theme.colors.text.subtle}
             />
-            <Text size="xs" mode="subtle" style={{ marginLeft: 4 }}>
+            <Text size="xs" style={{ color: theme.colors.neutral[600], marginLeft: 4 }}>
               Clear
             </Text>
           </Pressable>
