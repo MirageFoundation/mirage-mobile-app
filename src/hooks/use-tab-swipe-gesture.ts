@@ -17,9 +17,11 @@ const VELOCITY_THRESHOLD = 500;
 export function useTabSwipeGesture({
   onTabChange,
   animatedIndex,
+  tabCount = TAB_COUNT,
 }: {
   onTabChange: (index: number) => void;
   animatedIndex: SharedValue<number>;
+  tabCount?: number;
 }) {
   const startTab = useSharedValue(0);
   const contentTranslateX = useSharedValue(0);
@@ -48,7 +50,7 @@ export function useTabSwipeGesture({
     .onUpdate((event) => {
       const progress = -event.translationX / SCREEN_WIDTH;
       const newIndex = startTab.value + progress;
-      const clampedIndex = Math.max(0, Math.min(TAB_COUNT - 1, newIndex));
+      const clampedIndex = Math.max(0, Math.min(tabCount - 1, newIndex));
       animatedIndex.value = clampedIndex;
       contentTranslateX.value =
         -(clampedIndex - startTab.value) * SCREEN_WIDTH;
@@ -61,12 +63,12 @@ export function useTabSwipeGesture({
       if (Math.abs(velocity) > VELOCITY_THRESHOLD) {
         targetTab =
           velocity < 0
-            ? Math.min(startTab.value + 1, TAB_COUNT - 1)
+            ? Math.min(startTab.value + 1, tabCount - 1)
             : Math.max(startTab.value - 1, 0);
       } else {
         targetTab = Math.round(animatedIndex.value);
       }
-      targetTab = Math.max(0, Math.min(TAB_COUNT - 1, targetTab));
+      targetTab = Math.max(0, Math.min(tabCount - 1, targetTab));
 
       animatedIndex.value = withTiming(targetTab, { duration: 200 });
 

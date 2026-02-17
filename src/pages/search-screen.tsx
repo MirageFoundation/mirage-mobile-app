@@ -4,17 +4,24 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   FlatList,
   Keyboard,
   Pressable,
   TextInput,
   View,
 } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   FadeIn,
   FadeInDown,
   FadeOut,
   Layout,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+  interpolate,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -25,11 +32,13 @@ import { TimeAgo } from "@/src/components/atoms/time-ago";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useTabSwipeGesture } from "@/src/hooks";
 import { useSearchStore, type RecentSearch } from "@/src/stores";
 
 type SearchTab = "posts" | "topics" | "users";
 
-// Topic icon mapping based on topic name patterns
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
 const getTopicIcon = (
   topic: string,
 ): { icon: keyof typeof Ionicons.glyphMap; color: string } => {
@@ -179,7 +188,24 @@ export function SearchScreen() {
     tab === "topics" || tab === "users" ? tab : "posts",
   );
 
-  // State for viewing posts within a specific topic
+  const SEARCH_TABS: SearchTab[] = ["posts", "topics", "users"];
+  const tabToIndex = (t: SearchTab) => SEARCH_TABS.indexOf(t);
+  const indexToTab = (i: number) => SEARCH_TABS[i] ?? "posts";
+
+  const animatedTabIndex = useSharedValue(tabToIndex(activeTab));
+
+  const handleSwipeTabChange = useCallback((index: number) => {
+    const t = indexToTab(index);
+    setActiveTab(t);
+    if (t !== "topics") setSelectedTopic(null);
+  }, []);
+
+  const { swipeGesture, contentAnimatedStyle, fadeOpacity, completeTransition } = useTabSwipeGesture({
+    onTabChange: handleSwipeTabChange,
+    animatedIndex: animatedTabIndex,
+    tabCount: 3,
+  });
+
   const [selectedTopic, setSelectedTopic] = useState<TopicInfo | null>(null);
 
   // Search store for recent searches
@@ -332,12 +358,25 @@ export function SearchScreen() {
 
   const handleTabPress = useCallback((tab: SearchTab) => {
     triggerHaptic("light");
-    setActiveTab(tab);
-    // Reset selected topic when switching tabs
-    if (tab !== "topics") {
-      setSelectedTopic(null);
-    }
-  }, []);
+    const index = tabToIndex(tab);
+    if (index === tabToIndex(activeTab)) return;
+    animatedTabIndex.value = withTiming(index, { duration: 200 });
+    fadeOpacity.value = withTiming(
+      0,
+      { duration: 100 },
+      (finished) => {
+        "worklet";
+        if (finished) {
+          runOnJS(completeTransition)(index);
+        }
+      },
+    );
+  }, [activeTab, animatedTabIndex, fadeOpacity, completeTransition]);
+
+  const singleTabWidth = SCREEN_WIDTH / 3;
+  const tabIndicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: animatedTabIndex.value * singleTabWidth }],
+  }));
 
   // Render recent search item
   const renderRecentSearchItem = useCallback(
@@ -856,10 +895,6 @@ export function SearchScreen() {
             onPress={() => handleTabPress("posts")}
             style={({ pressed }) => [
               styles.tab,
-              activeTab === "posts" && styles.tabActive,
-              activeTab === "posts" && {
-                borderBottomColor: theme.colors.primary[500],
-              },
               pressed && { opacity: 0.7 },
             ]}
           >
@@ -908,10 +943,6 @@ export function SearchScreen() {
             onPress={() => handleTabPress("topics")}
             style={({ pressed }) => [
               styles.tab,
-              activeTab === "topics" && styles.tabActive,
-              activeTab === "topics" && {
-                borderBottomColor: theme.colors.primary[500],
-              },
               pressed && { opacity: 0.7 },
             ]}
           >
@@ -960,10 +991,6 @@ export function SearchScreen() {
             onPress={() => handleTabPress("users")}
             style={({ pressed }) => [
               styles.tab,
-              activeTab === "users" && styles.tabActive,
-              activeTab === "users" && {
-                borderBottomColor: theme.colors.primary[500],
-              },
               pressed && { opacity: 0.7 },
             ]}
           >
@@ -1006,13 +1033,21 @@ export function SearchScreen() {
               </View>
             )}
           </Pressable>
+          <Animated.View
+            style={[
+              styles.tabIndicator,
+              { width: singleTabWidth, backgroundColor: theme.colors.primary[500] },
+              tabIndicatorStyle,
+            ]}
+          />
         </Animated.View>
       )}
 
       {/* Content */}
       {showResults ? (
-        // Show search results based on active tab
-        activeTab === "posts" ? (
+        <GestureDetector gesture={swipeGesture}>
+        <Animated.View style={[{ flex: 1 }, contentAnimatedStyle]}>
+        {activeTab === "posts" ? (
           <FlatList
             data={searchResults?.posts ?? []}
             keyExtractor={(item) => `post-${item.post_id}`}
@@ -1084,7 +1119,9 @@ export function SearchScreen() {
             ]}
             ListEmptyComponent={!isSearching ? UsersEmptyState : null}
           />
-        )
+        )}
+        </Animated.View>
+        </GestureDetector>
       ) : (
         // Show recent searches and trending topics when empty
         <FlatList
@@ -1231,11 +1268,12 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     gap: 6,
     paddingVertical: theme.spacing.sm + 2,
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
   },
-  tabActive: {
-    borderBottomWidth: 2,
+  tabIndicator: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    height: 2,
   },
   tabBadge: {
     paddingHorizontal: 6,
