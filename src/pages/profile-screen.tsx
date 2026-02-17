@@ -64,8 +64,12 @@ import {
 } from "@/src/stores";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import { useEdit } from "@/src/api/write";
-import type { PoWProgress } from "@/src/api/write/signing";
 import { useToast } from "@/src/providers/toast-provider";
+import {
+  usePowQueueStore,
+  generateActionId,
+  getActionLabel,
+} from "@/src/services/pow-queue";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const AnimatedFlatList = Animated.createAnimatedComponent(
@@ -218,22 +222,12 @@ export function ProfileScreen() {
  const pendingEdit = useCommentComposeStore((s) => s.pendingEdit);
  const clearPendingEdit = useCommentComposeStore((s) => s.clearPendingEdit);
 
-  const editToastIdRef = useRef<string | null>(null);
-  const handleEditPoWProgress = useCallback(
-    (progress: PoWProgress) => {
-      const tid = editToastIdRef.current;
-      if (tid) {
-        const pct =
-          progress.estimatedTotalMs > 0
-            ? Math.min(99, Math.round((progress.elapsedMs / progress.estimatedTotalMs) * 100))
-            : 0;
-        toast.update(tid, { description: `Computing proof of work... ${pct}%` });
-      }
-    },
-    [toast],
-  );
-
- const editMutation = useEdit({ onPoWProgress: handleEditPoWProgress });
+ const editMutation = useEdit({});
+  const editMutateAsyncRef = useRef(editMutation.mutateAsync);
+  useEffect(() => {
+    editMutateAsyncRef.current = editMutation.mutateAsync;
+  }, [editMutation.mutateAsync]);
+  const enqueue = usePowQueueStore((state) => state.enqueue);
 
   const [commentEditOverrides, setCommentEditOverrides] = useState<
     Record<string, string>
@@ -471,57 +465,40 @@ useEffect(() => {
 
       setCommentEditOverrides((prev) => ({ ...prev, [commentId]: finalContent }));
 
-     toast.dismissAll();
-      const toastId = toast.loading("Editing comment", "Computing proof of work...");
-      editToastIdRef.current = toastId;
-
-     (async () => {
-       try {
-         await editMutation.mutateAsync({
-           postId: commentId,
-           parentId,
-           title: "",
-           content: finalContent,
-           tag: "",
-         });
-
-         toast.update(toastId, {
-           type: "success",
-           title: "Comment edited!",
-           description: undefined,
-           duration: 3000,
-         });
-      setTimeout(() => toast.dismiss(toastId), 3000);
-
-        setTimeout(async () => {
-          await refetchPosts();
+      const actionId = generateActionId();
+      enqueue({
+        id: actionId,
+        type: "edit",
+        label: getActionLabel("edit"),
+        execute: async () => {
+          return editMutateAsyncRef.current({
+            postId: commentId,
+            parentId,
+            title: "",
+            content: finalContent,
+            tag: "",
+          });
+        },
+        onSuccess: () => {
+          setTimeout(async () => {
+            await refetchPosts();
+            setCommentEditOverrides((prev) => {
+              const next = { ...prev };
+              delete next[commentId];
+              return next;
+            });
+          }, 3000);
+        },
+        onError: () => {
           setCommentEditOverrides((prev) => {
             const next = { ...prev };
             delete next[commentId];
             return next;
           });
-        }, 3000);
-      } catch (error: unknown) {
-          setCommentEditOverrides((prev) => {
-            const next = { ...prev };
-            delete next[commentId];
-            return next;
-          });
-        const errorMessage =
-           error instanceof Error ? error.message : "Failed to edit comment";
-         toast.update(toastId, {
-           type: "error",
-           title: "Failed to edit comment",
-           description: errorMessage,
-           duration: 5000,
-         });
-         setTimeout(() => toast.dismiss(toastId), 5000);
-       } finally {
-          editToastIdRef.current = null;
-       }
-     })();
+        },
+      });
    }
- }, [pendingEdit, clearPendingEdit, editMutation, toast, refetchPosts]);
+ }, [pendingEdit, clearPendingEdit, enqueue, refetchPosts]);
 
   const handleAuthorPress = useCallback(
     (authorId: string) => {

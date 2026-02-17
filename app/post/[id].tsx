@@ -18,7 +18,6 @@ import {
   getActionLabel,
 } from "@/src/services/pow-queue";
 import { useEdit } from "@/src/api/write";
-import type { PoWProgress } from "@/src/api/write/signing";
 import { Avatar } from "@/src/components/atoms";
 import {
   Comment,
@@ -386,31 +385,11 @@ export default function PostDetailScreen() {
   }, [commentMutation.mutateAsync]);
   const enqueue = usePowQueueStore((state) => state.enqueue);
 
-  const editToastIdRef = useRef<string | null>(null);
-  const handleEditPoWProgress = useCallback(
-    (progress: PoWProgress) => {
-      const tid = editToastIdRef.current;
-      if (tid) {
-        const pct =
-          progress.estimatedTotalMs > 0
-            ? Math.min(
-                99,
-                Math.round(
-                  (progress.elapsedMs / progress.estimatedTotalMs) * 100,
-                ),
-              )
-            : 0;
-        toast.update(tid, {
-          description: `Computing proof of work... ${pct}%`,
-        });
-      }
-    },
-    [toast],
-  );
-
-  const editMutation = useEdit({
-    onPoWProgress: handleEditPoWProgress,
-  });
+  const editMutation = useEdit({});
+  const editMutateAsyncRef = useRef(editMutation.mutateAsync);
+  useEffect(() => {
+    editMutateAsyncRef.current = editMutation.mutateAsync;
+  }, [editMutation.mutateAsync]);
 
   // Transform API post and comments to UI format
   const post = useMemo(() => {
@@ -1364,31 +1343,21 @@ export default function PostDetailScreen() {
         [commentId]: finalContent,
       }));
 
-      toast.dismissAll();
-      const toastId = toast.loading(
-        "Editing comment",
-        "Computing proof of work...",
-      );
-      editToastIdRef.current = toastId;
-
-      (async () => {
-        try {
-          await editMutation.mutateAsync({
+      const actionId = generateActionId();
+      enqueue({
+        id: actionId,
+        type: "edit",
+        label: getActionLabel("edit"),
+        execute: async () => {
+          return editMutateAsyncRef.current({
             postId: commentId,
             parentId,
             title: "",
             content: finalContent,
             tag: "",
           });
-
-          toast.update(toastId, {
-            type: "success",
-            title: "Comment edited!",
-            description: undefined,
-            duration: 3000,
-          });
-          setTimeout(() => toast.dismiss(toastId), 3000);
-
+        },
+        onSuccess: () => {
           setTimeout(async () => {
             await refetchComments();
             setCommentEditOverrides((prev) => {
@@ -1397,34 +1366,17 @@ export default function PostDetailScreen() {
               return next;
             });
           }, 3000);
-        } catch (error: unknown) {
+        },
+        onError: () => {
           setCommentEditOverrides((prev) => {
             const next = { ...prev };
             delete next[commentId];
             return next;
           });
-          const errorMessage =
-            error instanceof Error ? error.message : "Failed to edit comment";
-          toast.update(toastId, {
-            type: "error",
-            title: "Failed to edit comment",
-            description: errorMessage,
-            duration: 5000,
-          });
-          setTimeout(() => toast.dismiss(toastId), 5000);
-        } finally {
-          editToastIdRef.current = null;
-        }
-      })();
+        },
+      });
     }
-  }, [
-    pendingEdit,
-    clearPendingEdit,
-    editMutation,
-    toast,
-    refetchComments,
-    editToastIdRef,
-  ]);
+  }, [pendingEdit, clearPendingEdit, enqueue, refetchComments]);
 
   const handleDeleteComment = useCallback(() => {
     if (!selectedComment) return;

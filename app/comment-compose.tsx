@@ -181,7 +181,6 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
 
   const handleSubmit = useCallback(() => {
     if (!canSubmit) return;
-    Keyboard.dismiss();
     triggerHaptic("medium");
     if (isEditMode && editCommentId && editParentId) {
       setPendingEdit({
