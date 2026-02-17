@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View } from "react-native";
+import { AppState, View, type AppStateStatus } from "react-native";
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -40,6 +40,7 @@ import {
 import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
+import { HEADER_HEIGHT } from "@/src/providers/scroll-animation-context";
 import { useToast } from "@/src/providers/toast-provider";
 import { HomeTabbedFeed, type HomeTabbedFeedRef } from "./home/home-tabbed-feed";
 import { useHomePostCardStore } from "./home/home-post-card-store";
@@ -67,6 +68,33 @@ export function HomeScreen() {
   const easUpdate = useEasUpdate();
 
 
+  const backgroundTimeRef = useRef<number | null>(null);
+  const [isFeedRefreshing, setIsFeedRefreshing] = useState(false);
+
+  const handleRefreshingChange = useCallback((refreshing: boolean) => {
+    setIsFeedRefreshing(refreshing);
+  }, []);
+
+  useEffect(() => {
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      if (nextState === "background" || nextState === "inactive") {
+        if (!backgroundTimeRef.current) {
+          backgroundTimeRef.current = Date.now();
+        }
+        return;
+      }
+      if (nextState === "active" && backgroundTimeRef.current) {
+        const duration = Date.now() - backgroundTimeRef.current;
+        backgroundTimeRef.current = null;
+        if (duration >= 2 * 60 * 1000) {
+          tabbedFeedRef.current?.scrollToTop();
+          tabbedFeedRef.current?.refresh();
+        }
+      }
+    };
+    const sub = AppState.addEventListener("change", handleAppStateChange);
+    return () => sub.remove();
+  }, []);
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
 
@@ -499,6 +527,7 @@ export function HomeScreen() {
         feedType="home"
         activeTabIndex={feedTabIndex}
       />
+
 
       <UpdateBanner
         status={easUpdate.status}

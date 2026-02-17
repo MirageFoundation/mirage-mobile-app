@@ -44,24 +44,36 @@ import { useQueryClient } from "@tanstack/react-query";
 export type HomeTabbedFeedRef = {
   scrollToTop: (tabIndex?: number) => void;
   refresh: () => Promise<void>;
+  isRefreshing: () => boolean;
 };
 
 type HomeTabbedFeedProps = {
   feedType: "home" | "following";
   activeTabIndex?: number;
   ListHeaderExtra?: ReactNode;
+  onRefreshingChange?: (refreshing: boolean) => void;
 };
 
 export const HomeTabbedFeed = forwardRef<
   HomeTabbedFeedRef,
   HomeTabbedFeedProps
->(({ feedType: baseFeed, activeTabIndex = 0, ListHeaderExtra }, ref) => {
+>(({ feedType: baseFeed, activeTabIndex = 0, ListHeaderExtra, onRefreshingChange }, ref) => {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { scrollHandler } = useScrollAnimationContext();
 
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const isManualRefreshingRef = useRef(false);
+
+  const onRefreshingChangeRef = useRef(onRefreshingChange);
+  onRefreshingChangeRef.current = onRefreshingChange;
+
+  const setRefreshing = useCallback((value: boolean) => {
+    isManualRefreshingRef.current = value;
+    setIsManualRefreshing(value);
+    onRefreshingChangeRef.current?.(value);
+  }, []);
   const magicListRef = useRef<FlatList<Post>>(null);
   const latestListRef = useRef<FlatList<Post>>(null);
 
@@ -171,7 +183,7 @@ export const HomeTabbedFeed = forwardRef<
   );
 
   const handleRefresh = useCallback(async () => {
-    setIsManualRefreshing(true);
+    setRefreshing(true);
     try {
       const sortBy = activeTabIndex === 0 ? "magic" : "newest";
 
@@ -215,7 +227,7 @@ export const HomeTabbedFeed = forwardRef<
     } catch (error) {
       console.error("Failed to refresh feed:", error);
     } finally {
-      setIsManualRefreshing(false);
+      setRefreshing(false);
     }
   }, [
     activeTabIndex,
@@ -234,6 +246,7 @@ export const HomeTabbedFeed = forwardRef<
         listRef.current?.scrollToOffset({ offset: 0, animated: true });
       },
       refresh: handleRefresh,
+      isRefreshing: () => isManualRefreshingRef.current,
     }),
     [activeTabIndex, handleRefresh],
   );
@@ -352,11 +365,10 @@ export const HomeTabbedFeed = forwardRef<
   );
 
   const ListHeader = useCallback(() => {
-    const showRefreshIndicator = isManualRefreshing;
     return (
       <>
         {ListHeaderExtra}
-        {showRefreshIndicator && (
+        {isManualRefreshing && (
           <Box center p="md">
             <ActivityIndicator
               size="small"
@@ -369,6 +381,7 @@ export const HomeTabbedFeed = forwardRef<
     );
   }, [
     isManualRefreshing,
+    onRefreshingChange,
     theme.colors.background.emphasis,
     baseFeed,
     activeTabIndex,

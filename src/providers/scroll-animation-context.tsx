@@ -58,6 +58,7 @@ export const ScrollAnimationProvider = ({
  const headerTranslateY = useSharedValue(0);
  const tabBarTranslateY = useSharedValue(0);
   const isHidden = useSharedValue(false);
+  const isProgrammaticScroll = useSharedValue(false);
 
   // Refs for scroll-to-top functionality (home)
   const scrollRef = useRef<ScrollableRef>(null);
@@ -83,6 +84,10 @@ export const ScrollAnimationProvider = ({
      const diff = currentY - lastScrollY.value;
 
       if (diff > 0 && currentY > SCROLL_THRESHOLD && !isHidden.value) {
+      if (isProgrammaticScroll.value) {
+        lastScrollY.value = currentY;
+        return;
+      }
        headerTranslateY.value = withTiming(-fullHeaderHeight, {
          duration: 200,
        });
@@ -127,6 +132,10 @@ export const ScrollAnimationProvider = ({
    headerTranslateY.value = withTiming(0, { duration: 200 });
    tabBarTranslateY.value = withTiming(0, { duration: 200 });
     isHidden.value = false;
+    isProgrammaticScroll.value = true;
+    setTimeout(() => {
+      isProgrammaticScroll.value = false;
+    }, 500);
 
     // Scroll to top
     if (scrollToTopCallbackRef.current) {
