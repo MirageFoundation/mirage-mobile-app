@@ -33,8 +33,7 @@ export function SideMenuProvider({ children }: { children: React.ReactNode }) {
   const handleSettings = useCallback(() => router.push("/settings"), [router]);
   const handleSubscription = useCallback(() => router.push("/subscription"), [router]);
   const handleSaved = useCallback(() => router.push("/saved-posts"), [router]);
-  const handleHistory = useCallback(() => console.log("Navigate to history"), []);
-  const handleDrafts = useCallback(() => console.log("Navigate to drafts"), []);
+  const handleHistory = useCallback(() => router.push("/history"), [router]);
   const handleFollowing = useCallback(() => {
     const id = currentUser?.walletAddress || currentUser?.username;
     if (id) router.push(`/user-following/${id}`);
@@ -55,7 +54,6 @@ export function SideMenuProvider({ children }: { children: React.ReactNode }) {
         onSubscription={handleSubscription}
         onSaved={handleSaved}
         onHistory={handleHistory}
-        onDrafts={handleDrafts}
         onFollowing={handleFollowing}
         onTopics={handleTopics}
         onInviteAndEarn={handleInviteAndEarn}

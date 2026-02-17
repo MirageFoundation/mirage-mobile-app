@@ -54,6 +54,7 @@ import {
   useSavedPostsStore,
 } from "@/src/stores";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
+import { useHistoryStore } from "@/src/stores/history-store";
 import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 import {
   AntDesign,
@@ -396,6 +397,12 @@ export default function PostDetailScreen() {
     if (!commentsData?.root) return null;
     return transformApiPost(commentsData.root, { followedUsers });
   }, [commentsData, followedUsers]);
+
+  useEffect(() => {
+    if (post) {
+      useHistoryStore.getState().addEntry(post);
+    }
+  }, [post?.id]);
 
   const comments = useMemo(() => {
     if (!commentsData?.children) return [];

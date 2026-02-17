@@ -60,7 +60,6 @@ type SideMenuProps = {
   onSubscription?: () => void;
   onSaved?: () => void;
   onHistory?: () => void;
-  onDrafts?: () => void;
   onFollowing?: () => void;
   onTopics?: () => void;
   onInviteAndEarn?: () => void;
@@ -302,7 +301,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       onSubscription,
       onSaved,
       onHistory,
-      onDrafts,
       onFollowing,
       onTopics,
       onInviteAndEarn,
@@ -569,12 +567,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     title="History"
                     subtitle="Recently viewed"
                     onPress={createHandler(onHistory)}
-                  />
-                  <MenuItem
-                    iconName="document-text-outline"
-                    title="Drafts"
-                    subtitle="Unpublished content"
-                    onPress={createHandler(onDrafts)}
                   />
                   <SectionFooter />
 

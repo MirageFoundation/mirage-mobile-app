@@ -371,13 +371,9 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
     router.push("/invite-and-earn");
   }, [router]);
 
-  const handleMenuDrafts = useCallback(() => {
-    console.log("Drafts pressed");
-  }, []);
-
   const handleMenuHistory = useCallback(() => {
-    console.log("History pressed");
-  }, []);
+    router.push("/history");
+  }, [router]);
 
   const handleMenuSaved = useCallback(() => {
     router.push("/saved-posts");
@@ -888,7 +884,6 @@ useEffect(() => {
         onSubscription={handleMenuSubscription}
         onNetwork={handleMenuNetwork}
         onInviteAndEarn={handleMenuInviteAndEarn}
-        onDrafts={handleMenuDrafts}
         onHistory={handleMenuHistory}
         onSaved={handleMenuSaved}
         onOnlineStatusChange={handleOnlineStatusChange}
