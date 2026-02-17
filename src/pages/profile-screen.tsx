@@ -167,7 +167,7 @@ export function ProfileScreen() {
   const { theme } = useUnistyles();
   const queryClient = useQueryClient();
 
-  const { registerProfileScrollRef, registerProfileRefreshCallback } =
+  const { registerProfileRefresh } =
     useScrollAnimationContext();
 
   const flatListRef = useRef<FlatList<any>>(null);
@@ -183,10 +183,6 @@ export function ProfileScreen() {
     isLoading: isLoadingProfile,
     refetch: refetchProfile,
   } = useProfile();
-
-  useEffect(() => {
-    registerProfileScrollRef(flatListRef.current);
-  }, [registerProfileScrollRef]);
 
   const scrollY = useSharedValue(0);
   const animatedTabIndex = useSharedValue(0);
@@ -280,6 +276,11 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
 
   useEffect(() => {
     const handleRefresh = async () => {
+      if (flatListRef.current) {
+        if ("scrollToOffset" in flatListRef.current) {
+          flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+        }
+      }
       setIsRefreshing(true);
       try {
         await Promise.all([
@@ -291,9 +292,9 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
         setIsRefreshing(false);
       }
     };
-    registerProfileRefreshCallback(handleRefresh);
+    registerProfileRefresh(handleRefresh);
   }, [
-    registerProfileRefreshCallback,
+    registerProfileRefresh,
     refetchUserStatus,
     refetchProfile,
     refetchPosts,

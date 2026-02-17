@@ -1,4 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -8,7 +7,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import {
-  queryKeys,
   useUserFollowed,
 } from "@/src/api";
 
@@ -56,12 +54,8 @@ export function HomeScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const queryClient = useQueryClient();
   const {
     headerAnimatedStyle,
-    registerScrollRef,
-    registerRefreshCallback,
-    registerScrollToTopCallback,
   } = useScrollAnimationContext();
   const { requireAuth } = useAuthGuard();
   const toast = useToast();
@@ -359,22 +353,6 @@ export function HomeScreen() {
       return newSet;
     });
   }, []);
-
-  const handleRefresh = useCallback(async () => {
-    await tabbedFeedRef.current?.refresh();
-  }, []);
-
-  useEffect(() => {
-    registerRefreshCallback(handleRefresh);
-  }, [registerRefreshCallback, handleRefresh]);
-
-  const handleScrollToTop = useCallback(() => {
-    tabbedFeedRef.current?.scrollToTop();
-  }, []);
-
-  useEffect(() => {
-    registerScrollToTopCallback(handleScrollToTop);
-  }, [registerScrollToTopCallback, handleScrollToTop]);
 
   useEffect(() => {
     if (shouldScrollToTop) {

@@ -42,8 +42,6 @@ export function FollowingScreen() {
   const router = useRouter();
   const {
     headerAnimatedStyle,
-    registerFollowingRefreshCallback,
-   registerFollowingScrollToTopCallback,
   } = useScrollAnimationContext();
   const { requireAuth, isLoggedIn } = useAuthGuard();
   const toast = useToast();
@@ -278,22 +276,6 @@ export function FollowingScreen() {
       return newSet;
     });
   }, []);
-
-  const handleRefresh = useCallback(async () => {
-    await tabbedFeedRef.current?.refresh();
-  }, []);
-
-  useEffect(() => {
-    registerFollowingRefreshCallback(handleRefresh);
-  }, [registerFollowingRefreshCallback, handleRefresh]);
-
-  const handleScrollToTop = useCallback(() => {
-    tabbedFeedRef.current?.scrollToTop();
-  }, []);
-
-  useEffect(() => {
-    registerFollowingScrollToTopCallback(handleScrollToTop);
-  }, [registerFollowingScrollToTopCallback, handleScrollToTop]);
 
   const setCurrentUserId = useHomePostCardStore((state) => state.setCurrentUserId);
   const setFollowedUsers = useHomePostCardStore((state) => state.setFollowedUsers);

@@ -7,11 +7,11 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import type { FlatList, ReactNode } from "react-native";
-import { ActivityIndicator, RefreshControl, View } from "react-native";
+import type { FlatList } from "react-native";
+import type { ReactNode } from "react";
+import { ActivityIndicator, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated from "react-native-reanimated";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { useUnistyles } from "react-native-unistyles";
 
 import {
   getPosts,
@@ -61,19 +61,11 @@ export const HomeTabbedFeed = forwardRef<
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { scrollHandler } = useScrollAnimationContext();
+  const { scrollHandler, registerHomeRefresh, registerFollowingRefresh } = useScrollAnimationContext();
 
-  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
-  const isManualRefreshingRef = useRef(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const isRefreshingRef = useRef(false);
 
-  const onRefreshingChangeRef = useRef(onRefreshingChange);
-  onRefreshingChangeRef.current = onRefreshingChange;
-
-  const setRefreshing = useCallback((value: boolean) => {
-    isManualRefreshingRef.current = value;
-    setIsManualRefreshing(value);
-    onRefreshingChangeRef.current?.(value);
-  }, []);
   const magicListRef = useRef<FlatList<Post>>(null);
   const latestListRef = useRef<FlatList<Post>>(null);
 
@@ -183,7 +175,10 @@ export const HomeTabbedFeed = forwardRef<
   );
 
   const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
+    setIsRefreshing(true);
+    onRefreshingChange?.(true);
     try {
       const sortBy = activeTabIndex === 0 ? "magic" : "newest";
 
@@ -227,7 +222,9 @@ export const HomeTabbedFeed = forwardRef<
     } catch (error) {
       console.error("Failed to refresh feed:", error);
     } finally {
-      setRefreshing(false);
+      isRefreshingRef.current = false;
+      setIsRefreshing(false);
+      onRefreshingChange?.(false);
     }
   }, [
     activeTabIndex,
@@ -235,20 +232,33 @@ export const HomeTabbedFeed = forwardRef<
     allowedTags,
     currentUser?.walletAddress,
     queryClient,
+    onRefreshingChange,
   ]);
+
+  const scrollToTop = useCallback((tabIndex?: number) => {
+    const targetIndex = tabIndex ?? activeTabIndex;
+    const listRef = targetIndex === 0 ? magicListRef : latestListRef;
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, [activeTabIndex]);
+
+  const scrollToTopAndRefresh = useCallback(async () => {
+    scrollToTop();
+    await handleRefresh();
+  }, [scrollToTop, handleRefresh]);
+
+  useEffect(() => {
+    const register = baseFeed === "home" ? registerHomeRefresh : registerFollowingRefresh;
+    register(scrollToTopAndRefresh);
+  }, [baseFeed, registerHomeRefresh, registerFollowingRefresh, scrollToTopAndRefresh]);
 
   useImperativeHandle(
     ref,
     () => ({
-      scrollToTop: (tabIndex?: number) => {
-        const targetIndex = tabIndex ?? activeTabIndex;
-        const listRef = targetIndex === 0 ? magicListRef : latestListRef;
-        listRef.current?.scrollToOffset({ offset: 0, animated: true });
-      },
+      scrollToTop,
       refresh: handleRefresh,
-      isRefreshing: () => isManualRefreshingRef.current,
+      isRefreshing: () => isRefreshingRef.current,
     }),
-    [activeTabIndex, handleRefresh],
+    [scrollToTop, handleRefresh],
   );
 
   const lastMagicFetchTime = useRef(0);
@@ -368,11 +378,11 @@ export const HomeTabbedFeed = forwardRef<
     return (
       <>
         {ListHeaderExtra}
-        {isManualRefreshing && (
+        {isRefreshing && (
           <Box center p="md">
             <ActivityIndicator
               size="small"
-              color={theme.colors.background.emphasis}
+              color={theme.colors.text.subtle}
             />
           </Box>
         )}
@@ -380,12 +390,11 @@ export const HomeTabbedFeed = forwardRef<
       </>
     );
   }, [
-    isManualRefreshing,
-    onRefreshingChange,
-    theme.colors.background.emphasis,
     baseFeed,
     activeTabIndex,
     ListHeaderExtra,
+    isRefreshing,
+    theme.colors.text.subtle,
   ]);
 
   const ListFooter = useCallback(() => {
@@ -412,13 +421,14 @@ export const HomeTabbedFeed = forwardRef<
   const refreshControl = useMemo(
     () => (
       <RefreshControl
-        refreshing={false}
+        refreshing={isRefreshing}
         onRefresh={handleRefresh}
         tintColor="transparent"
+        colors={["transparent"]}
         progressViewOffset={insets.top + HEADER_HEIGHT}
       />
     ),
-    [handleRefresh, insets.top],
+    [handleRefresh, insets.top, isRefreshing],
   );
 
   const posts = activeTabIndex === 0 ? magicPosts : latestPosts;
