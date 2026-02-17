@@ -299,16 +299,18 @@ function subscribeNotificationResponses(): void {
       handleNotificationResponse(response);
     });
 
-  Notifications.getLastNotificationResponseAsync()
-    .then((response) => {
-      handleNotificationResponse(response);
-    })
-    .catch((error) => {
-      console.error(
-        "[InboxNotifications] Failed to read last notification response:",
-        error,
-      );
-    });
+  if (Platform.OS !== "android") {
+    Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        handleNotificationResponse(response);
+      })
+      .catch((error) => {
+        console.error(
+          "[InboxNotifications] Failed to read last notification response:",
+          error,
+        );
+      });
+  }
 }
 
 function subscribeInboxSignals(): void {
