@@ -545,7 +545,7 @@ export default function UsernameScreen() {
                 ) : (
                   <Text
                     size="sm"
-                    style={{ color: theme.colors.text.subtle, opacity: 0.6 }}
+                    style={{ color: theme.colors.neutral[600] }}
                   >
                     Enter an invite code
                   </Text>
@@ -582,7 +582,7 @@ export default function UsernameScreen() {
             ) : (
               <Text
                 size="sm"
-                style={{ color: theme.colors.text.subtle, opacity: 0.6 }}
+                style={{ color: theme.colors.neutral[600] }}
               >
                 This is how people will find you on Mirage
               </Text>
@@ -780,6 +780,7 @@ const styles = StyleSheet.create((theme) => ({
     marginVertical: theme.spacing.lg,
     fontSize: 16,
     color: theme.colors.neutral[600],
+    paddingHorizontal: theme.spacing.lg,
   },
   inputWrapper: {
     marginBottom: theme.spacing.xs,
