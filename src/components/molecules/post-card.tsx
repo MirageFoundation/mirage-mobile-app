@@ -3,7 +3,6 @@ import { Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { logPress } from "@/src/utils/press-logger";
 import { setLastPressedPostY } from "@/src/utils/post-transition";
-import { hasSpoilers, parseSpoilers } from "@/src/utils/spoiler-parser";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   Linking,
@@ -263,28 +262,15 @@ export const PostCard = memo(function PostCard({
 
       {bodyText && !shouldBlurContent && (
         <View style={styles.body}>
-          {!isPostDetail && isTruncated ? (
-            <Text
-              style={{
-                fontFamily: theme.typography.family.mono,
-                fontSize: theme.typography.size.md,
-                lineHeight:
-                  theme.typography.size.md * theme.typography.leading.normal,
-                color: theme.colors.text.default,
-              }}
-            >
-              {hasSpoilers(truncatedBody) ? parseSpoilers(truncatedBody) : truncatedBody}
-              <Text style={{ color: "#3B82F6" }}>…</Text>
-            </Text>
-          ) : (
-            <MarkdownContent
-              content={
-                expanded || !isTruncated
+          <MarkdownContent
+            content={
+              !isPostDetail && isTruncated
+                ? truncatedBody + "…"
+                : expanded || !isTruncated
                   ? bodyText
                   : bodyText.slice(0, MAX_BODY_LENGTH)
-              }
-            />
-          )}
+            }
+          />
           {isPostDetail && isTruncated && (
             <Pressable onPress={toggleExpanded} style={styles.showMoreButton}>
               <Text
