@@ -46,6 +46,7 @@ type MediaGalleryProps = {
   screenActive?: boolean;
   allowAutoplay?: boolean;
   isVisible?: boolean;
+  isPostDetail?: boolean;
 };
 
 const GalleryVideoItem = memo(function GalleryVideoItem({
@@ -58,6 +59,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   onAspectRatioDetected,
   allowAutoplay,
   isVisible,
+  isPostDetail,
 }: {
   item: ResolvedMedia;
   width: number;
@@ -68,6 +70,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   onAspectRatioDetected?: (uri: string, ratio: number) => void;
   allowAutoplay?: boolean;
   isVisible?: boolean;
+  isPostDetail?: boolean;
 }) {
   const videoRef = useRef<Video>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -138,20 +141,49 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
       />
 
       <View style={galleryStyles.playOverlay}>
-        <Pressable onPress={onPress} style={galleryStyles.videoTapArea} />
-        {isLoading ? (
-          <View style={galleryStyles.controlButton}>
-            <ActivityIndicator size="small" color="#fff" />
-          </View>
+        {isPostDetail ? (
+          <>
+            <Pressable onPress={handlePlayPause} style={galleryStyles.videoTapArea} />
+            {isLoading ? (
+              <View style={galleryStyles.controlButton} pointerEvents="none">
+                <ActivityIndicator size="small" color="#fff" />
+              </View>
+            ) : !isPlaying ? (
+              <View style={galleryStyles.controlButton} pointerEvents="none">
+                <Ionicons name="play" size={28} color="#fff" />
+              </View>
+            ) : null}
+          </>
         ) : (
-          <Pressable
-            onPress={handlePlayPause}
-            style={[galleryStyles.controlButton, { opacity: isPlaying ? 0.6 : 1 }]}
-          >
-            <Ionicons name={isPlaying ? "pause" : "play"} size={28} color="#fff" />
-          </Pressable>
+          <>
+            <Pressable onPress={onPress} style={galleryStyles.videoTapArea} />
+            {isLoading ? (
+              <View style={galleryStyles.controlButton}>
+                <ActivityIndicator size="small" color="#fff" />
+              </View>
+            ) : (
+              <Pressable
+                onPress={handlePlayPause}
+                style={[galleryStyles.controlButton, { opacity: isPlaying ? 0.6 : 1 }]}
+              >
+                <Ionicons name={isPlaying ? "pause" : "play"} size={28} color="#fff" />
+              </Pressable>
+            )}
+          </>
         )}
       </View>
+
+      {isPostDetail && (
+        <Pressable
+          onPress={onPress}
+          style={galleryStyles.fullscreenButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <View style={galleryStyles.fullscreenButtonInner}>
+            <Ionicons name="expand" size={16} color="#fff" />
+          </View>
+        </Pressable>
+      )}
 
       <Pressable
         onPress={handleMuteToggle}
@@ -228,6 +260,7 @@ export const MediaGallery = memo(function MediaGallery({
   screenActive = true,
   allowAutoplay = true,
   isVisible = true,
+  isPostDetail = false,
 }: MediaGalleryProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
@@ -304,6 +337,7 @@ export const MediaGallery = memo(function MediaGallery({
               onAspectRatioDetected={handleAspectRatioDetected}
               allowAutoplay={allowAutoplay}
               isVisible={isVisible}
+              isPostDetail={isPostDetail}
             />
           ) : (
             <GalleryImageItem
@@ -317,7 +351,7 @@ export const MediaGallery = memo(function MediaGallery({
         </View>
       );
     },
-    [onMediaPress, maxHeight, getHeightForIndex, screenActive, handleAspectRatioDetected, allowAutoplay, isVisible],
+    [onMediaPress, maxHeight, getHeightForIndex, screenActive, handleAspectRatioDetected, allowAutoplay, isVisible, isPostDetail],
   );
 
   const keyExtractor = useCallback(
@@ -408,6 +442,20 @@ const galleryStyles = StyleSheet.create({
     right: 8,
   },
   muteButtonInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fullscreenButton: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    zIndex: 20,
+  },
+  fullscreenButtonInner: {
     width: 32,
     height: 32,
     borderRadius: 16,

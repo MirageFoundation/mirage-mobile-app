@@ -250,6 +250,7 @@ export const PostCard = memo(function PostCard({
         screenActive={screenActive && !showMediaPreview}
         onRevealContent={onRevealContent}
         onMediaPress={handleMediaPress}
+        isPostDetail={isPostDetail}
         onGalleryMediaPress={(index) => {
           if (!isPostDetail && onMediaPressProp) {
             onMediaPressProp();

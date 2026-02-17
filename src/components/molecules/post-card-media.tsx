@@ -51,6 +51,8 @@ type PostCardMediaProps = {
   /** Called when media is pressed (for opening preview) */
   onMediaPress?: () => void;
   onGalleryMediaPress?: (index: number) => void;
+  /** Whether this is shown in post detail screen */
+  isPostDetail?: boolean;
 };
 
 const MEDIA_ASPECT_RATIO_CACHE = new Map<string, number>();
@@ -63,7 +65,7 @@ function getMediaAspectRatio(media?: ResolvedMedia): number {
   if (media.width && media.height) {
     return media.width / media.height;
   }
-  if (media.type === "video") return 4 / 5;
+  if (media.type === "video") return 4 / 3;
   return 16 / 9;
 }
 
@@ -81,6 +83,7 @@ export const PostCardMedia = memo(
       onRevealContent,
       onMediaPress,
       onGalleryMediaPress,
+      isPostDetail = false,
     },
     ref,
   ) {
@@ -251,6 +254,7 @@ export const PostCardMedia = memo(
         // Video is loaded and playing - hide loading indicator
         if (status.isPlaying && !status.isBuffering) {
           setIsVideoLoading(false);
+          setMediaLoaded(true);
           // Reset user initiated flag once video is playing smoothly
           userInitiatedPlayRef.current = false;
         } else if (status.isBuffering && userInitiatedPlayRef.current) {
@@ -336,6 +340,7 @@ export const PostCardMedia = memo(
               screenActive={screenActive}
               allowAutoplay={allowAutoplay}
               isVisible={isVisible}
+              isPostDetail={isPostDetail}
             />
           </View>
         </View>
@@ -375,6 +380,7 @@ export const PostCardMedia = memo(
                 isMuted={isMuted}
                 useNativeControls={false}
                 onLoad={() => {
+                  setMediaLoaded(true);
                   videoRef.current?.setStatusAsync({ isMuted }).catch(() => {});
                 }}
                 onReadyForDisplay={(event) => {
@@ -447,30 +453,67 @@ export const PostCardMedia = memo(
             !shouldBlurContent &&
             !isVideoProcessing && (
               <View style={styles.playOverlay}>
-                <Pressable
-                  onPress={handleMediaPress}
-                  style={styles.videoTapArea}
-                />
-                {isVideoLoading ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="small" color="#fff" />
-                  </View>
-                ) : (
-                  <Pressable
-                    onPress={handleVideoPress}
-                    style={[
-                      styles.playButton,
-                      { opacity: isVideoPlaying ? 0.6 : 1 },
-                    ]}
-                  >
-                    <Ionicons
-                      name={isVideoPlaying ? "pause" : "play"}
-                      size={28}
-                      color="#fff"
+                {isPostDetail ? (
+                  <>
+                    <Pressable
+                      onPress={handleVideoPress}
+                      style={styles.videoTapArea}
                     />
-                  </Pressable>
+                    {isVideoLoading ? (
+                      <View style={styles.loadingContainer} pointerEvents="none">
+                        <ActivityIndicator size="small" color="#fff" />
+                      </View>
+                    ) : !isVideoPlaying ? (
+                      <View style={styles.playButton} pointerEvents="none">
+                        <Ionicons name="play" size={28} color="#fff" />
+                      </View>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <Pressable
+                      onPress={handleMediaPress}
+                      style={styles.videoTapArea}
+                    />
+                    {isVideoLoading ? (
+                      <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="small" color="#fff" />
+                      </View>
+                    ) : (
+                      <Pressable
+                        onPress={handleVideoPress}
+                        style={[
+                          styles.playButton,
+                          { opacity: isVideoPlaying ? 0.6 : 1 },
+                        ]}
+                      >
+                        <Ionicons
+                          name={isVideoPlaying ? "pause" : "play"}
+                          size={28}
+                          color="#fff"
+                        />
+                      </Pressable>
+                    )}
+                  </>
                 )}
               </View>
+            )}
+
+          {media.type === "video" &&
+            !shouldBlurContent &&
+            !isVideoProcessing &&
+            isPostDetail && (
+              <Pressable
+                onPress={() => {
+                  onMediaPress?.();
+                }}
+                style={styles.fullscreenButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <View style={styles.fullscreenButtonInner}>
+                  <Ionicons name="expand" size={16} color="#fff" />
+                </View>
+              </Pressable>
             )}
 
           {/* Mute/Unmute button for videos */}
@@ -641,6 +684,20 @@ const styles = StyleSheet.create((theme) => ({
     right: theme.spacing.sm,
   },
   muteButtonInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fullscreenButton: {
+    position: "absolute",
+    top: theme.spacing.sm,
+    right: theme.spacing.sm,
+    zIndex: 20,
+  },
+  fullscreenButtonInner: {
     width: 32,
     height: 32,
     borderRadius: 16,
