@@ -73,6 +73,9 @@ export const HomeTabbedFeed = forwardRef<
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
 
+  const followedUsers = useHomePostCardStore((s) => s.followedUsers);
+  const followedTopics = useHomePostCardStore((s) => s.followedTopics);
+
   const allowedTags = useMemo(
     () => getAllowedTagsFromContentTypes(selectedContentTypes),
     [selectedContentTypes],
@@ -138,17 +141,33 @@ export const HomeTabbedFeed = forwardRef<
           !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id),
       );
     },
-    [hiddenPostIds, blockedUserIds, hideDownvotedPosts],
+    [hiddenPostIds, blockedUserIds, hideDownvotedPosts, baseFeed, followedUsers, followedTopics],
   );
 
   const magicPosts = useMemo(
-    () => transformPosts(magicQuery.data),
-    [magicQuery.data, transformPosts],
+    () => {
+      const posts = transformPosts(magicQuery.data);
+      if (baseFeed !== "following") return posts;
+      return posts.filter(
+        (post) =>
+          followedUsers.has(post.author.id) ||
+          (post.topic && followedTopics.has(post.topic)),
+      );
+    },
+    [magicQuery.data, transformPosts, baseFeed, followedUsers, followedTopics],
   );
 
   const latestPosts = useMemo(
-    () => transformPosts(latestQuery.data),
-    [latestQuery.data, transformPosts],
+    () => {
+      const posts = transformPosts(latestQuery.data);
+      if (baseFeed !== "following") return posts;
+      return posts.filter(
+        (post) =>
+          followedUsers.has(post.author.id) ||
+          (post.topic && followedTopics.has(post.topic)),
+      );
+    },
+    [latestQuery.data, transformPosts, baseFeed, followedUsers, followedTopics],
   );
 
   const handleRefresh = useCallback(async () => {
