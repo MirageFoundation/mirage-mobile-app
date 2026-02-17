@@ -3,9 +3,20 @@
  */
 
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueryClient,
+  type QueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 import { queryKeys } from "@/src/api/read/query-keys";
-import type { PostFilters, PostsResponse, Post as ApiPost } from "@/src/api/types";
+import type {
+  CommentsResponse,
+  PostFilters,
+  PostWithChildren,
+  PostsResponse,
+  Post as ApiPost,
+} from "@/src/api/types";
 import { useAuthStore } from "@/src/stores";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { useTxStatusPolling } from "@/src/api/read/hooks/use-tx-status";
@@ -108,6 +119,305 @@ const buildOptimisticPost = (
     user_vote: 1,
     user_weight: 0,
   };
+};
+
+const buildOptimisticComment = (
+  commentId: string,
+  input: CreateCommentInput,
+  address: string | null,
+  username: string | null | undefined,
+  rootPost: PostWithChildren,
+): PostWithChildren => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+
+  return {
+    post_id: commentId,
+    user_id: address ?? "unknown",
+    username: username ?? address ?? "you",
+    timestamp: nowSeconds,
+    topic: "",
+    root_topic: rootPost.root_topic,
+    root_post_id: rootPost.root_post_id || rootPost.post_id,
+    title: input.title ?? "",
+    content: input.content,
+    tag: input.tag ?? "",
+    edited_at: 0,
+    thumbnail: "",
+    media: input.media ?? [],
+    points: 1,
+    comments: 0,
+    user_vote: 1,
+    user_weight: 0,
+    children: [],
+  };
+};
+
+const isInfinitePostsData = (
+  data: unknown,
+): data is { pages: PostsResponse[]; pageParams: unknown[] } => {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "pages" in data &&
+    Array.isArray((data as { pages?: unknown }).pages)
+  );
+};
+
+const commentTreeContainsId = (
+  comments: PostWithChildren[],
+  targetId: string,
+): boolean => {
+  return comments.some(
+    (comment) =>
+      comment.post_id === targetId ||
+      commentTreeContainsId(comment.children ?? [], targetId),
+  );
+};
+
+const insertReplyIntoTree = (
+  comments: PostWithChildren[],
+  parentId: string,
+  reply: PostWithChildren,
+): PostWithChildren[] => {
+  let didUpdate = false;
+
+  const nextComments = comments.map((comment) => {
+    if (comment.post_id === parentId) {
+      didUpdate = true;
+      return {
+        ...comment,
+        children: [...(comment.children ?? []), reply],
+      };
+    }
+
+    if (!comment.children || comment.children.length === 0) {
+      return comment;
+    }
+
+    const updatedChildren = insertReplyIntoTree(comment.children, parentId, reply);
+    if (updatedChildren !== comment.children) {
+      didUpdate = true;
+      return {
+        ...comment,
+        children: updatedChildren,
+      };
+    }
+
+    return comment;
+  });
+
+  return didUpdate ? nextComments : comments;
+};
+
+const replaceCommentIdInTree = (
+  comments: PostWithChildren[],
+  oldId: string,
+  newId: string,
+): PostWithChildren[] => {
+  let didUpdate = false;
+
+  const nextComments = comments.map((comment) => {
+    const nextCommentId = comment.post_id === oldId ? newId : comment.post_id;
+    if (nextCommentId !== comment.post_id) {
+      didUpdate = true;
+    }
+
+    let nextChildren = comment.children;
+    if (comment.children && comment.children.length > 0) {
+      const updatedChildren = replaceCommentIdInTree(comment.children, oldId, newId);
+      if (updatedChildren !== comment.children) {
+        didUpdate = true;
+        nextChildren = updatedChildren;
+      }
+    }
+
+    if (nextCommentId !== comment.post_id || nextChildren !== comment.children) {
+      return {
+        ...comment,
+        post_id: nextCommentId,
+        children: nextChildren,
+      };
+    }
+
+    return comment;
+  });
+
+  return didUpdate ? nextComments : comments;
+};
+
+const removeCommentFromTree = (
+  comments: PostWithChildren[],
+  targetId: string,
+): { nextComments: PostWithChildren[]; removed: boolean } => {
+  let removed = false;
+
+  const nextComments = comments
+    .filter((comment) => {
+      if (comment.post_id === targetId) {
+        removed = true;
+        return false;
+      }
+      return true;
+    })
+    .map((comment) => {
+      if (!comment.children || comment.children.length === 0) {
+        return comment;
+      }
+
+      const nextChildrenResult = removeCommentFromTree(comment.children, targetId);
+      if (nextChildrenResult.removed) {
+        removed = true;
+        return {
+          ...comment,
+          children: nextChildrenResult.nextComments,
+        };
+      }
+
+      return comment;
+    });
+
+  return {
+    nextComments: removed ? nextComments : comments,
+    removed,
+  };
+};
+
+const applyCommentDeltaToPostsData = (
+  data: unknown,
+  postId: string,
+  delta: number,
+): { nextData: unknown; didUpdate: boolean } => {
+  if (!data) {
+    return { nextData: data, didUpdate: false };
+  }
+
+  if (isInfinitePostsData(data)) {
+    let didUpdate = false;
+    const nextPages = data.pages.map((page) => {
+      let didUpdatePage = false;
+      const nextPosts = page.posts.map((post) => {
+        if (post.post_id !== postId) return post;
+        didUpdatePage = true;
+        return {
+          ...post,
+          comments: Math.max(0, (post.comments ?? 0) + delta),
+        };
+      });
+
+      if (!didUpdatePage) {
+        return page;
+      }
+
+      didUpdate = true;
+      return {
+        ...page,
+        posts: nextPosts,
+      };
+    });
+
+    return {
+      nextData: didUpdate ? { ...data, pages: nextPages } : data,
+      didUpdate,
+    };
+  }
+
+  const singleData = data as PostsResponse;
+  let didUpdate = false;
+  const nextPosts = singleData.posts.map((post) => {
+    if (post.post_id !== postId) return post;
+    didUpdate = true;
+    return {
+      ...post,
+      comments: Math.max(0, (post.comments ?? 0) + delta),
+    };
+  });
+
+  return {
+    nextData: didUpdate ? { ...singleData, posts: nextPosts } : data,
+    didUpdate,
+  };
+};
+
+const removePostFromPostsData = (
+  data: unknown,
+  postId: string,
+): { nextData: unknown; didUpdate: boolean } => {
+  if (!data) {
+    return { nextData: data, didUpdate: false };
+  }
+
+  if (isInfinitePostsData(data)) {
+    let didUpdate = false;
+    const nextPages = data.pages.map((page) => {
+      const nextPosts = page.posts.filter((post) => post.post_id !== postId);
+      if (nextPosts.length === page.posts.length) {
+        return page;
+      }
+
+      didUpdate = true;
+      return {
+        ...page,
+        posts: nextPosts,
+        total: Math.max(0, page.total - 1),
+      };
+    });
+
+    return {
+      nextData: didUpdate ? { ...data, pages: nextPages } : data,
+      didUpdate,
+    };
+  }
+
+  const singleData = data as PostsResponse;
+  const nextPosts = singleData.posts.filter((post) => post.post_id !== postId);
+  if (nextPosts.length === singleData.posts.length) {
+    return { nextData: data, didUpdate: false };
+  }
+
+  return {
+    nextData: {
+      ...singleData,
+      posts: nextPosts,
+      total: Math.max(0, singleData.total - 1),
+    },
+    didUpdate: true,
+  };
+};
+
+const updateQueriesWithReducer = (
+  queryClient: QueryClient,
+  queryKeyPrefix: QueryKey,
+  reducer: (data: unknown) => { nextData: unknown; didUpdate: boolean },
+) => {
+  const matchingQueries = queryClient.getQueriesData({ queryKey: queryKeyPrefix });
+
+  matchingQueries.forEach(([queryKey, queryData]) => {
+    const { nextData, didUpdate } = reducer(queryData);
+    if (didUpdate) {
+      queryClient.setQueryData(queryKey, nextData);
+    }
+  });
+};
+
+const restoreQuerySnapshots = (
+  queryClient: QueryClient,
+  snapshots: Array<[QueryKey, unknown]> | undefined,
+) => {
+  snapshots?.forEach(([queryKey, queryData]) => {
+    queryClient.setQueryData(queryKey, queryData);
+  });
+};
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isTargetNotFoundError = (error: unknown): boolean => {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+  return message.toLowerCase().includes("target not found");
 };
 
 // ============================================
@@ -242,27 +552,126 @@ export function usePostWithConfirmation(options: UsePostOptions = {}) {
 export function useComment(options: UsePostOptions = {}) {
   const queryClient = useQueryClient();
   const { getWallet, address } = useWallet();
+  const username = useAuthStore((s) => s.user?.username);
 
   return useMutation({
     mutationFn: async (input: CreateCommentInput) => {
       const wallet = await getWallet();
       return createComment(wallet, input, options.onPoWProgress);
     },
-   onSuccess: (data, { parentId }) => {
-      // Mark comments as stale without refetching active feeds
-      // This prevents the optimistic update from being overwritten by stale server data
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: ["comments"] });
+      await queryClient.cancelQueries({ queryKey: ["posts"] });
+      await queryClient.cancelQueries({ queryKey: ["user", "posts"] });
+
+      const previousComments = queryClient.getQueriesData<CommentsResponse>({
+        queryKey: ["comments"],
+      }) as Array<[QueryKey, CommentsResponse | undefined]>;
+      const previousPosts = queryClient.getQueriesData({ queryKey: ["posts"] }) as Array<
+        [QueryKey, unknown]
+      >;
+      const previousUserPosts = queryClient.getQueriesData({
+        queryKey: ["user", "posts"],
+      }) as Array<[QueryKey, unknown]>;
+
+      const optimisticCommentId = `optimistic-${Date.now()}`;
+      const affectedRootPostIds = new Set<string>();
+
+      previousComments.forEach(([queryKey, queryData]) => {
+        if (!queryData?.root) return;
+
+        const isTopLevelComment = queryData.root.post_id === input.parentId;
+        const isReplyToNestedComment = commentTreeContainsId(
+          queryData.children,
+          input.parentId,
+        );
+
+        if (!isTopLevelComment && !isReplyToNestedComment) return;
+
+        affectedRootPostIds.add(queryData.root.post_id);
+        const optimisticComment = buildOptimisticComment(
+          optimisticCommentId,
+          input,
+          address,
+          username,
+          queryData.root,
+        );
+
+        const nextChildren = isTopLevelComment
+          ? [optimisticComment, ...queryData.children]
+          : insertReplyIntoTree(
+              queryData.children,
+              input.parentId,
+              optimisticComment,
+            );
+
+        queryClient.setQueryData<CommentsResponse>(queryKey, {
+          ...queryData,
+          root: {
+            ...queryData.root,
+            comments: (queryData.root.comments ?? 0) + 1,
+          },
+          children: nextChildren,
+        });
+      });
+
+      affectedRootPostIds.forEach((rootPostId) => {
+        updateQueriesWithReducer(queryClient, ["posts"], (queryData) =>
+          applyCommentDeltaToPostsData(queryData, rootPostId, 1),
+        );
+        updateQueriesWithReducer(queryClient, ["user", "posts"], (queryData) =>
+          applyCommentDeltaToPostsData(queryData, rootPostId, 1),
+        );
+      });
+
+      return {
+        previousComments,
+        previousPosts,
+        previousUserPosts,
+        optimisticCommentId,
+      };
+    },
+    onError: (_error, _input, context) => {
+      restoreQuerySnapshots(queryClient, context?.previousComments);
+      restoreQuerySnapshots(queryClient, context?.previousPosts);
+      restoreQuerySnapshots(queryClient, context?.previousUserPosts);
+    },
+    onSuccess: (data, _input, context) => {
+      if (!context?.optimisticCommentId || !data?.tx_hash) return;
+
+      const commentQueries = queryClient.getQueriesData<CommentsResponse>({
+        queryKey: ["comments"],
+      }) as Array<[QueryKey, CommentsResponse | undefined]>;
+
+      commentQueries.forEach(([queryKey, queryData]) => {
+        if (!queryData) return;
+
+        const nextChildren = replaceCommentIdInTree(
+          queryData.children,
+          context.optimisticCommentId,
+          data.tx_hash,
+        );
+
+        if (nextChildren === queryData.children) {
+          return;
+        }
+
+        queryClient.setQueryData<CommentsResponse>(queryKey, {
+          ...queryData,
+          children: nextChildren,
+        });
+      });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: ["comments"],
         refetchType: "inactive",
       });
-
-      // Also invalidate posts to update comment count
       queryClient.invalidateQueries({
         queryKey: ["posts"],
         refetchType: "inactive",
       });
 
-      // Invalidate user posts
       if (address) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.userPosts(address),
@@ -341,16 +750,98 @@ export function useDelete(options: UsePostOptions = {}) {
   return useMutation({
     mutationFn: async (input: DeletePostInput) => {
       const wallet = await getWallet();
-      return deletePost(wallet, input, options.onPoWProgress);
+      const maxAttempts = 3;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          return await deletePost(wallet, input, options.onPoWProgress);
+        } catch (error) {
+          const shouldRetry =
+            isTargetNotFoundError(error) && attempt < maxAttempts;
+
+          if (!shouldRetry) {
+            throw error;
+          }
+
+          await wait(1200 * attempt);
+        }
+      }
+
+      throw new Error("Delete failed");
     },
-    onSuccess: () => {
-      // Invalidate all post/comment caches
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
-      queryClient.invalidateQueries({ queryKey: ["comments"] });
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: ["comments"] });
+      await queryClient.cancelQueries({ queryKey: ["posts"] });
+      await queryClient.cancelQueries({ queryKey: ["user", "posts"] });
+
+      const previousComments = queryClient.getQueriesData<CommentsResponse>({
+        queryKey: ["comments"],
+      }) as Array<[QueryKey, CommentsResponse | undefined]>;
+      const previousPosts = queryClient.getQueriesData({ queryKey: ["posts"] }) as Array<
+        [QueryKey, unknown]
+      >;
+      const previousUserPosts = queryClient.getQueriesData({
+        queryKey: ["user", "posts"],
+      }) as Array<[QueryKey, unknown]>;
+
+      const affectedRootPostIds = new Set<string>();
+
+      previousComments.forEach(([queryKey, queryData]) => {
+        if (!queryData?.root || queryData.root.post_id === input.postId) {
+          return;
+        }
+
+        const removalResult = removeCommentFromTree(queryData.children, input.postId);
+        if (!removalResult.removed) {
+          return;
+        }
+
+        affectedRootPostIds.add(queryData.root.post_id);
+        queryClient.setQueryData<CommentsResponse>(queryKey, {
+          ...queryData,
+          root: {
+            ...queryData.root,
+            comments: Math.max(0, (queryData.root.comments ?? 0) - 1),
+          },
+          children: removalResult.nextComments,
+        });
+      });
+
+      affectedRootPostIds.forEach((rootPostId) => {
+        updateQueriesWithReducer(queryClient, ["posts"], (queryData) =>
+          applyCommentDeltaToPostsData(queryData, rootPostId, -1),
+        );
+        updateQueriesWithReducer(queryClient, ["user", "posts"], (queryData) =>
+          applyCommentDeltaToPostsData(queryData, rootPostId, -1),
+        );
+      });
+
+      updateQueriesWithReducer(queryClient, ["posts"], (queryData) =>
+        removePostFromPostsData(queryData, input.postId),
+      );
+      updateQueriesWithReducer(queryClient, ["user", "posts"], (queryData) =>
+        removePostFromPostsData(queryData, input.postId),
+      );
+
+      return {
+        previousComments,
+        previousPosts,
+        previousUserPosts,
+      };
+    },
+    onError: (_error, _input, context) => {
+      restoreQuerySnapshots(queryClient, context?.previousComments);
+      restoreQuerySnapshots(queryClient, context?.previousPosts);
+      restoreQuerySnapshots(queryClient, context?.previousUserPosts);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["posts"], refetchType: "inactive" });
+      queryClient.invalidateQueries({ queryKey: ["comments"], refetchType: "inactive" });
 
       if (address) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.userPosts(address),
+          refetchType: "inactive",
         });
       }
     },

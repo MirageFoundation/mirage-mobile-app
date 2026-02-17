@@ -192,18 +192,12 @@ export default function PostDetailScreen() {
 
  const { handleFollowUser: handleFollowUserViaQueue } = useFollowHandler({});
 
-  // Shared store for vote and comment count overrides (syncs with home/following screens)
+  // Shared store for vote overrides (syncs with home/following screens)
   const setVoteOverride = useHomePostCardStore(
     (state) => state.setVoteOverride,
   );
   const clearVoteOverride = useHomePostCardStore(
     (state) => state.clearVoteOverride,
-  );
-  const incrementCommentCount = useHomePostCardStore(
-    (state) => state.incrementCommentCount,
-  );
-  const decrementCommentCount = useHomePostCardStore(
-    (state) => state.decrementCommentCount,
   );
 
   // Track follow loading state
@@ -218,6 +212,9 @@ export default function PostDetailScreen() {
   const globalBlockUser = useContentModerationStore((s) => s.blockUser);
   const globalHideComment = useContentModerationStore((s) => s.hideComment);
   const globalUnhideComment = useContentModerationStore((s) => s.unhideComment);
+  const globalHiddenCommentIds = useContentModerationStore(
+    (s) => s.hiddenCommentIds,
+  );
 
   // Local state for filtering comments on this screen
   const [hiddenCommentIds, setHiddenCommentIds] = useState<Set<string>>(
@@ -289,11 +286,6 @@ export default function PostDetailScreen() {
         setHiddenCommentIds((prev) => new Set(prev).add(pending.id));
         removeCommentFromState(pending.id);
 
-        // Also update shared store (syncs with home/following screens)
-        if (id) {
-          decrementCommentCount(id);
-        }
-
         // If deleting the highlighted comment (came from profile), navigate back
         if (highlight && pending.id === highlight && isMountedRef.current) {
           router.back();
@@ -310,8 +302,6 @@ export default function PostDetailScreen() {
     globalHidePost,
     globalHideComment,
     highlight,
-    id,
-    decrementCommentCount,
   ]);
 
   const handleConfirmBlock = useCallback(() => {
@@ -708,6 +698,7 @@ export default function PostDetailScreen() {
         .filter(
           (comment) =>
             !hiddenCommentIds.has(comment.id) &&
+            !globalHiddenCommentIds.has(comment.id) &&
             !blockedUserIds.has(comment.author.id),
         )
         .map((comment) => ({
@@ -717,7 +708,7 @@ export default function PostDetailScreen() {
             : undefined,
         }));
     },
-    [hiddenCommentIds, blockedUserIds],
+    [hiddenCommentIds, globalHiddenCommentIds, blockedUserIds],
   );
 
   // Merge API comments with locally added comments and apply vote overrides + optimistic replies
@@ -1189,8 +1180,8 @@ export default function PostDetailScreen() {
         id: optimisticCommentId,
         author: {
           id: currentUser.id,
-          username: currentUser.username,
-          avatarSeed: currentUser.username,
+          username: currentUser.username ?? "you",
+          avatarSeed: currentUser.username ?? currentUser.id,
         },
         content: finalContent,
         likes: 1,
@@ -1234,11 +1225,58 @@ export default function PostDetailScreen() {
             ...prev,
             comments: (prev.comments ?? displayPost?.comments ?? 0) + 1,
           }));
-          if (id) {
-            incrementCommentCount(id);
-          }
         },
-        onSuccess: () => {},
+        onSuccess: (result) => {
+          const confirmedCommentId =
+            typeof result === "object" &&
+            result !== null &&
+            "tx_hash" in result &&
+            typeof (result as { tx_hash?: unknown }).tx_hash === "string"
+              ? (result as { tx_hash: string }).tx_hash
+              : null;
+
+          if (!confirmedCommentId) return;
+
+          if (replyTarget) {
+            setOptimisticReplies((prev) => {
+              const existingReplies = prev[replyTarget.id];
+              if (!existingReplies) return prev;
+
+              let hasChange = false;
+              const nextReplies = existingReplies.map((comment) => {
+                if (comment.id !== optimisticCommentId) return comment;
+                hasChange = true;
+                return {
+                  ...comment,
+                  id: confirmedCommentId,
+                };
+              });
+
+              if (!hasChange) return prev;
+
+              return {
+                ...prev,
+                [replyTarget.id]: nextReplies,
+              };
+            });
+          } else {
+            setLocalComments((prev) =>
+              prev.map((comment) =>
+                comment.id === optimisticCommentId
+                  ? { ...comment, id: confirmedCommentId }
+                  : comment,
+              ),
+            );
+          }
+
+          setSelectedComment((prev) => {
+            if (!prev || prev.id !== optimisticCommentId) return prev;
+            return {
+              ...prev,
+              id: confirmedCommentId,
+            };
+          });
+        },
         onError: () => {},
         onRollback: () => {
           if (replyTarget) {
@@ -1266,9 +1304,6 @@ export default function PostDetailScreen() {
               (prev.comments ?? displayPost?.comments ?? 0) - 1,
             ),
           }));
-          if (id) {
-            decrementCommentCount(id);
-          }
         },
       });
     },
@@ -1393,8 +1428,20 @@ export default function PostDetailScreen() {
 
   const handleDeleteComment = useCallback(() => {
     if (!selectedComment) return;
+
+    if (
+      selectedComment.id.startsWith("optimistic-") ||
+      selectedComment.id.startsWith("local-")
+    ) {
+      toast.info(
+        "Comment is still syncing",
+        "Please try deleting again in a moment.",
+      );
+      return;
+    }
+
     deleteHandler.requestDelete(selectedComment.id, "comment");
-  }, [selectedComment, deleteHandler]);
+  }, [selectedComment, deleteHandler, toast]);
 
   const handleEditComment = useCallback(() => {
     if (!selectedComment || !id || selectedComment.id.startsWith("optimistic-"))
