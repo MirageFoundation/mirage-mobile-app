@@ -324,7 +324,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     const toast = useToast();
     const { apiServer, setShareServer } = usePreferencesStore();
     const { servers } = useServerList();
-    const apiServerOptions = servers.map((s: string) => ({ value: s, label: s }));
+    const apiServerOptions = servers.map((s: string) => ({
+      value: s,
+      label: s,
+    }));
 
     const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
     const walletAddress = useAuthStore((s) => s.user?.walletAddress);
@@ -701,7 +704,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      update 20
+                      update 21
                     </Text>
                     <Text
                       style={{
@@ -711,7 +714,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      comments media not loading fix
+                      bug fixes
                     </Text>
                   </View>
                 </>
@@ -746,7 +749,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      update 20
+                      update 21
                     </Text>
                     <Text
                       style={{
@@ -756,7 +759,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       size="sm"
                       weight="light"
                     >
-                      comments media not loading fix
+                      bug fixes
                     </Text>
                   </View>
                 </>
