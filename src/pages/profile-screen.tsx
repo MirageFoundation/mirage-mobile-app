@@ -60,6 +60,7 @@ import {
   useContentModerationStore,
   usePreferencesStore,
   getShareBaseUrl,
+  useSavedPostsStore,
 } from "@/src/stores";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import { useEdit } from "@/src/api/write";
@@ -193,6 +194,7 @@ export function ProfileScreen() {
   const reportSheetRef = useRef<ReportSheetRef>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
+  const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const hiddenCommentIds = useContentModerationStore((s) => s.hiddenCommentIds);
   const globalHidePost = useContentModerationStore((s) => s.hidePost);
@@ -919,6 +921,15 @@ useEffect(() => {
         ref={postOptionsSheetRef}
         post={selectedPost}
         isOwnPost={true}
+        isSaved={selectedPost ? savedPosts.some((p) => p.id === selectedPost.id) : false}
+        onSave={() => {
+          if (!selectedPost) return;
+          const saved = useSavedPostsStore.getState().toggleSavePost(selectedPost);
+          toast.success(
+            saved ? "Post saved" : "Post unsaved",
+            saved ? "You can find it in your saved items." : "Removed from saved items.",
+          );
+        }}
         onDelete={handleDeletePost}
         onBlockPost={handleBlockPost}
         onReport={handleReportPost}

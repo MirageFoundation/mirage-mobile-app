@@ -21,7 +21,9 @@ type CommentOptionsSheetProps = {
   rootPostId?: string;
   isOwnComment?: boolean;
   isFollowingAuthor?: boolean;
+  isSaved?: boolean;
   onShare?: () => void;
+  onSave?: () => void;
   onCopyText?: () => void;
   onBlockUser?: () => void;
   onBlockComment?: () => void;
@@ -85,7 +87,9 @@ export const CommentOptionsSheet = forwardRef<
       rootPostId,
       isOwnComment = false,
       isFollowingAuthor = false,
+      isSaved = false,
       onShare,
+      onSave,
       onCopyText,
       onBlockUser,
       onBlockComment,
@@ -197,6 +201,12 @@ export const CommentOptionsSheet = forwardRef<
       onToggleFollowAuthor?.();
     }, [dismiss, onToggleFollowAuthor]);
 
+    const handleSave = useCallback(() => {
+      triggerHaptic("medium");
+      dismiss();
+      onSave?.();
+    }, [dismiss, onSave]);
+
     const footerHeight =
       Platform.OS === "ios" ? insets.bottom : insets.bottom + 30;
 
@@ -246,9 +256,16 @@ export const CommentOptionsSheet = forwardRef<
 
             <MenuItem
               iconComponent={Feather}
+              iconName="bookmark"
+              title={isSaved ? "Unsave" : "Save"}
+              onPress={handleSave}
+            />
+
+            <MenuItem
+              iconComponent={Feather}
               iconName="share"
               title="Share"
-            onPress={handleShare}
+              onPress={handleShare}
             />
 
             <MenuItem

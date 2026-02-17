@@ -72,6 +72,7 @@ import {
   useContentModerationStore,
   usePreferencesStore,
   getShareBaseUrl,
+  useSavedPostsStore,
 } from "@/src/stores";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -224,6 +225,7 @@ export function UserProfileScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
 
+  const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
   const userMenuSheetRef = useRef<UserProfileMenuSheetRef>(null);
@@ -976,6 +978,15 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         ref={postOptionsSheetRef}
         post={selectedPost}
         isOwnPost={isOwnProfile}
+        isSaved={selectedPost ? savedPosts.some((p) => p.id === selectedPost.id) : false}
+        onSave={() => {
+          if (!selectedPost) return;
+          const saved = useSavedPostsStore.getState().toggleSavePost(selectedPost);
+          toast.success(
+            saved ? "Post saved" : "Post unsaved",
+            saved ? "You can find it in your saved items." : "Removed from saved items.",
+          );
+        }}
         onDelete={handleDeletePost}
         onBlockPost={handleBlockPost}
         onReport={handleReportPost}

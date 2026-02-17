@@ -75,6 +75,7 @@ export function HomeScreen() {
 
   const { openSideMenu } = useSideMenu();
 
+  const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [feedTabIndex, setFeedTabIndex] = useState(0);
 
@@ -526,7 +527,7 @@ export function HomeScreen() {
         onFollowUser={handleFollowUserFromSheet}
         onFollowTopic={handleFollowTopic}
         onSave={handleSavePost}
-        isSaved={selectedPost ? useSavedPostsStore.getState().isPostSaved(selectedPost.id) : false}
+        isSaved={selectedPost ? savedPosts.some((p) => p.id === selectedPost.id) : false}
         onCopyText={handleCopyText}
         onReport={handleReport}
         onBlockUser={handleBlockUser}

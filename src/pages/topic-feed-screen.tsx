@@ -69,6 +69,7 @@ export function TopicFeedScreen() {
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
 
+  const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const [sortBy, setSortBy] = useState<"magic" | "newest">("magic");
@@ -840,11 +841,7 @@ export function TopicFeedScreen() {
         onFollowUser={handleFollowUserFromSheet}
         onFollowTopic={handleFollowTopic}
         onSave={handleSavePost}
-        isSaved={
-          selectedPost
-            ? useSavedPostsStore.getState().isPostSaved(selectedPost.id)
-            : false
-        }
+        isSaved={selectedPost ? savedPosts.some((p) => p.id === selectedPost.id) : false}
         onCopyText={handleCopyText}
         onReport={handleReport}
         onBlockUser={handleBlockUser}

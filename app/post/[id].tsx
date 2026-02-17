@@ -52,6 +52,7 @@ import {
   useUIStore,
   usePreferencesStore,
   getShareBaseUrl,
+  useSavedPostsStore,
 } from "@/src/stores";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
@@ -130,6 +131,8 @@ export default function PostDetailScreen() {
   const currentUser = useAuthStore((s) => s.user);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
   const shareServer = usePreferencesStore((s) => s.shareServer);
+  const savedPosts = useSavedPostsStore((s) => s.savedPosts);
+  const savedComments = useSavedPostsStore((s) => s.savedComments);
   const optionsSheetRef = useRef<CommentOptionsSheetRef>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
@@ -2003,6 +2006,15 @@ export default function PostDetailScreen() {
               ? followedUsers.includes(selectedComment.author.id)
               : false
           }
+          isSaved={selectedComment ? savedComments.some((c) => c.id === selectedComment.id) : false}
+          onSave={() => {
+            if (!selectedComment) return;
+            const saved = useSavedPostsStore.getState().toggleSaveComment(selectedComment, id);
+            toast.success(
+              saved ? "Comment saved" : "Comment unsaved",
+              saved ? "You can find it in your saved items." : "Removed from saved items.",
+            );
+          }}
           onDelete={handleDeleteComment}
           onEdit={handleEditComment}
           onBlockComment={handleBlockComment}
@@ -2027,8 +2039,17 @@ export default function PostDetailScreen() {
               ? followedUsers.includes(displayPost.author.id)
               : false
           }
+          isSaved={displayPost ? savedPosts.some((p) => p.id === displayPost.id) : false}
           onFollowUser={handleFollowPost}
           onFollowTopic={handleFollowTopic}
+          onSave={() => {
+            if (!displayPost) return;
+            const saved = useSavedPostsStore.getState().toggleSavePost(displayPost);
+            toast.success(
+              saved ? "Post saved" : "Post unsaved",
+              saved ? "You can find it in your saved items." : "Removed from saved items.",
+            );
+          }}
           onDelete={handleDeletePost}
           onBlockPost={handleBlockPost}
           onBlockUser={handleBlockPostAuthor}
