@@ -250,17 +250,13 @@ export const PostCardMedia = memo(
     const handlePlaybackStatusUpdate = useCallback(
       (status: AVPlaybackStatus) => {
         if (!status.isLoaded) {
-          // Video is still loading
           return;
         }
-        // Video is loaded and playing - hide loading indicator
         if (status.isPlaying && !status.isBuffering) {
           setIsVideoLoading(false);
           setMediaLoaded(true);
-          // Reset user initiated flag once video is playing smoothly
           userInitiatedPlayRef.current = false;
-        } else if (status.isBuffering && userInitiatedPlayRef.current) {
-          // Only show loading while buffering if user initiated playback
+        } else if (status.isBuffering) {
           setIsVideoLoading(true);
         }
       },
@@ -382,7 +378,6 @@ export const PostCardMedia = memo(
                 isMuted={isMuted}
                 useNativeControls={false}
                 onLoad={() => {
-                  setMediaLoaded(true);
                   videoRef.current?.setStatusAsync({ isMuted }).catch(() => {});
                 }}
                 onReadyForDisplay={(event) => {
@@ -457,7 +452,7 @@ export const PostCardMedia = memo(
                       onPress={handleVideoPress}
                       style={styles.videoTapArea}
                     />
-                    {isVideoLoading ? (
+                    {isVideoLoading || (isVideoPlaying && !mediaLoaded) ? (
                       <View
                         style={styles.loadingContainer}
                         pointerEvents="none"
@@ -476,7 +471,7 @@ export const PostCardMedia = memo(
                       onPress={handleMediaPress}
                       style={styles.videoTapArea}
                     />
-                    {isVideoLoading ? (
+                    {isVideoLoading || (isVideoPlaying && !mediaLoaded) ? (
                       <View style={styles.loadingContainer}>
                         <ActivityIndicator size="small" color="#fff" />
                       </View>

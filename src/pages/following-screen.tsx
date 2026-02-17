@@ -108,9 +108,12 @@ export function FollowingScreen() {
     ),
   });
 
+  const revealedPostsRef = useRef<Set<string>>(new Set());
+
   const handlePostPress = useCallback(
     (postId: string) => {
-      router.push(`/post/${postId}`);
+      const isRevealed = revealedPostsRef.current.has(postId);
+      router.push(`/post/${postId}${isRevealed ? '?reveal=true' : ''}`);
     },
     [router]
   );
@@ -271,10 +274,10 @@ export function FollowingScreen() {
     setRevealedPosts((prev) => {
       const newSet = new Set(prev);
       newSet.add(postId);
+      revealedPostsRef.current = newSet;
       return newSet;
     });
-    router.push(`/post/${postId}?reveal=true`);
-  }, [router]);
+  }, []);
 
   const handleRefresh = useCallback(async () => {
     await tabbedFeedRef.current?.refresh();

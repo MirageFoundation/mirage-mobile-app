@@ -158,6 +158,10 @@ export const PostCard = memo(function PostCard({
   const handlePress = useCallback(() => {
     triggerHaptic("selection");
     logPress({ name: "post_card", postId: post.id });
+    if (shouldBlurContent) {
+      onRevealContent?.();
+      return;
+    }
     if (containerRef.current) {
       containerRef.current.measureInWindow((_x, y) => {
         setLastPressedPostY(y);
@@ -166,7 +170,7 @@ export const PostCard = memo(function PostCard({
     } else {
       onPress?.();
     }
-  }, [onPress, post.id]);
+  }, [onPress, post.id, shouldBlurContent, onRevealContent]);
 
   const handlePlayNowPress = useCallback(() => {
     if (!resolvedContent.extractedUrl) return;
