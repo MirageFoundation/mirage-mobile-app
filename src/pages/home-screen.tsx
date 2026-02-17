@@ -80,7 +80,7 @@ export function HomeScreen() {
       if (nextState === "active" && backgroundTimeRef.current) {
         const duration = Date.now() - backgroundTimeRef.current;
         backgroundTimeRef.current = null;
-        if (duration >= 2 * 60 * 1000) {
+        if (duration >= 15 * 60 * 1000) {
           tabbedFeedRef.current?.scrollToTop();
           tabbedFeedRef.current?.refresh();
         }
