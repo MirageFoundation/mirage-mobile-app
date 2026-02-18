@@ -1237,9 +1237,9 @@ export function CreateScreen() {
       <StickerPicker
         visible={showStickerPicker}
         onClose={() => setShowStickerPicker(false)}
-        onSelect={setSelectedStickers}
+        onSelect={(urls) => setSelectedStickers(urls.length > 0 ? [urls[urls.length - 1]] : [])}
         selectedStickers={selectedStickers}
-        multiSelect
+        multiSelect={false}
       />
 
       <TransactionProgressModal
