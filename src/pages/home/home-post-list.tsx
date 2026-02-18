@@ -118,7 +118,7 @@ const HomePostListInner = function HomePostListInner(
       windowSize={11}
       initialNumToRender={7}
       getItemLayout={undefined}
-      maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+      maintainVisibleContentPosition={Platform.OS === "android" ? undefined : { minIndexForVisible: 0 }}
     />
   );
 };

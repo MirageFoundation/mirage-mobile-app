@@ -9,7 +9,7 @@ import {
 } from "react";
 import type { FlatList } from "react-native";
 import type { ReactNode } from "react";
-import { ActivityIndicator, RefreshControl } from "react-native";
+import { ActivityIndicator, Platform, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUnistyles } from "react-native-unistyles";
 
@@ -250,7 +250,16 @@ export const HomeTabbedFeed = forwardRef<
   const scrollToTop = useCallback((tabIndex?: number) => {
     const targetIndex = tabIndex ?? activeTabIndex;
     const listRef = targetIndex === 0 ? magicListRef : latestListRef;
-    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    try {
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    } catch {}
+    if (Platform.OS === "android") {
+      requestAnimationFrame(() => {
+        try {
+          listRef.current?.scrollToOffset({ offset: 0, animated: false });
+        } catch {}
+      });
+    }
   }, [activeTabIndex]);
 
   const scrollToTopAndRefresh = useCallback(async () => {
