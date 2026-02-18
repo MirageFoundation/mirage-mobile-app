@@ -1376,7 +1376,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   mediaBarContent: {
     flexDirection: "row",
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   mediaButton: {
     width: 44,
