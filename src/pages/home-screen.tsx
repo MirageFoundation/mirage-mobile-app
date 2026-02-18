@@ -56,6 +56,7 @@ export function HomeScreen() {
   const router = useRouter();
   const {
     headerAnimatedStyle,
+    showBars,
   } = useScrollAnimationContext();
   const { requireAuth } = useAuthGuard();
   const toast = useToast();
@@ -91,6 +92,15 @@ export function HomeScreen() {
   }, []);
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      showBars();
+      tabbedFeedRef.current?.scrollToTop();
+      tabbedFeedRef.current?.refresh();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, []);
 
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
