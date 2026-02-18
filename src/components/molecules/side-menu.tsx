@@ -699,23 +699,29 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       )
                     </Text>
 
-                    <Text
-                      style={{ color: theme.colors.text.subtle }}
-                      size="sm"
-                      weight="light"
-                    >
-                      update 21
-                    </Text>
-                    <Text
-                      style={{
-                        color: theme.colors.text.subtle,
-                        textAlign: "center",
-                      }}
-                      size="sm"
-                      weight="light"
-                    >
-                      bug fixes
-                    </Text>
+                    {(__DEV__ ||
+                      process.env.EXPO_PUBLIC_ENV === "dev" ||
+                      process.env.EXPO_PUBLIC_ENV === "preview") && (
+                      <>
+                        <Text
+                          style={{ color: theme.colors.text.subtle }}
+                          size="sm"
+                          weight="light"
+                        >
+                          update 22
+                        </Text>
+                        <Text
+                          style={{
+                            color: theme.colors.text.subtle,
+                            textAlign: "center",
+                          }}
+                          size="sm"
+                          weight="light"
+                        >
+                          mirage stickers added
+                        </Text>
+                      </>
+                    )}
                   </View>
                 </>
               ) : (
@@ -744,23 +750,29 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       )
                     </Text>
 
-                    <Text
-                      style={{ color: theme.colors.text.subtle }}
-                      size="sm"
-                      weight="light"
-                    >
-                      update 21
-                    </Text>
-                    <Text
-                      style={{
-                        color: theme.colors.text.subtle,
-                        textAlign: "center",
-                      }}
-                      size="sm"
-                      weight="light"
-                    >
-                      bug fixes
-                    </Text>
+                    {(__DEV__ ||
+                      process.env.EXPO_PUBLIC_ENV === "dev" ||
+                      process.env.EXPO_PUBLIC_ENV === "preview") && (
+                      <>
+                        <Text
+                          style={{ color: theme.colors.text.subtle }}
+                          size="sm"
+                          weight="light"
+                        >
+                          update 22
+                        </Text>
+                        <Text
+                          style={{
+                            color: theme.colors.text.subtle,
+                            textAlign: "center",
+                          }}
+                          size="sm"
+                          weight="light"
+                        >
+                          mirage stickers added
+                        </Text>
+                      </>
+                    )}
                   </View>
                 </>
               )}
