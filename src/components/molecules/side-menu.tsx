@@ -708,7 +708,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 23
+                          update 24
                         </Text>
                         <Text
                           style={{
@@ -718,7 +718,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          mirage stickers added
+                          mirage stickers added and bug fixes
                         </Text>
                       </>
                     )}
@@ -759,7 +759,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 23
+                          update 24
                         </Text>
                         <Text
                           style={{
@@ -769,7 +769,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          mirage stickers added
+                          mirage stickers added and bug fixes
                         </Text>
                       </>
                     )}
