@@ -18,7 +18,6 @@ import {
   getActionLabel,
 } from "@/src/services/pow-queue";
 import { useEdit } from "@/src/api/write";
-import type { PoWProgress } from "@/src/api/write/signing";
 import { Avatar } from "@/src/components/atoms";
 import {
   Comment,
@@ -52,8 +51,10 @@ import {
   useUIStore,
   usePreferencesStore,
   getShareBaseUrl,
+  useSavedPostsStore,
 } from "@/src/stores";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
+import { useHistoryStore } from "@/src/stores/history-store";
 import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 import {
   AntDesign,
@@ -130,6 +131,8 @@ export default function PostDetailScreen() {
   const currentUser = useAuthStore((s) => s.user);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
   const shareServer = usePreferencesStore((s) => s.shareServer);
+  const savedPosts = useSavedPostsStore((s) => s.savedPosts);
+  const savedComments = useSavedPostsStore((s) => s.savedComments);
   const optionsSheetRef = useRef<CommentOptionsSheetRef>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
@@ -189,18 +192,12 @@ export default function PostDetailScreen() {
 
  const { handleFollowUser: handleFollowUserViaQueue } = useFollowHandler({});
 
-  // Shared store for vote and comment count overrides (syncs with home/following screens)
+  // Shared store for vote overrides (syncs with home/following screens)
   const setVoteOverride = useHomePostCardStore(
     (state) => state.setVoteOverride,
   );
   const clearVoteOverride = useHomePostCardStore(
     (state) => state.clearVoteOverride,
-  );
-  const incrementCommentCount = useHomePostCardStore(
-    (state) => state.incrementCommentCount,
-  );
-  const decrementCommentCount = useHomePostCardStore(
-    (state) => state.decrementCommentCount,
   );
 
   // Track follow loading state
@@ -215,6 +212,9 @@ export default function PostDetailScreen() {
   const globalBlockUser = useContentModerationStore((s) => s.blockUser);
   const globalHideComment = useContentModerationStore((s) => s.hideComment);
   const globalUnhideComment = useContentModerationStore((s) => s.unhideComment);
+  const globalHiddenCommentIds = useContentModerationStore(
+    (s) => s.hiddenCommentIds,
+  );
 
   // Local state for filtering comments on this screen
   const [hiddenCommentIds, setHiddenCommentIds] = useState<Set<string>>(
@@ -286,11 +286,6 @@ export default function PostDetailScreen() {
         setHiddenCommentIds((prev) => new Set(prev).add(pending.id));
         removeCommentFromState(pending.id);
 
-        // Also update shared store (syncs with home/following screens)
-        if (id) {
-          decrementCommentCount(id);
-        }
-
         // If deleting the highlighted comment (came from profile), navigate back
         if (highlight && pending.id === highlight && isMountedRef.current) {
           router.back();
@@ -307,8 +302,6 @@ export default function PostDetailScreen() {
     globalHidePost,
     globalHideComment,
     highlight,
-    id,
-    decrementCommentCount,
   ]);
 
   const handleConfirmBlock = useCallback(() => {
@@ -393,37 +386,23 @@ export default function PostDetailScreen() {
   }, [commentMutation.mutateAsync]);
   const enqueue = usePowQueueStore((state) => state.enqueue);
 
-  const editToastIdRef = useRef<string | null>(null);
-  const handleEditPoWProgress = useCallback(
-    (progress: PoWProgress) => {
-      const tid = editToastIdRef.current;
-      if (tid) {
-        const pct =
-          progress.estimatedTotalMs > 0
-            ? Math.min(
-                99,
-                Math.round(
-                  (progress.elapsedMs / progress.estimatedTotalMs) * 100,
-                ),
-              )
-            : 0;
-        toast.update(tid, {
-          description: `Computing proof of work... ${pct}%`,
-        });
-      }
-    },
-    [toast],
-  );
-
-  const editMutation = useEdit({
-    onPoWProgress: handleEditPoWProgress,
-  });
+  const editMutation = useEdit({});
+  const editMutateAsyncRef = useRef(editMutation.mutateAsync);
+  useEffect(() => {
+    editMutateAsyncRef.current = editMutation.mutateAsync;
+  }, [editMutation.mutateAsync]);
 
   // Transform API post and comments to UI format
   const post = useMemo(() => {
     if (!commentsData?.root) return null;
     return transformApiPost(commentsData.root, { followedUsers });
   }, [commentsData, followedUsers]);
+
+  useEffect(() => {
+    if (post) {
+      useHistoryStore.getState().addEntry(post);
+    }
+  }, [post?.id]);
 
   const comments = useMemo(() => {
     if (!commentsData?.children) return [];
@@ -705,6 +684,7 @@ export default function PostDetailScreen() {
         .filter(
           (comment) =>
             !hiddenCommentIds.has(comment.id) &&
+            !globalHiddenCommentIds.has(comment.id) &&
             !blockedUserIds.has(comment.author.id),
         )
         .map((comment) => ({
@@ -714,7 +694,7 @@ export default function PostDetailScreen() {
             : undefined,
         }));
     },
-    [hiddenCommentIds, blockedUserIds],
+    [hiddenCommentIds, globalHiddenCommentIds, blockedUserIds],
   );
 
   // Merge API comments with locally added comments and apply vote overrides + optimistic replies
@@ -1178,7 +1158,7 @@ export default function PostDetailScreen() {
 
       let finalContent = text;
       if (mediaUrl) {
-        finalContent = text.trim() ? `${text.trim()}\n\n${mediaUrl}` : mediaUrl;
+        finalContent = text.trim() ? `${mediaUrl}\n\n${text.trim()}` : mediaUrl;
       }
 
       const optimisticCommentId = `optimistic-${Date.now()}`;
@@ -1186,8 +1166,8 @@ export default function PostDetailScreen() {
         id: optimisticCommentId,
         author: {
           id: currentUser.id,
-          username: currentUser.username,
-          avatarSeed: currentUser.username,
+          username: currentUser.username ?? "you",
+          avatarSeed: currentUser.username ?? currentUser.id,
         },
         content: finalContent,
         likes: 1,
@@ -1231,11 +1211,58 @@ export default function PostDetailScreen() {
             ...prev,
             comments: (prev.comments ?? displayPost?.comments ?? 0) + 1,
           }));
-          if (id) {
-            incrementCommentCount(id);
-          }
         },
-        onSuccess: () => {},
+        onSuccess: (result) => {
+          const confirmedCommentId =
+            typeof result === "object" &&
+            result !== null &&
+            "tx_hash" in result &&
+            typeof (result as { tx_hash?: unknown }).tx_hash === "string"
+              ? (result as { tx_hash: string }).tx_hash
+              : null;
+
+          if (!confirmedCommentId) return;
+
+          if (replyTarget) {
+            setOptimisticReplies((prev) => {
+              const existingReplies = prev[replyTarget.id];
+              if (!existingReplies) return prev;
+
+              let hasChange = false;
+              const nextReplies = existingReplies.map((comment) => {
+                if (comment.id !== optimisticCommentId) return comment;
+                hasChange = true;
+                return {
+                  ...comment,
+                  id: confirmedCommentId,
+                };
+              });
+
+              if (!hasChange) return prev;
+
+              return {
+                ...prev,
+                [replyTarget.id]: nextReplies,
+              };
+            });
+          } else {
+            setLocalComments((prev) =>
+              prev.map((comment) =>
+                comment.id === optimisticCommentId
+                  ? { ...comment, id: confirmedCommentId }
+                  : comment,
+              ),
+            );
+          }
+
+          setSelectedComment((prev) => {
+            if (!prev || prev.id !== optimisticCommentId) return prev;
+            return {
+              ...prev,
+              id: confirmedCommentId,
+            };
+          });
+        },
         onError: () => {},
         onRollback: () => {
           if (replyTarget) {
@@ -1263,9 +1290,6 @@ export default function PostDetailScreen() {
               (prev.comments ?? displayPost?.comments ?? 0) - 1,
             ),
           }));
-          if (id) {
-            decrementCommentCount(id);
-          }
         },
       });
     },
@@ -1316,9 +1340,9 @@ export default function PostDetailScreen() {
 
       let finalContent = text;
       if (imageUri) {
-        finalContent = text.trim() ? `${text.trim()}\n\n${imageUri}` : imageUri;
+        finalContent = text.trim() ? `${imageUri}\n\n${text.trim()}` : imageUri;
       } else if (gifUrl) {
-        finalContent = text.trim() ? `${text.trim()}\n\n${gifUrl}` : gifUrl;
+        finalContent = text.trim() ? `${gifUrl}\n\n${text.trim()}` : gifUrl;
       }
 
       setCommentEditOverrides((prev) => ({
@@ -1326,31 +1350,21 @@ export default function PostDetailScreen() {
         [commentId]: finalContent,
       }));
 
-      toast.dismissAll();
-      const toastId = toast.loading(
-        "Editing comment",
-        "Computing proof of work...",
-      );
-      editToastIdRef.current = toastId;
-
-      (async () => {
-        try {
-          await editMutation.mutateAsync({
+      const actionId = generateActionId();
+      enqueue({
+        id: actionId,
+        type: "edit",
+        label: getActionLabel("edit"),
+        execute: async () => {
+          return editMutateAsyncRef.current({
             postId: commentId,
             parentId,
             title: "",
             content: finalContent,
             tag: "",
           });
-
-          toast.update(toastId, {
-            type: "success",
-            title: "Comment edited!",
-            description: undefined,
-            duration: 3000,
-          });
-          setTimeout(() => toast.dismiss(toastId), 3000);
-
+        },
+        onSuccess: () => {
           setTimeout(async () => {
             await refetchComments();
             setCommentEditOverrides((prev) => {
@@ -1359,39 +1373,34 @@ export default function PostDetailScreen() {
               return next;
             });
           }, 3000);
-        } catch (error: unknown) {
+        },
+        onError: () => {
           setCommentEditOverrides((prev) => {
             const next = { ...prev };
             delete next[commentId];
             return next;
           });
-          const errorMessage =
-            error instanceof Error ? error.message : "Failed to edit comment";
-          toast.update(toastId, {
-            type: "error",
-            title: "Failed to edit comment",
-            description: errorMessage,
-            duration: 5000,
-          });
-          setTimeout(() => toast.dismiss(toastId), 5000);
-        } finally {
-          editToastIdRef.current = null;
-        }
-      })();
+        },
+      });
     }
-  }, [
-    pendingEdit,
-    clearPendingEdit,
-    editMutation,
-    toast,
-    refetchComments,
-    editToastIdRef,
-  ]);
+  }, [pendingEdit, clearPendingEdit, enqueue, refetchComments]);
 
   const handleDeleteComment = useCallback(() => {
     if (!selectedComment) return;
+
+    if (
+      selectedComment.id.startsWith("optimistic-") ||
+      selectedComment.id.startsWith("local-")
+    ) {
+      toast.info(
+        "Comment is still syncing",
+        "Please try deleting again in a moment.",
+      );
+      return;
+    }
+
     deleteHandler.requestDelete(selectedComment.id, "comment");
-  }, [selectedComment, deleteHandler]);
+  }, [selectedComment, deleteHandler, toast]);
 
   const handleEditComment = useCallback(() => {
     if (!selectedComment || !id || selectedComment.id.startsWith("optimistic-"))
@@ -2003,6 +2012,15 @@ export default function PostDetailScreen() {
               ? followedUsers.includes(selectedComment.author.id)
               : false
           }
+          isSaved={selectedComment ? savedComments.some((c) => c.id === selectedComment.id) : false}
+          onSave={() => {
+            if (!selectedComment) return;
+            const saved = useSavedPostsStore.getState().toggleSaveComment(selectedComment, id);
+            toast.success(
+              saved ? "Comment saved" : "Comment unsaved",
+              saved ? "You can find it in your saved items." : "Removed from saved items.",
+            );
+          }}
           onDelete={handleDeleteComment}
           onEdit={handleEditComment}
           onBlockComment={handleBlockComment}
@@ -2027,8 +2045,17 @@ export default function PostDetailScreen() {
               ? followedUsers.includes(displayPost.author.id)
               : false
           }
+          isSaved={displayPost ? savedPosts.some((p) => p.id === displayPost.id) : false}
           onFollowUser={handleFollowPost}
           onFollowTopic={handleFollowTopic}
+          onSave={() => {
+            if (!displayPost) return;
+            const saved = useSavedPostsStore.getState().toggleSavePost(displayPost);
+            toast.success(
+              saved ? "Post saved" : "Post unsaved",
+              saved ? "You can find it in your saved items." : "Removed from saved items.",
+            );
+          }}
           onDelete={handleDeletePost}
           onBlockPost={handleBlockPost}
           onBlockUser={handleBlockPostAuthor}

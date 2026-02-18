@@ -32,6 +32,7 @@ export type ResolvedPostContent = {
   displayDomain: string | null;
   bodyVideoUrl: string | null;
   resolvedMedia?: ResolvedMedia;
+  resolvedMediaList: ResolvedMedia[];
   hasMultipleMedia: boolean;
   extraMediaCount: number;
 };
@@ -276,6 +277,16 @@ export function resolvePostContent(
     displayDomain,
     bodyVideoUrl,
     resolvedMedia: finalMedia,
+    resolvedMediaList: isOgThumbnail
+      ? []
+      : (media ?? []).map((m) => {
+          const redgifs = m.type === "gif" ? resolveRedgifsVideoUrl(m.uri) : null;
+          return {
+            ...m,
+            uri: redgifs ?? (m.type === "video" ? normalizeVideoUrl(m.uri) : m.uri),
+            type: redgifs ? ("video" as const) : m.type,
+          };
+        }),
     hasMultipleMedia: isOgThumbnail ? false : hasMultipleMedia,
     extraMediaCount: isOgThumbnail ? 0 : extraMediaCount,
   };

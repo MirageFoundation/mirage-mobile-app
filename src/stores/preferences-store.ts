@@ -4,8 +4,8 @@ import { mmkvStorage } from "./mmkv-storage";
 
 export type FeedType = "home" | "popular" | "news" | "watch" | "latest";
 export type ThemeMode = "light" | "dark" | "system";
-export type ShareServer = "mirage.talk" | "mirage.vote";
-export type ApiServer = "mirage.talk" | "mirage.vote";
+export type ShareServer = string;
+export type ApiServer = string;
 export type VideoAutoplayNetwork = "always" | "wifi_only" | "never";
 export type ContentType =
   | "sensitive"
@@ -275,14 +275,21 @@ export const usePreferencesStore = create<PreferencesState>()(
    {
      name: "preferences-storage",
       storage: createJSONStorage(() => mmkvStorage),
-      version: 1,
+      version: 2,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<PreferencesState>;
         
-        // Migration from version 0 (no version) to version 1
-        // Reset theme to "system" (automatic) as the new default
         if (version === 0) {
           state.theme = "system";
+        }
+
+        if (version < 2) {
+          if (state.apiServer === "mirage.vote") {
+            state.apiServer = "mirage.talk";
+          }
+          if (state.shareServer === "mirage.vote") {
+            state.shareServer = "mirage.talk";
+          }
         }
 
         if (Array.isArray(state.selectedContentTypes)) {

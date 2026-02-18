@@ -26,6 +26,8 @@ export type PostDraft = {
   tags: string[];
 };
 
+const MAX_MEDIA_ITEMS = 10;
+
 type DraftState = {
   draft: PostDraft;
   hasDraft: boolean;
@@ -34,6 +36,8 @@ type DraftState = {
   updateDraft: (partial: Partial<PostDraft>) => void;
   clearDraft: () => void;
   setAttachment: (type: AttachmentType, uri?: string) => void;
+  addMediaUri: (uri: string) => void;
+  removeMediaUri: (uri: string) => void;
   removeAttachment: () => void;
 };
 
@@ -66,13 +70,43 @@ export const useDraftStore = create<DraftState>()(
           draft: {
             ...state.draft,
             attachmentType: type,
-            // Convert empty string to null for linkUrl
             linkUrl: type === "link" ? (uri && uri.length > 0 ? uri : null) : null,
             mediaUris:
-              type === "image" || type === "video" ? (uri ? [uri] : []) : [],
+              type === "image"
+                ? uri
+                  ? [...state.draft.mediaUris, uri].slice(0, MAX_MEDIA_ITEMS)
+                  : state.draft.mediaUris
+                : type === "video"
+                  ? uri
+                    ? [...state.draft.mediaUris, uri].slice(0, MAX_MEDIA_ITEMS)
+                    : state.draft.mediaUris
+                  : [],
           },
           hasDraft: true,
         })),
+      addMediaUri: (uri) =>
+        set((state) => {
+          if (state.draft.mediaUris.length >= MAX_MEDIA_ITEMS) return state;
+          return {
+            draft: {
+              ...state.draft,
+              attachmentType: "image",
+              mediaUris: [...state.draft.mediaUris, uri],
+            },
+            hasDraft: true,
+          };
+        }),
+      removeMediaUri: (uri) =>
+        set((state) => {
+          const filtered = state.draft.mediaUris.filter((u) => u !== uri);
+          return {
+            draft: {
+              ...state.draft,
+              mediaUris: filtered,
+              attachmentType: filtered.length === 0 ? null : state.draft.attachmentType,
+            },
+          };
+        }),
       removeAttachment: () =>
         set((state) => ({
           draft: {

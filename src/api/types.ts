@@ -35,7 +35,10 @@ export interface UserFilters {
 export interface ParametersResponse {
   last_block_hash: string; // hex
   pow_difficulty: number;
+  pow_base_bits: number;
+  pow_factor: number;
   balance?: number; // umirage, if address provided
+  user_level: number;
 }
 
 export interface TierInfo {
@@ -60,7 +63,7 @@ export interface TierInfo {
 }
 
 export interface ConfigResponse {
-  // Chain params
+  // Chain params (from get_chain_config)
   max_username_size: number;
   min_username_size: number;
   max_topic_size: number;
@@ -85,6 +88,20 @@ export interface ConfigResponse {
 
   // Misc
   giphy_api_key: string;
+}
+
+export type ChainConfigResponse = ConfigResponse;
+
+export interface NodeConfigResponse {
+  giphy_api_key: string;
+  quest_payouts_enabled: boolean;
+  quests_enabled: boolean;
+  registration_enabled: boolean;
+  registration_invite_code_required: boolean;
+  validator_account_address: string;
+  validator_consensus_address: string;
+  validator_moniker: string;
+  validator_operator_address: string;
 }
 
 // ============================================
@@ -187,6 +204,7 @@ export interface Post {
   tag: string;
   edited_at: number; // 0 if never edited
   thumbnail: string;
+  media?: string[];
   points: number;
   comments: number;
   user_vote: number; // -1, 0, 1
@@ -235,6 +253,7 @@ export interface InboxReply {
   parent_content: string;
   parent_owner: string;
   root_post_id: string;
+  type?: "reply" | "mention";
 }
 
 export interface InboxResponse {

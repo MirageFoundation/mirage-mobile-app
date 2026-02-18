@@ -5,6 +5,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
+  FlatList,
   Modal,
   Pressable,
   View,
@@ -27,22 +28,149 @@ import type { ResolvedMedia } from "./post-card-utils";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
+import { Text } from "@/src/components/ui/primitives";
+import { useVideoMuteStore } from "@/src/stores";
+
+const PreviewVideoItem = memo(function PreviewVideoItem({
+  item,
+  width,
+  isActive,
+}: {
+  item: ResolvedMedia;
+  width: number;
+  isActive: boolean;
+}) {
+  const ref = useRef<Video>(null);
+  const [playing, setPlaying] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const muted = useVideoMuteStore((s) => s.isMuted);
+  const toggleMute = useVideoMuteStore((s) => s.toggleMute);
+
+  useEffect(() => {
+    if (!isActive) {
+      ref.current?.pauseAsync().catch(() => {});
+    }
+  }, [isActive]);
+
+  const handleTogglePlay = useCallback(() => {
+    setPlaying((p) => !p);
+  }, []);
+
+  const handleToggleMute = useCallback(async () => {
+    const newMuted = !muted;
+    toggleMute();
+    try {
+      if (ref.current) {
+        if (!newMuted) {
+          await ref.current.pauseAsync();
+          await ref.current.setStatusAsync({ isMuted: false });
+          await ref.current.playAsync();
+        } else {
+          await ref.current.setStatusAsync({ isMuted: true });
+        }
+      }
+    } catch {}
+  }, [muted, toggleMute]);
+
+  return (
+    <View style={{ width, height: SCREEN_HEIGHT, justifyContent: "center", alignItems: "center" }}>
+      <Pressable onPress={handleTogglePlay} style={{ width, height: SCREEN_HEIGHT }}>
+        <Video
+          ref={ref}
+          source={{ uri: item.uri }}
+          style={{ width: "100%", height: "100%" }}
+          resizeMode={ResizeMode.CONTAIN}
+          shouldPlay={playing && isActive}
+          isLooping
+          isMuted={muted}
+          useNativeControls={false}
+          onPlaybackStatusUpdate={(status) => {
+            if (status.isLoaded && status.isPlaying && !status.isBuffering) {
+              setIsLoading(false);
+            }
+          }}
+          onLoad={() => setIsLoading(false)}
+        />
+        {isLoading && (
+          <View style={previewVideoStyles.playOverlay}>
+            <ActivityIndicator size="large" color="#fff" />
+          </View>
+        )}
+        {!playing && !isLoading && (
+          <View style={previewVideoStyles.playOverlay}>
+            <View style={previewVideoStyles.playButton}>
+              <Ionicons name="play" size={40} color="#fff" />
+            </View>
+          </View>
+        )}
+      </Pressable>
+      <Pressable
+        onPress={handleToggleMute}
+        style={previewVideoStyles.muteButton}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <View style={previewVideoStyles.muteButtonInner}>
+          <Ionicons name={muted ? "volume-mute" : "volume-high"} size={20} color="#fff" />
+        </View>
+      </Pressable>
+    </View>
+  );
+});
+
+const previewVideoStyles = StyleSheet.create({
+  playOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  muteButton: {
+    position: "absolute",
+    bottom: 80,
+    right: 20,
+  },
+  muteButtonInner: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
+
 type MediaPreviewModalProps = {
   visible: boolean;
   media: ResolvedMedia | null;
+  mediaList?: ResolvedMedia[];
+  initialIndex?: number;
   onClose: () => void;
 };
 
 export const MediaPreviewModal = memo(function MediaPreviewModal({
   visible,
   media,
+  mediaList,
+  initialIndex = 0,
   onClose,
 }: MediaPreviewModalProps) {
   const insets = useSafeAreaInsets();
   const videoRef = useRef<Video | null>(null);
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(false);
+  const isMuted = useVideoMuteStore((s) => s.isMuted);
+  const toggleMute = useVideoMuteStore((s) => s.toggleMute);
   const [isLoading, setIsLoading] = useState(true);
+
+  const [activeGalleryIndex, setActiveGalleryIndex] = useState(initialIndex);
+  const galleryListRef = useRef<FlatList>(null);
+  const hasGallery = mediaList && mediaList.length > 1;
 
   const scale = useSharedValue(1);
   const savedScale = useSharedValue(1);
@@ -64,7 +192,6 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
     videoRef.current?.pauseAsync().catch(() => {});
     resetTransforms();
     setIsVideoPlaying(false);
-    setIsMuted(false);
     setIsLoading(true);
     onClose();
   }, [onClose, resetTransforms]);
@@ -98,8 +225,8 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
   }, []);
 
   const handleMuteToggle = useCallback(() => {
-    setIsMuted((prev) => !prev);
-  }, []);
+    toggleMute();
+  }, [toggleMute]);
 
   const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
     if (!status.isLoaded) return;
@@ -170,11 +297,73 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
     ],
   }));
 
-  if (!media) return null;
+  if (!media && !hasGallery) return null;
 
-  const isVideo = media.type === "video";
-  const isGif = media.type === "gif";
-  const isImage = media.type === "image";
+  if (hasGallery) {
+    return (
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleClose}
+        statusBarTranslucent
+      >
+        <View style={styles.container}>
+          <Pressable
+            style={[styles.closeButton, { top: insets.top + 10 }]}
+            onPress={handleClose}
+            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+          >
+            <View style={styles.closeButtonInner}>
+              <Ionicons name="close" size={24} color="#fff" />
+            </View>
+          </Pressable>
+
+          <FlatList
+            ref={galleryListRef}
+            data={mediaList}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            initialScrollIndex={initialIndex}
+            getItemLayout={(_, index) => ({
+              length: SCREEN_WIDTH,
+              offset: SCREEN_WIDTH * index,
+              index,
+            })}
+            onMomentumScrollEnd={(e) => {
+              const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+              setActiveGalleryIndex(idx);
+            }}
+            keyExtractor={(item, index) => `${item.uri}-${index}`}
+            renderItem={({ item, index }) =>
+              item.type === "video" ? (
+                <PreviewVideoItem item={item} width={SCREEN_WIDTH} isActive={index === activeGalleryIndex} />
+              ) : (
+                <View style={styles.mediaContainer}>
+                  <Image
+                    source={{ uri: item.uri }}
+                    style={styles.fullMedia}
+                    contentFit="contain"
+                  />
+                </View>
+              )
+            }
+          />
+
+          <View style={[styles.pageIndicator, { bottom: insets.bottom + 20 }]}>
+            <Text style={styles.pageIndicatorText}>
+              {activeGalleryIndex + 1} / {mediaList!.length}
+            </Text>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
+  const isVideo = media!.type === "video";
+  const isGif = media!.type === "gif";
+  const isImage = media!.type === "image";
 
   return (
     <Modal
@@ -200,7 +389,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
             <GestureDetector gesture={composedGesture}>
               <Animated.View style={[styles.mediaContainer, animatedStyle]}>
                 <Image
-                  source={{ uri: media.uri }}
+                  source={{ uri: media!.uri }}
                   style={styles.fullMedia}
                   contentFit="contain"
                   onLoad={() => setIsLoading(false)}
@@ -212,7 +401,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
           {isGif && (
             <View style={styles.mediaContainer}>
               <Image
-                source={{ uri: media.uri }}
+                source={{ uri: media!.uri }}
                 style={styles.fullMedia}
                 contentFit="contain"
                 onLoad={() => setIsLoading(false)}
@@ -224,7 +413,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
             <Pressable style={styles.mediaContainer} onPress={handleVideoToggle}>
               <Video
                 ref={videoRef}
-                source={{ uri: media.uri }}
+                source={{ uri: media!.uri }}
                 style={styles.fullMedia}
                 resizeMode={ResizeMode.CONTAIN}
                 shouldPlay={isVideoPlaying}
@@ -334,5 +523,18 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  pageIndicator: {
+    position: "absolute",
+    alignSelf: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+  },
+  pageIndicatorText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 }));

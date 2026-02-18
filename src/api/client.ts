@@ -1,9 +1,10 @@
 import axios, { type AxiosError, type AxiosInstance } from "axios";
+import { walletService } from "@/src/services/wallet-service";
 import { useInboxStore } from "@/src/stores/inbox-store";
 
 const DEFAULT_NODES = [
-  "https://mirage.vote",
-  "https://mirage.vote", // fallback
+  "https://mirage.talk",
+  "https://mirage.talk", // fallback
 ];
 
 class ApiClient {
@@ -27,8 +28,31 @@ class ApiClient {
     this.client.interceptors.response.use(
       (response) => {
         const data = response.data;
-        if (data && typeof data === "object" && "new_inbox_items" in data) {
-          useInboxStore.getState().setUnreadCount((data as any).new_inbox_items);
+        if (data && typeof data === "object") {
+          const currentAddress = this.getCurrentAddress();
+          const requestAddress = this.getRequestAddress(response.config?.params);
+          const shouldSyncInbox =
+            !!currentAddress &&
+            (!requestAddress ||
+              currentAddress.toLowerCase() === requestAddress.toLowerCase());
+
+          if (shouldSyncInbox && "new_inbox_items" in data) {
+            const unreadCount = Number((data as any).new_inbox_items);
+            if (Number.isFinite(unreadCount)) {
+              useInboxStore.getState().setUnreadCount(unreadCount);
+            }
+          }
+
+          if (shouldSyncInbox && "latest_inbox_timestamp" in data) {
+            const latestTimestamp = Number(
+              (data as any).latest_inbox_timestamp
+            );
+            if (Number.isFinite(latestTimestamp)) {
+              useInboxStore
+                .getState()
+                .setLatestInboxTimestamp(latestTimestamp);
+            }
+          }
         }
         return response;
       },
@@ -81,6 +105,46 @@ class ApiClient {
     return `${this.getBaseUrl()}/api${path}`;
   }
 
+  private getCurrentAddress(): string | null {
+    return walletService.getWalletMetadata()?.address ?? null;
+  }
+
+  private getRequestAddress(params?: Record<string, unknown>): string | null {
+    if (!params) return null;
+    const address = params.address;
+    if (!address) return null;
+    return String(address).trim();
+  }
+
+  private withInboxLastViewed(
+    params?: Record<string, unknown>
+  ): Record<string, unknown> | undefined {
+    if (!params || typeof params !== "object") return params;
+
+    const currentAddress = this.getCurrentAddress();
+    if (!currentAddress) return params;
+
+    const requestAddress = this.getRequestAddress(params);
+    if (
+      requestAddress &&
+      currentAddress.toLowerCase() !== requestAddress.toLowerCase()
+    ) {
+      return params;
+    }
+
+    if (
+      params.inbox_last_viewed_at !== undefined &&
+      params.inbox_last_viewed_at !== null
+    ) {
+      return params;
+    }
+
+    const lastViewedAt = useInboxStore.getState().lastViewedAt;
+    if (!lastViewedAt) return params;
+
+    return { ...params, inbox_last_viewed_at: lastViewedAt };
+  }
+
   /**
    * GET request
    */
@@ -90,7 +154,11 @@ class ApiClient {
       params ? `with params: ${JSON.stringify(params)}` : "no params"
     );
     try {
-      const response = await this.client.get<T>(`/api${path}`, { params });
+      const response = await this.client.get<T>(`/api${path}`, {
+        params: this.withInboxLastViewed(
+          params as Record<string, unknown> | undefined
+        ),
+      });
       console.log(`[ApiClient] GET ${path} success`);
       return response.data;
     } catch (error: any) {

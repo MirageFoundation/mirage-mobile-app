@@ -30,6 +30,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { SideMenuProvider } from "@/src/providers/side-menu-provider";
 
 // Tabs that require authentication
 const PROTECTED_TABS = ["following", "create", "inbox", "profile"];
@@ -105,7 +106,7 @@ const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
               label={options.title || route.name}
               isFocused={isFocused}
               onPress={onPress}
-              badgeCount={route.name === "inbox" ? inboxUnreadCount : 0}
+              badgeCount={route.name === "inbox" && isLoggedIn ? inboxUnreadCount : 0}
             />
           );
         })}
@@ -289,7 +290,9 @@ function TabsContent() {
 export default function TabLayout() {
   return (
     <ScrollAnimationProvider>
-      <TabsContent />
+      <SideMenuProvider>
+        <TabsContent />
+      </SideMenuProvider>
     </ScrollAnimationProvider>
   );
 }

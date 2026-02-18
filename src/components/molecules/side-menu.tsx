@@ -44,6 +44,7 @@ import {
 } from "./settings";
 import { useApiServer } from "@/src/providers/api-server-provider";
 import { useToast } from "@/src/providers/toast-provider";
+import { useServerList } from "@/src/hooks/use-server-list";
 import {
   useUserFollowed,
   useUsernameFromAddress,
@@ -54,17 +55,11 @@ import Constants from "expo-constants";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MENU_WIDTH = SCREEN_WIDTH * 0.8;
 
-const apiServerOptions: ValueOption<ApiServer>[] = [
-  { value: "mirage.talk", label: "mirage.talk" },
-  { value: "mirage.vote", label: "mirage.vote" },
-];
-
 type SideMenuProps = {
   onSettings?: () => void;
   onSubscription?: () => void;
   onSaved?: () => void;
   onHistory?: () => void;
-  onDrafts?: () => void;
   onFollowing?: () => void;
   onTopics?: () => void;
   onInviteAndEarn?: () => void;
@@ -306,7 +301,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       onSubscription,
       onSaved,
       onHistory,
-      onDrafts,
       onFollowing,
       onTopics,
       onInviteAndEarn,
@@ -329,6 +323,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     const { switchServer } = useApiServer();
     const toast = useToast();
     const { apiServer, setShareServer } = usePreferencesStore();
+    const { servers } = useServerList();
+    const apiServerOptions = servers.map((s: string) => ({
+      value: s,
+      label: s,
+    }));
 
     const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
     const walletAddress = useAuthStore((s) => s.user?.walletAddress);
@@ -493,18 +492,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                 Menu
               </Text>
               <View style={styles.headerRight}>
-                <Pressable onPress={handleServerPress}>
-                  <Text
-                    size="sm"
-                    weight="semibold"
-                    style={{
-                      color: theme.colors.primary[500],
-                      textDecorationLine: "underline",
-                    }}
-                  >
-                    {apiServer}
-                  </Text>
-                </Pressable>
                 <Pressable
                   onPress={close}
                   style={[
@@ -525,7 +512,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
               style={styles.scrollView}
               contentContainerStyle={[
                 styles.scrollContent,
-                { paddingBottom: insets.bottom + 24 },
+                { paddingBottom: 20 },
               ]}
               showsVerticalScrollIndicator={false}
             >
@@ -583,12 +570,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     title="History"
                     subtitle="Recently viewed"
                     onPress={createHandler(onHistory)}
-                  />
-                  <MenuItem
-                    iconName="document-text-outline"
-                    title="Drafts"
-                    subtitle="Unpublished content"
-                    onPress={createHandler(onDrafts)}
                   />
                   <SectionFooter />
 
@@ -718,13 +699,29 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       )
                     </Text>
 
-                    <Text
-                      style={{ color: theme.colors.text.subtle }}
-                      size="sm"
-                      weight="light"
-                    >
-                      update 10
-                    </Text>
+                    {(__DEV__ ||
+                      process.env.EXPO_PUBLIC_ENV === "dev" ||
+                      process.env.EXPO_PUBLIC_ENV === "preview") && (
+                      <>
+                        <Text
+                          style={{ color: theme.colors.text.subtle }}
+                          size="sm"
+                          weight="light"
+                        >
+                          update 22
+                        </Text>
+                        <Text
+                          style={{
+                            color: theme.colors.text.subtle,
+                            textAlign: "center",
+                          }}
+                          size="sm"
+                          weight="light"
+                        >
+                          mirage stickers added
+                        </Text>
+                      </>
+                    )}
                   </View>
                 </>
               ) : (
@@ -753,13 +750,29 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       )
                     </Text>
 
-                    <Text
-                      style={{ color: theme.colors.text.subtle }}
-                      size="sm"
-                      weight="light"
-                    >
-                      update 10
-                    </Text>
+                    {(__DEV__ ||
+                      process.env.EXPO_PUBLIC_ENV === "dev" ||
+                      process.env.EXPO_PUBLIC_ENV === "preview") && (
+                      <>
+                        <Text
+                          style={{ color: theme.colors.text.subtle }}
+                          size="sm"
+                          weight="light"
+                        >
+                          update 22
+                        </Text>
+                        <Text
+                          style={{
+                            color: theme.colors.text.subtle,
+                            textAlign: "center",
+                          }}
+                          size="sm"
+                          weight="light"
+                        >
+                          mirage stickers added
+                        </Text>
+                      </>
+                    )}
                   </View>
                 </>
               )}
@@ -800,6 +813,8 @@ const styles = StyleSheet.create((theme) => ({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "#000",
+    zIndex: 1,
+    elevation: 1,
   },
   backdropPressable: {
     flex: 1,
@@ -814,7 +829,8 @@ const styles = StyleSheet.create((theme) => ({
     shadowOffset: { width: 2, height: 0 },
     shadowOpacity: 0.25,
     shadowRadius: 10,
-    elevation: 10,
+    zIndex: 2,
+    elevation: 20,
   },
   header: {
     flexDirection: "row",

@@ -4,6 +4,7 @@ export const queryKeys = {
   // Config & Parameters
   parameters: (address?: string) => ["parameters", address] as const,
   config: () => ["config"] as const,
+  nodeConfig: () => ["nodeConfig"] as const,
 
   // User
   userStatus: (address: string) => ["user", "status", address] as const,

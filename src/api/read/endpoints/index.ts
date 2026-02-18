@@ -1,5 +1,5 @@
 // Parameters & Config
-export { getParameters, getConfig } from "./parameters";
+export { getParameters, getConfig, getChainConfig, getNodeConfig } from "./parameters";
 export type { GetParametersParams } from "./parameters";
 
 // Users

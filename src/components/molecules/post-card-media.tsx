@@ -17,14 +17,22 @@ import {
 import {
   ActivityIndicator,
   Dimensions,
+  LayoutAnimation,
   Platform,
   Pressable,
+  UIManager,
   View,
   type GestureResponderEvent,
 } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import YoutubePlayer from "react-native-youtube-iframe";
 import { extractYouTubeVideoId, type ResolvedMedia } from "./post-card-utils";
+import { MediaGallery } from "./media-gallery";
+import { useVideoMuteStore } from "@/src/stores";
+
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEDIA_MAX_HEIGHT = 450;
@@ -36,6 +44,7 @@ export type PostCardMediaRef = {
 
 type PostCardMediaProps = {
   media?: ResolvedMedia;
+  mediaList?: ResolvedMedia[];
   isVisible: boolean;
   shouldBlurContent: boolean;
   hasMultipleMedia: boolean;
@@ -47,16 +56,24 @@ type PostCardMediaProps = {
   onRevealContent?: () => void;
   /** Called when media is pressed (for opening preview) */
   onMediaPress?: () => void;
+  onGalleryMediaPress?: (index: number) => void;
+  /** Whether this is shown in post detail screen */
+  isPostDetail?: boolean;
 };
 
 const MEDIA_ASPECT_RATIO_CACHE = new Map<string, number>();
 
 function getMediaAspectRatio(media?: ResolvedMedia): number {
   if (!media) return 16 / 9;
+  const cached = media.uri
+    ? MEDIA_ASPECT_RATIO_CACHE.get(media.uri)
+    : undefined;
+  if (cached) return cached;
   if (media.aspectRatio) return media.aspectRatio;
   if (media.width && media.height) {
     return media.width / media.height;
   }
+  if (media.type === "video") return 4 / 3;
   return 16 / 9;
 }
 
@@ -64,6 +81,7 @@ export const PostCardMedia = memo(
   forwardRef<PostCardMediaRef, PostCardMediaProps>(function PostCardMedia(
     {
       media,
+      mediaList,
       isVisible,
       shouldBlurContent,
       hasMultipleMedia,
@@ -72,6 +90,8 @@ export const PostCardMedia = memo(
       screenActive = true,
       onRevealContent,
       onMediaPress,
+      onGalleryMediaPress,
+      isPostDetail = false,
     },
     ref,
   ) {
@@ -79,7 +99,8 @@ export const PostCardMedia = memo(
     const [isVideoPlaying, setIsVideoPlaying] = useState(false);
     const [isVideoLoading, setIsVideoLoading] = useState(false);
     const [isVideoProcessing, setIsVideoProcessing] = useState(false);
-    const [isMuted, setIsMuted] = useState(true);
+    const isMuted = useVideoMuteStore((s) => s.isMuted);
+    const toggleMute = useVideoMuteStore((s) => s.toggleMute);
     const [mediaLoaded, setMediaLoaded] = useState(false);
     const videoRef = useRef<Video | null>(null);
 
@@ -97,6 +118,12 @@ export const PostCardMedia = memo(
         }
       },
     }));
+
+    useEffect(() => {
+      return () => {
+        videoRef.current?.pauseAsync().catch(() => {});
+      };
+    }, []);
 
     const resolvedMediaUri = media?.uri;
 
@@ -170,9 +197,11 @@ export const PostCardMedia = memo(
         if (aspectRatioLockedRef.current) return;
         const ratio = width / height;
         if (!Number.isFinite(ratio) || ratio <= 0) return;
-        setMediaAspectRatio((current) =>
-          Math.abs(current - ratio) < 0.01 ? current : ratio,
-        );
+        setMediaAspectRatio((current) => {
+          if (Math.abs(current - ratio) < 0.01) return current;
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          return ratio;
+        });
         if (resolvedMediaUri) {
           MEDIA_ASPECT_RATIO_CACHE.set(resolvedMediaUri, ratio);
         }
@@ -229,16 +258,13 @@ export const PostCardMedia = memo(
     const handlePlaybackStatusUpdate = useCallback(
       (status: AVPlaybackStatus) => {
         if (!status.isLoaded) {
-          // Video is still loading
           return;
         }
-        // Video is loaded and playing - hide loading indicator
         if (status.isPlaying && !status.isBuffering) {
           setIsVideoLoading(false);
-          // Reset user initiated flag once video is playing smoothly
+          setMediaLoaded(true);
           userInitiatedPlayRef.current = false;
-        } else if (status.isBuffering && userInitiatedPlayRef.current) {
-          // Only show loading while buffering if user initiated playback
+        } else if (status.isBuffering) {
           setIsVideoLoading(true);
         }
       },
@@ -258,7 +284,7 @@ export const PostCardMedia = memo(
         event.stopPropagation?.();
         triggerHaptic("light");
         const newMutedState = !isMuted;
-        setIsMuted(newMutedState);
+        toggleMute();
 
         // When unmuting, we need to pause and resume to initialize audio
         if (videoRef.current) {
@@ -275,7 +301,7 @@ export const PostCardMedia = memo(
           } catch {}
         }
       },
-      [isMuted],
+      [isMuted, toggleMute],
     );
 
     const handleMediaPress = useCallback(
@@ -310,6 +336,23 @@ export const PostCardMedia = memo(
 
     if (!media || shouldHideOnError) return null;
 
+    if (mediaList && mediaList.length > 1) {
+      return (
+        <View style={styles.mediaContainer}>
+          <View style={styles.mediaWrapper}>
+            <MediaGallery
+              media={mediaList}
+              onMediaPress={onGalleryMediaPress}
+              screenActive={screenActive}
+              allowAutoplay={allowAutoplay}
+              isVisible={isVisible}
+              isPostDetail={isPostDetail}
+            />
+          </View>
+        </View>
+      );
+    }
+
     if (
       __DEV__ &&
       (media.uri?.includes("cloudflarestream") ||
@@ -338,12 +381,11 @@ export const PostCardMedia = memo(
                 source={mediaSource}
                 style={styles.media}
                 resizeMode={ResizeMode.COVER}
-                shouldPlay={isVideoPlaying && screenActive}
+                shouldPlay={isVideoPlaying && screenActive && isVisible}
                 isLooping={true}
                 isMuted={isMuted}
                 useNativeControls={false}
                 onLoad={() => {
-                  // Ensure mute state is applied when video loads
                   videoRef.current?.setStatusAsync({ isMuted }).catch(() => {});
                 }}
                 onReadyForDisplay={(event) => {
@@ -397,17 +439,13 @@ export const PostCardMedia = memo(
                   setMediaLoaded(true);
                 }}
                 onError={() => setImageError(true)}
-                blurRadius={shouldBlurContent ? 30 : 0}
+                blurRadius={shouldBlurContent ? 50 : 0}
               />
             </Pressable>
           )}
 
           {!mediaLoaded && !shouldBlurContent && (
-            <View
-              style={[
-                styles.skeletonOverlay,
-              ]}
-            >
+            <View style={[styles.skeletonOverlay]}>
               <ActivityIndicator size="small" color="rgba(150,150,150,0.6)" />
             </View>
           )}
@@ -416,30 +454,70 @@ export const PostCardMedia = memo(
             !shouldBlurContent &&
             !isVideoProcessing && (
               <View style={styles.playOverlay}>
-                <Pressable
-                  onPress={handleMediaPress}
-                  style={styles.videoTapArea}
-                />
-                {isVideoLoading ? (
-                  <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#fff" />
-                  </View>
-                ) : (
-                  <Pressable
-                    onPress={handleVideoPress}
-                    style={[
-                      styles.playButton,
-                      { opacity: isVideoPlaying ? 0.6 : 1 },
-                    ]}
-                  >
-                    <Ionicons
-                      name={isVideoPlaying ? "pause" : "play"}
-                      size={28}
-                      color="#fff"
+                {isPostDetail ? (
+                  <>
+                    <Pressable
+                      onPress={handleVideoPress}
+                      style={styles.videoTapArea}
                     />
-                  </Pressable>
+                    {isVideoLoading || (isVideoPlaying && !mediaLoaded) ? (
+                      <View
+                        style={styles.loadingContainer}
+                        pointerEvents="none"
+                      >
+                        <ActivityIndicator size="small" color="#fff" />
+                      </View>
+                    ) : !isVideoPlaying ? (
+                      <View style={styles.playButton} pointerEvents="none">
+                        <Ionicons name="play" size={28} color="#fff" />
+                      </View>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <Pressable
+                      onPress={handleMediaPress}
+                      style={styles.videoTapArea}
+                    />
+                    {isVideoLoading || (isVideoPlaying && !mediaLoaded) ? (
+                      <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="small" color="#fff" />
+                      </View>
+                    ) : (
+                      <Pressable
+                        onPress={handleVideoPress}
+                        style={[
+                          styles.playButton,
+                          { opacity: isVideoPlaying ? 0.6 : 1 },
+                        ]}
+                      >
+                        <Ionicons
+                          name={isVideoPlaying ? "pause" : "play"}
+                          size={28}
+                          color="#fff"
+                        />
+                      </Pressable>
+                    )}
+                  </>
                 )}
               </View>
+            )}
+
+          {media.type === "video" &&
+            !shouldBlurContent &&
+            !isVideoProcessing &&
+            isPostDetail && (
+              <Pressable
+                onPress={() => {
+                  onMediaPress?.();
+                }}
+                style={styles.fullscreenButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <View style={styles.fullscreenButtonInner}>
+                  <Ionicons name="expand" size={16} color="#fff" />
+                </View>
+              </Pressable>
             )}
 
           {/* Mute/Unmute button for videos */}
@@ -478,52 +556,52 @@ export const PostCardMedia = memo(
               >
                 This may take a few moments
               </Text>
-           </View>
-         )}
+            </View>
+          )}
 
-         {hasMultipleMedia && (
-           <View style={styles.multiMediaBadge}>
+          {hasMultipleMedia && (
+            <View style={styles.multiMediaBadge}>
               <Text size="xs" weight="semibold" style={{ color: "#fff" }}>
                 +{extraMediaCount}
               </Text>
             </View>
           )}
 
-         {/* Blur overlay with reveal button */}
-         {shouldBlurContent && (
-           <Pressable onPress={onRevealContent} style={styles.blurOverlay}>
-             {Platform.OS === "ios" ? (
-               <BlurView
-                 intensity={80}
-                 tint="dark"
-                 style={styles.blurViewFill}
-               >
-                 <View style={styles.revealTextContainer}>
-                   <Ionicons name="eye-outline" size={24} color="#fff" />
-                   <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                     Tap to reveal
-                   </Text>
-                 </View>
-               </BlurView>
-             ) : (
-               <View style={styles.androidBlurOverlay}>
-                 <Ionicons name="eye-outline" size={24} color="#fff" />
-                 <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                   Tap to reveal
-                 </Text>
-               </View>
-             )}
-           </Pressable>
-        )}
+          {/* Blur overlay with reveal button */}
+          {shouldBlurContent && (
+            <Pressable onPress={onRevealContent} style={styles.blurOverlay}>
+              {Platform.OS === "ios" ? (
+                <BlurView
+                  intensity={80}
+                  tint="dark"
+                  style={styles.blurViewFill}
+                >
+                  <View style={styles.revealTextContainer}>
+                    <Ionicons name="eye-outline" size={24} color="#fff" />
+                    <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
+                      Tap to reveal
+                    </Text>
+                  </View>
+                </BlurView>
+              ) : (
+                <View style={styles.androidBlurOverlay}>
+                  <Ionicons name="eye-outline" size={24} color="#fff" />
+                  <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
+                    Tap to reveal
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          )}
 
-         {/* Video badge - placed after blur so it's always visible */}
-         {media.type === "video" && (
-           <View style={styles.videoBadge}>
-             <Text size="xs" weight="bold" style={{ color: "#fff" }}>
-               VIDEO
-             </Text>
-           </View>
-         )}
+          {/* Video badge - placed after blur so it's always visible */}
+          {media.type === "video" && (
+            <View style={styles.videoBadge}>
+              <Text size="xs" weight="bold" style={{ color: "#fff" }}>
+                VIDEO
+              </Text>
+            </View>
+          )}
 
           {/* GIF badge - placed after blur so it's always visible */}
           {media.type === "gif" && (
@@ -534,17 +612,17 @@ export const PostCardMedia = memo(
             </View>
           )}
 
-         {/* Image badge - placed after blur so it's always visible */}
-         {media.type === "image" && (
-           <View style={styles.imageBadge}>
-             <Text size="xs" weight="bold" style={{ color: "#fff" }}>
+          {/* Image badge - placed after blur so it's always visible */}
+          {media.type === "image" && (
+            <View style={styles.imageBadge}>
+              <Text size="xs" weight="bold" style={{ color: "#fff" }}>
                 IMG
-             </Text>
-           </View>
-         )}
+              </Text>
+            </View>
+          )}
+        </View>
       </View>
-    </View>
-  );
+    );
   }),
 );
 
@@ -591,9 +669,9 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   loadingContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     alignItems: "center",
     justifyContent: "center",
@@ -617,37 +695,51 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-gifBadge: {
-  position: "absolute",
-   top: theme.spacing.sm,
-  left: theme.spacing.sm,
-   backgroundColor: theme.colors.primary.main,
-  paddingHorizontal: theme.spacing.xs,
-  paddingVertical: 2,
-  borderRadius: theme.radius.sm,
-   zIndex: 20,
-},
- videoBadge: {
-   position: "absolute",
-   top: theme.spacing.sm,
-   left: theme.spacing.sm,
-   backgroundColor: theme.colors.primary.main,
-   paddingHorizontal: theme.spacing.xs,
-   paddingVertical: 2,
-   borderRadius: theme.radius.sm,
-   zIndex: 20,
- },
-  imageBadge: {
+  fullscreenButton: {
+    position: "absolute",
+    top: theme.spacing.sm,
+    right: theme.spacing.sm,
+    zIndex: 20,
+  },
+  fullscreenButtonInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gifBadge: {
     position: "absolute",
     top: theme.spacing.sm,
     left: theme.spacing.sm,
-    backgroundColor: theme.colors.primary.main,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
     paddingHorizontal: theme.spacing.xs,
     paddingVertical: 2,
     borderRadius: theme.radius.sm,
     zIndex: 20,
   },
-multiMediaBadge: {
+  videoBadge: {
+    position: "absolute",
+    top: theme.spacing.sm,
+    left: theme.spacing.sm,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 2,
+    borderRadius: theme.radius.sm,
+    zIndex: 20,
+  },
+  imageBadge: {
+    position: "absolute",
+    top: theme.spacing.sm,
+    left: theme.spacing.sm,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 2,
+    borderRadius: theme.radius.sm,
+    zIndex: 20,
+  },
+  multiMediaBadge: {
     position: "absolute",
     top: theme.spacing.sm,
     right: theme.spacing.sm,
@@ -661,6 +753,7 @@ multiMediaBadge: {
   },
   blurViewFill: {
     flex: 1,
+    width: "100%",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -671,9 +764,10 @@ multiMediaBadge: {
   },
   androidBlurOverlay: {
     flex: 1,
+    width: "100%",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    backgroundColor: "rgba(5, 5, 5, 0.97)",
     gap: 8,
   },
 }));

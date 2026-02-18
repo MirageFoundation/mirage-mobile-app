@@ -110,15 +110,19 @@ export function transformApiPost(
     title: apiPost.title,
     body: apiPost.content || undefined,
     topic: apiPost.topic || undefined,
-    media: apiPost.thumbnail
-      ? [
-          {
-            uri: apiPost.thumbnail,
-            type: getMediaTypeFromUrl(apiPost.thumbnail),
-            aspectRatio: 16 / 9, // Default, could be extracted from URL or metadata
-          },
-        ]
-      : undefined,
+    media: apiPost.media && apiPost.media.length > 0
+      ? apiPost.media.map((url) => ({
+          uri: url,
+          type: getMediaTypeFromUrl(url),
+        }))
+      : apiPost.thumbnail
+        ? [
+            {
+              uri: apiPost.thumbnail,
+              type: getMediaTypeFromUrl(apiPost.thumbnail),
+            },
+          ]
+        : undefined,
     contentWarnings: contentWarnings.length > 0 ? contentWarnings : undefined,
     likes: Math.max(0, displayPoints), // Display positive points as likes
     dislikes: Math.max(0, -displayPoints), // Display negative points as dislikes (inverted)

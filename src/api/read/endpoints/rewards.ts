@@ -39,6 +39,12 @@ export interface FlashQuest {
   ends_at: number;
   seconds_remaining: number;
   rewards: QuestReward[];
+  min_content_length: number | null;
+  quality_threshold: number | null;
+  unique_target: boolean;
+  unique_topics_min: number | null;
+  time_spacing_minutes: number | null;
+  count_vote_changes: boolean;
 }
 
 export interface PendingRewardRow {
@@ -47,6 +53,13 @@ export interface PendingRewardRow {
   data: { amount: number; apply_multiplier: boolean };
   reason: string;
   created_at: number;
+}
+
+export interface QuestSuspension {
+  reason: string;
+  suspended_by: string;
+  suspended_until: number;
+  updated_at: number;
 }
 
 export interface RewardSummaryResponse {
@@ -62,7 +75,7 @@ export interface RewardSummaryResponse {
   claiming_available: boolean;
   debug: boolean;
   disabled?: boolean;
-  suspension?: Record<string, unknown>;
+  suspension?: QuestSuspension;
 }
 
 export interface Achievement {
@@ -88,7 +101,9 @@ export interface GetRewardSummaryParams {
 export async function getRewardSummary(
   params: GetRewardSummaryParams
 ): Promise<RewardSummaryResponse> {
-  return api.get<RewardSummaryResponse>("/rewards/summary", { owner: params.address });
+  const data = await api.get<RewardSummaryResponse>("/rewards/summary", { owner: params.address });
+  console.log("[getRewardSummary] daily_quests:", data.daily_quests?.length, "pending_rewards:", data.pending_rewards?.length, "disabled:", data.disabled, "suspended:", data.suspended);
+  return data;
 }
 
 export async function getAchievements(

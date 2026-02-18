@@ -1,7 +1,10 @@
 import { useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   Image,
+  ActivityIndicator,
   Linking,
+  Modal,
   Pressable,
   ScrollView,
   View,
@@ -10,7 +13,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useWelcomeStats } from "@/src/api/read/hooks/use-stats";
+import { useNodeConfig } from "@/src/api/read/hooks/use-parameters";
 import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import { useToast } from "@/src/providers/toast-provider";
+import { apiClient } from "@/src/api/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { usePreferencesStore, type ApiServer } from "@/src/stores";
+import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useServerList } from "@/src/hooks/use-server-list";
 import {
   HEADER_HEIGHT,
   TAB_BAR_HEIGHT,
@@ -21,11 +32,61 @@ export function LoggedOutHome() {
   const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const toast = useToast();
   const { data: stats } = useWelcomeStats();
+  const { data: nodeConfig, refetch: refetchNodeConfig } = useNodeConfig();
+  const apiServer = usePreferencesStore((s) => s.apiServer);
+  const setApiServer = usePreferencesStore((s) => s.setApiServer);
+  const { servers } = useServerList();
+
+  const [showRegPopup, setShowRegPopup] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
+  const [showServerModal, setShowServerModal] = useState(false);
+  const [switchingServer, setSwitchingServer] = useState<ApiServer | null>(null);
+  const [modalServers, setModalServers] = useState<string[]>([]);
 
   const totalUsers = stats?.registered_users;
   const activeToday = stats?.active_24h;
   const postsToday = stats?.posts_24h;
+
+  const otherServer = servers.find((s) => s !== apiServer) ?? servers[0];
+
+  const handleCreateAccount = useCallback(async () => {
+    triggerHaptic("selection");
+
+    if (nodeConfig && !nodeConfig.registration_enabled) {
+      setShowRegPopup(true);
+      return;
+    }
+
+    router.push("/(auth)/username");
+  }, [nodeConfig, router]);
+
+  const handleSwitchNode = useCallback(async () => {
+    triggerHaptic("selection");
+    setIsSwitching(true);
+
+    try {
+      const newServer = otherServer;
+      console.log("[LoggedOutHome] Switching server to:", newServer);
+      apiClient.setBaseUrl(`https://${newServer}`);
+      queryClient.clear();
+      await queryClient.invalidateQueries();
+
+      const result = await refetchNodeConfig();
+
+      setApiServer(newServer);
+      setShowRegPopup(false);
+      toast.success(`Switched to ${newServer}`);
+
+      if (result.data?.registration_enabled) {
+        router.push("/(auth)/username");
+      }
+    } finally {
+      setIsSwitching(false);
+    }
+  }, [otherServer, setApiServer, queryClient, refetchNodeConfig, router]);
 
   return (
     <Box flex background="base">
@@ -46,6 +107,19 @@ export function LoggedOutHome() {
             Mirage
           </Text>
         </View>
+        <Pressable onPress={() => { setModalServers(servers); setShowServerModal(true); }}>
+          <Text
+            size="lg"
+            weight="semibold"
+            style={{
+              color: "#60A5FA",
+              textDecorationLine: "underline",
+              marginRight: 8,
+            }}
+          >
+            {apiServer}
+          </Text>
+        </Pressable>
       </View>
 
       <ScrollView
@@ -109,17 +183,25 @@ export function LoggedOutHome() {
               <LinearGradient
                 colors={
                   isDark
-                    ? ["rgba(102,126,234,0.06)", "transparent", "rgba(118,75,162,0.06)"]
-                    : ["rgba(102,126,234,0.04)", "transparent", "rgba(118,75,162,0.04)"]
+                    ? [
+                        "rgba(102,126,234,0.06)",
+                        "transparent",
+                        "rgba(118,75,162,0.06)",
+                      ]
+                    : [
+                        "rgba(102,126,234,0.04)",
+                        "transparent",
+                        "rgba(118,75,162,0.04)",
+                      ]
                 }
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.statsInnerGlow}
-             />
+              />
 
-            <View style={styles.statsRow}>
-               <View style={styles.statItem}>
-                 <Text
+              <View style={styles.statsRow}>
+                <View style={styles.statItem}>
+                  <Text
                     style={[
                       styles.statNumber,
                       { color: isDark ? "#A5B4FC" : "rgb(79,70,229)" },
@@ -141,11 +223,11 @@ export function LoggedOutHome() {
                   ]}
                 />
 
-               <View style={styles.statItem}>
-                 <Text
-                   style={[
-                     styles.statNumber,
-                     { color: isDark ? "#6EE7B7" : "#059669" },
+                <View style={styles.statItem}>
+                  <Text
+                    style={[
+                      styles.statNumber,
+                      { color: isDark ? "#6EE7B7" : "#059669" },
                     ]}
                   >
                     {activeToday != null ? activeToday.toLocaleString() : "-"}
@@ -164,7 +246,7 @@ export function LoggedOutHome() {
                   ]}
                 />
 
-              <View style={styles.statItem}>
+                <View style={styles.statItem}>
                   <Text
                     style={[
                       styles.statNumber,
@@ -195,7 +277,7 @@ export function LoggedOutHome() {
           <View style={styles.buttonRow}>
             <Pressable
               style={styles.createButton}
-              onPress={() => router.push("/(auth)/username")}
+              onPress={handleCreateAccount}
             >
               <LinearGradient
                 colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
@@ -222,6 +304,168 @@ export function LoggedOutHome() {
           </View>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={showRegPopup}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRegPopup(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowRegPopup(false)}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.colors.background.default },
+            ]}
+          >
+            <View style={styles.modalIconContainer}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={48}
+                color={theme.colors.warning[500]}
+              />
+            </View>
+            <Text
+              size="lg"
+              weight="bold"
+              style={{ textAlign: "center", marginBottom: 10 }}
+            >
+              Registration Unavailable
+            </Text>
+            <Text
+              size="md"
+              style={{
+                textAlign: "center",
+                color: theme.colors.text.subtle,
+                marginBottom: 20,
+              }}
+            >
+              Account creation is not available on{" "}
+              <Text size="md" weight="semibold">
+                {apiServer}
+              </Text>
+              . Switch to{" "}
+              <Text size="md" weight="semibold">
+                {otherServer}
+              </Text>{" "}
+              to create an account.
+            </Text>
+            <Pressable
+              onPress={handleSwitchNode}
+              disabled={isSwitching}
+              style={[styles.switchButton, { opacity: isSwitching ? 0.7 : 1 }]}
+            >
+              <LinearGradient
+                colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.switchButtonGradient}
+              >
+                {isSwitching ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text
+                    style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "600" }}
+                  >
+                    Switch to {otherServer}
+                  </Text>
+                )}
+              </LinearGradient>
+            </Pressable>
+            <Pressable
+              onPress={() => setShowRegPopup(false)}
+              disabled={isSwitching}
+              style={{ paddingTop: 12, opacity: isSwitching ? 0.3 : 1 }}
+            >
+              <Text size="md" style={{ color: theme.colors.text.subtle }}>
+                Cancel
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={showServerModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowServerModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowServerModal(false)}
+        >
+          <View
+            style={[
+              styles.serverModalContent,
+              { backgroundColor: theme.colors.background.default },
+            ]}
+          >
+            <Text size="lg" weight="bold" style={{ marginBottom: 16, textAlign: "center" }}>
+              Switch Node
+            </Text>
+            {modalServers.map((server) => {
+              const isActive = server === apiServer;
+              const isSwitchingThis = switchingServer === server;
+              return (
+                <Pressable
+                  key={server}
+                  disabled={!!switchingServer}
+                  onPress={async () => {
+                    if (!isActive) {
+                      setSwitchingServer(server);
+                      try {
+                        apiClient.setBaseUrl(`https://${server}`);
+                        queryClient.clear();
+                        await queryClient.invalidateQueries();
+                        await refetchNodeConfig();
+                        setApiServer(server);
+                        toast.success(`Switched to ${server}`);
+                      } catch (e) {
+                        apiClient.setBaseUrl(`https://${apiServer}`);
+                        toast.error(`Failed to connect to ${server}`);
+                      } finally {
+                        setSwitchingServer(null);
+                      }
+                    }
+                    setShowServerModal(false);
+                  }}
+                  style={[
+                    styles.serverModalOption,
+                    {
+                      backgroundColor: isActive
+                        ? `${theme.colors.primary[500]}10`
+                        : "transparent",
+                      opacity: switchingServer && !isSwitchingThis ? 0.5 : 1,
+                    },
+                  ]}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                    <Ionicons
+                      name={isActive ? "radio-button-on" : "radio-button-off"}
+                      size={20}
+                      color={isActive ? theme.colors.primary[500] : theme.colors.text.subtle}
+                    />
+                    <Text
+                      size="md"
+                      weight={isActive ? "semibold" : "regular"}
+                      style={isActive ? { color: theme.colors.primary[500] } : undefined}
+                    >
+                      {server}
+                    </Text>
+                  </View>
+                  {isSwitchingThis && (
+                    <ActivityIndicator size="small" color={theme.colors.primary[500]} />
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
     </Box>
   );
 }
@@ -244,12 +488,17 @@ const styles = StyleSheet.create((theme) => ({
     borderBottomWidth: 0.5,
     borderBottomColor: theme.colors.border.subtle,
     zIndex: 100,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingRight: 16,
   },
   headerContent: {
     height: 44,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
+    flex: 1,
   },
   appIcon: {
     width: 22,
@@ -412,5 +661,65 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: 16,
     lineHeight: 22,
     fontWeight: "600",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "85%",
+    borderRadius: 20,
+    padding: 28,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalIconContainer: {
+    marginBottom: 12,
+  },
+  switchButton: {
+    width: "100%",
+    marginBottom: 4,
+  },
+  switchButtonGradient: {
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.radius.lg,
+  },
+  cancelButton: {
+    width: "100%",
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.background.subtle,
+    marginTop: 8,
+  },
+  serverModalContent: {
+    width: "75%",
+    borderRadius: 14,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  serverModalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 4,
   },
 }));

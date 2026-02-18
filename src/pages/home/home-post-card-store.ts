@@ -49,6 +49,7 @@ type HomePostCardState = {
  followLoadingUsers: Set<string>;
  revealedPosts: Set<string>;
  visiblePostIds: Set<string>;
+ activeVideoPostId: string | null;
  voteOverrides: Record<string, VoteOverride>;
  commentCountOverrides: Record<string, CommentCountOverride>;
  handlers: HomePostCardHandlers;
@@ -63,6 +64,7 @@ type HomePostCardState = {
  setFollowLoadingUsers: (users: Set<string>) => void;
  setRevealedPosts: (posts: Set<string>) => void;
  setVisiblePostIds: (posts: Set<string>) => void;
+ setActiveVideoPostId: (postId: string | null) => void;
  setVoteOverride: (postId: string, override: VoteOverride) => void;
  clearVoteOverride: (postId: string) => void;
  incrementCommentCount: (postId: string) => void;
@@ -87,6 +89,7 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
  followLoadingUsers: emptySet,
  revealedPosts: emptySet,
  visiblePostIds: emptySet,
+ activeVideoPostId: null,
  voteOverrides: {},
  commentCountOverrides: {},
  handlers: {},
@@ -114,6 +117,11 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
       }
       return { visiblePostIds: posts };
     }),
+ setActiveVideoPostId: (postId) =>
+   set((state) => {
+     if (state.activeVideoPostId === postId) return state;
+     return { activeVideoPostId: postId };
+   }),
 setVoteOverride: (postId, override) =>
   set((state) => {
     return {
@@ -173,6 +181,7 @@ setVoteOverride: (postId, override) =>
    followLoadingUsers: emptySet,
    revealedPosts: emptySet,
    visiblePostIds: emptySet,
+   activeVideoPostId: null,
    voteOverrides: {},
    commentCountOverrides: {},
    shouldScrollToTop: false,
@@ -185,7 +194,7 @@ setVoteOverride: (postId, override) =>
 // These only trigger re-render when the specific value changes
 
 export const useIsPostVisible = (postId: string) =>
-  useHomePostCardStore((state) => state.visiblePostIds.has(postId));
+  useHomePostCardStore((state) => state.activeVideoPostId === postId);
 
 export const useIsPostRevealed = (postId: string) =>
   useHomePostCardStore((state) => state.revealedPosts.has(postId));

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -14,10 +14,14 @@ import Animated, {
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { useRewardSummary } from "@/src/api/read/hooks";
+import { useNodeConfig } from "@/src/api/read/hooks/use-parameters";
+import type { FlashQuest } from "@/src/api/read/endpoints/rewards";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { usePreferencesStore } from "@/src/stores";
 import { useAuthStore } from "@/src/stores";
+import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
+import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 
 function formatTimeShort(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -102,11 +106,117 @@ function QuestsSummarySkeleton() {
   );
 }
 
+function FlashQuestSummaryCountdown({
+  secondsRemaining: initial,
+}: {
+  secondsRemaining: number;
+}) {
+  const [seconds, setSeconds] = useState(initial);
+
+  useEffect(() => {
+    setSeconds(initial);
+  }, [initial]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSeconds((s: number) => Math.max(0, s - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const hours = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m ${secs}s`;
+}
+
+function FlashQuestSummaryItem({ quest }: { quest: FlashQuest }) {
+  const { theme } = useUnistyles();
+  const accentColor = "#F59E0B";
+  const progress = quest.target > 0 ? quest.progress / quest.target : 0;
+
+  return (
+    <View
+      style={{
+        borderWidth: 1,
+        borderColor: accentColor + "30",
+        borderRadius: theme.radius.md,
+        padding: theme.spacing.sm,
+        backgroundColor: accentColor + "08",
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <Ionicons name="flash" size={13} color={accentColor} />
+          <Text size="xs" weight="bold" style={{ color: accentColor, letterSpacing: 0.5 }}>
+            FLASH
+          </Text>
+        </View>
+        {!quest.completed && (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+            <Ionicons name="timer-outline" size={12} color={quest.seconds_remaining < 1800 ? theme.colors.error[500] : accentColor} />
+            <Text
+              size="xs"
+              weight="semibold"
+              style={{
+                color: quest.seconds_remaining < 1800 ? theme.colors.error[500] : accentColor,
+                fontVariant: ["tabular-nums"],
+              }}
+            >
+              <FlashQuestSummaryCountdown secondsRemaining={quest.seconds_remaining} />
+            </Text>
+          </View>
+        )}
+      </View>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.sm }}>
+        <Ionicons
+          name={quest.completed ? "checkmark-circle" : "ellipse-outline"}
+          size={16}
+          color={quest.completed ? theme.colors.success[500] : accentColor}
+        />
+        <Text
+          size="md"
+          style={quest.completed ? { flex: 1 } : { flex: 1, opacity: 0.8 }}
+          numberOfLines={1}
+        >
+          {quest.title}
+        </Text>
+        <Text size="sm" style={{ color: accentColor }}>
+          {quest.progress}/{quest.target}
+        </Text>
+      </View>
+      <View
+        style={{
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: accentColor + "15",
+          overflow: "hidden",
+          marginTop: 6,
+        }}
+      >
+        <View
+          style={{
+            height: "100%",
+            borderRadius: 2,
+            backgroundColor: quest.completed ? theme.colors.success[500] : accentColor,
+            width: `${progress * 100}%`,
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
 export function QuestsSummaryCard() {
   const { theme, rt } = useUnistyles();
   const router = useRouter();
-  const { data, isLoading } = useRewardSummary();
+  const { showBars } = useScrollAnimationContext();
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const { data: nodeConfig } = useNodeConfig();
+  const questsEnabled = nodeConfig?.quests_enabled ?? true;
+  const payoutsEnabled = nodeConfig?.quest_payouts_enabled ?? true;
+  const { data, isLoading } = useRewardSummary();
   const questsCardExpanded = usePreferencesStore((s) => s.questsCardExpanded);
   const setQuestsCardExpanded = usePreferencesStore(
     (s) => s.setQuestsCardExpanded,
@@ -151,14 +261,107 @@ export function QuestsSummaryCard() {
     router.push("/quests");
   }, [router]);
 
+  const triggerScrollToTop = useHomePostCardStore((s) => s.triggerScrollToTop);
+
+  useEffect(() => {
+    if (questsCardExpanded) {
+      setTimeout(() => triggerScrollToTop(), 100);
+    }
+  }, []);
+
   const handleToggleExpand = useCallback(() => {
     triggerHaptic("light");
+    showBars();
     setQuestsCardExpanded(!questsCardExpanded);
-  }, [questsCardExpanded, setQuestsCardExpanded]);
+    setTimeout(() => triggerScrollToTop(), 50);
+  }, [questsCardExpanded, setQuestsCardExpanded, showBars, triggerScrollToTop]);
 
   if (!isLoggedIn) return null;
+  if (!questsEnabled) return null;
   if (isLoading && !data) return <QuestsSummarySkeleton />;
-  if (!data?.daily_quests?.length) return null;
+  if (!data?.daily_quests?.length && !data?.suspended) return null;
+
+  if (data?.suspended && data?.suspension) {
+    const suspendedUntil = new Date(data.suspension.suspended_until * 1000);
+    const formattedDate = suspendedUntil.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    const formattedTime = suspendedUntil.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    return (
+      <>
+        <Pressable
+          onPress={handleViewQuests}
+          style={[
+            styles.container,
+            {
+              backgroundColor: theme.colors.background.default,
+            },
+          ]}
+        >
+          <View style={styles.header}>
+            <View style={styles.titleRow}>
+              <View
+                style={[
+                  styles.iconContainer,
+                  { backgroundColor: "#EF444420" },
+                ]}
+              >
+                <Ionicons
+                  name="warning"
+                  size={18}
+                  color="#EF4444"
+                />
+              </View>
+              <View style={styles.titleContent}>
+                <Text size="md" weight="semibold" style={{ color: "#EF4444" }}>
+                  Quests Suspended
+                </Text>
+                <Text size="sm" style={{ color: "#F87171" }} numberOfLines={2}>
+                  {data.suspension.reason}
+                </Text>
+              </View>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={theme.colors.text.subtle}
+            />
+          </View>
+          <View style={{ paddingHorizontal: theme.spacing.md + 2, paddingBottom: theme.spacing.md + 2 }}>
+            <View
+              style={{
+                backgroundColor: "#EF444410",
+                borderWidth: 1,
+                borderColor: "#EF444425",
+                borderRadius: theme.radius.md,
+                padding: theme.spacing.sm,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: theme.spacing.sm,
+              }}
+            >
+              <Ionicons name="time-outline" size={16} color="#F87171" />
+              <Text size="sm" style={{ color: "#F87171" }}>
+                Suspended until {formattedDate} at {formattedTime}
+              </Text>
+            </View>
+          </View>
+        </Pressable>
+        <View
+          style={{
+            height: 1,
+            backgroundColor: theme.colors.border.subtle,
+          }}
+        />
+      </>
+    );
+  }
 
   return (
     <>
@@ -252,8 +455,12 @@ export function QuestsSummaryCard() {
               />
             </View>
 
+            {data?.flash_quest && (
+              <FlashQuestSummaryItem quest={data.flash_quest} />
+            )}
+
             <View style={styles.questsList}>
-              {data?.daily_quests.slice(0, 3).map((quest) => (
+              {data?.daily_quests.map((quest) => (
                 <View key={quest.id} style={styles.questItem}>
                   <Ionicons
                     name={
@@ -284,11 +491,11 @@ export function QuestsSummaryCard() {
 
             <Pressable
               onPress={handleViewQuests}
-              disabled={hasClaimed}
+              disabled={hasClaimed || !payoutsEnabled}
               style={({ pressed }) => [
                 styles.gradientButtonContainer,
-                pressed && !hasClaimed && { opacity: 0.9 },
-                hasClaimed && { opacity: 0.5 },
+                pressed && !hasClaimed && payoutsEnabled && { opacity: 0.9 },
+                (hasClaimed || !payoutsEnabled) && { opacity: 0.5 },
               ]}
             >
               <LinearGradient
@@ -298,7 +505,9 @@ export function QuestsSummaryCard() {
                 style={styles.gradientButton}
               >
                 <Text size="md" weight="bold" style={{ color: "#FFFFFF" }}>
-                  {hasRewardsToClaim
+                  {!payoutsEnabled
+                    ? "Payouts Disabled"
+                    : hasRewardsToClaim
                     ? "Claim Rewards"
                     : hasClaimed
                       ? "Claimed"

@@ -4,7 +4,9 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/src/api/client";
 import { usePreferencesStore, getApiBaseUrl, type ApiServer } from "@/src/stores";
+import { useAuthStore } from "@/src/stores";
 import { Text } from "@/src/components/ui/primitives";
+import { queryKeys } from "@/src/api/read/query-keys";
 
 type ApiServerContextType = {
   isRefreshing: boolean;
@@ -35,6 +37,17 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       apiClient.setBaseUrl(baseUrl);
       initializedRef.current = true;
       previousServerRef.current = apiServer;
+
+      const isLoggedIn = useAuthStore.getState().isLoggedIn;
+      if (isLoggedIn) {
+        queryClient.prefetchQuery({
+          queryKey: queryKeys.nodeConfig(),
+          queryFn: async () => {
+            const { getNodeConfig } = await import("@/src/api/read/endpoints/parameters");
+            return getNodeConfig();
+          },
+        });
+      }
       return;
     }
 
@@ -61,7 +74,15 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setApiServer(server);
       previousServerRef.current = server;
 
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await queryClient.fetchQuery({
+        queryKey: queryKeys.nodeConfig(),
+        queryFn: async () => {
+          const { getNodeConfig } = await import("@/src/api/read/endpoints/parameters");
+          return getNodeConfig();
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 300));
     } catch (error) {
       throw error;
     } finally {

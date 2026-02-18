@@ -158,6 +158,10 @@ export const PostCard = memo(function PostCard({
   const handlePress = useCallback(() => {
     triggerHaptic("selection");
     logPress({ name: "post_card", postId: post.id });
+    if (shouldBlurContent) {
+      onRevealContent?.();
+      return;
+    }
     if (containerRef.current) {
       containerRef.current.measureInWindow((_x, y) => {
         setLastPressedPostY(y);
@@ -166,7 +170,7 @@ export const PostCard = memo(function PostCard({
     } else {
       onPress?.();
     }
-  }, [onPress, post.id]);
+  }, [onPress, post.id, shouldBlurContent, onRevealContent]);
 
   const handlePlayNowPress = useCallback(() => {
     if (!resolvedContent.extractedUrl) return;
@@ -175,11 +179,13 @@ export const PostCard = memo(function PostCard({
   }, [resolvedContent.extractedUrl]);
 
   const [showMediaPreview, setShowMediaPreview] = useState(false);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
 
   const handleMediaPress = useCallback(() => {
     if (onMediaPressProp) {
       onMediaPressProp();
     } else {
+      setSelectedMediaIndex(0);
       setShowMediaPreview(true);
     }
   }, [onMediaPressProp]);
@@ -239,6 +245,7 @@ export const PostCard = memo(function PostCard({
 
       <PostCardMedia
         media={resolvedContent.resolvedMedia}
+        mediaList={resolvedContent.resolvedMediaList}
         isVisible={isVisible}
         shouldBlurContent={shouldBlurContent}
         hasMultipleMedia={resolvedContent.hasMultipleMedia}
@@ -247,32 +254,28 @@ export const PostCard = memo(function PostCard({
         screenActive={screenActive && !showMediaPreview}
         onRevealContent={onRevealContent}
         onMediaPress={handleMediaPress}
+        isPostDetail={isPostDetail}
+        onGalleryMediaPress={(index) => {
+          if (!isPostDetail && onMediaPressProp) {
+            onMediaPressProp();
+          } else {
+            setSelectedMediaIndex(index);
+            setShowMediaPreview(true);
+          }
+        }}
       />
 
       {bodyText && !shouldBlurContent && (
         <View style={styles.body}>
-          {!isPostDetail && isTruncated ? (
-            <Text
-              style={{
-                fontFamily: theme.typography.family.mono,
-                fontSize: theme.typography.size.md,
-                lineHeight:
-                  theme.typography.size.md * theme.typography.leading.normal,
-                color: theme.colors.text.default,
-              }}
-            >
-              {truncatedBody}
-              <Text style={{ color: "#3B82F6" }}>…</Text>
-            </Text>
-          ) : (
-            <MarkdownContent
-              content={
-                expanded || !isTruncated
+          <MarkdownContent
+            content={
+              !isPostDetail && isTruncated
+                ? truncatedBody + "…"
+                : expanded || !isTruncated
                   ? bodyText
                   : bodyText.slice(0, MAX_BODY_LENGTH)
-              }
-            />
-          )}
+            }
+          />
           {isPostDetail && isTruncated && (
             <Pressable onPress={toggleExpanded} style={styles.showMoreButton}>
               <Text
@@ -309,6 +312,8 @@ export const PostCard = memo(function PostCard({
       <MediaPreviewModal
         visible={showMediaPreview}
         media={resolvedContent.resolvedMedia ?? null}
+        mediaList={resolvedContent.resolvedMediaList}
+        initialIndex={selectedMediaIndex}
         onClose={handleCloseMediaPreview}
       />
     </Pressable>

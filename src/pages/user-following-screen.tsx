@@ -2,10 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Pressable, View } from "react-native";
+import { Dimensions, FlatList, Pressable, View } from "react-native";
 import PagerView from "react-native-pager-view";
 import Animated, {
   interpolate,
+  interpolateColor,
+  type SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -28,6 +30,8 @@ import { Box, Icon, Text } from "@/src/components/ui/primitives";
 import { useAuthStore } from "@/src/stores";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
+
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 type FollowingTab = "users" | "topics" | "moderators";
 
@@ -53,6 +57,43 @@ const formatCount = (
   if (count === 1) return `${count} ${singular}`;
   return `${count} ${plural}`;
 };
+
+function AnimatedTabLabel({
+  label,
+  index,
+  animatedIndex,
+  activeColor,
+  inactiveColor,
+}: {
+  label: string;
+  index: number;
+  animatedIndex: SharedValue<number>;
+  activeColor: string;
+  inactiveColor: string;
+}) {
+  const animStyle = useAnimatedStyle(() => {
+    const distance = Math.abs(animatedIndex.value - index);
+    const opacity = interpolate(distance, [0, 0.5, 1], [1, 0.6, 0.5], "clamp");
+    const scale = interpolate(distance, [0, 1], [1, 0.97], "clamp");
+    const color = interpolateColor(
+      distance,
+      [0, 0.5],
+      [activeColor, inactiveColor],
+    );
+    return {
+      opacity,
+      transform: [{ scale }],
+      color,
+      fontWeight: distance < 0.5 ? "700" : "500",
+    } as any;
+  });
+
+  return (
+    <Animated.Text style={[{ fontSize: 14 }, animStyle]}>
+      {label}
+    </Animated.Text>
+  );
+}
 
 // --- Skeleton primitives ---
 
@@ -412,6 +453,7 @@ export function UserFollowingScreen() {
 
   const [activeTab, setActiveTab] = useState<FollowingTab>("users");
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
+  const animatedTabIndex = useSharedValue(0);
 
   const { data: topicPostsData, isLoading: isLoadingTopicPosts } = usePosts({
     topic: selectedTopic ?? undefined,
@@ -479,21 +521,29 @@ export function UserFollowingScreen() {
   }, [router]);
 
   const handleTabPress = useCallback((tab: FollowingTab) => {
+    const index = TAB_INDEX_MAP[tab];
     setActiveTab(tab);
-    pagerRef.current?.setPage(TAB_INDEX_MAP[tab]);
+    animatedTabIndex.value = withTiming(index, { duration: 200 });
+    pagerRef.current?.setPage(index);
     if (tab !== "topics") {
       setSelectedTopic(null);
     }
-  }, []);
+  }, [animatedTabIndex]);
+
+  const handlePageScroll = useCallback((e: any) => {
+    const { position, offset } = e.nativeEvent;
+    animatedTabIndex.value = position + offset;
+  }, [animatedTabIndex]);
 
   const handlePageSelected = useCallback((e: any) => {
     const index = e.nativeEvent.position;
     const tab = INDEX_TAB_MAP[index];
     setActiveTab(tab);
+    animatedTabIndex.value = index;
     if (tab !== "topics") {
       setSelectedTopic(null);
     }
-  }, []);
+  }, [animatedTabIndex]);
 
   const renderUserItem = useCallback(
     ({ item }: { item: string }) => (
@@ -575,6 +625,11 @@ export function UserFollowingScreen() {
     return <FollowingEmptyState tab="topics" />;
   }, [isLoadingTopicPosts]);
 
+  const singleTabWidth = SCREEN_WIDTH / TABS.length;
+  const tabIndicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: animatedTabIndex.value * singleTabWidth }],
+  }));
+
   return (
     <Box flex background="base">
       <View
@@ -601,37 +656,42 @@ export function UserFollowingScreen() {
           </Text>
         </View>
 
-        <View style={styles.tabBar}>
-          {TABS.map((tab) => {
-            const isActive = activeTab === tab.key;
-            const count = tabCounts[tab.key];
-            const hasCount = !isLoading && followedData;
-            return (
-              <Pressable
-                key={tab.key}
-                onPress={() => handleTabPress(tab.key)}
-                style={[
-                  styles.tab,
-                  isActive && {
-                    borderBottomColor: theme.colors.primary[500],
-                  },
-                ]}
-              >
-                <Text
-                  size="md"
-                  weight={isActive ? "semibold" : "regular"}
-                  style={{
-                    color: isActive
-                      ? theme.colors.primary[500]
-                      : theme.colors.text.subtle,
-                  }}
+        <View style={styles.tabBarContainer}>
+          <View style={styles.tabBar}>
+            {TABS.map((tab, index) => {
+              const count = tabCounts[tab.key];
+              const hasCount = !isLoading && followedData;
+              const label = `${tab.label}${hasCount ? ` (${count})` : ""}`;
+              return (
+                <Pressable
+                  key={tab.key}
+                  onPress={() => handleTabPress(tab.key)}
+                  style={styles.tab}
                 >
-                  {tab.label}
-                  {hasCount ? ` (${count})` : ""}
-                </Text>
-              </Pressable>
-            );
-          })}
+                  <AnimatedTabLabel
+                    label={label}
+                    index={index}
+                    animatedIndex={animatedTabIndex}
+                    activeColor={theme.colors.text.default}
+                    inactiveColor={theme.colors.text.subtle}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
+          <Animated.View
+            style={[
+              styles.tabIndicator,
+              { width: singleTabWidth, backgroundColor: theme.colors.text.default },
+              tabIndicatorStyle,
+            ]}
+          />
+          <View
+            style={[
+              styles.tabBarBorder,
+              { backgroundColor: theme.colors.border.subtle },
+            ]}
+          />
         </View>
       </View>
 
@@ -639,6 +699,7 @@ export function UserFollowingScreen() {
         ref={pagerRef}
         style={{ flex: 1 }}
         initialPage={0}
+        onPageScroll={handlePageScroll}
         onPageSelected={handlePageSelected}
       >
         <View key="users" style={{ flex: 1 }}>
@@ -699,14 +760,15 @@ export function UserFollowingScreen() {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  header: {
-    borderBottomWidth: 1,
-  },
+  header: {},
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
     height: 56,
+  },
+  tabBarContainer: {
+    position: "relative",
   },
   tabBar: {
     flexDirection: "row",
@@ -715,9 +777,20 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
+    paddingVertical: 14,
+  },
+  tabIndicator: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    height: 2,
+  },
+  tabBarBorder: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 1,
   },
   row: {
     flexDirection: "row",

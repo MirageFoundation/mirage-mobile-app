@@ -32,6 +32,8 @@ export interface CreatePostInput {
   content: string;
   /** Content tag for NSFW/etc. content */
   tag?: ContentTag;
+  /** Media URLs (max 10) */
+  media?: string[];
 }
 
 export interface CreateCommentInput {
@@ -43,6 +45,8 @@ export interface CreateCommentInput {
   title?: string;
   /** Content tag */
   tag?: ContentTag;
+  /** Media URLs (max 10) */
+  media?: string[];
 }
 
 export interface EditPostInput {
@@ -58,6 +62,8 @@ export interface EditPostInput {
   tag?: ContentTag;
   /** Parent txhash (for comments) */
   parentId?: string;
+  /** Media URLs (max 10, full replacement) */
+  media?: string[];
 }
 
 export interface DeletePostInput {
@@ -77,7 +83,7 @@ export async function createPost(
   input: CreatePostInput,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
-  const { topic, title, content, tag = "" } = input;
+  const { topic, title, content, tag = "", media } = input;
 
   return withPowRetry(async () => {
     const payload = await buildSignedEnvelope({
@@ -89,6 +95,7 @@ export async function createPost(
         title,
         content,
         tag,
+        media: media ?? [],
       },
       onPoWProgress,
     });
@@ -105,7 +112,7 @@ export async function createComment(
   input: CreateCommentInput,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
-  const { parentId, content, title = "", tag = "" } = input;
+  const { parentId, content, title = "", tag = "", media } = input;
 
   return withPowRetry(async () => {
     const payload = await buildSignedEnvelope({
@@ -117,6 +124,7 @@ export async function createComment(
         title,
         content,
         tag,
+        media: media ?? [],
       },
       onPoWProgress,
     });
@@ -133,7 +141,7 @@ export async function editPost(
   input: EditPostInput,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
-  const { postId, topic = "", title, content, tag = "", parentId = "" } = input;
+  const { postId, topic = "", title, content, tag = "", parentId = "", media } = input;
 
   return withPowRetry(async () => {
     const payload = await buildSignedEnvelope({
@@ -146,6 +154,7 @@ export async function editPost(
         content,
         tag,
         override: postId,
+        media: media ?? [],
       },
       onPoWProgress,
     });

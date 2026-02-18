@@ -29,19 +29,13 @@ type ScrollAnimationContextType = {
   subTabBarAnimatedStyle: ReturnType<typeof useAnimatedStyle>;
   headerTranslateY: SharedValue<number>;
   tabBarTranslateY: SharedValue<number>;
-  registerScrollRef: (ref: ScrollableRef) => void;
-  registerRefreshCallback: (callback: () => void) => void;
-  registerScrollToTopCallback: (callback: () => void) => void;
+  registerHomeRefresh: (callback: () => void) => void;
+  registerFollowingRefresh: (callback: () => void) => void;
+  registerProfileRefresh: (callback: () => void) => void;
   scrollToTopAndRefresh: () => void;
-  // Following-specific
-  registerFollowingScrollRef: (ref: ScrollableRef) => void;
-  registerFollowingRefreshCallback: (callback: () => void) => void;
-  registerFollowingScrollToTopCallback: (callback: () => void) => void;
   scrollToTopAndRefreshFollowing: () => void;
-  // Profile-specific
-  registerProfileScrollRef: (ref: ScrollableRef) => void;
-  registerProfileRefreshCallback: (callback: () => void) => void;
   scrollToTopAndRefreshProfile: () => void;
+  showBars: () => void;
 };
 
 const ScrollAnimationContext = createContext<ScrollAnimationContextType | null>(
@@ -54,51 +48,53 @@ export const ScrollAnimationProvider = ({
   children: React.ReactNode;
 }) => {
   const insets = useSafeAreaInsets();
- const lastScrollY = useSharedValue(0);
- const headerTranslateY = useSharedValue(0);
- const tabBarTranslateY = useSharedValue(0);
+  const lastScrollY = useSharedValue(0);
+  const headerTranslateY = useSharedValue(0);
+  const tabBarTranslateY = useSharedValue(0);
   const isHidden = useSharedValue(false);
+  const isProgrammaticScroll = useSharedValue(false);
+  const isFirstScroll = useSharedValue(true);
 
-  // Refs for scroll-to-top functionality (home)
-  const scrollRef = useRef<ScrollableRef>(null);
-  const refreshCallbackRef = useRef<(() => void) | null>(null);
-  const scrollToTopCallbackRef = useRef<(() => void) | null>(null);
+  const homeRefreshRef = useRef<(() => void) | null>(null);
+  const followingRefreshRef = useRef<(() => void) | null>(null);
+  const profileRefreshRef = useRef<(() => void) | null>(null);
 
-  // Refs for following scroll-to-top functionality
-  const followingScrollRef = useRef<ScrollableRef>(null);
-  const followingRefreshCallbackRef = useRef<(() => void) | null>(null);
-  const followingScrollToTopCallbackRef = useRef<(() => void) | null>(null);
-
-  // Refs for profile scroll-to-top functionality
-  const profileScrollRef = useRef<ScrollableRef>(null);
-  const profileRefreshCallbackRef = useRef<(() => void) | null>(null);
-
-  // Calculate full heights including safe areas
   const fullHeaderHeight = HEADER_HEIGHT + insets.top;
   const fullTabBarHeight = TAB_BAR_HEIGHT + insets.bottom;
 
- const scrollHandler = useAnimatedScrollHandler({
-   onScroll: (event) => {
-     const currentY = event.contentOffset.y;
-     const diff = currentY - lastScrollY.value;
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      const currentY = event.contentOffset.y;
+
+      if (isFirstScroll.value) {
+        isFirstScroll.value = false;
+        lastScrollY.value = currentY;
+        return;
+      }
+
+      const diff = currentY - lastScrollY.value;
 
       if (diff > 0 && currentY > SCROLL_THRESHOLD && !isHidden.value) {
-       headerTranslateY.value = withTiming(-fullHeaderHeight, {
-         duration: 200,
-       });
-       tabBarTranslateY.value = withTiming(fullTabBarHeight, {
-         duration: 200,
-       });
+        if (isProgrammaticScroll.value) {
+          lastScrollY.value = currentY;
+          return;
+        }
+        headerTranslateY.value = withTiming(-fullHeaderHeight, {
+          duration: 200,
+        });
+        tabBarTranslateY.value = withTiming(fullTabBarHeight, {
+          duration: 200,
+        });
         isHidden.value = true;
       } else if (diff < -5 && isHidden.value) {
-       headerTranslateY.value = withTiming(0, { duration: 200 });
-       tabBarTranslateY.value = withTiming(0, { duration: 200 });
+        headerTranslateY.value = withTiming(0, { duration: 200 });
+        tabBarTranslateY.value = withTiming(0, { duration: 200 });
         isHidden.value = false;
-     }
+      }
 
-     lastScrollY.value = currentY;
-   },
- });
+      lastScrollY.value = currentY;
+    },
+  });
 
   const headerAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: headerTranslateY.value }],
@@ -108,106 +104,42 @@ export const ScrollAnimationProvider = ({
     transform: [{ translateY: tabBarTranslateY.value }],
   }));
 
-  // Register scroll ref from screens
-  const registerScrollRef = useCallback((ref: ScrollableRef) => {
-    scrollRef.current = ref;
-  }, []);
-
-  // Register refresh callback from screens
-  const registerRefreshCallback = useCallback((callback: () => void) => {
-    refreshCallbackRef.current = callback;
-  }, []);
-
-  const registerScrollToTopCallback = useCallback((callback: () => void) => {
-    scrollToTopCallbackRef.current = callback;
-  }, []);
-
-  // Scroll to top and trigger refresh
- const scrollToTopAndRefresh = useCallback(() => {
-   headerTranslateY.value = withTiming(0, { duration: 200 });
-   tabBarTranslateY.value = withTiming(0, { duration: 200 });
+  const showBars = useCallback(() => {
+    headerTranslateY.value = withTiming(0, { duration: 200 });
+    tabBarTranslateY.value = withTiming(0, { duration: 200 });
     isHidden.value = false;
-
-    // Scroll to top
-    if (scrollToTopCallbackRef.current) {
-      scrollToTopCallbackRef.current();
-    } else if (scrollRef.current) {
-      if ("scrollToOffset" in scrollRef.current) {
-        scrollRef.current.scrollToOffset({ offset: 0, animated: true });
-      } else if ("scrollTo" in scrollRef.current) {
-        scrollRef.current.scrollTo({ y: 0, animated: true });
-      }
-    }
-
-    // Trigger refresh
-    if (refreshCallbackRef.current) {
-      refreshCallbackRef.current();
-    }
+    isProgrammaticScroll.value = true;
+    setTimeout(() => {
+      isProgrammaticScroll.value = false;
+    }, 500);
   }, [headerTranslateY, tabBarTranslateY]);
 
-  // Following-specific register and refresh functions
-  const registerFollowingScrollRef = useCallback((ref: ScrollableRef) => {
-    followingScrollRef.current = ref;
+  const registerHomeRefresh = useCallback((callback: () => void) => {
+    homeRefreshRef.current = callback;
   }, []);
 
-  const registerFollowingRefreshCallback = useCallback((callback: () => void) => {
-    followingRefreshCallbackRef.current = callback;
+  const registerFollowingRefresh = useCallback((callback: () => void) => {
+    followingRefreshRef.current = callback;
   }, []);
 
-  const registerFollowingScrollToTopCallback = useCallback((callback: () => void) => {
-    followingScrollToTopCallbackRef.current = callback;
+  const registerProfileRefresh = useCallback((callback: () => void) => {
+    profileRefreshRef.current = callback;
   }, []);
 
- const scrollToTopAndRefreshFollowing = useCallback(() => {
-   headerTranslateY.value = withTiming(0, { duration: 200 });
-   tabBarTranslateY.value = withTiming(0, { duration: 200 });
-    isHidden.value = false;
+  const scrollToTopAndRefresh = useCallback(() => {
+    showBars();
+    homeRefreshRef.current?.();
+  }, [showBars]);
 
-    if (followingScrollToTopCallbackRef.current) {
-      followingScrollToTopCallbackRef.current();
-    } else if (followingScrollRef.current) {
-      if ("scrollToOffset" in followingScrollRef.current) {
-        followingScrollRef.current.scrollToOffset({ offset: 0, animated: true });
-      } else if ("scrollTo" in followingScrollRef.current) {
-        followingScrollRef.current.scrollTo({ y: 0, animated: true });
-      }
-    }
+  const scrollToTopAndRefreshFollowing = useCallback(() => {
+    showBars();
+    followingRefreshRef.current?.();
+  }, [showBars]);
 
-    if (followingRefreshCallbackRef.current) {
-      followingRefreshCallbackRef.current();
-    }
-  }, [headerTranslateY, tabBarTranslateY]);
-
-  // Profile-specific register and refresh functions
-  const registerProfileScrollRef = useCallback((ref: ScrollableRef) => {
-    profileScrollRef.current = ref;
-  }, []);
-
-  const registerProfileRefreshCallback = useCallback((callback: () => void) => {
-    profileRefreshCallbackRef.current = callback;
-  }, []);
-
- const scrollToTopAndRefreshProfile = useCallback(() => {
-   headerTranslateY.value = withTiming(0, { duration: 200 });
-   tabBarTranslateY.value = withTiming(0, { duration: 200 });
-    isHidden.value = false;
-
-    // Scroll to top
-    if (profileScrollRef.current) {
-      if ("scrollToOffset" in profileScrollRef.current) {
-        // FlatList
-        profileScrollRef.current.scrollToOffset({ offset: 0, animated: true });
-      } else if ("scrollTo" in profileScrollRef.current) {
-        // ScrollView
-        profileScrollRef.current.scrollTo({ y: 0, animated: true });
-      }
-    }
-
-    // Trigger refresh
-    if (profileRefreshCallbackRef.current) {
-      profileRefreshCallbackRef.current();
-    }
-  }, [headerTranslateY, tabBarTranslateY]);
+  const scrollToTopAndRefreshProfile = useCallback(() => {
+    showBars();
+    profileRefreshRef.current?.();
+  }, [showBars]);
 
   const value = useMemo(
     () => ({
@@ -217,17 +149,13 @@ export const ScrollAnimationProvider = ({
       subTabBarAnimatedStyle: headerAnimatedStyle,
       headerTranslateY,
       tabBarTranslateY,
-      registerScrollRef,
-      registerRefreshCallback,
-      registerScrollToTopCallback,
+      registerHomeRefresh,
+      registerFollowingRefresh,
+      registerProfileRefresh,
       scrollToTopAndRefresh,
-      registerFollowingScrollRef,
-      registerFollowingRefreshCallback,
-      registerFollowingScrollToTopCallback,
       scrollToTopAndRefreshFollowing,
-      registerProfileScrollRef,
-      registerProfileRefreshCallback,
       scrollToTopAndRefreshProfile,
+      showBars,
     }),
     [
       scrollHandler,
@@ -235,17 +163,13 @@ export const ScrollAnimationProvider = ({
       tabBarAnimatedStyle,
       headerTranslateY,
       tabBarTranslateY,
-      registerScrollRef,
-      registerRefreshCallback,
-      registerScrollToTopCallback,
+      registerHomeRefresh,
+      registerFollowingRefresh,
+      registerProfileRefresh,
       scrollToTopAndRefresh,
-      registerFollowingScrollRef,
-      registerFollowingRefreshCallback,
-      registerFollowingScrollToTopCallback,
       scrollToTopAndRefreshFollowing,
-      registerProfileScrollRef,
-      registerProfileRefreshCallback,
       scrollToTopAndRefreshProfile,
+      showBars,
     ]
   );
 

@@ -6,6 +6,7 @@ import {
   Feather,
   FontAwesome5,
   Ionicons,
+  MaterialCommunityIcons,
   MaterialIcons,
 } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -26,11 +27,13 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { StickerPicker } from "@/src/components/molecules/sticker-picker";
+import { MEME_STICKERS } from "@/src/data/stickers";
 
 type InputMode = "keyboard" | "link" | "gif" | "photo";
 
-const PREVIEW_WIDTH = 120;
-const PREVIEW_HEIGHT = 90;
+const PREVIEW_WIDTH = 180;
+const PREVIEW_HEIGHT = 140;
 
 const IMAGE_URL_REGEX = /^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp))$/i;
 const CLOUDFLARE_IMAGE_REGEX = /^https?:\/\/imagedelivery\.net\/[^\s]+$/i;
@@ -69,6 +72,8 @@ export default function CommentComposeScreen() {
  const inputRef = useRef<TextInput>(null);
  const gifSearchRef = useRef<TextInput>(null);
   const linkUrlRef = useRef<TextInput>(null);
+  const selectionRef = useRef({ start: 0, end: 0 });
+  const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined);
 const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const setPendingEdit = useCommentComposeStore((s) => s.setPendingEdit);
 
@@ -143,6 +148,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
    initialAttachment?.type === "gif" ? initialAttachment.url : null,
  );
   const [isMediaLoading, setIsMediaLoading] = useState(false);
+  const [showStickerPicker, setShowStickerPicker] = useState(false);
 
   const hasAttachment = selectedImageUri !== null || selectedGifUrl !== null;
   const canSubmit = text.trim().length > 0 || hasAttachment;
@@ -179,7 +185,6 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
 
   const handleSubmit = useCallback(() => {
     if (!canSubmit) return;
-    Keyboard.dismiss();
     triggerHaptic("medium");
     if (isEditMode && editCommentId && editParentId) {
       setPendingEdit({
@@ -280,6 +285,24 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
     setSelectedGifUrl(null);
     setIsMediaLoading(false);
   }, []);
+
+  const handleSpoilerPress = useCallback(() => {
+    triggerHaptic("selection");
+    const { start, end } = selectionRef.current;
+    const before = text.slice(0, start);
+    const selected = text.slice(start, end);
+    const after = text.slice(end);
+    const newText = selected
+      ? `${before}||${selected}||${after}`
+      : `${before}||||${after}`;
+    setText(newText);
+    const cursorPos = selected ? start + selected.length + 4 : start + 2;
+    setTimeout(() => {
+      inputRef.current?.focus();
+      setSelection({ start: cursorPos, end: cursorPos });
+      setTimeout(() => setSelection(undefined), 50);
+    }, 50);
+  }, [text]);
 
   return (
     <KeyboardAvoidingView style={styles.keyboardView} behavior="padding">
@@ -486,6 +509,10 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
               multiline
               maxLength={2000}
               autoFocus
+              selection={selection}
+              onSelectionChange={(e) => {
+                selectionRef.current = e.nativeEvent.selection;
+              }}
             />
           )}
         </ScrollView>
@@ -669,9 +696,44 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
                 color={theme.colors.text.subtle}
               />
             </Pressable>
+            <Pressable
+              onPress={() => {
+                triggerHaptic("selection");
+                setShowStickerPicker(true);
+              }}
+              style={styles.toolbarButton}
+            >
+              <MaterialCommunityIcons
+                name="sticker-emoji"
+                size={18}
+                color={theme.colors.text.subtle}
+              />
+            </Pressable>
+            <Pressable onPress={handleSpoilerPress} style={styles.toolbarButton}>
+              <Feather
+                name="eye-off"
+                size={16}
+                color={theme.colors.text.subtle}
+              />
+            </Pressable>
           </View>
         </View>
       </View>
+      <StickerPicker
+        visible={showStickerPicker}
+        onClose={() => setShowStickerPicker(false)}
+        onSelect={(urls) => {
+          if (urls.length > 0) {
+            setSelectedGifUrl(null);
+            setSelectedImageUri(urls[0]);
+            setIsMediaLoading(true);
+          } else {
+            setSelectedImageUri(null);
+          }
+        }}
+        selectedStickers={selectedImageUri && MEME_STICKERS.includes(selectedImageUri) ? [selectedImageUri] : []}
+        multiSelect={false}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -772,6 +834,7 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.radius.md,
     overflow: "hidden",
     position: "relative",
+    backgroundColor: theme.colors.background.subtle,
   },
   previewImage: {
     width: PREVIEW_WIDTH,

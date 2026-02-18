@@ -103,5 +103,6 @@ export async function setAutoRenewal(
     skipPoW: true, // Paid operations don't need PoW
   });
 
-  return api.post<WriteResponse>("/core/set_auto_renewal", payload);
+  const { autoRenew: _, ...rest } = payload;
+  return api.post<WriteResponse>("/core/set_auto_renewal", { ...rest, auto_renew: autoRenew });
 }

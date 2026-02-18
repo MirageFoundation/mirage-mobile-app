@@ -208,16 +208,19 @@ export async function validateInviteCode(
   params: ValidateInviteCodeParams
 ): Promise<ValidateInviteCodeResponse> {
   const trimmed = params.code.trim();
-  const isValidFormat = /^[A-Za-z0-9]{6,10}$/.test(trimmed);
+  const isValidFormat = /^[A-Za-z0-9]{4}-?[A-Za-z0-9]{4}$/.test(trimmed);
+  console.log("[validateInviteCode] code:", JSON.stringify(trimmed), "isValidFormat:", isValidFormat);
   if (!isValidFormat) {
     return { valid: false, code: trimmed, error: "invalid_code" };
   }
 
   try {
-    const response = await apiClient.getInstance().get<ValidateInviteCodeResponse>("/api/validate_invite_code", { params });
+    const response = await apiClient.getInstance().post<ValidateInviteCodeResponse>("/api/validate_invite_code", { code: trimmed });
+    console.log("[validateInviteCode] server response:", JSON.stringify(response.data));
     return response.data;
   } catch (error: any) {
     const status = error?.response?.status;
+    console.log("[validateInviteCode] error status:", status, "message:", error?.message);
     if (status === 404 || status === 405) {
       return { valid: true, code: trimmed };
     }

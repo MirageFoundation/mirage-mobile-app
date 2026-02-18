@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react-native";
 import { EvilIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useRef } from "react";
@@ -19,6 +20,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useApiServer } from "@/src/providers/api-server-provider";
 import { useToast } from "@/src/providers/toast-provider";
 import { usePreferencesStore, type ThemeMode, type ApiServer, type VideoAutoplayNetwork } from "@/src/stores";
+import { useServerList } from "@/src/hooks/use-server-list";
 import { runInboxCheckNow, sendTestNotification, resetAndTestInboxNotification, getNotificationDebugInfo } from "@/src/services/inbox-notifications";
 
 // Auto-collapse threshold options
@@ -38,12 +40,6 @@ const sidebarCountOptions: ValueOption<number>[] = [
   { value: 7, label: "7" },
   { value: 10, label: "10" },
   { value: -1, label: "Show All" },
-];
-
-// Server options
-const apiServerOptions: ValueOption<ApiServer>[] = [
-  { value: "mirage.talk", label: "mirage.talk" },
-  { value: "mirage.vote", label: "mirage.vote" },
 ];
 
 // Video autoplay network options
@@ -93,6 +89,9 @@ export function SettingsScreen() {
     apiServer,
     setShareServer,
   } = usePreferencesStore();
+
+  const { servers } = useServerList();
+  const apiServerOptions = servers.map((s) => ({ value: s, label: s }));
 
   // Sheet refs
   const contentTypeSheetRef = useRef<ContentTypeSheetRef>(null);
@@ -392,6 +391,26 @@ const handleApiServerChange = useCallback(
               onPress={() => {
                 resetAndTestInboxNotification();
                 toast.success("Reset done, checking inbox...");
+              }}
+            />
+          ),
+        },
+      ],
+    },
+    {
+      title: "Sentry",
+      data: [
+        {
+          id: "sentry-test",
+          component: (
+            <SettingRow
+              type="navigate"
+              icon="bug-outline"
+              title="Test Sentry"
+              subtitle="Send a test error to Sentry"
+              onPress={() => {
+                Sentry.captureException(new Error("First error"));
+                toast.success("Test error sent to Sentry!");
               }}
             />
           ),

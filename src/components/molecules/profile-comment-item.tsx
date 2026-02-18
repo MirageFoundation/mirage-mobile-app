@@ -8,7 +8,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { memo, useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { ActivityIndicator, Dimensions, Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 const IMAGE_URL_REGEX = /^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp))$/i;
@@ -41,59 +41,74 @@ function extractImageUrls(content: string): {
   return { text: textLines.join("\n").trim(), imageUrls };
 }
 
-const CommentImage = ({ url, onPress }: { url: string; onPress?: () => void }) => {
-const { theme } = useUnistyles();
-const [hasError, setHasError] = useState(false);
- const [aspectRatio, setAspectRatio] = useState(16 / 9);
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const MEDIA_HORIZONTAL_PADDING = 32;
+
+const CommentImage = memo(({ url, onPress }: { url: string; onPress?: (url: string) => void }) => {
+  const { theme } = useUnistyles();
+  const [hasError, setHasError] = useState(false);
+  const [mediaLoaded, setMediaLoaded] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState(16 / 9);
+
+  const mediaSource = useMemo(() => ({ uri: url }), [url]);
 
   const MEDIA_MAX_HEIGHT = 450;
-  const containerWidth = 350;
+  const containerWidth = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
   const calculatedHeight = containerWidth / aspectRatio;
   const exceedsMaxHeight = calculatedHeight > MEDIA_MAX_HEIGHT;
-  const containerStyle = exceedsMaxHeight
+  const mediaWrapperStyle = exceedsMaxHeight
     ? { height: MEDIA_MAX_HEIGHT }
     : { aspectRatio };
 
-if (hasError) {
+  if (hasError) {
+    return (
+      <View
+        style={[
+          styles.imageError,
+          { backgroundColor: theme.colors.background.subtle },
+        ]}
+      >
+        <Text size="xs" mode="subtle">
+          Failed to load image
+        </Text>
+      </View>
+    );
+  }
+
   return (
-    <View
-      style={[
-        styles.imageError,
-        { backgroundColor: theme.colors.background.subtle },
-      ]}
-    >
-      <Text size="xs" mode="subtle">
-        Failed to load image
-      </Text>
+    <View style={styles.mediaContainer}>
+      <Pressable
+        style={[styles.mediaWrapper, mediaWrapperStyle]}
+        onPress={() => {
+          if (onPress) {
+            triggerHaptic("selection");
+            onPress(url);
+          }
+        }}
+      >
+        <Image
+          source={mediaSource}
+          style={styles.image}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          recyclingKey={url}
+          onLoad={({ source }) => {
+            if (source?.width && source?.height) {
+              setAspectRatio(source.width / source.height);
+            }
+            setMediaLoaded(true);
+          }}
+          onError={() => setHasError(true)}
+        />
+        {!mediaLoaded && (
+          <View style={styles.skeletonOverlay}>
+            <ActivityIndicator size="small" color="rgba(150,150,150,0.6)" />
+          </View>
+        )}
+      </Pressable>
     </View>
   );
-}
-
-return (
-  <Pressable 
-      style={[styles.imageContainer, containerStyle]}
-    onPress={() => {
-      if (onPress) {
-        triggerHaptic("selection");
-        onPress();
-      }
-    }}
-  >
-    <Image
-      source={{ uri: url }}
-      style={styles.image}
-      contentFit="cover"
-      transition={200}
-       onLoad={({ source }) => {
-         if (source?.width && source?.height) {
-           setAspectRatio(source.width / source.height);
-         }
-       }}
-      onError={() => setHasError(true)}
-    />
-   </Pressable>
-);
-};
+});
 interface ProfileCommentItemProps {
   comment: Post;
   onPress: (commentId: string, rootPostId: string) => void;
@@ -200,11 +215,7 @@ export const ProfileCommentItem = memo(function ProfileCommentItem({
           </Text>
         </View>
 
-        {isLoading && (
-          <View style={styles.loadingIndicator}>
-            <ActivityIndicator size="small" color={theme.colors.text.subtle} />
-          </View>
-        )}
+
 
         <View style={styles.actionsRow}>
           {onEditPress && (
@@ -244,7 +255,7 @@ export const ProfileCommentItem = memo(function ProfileCommentItem({
           <CommentImage 
             key={`img-${index}`} 
             url={url} 
-            onPress={() => handleImagePress(url)}
+            onPress={handleImagePress}
           />
        ))}
      </View>
@@ -283,9 +294,7 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: 2,
   },
-  loadingIndicator: {
-    marginLeft: "auto",
-  },
+
   actionsRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -295,12 +304,17 @@ const styles = StyleSheet.create((theme) => ({
   actionButton: {
     padding: 4,
   },
- imageContainer: {
+ mediaContainer: {
    marginTop: theme.spacing.sm,
    marginBottom: theme.spacing.xs,
    borderRadius: theme.radius.md,
    overflow: "hidden",
+ },
+ mediaWrapper: {
+   width: "100%",
    backgroundColor: theme.colors.background.subtle,
+   borderRadius: theme.radius.md,
+   overflow: "hidden",
  },
  image: {
    width: "100%",
@@ -315,6 +329,13 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.xs,
+  },
+  skeletonOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.md,
+    zIndex: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
   commentText: {
     lineHeight: 22,

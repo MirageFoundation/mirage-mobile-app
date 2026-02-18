@@ -3,6 +3,7 @@ import { Text } from "@/src/components/ui/primitives";
 import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { memo, useCallback } from "react";
 import { Pressable, View } from "react-native";
 import {
@@ -54,6 +55,10 @@ export const PostCardHeader = memo(function PostCardHeader({
   const isFollowingAll = topic
     ? !!(isFollowing && isTopicFollowed)
     : !!isFollowing;
+
+  const isFollowingPartial = topic
+    ? !!(isFollowing || isTopicFollowed) && !isFollowingAll
+    : false;
 
   const followMenuMinWidth = Math.max(
     180,
@@ -166,7 +171,7 @@ export const PostCardHeader = memo(function PostCardHeader({
                   borderColor: isFollowing
                     ? theme.colors.border.default
                     : theme.colors.primary[500],
-                 height: isFollowing ? 22 : 20,
+                  height: isFollowing ? 22 : 20,
                 },
               ]}
             >
@@ -194,32 +199,56 @@ export const PostCardHeader = memo(function PostCardHeader({
                 },
               }}
             >
-              <View
-                style={[
-                  styles.followButton,
-                  {
-                    backgroundColor: isFollowingAll
-                      ? "transparent"
-                      : theme.colors.primary[500],
-                    borderColor: isFollowingAll
-                      ? theme.colors.border.default
-                      : theme.colors.primary[500],
-                   height: isFollowingAll ? 22 : 20,
-                  },
-                ]}
-              >
-                <Text
-                  size="sm"
-                  weight="bold"
-                  style={{
-                    color: isFollowingAll
-                      ? theme.colors.text.default
-                      : theme.colors.background.default,
-                  }}
+              {isFollowingPartial ? (
+                <LinearGradient
+                  colors={["#FFFFFF", "#C1C1C1"]}
+                  locations={[0.5, 0.5]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[
+                    styles.followButton,
+                    {
+                      borderColor: theme.colors.border.default,
+                      height: 20,
+                    },
+                  ]}
                 >
-                  {isFollowingAll ? "Unfollow" : "Follow"}
-                </Text>
-              </View>
+                  <Text
+                    size="sm"
+                    weight="bold"
+                    style={{ color: theme.colors.background.default }}
+                  >
+                    Follow
+                  </Text>
+                </LinearGradient>
+              ) : (
+                <View
+                  style={[
+                    styles.followButton,
+                    {
+                      backgroundColor: isFollowingAll
+                        ? "transparent"
+                        : theme.colors.primary[500],
+                      borderColor: isFollowingAll
+                        ? theme.colors.border.default
+                        : theme.colors.primary[500],
+                      height: isFollowingAll ? 22 : 20,
+                    },
+                  ]}
+                >
+                  <Text
+                    size="sm"
+                    weight="bold"
+                    style={{
+                      color: isFollowingAll
+                        ? theme.colors.text.default
+                        : theme.colors.background.default,
+                    }}
+                  >
+                    {isFollowingAll ? "Unfollow" : "Follow"}
+                  </Text>
+                </View>
+              )}
             </MenuTrigger>
             <MenuOptions
               customStyles={{
@@ -295,20 +324,20 @@ export const PostCardHeader = memo(function PostCardHeader({
             </MenuOptions>
           </Menu>
         )}
-      {showMoreButton && (
-        <AnimatedPressable
-          scaleAmount={0.85}
-          hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-          onPress={handleMorePress}
-          style={styles.moreButton}
-        >
-          <Ionicons
-            name="ellipsis-horizontal"
-            size={18}
-            color={theme.colors.text.default}
-          />
-        </AnimatedPressable>
-      )}
+        {showMoreButton && (
+          <AnimatedPressable
+            scaleAmount={0.85}
+            hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+            onPress={handleMorePress}
+            style={styles.moreButton}
+          >
+            <Ionicons
+              name="ellipsis-horizontal"
+              size={18}
+              color={theme.colors.text.default}
+            />
+          </AnimatedPressable>
+        )}
       </View>
     </View>
   );

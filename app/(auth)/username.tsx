@@ -1,6 +1,8 @@
-import { useConfig } from "@/src/api/read/hooks/use-parameters";
+import { useConfig, useNodeConfig } from "@/src/api/read/hooks/use-parameters";
+import { queryKeys } from "@/src/api/read/query-keys";
 import { useUsernameAvailability } from "@/src/api/read/hooks/use-username-resolution";
 import { validateInviteCode } from "@/src/api/read/endpoints/users";
+import { getNodeConfig } from "@/src/api/read/endpoints/parameters";
 import { getTxStatus } from "@/src/api/read/endpoints/tx";
 import { setUsername as setUsernameOnChain } from "@/src/api/write";
 import { TransactionProgressModal } from "@/src/components/molecules";
@@ -12,17 +14,18 @@ import {
   Text,
 } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { executeWithProgress, useTransactionProgress } from "@/src/hooks";
+import { executeWithProgress, useTransactionProgress, useServerList } from "@/src/hooks";
 import { walletService } from "@/src/services/wallet-service";
 import { useAuthStore, useUIStore, type ApiServer } from "@/src/stores";
 import { apiClient } from "@/src/api/client";
 import { usePreferencesStore } from "@/src/stores";
+import { useToast } from "@/src/providers/toast-provider";
+import { useQueryClient } from "@tanstack/react-query";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Animated as RNAnimated,
   Image,
   Keyboard,
   Modal,
@@ -49,6 +52,7 @@ export default function UsernameScreen() {
   const { theme, rt } = useUnistyles();
   const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
 
   const createNewWallet = useAuthStore((s) => s.createNewWallet);
@@ -62,23 +66,28 @@ export default function UsernameScreen() {
   const [inviteStatus, setInviteStatus] = useState<InviteCodeStatus>("idle");
   const [createError, setCreateError] = useState<string | null>(null);
   const [isSettingUp, setIsSettingUp] = useState(false);
-  const [activeServer, setActiveServer] = useState<ApiServer>("mirage.talk");
-  const [showServerModal, setShowServerModal] = useState(false);
-  const [serverSwitchMsg, setServerSwitchMsg] = useState<string | null>(null);
-  const bannerOpacity = useRef(new RNAnimated.Value(0)).current;
   const savedServer = usePreferencesStore((s) => s.apiServer);
+  const setApiServer = usePreferencesStore((s) => s.setApiServer);
+  const [activeServer, setActiveServer] = useState<ApiServer>(savedServer);
+  const [showServerModal, setShowServerModal] = useState(false);
+  const [switchingServer, setSwitchingServer] = useState<ApiServer | null>(null);
+  const toast = useToast();
+  const { servers } = useServerList();
 
   const walletConfirmedRef = useRef(false);
   const txProgress = useTransactionProgress();
 
   useEffect(() => {
+    console.log("[UsernameScreen] activeServer:", activeServer, "savedServer:", savedServer);
     apiClient.setBaseUrl(`https://${activeServer}`);
     return () => {
       apiClient.setBaseUrl(`https://${savedServer}`);
     };
-  }, []);
+  }, [activeServer]);
 
   const { data: config } = useConfig();
+  const { data: nodeConfig } = useNodeConfig();
+  const inviteCodeRequired = nodeConfig?.registration_invite_code_required ?? true;
   const minUsernameSize = config?.min_username_size ?? 3;
   const maxUsernameSize = config?.max_username_size ?? 20;
 
@@ -145,7 +154,7 @@ export default function UsernameScreen() {
 
   const handleContinue = useCallback(async () => {
     if (status !== "available") return;
-    if (!inviteCode.trim()) {
+    if (inviteCodeRequired && !inviteCode.trim()) {
       setInviteStatus("invalid");
       setCreateError("Please enter an invite code");
       triggerHaptic("error");
@@ -158,22 +167,26 @@ export default function UsernameScreen() {
     setInviteStatus("checking");
 
     try {
-      const rawCode = inviteCode.replace(/-/g, "").trim();
-      const result = await validateInviteCode({ code: rawCode });
+      if (inviteCodeRequired) {
+        const rawCode = inviteCode.trim();
+        console.log("[InviteCode] raw input:", JSON.stringify(inviteCode), "code:", JSON.stringify(rawCode), "length:", rawCode.length);
+        const result = await validateInviteCode({ code: rawCode });
+        console.log("[InviteCode] validateInviteCode result:", JSON.stringify(result));
 
-      if (!result.valid) {
-        if (result.error === "already_used") {
-          setInviteStatus("used");
-        } else if (result.error === "expired") {
-          setInviteStatus("expired");
-        } else {
-          setInviteStatus("invalid");
+        if (!result.valid) {
+          if (result.error === "already_used") {
+            setInviteStatus("used");
+          } else if (result.error === "expired") {
+            setInviteStatus("expired");
+          } else {
+            setInviteStatus("invalid");
+          }
+          triggerHaptic("error");
+          return;
         }
-        triggerHaptic("error");
-        return;
+        setInviteStatus("valid");
       }
 
-      setInviteStatus("valid");
       setIsSettingUp(true);
 
       const mnemonic = await createNewWallet();
@@ -192,9 +205,11 @@ export default function UsernameScreen() {
         txProgress,
         async (onPoWProgress) => {
           txProgress.setPhase("signing");
+          const usernamePayload = { username, ...(inviteCodeRequired && inviteCode.trim() ? { invite_code: inviteCode.trim() } : {}) };
+          console.log("[InviteCode] setUsername payload:", JSON.stringify(usernamePayload));
           const response = await setUsernameOnChain(
             wallet,
-            { username, invite_code: inviteCode.trim() },
+            usernamePayload,
             onPoWProgress,
           );
           txProgress.setPhase("submitting");
@@ -251,6 +266,7 @@ export default function UsernameScreen() {
     status,
     username,
     inviteCode,
+    inviteCodeRequired,
     createNewWallet,
     setHasUsername,
     txProgress,
@@ -397,7 +413,7 @@ export default function UsernameScreen() {
 
   const isButtonEnabled =
     status === "available" &&
-    inviteCode.trim().length > 0 &&
+    (inviteCodeRequired ? inviteCode.trim().length > 0 : true) &&
     !isCreatingWallet &&
     !isSettingUp &&
     inviteStatus !== "checking";
@@ -441,7 +457,7 @@ export default function UsernameScreen() {
             size="lg"
             weight="semibold"
             style={{
-              color: "#3B82F6",
+              color: "#60A5FA",
               textDecorationLine: "underline",
               marginRight: 8,
             }}
@@ -451,24 +467,6 @@ export default function UsernameScreen() {
         </Pressable>
       </View>
 
-      {serverSwitchMsg && (
-        <RNAnimated.View
-          style={[
-            styles.switchBanner,
-            {
-              opacity: bannerOpacity,
-              top: (Platform.OS === "ios" ? 20 : insets.top) + 48,
-            },
-          ]}
-        >
-          <View style={styles.switchBannerInner}>
-            <Ionicons name="checkmark-circle" size={18} color="#22C55E" />
-            <Text size="md" weight="semibold" style={{ color: "#22C55E", marginLeft: 8 }}>
-              {serverSwitchMsg}
-            </Text>
-          </View>
-        </RNAnimated.View>
-      )}
 
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <ScrollView
@@ -495,60 +493,66 @@ export default function UsernameScreen() {
           </View>
 
           <Text style={styles.subtitle}>
-            Pick a username and enter your invite code to join
+            {inviteCodeRequired
+              ? "Pick a username and enter your invite code to join"
+              : "Pick a username to join"}
           </Text>
 
-          <View style={styles.inviteInputWrapper}>
-            <Input
-              value={inviteCode}
-              onChangeText={handleInviteCodeChange}
-              placeholder="XXXX-XXXX"
-              autoCapitalize="characters"
-              autoCorrect={false}
-              size="lg"
-              variant="filled"
-              style={styles.input}
-              maxLength={9}
-              rightAccessory={
-                inviteCode.length > 0 ? (
-                  <Pressable
-                    style={styles.statusIcon}
-                    onPress={() => {
-                      setInviteCode("");
-                      setInviteStatus("idle");
-                    }}
-                  >
-                    {inviteStatus !== "idle" ? (
-                      getInviteStatusIcon()
-                    ) : (
-                      <Ionicons
-                        name="close-circle"
-                        size={20}
-                        color={theme.colors.text.subtle}
-                      />
-                    )}
-                  </Pressable>
-                ) : undefined
-              }
-            />
-          </View>
+          {inviteCodeRequired && (
+            <>
+              <View style={styles.inviteInputWrapper}>
+                <Input
+                  value={inviteCode}
+                  onChangeText={handleInviteCodeChange}
+                  placeholder="XXXX-XXXX"
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  size="lg"
+                  variant="filled"
+                  style={styles.input}
+                  maxLength={9}
+                  rightAccessory={
+                    inviteCode.length > 0 ? (
+                      <Pressable
+                        style={styles.statusIcon}
+                        onPress={() => {
+                          setInviteCode("");
+                          setInviteStatus("idle");
+                        }}
+                      >
+                        {inviteStatus !== "idle" ? (
+                          getInviteStatusIcon()
+                        ) : (
+                          <Ionicons
+                            name="close-circle"
+                            size={20}
+                            color={theme.colors.text.subtle}
+                          />
+                        )}
+                      </Pressable>
+                    ) : undefined
+                  }
+                />
+              </View>
 
-          <View
-            style={[styles.statusContainer, { marginBottom: theme.spacing.sm }]}
-          >
-            {inviteStatus !== "idle" ? (
-              <Text size="sm" style={{ color: getInviteStatusColor() }}>
-                {getInviteStatusMessage}
-              </Text>
-            ) : (
-              <Text
-                size="sm"
-                style={{ color: theme.colors.text.subtle, opacity: 0.6 }}
+              <View
+                style={[styles.statusContainer, { marginBottom: theme.spacing.sm }]}
               >
-                Enter a invite code
-              </Text>
-            )}
-          </View>
+                {inviteStatus !== "idle" ? (
+                  <Text size="sm" style={{ color: getInviteStatusColor() }}>
+                    {getInviteStatusMessage}
+                  </Text>
+                ) : (
+                  <Text
+                    size="sm"
+                    style={{ color: theme.colors.neutral[600] }}
+                  >
+                    Enter an invite code
+                  </Text>
+                )}
+              </View>
+            </>
+          )}
 
           <View style={styles.inputWrapper}>
             <Input
@@ -578,7 +582,7 @@ export default function UsernameScreen() {
             ) : (
               <Text
                 size="sm"
-                style={{ color: theme.colors.text.subtle, opacity: 0.6 }}
+                style={{ color: theme.colors.neutral[600] }}
               >
                 This is how people will find you on Mirage
               </Text>
@@ -647,68 +651,78 @@ export default function UsernameScreen() {
               { backgroundColor: theme.colors.background.default },
             ]}
           >
-            <Text size="lg" weight="bold" style={{ marginBottom: 16 }}>
-              Select Server
+            <Text size="lg" weight="bold" style={{ marginBottom: 16, textAlign: "center" }}>
+              Switch Node
             </Text>
-            {(["mirage.talk", "mirage.vote"] as ApiServer[]).map((server) => (
-              <Pressable
-                key={server}
-                onPress={() => {
-                  if (server !== activeServer) {
-                    setActiveServer(server);
-                    apiClient.setBaseUrl(`https://${server}`);
-                    setServerSwitchMsg(`Switched to ${server}`);
-                    bannerOpacity.setValue(0);
-                    RNAnimated.timing(bannerOpacity, {
-                      toValue: 1,
-                      duration: 300,
-                      useNativeDriver: true,
-                    }).start(() => {
-                      setTimeout(() => {
-                        RNAnimated.timing(bannerOpacity, {
-                          toValue: 0,
-                          duration: 400,
-                          useNativeDriver: true,
-                        }).start(() => setServerSwitchMsg(null));
-                      }, 2000);
-                    });
-                  }
-                  setShowServerModal(false);
-                }}
-                style={[
-                  styles.modalOption,
-                  {
-                    backgroundColor:
-                      server === activeServer
-                        ? `${theme.colors.primary[500]}15`
+            {servers.map((server) => {
+              const isActive = server === activeServer;
+              const isSwitching = switchingServer === server;
+              return (
+                <Pressable
+                  key={server}
+                  disabled={!!switchingServer}
+                  onPress={async () => {
+                    if (!isActive) {
+                      setSwitchingServer(server);
+                      setActiveServer(server);
+                      apiClient.setBaseUrl(`https://${server}`);
+                      queryClient.removeQueries({ queryKey: queryKeys.nodeConfig() });
+                      queryClient.removeQueries({ queryKey: queryKeys.config() });
+                      queryClient.invalidateQueries({ queryKey: queryKeys.nodeConfig() });
+                      queryClient.invalidateQueries({ queryKey: queryKeys.config() });
+
+                      try {
+                        const freshNodeConfig = await getNodeConfig();
+                        if (!freshNodeConfig.registration_enabled) {
+                          setSwitchingServer(null);
+                          setShowServerModal(false);
+                          setApiServer(server);
+                          apiClient.setBaseUrl(`https://${server}`);
+                          toast.success(`Switched to ${server}`);
+                          router.back();
+                          return;
+                        }
+                        toast.success(`Switched to ${server}`);
+                      } catch (e) {
+                        console.error("[UsernameScreen] Failed to fetch nodeConfig after switch:", e);
+                        setActiveServer(activeServer);
+                        apiClient.setBaseUrl(`https://${activeServer}`);
+                        toast.error(`Failed to connect to ${server}`);
+                      }
+                      setSwitchingServer(null);
+                    }
+                    setShowServerModal(false);
+                  }}
+                  style={[
+                    styles.modalOption,
+                    {
+                      backgroundColor: isActive
+                        ? `${theme.colors.primary[500]}10`
                         : "transparent",
-                    borderColor:
-                      server === activeServer
-                        ? theme.colors.primary[500]
-                        : theme.colors.border.subtle,
-                  },
-                ]}
-              >
-                <Text
-                  size="lg"
-                  weight={server === activeServer ? "bold" : "medium"}
-                  style={
-                    server === activeServer
-                      ? { color: theme.colors.primary[500] }
-                      : undefined
-                  }
+                      opacity: switchingServer && !isSwitching ? 0.5 : 1,
+                    },
+                  ]}
                 >
-                  {server}
-                </Text>
-                {server === activeServer && (
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={20}
-                    color={theme.colors.primary[500]}
-                  />
-                )}
-              </Pressable>
-            ))}
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
+                    <Ionicons
+                      name={isActive ? "radio-button-on" : "radio-button-off"}
+                      size={20}
+                      color={isActive ? theme.colors.primary[500] : theme.colors.text.subtle}
+                    />
+                    <Text
+                      size="md"
+                      weight={isActive ? "semibold" : "regular"}
+                      style={isActive ? { color: theme.colors.primary[500] } : undefined}
+                    >
+                      {server}
+                    </Text>
+                  </View>
+                  {isSwitching && (
+                    <ActivityIndicator size="small" color={theme.colors.primary[500]} />
+                  )}
+                </Pressable>
+              );
+            })}
           </View>
         </Pressable>
       </Modal>
@@ -735,25 +749,6 @@ const styles = StyleSheet.create((theme) => ({
     height: 40,
     alignItems: "center",
     justifyContent: "center",
-  },
-  switchBanner: {
-    alignItems: "center",
-    position: "absolute",
-    left: 24,
-    right: 24,
-    top: 0,
-    zIndex: 50,
-  },
-  switchBannerInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    backgroundColor: "rgba(34,197,94,0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(34,197,94,0.25)",
   },
   content: {
     flexGrow: 1,
@@ -785,6 +780,7 @@ const styles = StyleSheet.create((theme) => ({
     marginVertical: theme.spacing.lg,
     fontSize: 16,
     color: theme.colors.neutral[600],
+    paddingHorizontal: theme.spacing.lg,
   },
   inputWrapper: {
     marginBottom: theme.spacing.xs,
@@ -833,7 +829,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing.md,
   },
   loginText: {
-    color: "rgb(34,74,154)",
+    color: "#60A5FA",
     fontSize: 13,
     fontWeight: "500",
   },
@@ -844,23 +840,23 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
   },
   modalContent: {
-    width: "80%",
-    borderRadius: 16,
-    padding: 24,
+    width: "75%",
+    borderRadius: 14,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
   },
   modalOption: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 4,
   },
 }));

@@ -141,6 +141,10 @@ export const InboxItem = memo(function InboxItem({
     [reply.parent_content],
   );
 
+  const isMention = reply.type === "mention";
+  const actionLabel = isMention ? "mentioned you in" : "replied to";
+  const actionIcon = isMention ? "at-outline" : "arrow-undo-outline";
+
   const { text: replyText, imageUrls } = useMemo(
     () => extractImageUrls(reply.reply_content),
     [reply.reply_content],
@@ -158,7 +162,7 @@ export const InboxItem = memo(function InboxItem({
         <View style={styles.headerTextRow}>
           <View style={styles.headerLeft}>
             <Ionicons
-              name="arrow-undo-outline"
+              name={actionIcon}
               size={16}
               color={theme.colors.text.subtle}
             />
@@ -176,7 +180,7 @@ export const InboxItem = memo(function InboxItem({
               {reply.reply_username}
             </Text>
             <Text size="sm" mode="subtle" numberOfLines={1}>
-              replied to
+              {actionLabel}
             </Text>
             <Text
               size="sm"

@@ -285,6 +285,10 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
             refetchType: "active",
           });
         }
+        queryClient.invalidateQueries({
+          queryKey: ["posts"],
+          refetchType: "active",
+        });
       }, 5000);
     },
     onError: (err, { topic, isCurrentlyFollowing }, context) => {
@@ -323,7 +327,7 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
     onSettled: (_data, error) => {
       queryClient.invalidateQueries({
         queryKey: ["posts"],
-        refetchType: "none",
+        refetchType: "active",
       });
 
       if (error) {
@@ -443,8 +447,6 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
       setTimeout(() => {
         console.log(`[Follow] Delayed refetch after successful follow`);
         if (address) {
-          // Use refetchType: 'active' to only refetch if the query is currently being used
-          // This prevents showing a loading indicator
           queryClient.invalidateQueries({
             queryKey: queryKeys.userFollowed(address),
             refetchType: "active",
@@ -454,6 +456,10 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
             refetchType: "none",
           });
         }
+        queryClient.invalidateQueries({
+          queryKey: ["posts"],
+          refetchType: "active",
+        });
       }, 5000);
     },
     onError: (err, { userAddress, isCurrentlyFollowing }, context) => {
@@ -496,16 +502,11 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
       }
     },
     onSettled: (_data, error) => {
-      // Mark posts as stale but don't trigger an immediate refetch
-      // This prevents the refreshing indicator from showing
-      // Posts will be refetched on next navigation or pull-to-refresh
       queryClient.invalidateQueries({
         queryKey: ["posts"],
-        refetchType: "none",
+        refetchType: "active",
       });
 
-      // If there was an error (and it wasn't a "state mismatch" error),
-      // we should refetch to get the correct state
       if (error) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const axiosError = error as any;

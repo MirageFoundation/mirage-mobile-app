@@ -69,6 +69,7 @@ export function TopicFeedScreen() {
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
 
+  const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const [sortBy, setSortBy] = useState<"magic" | "newest">("magic");
@@ -217,9 +218,12 @@ export function TopicFeedScreen() {
     ),
   });
 
+  const revealedPostsRef = useRef<Set<string>>(new Set());
+
   const handlePostPress = useCallback(
     (postId: string) => {
-      router.push(`/post/${postId}`);
+      const isRevealed = revealedPostsRef.current.has(postId);
+      router.push(`/post/${postId}${isRevealed ? '?reveal=true' : ''}`);
     },
     [router],
   );
@@ -385,11 +389,11 @@ export function TopicFeedScreen() {
       setRevealedPosts((prev) => {
         const newSet = new Set(prev);
         newSet.add(postId);
+        revealedPostsRef.current = newSet;
         return newSet;
       });
-      router.push(`/post/${postId}?reveal=true`);
     },
-    [router],
+    [],
   );
 
   const lastFetchTime = useRef(0);
@@ -840,11 +844,7 @@ export function TopicFeedScreen() {
         onFollowUser={handleFollowUserFromSheet}
         onFollowTopic={handleFollowTopic}
         onSave={handleSavePost}
-        isSaved={
-          selectedPost
-            ? useSavedPostsStore.getState().isPostSaved(selectedPost.id)
-            : false
-        }
+        isSaved={selectedPost ? savedPosts.some((p) => p.id === selectedPost.id) : false}
         onCopyText={handleCopyText}
         onReport={handleReport}
         onBlockUser={handleBlockUser}

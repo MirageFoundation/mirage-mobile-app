@@ -60,11 +60,16 @@ import {
   useContentModerationStore,
   usePreferencesStore,
   getShareBaseUrl,
+  useSavedPostsStore,
 } from "@/src/stores";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import { useEdit } from "@/src/api/write";
-import type { PoWProgress } from "@/src/api/write/signing";
 import { useToast } from "@/src/providers/toast-provider";
+import {
+  usePowQueueStore,
+  generateActionId,
+  getActionLabel,
+} from "@/src/services/pow-queue";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const AnimatedFlatList = Animated.createAnimatedComponent(
@@ -162,7 +167,7 @@ export function ProfileScreen() {
   const { theme } = useUnistyles();
   const queryClient = useQueryClient();
 
-  const { registerProfileScrollRef, registerProfileRefreshCallback } =
+  const { registerProfileRefresh } =
     useScrollAnimationContext();
 
   const flatListRef = useRef<FlatList<any>>(null);
@@ -179,10 +184,6 @@ export function ProfileScreen() {
     refetch: refetchProfile,
   } = useProfile();
 
-  useEffect(() => {
-    registerProfileScrollRef(flatListRef.current);
-  }, [registerProfileScrollRef]);
-
   const scrollY = useSharedValue(0);
   const animatedTabIndex = useSharedValue(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -193,6 +194,7 @@ export function ProfileScreen() {
   const reportSheetRef = useRef<ReportSheetRef>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
+  const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const hiddenCommentIds = useContentModerationStore((s) => s.hiddenCommentIds);
   const globalHidePost = useContentModerationStore((s) => s.hidePost);
@@ -216,22 +218,12 @@ export function ProfileScreen() {
  const pendingEdit = useCommentComposeStore((s) => s.pendingEdit);
  const clearPendingEdit = useCommentComposeStore((s) => s.clearPendingEdit);
 
-  const editToastIdRef = useRef<string | null>(null);
-  const handleEditPoWProgress = useCallback(
-    (progress: PoWProgress) => {
-      const tid = editToastIdRef.current;
-      if (tid) {
-        const pct =
-          progress.estimatedTotalMs > 0
-            ? Math.min(99, Math.round((progress.elapsedMs / progress.estimatedTotalMs) * 100))
-            : 0;
-        toast.update(tid, { description: `Computing proof of work... ${pct}%` });
-      }
-    },
-    [toast],
-  );
-
- const editMutation = useEdit({ onPoWProgress: handleEditPoWProgress });
+ const editMutation = useEdit({});
+  const editMutateAsyncRef = useRef(editMutation.mutateAsync);
+  useEffect(() => {
+    editMutateAsyncRef.current = editMutation.mutateAsync;
+  }, [editMutation.mutateAsync]);
+  const enqueue = usePowQueueStore((state) => state.enqueue);
 
   const [commentEditOverrides, setCommentEditOverrides] = useState<
     Record<string, string>
@@ -284,6 +276,11 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
 
   useEffect(() => {
     const handleRefresh = async () => {
+      if (flatListRef.current) {
+        if ("scrollToOffset" in flatListRef.current) {
+          flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+        }
+      }
       setIsRefreshing(true);
       try {
         await Promise.all([
@@ -295,9 +292,9 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
         setIsRefreshing(false);
       }
     };
-    registerProfileRefreshCallback(handleRefresh);
+    registerProfileRefresh(handleRefresh);
   }, [
-    registerProfileRefreshCallback,
+    registerProfileRefresh,
     refetchUserStatus,
     refetchProfile,
     refetchPosts,
@@ -375,13 +372,9 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
     router.push("/invite-and-earn");
   }, [router]);
 
-  const handleMenuDrafts = useCallback(() => {
-    console.log("Drafts pressed");
-  }, []);
-
   const handleMenuHistory = useCallback(() => {
-    console.log("History pressed");
-  }, []);
+    router.push("/history");
+  }, [router]);
 
   const handleMenuSaved = useCallback(() => {
     router.push("/saved-posts");
@@ -390,6 +383,10 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
   const handleOnlineStatusChange = useCallback((isOnline: boolean) => {
     console.log("Online status changed:", isOnline);
   }, []);
+
+  const handleEditUsernamePress = useCallback(() => {
+    router.push("/change-username");
+  }, [router]);
 
   const handleFollowersPress = useCallback(() => {
     const id = user?.walletAddress || user?.username;
@@ -458,64 +455,47 @@ useEffect(() => {
 
    let finalContent = text;
     if (imageUri) {
-      finalContent = text.trim() ? `${text.trim()}\n\n${imageUri}` : imageUri;
+      finalContent = text.trim() ? `${imageUri}\n\n${text.trim()}` : imageUri;
     } else if (gifUrl) {
-      finalContent = text.trim() ? `${text.trim()}\n\n${gifUrl}` : gifUrl;
+      finalContent = text.trim() ? `${gifUrl}\n\n${text.trim()}` : gifUrl;
     }
 
       setCommentEditOverrides((prev) => ({ ...prev, [commentId]: finalContent }));
 
-     toast.dismissAll();
-      const toastId = toast.loading("Editing comment", "Computing proof of work...");
-      editToastIdRef.current = toastId;
-
-     (async () => {
-       try {
-         await editMutation.mutateAsync({
-           postId: commentId,
-           parentId,
-           title: "",
-           content: finalContent,
-           tag: "",
-         });
-
-         toast.update(toastId, {
-           type: "success",
-           title: "Comment edited!",
-           description: undefined,
-           duration: 3000,
-         });
-      setTimeout(() => toast.dismiss(toastId), 3000);
-
-        setTimeout(async () => {
-          await refetchPosts();
+      const actionId = generateActionId();
+      enqueue({
+        id: actionId,
+        type: "edit",
+        label: getActionLabel("edit"),
+        execute: async () => {
+          return editMutateAsyncRef.current({
+            postId: commentId,
+            parentId,
+            title: "",
+            content: finalContent,
+            tag: "",
+          });
+        },
+        onSuccess: () => {
+          setTimeout(async () => {
+            await refetchPosts();
+            setCommentEditOverrides((prev) => {
+              const next = { ...prev };
+              delete next[commentId];
+              return next;
+            });
+          }, 3000);
+        },
+        onError: () => {
           setCommentEditOverrides((prev) => {
             const next = { ...prev };
             delete next[commentId];
             return next;
           });
-        }, 3000);
-      } catch (error: unknown) {
-          setCommentEditOverrides((prev) => {
-            const next = { ...prev };
-            delete next[commentId];
-            return next;
-          });
-        const errorMessage =
-           error instanceof Error ? error.message : "Failed to edit comment";
-         toast.update(toastId, {
-           type: "error",
-           title: "Failed to edit comment",
-           description: errorMessage,
-           duration: 5000,
-         });
-         setTimeout(() => toast.dismiss(toastId), 5000);
-       } finally {
-          editToastIdRef.current = null;
-       }
-     })();
+        },
+      });
    }
- }, [pendingEdit, clearPendingEdit, editMutation, toast, refetchPosts]);
+ }, [pendingEdit, clearPendingEdit, enqueue, refetchPosts]);
 
   const handleAuthorPress = useCallback(
     (authorId: string) => {
@@ -693,6 +673,7 @@ useEffect(() => {
              gradientColors={gradientColors}
              scrollY={scrollY}
              onFollowersPress={handleFollowersPress}
+             onEditUsernamePress={handleEditUsernamePress}
              isLoading={isLoading}
             headerHeight={headerHeight}
            />
@@ -747,6 +728,7 @@ useEffect(() => {
        gradientColors,
        scrollY,
        handleFollowersPress,
+       handleEditUsernamePress,
         isLoading,
        headerHeight,
         activeTab,
@@ -887,12 +869,13 @@ useEffect(() => {
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.5}
           ListFooterComponent={ListFooterComponent}
-          removeClippedSubviews={false}
+          removeClippedSubviews={true}
           maxToRenderPerBatch={5}
           windowSize={5}
           initialNumToRender={7}
           updateCellsBatchingPeriod={100}
           bounces={true}
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         />
       </GestureDetector>
 
@@ -903,7 +886,6 @@ useEffect(() => {
         onSubscription={handleMenuSubscription}
         onNetwork={handleMenuNetwork}
         onInviteAndEarn={handleMenuInviteAndEarn}
-        onDrafts={handleMenuDrafts}
         onHistory={handleMenuHistory}
         onSaved={handleMenuSaved}
         onOnlineStatusChange={handleOnlineStatusChange}
@@ -913,6 +895,15 @@ useEffect(() => {
         ref={postOptionsSheetRef}
         post={selectedPost}
         isOwnPost={true}
+        isSaved={selectedPost ? savedPosts.some((p) => p.id === selectedPost.id) : false}
+        onSave={() => {
+          if (!selectedPost) return;
+          const saved = useSavedPostsStore.getState().toggleSavePost(selectedPost);
+          toast.success(
+            saved ? "Post saved" : "Post unsaved",
+            saved ? "You can find it in your saved items." : "Removed from saved items.",
+          );
+        }}
         onDelete={handleDeletePost}
         onBlockPost={handleBlockPost}
         onReport={handleReportPost}

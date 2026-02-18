@@ -263,16 +263,6 @@ export const Toast = ({
                 </View>
               )}
 
-              {/* Dismiss button (only when not loading) */}
-              {toast.type !== "loading" && (
-                <Pressable onPress={handleDismiss} style={[styles.closeButton, { backgroundColor: timerBackground }]}>
-                  <Ionicons
-                    name="close"
-                    size={14}
-                    color={theme.colors.text.subtle}
-                  />
-                </Pressable>
-              )}
             </View>
           </View>
         </ToastWrapper>
@@ -317,8 +307,9 @@ export const ToastContainer = ({ toasts, onDismiss }: ToastContainerProps) => {
 const styles = StyleSheet.create((theme) => ({
   container: {
     position: "absolute",
-    left: 48,
-    right: 48,
+    left: 0,
+    right: 0,
+    alignItems: "center",
     zIndex: 9999,
   },
   blurContainer: {
@@ -340,7 +331,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   textContainer: {
-    flex: 1,
+    flexShrink: 1,
   },
   rightSection: {
     flexDirection: "row",

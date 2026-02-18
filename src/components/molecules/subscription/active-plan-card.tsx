@@ -7,12 +7,13 @@ import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
 type ActivePlanCardProps = {
-  /** Current plan tier: Free, Trusted, Established, Distinguished */
   planTitle: string;
-  /** User's MIRAGE balance */
   balance: number;
-  /** User's MIRAGE reserve */
   reserve: number;
+  autoRenew?: boolean;
+  subscriptionExpiry?: number;
+  autoRenewLoading?: boolean;
+  onToggleAutoRenew?: () => void;
 };
 
 // Plan colors for visual distinction
@@ -87,14 +88,32 @@ function InfoPopup({ visible, text, onClose }: InfoPopupProps) {
   );
 }
 
+function formatTimeUntil(unixSeconds: number): string | null {
+  const now = Math.floor(Date.now() / 1000);
+  const diff = unixSeconds - now;
+  if (diff <= 0) return null;
+  const days = Math.floor(diff / 86400);
+  const hours = Math.floor((diff % 86400) / 3600);
+  if (days > 0) return `${days}d ${hours}h`;
+  const mins = Math.floor((diff % 3600) / 60);
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+}
+
 export function ActivePlanCard({
   planTitle,
   balance,
   reserve,
+  autoRenew,
+  subscriptionExpiry,
+  autoRenewLoading,
+  onToggleAutoRenew,
 }: ActivePlanCardProps) {
   const { theme } = useUnistyles();
   const planColor = PLAN_COLORS[planTitle] || PLAN_COLORS.Free;
   const planIcon = PLAN_ICONS[planTitle] || PLAN_ICONS.Free;
+  const isFree = planTitle === "Free";
+  const renewalTime = subscriptionExpiry ? formatTimeUntil(subscriptionExpiry) : null;
 
   // Info popup state
   const [showBalanceInfo, setShowBalanceInfo] = useState(false);
@@ -145,9 +164,56 @@ export function ActivePlanCard({
             {planTitle}
           </Text>
         </Box>
+        {!isFree && (
+          <Pressable
+            onPress={autoRenewLoading ? undefined : onToggleAutoRenew}
+            disabled={autoRenewLoading}
+            hitSlop={8}
+          >
+            <Box
+              px="sm"
+              py="xs"
+              rounded="full"
+              style={{
+                backgroundColor: autoRenewLoading
+                  ? theme.colors.background.subtle
+                  : autoRenew
+                    ? `${planColor}20`
+                    : `${theme.colors.error[500]}15`,
+              }}
+            >
+              <Text
+                size="xs"
+                weight="semibold"
+                style={{
+                  color: autoRenewLoading
+                    ? theme.colors.text.subtle
+                    : autoRenew
+                      ? planColor
+                      : theme.colors.error[500],
+                }}
+              >
+                {autoRenewLoading ? "Processing..." : autoRenew ? "AUTO-RENEW" : "NOT RENEWING"}
+              </Text>
+            </Box>
+          </Pressable>
+        )}
       </Box>
 
-      {/* Divider */}
+      {!isFree && renewalTime && (
+        <Box direction="row" alignItems="center" gap="xs" mt="sm">
+          <Icon
+            icon={Ionicons}
+            name="time-outline"
+            size={14}
+            color={autoRenew ? theme.colors.text.subtle : theme.colors.error[500]}
+          />
+          <Text size="xs" style={{ color: autoRenew ? theme.colors.text.subtle : theme.colors.error[500] }}>
+            {autoRenew ? `Renews in ${renewalTime}` : `Expires in ${renewalTime}`}
+          </Text>
+        </Box>
+      )}
+
       <Divider style={styles.divider} size="extraThin" />
 
       {/* Balance & Reserve Stats */}

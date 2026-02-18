@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -25,11 +25,25 @@ export function InboxScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const router = useRouter();
+  const { fromNotification } = useLocalSearchParams<{
+    fromNotification?: string;
+  }>();
   const isLoggedIn = !!useAuthStore((s) => s.user);
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
   const markAsViewed = useInboxStore((s) => s.markAsViewed);
   const lastViewedAt = useInboxStore((s) => s.lastViewedAt);
   const viewedAtOnEntry = useRef(lastViewedAt);
+  const listRef = useRef<FlatList<InboxReply>>(null);
+  const applyViewedTimestamp = useCallback(
+    (timestamp?: number) => {
+      const resolved =
+        typeof timestamp === "number" && timestamp > 0
+          ? timestamp
+          : Math.floor(Date.now() / 1000);
+      markAsViewed(resolved);
+    },
+    [markAsViewed],
+  );
 
   const {
     data,
@@ -41,26 +55,35 @@ export function InboxScreen() {
     refetch,
   } = useInfiniteInbox({ limit: 25 });
 
-  const replies = useMemo(
-    () => data?.pages?.flatMap((page) => page?.replies ?? []) ?? [],
-    [data],
-  );
+  const replies = useMemo(() => {
+    const items: InboxReply[] = [];
+    const seen = new Set<string>();
+    for (const page of data?.pages ?? []) {
+      for (const reply of page?.replies ?? []) {
+        if (!reply?.reply_id || seen.has(reply.reply_id)) continue;
+        seen.add(reply.reply_id);
+        items.push(reply);
+      }
+    }
+    return items;
+  }, [data]);
 
   useFocusEffect(
     useCallback(() => {
       viewedAtOnEntry.current = useInboxStore.getState().lastViewedAt;
-     markAsViewed();
+      markAsViewed();
       refetch();
       if (walletAddress) {
         markInboxViewed(walletAddress)
           .then((res) => {
-            markAsViewed(res.inbox_last_viewed_at);
+            applyViewedTimestamp(res.inbox_last_viewed_at);
           })
-         .catch(() => {});
+          .catch(() => {
+            applyViewedTimestamp();
+          });
       }
-      return () => {
-      };
-    }, [refetch, walletAddress, markAsViewed]),
+      return () => {};
+    }, [applyViewedTimestamp, refetch, walletAddress, markAsViewed]),
   );
 
   useEffect(() => {
@@ -68,6 +91,14 @@ export function InboxScreen() {
       markRepliesAsNotified(replies.map((r) => r.reply_id));
     }
   }, [replies]);
+
+  useEffect(() => {
+    if (!fromNotification) return;
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    });
+    refetch();
+  }, [fromNotification, refetch]);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -188,6 +219,7 @@ export function InboxScreen() {
       </View>
 
       <FlatList
+        ref={listRef}
         data={replies}
         renderItem={renderItem}
         keyExtractor={keyExtractor}

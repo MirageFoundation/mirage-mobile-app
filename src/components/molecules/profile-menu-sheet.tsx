@@ -28,8 +28,6 @@ type ProfileMenuSheetProps = {
   onNetwork?: () => void;
   /** Callback when invite and earn is pressed */
   onInviteAndEarn?: () => void;
-  /** Callback when drafts is pressed */
-  onDrafts?: () => void;
   /** Callback when history is pressed */
   onHistory?: () => void;
   /** Callback when saved is pressed */
@@ -94,7 +92,6 @@ export const ProfileMenuSheet = forwardRef<
       onSubscription,
       onNetwork,
       onInviteAndEarn,
-      onDrafts,
       onHistory,
       onSaved,
       onOnlineStatusChange,
@@ -164,12 +161,6 @@ export const ProfileMenuSheet = forwardRef<
       dismiss();
       onInviteAndEarn?.();
     }, [dismiss, onInviteAndEarn]);
-
-    const handleDrafts = useCallback(() => {
-      triggerHaptic("light");
-      dismiss();
-      onDrafts?.();
-    }, [dismiss, onDrafts]);
 
     const handleHistory = useCallback(() => {
       triggerHaptic("light");
@@ -252,12 +243,6 @@ export const ProfileMenuSheet = forwardRef<
               iconName="gift-outline"
               title="Invite a Friend"
               onPress={handleInviteAndEarn}
-            />
-
-            <MenuItem
-              iconName="document-text-outline"
-              title="Drafts"
-              onPress={handleDrafts}
             />
 
             <MenuItem

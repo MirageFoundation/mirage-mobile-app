@@ -1,16 +1,15 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Linking, View } from "react-native";
+import { AppState, View, type AppStateStatus } from "react-native";
+
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import {
-  queryKeys,
   useUserFollowed,
-  useUserStatus,
 } from "@/src/api";
+
 import {
 AdultContentPopup,
 ConfirmationPopup,
@@ -20,11 +19,10 @@ type Post,
  type PostOptionsSheetRef,
  ReportSheet,
  type ReportSheetRef,
- SideMenu,
- type SideMenuRef,
 UpdateBanner,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
+import { useSideMenu } from "@/src/providers/side-menu-provider";
 import {
   useAuthGuard,
   useBlockHandler,
@@ -40,6 +38,7 @@ import {
 import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
+import { HEADER_HEIGHT } from "@/src/providers/scroll-animation-context";
 import { useToast } from "@/src/providers/toast-provider";
 import { HomeTabbedFeed, type HomeTabbedFeedRef } from "./home/home-tabbed-feed";
 import { useHomePostCardStore } from "./home/home-post-card-store";
@@ -55,25 +54,60 @@ export function HomeScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const queryClient = useQueryClient();
   const {
     headerAnimatedStyle,
-    registerScrollRef,
-    registerRefreshCallback,
-    registerScrollToTopCallback,
+    showBars,
   } = useScrollAnimationContext();
   const { requireAuth } = useAuthGuard();
   const toast = useToast();
   const easUpdate = useEasUpdate();
 
-  const { data: userStatus, refetch: refetchUserStatus } = useUserStatus();
+
+  const backgroundTimeRef = useRef<number | null>(null);
+  const [isFeedRefreshing, setIsFeedRefreshing] = useState(false);
+
+  const handleRefreshingChange = useCallback((refreshing: boolean) => {
+    setIsFeedRefreshing(refreshing);
+  }, []);
+
+  useEffect(() => {
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      if (nextState === "background" || nextState === "inactive") {
+        if (!backgroundTimeRef.current) {
+          backgroundTimeRef.current = Date.now();
+        }
+        return;
+      }
+      if (nextState === "active" && backgroundTimeRef.current) {
+        const duration = Date.now() - backgroundTimeRef.current;
+        backgroundTimeRef.current = null;
+        if (duration >= 15 * 60 * 1000) {
+          tabbedFeedRef.current?.scrollToTop();
+          tabbedFeedRef.current?.refresh();
+        }
+      }
+    };
+    const sub = AppState.addEventListener("change", handleAppStateChange);
+    return () => sub.remove();
+  }, []);
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      showBars();
+      tabbedFeedRef.current?.scrollToTop();
+      tabbedFeedRef.current?.refresh();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, []);
+
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
-  const sideMenuRef = useRef<SideMenuRef>(null);
 
+  const { openSideMenu } = useSideMenu();
+
+  const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [feedTabIndex, setFeedTabIndex] = useState(0);
 
@@ -101,7 +135,7 @@ export function HomeScreen() {
   const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
   const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
   const currentUser = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
+
   const isInitializing = useAuthStore((s) => s.isInitializing);
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
 
@@ -159,65 +193,12 @@ export function HomeScreen() {
     setHasSeenAdultPrompt();
   }, [setAdultContent, setHasSeenAdultPrompt]);
 
-  const handleMenuPress = useCallback(() => {
-    refetchUserStatus();
-    sideMenuRef.current?.present();
-  }, [refetchUserStatus]);
-
-  const handleMenuSettings = useCallback(() => {
-    router.push("/settings");
-  }, [router]);
-
-  const handleMenuSubscription = useCallback(() => {
-    router.push("/subscription");
-  }, [router]);
-
-  const handleMenuSaved = useCallback(() => {
-    router.push("/saved-posts");
-  }, [router]);
-
-  const handleMenuHistory = useCallback(() => {
-    console.log("Navigate to history");
-  }, []);
-
-  const handleMenuDrafts = useCallback(() => {
-    console.log("Navigate to drafts");
-  }, []);
-
-  const handleMenuFollowing = useCallback(() => {
-    const id = currentUser?.walletAddress || currentUser?.username;
-    if (id) {
-      router.push(`/user-following/${id}`);
-    }
-  }, [router, currentUser?.walletAddress, currentUser?.username]);
-
-  const handleMenuInvite = useCallback(() => {
-    router.push("/invite-and-earn");
-  }, [router]);
-
-  const handleMenuQuests = useCallback(() => {
-    router.push("/quests");
-  }, [router]);
-
-  const handleMenuTopics = useCallback(() => {
-    router.push("/topics");
-  }, [router]);
-
-  const handleMenuHelp = useCallback(() => {
-    Linking.openURL("https://mirage.foundation/faq");
-  }, []);
-
-  const handleMenuAbout = useCallback(() => {
-    Linking.openURL("https://mirage.foundation");
-  }, []);
-
-  const handleMenuLogout = useCallback(async () => {
-    await logout();
-  }, [logout]);
+  const revealedPostsRef = useRef<Set<string>>(new Set());
 
   const handlePostPress = useCallback(
     (postId: string) => {
-      router.push(`/post/${postId}`);
+      const isRevealed = revealedPostsRef.current.has(postId);
+      router.push(`/post/${postId}${isRevealed ? '?reveal=true' : ''}`);
     },
     [router]
   );
@@ -378,26 +359,10 @@ export function HomeScreen() {
     setRevealedPosts((prev) => {
       const newSet = new Set(prev);
       newSet.add(postId);
+      revealedPostsRef.current = newSet;
       return newSet;
     });
-    router.push(`/post/${postId}?reveal=true`);
-  }, [router]);
-
-  const handleRefresh = useCallback(async () => {
-    await tabbedFeedRef.current?.refresh();
   }, []);
-
-  useEffect(() => {
-    registerRefreshCallback(handleRefresh);
-  }, [registerRefreshCallback, handleRefresh]);
-
-  const handleScrollToTop = useCallback(() => {
-    tabbedFeedRef.current?.scrollToTop();
-  }, []);
-
-  useEffect(() => {
-    registerScrollToTopCallback(handleScrollToTop);
-  }, [registerScrollToTopCallback, handleScrollToTop]);
 
   useEffect(() => {
     if (shouldScrollToTop) {
@@ -537,7 +502,7 @@ export function HomeScreen() {
 
       <FeedHeader
         title="Mirage"
-        onMenuPress={handleMenuPress}
+        onMenuPress={openSideMenu}
         onSearchPress={() => router.push("/search")}
         animatedStyle={headerAnimatedStyle}
         feedType={feedTabIndex === 0 ? "magic" : "latest"}
@@ -550,6 +515,7 @@ export function HomeScreen() {
         feedType="home"
         activeTabIndex={feedTabIndex}
       />
+
 
       <UpdateBanner
         status={easUpdate.status}
@@ -581,7 +547,7 @@ export function HomeScreen() {
         onFollowUser={handleFollowUserFromSheet}
         onFollowTopic={handleFollowTopic}
         onSave={handleSavePost}
-        isSaved={selectedPost ? useSavedPostsStore.getState().isPostSaved(selectedPost.id) : false}
+        isSaved={selectedPost ? savedPosts.some((p) => p.id === selectedPost.id) : false}
         onCopyText={handleCopyText}
         onReport={handleReport}
         onBlockUser={handleBlockUser}
@@ -622,21 +588,6 @@ export function HomeScreen() {
         onCancel={deleteHandler.cancelDelete}
       />
 
-      <SideMenu
-        ref={sideMenuRef}
-        onSettings={handleMenuSettings}
-        onSubscription={handleMenuSubscription}
-        onSaved={handleMenuSaved}
-        onHistory={handleMenuHistory}
-        onDrafts={handleMenuDrafts}
-        onFollowing={handleMenuFollowing}
-        onTopics={handleMenuTopics}
-        onInviteAndEarn={handleMenuInvite}
-        onQuests={handleMenuQuests}
-        onHelp={handleMenuHelp}
-        onAbout={handleMenuAbout}
-        onLogout={handleMenuLogout}
-      />
     </Box>
   );
 }

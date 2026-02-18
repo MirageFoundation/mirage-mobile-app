@@ -11,8 +11,10 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import * as Linking from "expo-linking";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Dimensions,
   Pressable,
   Animated as RNAnimated,
   View,
@@ -136,22 +138,28 @@ function extractImageUrls(content: string): {
 /**
  * Component to render an image in comment
  */
-const CommentImage = ({
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const MEDIA_HORIZONTAL_PADDING = 32;
+
+const CommentImage = memo(({
   url,
   onPress,
 }: {
   url: string;
-  onPress?: () => void;
+  onPress?: (url: string) => void;
 }) => {
   const { theme } = useUnistyles();
   const [hasError, setHasError] = useState(false);
+  const [mediaLoaded, setMediaLoaded] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(16 / 9);
 
+  const mediaSource = useMemo(() => ({ uri: url }), [url]);
+
   const MEDIA_MAX_HEIGHT = 450;
-  const containerWidth = 350;
+  const containerWidth = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
   const calculatedHeight = containerWidth / aspectRatio;
   const exceedsMaxHeight = calculatedHeight > MEDIA_MAX_HEIGHT;
-  const containerStyle = exceedsMaxHeight
+  const mediaWrapperStyle = exceedsMaxHeight
     ? { height: MEDIA_MAX_HEIGHT }
     : { aspectRatio };
 
@@ -171,37 +179,51 @@ const CommentImage = ({
   }
 
   return (
-    <Pressable
-      style={[commentImageStyles.container, containerStyle]}
-      onPress={() => {
-        if (onPress) {
-          triggerHaptic("selection");
-          onPress();
-        }
-      }}
-    >
-      <Image
-        source={{ uri: url }}
-        style={commentImageStyles.image}
-        contentFit="cover"
-        transition={200}
-        onLoad={({ source }) => {
-          if (source?.width && source?.height) {
-            setAspectRatio(source.width / source.height);
+    <View style={commentImageStyles.mediaContainer}>
+      <Pressable
+        style={[commentImageStyles.mediaWrapper, mediaWrapperStyle]}
+        onPress={() => {
+          if (onPress) {
+            triggerHaptic("selection");
+            onPress(url);
           }
         }}
-        onError={() => setHasError(true)}
-      />
-    </Pressable>
+      >
+        <Image
+          source={mediaSource}
+          style={commentImageStyles.image}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          recyclingKey={url}
+          onLoad={({ source }) => {
+            if (source?.width && source?.height) {
+              setAspectRatio(source.width / source.height);
+            }
+            setMediaLoaded(true);
+          }}
+          onError={() => setHasError(true)}
+        />
+        {!mediaLoaded && (
+          <View style={commentImageStyles.skeletonOverlay}>
+            <ActivityIndicator size="small" color="rgba(150,150,150,0.6)" />
+          </View>
+        )}
+      </Pressable>
+    </View>
   );
-};
+});
 const commentImageStyles = StyleSheet.create((theme) => ({
-  container: {
+  mediaContainer: {
     marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.xs,
     borderRadius: theme.radius.md,
     overflow: "hidden",
+  },
+  mediaWrapper: {
+    width: "100%",
     backgroundColor: theme.colors.background.subtle,
+    borderRadius: theme.radius.md,
+    overflow: "hidden",
   },
   image: {
     width: "100%",
@@ -217,9 +239,16 @@ const commentImageStyles = StyleSheet.create((theme) => ({
     marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.xs,
   },
+  skeletonOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.md,
+    zIndex: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 }));
 
-const CommentContent = ({ content }: { content: string }) => {
+const CommentContent = memo(({ content }: { content: string }) => {
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   const { text, imageUrls } = useMemo(
@@ -255,7 +284,7 @@ const CommentContent = ({ content }: { content: string }) => {
           <CommentImage
             key={`img-${index}`}
             url={url}
-            onPress={() => handleImagePress(url)}
+            onPress={handleImagePress}
           />
         ))}
       </View>
@@ -267,7 +296,7 @@ const CommentContent = ({ content }: { content: string }) => {
       />
     </>
   );
-};
+});
 
 export const CommentItem = ({
   comment,

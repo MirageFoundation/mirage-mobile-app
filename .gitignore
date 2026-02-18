@@ -47,3 +47,5 @@ reference
 build-*
 .otto
 .env
+
+.env.local

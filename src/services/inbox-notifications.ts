@@ -1,12 +1,17 @@
 import * as Notifications from "expo-notifications";
 import * as BackgroundFetch from "expo-background-fetch";
 import * as TaskManager from "expo-task-manager";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
+import { router } from "expo-router";
+import type { InfiniteData } from "@tanstack/react-query";
 
 import { api } from "@/src/api/client";
+import { queryKeys } from "@/src/api/read/query-keys";
 import type { InboxResponse } from "@/src/api/types";
+import { queryClient } from "@/src/providers/query-provider";
 import { storage } from "@/src/stores/mmkv-storage";
 import { useAuthStore } from "@/src/stores/auth-store";
+import { useInboxStore } from "@/src/stores/inbox-store";
 
 const TASK_NAME = "INBOX_NOTIFICATION_CHECK";
 const NOTIFIED_IDS_KEY = "inbox-notified-ids";
@@ -15,6 +20,15 @@ const SEEDED_KEY = "inbox-notified-seeded";
 const SEED_TIMESTAMP_KEY = "inbox-seed-timestamp";
 const MAX_NOTIFIED_IDS = 500;
 const FETCH_INTERVAL_SECONDS = 15 * 60;
+const FOREGROUND_INTERVAL_MS = FETCH_INTERVAL_SECONDS * 1000;
+const SIGNAL_THROTTLE_MS = 15_000;
+
+let isCheckInFlight = false;
+let lastSignalCheckAt = 0;
+let foregroundInterval: ReturnType<typeof setInterval> | null = null;
+let appStateSubscription: { remove(): void } | null = null;
+let unsubscribeInboxSignals: (() => void) | null = null;
+let notificationResponseSubscription: Notifications.Subscription | null = null;
 
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
@@ -52,6 +66,25 @@ function saveNotifiedIds(ids: Set<string>): void {
   storage.set(NOTIFIED_IDS_KEY, JSON.stringify(trimmed));
 }
 
+function seedInboxCache(walletAddress: string, inbox: InboxResponse): void {
+  const page = inbox.page || 1;
+  queryClient.setQueryData<InfiniteData<InboxResponse>>(
+    queryKeys.inboxInfinite(walletAddress),
+    (current) => {
+      if (!current) {
+        return { pages: [inbox], pageParams: [page] };
+      }
+      const pages = [...current.pages];
+      pages[0] = inbox;
+      const pageParams = current.pageParams.length
+        ? current.pageParams
+        : [page];
+      return { ...current, pages, pageParams };
+    },
+  );
+  queryClient.setQueryData(queryKeys.inbox(walletAddress, page), inbox);
+}
+
 export function markRepliesAsNotified(replyIds: string[]): void {
   if (replyIds.length === 0) return;
   const existing = getNotifiedIds();
@@ -64,6 +97,13 @@ export function markRepliesAsNotified(replyIds: string[]): void {
 function truncate(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
   return text.slice(0, maxLen - 1) + "…";
+}
+
+function getNotificationTitle(reply: InboxResponse["replies"][number]): string {
+  if (reply.type === "mention") {
+    return `@${reply.reply_username} mentioned you`;
+  }
+  return `@${reply.reply_username} replied`;
 }
 
 async function seedExistingReplies(walletAddress: string): Promise<void> {
@@ -86,7 +126,7 @@ async function seedExistingReplies(walletAddress: string): Promise<void> {
   }
 }
 
-async function checkAndNotify(): Promise<BackgroundFetch.BackgroundFetchResult> {
+async function performInboxCheck(): Promise<BackgroundFetch.BackgroundFetchResult> {
   try {
     const walletAddress = useAuthStore.getState().walletAddress;
     console.log("[InboxNotifications] walletAddress:", walletAddress);
@@ -114,6 +154,7 @@ async function checkAndNotify(): Promise<BackgroundFetch.BackgroundFetchResult> 
     });
 
     console.log("[InboxNotifications] Fetched replies:", inbox.replies?.length ?? 0);
+    seedInboxCache(walletAddress, inbox);
 
     if (!inbox.replies || inbox.replies.length === 0) {
       storage.set(LAST_CHECK_KEY, Date.now().toString());
@@ -121,6 +162,7 @@ async function checkAndNotify(): Promise<BackgroundFetch.BackgroundFetchResult> 
     }
 
     const notifiedIds = getNotifiedIds();
+    const lastViewedAt = useInboxStore.getState().lastViewedAt;
     console.log("[InboxNotifications] Already notified IDs count:", notifiedIds.size);
     const newReplies = inbox.replies.filter((r) => !notifiedIds.has(r.reply_id));
     console.log("[InboxNotifications] New replies to notify:", newReplies.length);
@@ -130,11 +172,27 @@ async function checkAndNotify(): Promise<BackgroundFetch.BackgroundFetchResult> 
       return BackgroundFetch.BackgroundFetchResult.NoData;
     }
 
+    const unreadReplies: InboxResponse["replies"][number][] = [];
     for (const reply of newReplies) {
+      const replyTimestamp = Math.max(0, Number(reply.reply_timestamp) || 0);
+      if (lastViewedAt > 0 && replyTimestamp <= lastViewedAt) {
+        notifiedIds.add(reply.reply_id);
+        continue;
+      }
+      unreadReplies.push(reply);
+    }
+
+    if (unreadReplies.length === 0) {
+      saveNotifiedIds(notifiedIds);
+      storage.set(LAST_CHECK_KEY, Date.now().toString());
+      return BackgroundFetch.BackgroundFetchResult.NoData;
+    }
+
+    for (const reply of unreadReplies) {
       console.log("[InboxNotifications] Scheduling notification for:", reply.reply_id);
       const id = await Notifications.scheduleNotificationAsync({
         content: {
-          title: `@${reply.reply_username} replied`,
+          title: getNotificationTitle(reply),
           body: truncate(reply.reply_content, 150),
           data: {
             rootPostId: reply.root_post_id,
@@ -160,8 +218,122 @@ async function checkAndNotify(): Promise<BackgroundFetch.BackgroundFetchResult> 
   }
 }
 
+async function runInboxCheck(
+  trigger: "background" | "foreground" | "manual" | "signal"
+): Promise<BackgroundFetch.BackgroundFetchResult> {
+  if (isCheckInFlight) {
+    return BackgroundFetch.BackgroundFetchResult.NoData;
+  }
+
+  if (trigger === "signal") {
+    const now = Date.now();
+    if (now - lastSignalCheckAt < SIGNAL_THROTTLE_MS) {
+      return BackgroundFetch.BackgroundFetchResult.NoData;
+    }
+    lastSignalCheckAt = now;
+  }
+
+  isCheckInFlight = true;
+  try {
+    return await performInboxCheck();
+  } finally {
+    isCheckInFlight = false;
+  }
+}
+
+function triggerForegroundCheck(): void {
+  runInboxCheck("foreground").catch((error) => {
+    console.error("[InboxNotifications] Foreground check failed:", error);
+  });
+}
+
+function startForegroundPolling(): void {
+  if (foregroundInterval) return;
+  foregroundInterval = setInterval(() => {
+    triggerForegroundCheck();
+  }, FOREGROUND_INTERVAL_MS);
+}
+
+function stopForegroundPolling(): void {
+  if (!foregroundInterval) return;
+  clearInterval(foregroundInterval);
+  foregroundInterval = null;
+}
+
+function subscribeAppState(): void {
+  if (appStateSubscription) return;
+  appStateSubscription = AppState.addEventListener("change", (nextState) => {
+    if (nextState === "active") {
+      triggerForegroundCheck();
+      startForegroundPolling();
+    } else {
+      stopForegroundPolling();
+    }
+  });
+
+  if (AppState.currentState === "active") {
+    triggerForegroundCheck();
+    startForegroundPolling();
+  }
+}
+
+function handleNotificationResponse(
+  response: Notifications.NotificationResponse | null
+): void {
+  if (!response) return;
+  try {
+    const notificationId = response.notification?.request?.identifier ?? `${Date.now()}`;
+    router.push({
+      pathname: "/inbox",
+      params: { fromNotification: notificationId },
+    });
+  } catch (error) {
+    console.error("[InboxNotifications] Failed to navigate from notification:", error);
+  }
+}
+
+function subscribeNotificationResponses(): void {
+  if (notificationResponseSubscription) return;
+  notificationResponseSubscription =
+    Notifications.addNotificationResponseReceivedListener((response) => {
+      handleNotificationResponse(response);
+    });
+
+  if (Platform.OS !== "android") {
+    Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        handleNotificationResponse(response);
+      })
+      .catch((error) => {
+        console.error(
+          "[InboxNotifications] Failed to read last notification response:",
+          error,
+        );
+      });
+  }
+}
+
+function subscribeInboxSignals(): void {
+  if (unsubscribeInboxSignals) return;
+  unsubscribeInboxSignals = useInboxStore.subscribe((state, prevState) => {
+    if (!prevState) return;
+    const lastViewedAt = state.lastViewedAt;
+    const hasNewTimestamp =
+      state.latestInboxTimestamp > prevState.latestInboxTimestamp &&
+      (lastViewedAt <= 0 || state.latestInboxTimestamp > lastViewedAt);
+    const hasUnreadIncrease =
+      state.unreadCount > prevState.unreadCount && state.unreadCount > 0;
+
+    if (hasNewTimestamp || hasUnreadIncrease) {
+      runInboxCheck("signal").catch((error) => {
+        console.error("[InboxNotifications] Signal check failed:", error);
+      });
+    }
+  });
+}
+
 TaskManager.defineTask(TASK_NAME, async () => {
-  return await checkAndNotify();
+  return await runInboxCheck("background");
 });
 
 export async function initInboxNotifications(): Promise<void> {
@@ -211,6 +383,10 @@ export async function initInboxNotifications(): Promise<void> {
       });
     }
 
+    subscribeInboxSignals();
+    subscribeAppState();
+    subscribeNotificationResponses();
+
     console.log("[InboxNotifications] Background fetch registered");
   } catch (error) {
     console.error("[InboxNotifications] Init failed:", error);
@@ -219,7 +395,7 @@ export async function initInboxNotifications(): Promise<void> {
 
 export async function runInboxCheckNow(): Promise<void> {
   console.log("[InboxNotifications] Manual check triggered");
-  const result = await checkAndNotify();
+  const result = await runInboxCheck("manual");
   console.log("[InboxNotifications] Manual check result:", result);
 }
 
@@ -247,7 +423,7 @@ export async function resetAndTestInboxNotification(): Promise<void> {
   storage.remove(NOTIFIED_IDS_KEY);
   storage.remove(LAST_CHECK_KEY);
   storage.set(SEEDED_KEY, "true");
-  const result = await checkAndNotify();
+  const result = await runInboxCheck("manual");
   console.log("[InboxNotifications] Reset+check result:", result);
 }
 

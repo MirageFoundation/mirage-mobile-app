@@ -1,9 +1,10 @@
 import { ContentWarningBadge, type ContentWarningType } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import { Ionicons } from "@expo/vector-icons";
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { hasSpoilers, parseSpoilers } from "@/src/utils/spoiler-parser";
 
 type PostCardContentProps = {
   title: string;
@@ -49,7 +50,7 @@ export const PostCardContent = memo(function PostCardContent({
         weight="bold"
         style={styles.title}
       >
-        {title}
+        {hasSpoilers(title) ? parseSpoilers(title) : title}
       </Text>
 
       {showUrlCard && extractedUrl && displayDomain && !shouldBlurContent && !bodyVideoUrl && (
