@@ -230,7 +230,7 @@ export const PostCard = memo(function PostCard({
         onFollowTopic={onFollowTopic}
         onMorePress={onMorePress}
         directFollowUser={directFollowUser}
-        showMoreButton={showMoreButton}
+        showMoreButton={showMoreButton || isOwnPost}
       />
 
       <PostCardContent
