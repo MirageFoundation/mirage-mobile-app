@@ -3,6 +3,7 @@ import { Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { logPress } from "@/src/utils/press-logger";
 import { setLastPressedPostY } from "@/src/utils/post-transition";
+import { usePreferencesStore } from "@/src/stores";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   Linking,
@@ -146,7 +147,8 @@ export const PostCard = memo(function PostCard({
     topic,
   } = post;
 
-  const shouldBlurContent = !!contentWarnings?.length && !contentRevealed;
+  const blurSensitiveMedia = usePreferencesStore((s) => s.blurSensitiveMedia);
+  const shouldBlurContent = blurSensitiveMedia && !!contentWarnings?.length && !contentRevealed;
 
   const resolvedContent = useMemo(
     () => resolvePostContent(body, media),
