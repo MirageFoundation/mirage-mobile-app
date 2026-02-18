@@ -20,6 +20,8 @@ import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { usePreferencesStore } from "@/src/stores";
 import { useAuthStore } from "@/src/stores";
+import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
+import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 
 function formatTimeShort(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -209,6 +211,7 @@ function FlashQuestSummaryItem({ quest }: { quest: FlashQuest }) {
 export function QuestsSummaryCard() {
   const { theme, rt } = useUnistyles();
   const router = useRouter();
+  const { showBars } = useScrollAnimationContext();
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
   const { data: nodeConfig } = useNodeConfig();
   const questsEnabled = nodeConfig?.quests_enabled ?? true;
@@ -258,10 +261,20 @@ export function QuestsSummaryCard() {
     router.push("/quests");
   }, [router]);
 
+  const triggerScrollToTop = useHomePostCardStore((s) => s.triggerScrollToTop);
+
+  useEffect(() => {
+    if (questsCardExpanded) {
+      setTimeout(() => triggerScrollToTop(), 100);
+    }
+  }, []);
+
   const handleToggleExpand = useCallback(() => {
     triggerHaptic("light");
+    showBars();
     setQuestsCardExpanded(!questsCardExpanded);
-  }, [questsCardExpanded, setQuestsCardExpanded]);
+    setTimeout(() => triggerScrollToTop(), 50);
+  }, [questsCardExpanded, setQuestsCardExpanded, showBars, triggerScrollToTop]);
 
   if (!isLoggedIn) return null;
   if (!questsEnabled) return null;
