@@ -286,11 +286,21 @@ function subscribeAppState(): void {
   }
 }
 
+const STALE_NOTIFICATION_MS = 5_000;
+
 function handleNotificationResponse(
   response: Notifications.NotificationResponse | null
 ): void {
   if (!response) return;
   try {
+    const responseDate = response.notification?.date;
+    if (responseDate) {
+      const ageMs = Date.now() - responseDate;
+      if (ageMs > STALE_NOTIFICATION_MS) {
+        console.log("[InboxNotifications] Ignoring stale notification response, age:", ageMs);
+        return;
+      }
+    }
     const notificationId = response.notification?.request?.identifier ?? `${Date.now()}`;
     router.push({
       pathname: "/inbox",
