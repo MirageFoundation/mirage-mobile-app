@@ -6,6 +6,7 @@
  */
 
 import * as SecureStore from "expo-secure-store";
+import * as Sentry from "@sentry/react-native";
 import { storage } from "@/src/stores/mmkv-storage";
 import {
   generateMnemonic,
@@ -96,6 +97,9 @@ class WalletService {
       return metadata;
     } catch (error) {
       if (error instanceof WalletError) throw error;
+      Sentry.captureException(error, {
+        tags: { action: "wallet_create" },
+      });
       throw new WalletError(`Failed to create wallet: ${error}`, WalletErrorCode.SECURE_STORE_ERROR);
     }
   }
@@ -177,6 +181,9 @@ class WalletService {
       return metadata;
     } catch (error) {
       if (error instanceof WalletError) throw error;
+      Sentry.captureException(error, {
+        tags: { action: "wallet_import" },
+      });
       throw new WalletError(`Failed to import wallet: ${error}`, WalletErrorCode.SECURE_STORE_ERROR);
     }
   }
@@ -263,6 +270,9 @@ class WalletService {
       return b64encode(signature);
     } catch (error) {
       if (error instanceof WalletError) throw error;
+      Sentry.captureException(error, {
+        tags: { action: "wallet_sign" },
+      });
       throw new WalletError(`Signing failed: ${error}`, WalletErrorCode.SIGNING_FAILED);
     }
   }
@@ -351,6 +361,9 @@ class WalletService {
       // Clear cached mnemonic
       this.cachedMnemonic = null;
     } catch (error) {
+      Sentry.captureException(error, {
+        tags: { action: "wallet_clear" },
+      });
       throw new WalletError(`Failed to clear wallet: ${error}`, WalletErrorCode.SECURE_STORE_ERROR);
     }
   }
@@ -391,6 +404,9 @@ class WalletService {
       return mnemonic;
     } catch (error) {
       console.error("[WalletService] Failed to get mnemonic:", error);
+      Sentry.captureException(error, {
+        tags: { action: "wallet_get_mnemonic" },
+      });
       return null;
     }
   }

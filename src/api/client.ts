@@ -1,4 +1,5 @@
 import axios, { type AxiosError, type AxiosInstance } from "axios";
+import * as Sentry from "@sentry/react-native";
 import { walletService } from "@/src/services/wallet-service";
 import { useInboxStore } from "@/src/stores/inbox-store";
 
@@ -86,6 +87,11 @@ class ApiClient {
   async failover(): Promise<void> {
     this.currentNodeIndex = (this.currentNodeIndex + 1) % this.nodeList.length;
     this.client.defaults.baseURL = this.getBaseUrl();
+    Sentry.addBreadcrumb({
+      category: "api",
+      message: `Failover to node: ${this.getBaseUrl()}`,
+      level: "warning",
+    });
     console.log(`[ApiClient] Failover to: ${this.getBaseUrl()}`);
   }
 
@@ -165,6 +171,18 @@ class ApiClient {
       const errorData = error?.response?.data;
       const errorMessage = error?.message;
       const status = error?.response?.status;
+      Sentry.addBreadcrumb({
+        category: "api",
+        message: `GET ${path} failed`,
+        level: "error",
+        data: { status, errorMessage, errorData },
+      });
+      if (status && status >= 500) {
+        Sentry.captureException(error, {
+          tags: { api_method: "GET", api_path: path },
+          extra: { status, errorData },
+        });
+      }
       console.error(`[ApiClient] GET ${path} failed`);
       console.error(`[ApiClient] Status:`, status);
       console.error(`[ApiClient] Error data:`, errorData);
@@ -187,6 +205,20 @@ class ApiClient {
       console.log(`[ApiClient] POST ${path} success:`, response.data);
       return response.data;
     } catch (error: any) {
+      const status = error?.response?.status;
+      const errorData = error?.response?.data;
+      Sentry.addBreadcrumb({
+        category: "api",
+        message: `POST ${path} failed`,
+        level: "error",
+        data: { status, errorData: errorData || error?.message },
+      });
+      if (status && status >= 500) {
+        Sentry.captureException(error, {
+          tags: { api_method: "POST", api_path: path },
+          extra: { status, errorData },
+        });
+      }
       console.error(
         `[ApiClient] POST ${path} failed:`,
         error?.response?.data || error?.message || error

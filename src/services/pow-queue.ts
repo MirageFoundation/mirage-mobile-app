@@ -16,6 +16,7 @@
 
 import { create } from "zustand";
 import { InteractionManager } from "react-native";
+import * as Sentry from "@sentry/react-native";
 import { cancelPow } from "@/src/wallet";
 
 export type PowActionType =
@@ -269,6 +270,12 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       currentCancelReject = null;
     nextAction.onSuccess?.(result);
 
+    Sentry.addBreadcrumb({
+      category: "pow",
+      message: `${nextAction.type} completed successfully`,
+      level: "info",
+      data: { actionId: nextAction.id, type: nextAction.type },
+    });
     set((s) => ({
       completedCount: s.completedCount + 1,
       lastError: null,
@@ -289,6 +296,10 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
         wasCancelled = true;
       } else {
         const err = error instanceof Error ? error : new Error(String(error));
+        Sentry.captureException(err, {
+          tags: { action: "pow_action", pow_type: nextAction.type },
+          extra: { actionId: nextAction.id, label: nextAction.label },
+        });
         nextAction.onRollback?.();
         nextAction.onError?.(err);
 

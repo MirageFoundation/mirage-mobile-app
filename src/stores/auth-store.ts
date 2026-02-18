@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { mmkvStorage } from "./mmkv-storage";
+import * as Sentry from "@sentry/react-native";
 import { walletService } from "@/src/services/wallet-service";
 import { getUserStatus } from "@/src/api/read/endpoints/users";
 import type { WalletMetadata } from "@/src/wallet";
@@ -134,6 +135,9 @@ export const useAuthStore = create<AuthState>()(
           const metadata = walletService.getWalletMetadata();
 
           if (metadata) {
+            Sentry.setUser({
+              id: metadata.address,
+            });
             set({
               isLoggedIn: true,
               walletAddress: metadata.address,
@@ -173,12 +177,20 @@ export const useAuthStore = create<AuthState>()(
               })
               .catch((apiError) => {
                 console.warn("[AuthStore] Failed to fetch user status from API:", apiError);
+                Sentry.addBreadcrumb({
+                  category: "auth",
+                  message: "Failed to fetch user status",
+                  level: "warning",
+                });
               });
 
             return;
           }
         } catch (error) {
           console.error("[AuthStore] Failed to initialize wallet:", error);
+          Sentry.captureException(error, {
+            tags: { action: "wallet_init" },
+          });
           set({
             isLoggedIn: false,
             walletAddress: null,
@@ -215,6 +227,9 @@ export const useAuthStore = create<AuthState>()(
           return mnemonic;
         } catch (error) {
           console.error("[AuthStore] Failed to create wallet:", error);
+          Sentry.captureException(error, {
+            tags: { action: "wallet_create" },
+          });
           throw error;
         } finally {
           set({ isCreatingWallet: false });
@@ -231,6 +246,14 @@ export const useAuthStore = create<AuthState>()(
 
           const metadata = await walletService.importWallet(mnemonic);
 
+          Sentry.setUser({
+            id: metadata.address,
+          });
+          Sentry.addBreadcrumb({
+            category: "auth",
+            message: "Wallet imported successfully",
+            level: "info",
+          });
           set({
             isLoggedIn: true,
             walletAddress: metadata.address,
@@ -246,6 +269,9 @@ export const useAuthStore = create<AuthState>()(
           });
         } catch (error) {
           console.error("[AuthStore] Failed to import wallet:", error);
+          Sentry.captureException(error, {
+            tags: { action: "wallet_import" },
+          });
           throw error;
         } finally {
           set({ isCreatingWallet: false });
@@ -279,8 +305,17 @@ export const useAuthStore = create<AuthState>()(
           await walletService.clearWallet();
         } catch (error) {
           console.error("[AuthStore] Failed to clear wallet:", error);
+          Sentry.captureException(error, {
+            tags: { action: "wallet_clear" },
+          });
         }
 
+        Sentry.setUser(null);
+        Sentry.addBreadcrumb({
+          category: "auth",
+          message: "User logged out",
+          level: "info",
+        });
         set({
           user: null,
           isLoggedIn: false,
