@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react-native";
 import { EvilIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useRef } from "react";
@@ -390,6 +391,26 @@ const handleApiServerChange = useCallback(
               onPress={() => {
                 resetAndTestInboxNotification();
                 toast.success("Reset done, checking inbox...");
+              }}
+            />
+          ),
+        },
+      ],
+    },
+    {
+      title: "Sentry",
+      data: [
+        {
+          id: "sentry-test",
+          component: (
+            <SettingRow
+              type="navigate"
+              icon="bug-outline"
+              title="Test Sentry"
+              subtitle="Send a test error to Sentry"
+              onPress={() => {
+                Sentry.captureException(new Error("First error"));
+                toast.success("Test error sent to Sentry!");
               }}
             />
           ),
