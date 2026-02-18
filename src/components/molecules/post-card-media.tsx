@@ -347,6 +347,8 @@ export const PostCardMedia = memo(
               allowAutoplay={allowAutoplay}
               isVisible={isVisible}
               isPostDetail={isPostDetail}
+             shouldBlurContent={shouldBlurContent}
+             onRevealContent={onRevealContent}
             />
           </View>
         </View>

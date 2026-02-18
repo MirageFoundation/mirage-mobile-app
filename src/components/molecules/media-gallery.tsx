@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
@@ -47,6 +48,8 @@ type MediaGalleryProps = {
   allowAutoplay?: boolean;
   isVisible?: boolean;
   isPostDetail?: boolean;
+  shouldBlurContent?: boolean;
+  onRevealContent?: () => void;
 };
 
 const GalleryVideoItem = memo(function GalleryVideoItem({
@@ -261,6 +264,8 @@ export const MediaGallery = memo(function MediaGallery({
   allowAutoplay = true,
   isVisible = true,
   isPostDetail = false,
+  shouldBlurContent = false,
+  onRevealContent,
 }: MediaGalleryProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef<FlatList>(null);
@@ -335,7 +340,7 @@ export const MediaGallery = memo(function MediaGallery({
               screenActive={screenActive}
               onPress={() => onMediaPress?.(index)}
               onAspectRatioDetected={handleAspectRatioDetected}
-              allowAutoplay={allowAutoplay}
+              allowAutoplay={allowAutoplay && !shouldBlurContent}
               isVisible={isVisible}
               isPostDetail={isPostDetail}
             />
@@ -351,7 +356,7 @@ export const MediaGallery = memo(function MediaGallery({
         </View>
       );
     },
-    [onMediaPress, maxHeight, getHeightForIndex, screenActive, handleAspectRatioDetected, allowAutoplay, isVisible, isPostDetail],
+    [onMediaPress, maxHeight, getHeightForIndex, screenActive, handleAspectRatioDetected, allowAutoplay, isVisible, isPostDetail, shouldBlurContent],
   );
 
   const keyExtractor = useCallback(
@@ -369,6 +374,7 @@ export const MediaGallery = memo(function MediaGallery({
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
+        scrollEnabled={!shouldBlurContent}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         snapToInterval={GALLERY_WIDTH}
@@ -392,6 +398,31 @@ export const MediaGallery = memo(function MediaGallery({
             />
           ))}
         </View>
+      )}
+      {shouldBlurContent && (
+        <Pressable onPress={onRevealContent} style={galleryStyles.blurOverlay}>
+          {Platform.OS === "ios" ? (
+            <BlurView
+              intensity={80}
+              tint="dark"
+              style={galleryStyles.blurViewFill}
+            >
+              <View style={galleryStyles.revealTextContainer}>
+                <Ionicons name="eye-outline" size={24} color="#fff" />
+                <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
+                  Tap to reveal
+                </Text>
+              </View>
+            </BlurView>
+          ) : (
+            <View style={galleryStyles.androidBlurOverlay}>
+              <Ionicons name="eye-outline" size={24} color="#fff" />
+              <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
+                Tap to reveal
+              </Text>
+            </View>
+          )}
+        </Pressable>
       )}
     </View>
   );
@@ -478,5 +509,28 @@ const galleryStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     zIndex: 10,
+  },
+  blurOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 30,
+  },
+  blurViewFill: {
+    flex: 1,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  revealTextContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  androidBlurOverlay: {
+    flex: 1,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(5, 5, 5, 0.97)",
+    gap: 8,
   },
 });
