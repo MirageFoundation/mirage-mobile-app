@@ -85,7 +85,9 @@ export function TopicFeedScreen() {
   const handleSortChange = useCallback((value: "magic" | "newest") => {
     triggerHaptic("light");
     setSortBy(value);
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    requestAnimationFrame(() => {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    });
   }, []);
 
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);

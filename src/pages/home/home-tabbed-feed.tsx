@@ -61,13 +61,25 @@ export const HomeTabbedFeed = forwardRef<
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { scrollHandler, registerHomeRefresh, registerFollowingRefresh } = useScrollAnimationContext();
+  const { scrollHandler, registerHomeRefresh, registerFollowingRefresh, showBars } = useScrollAnimationContext();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
+  const prevTabIndexRef = useRef(activeTabIndex);
 
   const magicListRef = useRef<FlatList<Post>>(null);
   const latestListRef = useRef<FlatList<Post>>(null);
+
+  useEffect(() => {
+    if (prevTabIndexRef.current !== activeTabIndex) {
+      prevTabIndexRef.current = activeTabIndex;
+      showBars();
+      const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      });
+    }
+  }, [activeTabIndex, showBars]);
 
   const currentUser = useAuthStore((s) => s.user);
   const selectedContentTypes = usePreferencesStore(
