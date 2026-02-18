@@ -1,4 +1,4 @@
-import { Entypo, EvilIcons, Feather } from "@expo/vector-icons";
+import { Entypo, EvilIcons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { ResizeMode, Video } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -36,6 +36,7 @@ import { useDraftStore, type Community } from "@/src/stores/draft-store";
 import { useHomePostCardStore } from "./home/home-post-card-store";
 
 import { CommunitySelectionModal } from "./create/community-selection-modal";
+import { StickerPicker } from "@/src/components/molecules/sticker-picker";
 
 // Strict URL validation - requires protocol (http:// or https://)
 const URL_REGEX = /^https?:\/\/[^\s<>"{}|\\^`\[\]]+$/i;
@@ -105,6 +106,8 @@ export function CreateScreen() {
   const [showContentWarningModal, setShowContentWarningModal] = useState(false);
   const [selectedContentWarning, setSelectedContentWarning] =
     useState<ContentTag>("");
+  const [showStickerPicker, setShowStickerPicker] = useState(false);
+  const [selectedStickers, setSelectedStickers] = useState<string[]>([]);
 
   const [videoUploadState, setVideoUploadState] = useState<
     Record<string, { progress: number; uploading: boolean; done: boolean; error: string | null }>
@@ -270,6 +273,10 @@ export function CreateScreen() {
     try {
       const mediaUrls: string[] = [];
 
+      if (selectedStickers.length > 0) {
+        mediaUrls.push(...selectedStickers);
+      }
+
       if (draft.attachmentType === "image" && draft.mediaUris.length > 0) {
         try {
           console.log("[CreatePost] Uploading images...", draft.mediaUris.length);
@@ -347,6 +354,7 @@ export function CreateScreen() {
       console.log("[CreatePost] Post created successfully:", result);
 
       setSelectedContentWarning("");
+      setSelectedStickers([]);
       setShowLinkInput(false);
       setLinkUrl("");
       setLinkError(null);
@@ -512,6 +520,11 @@ export function CreateScreen() {
     triggerHaptic("selection");
     toast.info("Coming soon", "Polls will be available soon");
   }, [hasAttachment, toast]);
+
+  const handleStickerPress = useCallback(() => {
+    triggerHaptic("selection");
+    setShowStickerPicker(true);
+  }, []);
 
   const handleSpoilerPress = useCallback(() => {
     triggerHaptic("selection");
@@ -978,6 +991,38 @@ export function CreateScreen() {
 
           {renderVideoPreview()}
 
+          {selectedStickers.length > 0 && (
+            <Animated.View
+              entering={FadeIn.duration(200)}
+              exiting={FadeOut.duration(200)}
+              style={styles.videoPreviewContainer}
+            >
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}
+              >
+                {selectedStickers.map((url) => (
+                  <View key={url} style={[styles.videoPlayerWrapper, { height: 140, width: 140, backgroundColor: theme.colors.background.subtle }]}>
+                    <Image
+                      source={{ uri: url }}
+                      style={[styles.videoPlayer, { resizeMode: "contain" }]}
+                    />
+                    <Pressable
+                      onPress={() => setSelectedStickers((prev) => prev.filter((s) => s !== url))}
+                      style={[styles.videoRemoveButton, { top: 4, right: 4 }]}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <View style={styles.removeButtonInner}>
+                        <Feather name="x" size={18} color="#fff" />
+                      </View>
+                    </Pressable>
+                  </View>
+                ))}
+              </ScrollView>
+            </Animated.View>
+          )}
+
           <TextInput
             ref={bodyInputRef}
             style={[styles.bodyInput, { color: theme.colors.text.default }]}
@@ -1066,6 +1111,17 @@ export function CreateScreen() {
                     ? theme.colors.text.subtle
                     : theme.colors.text.default
                 }
+              />
+            </Pressable>
+
+            <Pressable
+              onPress={handleStickerPress}
+              style={styles.mediaButton}
+            >
+              <MaterialCommunityIcons
+                name="sticker-emoji"
+                size={22}
+                color={theme.colors.text.default}
               />
             </Pressable>
 
@@ -1176,6 +1232,14 @@ export function CreateScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <StickerPicker
+        visible={showStickerPicker}
+        onClose={() => setShowStickerPicker(false)}
+        onSelect={setSelectedStickers}
+        selectedStickers={selectedStickers}
+        multiSelect
+      />
 
       <TransactionProgressModal
         visible={txProgress.isVisible}
