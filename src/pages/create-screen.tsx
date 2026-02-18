@@ -228,14 +228,6 @@ export function CreateScreen() {
     console.log("[CreatePost] Received video from editor:", params.videoUri);
 
     const oldUri = params.replacingUri || null;
-    if (oldUri) {
-      const { removeMediaUri } = useDraftStore.getState();
-      removeMediaUri(oldUri);
-      VIDEO_UPLOADS.delete(oldUri);
-      setVideoUploadState((prev) => { const next = { ...prev }; delete next[oldUri]; return next; });
-      VIDEO_META.delete(oldUri);
-    }
-
     const origUri = params.originalVideoUri ?? params.videoUri;
     const w = params.videoWidth ? parseInt(params.videoWidth) : 1920;
     const h = params.videoHeight ? parseInt(params.videoHeight) : 1080;
@@ -243,7 +235,15 @@ export function CreateScreen() {
     const te = params.trimEnd ? parseInt(params.trimEnd) : 0;
     VIDEO_META.set(params.videoUri, { originalUri: origUri, width: w, height: h, trimStart: ts, trimEnd: te });
 
-    setAttachment("video", params.videoUri);
+    if (oldUri && oldUri !== params.videoUri) {
+      const { replaceMediaUri } = useDraftStore.getState();
+      replaceMediaUri(oldUri, params.videoUri);
+      VIDEO_UPLOADS.delete(oldUri);
+      setVideoUploadState((prev) => { const next = { ...prev }; delete next[oldUri]; return next; });
+      VIDEO_META.delete(oldUri);
+    } else {
+      setAttachment("video", params.videoUri);
+    }
     setIsVideoMuted(params.isMuted === "1");
     startVideoUpload(params.videoUri);
   }, [params.videoUri, params.originalVideoUri, params.replacingUri, params.videoWidth, params.videoHeight, params.trimStart, params.trimEnd, params.isMuted]);
@@ -373,6 +373,7 @@ export function CreateScreen() {
 
       setTimeout(() => {
         txProgress.hideModal();
+       useHomePostCardStore.getState().setSkipNextRefresh(true);
         router.replace("/(tabs)/");
       }, 1000);
     } catch (error) {

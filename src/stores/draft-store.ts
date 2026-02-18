@@ -38,6 +38,7 @@ type DraftState = {
   setAttachment: (type: AttachmentType, uri?: string) => void;
   addMediaUri: (uri: string) => void;
   removeMediaUri: (uri: string) => void;
+ replaceMediaUri: (oldUri: string, newUri: string) => void;
   removeAttachment: () => void;
 };
 
@@ -107,6 +108,13 @@ export const useDraftStore = create<DraftState>()(
             },
           };
         }),
+      replaceMediaUri: (oldUri, newUri) =>
+        set((state) => ({
+          draft: {
+            ...state.draft,
+            mediaUris: state.draft.mediaUris.map((u) => u === oldUri ? newUri : u),
+          },
+        })),
       removeAttachment: () =>
         set((state) => ({
           draft: {

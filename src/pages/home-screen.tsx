@@ -94,6 +94,11 @@ export function HomeScreen() {
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
 
   useEffect(() => {
+    const switchToLatest = useHomePostCardStore.getState().skipNextRefresh;
+    if (switchToLatest) {
+      useHomePostCardStore.getState().setSkipNextRefresh(false);
+      setFeedTabIndex(1);
+    }
     const timer = setTimeout(() => {
       showBars();
       tabbedFeedRef.current?.scrollToTop();
