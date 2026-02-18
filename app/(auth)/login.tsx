@@ -22,12 +22,15 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { LinearGradient } from "expo-linear-gradient";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function LoginScreen() {
   const router = useRouter();
   const { theme, rt } = useUnistyles();
   const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
 
   const importWallet = useAuthStore((s) => s.importWallet);
   const setUserLevel = useAuthStore((s) => s.setUserLevel);
@@ -45,23 +48,33 @@ export default function LoginScreen() {
   const [activeServer, setActiveServer] = useState<ApiServer>(savedServer);
   const [showServerModal, setShowServerModal] = useState(false);
   const [switchingServer, setSwitchingServer] = useState<ApiServer | null>(null);
+  const [showRegPopup, setShowRegPopup] = useState(false);
+  const [isSwitchingReg, setIsSwitchingReg] = useState(false);
 
   const { servers } = useServerList();
 
   const isComplete = words.every((w) => w.length > 0);
+  const [nodeConfigData, setNodeConfigData] = useState<{ registration_enabled: boolean } | null>(null);
 
   useEffect(() => {
     apiClient.setBaseUrl(`https://${activeServer}`);
-    return () => {
-      apiClient.setBaseUrl(`https://${savedServer}`);
-    };
+    getNodeConfig()
+      .then((config) => setNodeConfigData(config))
+      .catch(() => setNodeConfigData(null));
   }, [activeServer]);
+
+  useEffect(() => {
+    return () => {
+      const currentServer = usePreferencesStore.getState().apiServer;
+      apiClient.setBaseUrl(`https://${currentServer}`);
+    };
+  }, []);
 
   const handleBack = useCallback(() => {
     triggerHaptic("selection");
-    apiClient.setBaseUrl(`https://${savedServer}`);
+    apiClient.setBaseUrl(`https://${usePreferencesStore.getState().apiServer}`);
     router.back();
-  }, [router, savedServer]);
+  }, [router]);
 
   const handleWordsChange = useCallback((newWords: string[]) => {
     setWords(newWords);
@@ -301,6 +314,7 @@ export default function LoginScreen() {
                       setSwitchingServer(server);
                       try {
                         apiClient.setBaseUrl(`https://${server}`);
+                        queryClient.clear();
                         await getNodeConfig();
                         setActiveServer(server);
                         setApiServer(server);
@@ -348,12 +362,123 @@ export default function LoginScreen() {
         </Pressable>
       </Modal>
 
+      <Modal
+        visible={showRegPopup}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRegPopup(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowRegPopup(false)}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.colors.background.default },
+            ]}
+          >
+            <View style={{ alignItems: "center", marginBottom: 12 }}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={48}
+                color={theme.colors.warning[500]}
+              />
+            </View>
+            <Text
+              size="lg"
+              weight="bold"
+              style={{ textAlign: "center", marginBottom: 10 }}
+            >
+              Registration Unavailable
+            </Text>
+            <Text
+              size="md"
+              style={{
+                textAlign: "center",
+                color: theme.colors.text.subtle,
+                marginBottom: 20,
+              }}
+            >
+              Account creation is not available on{" "}
+              <Text size="md" weight="semibold">
+                {activeServer}
+              </Text>
+              . Switch to{" "}
+              <Text size="md" weight="semibold">
+                {servers.find((s) => s !== activeServer) ?? servers[0]}
+              </Text>{" "}
+              to create an account.
+            </Text>
+            <Pressable
+              onPress={async () => {
+                const target = servers.find((s) => s !== activeServer) ?? servers[0];
+                setIsSwitchingReg(true);
+                try {
+                  apiClient.setBaseUrl(`https://${target}`);
+                  queryClient.clear();
+                  const config = await getNodeConfig();
+                  setActiveServer(target);
+                  setApiServer(target);
+                  setNodeConfigData(config);
+                  setShowRegPopup(false);
+                  toast.success(`Switched to ${target}`);
+                  if (config.registration_enabled) {
+                    router.replace("/(auth)/username");
+                  }
+                } catch (e) {
+                  apiClient.setBaseUrl(`https://${activeServer}`);
+                  toast.error(`Failed to connect to ${target}`);
+                } finally {
+                  setIsSwitchingReg(false);
+                }
+              }}
+              disabled={isSwitchingReg}
+              style={{ width: "100%", opacity: isSwitchingReg ? 0.7 : 1 }}
+            >
+              <LinearGradient
+                colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{
+                  height: 48,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 12,
+                }}
+              >
+                {isSwitchingReg ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "600" }}>
+                    Switch to {servers.find((s) => s !== activeServer) ?? servers[0]}
+                  </Text>
+                )}
+              </LinearGradient>
+            </Pressable>
+            <Pressable
+              onPress={() => setShowRegPopup(false)}
+              disabled={isSwitchingReg}
+              style={{ alignItems: "center", paddingTop: 12, opacity: isSwitchingReg ? 0.3 : 1 }}
+            >
+              <Text size="md" style={{ color: theme.colors.text.subtle }}>
+                Cancel
+              </Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
       {/* Footer */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.divider} />
         <Pressable
           onPress={() => {
             triggerHaptic("selection");
+            if (nodeConfigData && !nodeConfigData.registration_enabled) {
+              setShowRegPopup(true);
+              return;
+            }
             router.replace("/(auth)/username");
           }}
           style={styles.createAccountButton}
