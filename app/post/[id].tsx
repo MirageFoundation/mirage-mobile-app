@@ -662,10 +662,8 @@ export default function PostDetailScreen() {
       const pendingReplies = optimisticReplies[comment.id] ?? [];
       const existingReplies = comment.replies ?? [];
 
-      // Recursively apply to existing replies
       const processedReplies = existingReplies.map(applyOptimisticReplies);
 
-      // Add optimistic replies
       const allReplies = [...processedReplies, ...pendingReplies];
 
       return {
@@ -700,7 +698,9 @@ export default function PostDetailScreen() {
   // Merge API comments with locally added comments and apply vote overrides + optimistic replies
   // Filter hidden/blocked and sort by createdAt descending (latest first)
   const allComments = useMemo(() => {
-    const merged = [...localComments, ...comments];
+    const localIds = new Set(localComments.map((c) => c.id));
+    const dedupedComments = comments.filter((c) => !localIds.has(c.id));
+    const merged = [...localComments, ...dedupedComments];
     return filterComments(
       merged
         .map(applyOptimisticReplies)
@@ -1141,24 +1141,12 @@ export default function PostDetailScreen() {
       const parentId = replyingTo?.id ?? id;
       const replyingToUsername = replyingTo?.author.username;
 
-      let mediaUrl: string | null = null;
-      if (imageUri) {
-        try {
-          mediaUrl = await uploadImageAndGetUrl(imageUri);
-        } catch (error) {
-          toast.error(
-            "Image upload failed",
-            error instanceof Error ? error.message : "Please try again",
-          );
-          return;
-        }
-      } else if (gifUrl) {
-        mediaUrl = gifUrl;
-      }
-
-      let finalContent = text;
-      if (mediaUrl) {
-        finalContent = text.trim() ? `${mediaUrl}\n\n${text.trim()}` : mediaUrl;
+      const optimisticMediaUrl = imageUri || gifUrl || null;
+      let optimisticContent = text;
+      if (optimisticMediaUrl) {
+        optimisticContent = text.trim()
+          ? `${optimisticMediaUrl}\n\n${text.trim()}`
+          : optimisticMediaUrl;
       }
 
       const optimisticCommentId = `optimistic-${Date.now()}`;
@@ -1169,7 +1157,7 @@ export default function PostDetailScreen() {
           username: currentUser.username ?? "you",
           avatarSeed: currentUser.username ?? currentUser.id,
         },
-        content: finalContent,
+        content: optimisticContent,
         likes: 1,
         dislikes: 0,
         hasLiked: true,
@@ -1180,6 +1168,9 @@ export default function PostDetailScreen() {
       };
 
       const replyTarget = replyingTo;
+      const capturedImageUri = imageUri;
+      const capturedGifUrl = gifUrl;
+      const capturedText = text;
 
       setReplyingTo(null);
       setIsSubmitting(false);
@@ -1190,6 +1181,20 @@ export default function PostDetailScreen() {
         type: "comment",
         label: getActionLabel("comment"),
         execute: async () => {
+          let mediaUrl: string | null = null;
+          if (capturedImageUri) {
+            mediaUrl = await uploadImageAndGetUrl(capturedImageUri);
+          } else if (capturedGifUrl) {
+            mediaUrl = capturedGifUrl;
+          }
+
+          let finalContent = capturedText;
+          if (mediaUrl) {
+            finalContent = capturedText.trim()
+              ? `${mediaUrl}\n\n${capturedText.trim()}`
+              : mediaUrl;
+          }
+
           return commentMutateAsyncRef.current({
             parentId,
             content: finalContent,
