@@ -263,9 +263,17 @@ export const HomeTabbedFeed = forwardRef<
   }, [activeTabIndex]);
 
   const scrollToTopAndRefresh = useCallback(async () => {
-    scrollToTop();
+    const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
+    try {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    } catch {}
     await handleRefresh();
-  }, [scrollToTop, handleRefresh]);
+    requestAnimationFrame(() => {
+      try {
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      } catch {}
+    });
+  }, [activeTabIndex, handleRefresh]);
 
   useEffect(() => {
     const register = baseFeed === "home" ? registerHomeRefresh : registerFollowingRefresh;
