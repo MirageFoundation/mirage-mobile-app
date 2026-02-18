@@ -7,6 +7,7 @@ import {
   signCanonical,
 } from "@/src/wallet";
 
+import * as Sentry from "@sentry/react-native";
 import { getParameters } from "@/src/api/read/endpoints/parameters";
 import { useAuthStore } from "@/src/stores";
 
@@ -139,6 +140,12 @@ export async function buildSignedEnvelope<
     } catch (err) {
       const msg = String((err as Error)?.message || err || "");
       if (/exceeded \d+ attempts/i.test(msg)) {
+        Sentry.addBreadcrumb({
+          category: "pow",
+          message: "PoW attempt cap reached, retrying with fresh params",
+          level: "warning",
+          data: { difficulty, maxAttempts },
+        });
         console.log(
           "[PoW] Attempt cap reached; refreshing parameters and retrying once..."
         );
@@ -173,6 +180,10 @@ export async function buildSignedEnvelope<
           `[PoW] Complete (retry)! Found nonce=${pow} after ${powResult2.attempts} attempts in ${powResult2.computeTimeMs}ms`
         );
       } else {
+        Sentry.captureException(err, {
+          tags: { action: "pow_computation" },
+          extra: { difficulty, powBaseBits: params.pow_base_bits, powFactor: params.pow_factor },
+        });
         throw err;
       }
     }

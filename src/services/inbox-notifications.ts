@@ -5,6 +5,7 @@ import { AppState, Platform } from "react-native";
 import { router } from "expo-router";
 import type { InfiniteData } from "@tanstack/react-query";
 
+import * as Sentry from "@sentry/react-native";
 import { api } from "@/src/api/client";
 import { queryKeys } from "@/src/api/read/query-keys";
 import type { InboxResponse } from "@/src/api/types";
@@ -123,6 +124,11 @@ async function seedExistingReplies(walletAddress: string): Promise<void> {
     console.log("[InboxNotifications] Seeded existing replies, won't spam on first run");
   } catch (error) {
     console.error("[InboxNotifications] Seed failed:", error);
+    Sentry.addBreadcrumb({
+      category: "notifications",
+      message: "Inbox seed failed",
+      level: "error",
+    });
   }
 }
 
@@ -214,6 +220,9 @@ async function performInboxCheck(): Promise<BackgroundFetch.BackgroundFetchResul
     return BackgroundFetch.BackgroundFetchResult.NewData;
   } catch (error) {
     console.error("[InboxNotifications] Check failed:", error);
+    Sentry.captureException(error, {
+      tags: { action: "inbox_check" },
+    });
     return BackgroundFetch.BackgroundFetchResult.Failed;
   }
 }
@@ -289,6 +298,9 @@ function handleNotificationResponse(
     });
   } catch (error) {
     console.error("[InboxNotifications] Failed to navigate from notification:", error);
+    Sentry.captureException(error, {
+      tags: { action: "notification_navigate" },
+    });
   }
 }
 
@@ -390,6 +402,9 @@ export async function initInboxNotifications(): Promise<void> {
     console.log("[InboxNotifications] Background fetch registered");
   } catch (error) {
     console.error("[InboxNotifications] Init failed:", error);
+    Sentry.captureException(error, {
+      tags: { action: "inbox_init" },
+    });
   }
 }
 
