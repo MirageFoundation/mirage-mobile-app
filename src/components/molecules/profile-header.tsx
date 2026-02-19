@@ -216,13 +216,15 @@ export const ProfileHeaderBar = ({
               </Text>
             </AnimatedPressable>
           )}
-          <IconButton
-            name="ellipsis-horizontal"
-            size="md"
-            color="#FFFFFF"
-            onPress={onMenuPress}
-            style={styles.iconButton}
-          />
+          {!isOwnProfile && (
+            <IconButton
+              name="ellipsis-horizontal"
+              size="md"
+              color="#FFFFFF"
+              onPress={onMenuPress}
+              style={styles.iconButton}
+            />
+          )}
         </Box>
       </Box>
     </Animated.View>
