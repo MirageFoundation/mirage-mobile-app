@@ -193,10 +193,10 @@ export function CreateScreen() {
   }, [showLinkInput, draft.attachmentType]);
 
   useEffect(() => {
-    const showSubscription = Keyboard.addListener("keyboardDidShow", () => {
+    const showSubscription = Keyboard.addListener("keyboardWillShow", () => {
       setKeyboardVisible(true);
     });
-    const hideSubscription = Keyboard.addListener("keyboardDidHide", () => {
+    const hideSubscription = Keyboard.addListener("keyboardWillHide", () => {
       setKeyboardVisible(false);
     });
 
