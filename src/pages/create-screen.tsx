@@ -766,7 +766,11 @@ export function CreateScreen() {
         </Button>
       </View>
 
-      <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+      <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === "android" ? -(TAB_BAR_HEIGHT + 24) : 0}
+        style={{ flex: 1 }}
+      >
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={[
@@ -1046,7 +1050,7 @@ export function CreateScreen() {
             {
               backgroundColor: theme.colors.background.default,
               paddingBottom: keyboardVisible
-                ? 8
+                ? (Platform.OS === "android" ? 0 : 8)
                 : Platform.OS === "android"
                   ? TAB_BAR_HEIGHT + 24
                   : insets.bottom + TAB_BAR_HEIGHT + 8,
