@@ -336,10 +336,11 @@ const handleApiServerChange = useCallback(
           id: "view-recovery-phrase",
           component: (
             <SettingRow
-              type="navigate"
+              type="value"
               icon="key-outline"
               title="Recovery Phrase"
               subtitle="View your wallet recovery phrase"
+              rightText=""
               onPress={() => router.push("/view-recovery-phrase")}
             />
           ),
