@@ -559,3 +559,17 @@ export function canonBaseClaimReward(params: ClaimRewardParams): Uint8Array {
     encString(101, params.questId)
   );
 }
+
+// --- MsgDeleteUser (Account Deletion) ---
+
+export interface DeleteUserParams extends BaseParams {
+  target: string;
+}
+
+export function canonBaseDeleteUser(params: DeleteUserParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgDeleteUser"),
+    encodeHeader(params),
+    encString(100, params.target)
+  );
+}

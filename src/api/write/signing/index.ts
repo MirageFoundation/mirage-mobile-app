@@ -47,6 +47,7 @@ export {
  canonBaseSetAutoRenewal,
  canonBaseReport,
   canonBaseClaimReward,
+  canonBaseDeleteUser,
  // Types
  type BaseParams,
  type SetUsernameParams,
@@ -64,6 +65,7 @@ export {
  type SetAutoRenewalParams,
  type ReportParams,
   type ClaimRewardParams,
+  type DeleteUserParams,
 } from "./canonical";
 
 // Envelope builder

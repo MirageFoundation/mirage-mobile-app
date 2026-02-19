@@ -50,6 +50,8 @@ export {
   useSetAutoRenewal,
   // Moderation
   useReport,
+  // Delete User
+  useDeleteUser,
 } from "./hooks";
 
 // Hook types
@@ -99,6 +101,8 @@ export {
   setAutoRenewal,
   // Moderation
   report,
+  // Delete User
+  deleteUser,
 } from "./endpoints";
 
 // Endpoint types
@@ -114,6 +118,7 @@ export type {
   SendTokensInput,
   SubscriptionLevel,
   ReportInput,
+  DeleteUserInput,
 } from "./endpoints";
 
 // ============================================
@@ -143,6 +148,7 @@ export {
   canonBaseUpgradeLevel,
   canonBaseSetAutoRenewal,
   canonBaseReport,
+  canonBaseDeleteUser,
   // Low-level utilities
   canonSignedWithPow,
   uvarint,
@@ -179,4 +185,5 @@ export type {
   UpgradeLevelParams,
   SetAutoRenewalParams,
   ReportParams,
+  DeleteUserParams,
 } from "./signing";

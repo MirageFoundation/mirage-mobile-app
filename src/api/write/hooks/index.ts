@@ -60,3 +60,6 @@ export type { UseReportOptions } from "./use-report";
 
 // Rewards
 export { useClaimReward } from "./use-claim-reward";
+
+// Delete User
+export { useDeleteUser } from "./use-delete-user";

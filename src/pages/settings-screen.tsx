@@ -329,6 +329,23 @@ const handleApiServerChange = useCallback(
         },
       ],
     },
+    {
+      title: "Danger Zone",
+      data: [
+        {
+          id: "delete-account",
+          component: (
+            <SettingRow
+              type="navigate"
+              icon="trash-outline"
+              title="Delete Account"
+              subtitle="Permanently delete your account"
+              onPress={() => router.push("/delete-account")}
+            />
+          ),
+        },
+      ],
+    },
     ...(__DEV__ ? [{
       title: "Notifications",
       data: [

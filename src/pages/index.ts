@@ -18,3 +18,4 @@ export { SavedPostsScreen } from "./saved-posts-screen";
 export { HistoryScreen } from "./history-screen";
 export { TopicsListScreen } from "./topics-list-screen";
 export { QuestsScreen } from "./quests-screen";
+export { DeleteAccountScreen } from "./delete-account-screen";
