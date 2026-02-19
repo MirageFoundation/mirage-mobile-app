@@ -723,7 +723,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 26
+                          update 27
                         </Text>
                         <Text
                           style={{
@@ -733,7 +733,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          onboarding fix and stickers fix
+                          delete account, profile changes, recovery phrase
+                          option
                         </Text>
                       </>
                     )}
@@ -774,7 +775,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 26
+                          update 27
                         </Text>
                         <Text
                           style={{
@@ -784,7 +785,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          onboarding fix and stickers fix
+                          delete account, profile changes, recovery phrase
+                          option
                         </Text>
                       </>
                     )}
