@@ -330,6 +330,23 @@ const handleApiServerChange = useCallback(
       ],
     },
     {
+      title: "Security",
+      data: [
+        {
+          id: "view-recovery-phrase",
+          component: (
+            <SettingRow
+              type="navigate"
+              icon="key-outline"
+              title="Recovery Phrase"
+              subtitle="View your wallet recovery phrase"
+              onPress={() => router.push("/view-recovery-phrase")}
+            />
+          ),
+        },
+      ],
+    },
+    {
       title: "Danger Zone",
       data: [
         {
