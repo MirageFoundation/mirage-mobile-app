@@ -835,6 +835,7 @@ useEffect(() => {
         isOwnProfile={true}
        onBackPress={handleBackPress}
        onMenuPress={handleMenuPress}
+       onSubscriptionPress={handleMenuSubscription}
      />
 
       <Animated.View
