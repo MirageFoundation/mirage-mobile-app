@@ -196,7 +196,15 @@ export function TopicFeedScreen() {
   }, [data, hiddenPostIds, blockedUserIds, hideDownvotedPosts]);
 
   const currentFirstPostId = posts[0]?.id ?? null;
-  const knownPostIds = useMemo(() => new Set(posts.map(p => p.id)), [posts]);
+  const latestTimestamp = useMemo(() => {
+    if (posts.length === 0) return null;
+    let max = 0;
+    for (const p of posts) {
+      const ts = typeof p.createdAt === "number" ? p.createdAt : new Date(p.createdAt).getTime();
+      if (ts > max) max = ts;
+    }
+    return max > 0 ? Math.floor(max / 1000) : null;
+  }, [posts]);
   const queryClient = useQueryClient();
 
   const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, getPrefetchedData, clearPrefetch } = useNewPostsChecker({
@@ -204,7 +212,7 @@ export function TopicFeedScreen() {
     by: sortBy === "magic" ? "magic" : "newest",
     enabled: true,
     currentFirstPostId,
-    knownPostIds,
+    latestTimestamp,
   });
 
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());

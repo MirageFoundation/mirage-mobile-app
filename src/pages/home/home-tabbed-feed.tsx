@@ -288,14 +288,22 @@ export const HomeTabbedFeed = forwardRef<
   const activeSortBy = activeTabIndex === 0 ? "magic" : "newest";
   const activePosts = activeTabIndex === 0 ? magicPosts : latestPosts;
   const currentFirstPostId = activePosts[0]?.id ?? null;
-  const knownPostIds = useMemo(() => new Set(activePosts.map(p => p.id)), [activePosts]);
+  const latestTimestamp = useMemo(() => {
+    if (activePosts.length === 0) return null;
+    let max = 0;
+    for (const p of activePosts) {
+      const ts = typeof p.createdAt === "number" ? p.createdAt : new Date(p.createdAt).getTime();
+      if (ts > max) max = ts;
+    }
+    return max > 0 ? Math.floor(max / 1000) : null;
+  }, [activePosts]);
 
   const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, getPrefetchedData, clearPrefetch } = useNewPostsChecker({
     feed: baseFeed,
     by: activeSortBy as "magic" | "newest",
     enabled: true,
     currentFirstPostId,
-    knownPostIds,
+    latestTimestamp,
   });
 
   useEffect(() => {
