@@ -8,8 +8,6 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { getGradientColor } from "@/src/components/molecules/profile-header";
 import {
-  useToggleFollowUser,
-  useToggleFollowTopic,
   useComment,
 } from "@/src/api/write";
 import {
@@ -186,11 +184,28 @@ export default function PostDetailScreen() {
   );
 
   // Follow/unfollow mutations
-  const toggleFollowMutation = useToggleFollowUser();
-  const toggleFollowTopicMutation = useToggleFollowTopic();
   const toast = useToast();
 
- const { handleFollowUser: handleFollowUserViaQueue } = useFollowHandler({});
+ const { handleFollowUser: handleFollowUserViaQueue, handleFollowTopic: handleFollowTopicViaQueue } = useFollowHandler({
+  onOptimisticFollowUser: (_userId, isFollowing) => {
+   setLocalPostUpdates((prev) => ({
+    ...prev,
+    isFollowing,
+   }));
+  },
+  onRollbackFollowUser: () => {
+   setLocalPostUpdates((prev) => ({
+    ...prev,
+    isFollowing: undefined,
+   }));
+  },
+  onOptimisticFollowTopic: (_topic, isFollowing) => {
+   setLocalTopicFollowed(isFollowing);
+  },
+  onRollbackFollowTopic: () => {
+   setLocalTopicFollowed(null);
+  },
+ });
 
   // Shared store for vote overrides (syncs with home/following screens)
   const setVoteOverride = useHomePostCardStore(
@@ -204,7 +219,6 @@ export default function PostDetailScreen() {
   const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(
     new Set(),
   );
-  const followLoadingRef = useRef<Set<string>>(new Set());
 
   // Global content moderation state (syncs to home screen)
   const globalHidePost = useContentModerationStore((s) => s.hidePost);
@@ -875,95 +889,18 @@ export default function PostDetailScreen() {
 
   const handleFollowPost = useCallback(() => {
     const currentPost = displayPost;
-    if (!currentPost || followLoadingRef.current.has(currentPost.author.id))
-      return;
+    if (!currentPost) return;
 
     const authorId = currentPost.author.id;
     const authorUsername = currentPost.author.username;
     const isCurrentlyFollowing =
       localPostUpdates.isFollowing ?? currentPost.isFollowing ?? false;
 
-    followLoadingRef.current.add(authorId);
-
-    setLocalPostUpdates((prev) => ({
-      ...prev,
-      isFollowing: !isCurrentlyFollowing,
-    }));
-
-    requireAuth(async () => {
-      const action = isCurrentlyFollowing ? "Unfollowing" : "Following";
-      const actionPast = isCurrentlyFollowing ? "Unfollowed" : "Followed";
-
-      const toastId = toast.loading(
-        `${action} @${authorUsername}`,
-        "Computing proof of work...",
-      );
-
-      setTimeout(async () => {
-        try {
-          await toggleFollowMutation.mutateAsync({
-            userAddress: authorId,
-            isCurrentlyFollowing,
-          });
-
-          toast.update(toastId, {
-            type: "success",
-            title: `${actionPast} @${authorUsername}`,
-            description: undefined,
-            duration: 3000,
-          });
-          setTimeout(() => toast.dismiss(toastId), 3000);
-        } catch (error: unknown) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          const isAlreadyFollowed = errorMessage
-            .toLowerCase()
-            .includes("already follow");
-          const isNotFollowing =
-            errorMessage.toLowerCase().includes("not following") ||
-            errorMessage.includes("not in followed");
-
-          if (isAlreadyFollowed) {
-            toast.update(toastId, {
-              type: "success",
-              title: `Already following @${authorUsername}`,
-              description: undefined,
-              duration: 3000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } else if (isNotFollowing) {
-            toast.update(toastId, {
-              type: "success",
-              title: `Already not following @${authorUsername}`,
-              description: undefined,
-              duration: 3000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } else {
-            setLocalPostUpdates((prev) => ({
-              ...prev,
-              isFollowing: isCurrentlyFollowing,
-            }));
-            console.error("Follow/unfollow failed:", error);
-            toast.update(toastId, {
-              type: "error",
-              title: `Failed to ${action.toLowerCase()} @${authorUsername}`,
-              description: "Please try again",
-              duration: 4000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 4000);
-          }
-        } finally {
-          followLoadingRef.current.delete(authorId);
-        }
-      }, 0);
-    });
+    handleFollowUserViaQueue(authorId, authorUsername, isCurrentlyFollowing);
   }, [
-    requireAuth,
     displayPost,
     localPostUpdates.isFollowing,
-    toggleFollowMutation,
-    toast,
+    handleFollowUserViaQueue,
   ]);
 
   const handleFollowTopic = useCallback(() => {
@@ -972,81 +909,12 @@ export default function PostDetailScreen() {
     const isCurrentlyFollowed =
       localTopicFollowed ?? followedTopics.includes(topic);
 
-    setLocalTopicFollowed(!isCurrentlyFollowed);
-
-    requireAuth(async () => {
-      const action = isCurrentlyFollowed ? "Unfollowing" : "Following";
-      const actionPast = isCurrentlyFollowed ? "Unfollowed" : "Now following";
-
-      // Show loading toast
-      const toastId = toast.loading(
-        `${action} #${topic}`,
-        "Computing proof of work...",
-      );
-
-      // Use setTimeout to allow toast to render before heavy operations
-      setTimeout(async () => {
-        try {
-          await toggleFollowTopicMutation.mutateAsync({
-            topic,
-            isCurrentlyFollowing: isCurrentlyFollowed,
-          });
-
-          // Update to success
-          toast.update(toastId, {
-            type: "success",
-            title: `${actionPast} #${topic}`,
-            description: undefined,
-            duration: 3000,
-          });
-          setTimeout(() => toast.dismiss(toastId), 3000);
-        } catch (error: unknown) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          const isAlreadyFollowed = errorMessage
-            .toLowerCase()
-            .includes("already follow");
-          const isNotFollowing =
-            errorMessage.toLowerCase().includes("not following") ||
-            errorMessage.includes("not in followed");
-
-          if (isAlreadyFollowed) {
-            toast.update(toastId, {
-              type: "success",
-              title: `Already following #${topic}`,
-              description: undefined,
-              duration: 3000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } else if (isNotFollowing) {
-            toast.update(toastId, {
-              type: "success",
-              title: `Already not following #${topic}`,
-              description: undefined,
-              duration: 3000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 3000);
-          } else {
-            setLocalTopicFollowed(isCurrentlyFollowed);
-            console.error("Follow/unfollow topic failed:", error);
-            toast.update(toastId, {
-              type: "error",
-              title: `Failed to ${action.toLowerCase()} #${topic}`,
-              description: "Please try again",
-              duration: 4000,
-            });
-            setTimeout(() => toast.dismiss(toastId), 4000);
-          }
-        }
-      }, 0);
-    });
+    handleFollowTopicViaQueue(topic, isCurrentlyFollowed);
   }, [
-    requireAuth,
     displayPost?.topic,
     followedTopics,
     localTopicFollowed,
-    toggleFollowTopicMutation,
-    toast,
+    handleFollowTopicViaQueue,
   ]);
 
   const handleRevealContent = useCallback(() => {
