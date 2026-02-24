@@ -194,16 +194,11 @@ export const PostCard = memo(function PostCard({
 
   const { theme } = useUnistyles();
   const MAX_BODY_LENGTH = 700;
-  const [expanded, setExpanded] = useState(false);
   const bodyText = resolvedContent.bodyWithoutUrl ?? "";
   const isTruncated = bodyText.length > MAX_BODY_LENGTH;
   const truncatedBody = isTruncated
     ? bodyText.slice(0, MAX_BODY_LENGTH)
     : bodyText;
-
-  const toggleExpanded = useCallback(() => {
-    setExpanded((prev) => !prev);
-  }, []);
 
   const handleCloseMediaPreview = useCallback(() => {
     setShowMediaPreview(false);
@@ -271,22 +266,13 @@ export const PostCard = memo(function PostCard({
         <View style={styles.body}>
           <MarkdownContent
             content={
-              !isPostDetail && isTruncated
+              isPostDetail
+                ? bodyText
+                : !isPostDetail && isTruncated
                 ? truncatedBody + "…"
-                : expanded || !isTruncated
-                  ? bodyText
-                  : bodyText.slice(0, MAX_BODY_LENGTH)
+                : bodyText
             }
           />
-          {isPostDetail && isTruncated && (
-            <Pressable onPress={toggleExpanded} style={styles.showMoreButton}>
-              <Text
-                style={{ color: "#3B82F6", fontSize: theme.typography.size.sm }}
-              >
-                {expanded ? "Show less" : "Show more"}
-              </Text>
-            </Pressable>
-          )}
         </View>
       )}
 
@@ -336,9 +322,5 @@ const styles = StyleSheet.create((theme) => ({
   body: {
     marginTop: theme.spacing.sm,
     lineHeight: 18,
-  },
-  showMoreButton: {
-    alignSelf: "flex-end",
-    marginBottom: theme.spacing.xs,
   },
 }));
