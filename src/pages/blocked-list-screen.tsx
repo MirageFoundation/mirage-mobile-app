@@ -392,16 +392,30 @@ export function BlockedListScreen() {
       type: "unblock",
       label,
       execute: async () => {
-        if (type === "user") {
-          return unblockUserMutation.mutateAsync(id);
-        } else if (type === "post") {
-          return unblockPostMutation.mutateAsync(id);
-        } else {
-          return unblockTopicMutation.mutateAsync(id);
+        const qk = walletAddress ? queryKeys.userBlocked(walletAddress) : null;
+        if (qk) {
+          await queryClient.cancelQueries({ queryKey: qk });
         }
+        let result;
+        if (type === "user") {
+          result = await unblockUserMutation.mutateAsync(id);
+        } else if (type === "post") {
+          result = await unblockPostMutation.mutateAsync(id);
+        } else {
+          result = await unblockTopicMutation.mutateAsync(id);
+        }
+        if (qk) {
+          await queryClient.cancelQueries({ queryKey: qk });
+          optimisticallyRemoveFromList(type, id);
+        }
+        return result;
       },
       onSuccess: () => {
-        refetch();
+        if (walletAddress) {
+          queryClient.cancelQueries({ queryKey: queryKeys.userBlocked(walletAddress) });
+          optimisticallyRemoveFromList(type, id);
+        }
+        setTimeout(() => refetch(), 3000);
       },
       onError: () => {
         if (previousData && walletAddress) {

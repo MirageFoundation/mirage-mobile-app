@@ -311,6 +311,9 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
         queryClient.invalidateQueries({
           queryKey: ["user", "posts", user.walletAddress],
         });
+        queryClient.invalidateQueries({
+          queryKey: ["user", "blocked", user.walletAddress],
+        });
       }
     }, [queryClient, user?.walletAddress, refetchUserStatus, refetchProfile]),
   );
