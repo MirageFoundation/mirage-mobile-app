@@ -415,7 +415,10 @@ export function BlockedListScreen() {
           queryClient.cancelQueries({ queryKey: queryKeys.userBlocked(walletAddress) });
           optimisticallyRemoveFromList(type, id);
         }
-        setTimeout(() => refetch(), 3000);
+        setTimeout(async () => {
+          await refetch();
+          optimisticallyRemoveFromList(type, id);
+        }, 3000);
       },
       onError: () => {
         if (previousData && walletAddress) {
