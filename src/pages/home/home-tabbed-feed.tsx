@@ -93,6 +93,7 @@ export const HomeTabbedFeed = forwardRef<
   const hideDownvotedPosts = usePreferencesStore((s) => s.hideDownvotedPosts);
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
+  const blockedTopicNames = useContentModerationStore((s) => s.blockedTopicNames);
 
   const followedUsers = useHomePostCardStore((s) => s.followedUsers);
   const followedTopics = useHomePostCardStore((s) => s.followedTopics);
@@ -161,10 +162,12 @@ export const HomeTabbedFeed = forwardRef<
 
       return transformedPosts.filter(
         (post) =>
-          !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id),
+          !hiddenPostIds.has(post.id) &&
+          !blockedUserIds.has(post.author.id) &&
+          !(post.topic && blockedTopicNames.has(post.topic.toLowerCase())),
       );
     },
-    [hiddenPostIds, blockedUserIds, hideDownvotedPosts, baseFeed, followedUsers, followedTopics, currentUser],
+    [hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, baseFeed, followedUsers, followedTopics, currentUser],
   );
 
   const magicPosts = useMemo(

@@ -37,6 +37,7 @@ type PostCardItemProps = {
   onRevealContent?: (postId: string) => void;
   onBlockUser?: (postId: string, authorId: string, authorUsername: string) => void;
   onBlockPost?: (postId: string) => void;
+  onBlockTopic?: (postId: string, topic: string) => void;
   onReport?: (postId: string) => void;
 };
 
@@ -76,6 +77,7 @@ onPostPress,
   onRevealContent,
   onBlockUser,
   onBlockPost,
+  onBlockTopic,
   onReport,
 }: PostCardItemProps) {
   const handlePostPress = useCallback(() => {
@@ -142,6 +144,12 @@ onPostPress,
     onBlockPost?.(post.id);
   }, [onBlockPost, post.id]);
 
+  const handleBlockTopic = useCallback(() => {
+    if (!post.topic) return;
+    logPress({ name: "post_block_topic", postId: post.id });
+    onBlockTopic?.(post.id, post.topic);
+  }, [onBlockTopic, post.id, post.topic]);
+
   const handleReport = useCallback(() => {
     logPress({ name: "post_report", postId: post.id });
     onReport?.(post.id);
@@ -165,6 +173,7 @@ onPostPress,
     onRevealContent={handleRevealContent}
     onBlockUser={handleBlockUser}
     onBlockPost={handleBlockPost}
+    onBlockTopic={handleBlockTopic}
     onReport={handleReport}
      onMediaPress={handlePostPress}
     contentRevealed={contentRevealed}

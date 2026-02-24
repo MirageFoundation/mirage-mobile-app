@@ -5,14 +5,14 @@
  */
 
 import { useCallback, useState } from "react";
-import { useBlockUser, useBlockPost } from "@/src/api/write";
+import { useBlockUser, useBlockPost, useBlockTopic } from "@/src/api/write";
 import {
   usePowQueueStore,
   generateActionId,
 } from "@/src/services/pow-queue";
 import { useAuthGuard } from "./use-auth-guard";
 
-export type BlockType = "user" | "post" | "comment";
+export type BlockType = "user" | "post" | "comment" | "topic";
 
 export interface BlockTarget {
   id: string;
@@ -29,6 +29,7 @@ export interface UseBlockHandlerReturn {
   requestBlockUser: (userAddress: string, username?: string) => void;
   requestBlockPost: (postId: string) => void;
   requestBlockComment: (commentId: string) => void;
+  requestBlockTopic: (topic: string) => void;
   confirmBlock: () => void;
   cancelBlock: () => void;
   isBlocking: boolean;
@@ -50,6 +51,7 @@ export function useBlockHandler(
 
   const blockUserMutation = useBlockUser();
   const blockPostMutation = useBlockPost();
+  const blockTopicMutation = useBlockTopic();
 
   const requestBlockUser = useCallback(
     (userAddress: string, username?: string) => {
@@ -93,6 +95,20 @@ export function useBlockHandler(
     [requireAuth]
   );
 
+  const requestBlockTopic = useCallback(
+    (topic: string) => {
+      requireAuth(() => {
+        setPendingBlock({
+          id: topic,
+          type: "topic",
+          label: `#${topic}`,
+        });
+        setShowConfirmation(true);
+      });
+    },
+    [requireAuth]
+  );
+
   const cancelBlock = useCallback(() => {
     setShowConfirmation(false);
     setPendingBlock(null);
@@ -116,6 +132,8 @@ export function useBlockHandler(
       execute: async () => {
         if (blockType === "user") {
           return blockUserMutation.mutateAsync(targetId);
+        } else if (blockType === "topic") {
+          return blockTopicMutation.mutateAsync(targetId);
         } else {
           return blockPostMutation.mutateAsync(targetId);
         }
@@ -135,12 +153,13 @@ export function useBlockHandler(
         setPendingBlock(null);
       },
     });
-  }, [pendingBlock, enqueue, blockUserMutation, blockPostMutation, onSuccess, onError]);
+  }, [pendingBlock, enqueue, blockUserMutation, blockPostMutation, blockTopicMutation, onSuccess, onError]);
 
   return {
     requestBlockUser,
     requestBlockPost,
     requestBlockComment,
+    requestBlockTopic,
     confirmBlock,
     cancelBlock,
     isBlocking,

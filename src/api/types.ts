@@ -156,6 +156,7 @@ export interface UserFollowedResponse {
 export interface UserBlockedResponse {
   blocked_posts: string[]; // txhashes
   blocked_users: string[]; // addresses
+  blocked_topics?: string[]; // topic names
 }
 
 export interface PreferencesResponse {

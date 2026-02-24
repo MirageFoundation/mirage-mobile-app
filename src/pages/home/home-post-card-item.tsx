@@ -161,6 +161,13 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     getHandlers().onBlockPost?.(p.id);
   }, []);
 
+  const handleBlockTopic = useCallback(() => {
+    const p = postRef.current;
+    if (!p.topic) return;
+    logPress({ name: "post_block_topic", postId: p.id });
+    getHandlers().onBlockTopic?.(p.id, p.topic);
+  }, []);
+
   const handleReport = useCallback(() => {
     const p = postRef.current;
     logPress({ name: "post_report", postId: p.id });
@@ -210,6 +217,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
      onRevealContent={handleRevealContent}
      onBlockUser={handleBlockUser}
      onBlockPost={handleBlockPost}
+     onBlockTopic={handleBlockTopic}
      onReport={handleReport}
     onMediaPress={handlePostPress}
     contentRevealed={contentRevealed}

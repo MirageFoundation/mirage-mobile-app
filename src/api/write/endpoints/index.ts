@@ -39,6 +39,8 @@ export {
   unblockUser,
   blockPost,
   unblockPost,
+  blockTopic,
+  unblockTopic,
 } from "./social";
 
 // Tokens & Subscription

@@ -43,6 +43,8 @@ export {
   useUnblockUser,
   useBlockPost,
   useUnblockPost,
+  useBlockTopic,
+  useUnblockTopic,
 } from "./use-block";
 export type { UseBlockOptions } from "./use-block";
 

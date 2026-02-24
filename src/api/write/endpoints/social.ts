@@ -19,6 +19,8 @@ import {
   canonBaseUnblockUser,
   canonBaseBlockPost,
   canonBaseUnblockPost,
+  canonBaseBlockTopic,
+  canonBaseUnblockTopic,
 } from "../signing";
 import type { WriteResponse, PoWProgressCallback } from "../signing";
 import { withPowRetry } from "../utils/retry-pow";
@@ -267,4 +269,48 @@ export async function unblockPost(
 
     return api.post<WriteResponse>("/core/unblock_post", payload);
   }, "unblockPost");
+}
+
+// ============================================
+// Block Topic
+// ============================================
+
+export async function blockTopic(
+  wallet: MirageWallet,
+  topic: string,
+  onPoWProgress?: PoWProgressCallback
+): Promise<WriteResponse> {
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseBlockTopic,
+      payloadFields: {
+        target: "",
+        topic: topic.toLowerCase(),
+      },
+      onPoWProgress,
+    });
+
+    return api.post<WriteResponse>("/core/block_topic", payload);
+  }, "blockTopic");
+}
+
+export async function unblockTopic(
+  wallet: MirageWallet,
+  topic: string,
+  onPoWProgress?: PoWProgressCallback
+): Promise<WriteResponse> {
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseUnblockTopic,
+      payloadFields: {
+        target: "",
+        topic: topic.toLowerCase(),
+      },
+      onPoWProgress,
+    });
+
+    return api.post<WriteResponse>("/core/unblock_topic", payload);
+  }, "unblockTopic");
 }

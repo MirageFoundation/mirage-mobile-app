@@ -10,6 +10,8 @@ import {
   unblockUser,
   blockPost,
   unblockPost,
+  blockTopic,
+  unblockTopic,
 } from "../endpoints/social";
 import type { PoWProgress } from "../signing";
 
@@ -46,6 +48,56 @@ export function useBlockUser(options: UseBlockOptions = {}) {
       // Blocking affects what content is shown
       queryClient.invalidateQueries({ queryKey: ["posts"] });
       queryClient.invalidateQueries({ queryKey: ["comments"] });
+    },
+  });
+}
+
+// ============================================
+// Topic Block Hooks
+// ============================================
+
+export function useBlockTopic(options: UseBlockOptions = {}) {
+  const queryClient = useQueryClient();
+  const { getWallet, address } = useWallet();
+
+  return useMutation({
+    mutationFn: async (topic: string) => {
+      const wallet = await getWallet();
+      return blockTopic(wallet, topic, options.onPoWProgress);
+    },
+    onSuccess: () => {
+      if (address) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.userBlocked(address),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.profile(address),
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+    },
+  });
+}
+
+export function useUnblockTopic(options: UseBlockOptions = {}) {
+  const queryClient = useQueryClient();
+  const { getWallet, address } = useWallet();
+
+  return useMutation({
+    mutationFn: async (topic: string) => {
+      const wallet = await getWallet();
+      return unblockTopic(wallet, topic, options.onPoWProgress);
+    },
+    onSuccess: () => {
+      if (address) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.userBlocked(address),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.profile(address),
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
     },
   });
 }

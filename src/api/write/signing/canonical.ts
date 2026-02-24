@@ -445,6 +445,31 @@ export function canonBaseUnblockUser(params: BlockUserParams): Uint8Array {
   );
 }
 
+// --- MsgBlockTopic / MsgUnblockTopic ---
+
+export interface BlockTopicParams extends BaseParams {
+  target: string;
+  topic: string;
+}
+
+export function canonBaseBlockTopic(params: BlockTopicParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgBlockTopic"),
+    encodeHeader(params),
+    encString(100, params.target),
+    encString(101, params.topic)
+  );
+}
+
+export function canonBaseUnblockTopic(params: BlockTopicParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgUnblockTopic"),
+    encodeHeader(params),
+    encString(100, params.target),
+    encString(101, params.topic)
+  );
+}
+
 // --- MsgSendTokens ---
 
 export interface SendTokensParams extends BaseParams {

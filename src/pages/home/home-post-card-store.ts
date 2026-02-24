@@ -39,6 +39,7 @@ type HomePostCardHandlers = {
   onRevealContent?: (postId: string) => void;
   onBlockUser?: (postId: string, authorId: string, authorUsername: string) => void;
   onBlockPost?: (postId: string) => void;
+  onBlockTopic?: (postId: string, topic: string) => void;
   onReport?: (postId: string) => void;
 };
 

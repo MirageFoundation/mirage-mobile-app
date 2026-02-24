@@ -95,9 +95,11 @@ export function TopicFeedScreen() {
 
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
+  const blockedTopicNames = useContentModerationStore((s) => s.blockedTopicNames);
   const hidePost = useContentModerationStore((s) => s.hidePost);
   const unhidePost = useContentModerationStore((s) => s.unhidePost);
   const blockUser = useContentModerationStore((s) => s.blockUser);
+  const blockTopicOptimistic = useContentModerationStore((s) => s.blockTopic);
 
   const selectedContentTypes = usePreferencesStore(
     (s) => s.selectedContentTypes,
@@ -193,9 +195,11 @@ export function TopicFeedScreen() {
 
     return transformedPosts.filter(
       (post) =>
-        !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id),
+        !hiddenPostIds.has(post.id) &&
+        !blockedUserIds.has(post.author.id) &&
+        !(post.topic && blockedTopicNames.has(post.topic.toLowerCase())),
     );
-  }, [data, hiddenPostIds, blockedUserIds, hideDownvotedPosts, currentUser]);
+  }, [data, hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, currentUser]);
 
   const currentFirstPostId = posts[0]?.id ?? null;
   const latestTimestamp = useMemo(() => {
@@ -298,10 +302,12 @@ export function TopicFeedScreen() {
         blockUser(pending.id);
       } else if (pending.type === "post") {
         hidePost(pending.id);
+      } else if (pending.type === "topic") {
+        blockTopicOptimistic(pending.id);
       }
     }
     blockHandler.confirmBlock();
-  }, [blockHandler, blockUser, hidePost]);
+  }, [blockHandler, blockUser, hidePost, blockTopicOptimistic]);
 
   const handleConfirmDelete = useCallback(() => {
     const pending = deleteHandler.pendingTarget;
@@ -360,6 +366,13 @@ export function TopicFeedScreen() {
   const handleBlockPostFromCard = useCallback(
     (postId: string) => {
       blockHandler.requestBlockPost(postId);
+    },
+    [blockHandler],
+  );
+
+  const handleBlockTopicFromCard = useCallback(
+    (_postId: string, topic: string) => {
+      blockHandler.requestBlockTopic(topic);
     },
     [blockHandler],
   );
@@ -670,6 +683,7 @@ export function TopicFeedScreen() {
     handleRevealContent,
     handleBlockUserFromCard,
     handleBlockPostFromCard,
+    handleBlockTopicFromCard,
     handleReportFromCard,
   });
 
@@ -687,6 +701,7 @@ export function TopicFeedScreen() {
       handleRevealContent,
       handleBlockUserFromCard,
       handleBlockPostFromCard,
+      handleBlockTopicFromCard,
       handleReportFromCard,
     };
   });
@@ -723,6 +738,8 @@ export function TopicFeedScreen() {
           ),
         onBlockPost: (postId) =>
           handlersRef.current.handleBlockPostFromCard(postId),
+        onBlockTopic: (postId, topic) =>
+          handlersRef.current.handleBlockTopicFromCard(postId, topic),
         onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
       });
     }, [setHandlers]),

@@ -48,6 +48,7 @@ type PostCardProps = {
   onSharePress?: () => void;
   onBlockUser?: () => void;
   onBlockPost?: () => void;
+  onBlockTopic?: () => void;
   onReport?: () => void;
   onRevealContent?: () => void;
   onMediaPress?: () => void;
@@ -115,6 +116,7 @@ export const PostCard = memo(function PostCard({
   onSharePress,
   onBlockUser,
   onBlockPost,
+  onBlockTopic,
   onReport,
   onRevealContent,
   onMediaPress: onMediaPressProp,
@@ -292,6 +294,8 @@ export const PostCard = memo(function PostCard({
         authorUsername={author.username}
         onBlockUser={onBlockUser}
         onBlockPost={onBlockPost}
+        onBlockTopic={onBlockTopic}
+        topic={post.topic}
         onReport={onReport}
         hideCommentAction={hideCommentAction}
         style={styles.actions}
