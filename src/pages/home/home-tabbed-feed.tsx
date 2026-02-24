@@ -155,14 +155,16 @@ export const HomeTabbedFeed = forwardRef<
         ? uniquePosts.filter((post) => post.user_vote !== -1)
         : uniquePosts;
 
-      const transformedPosts = transformApiPosts(filteredPosts);
+      const transformedPosts = transformApiPosts(filteredPosts, {
+        currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined,
+      });
 
       return transformedPosts.filter(
         (post) =>
           !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id),
       );
     },
-    [hiddenPostIds, blockedUserIds, hideDownvotedPosts, baseFeed, followedUsers, followedTopics],
+    [hiddenPostIds, blockedUserIds, hideDownvotedPosts, baseFeed, followedUsers, followedTopics, currentUser],
   );
 
   const magicPosts = useMemo(

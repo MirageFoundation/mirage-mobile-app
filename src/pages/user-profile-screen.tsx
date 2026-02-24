@@ -335,8 +335,10 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   }, [postsData, getTabType, hiddenPostIds, hiddenCommentIds]);
 
   const uiPosts = useMemo(
-    () => apiPosts.map((post) => transformApiPost(post)),
-    [apiPosts]
+    () => apiPosts.map((post) => transformApiPost(post, {
+      currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined,
+    })),
+    [apiPosts, currentUser]
   );
 
   const postsWithVotes = useMemo(() => {

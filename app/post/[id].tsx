@@ -409,7 +409,7 @@ export default function PostDetailScreen() {
   // Transform API post and comments to UI format
   const post = useMemo(() => {
     if (!commentsData?.root) return null;
-    return transformApiPost(commentsData.root, { followedUsers });
+    return transformApiPost(commentsData.root, { followedUsers, currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined });
   }, [commentsData, followedUsers]);
 
   useEffect(() => {

@@ -238,7 +238,7 @@ export default function UsernameScreen() {
         return;
       }
 
-      setHasUsername(true);
+      setHasUsername(true, username);
 
       triggerHaptic("success");
 

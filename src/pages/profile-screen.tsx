@@ -262,8 +262,10 @@ export function ProfileScreen() {
   }, [postsData, getTabType, hiddenPostIds, hiddenCommentIds, commentEditOverrides]);
 
   const uiPosts = useMemo(
-    () => apiPosts.map((post) => transformApiPost(post)),
-    [apiPosts],
+    () => apiPosts.map((post) => transformApiPost(post, {
+      currentUser: user ? { id: user.id, username: user.username } : undefined,
+    })),
+    [apiPosts, user],
   );
 
 const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {

@@ -2,7 +2,7 @@ import { useInfiniteUserPosts, useUserFollowed } from "@/src/api/read";
 import { transformApiPost } from "@/src/api/read/utils";
 import type { Post as ApiPost } from "@/src/api/types";
 import { Text } from "@/src/components/ui/primitives";
-import { useContentModerationStore } from "@/src/stores";
+import { useAuthStore, useContentModerationStore } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { memo, useCallback, useMemo, useRef } from "react";
 import { ActivityIndicator, FlatList, Pressable, View } from "react-native";
@@ -76,9 +76,12 @@ export const ProfilePostsList = memo(function ProfilePostsList({
 
   // Transform API posts to UI posts for PostCard
   // Note: isFollowing is computed per-post, not from followedUsers dependency
+  const currentUser = useAuthStore((s) => s.user);
   const uiPosts = useMemo(
-    () => apiPosts.map((post) => transformApiPost(post)),
-    [apiPosts]
+    () => apiPosts.map((post) => transformApiPost(post, {
+      currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined,
+    })),
+    [apiPosts, currentUser]
   );
 
   const postsById = useMemo(() => {

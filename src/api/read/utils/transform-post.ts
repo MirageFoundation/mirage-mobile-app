@@ -68,6 +68,8 @@ function mapTagToContentWarning(tag: string): ContentWarningType | null {
 export interface TransformPostOptions {
   /** List of user addresses that the current user is following */
   followedUsers?: string[];
+  /** Current user info for resolving own username on new posts */
+  currentUser?: { id: string; username: string | null };
 }
 
 /**
@@ -79,7 +81,7 @@ export function transformApiPost(
   apiPost: ApiPost,
   options: TransformPostOptions = {}
 ): UIPost {
-  const { followedUsers = [] } = options;
+  const { followedUsers = [], currentUser } = options;
 
   // Get content warnings from tag
   const contentWarnings: ContentWarningType[] = [];
@@ -104,8 +106,10 @@ export function transformApiPost(
     id: apiPost.post_id,
     author: {
       id: apiPost.user_id,
-      username: apiPost.username,
-      avatarSeed: apiPost.username, // Use username as seed for DiceBear
+      username: currentUser && currentUser.id === apiPost.user_id && currentUser.username && apiPost.username === apiPost.user_id
+        ? currentUser.username
+        : apiPost.username,
+      avatarSeed: apiPost.username,
     },
     title: apiPost.title,
     body: apiPost.content || undefined,

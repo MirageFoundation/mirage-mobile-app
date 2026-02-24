@@ -187,13 +187,15 @@ export function TopicFeedScreen() {
       ? uniquePosts.filter((post) => post.user_vote !== -1)
       : uniquePosts;
 
-    const transformedPosts = transformApiPosts(filteredPosts);
+    const transformedPosts = transformApiPosts(filteredPosts, {
+      currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined,
+    });
 
     return transformedPosts.filter(
       (post) =>
         !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id),
     );
-  }, [data, hiddenPostIds, blockedUserIds, hideDownvotedPosts]);
+  }, [data, hiddenPostIds, blockedUserIds, hideDownvotedPosts, currentUser]);
 
   const currentFirstPostId = posts[0]?.id ?? null;
   const latestTimestamp = useMemo(() => {
