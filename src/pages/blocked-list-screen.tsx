@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -15,12 +16,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { useUserBlocked, useUsernameFromAddress } from "@/src/api/read";
+import { queryKeys } from "@/src/api/read/query-keys";
+import type { UserBlockedResponse } from "@/src/api/types";
 import { useUnblockUser, useUnblockPost, useUnblockTopic } from "@/src/api/write";
 import { Avatar } from "@/src/components/atoms";
 import { ConfirmationPopup } from "@/src/components/molecules";
 import { Box, Icon, Text } from "@/src/components/ui/primitives";
-import { useToast } from "@/src/providers/toast-provider";
-import { useContentModerationStore } from "@/src/stores";
+import { useAuthStore, useContentModerationStore } from "@/src/stores";
+import {
+  usePowQueueStore,
+  generateActionId,
+} from "@/src/services/pow-queue";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
@@ -277,13 +283,15 @@ export function BlockedListScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const pagerRef = useRef<PagerView>(null);
-  const toast = useToast();
+  const queryClient = useQueryClient();
+  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
 
   const { data: blockedData, isLoading, refetch } = useUserBlocked();
   const unblockUserMutation = useUnblockUser();
   const unblockPostMutation = useUnblockPost();
   const unblockTopicMutation = useUnblockTopic();
   const unblockTopicOptimistic = useContentModerationStore((s) => s.unblockTopic);
+  const enqueue = usePowQueueStore((state) => state.enqueue);
 
   const [activeTab, setActiveTab] = useState<BlockedTab>("users");
   const [confirmTarget, setConfirmTarget] = useState<{
@@ -340,41 +348,73 @@ export function BlockedListScreen() {
     setConfirmTarget({ type: "topic", id: topic });
   }, []);
 
+  const optimisticallyRemoveFromList = useCallback(
+    (type: "user" | "post" | "topic", id: string) => {
+      if (!walletAddress) return;
+      const qk = queryKeys.userBlocked(walletAddress);
+      const prev = queryClient.getQueryData<UserBlockedResponse>(qk);
+      if (!prev) return;
+      const updated = { ...prev };
+      if (type === "user") {
+        updated.blocked_users = prev.blocked_users.filter((u) => u !== id);
+      } else if (type === "post") {
+        updated.blocked_posts = prev.blocked_posts.filter((p) => p !== id);
+      } else {
+        updated.blocked_topics = (prev.blocked_topics ?? []).filter((t) => t !== id);
+      }
+      queryClient.setQueryData(qk, updated);
+      return prev;
+    },
+    [walletAddress, queryClient],
+  );
+
   const handleConfirmUnblock = useCallback(() => {
     if (!confirmTarget) return;
     const { type, id } = confirmTarget;
     setConfirmTarget(null);
 
-    if (type === "user") {
-      toast
-        .promise(unblockUserMutation.mutateAsync(id), {
-          loading: "Unblocking user...",
-          success: "User unblocked",
-          error: "Failed to unblock user",
-        })
-        .then(() => refetch())
-        .catch(() => {});
-    } else if (type === "post") {
-      toast
-        .promise(unblockPostMutation.mutateAsync(id), {
-          loading: "Unblocking post...",
-          success: "Post unblocked",
-          error: "Failed to unblock post",
-        })
-        .then(() => refetch())
-        .catch(() => {});
-    } else if (type === "topic") {
+    const actionId = generateActionId();
+    const label =
+      type === "user"
+        ? "Unblocking user"
+        : type === "post"
+          ? "Unblocking post"
+          : "Unblocking topic";
+
+    if (type === "topic") {
       unblockTopicOptimistic(id);
-      toast
-        .promise(unblockTopicMutation.mutateAsync(id), {
-          loading: "Unblocking topic...",
-          success: "Topic unblocked",
-          error: "Failed to unblock topic",
-        })
-        .then(() => refetch())
-        .catch(() => {});
     }
-  }, [confirmTarget, unblockUserMutation, unblockPostMutation, unblockTopicMutation, unblockTopicOptimistic, toast, refetch]);
+
+    const previousData = optimisticallyRemoveFromList(type, id);
+
+    enqueue({
+      id: actionId,
+      type: "unblock",
+      label,
+      execute: async () => {
+        if (type === "user") {
+          return unblockUserMutation.mutateAsync(id);
+        } else if (type === "post") {
+          return unblockPostMutation.mutateAsync(id);
+        } else {
+          return unblockTopicMutation.mutateAsync(id);
+        }
+      },
+      onSuccess: () => {
+        refetch();
+      },
+      onError: () => {
+        if (previousData && walletAddress) {
+          queryClient.setQueryData(queryKeys.userBlocked(walletAddress), previousData);
+        }
+      },
+      onRollback: () => {
+        if (previousData && walletAddress) {
+          queryClient.setQueryData(queryKeys.userBlocked(walletAddress), previousData);
+        }
+      },
+    });
+  }, [confirmTarget, unblockUserMutation, unblockPostMutation, unblockTopicMutation, unblockTopicOptimistic, enqueue, refetch, optimisticallyRemoveFromList, walletAddress, queryClient]);
 
   const handleCancelUnblock = useCallback(() => {
     setConfirmTarget(null);

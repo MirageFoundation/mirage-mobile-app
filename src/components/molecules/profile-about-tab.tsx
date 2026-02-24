@@ -663,6 +663,7 @@ export function ProfileAboutTab({
 
   const blockedUsersCount = blockedData?.blocked_users?.length ?? 0;
   const blockedPostsCount = blockedData?.blocked_posts?.length ?? 0;
+  const blockedTopicsCount = blockedData?.blocked_topics?.length ?? 0;
 
   const isLoading =
     isLoadingPrefs || isLoadingSimilar || isLoadingProfile || isLoadingStatus;
@@ -673,7 +674,8 @@ export function ProfileAboutTab({
 
   const hasAlgoData =
     topics.length > 0 || authors.length > 0 || similar.length > 0;
-  const hasAnyData = hasAlgoData || profile || userStatus;
+  const hasBlockedData = blockedUsersCount > 0 || blockedPostsCount > 0 || blockedTopicsCount > 0;
+  const hasAnyData = hasAlgoData || profile || userStatus || (isOwnProfile && hasBlockedData);
 
   if (!hasAnyData && !isLoading) {
     return (
@@ -707,7 +709,7 @@ export function ProfileAboutTab({
 
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom + 40 }]}>
-      {isOwnProfile && (blockedUsersCount > 0 || blockedPostsCount > 0) && (
+      {isOwnProfile && (blockedUsersCount > 0 || blockedPostsCount > 0 || blockedTopicsCount > 0) && (
         <Pressable
           onPress={onBlockedPress}
           style={[
@@ -727,11 +729,12 @@ export function ProfileAboutTab({
               weight="medium"
               style={{ color: theme.colors.text.default }}
             >
-              Blocked Users & Posts
+              Blocked
             </Text>
             <Text size="sm" mode="subtle">
               {blockedUsersCount} user{blockedUsersCount !== 1 ? "s" : ""},{" "}
-              {blockedPostsCount} post{blockedPostsCount !== 1 ? "s" : ""}
+              {blockedPostsCount} post{blockedPostsCount !== 1 ? "s" : ""},{" "}
+              {blockedTopicsCount} topic{blockedTopicsCount !== 1 ? "s" : ""}
             </Text>
           </View>
           <Icon
