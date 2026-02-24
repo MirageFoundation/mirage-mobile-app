@@ -16,6 +16,7 @@ type UseNewPostsCheckerOptions = {
   enabled?: boolean;
   intervalMs?: number;
   currentFirstPostId?: string | null;
+  knownPostIds?: Set<string>;
 };
 
 export function useNewPostsChecker({
@@ -25,11 +26,13 @@ export function useNewPostsChecker({
   enabled = true,
   intervalMs = 30_000,
   currentFirstPostId = null,
+  knownPostIds,
 }: UseNewPostsCheckerOptions) {
   const [hasNewPosts, setHasNewPosts] = useState(false);
   const [newPostAvatars, setNewPostAvatars] = useState<NewPostAvatar[]>([]);
   const [newPostCount, setNewPostCount] = useState(0);
   const baselineIdRef = useRef<string | null>(null);
+  const knownIdsRef = useRef<Set<string>>(new Set());
   const hasNewPostsRef = useRef(false);
   const isFocused = useIsFocused();
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
@@ -42,21 +45,30 @@ export function useNewPostsChecker({
   }, [currentFirstPostId]);
 
   useEffect(() => {
+    if (knownPostIds && knownPostIds.size > 0 && !hasNewPostsRef.current) {
+      knownIdsRef.current = knownPostIds;
+    }
+  }, [knownPostIds]);
+
+  useEffect(() => {
     hasNewPostsRef.current = false;
     setHasNewPosts(false);
     setNewPostAvatars([]);
     setNewPostCount(0);
     prefetchedDataRef.current = null;
     baselineIdRef.current = currentFirstPostId;
+    if (knownPostIds) {
+      knownIdsRef.current = knownPostIds;
+    }
   }, [feed, by, topic]);
 
-  const extractNewPostInfo = useCallback((data: PostsResponse, baselineId: string | null): { avatars: NewPostAvatar[]; count: number } => {
-    if (!baselineId) return { avatars: [], count: 0 };
+  const extractNewPostInfo = useCallback((data: PostsResponse, known: Set<string>): { avatars: NewPostAvatar[]; count: number } => {
+    if (known.size === 0) return { avatars: [], count: 0 };
     const avatars: NewPostAvatar[] = [];
     const seen = new Set<string>();
     let count = 0;
     for (const post of data.posts) {
-      if (post.post_id === baselineId) break;
+      if (known.has(post.post_id)) continue;
       count++;
       if (!seen.has(post.user_id) && avatars.length < 3) {
         seen.add(post.user_id);
@@ -67,7 +79,7 @@ export function useNewPostsChecker({
   }, []);
 
   const checkForNewPosts = useCallback(async () => {
-    if (!baselineIdRef.current) return;
+    if (!baselineIdRef.current && knownIdsRef.current.size === 0) return;
     try {
       const result = await getPosts({
         limit: 20,
@@ -77,10 +89,9 @@ export function useNewPostsChecker({
         address: walletAddress ?? undefined,
         page: 1,
       });
-      const newestId = result.posts[0]?.post_id;
-      if (newestId && newestId !== baselineIdRef.current) {
+      const { avatars, count } = extractNewPostInfo(result, knownIdsRef.current);
+      if (count > 0) {
         prefetchedDataRef.current = result;
-        const { avatars, count } = extractNewPostInfo(result, baselineIdRef.current);
         setNewPostAvatars(avatars);
         setNewPostCount(count);
         if (!hasNewPostsRef.current) {
