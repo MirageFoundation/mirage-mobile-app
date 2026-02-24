@@ -1,6 +1,7 @@
 export { AuthSheet } from "./auth-sheet";
 export { FeedHeader } from "./feed-header";
 export { FeedTypeTabBar, FEED_TAB_BAR_HEIGHT } from "./feed-type-tab-bar";
+export { NewPostsButton } from "./new-posts-button";
 export { InviteCodesCard } from "./invite-codes-card";
 export { QuestsSummaryCard } from "./quests-summary-card";
 export { PostActions } from "./post-actions";

@@ -20,12 +20,14 @@ import {
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
 import {
+  queryKeys,
   transformApiPosts,
   useInfinitePosts,
   useUserFollowed,
 } from "@/src/api";
 import {
   ConfirmationPopup,
+  NewPostsButton,
   type Post,
   PostCardSkeletonList,
   PostOptionsSheet,
@@ -56,6 +58,7 @@ import {
   useSavedPostsStore,
 } from "@/src/stores";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNewPostsChecker } from "@/src/hooks/use-new-posts-checker";
 
 export function TopicFeedScreen() {
   const { id: topicName } = useLocalSearchParams<{ id: string }>();
@@ -191,6 +194,16 @@ export function TopicFeedScreen() {
         !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id),
     );
   }, [data, hiddenPostIds, blockedUserIds, hideDownvotedPosts]);
+
+  const currentFirstPostId = posts[0]?.id ?? null;
+  const queryClient = useQueryClient();
+
+  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, getPrefetchedData, clearPrefetch } = useNewPostsChecker({
+    topic: topicName,
+    by: sortBy === "magic" ? "magic" : "newest",
+    enabled: true,
+    currentFirstPostId,
+  });
 
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
@@ -416,6 +429,45 @@ export function TopicFeedScreen() {
       setIsManualRefreshing(false);
     }
   }, [refetch]);
+
+  const handleNewPostsPress = useCallback(async () => {
+    try {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    } catch {}
+
+    const postsQueryKey = queryKeys.posts({
+      limit: 20,
+      topic: topicName,
+      by: sortBy,
+      allowed_tags: allowedTags || undefined,
+      address: currentUser?.walletAddress,
+      page: undefined,
+    });
+
+    const prefetched = getPrefetchedData();
+    if (prefetched) {
+      queryClient.setQueryData(postsQueryKey, (oldData: any) => {
+        if (!oldData) {
+          return { pages: [prefetched], pageParams: [1] };
+        }
+        return {
+          ...oldData,
+          pages: [prefetched, ...oldData.pages.slice(1)],
+          pageParams: [1, ...oldData.pageParams.slice(1)],
+        };
+      });
+      clearPrefetch();
+    } else {
+      await handleRefresh();
+    }
+
+    requestAnimationFrame(() => {
+      try {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      } catch {}
+    });
+    dismissNewPosts();
+  }, [topicName, sortBy, allowedTags, currentUser?.walletAddress, queryClient, handleRefresh, dismissNewPosts, getPrefetchedData, clearPrefetch]);
 
   const handleItemVisible = useCallback((index: number) => {
     const totalLoaded = postsLengthRef.current;
@@ -826,6 +878,14 @@ export function TopicFeedScreen() {
         refreshControl={refreshControl}
         feedScreen="topic"
         onItemVisible={handleItemVisible}
+      />
+
+      <NewPostsButton
+        visible={hasNewPosts}
+        onPress={handleNewPostsPress}
+        topOffset={insets.top + 52}
+        avatars={newPostAvatars}
+        newPostCount={newPostCount}
       />
 
       <PostOptionsSheet

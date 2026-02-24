@@ -13,6 +13,7 @@ import {
 import {
   ConfirmationPopup,
   FeedHeader,
+  NewPostsButton,
   PostOptionsSheet,
   type PostOptionsSheetRef,
   ReportSheet,
@@ -45,9 +46,25 @@ export function FollowingScreen() {
   } = useScrollAnimationContext();
   const { requireAuth, isLoggedIn } = useAuthGuard();
   const toast = useToast();
+  const { showBars } = useScrollAnimationContext();
 
   const currentUser = useAuthStore((s) => s.user);
   const shareServer = usePreferencesStore((s) => s.shareServer);
+
+  const [hasNewPosts, setHasNewPosts] = useState(false);
+  const [newPostAvatars, setNewPostAvatars] = useState<{ userId: string; username: string }[]>([]);
+  const [newPostCount, setNewPostCount] = useState(0);
+
+  const handleNewPostsChange = useCallback((hasNew: boolean, avatars: { userId: string; username: string }[], count: number) => {
+    setHasNewPosts(hasNew);
+    setNewPostAvatars(avatars);
+    setNewPostCount(count);
+  }, []);
+
+  const handleNewPostsPress = useCallback(async () => {
+    await tabbedFeedRef.current?.handleNewPostsPress();
+    setHasNewPosts(false);
+  }, []);
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
@@ -393,7 +410,20 @@ export function FollowingScreen() {
         onFeedTypeChange={handleFeedTypeChange}
       />
 
-      <HomeTabbedFeed ref={tabbedFeedRef} feedType="following" activeTabIndex={feedTabIndex} />
+      <HomeTabbedFeed
+        ref={tabbedFeedRef}
+        feedType="following"
+        activeTabIndex={feedTabIndex}
+        onNewPostsChange={handleNewPostsChange}
+      />
+
+      <NewPostsButton
+        visible={hasNewPosts}
+        onPress={handleNewPostsPress}
+        topOffset={insets.top + 44}
+        avatars={newPostAvatars}
+        newPostCount={newPostCount}
+      />
 
       <PostOptionsSheet
         ref={postOptionsSheetRef}

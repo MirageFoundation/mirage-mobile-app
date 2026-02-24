@@ -65,3 +65,4 @@ export {
 export { useEasUpdate } from "./use-eas-update";
 export { useTabSwipeGesture } from "./use-tab-swipe-gesture";
 export { useServerList } from "./use-server-list";
+export { useNewPostsChecker } from "./use-new-posts-checker";

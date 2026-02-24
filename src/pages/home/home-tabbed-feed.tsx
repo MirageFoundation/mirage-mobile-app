@@ -40,11 +40,15 @@ import {
   usePreferencesStore,
 } from "@/src/stores";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNewPostsChecker, type NewPostAvatar } from "@/src/hooks/use-new-posts-checker";
 
 export type HomeTabbedFeedRef = {
   scrollToTop: (tabIndex?: number) => void;
   refresh: () => Promise<void>;
   isRefreshing: () => boolean;
+  hasNewPosts: () => boolean;
+  handleNewPostsPress: () => Promise<void>;
+  dismissNewPosts: () => void;
 };
 
 type HomeTabbedFeedProps = {
@@ -52,12 +56,13 @@ type HomeTabbedFeedProps = {
   activeTabIndex?: number;
   ListHeaderExtra?: ReactNode;
   onRefreshingChange?: (refreshing: boolean) => void;
+  onNewPostsChange?: (hasNew: boolean, avatars: NewPostAvatar[], count: number) => void;
 };
 
 export const HomeTabbedFeed = forwardRef<
   HomeTabbedFeedRef,
   HomeTabbedFeedProps
->(({ feedType: baseFeed, activeTabIndex = 0, ListHeaderExtra, onRefreshingChange }, ref) => {
+>(({ feedType: baseFeed, activeTabIndex = 0, ListHeaderExtra, onRefreshingChange, onNewPostsChange }, ref) => {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
@@ -280,14 +285,74 @@ export const HomeTabbedFeed = forwardRef<
     register(scrollToTopAndRefresh);
   }, [baseFeed, registerHomeRefresh, registerFollowingRefresh, scrollToTopAndRefresh]);
 
+  const activeSortBy = activeTabIndex === 0 ? "magic" : "newest";
+  const activePosts = activeTabIndex === 0 ? magicPosts : latestPosts;
+  const currentFirstPostId = activePosts[0]?.id ?? null;
+
+  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, getPrefetchedData, clearPrefetch } = useNewPostsChecker({
+    feed: baseFeed,
+    by: activeSortBy as "magic" | "newest",
+    enabled: true,
+    currentFirstPostId,
+  });
+
+  useEffect(() => {
+    onNewPostsChange?.(hasNewPosts, newPostAvatars, newPostCount);
+  }, [hasNewPosts, newPostAvatars, newPostCount, onNewPostsChange]);
+
+  const handleNewPostsPress = useCallback(async () => {
+    const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
+    try {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    } catch {}
+
+    const sortBy = activeTabIndex === 0 ? "magic" : "newest";
+    const postsQueryKey = queryKeys.posts({
+      limit: 20,
+      feed: baseFeed,
+      by: sortBy as any,
+      allowed_tags: allowedTags || undefined,
+      address: currentUser?.walletAddress,
+      page: undefined,
+    });
+
+    const prefetched = getPrefetchedData();
+    if (prefetched) {
+      queryClient.setQueryData(postsQueryKey, (oldData: any) => {
+        if (!oldData) {
+          return { pages: [prefetched], pageParams: [1] };
+        }
+        return {
+          ...oldData,
+          pages: [prefetched, ...oldData.pages.slice(1)],
+          pageParams: [1, ...oldData.pageParams.slice(1)],
+        };
+      });
+      clearPrefetch();
+    } else {
+      await handleRefresh();
+    }
+
+    requestAnimationFrame(() => {
+      try {
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      } catch {}
+      showBars();
+    });
+    dismissNewPosts();
+  }, [showBars, activeTabIndex, baseFeed, allowedTags, currentUser?.walletAddress, queryClient, handleRefresh, dismissNewPosts, getPrefetchedData, clearPrefetch]);
+
   useImperativeHandle(
     ref,
     () => ({
       scrollToTop,
       refresh: handleRefresh,
       isRefreshing: () => isRefreshingRef.current,
+      hasNewPosts: () => hasNewPosts,
+      handleNewPostsPress,
+      dismissNewPosts,
     }),
-    [scrollToTop, handleRefresh],
+    [scrollToTop, handleRefresh, hasNewPosts, handleNewPostsPress, dismissNewPosts],
   );
 
   const lastMagicFetchTime = useRef(0);
