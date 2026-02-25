@@ -32,6 +32,8 @@ import {
   PostCardSkeletonList,
   PostOptionsSheet,
   type PostOptionsSheetRef,
+  AwardPickerSheet,
+  type AwardPickerSheetRef,
   ReportSheet,
   type ReportSheetRef,
 } from "@/src/components/molecules";
@@ -70,6 +72,7 @@ export function TopicFeedScreen() {
 
   const flatListRef = useRef<FlatList<Post>>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
+  const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
 
   const savedPosts = useSavedPostsStore((s) => s.savedPosts);
@@ -941,7 +944,18 @@ export function TopicFeedScreen() {
         onBlockUser={handleBlockUser}
         onHidePost={handleHidePost}
         onDelete={handleDeletePost}
+        onGiveAward={() => {
+          if (!selectedPost) return;
+          setTimeout(() => awardPickerSheetRef.current?.present(), 300);
+        }}
         onDismiss={() => setSelectedPost(null)}
+      />
+
+      <AwardPickerSheet
+        ref={awardPickerSheetRef}
+        targetId={selectedPost?.id ?? ""}
+        targetType="post"
+        isOwnContent={currentUser?.id === selectedPost?.author.id}
       />
 
       <ReportSheet

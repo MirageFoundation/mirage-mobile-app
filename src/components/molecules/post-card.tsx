@@ -15,6 +15,7 @@ import {
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { MediaPreviewModal } from "./media-preview-modal";
+import { AwardBadges } from "@/src/components/atoms/award-badges";
 import { PostActions } from "./post-actions";
 import { PostCardContent } from "./post-card-content";
 import { PostCardHeader } from "./post-card-header";
@@ -278,6 +279,12 @@ export const PostCard = memo(function PostCard({
         </View>
       )}
 
+      {post.awards && post.awards.length > 0 && (
+        <View style={styles.awardBadgesRow}>
+          <AwardBadges awards={post.awards} size="sm" />
+        </View>
+      )}
+
       <PostActions
         likes={likes}
         dislikes={dislikes}
@@ -326,5 +333,9 @@ const styles = StyleSheet.create((theme) => ({
   body: {
     marginTop: theme.spacing.sm,
     lineHeight: 18,
+  },
+  awardBadgesRow: {
+    marginTop: theme.spacing.sm,
+    paddingLeft: 2,
   },
 }));

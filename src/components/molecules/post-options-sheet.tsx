@@ -52,6 +52,8 @@ type PostOptionsSheetProps = {
   onDelete?: () => void;
   /** Callback when report is pressed */
   onReport?: () => void;
+  /** Callback when give award is pressed */
+  onGiveAward?: () => void;
   /** Callback when sheet is dismissed */
   onDismiss?: () => void;
 };
@@ -213,6 +215,7 @@ export const PostOptionsSheet = forwardRef<
       onHidePost,
       onDelete,
       onReport,
+      onGiveAward,
       onDismiss,
     },
     ref,
@@ -410,6 +413,12 @@ export const PostOptionsSheet = forwardRef<
       onReport?.();
     }, [dismiss, onReport]);
 
+    const handleGiveAward = useCallback(() => {
+      triggerHaptic("medium");
+      dismiss();
+      onGiveAward?.();
+    }, [dismiss, onGiveAward]);
+
     const handleShare = useCallback(async () => {
       triggerHaptic("light");
       dismiss();
@@ -499,6 +508,14 @@ export const PostOptionsSheet = forwardRef<
               title="Share"
               onPress={handleShare}
             />
+
+            {!isOwnPost && onGiveAward && (
+              <MenuItem
+                iconName="gift-outline"
+                title="Give Award"
+                onPress={handleGiveAward}
+              />
+            )}
 
             {/* Delete (only for own posts) - RED */}
             {isOwnPost && (

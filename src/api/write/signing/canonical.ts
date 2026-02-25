@@ -598,3 +598,19 @@ export function canonBaseDeleteUser(params: DeleteUserParams): Uint8Array {
     encString(100, params.target)
   );
 }
+
+// --- MsgAward ---
+
+export interface AwardParams extends BaseParams {
+  target: string;
+  award_type: string;
+}
+
+export function canonBaseAward(params: AwardParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgAward"),
+    encodeHeader(params),
+    encString(100, params.target),
+    encString(101, params.award_type)
+  );
+}

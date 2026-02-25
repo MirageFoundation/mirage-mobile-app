@@ -31,6 +31,10 @@ export {
   type PostOptionsSheetRef,
 } from "./post-options-sheet";
 export { ReportSheet, type ReportSheetRef } from "./report-sheet";
+export {
+  AwardPickerSheet,
+  type AwardPickerSheetRef,
+} from "./award-picker-sheet";
 
 // Authentication & Onboarding
 export { AdultContentPopup } from "./adult-content-popup";

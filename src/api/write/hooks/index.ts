@@ -65,3 +65,6 @@ export { useClaimReward } from "./use-claim-reward";
 
 // Delete User
 export { useDeleteUser } from "./use-delete-user";
+
+// Award
+export { useGiveAward } from "./use-award";

@@ -10,6 +10,7 @@ export { WordChip } from "./word-chip";
 export { StatusStep } from "./status-step";
 export { ContentWarningBadge, ContentWarningChip, type ContentWarningType } from "./content-warning-badge";
 export { MediaThumbnail } from "./media-thumbnail";
+export { AwardBadges } from "./award-badges";
 
 // Legacy atoms (from existing codebase)
 export * from "./slot-digit";

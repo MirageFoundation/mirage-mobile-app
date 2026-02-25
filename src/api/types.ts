@@ -62,6 +62,16 @@ export interface TierInfo {
   can_have_banner: boolean;
 }
 
+export interface AwardConfig {
+  name: string;
+  cost: number;
+}
+
+export interface AwardBadge {
+  type: string;
+  count: number;
+}
+
 export interface ConfigResponse {
   // Chain params (from get_chain_config)
   max_username_size: number;
@@ -88,6 +98,9 @@ export interface ConfigResponse {
 
   // Misc
   giphy_api_key: string;
+
+  // Awards
+  award_configs?: AwardConfig[];
 }
 
 export type ChainConfigResponse = ConfigResponse;
@@ -210,6 +223,7 @@ export interface Post {
   comments: number;
   user_vote: number; // -1, 0, 1
   user_weight: number; // viewer's weighted contribution
+  awards?: AwardBadge[];
 }
 
 export interface PostsResponse {
@@ -254,7 +268,8 @@ export interface InboxReply {
   parent_content: string;
   parent_owner: string;
   root_post_id: string;
-  type?: "reply" | "mention";
+  type?: "reply" | "mention" | "award";
+  award_type?: string;
 }
 
 export interface InboxResponse {

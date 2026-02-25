@@ -2,6 +2,7 @@ import {
   DownvoteFilledIcon,
   UpvoteFilledIcon,
 } from "@/assets/figma-icons";
+import { AwardBadges } from "@/src/components/atoms/award-badges";
 import { TimeAgo, FollowButton } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
@@ -53,6 +54,7 @@ export type Comment = {
   replyCount?: number;
   parentId?: string | null;
   depth?: number;
+  awards?: import("@/src/api/types").AwardBadge[];
 };
 
 type CommentItemProps = {
@@ -512,6 +514,12 @@ export const CommentItem = ({
         <Animated.View style={animatedContentStyle}>
           <CommentContent content={content} />
 
+          {comment.awards && comment.awards.length > 0 && (
+            <View style={styles.awardBadgesRow}>
+              <AwardBadges awards={comment.awards} size="sm" />
+            </View>
+          )}
+
           {/* Actions below content on the right */}
           <View style={styles.actionsRow}>
             <View style={styles.actions}>
@@ -712,5 +720,9 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 4,
+  },
+  awardBadgesRow: {
+    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.xs,
   },
 }));

@@ -18,6 +18,8 @@ NewPostsButton,
 type Post,
  PostOptionsSheet,
  type PostOptionsSheetRef,
+ AwardPickerSheet,
+ type AwardPickerSheetRef,
  ReportSheet,
  type ReportSheetRef,
 UpdateBanner,
@@ -123,6 +125,7 @@ export function HomeScreen() {
   }, []);
 
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
+  const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
 
   const { openSideMenu } = useSideMenu();
@@ -595,7 +598,18 @@ export function HomeScreen() {
         onBlockUser={handleBlockUser}
         onHidePost={handleHidePost}
         onDelete={handleDeletePost}
+        onGiveAward={() => {
+          if (!selectedPost) return;
+          setTimeout(() => awardPickerSheetRef.current?.present(), 300);
+        }}
         onDismiss={() => setSelectedPost(null)}
+      />
+
+      <AwardPickerSheet
+        ref={awardPickerSheetRef}
+        targetId={selectedPost?.id ?? ""}
+        targetType="post"
+        isOwnContent={currentUser?.id === selectedPost?.author.id}
       />
 
       <ReportSheet

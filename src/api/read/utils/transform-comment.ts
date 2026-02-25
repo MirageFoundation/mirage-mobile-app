@@ -43,6 +43,7 @@ export function transformApiComment(
     replyCount: apiComment.children?.length ?? 0,
     parentId: parentId ?? null,
     depth,
+    awards: apiComment.awards ?? [],
   };
 }
 
@@ -55,5 +56,4 @@ export function transformApiComments(
 ): Comment[] {
   return apiComments.map((comment) => transformApiComment(comment, null, 0));
 }
-
 
