@@ -102,6 +102,7 @@ const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
  if (p.comments !== n.comments) return false;
  if (p.hasLiked !== n.hasLiked) return false;
  if (p.hasDisliked !== n.hasDisliked) return false;
+ if (p.awards?.length !== n.awards?.length) return false;
  return true;
 });
 const MemoizedProfileCommentItem = memo(ProfileCommentItem, (prev, next) => {

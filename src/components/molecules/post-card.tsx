@@ -78,6 +78,7 @@ function arePostCardPropsEqual(
   if (prevPost.comments !== nextPost.comments) return false;
   if (prevPost.hasLiked !== nextPost.hasLiked) return false;
   if (prevPost.hasDisliked !== nextPost.hasDisliked) return false;
+  if (prevPost.awards?.length !== nextPost.awards?.length) return false;
   if (prevPost.isFollowing !== nextPost.isFollowing) return false;
 
   if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
