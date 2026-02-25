@@ -17,7 +17,7 @@ export const AwardBadges = memo(function AwardBadges({
 }: AwardBadgesProps) {
   if (!awards || awards.length === 0) return null;
 
-  const textSize = size === "sm" ? "xs" : "sm";
+  const textSize = size === "sm" ? "sm" : "md";
   const iconSize = size === "sm" ? 14 : 18;
 
   return (

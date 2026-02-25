@@ -52,6 +52,7 @@ function arePostCardItemPropsEqual(
   if (prev.comments !== next.comments) return false;
   if (prev.hasLiked !== next.hasLiked) return false;
   if (prev.hasDisliked !== next.hasDisliked) return false;
+  if (prev.awards?.length !== next.awards?.length) return false;
   if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
   if (prevProps.isVisible !== nextProps.isVisible) return false;
   return true;
