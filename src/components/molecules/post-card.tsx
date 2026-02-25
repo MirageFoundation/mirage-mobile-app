@@ -231,6 +231,12 @@ export const PostCard = memo(function PostCard({
         showMoreButton={showMoreButton || isOwnPost}
       />
 
+      {post.awards && post.awards.length > 0 && (
+        <View style={styles.awardBadgesRow}>
+          <AwardBadges awards={post.awards} size="sm" />
+        </View>
+      )}
+
       <PostCardContent
         title={title}
         extractedUrl={resolvedContent.extractedUrl}
@@ -276,12 +282,6 @@ export const PostCard = memo(function PostCard({
                 : bodyText
             }
           />
-        </View>
-      )}
-
-      {post.awards && post.awards.length > 0 && (
-        <View style={styles.awardBadgesRow}>
-          <AwardBadges awards={post.awards} size="sm" />
         </View>
       )}
 
@@ -335,7 +335,7 @@ const styles = StyleSheet.create((theme) => ({
     lineHeight: 18,
   },
   awardBadgesRow: {
-    marginTop: theme.spacing.sm,
+    marginVertical: theme.spacing.xs,
     paddingLeft: 2,
   },
 }));
