@@ -125,9 +125,11 @@ export const AwardPickerSheet = forwardRef<
     const giveAwardMutation = useGiveAward();
 
     const [selectedType, setSelectedType] = useState<string | null>(null);
+    const [isSending, setIsSending] = useState(false);
 
     const present = useCallback(() => {
       setSelectedType(null);
+      setIsSending(false);
       giveAwardMutation.reset();
       bottomSheetRef.current?.present();
     }, [giveAwardMutation]);
@@ -168,7 +170,8 @@ export const AwardPickerSheet = forwardRef<
       !isAdmin && selectedConfig ? balance < selectedConfig.cost : false;
 
     const handleSendAward = useCallback(async () => {
-      if (!selectedType || !targetId) return;
+      if (!selectedType || !targetId || isSending) return;
+      setIsSending(true);
       triggerHaptic("medium");
 
       try {
@@ -197,6 +200,8 @@ export const AwardPickerSheet = forwardRef<
           }
         }
         toast.error(getFriendlyAwardError(errorMessage));
+      } finally {
+        setIsSending(false);
       }
     }, [selectedType, targetId, giveAwardMutation, toast, dismiss, onSuccess]);
 
@@ -254,7 +259,7 @@ export const AwardPickerSheet = forwardRef<
             onPress={handleSendAward}
             disabled={
               !selectedType ||
-              giveAwardMutation.isPending ||
+              isSending ||
               hasInsufficientBalance
             }
             style={({ pressed }) => [
@@ -269,7 +274,7 @@ export const AwardPickerSheet = forwardRef<
               (!selectedType || hasInsufficientBalance) && { opacity: 0.5 },
             ]}
           >
-            {giveAwardMutation.isPending ? (
+            {isSending ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
               <Text
