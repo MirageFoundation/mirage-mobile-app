@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { View } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
+import { Ionicons } from "@expo/vector-icons";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Text } from "@/src/components/ui/primitives";
 import { getAwardInfo } from "@/src/data/awards";
@@ -17,17 +18,28 @@ export const AwardBadges = memo(function AwardBadges({
 }: AwardBadgesProps) {
   if (!awards || awards.length === 0) return null;
 
+  const { theme } = useUnistyles();
   const textSize = size === "sm" ? "sm" : "md";
   const iconSize = size === "sm" ? 14 : 18;
 
   return (
     <View style={styles.container}>
+      <View style={styles.label}>
+        <Ionicons
+          name="gift-outline"
+          size={size === "sm" ? 16 : 18}
+          color={theme.colors.text.subtle}
+        />
+        <Text size="sm" mode="subtle" weight="semibold">
+          Rewards{" · "}
+        </Text>
+      </View>
       {awards.map((award) => {
         const info = getAwardInfo(award.type);
         if (!info) return null;
         return (
           <View key={award.type} style={styles.badge}>
-            <Text style={{ fontSize: iconSize, lineHeight: iconSize + 2 }}>
+            <Text style={{ fontSize: iconSize, lineHeight: iconSize + 4 }}>
               {info.icon}
             </Text>
             {award.count > 1 && (
@@ -47,6 +59,12 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing.xs,
+  },
+  label: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    marginRight: 2,
   },
   badge: {
     flexDirection: "row",
