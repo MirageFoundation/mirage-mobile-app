@@ -14,6 +14,7 @@ import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-s
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useAuthStore } from "@/src/stores";
 import { useInboxStore } from "@/src/stores/inbox-store";
+import { useShallow } from "zustand/react/shallow";
 import { markRepliesAsNotified } from "@/src/services/inbox-notifications";
 import { markInboxViewed } from "@/src/api/write/endpoints/inbox";
 
@@ -30,9 +31,16 @@ export function InboxScreen() {
   }>();
   const isLoggedIn = !!useAuthStore((s) => s.user);
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
-  const markAsViewed = useInboxStore((s) => s.markAsViewed);
-  const lastViewedAt = useInboxStore((s) => s.lastViewedAt);
-  const viewedAtOnEntry = useRef(lastViewedAt);
+  const { markAsViewed, highlightBaselineAt, readReplyIds, markReplyAsRead } =
+    useInboxStore(
+      useShallow((s) => ({
+        markAsViewed: s.markAsViewed,
+        highlightBaselineAt: s.highlightBaselineAt,
+        readReplyIds: s.readReplyIds,
+        markReplyAsRead: s.markReplyAsRead,
+      })),
+    );
+  const readReplyIdsSet = useMemo(() => new Set(readReplyIds), [readReplyIds]);
   const listRef = useRef<FlatList<InboxReply>>(null);
   const applyViewedTimestamp = useCallback(
     (timestamp?: number) => {
@@ -70,7 +78,6 @@ export function InboxScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      viewedAtOnEntry.current = useInboxStore.getState().lastViewedAt;
       markAsViewed();
       refetch();
       if (walletAddress) {
@@ -113,9 +120,10 @@ export function InboxScreen() {
 
   const handleItemPress = useCallback(
     (rootPostId: string, replyId: string) => {
+      markReplyAsRead(replyId);
       router.push(`/post/${rootPostId}?highlight=${replyId}`);
     },
-    [router],
+    [router, markReplyAsRead],
   );
 
   const lastFetchTime = useRef(0);
@@ -141,7 +149,9 @@ export function InboxScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: InboxReply }) => {
-      const isUnread = item.reply_timestamp > viewedAtOnEntry.current;
+      const isUnread =
+        item.reply_timestamp > highlightBaselineAt &&
+        !readReplyIdsSet.has(item.reply_id);
       return (
         <MemoizedInboxItem
           reply={item}
@@ -150,7 +160,7 @@ export function InboxScreen() {
         />
       );
     },
-    [handleItemPress],
+    [handleItemPress, readReplyIdsSet, highlightBaselineAt],
   );
 
   const ListEmptyComponent = useCallback(() => {
