@@ -25,8 +25,18 @@ import {
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 // Vote colors
-const UPVOTE_COLOR = "#22C55E"; // Green for upvote
-const DOWNVOTE_COLOR = "#EF4444"; // Red for downvote
+const UPVOTE_COLOR = "#22C55E";
+const DOWNVOTE_COLOR = "#EF4444";
+
+const formatCount = (num: number): string => {
+  if (num >= 1000000) {
+    return `${(num / 1000000).toFixed(1)}M`;
+  }
+  if (num >= 1000) {
+    return `${(num / 1000).toFixed(1)}K`;
+  }
+  return num.toString();
+};
 
 type PostActionsProps = {
   /** Number of likes */
@@ -233,17 +243,6 @@ export const PostActions = memo(function PostActions({
   const handleReport = () => {
     triggerHaptic("warning");
     onReport?.();
-  };
-
-  // Format count for display (e.g., 1234 -> 1.2K)
-  const formatCount = (num: number): string => {
-    if (num >= 1000000) {
-      return `${(num / 1000000).toFixed(1)}M`;
-    }
-    if (num >= 1000) {
-      return `${(num / 1000).toFixed(1)}K`;
-    }
-    return num.toString();
   };
 
   const defaultColor = theme.colors.text.default;

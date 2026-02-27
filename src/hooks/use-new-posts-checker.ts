@@ -13,6 +13,7 @@ type UseNewPostsCheckerOptions = {
   feed?: "home" | "following";
   by?: "magic" | "newest";
   topic?: string;
+  allowed_tags?: string;
   enabled?: boolean;
   intervalMs?: number;
   currentFirstPostId?: string | null;
@@ -23,6 +24,7 @@ export function useNewPostsChecker({
   feed,
   by = "magic",
   topic,
+  allowed_tags,
   enabled = true,
   intervalMs = 30_000,
   currentFirstPostId = null,
@@ -83,6 +85,7 @@ export function useNewPostsChecker({
         feed: topic ? undefined : feed,
         by,
         topic: topic || undefined,
+        allowed_tags: allowed_tags || undefined,
         address: walletAddress ?? undefined,
         page: 1,
       });
@@ -103,7 +106,7 @@ export function useNewPostsChecker({
         prefetchedDataRef.current = null;
       }
     } catch {}
-  }, [feed, by, topic, walletAddress, extractNewPostInfo]);
+  }, [feed, by, topic, allowed_tags, walletAddress, extractNewPostInfo]);
 
   useEffect(() => {
     if (!enabled || !isFocused) return;

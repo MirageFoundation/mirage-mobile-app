@@ -17,10 +17,8 @@ import {
 import {
   ActivityIndicator,
   Dimensions,
-  LayoutAnimation,
   Platform,
   Pressable,
-  UIManager,
   View,
   type GestureResponderEvent,
 } from "react-native";
@@ -30,9 +28,6 @@ import { extractYouTubeVideoId, type ResolvedMedia } from "./post-card-utils";
 import { MediaGallery } from "./media-gallery";
 import { useVideoMuteStore } from "@/src/stores";
 
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEDIA_MAX_HEIGHT = 450;
@@ -198,7 +193,6 @@ export const PostCardMedia = memo(
         if (!Number.isFinite(ratio) || ratio <= 0) return;
         setMediaAspectRatio((current) => {
           if (Math.abs(current - ratio) < 0.01) return current;
-          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
           return ratio;
         });
         if (resolvedMediaUri) {

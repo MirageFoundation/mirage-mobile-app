@@ -53,8 +53,10 @@ export function useInfinitePosts(
       if (!lastPage.has_more) return undefined;
       return lastPage.page + 1;
     },
-    staleTime: 1000 * 60, // 1 minute
-    gcTime: 1000 * 60 * 60 * 4, // 4 hours
+    staleTime: 1000 * 60 * 2,
+    gcTime: 1000 * 60 * 60 * 4,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 }
 

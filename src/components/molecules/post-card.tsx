@@ -208,6 +208,15 @@ export const PostCard = memo(function PostCard({
     setShowMediaPreview(false);
   }, []);
 
+  const handleGalleryMediaPress = useCallback((index: number) => {
+    if (!isPostDetail && onMediaPressProp) {
+      onMediaPressProp();
+    } else {
+      setSelectedMediaIndex(index);
+      setShowMediaPreview(true);
+    }
+  }, [isPostDetail, onMediaPressProp]);
+
   return (
     <Pressable
       ref={containerRef}
@@ -262,14 +271,7 @@ export const PostCard = memo(function PostCard({
         onRevealContent={onRevealContent}
         onMediaPress={handleMediaPress}
         isPostDetail={isPostDetail}
-        onGalleryMediaPress={(index) => {
-          if (!isPostDetail && onMediaPressProp) {
-            onMediaPressProp();
-          } else {
-            setSelectedMediaIndex(index);
-            setShowMediaPreview(true);
-          }
-        }}
+        onGalleryMediaPress={handleGalleryMediaPress}
       />
 
       {bodyText && !shouldBlurContent && (

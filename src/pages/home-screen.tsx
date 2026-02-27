@@ -119,7 +119,6 @@ export function HomeScreen() {
     const timer = setTimeout(() => {
       showBars();
       tabbedFeedRef.current?.scrollToTop();
-      tabbedFeedRef.current?.refresh();
     }, 300);
     return () => clearTimeout(timer);
   }, []);

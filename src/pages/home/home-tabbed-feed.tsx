@@ -306,6 +306,7 @@ export const HomeTabbedFeed = forwardRef<
   const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, getPrefetchedData, clearPrefetch } = useNewPostsChecker({
     feed: baseFeed,
     by: activeSortBy as "magic" | "newest",
+    allowed_tags: allowedTags || undefined,
     enabled: true,
     currentFirstPostId,
     latestTimestamp,
@@ -546,6 +547,16 @@ export const HomeTabbedFeed = forwardRef<
   const onItemVisible =
     activeTabIndex === 0 ? handleMagicItemVisible : handleLatestItemVisible;
 
+  const ListEmpty = useCallback(
+    () =>
+      createListEmptyComponent(
+        query.isLoading,
+        query.isError,
+        query.error?.message,
+      ),
+    [createListEmptyComponent, query.isLoading, query.isError, query.error?.message],
+  );
+
   return (
     <HomePostList
       ref={listRef}
@@ -553,13 +564,7 @@ export const HomeTabbedFeed = forwardRef<
       contentContainerStyle={listContentStyle}
       onScroll={scrollHandler}
       ListHeaderComponent={ListHeader}
-      ListEmptyComponent={() =>
-        createListEmptyComponent(
-          query.isLoading,
-          query.isError,
-          query.error?.message,
-        )
-      }
+      ListEmptyComponent={ListEmpty}
       ListFooterComponent={ListFooter}
       refreshControl={refreshControl}
       feedScreen={baseFeed}

@@ -219,6 +219,7 @@ export function TopicFeedScreen() {
   const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, getPrefetchedData, clearPrefetch } = useNewPostsChecker({
     topic: topicName,
     by: sortBy === "magic" ? "magic" : "newest",
+    allowed_tags: allowedTags || undefined,
     enabled: true,
     currentFirstPostId,
     latestTimestamp,
