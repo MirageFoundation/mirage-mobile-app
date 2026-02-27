@@ -34,6 +34,8 @@ import { useTransactionProgress } from "@/src/hooks/use-transaction-progress";
 import { getTxStatus } from "@/src/api/read/endpoints/tx";
 import { useDraftStore, type Community } from "@/src/stores/draft-store";
 import { useHomePostCardStore } from "./home/home-post-card-store";
+import { useUserLevel } from "@/src/stores/auth-store";
+import { getTierPostLimits } from "@/src/utils/tiers";
 
 import { CommunitySelectionModal } from "./create/community-selection-modal";
 import { StickerPicker } from "@/src/components/molecules/sticker-picker";
@@ -68,6 +70,8 @@ let _handledVideoParam: string | null = null;
 export function CreateScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
+  const userLevel = useUserLevel();
+  const tierLimits = useMemo(() => getTierPostLimits(userLevel), [userLevel]);
 
   // Get params from video editor
   const params = useLocalSearchParams<{
@@ -844,13 +848,30 @@ export function CreateScreen() {
             placeholder="Title"
             placeholderTextColor={theme.colors.text.subtle}
             value={draft.title}
-            onChangeText={(text) => updateDraft({ title: text })}
+            onChangeText={(text) => {
+              if (text.length <= tierLimits.maxTitleLength) {
+                updateDraft({ title: text });
+              }
+            }}
             multiline
-            maxLength={300}
+            maxLength={tierLimits.maxTitleLength}
             returnKeyType="next"
             onSubmitEditing={() => bodyInputRef.current?.focus()}
             blurOnSubmit={false}
           />
+          <Text
+            size="xs"
+            style={{
+              color: draft.title.length >= tierLimits.maxTitleLength
+                ? theme.colors.error[500]
+                : theme.colors.text.subtle,
+              textAlign: "right",
+              marginTop: -8,
+              marginBottom: 4,
+            }}
+          >
+            {draft.title.length}/{tierLimits.maxTitleLength}
+          </Text>
 
           <Pressable
             onPress={handleOpenContentWarning}
@@ -1034,14 +1055,33 @@ export function CreateScreen() {
             placeholder="body text (optional)"
             placeholderTextColor={theme.colors.text.subtle}
             value={draft.body}
-            onChangeText={(text) => updateDraft({ body: text })}
+            onChangeText={(text) => {
+              if (text.length <= tierLimits.maxContentLength) {
+                updateDraft({ body: text });
+              }
+            }}
             multiline
+            maxLength={tierLimits.maxContentLength}
             textAlignVertical="top"
             selection={bodySelection}
             onSelectionChange={(e) => {
               bodySelectionRef.current = e.nativeEvent.selection;
             }}
           />
+          {draft.body.length > 0 && (
+            <Text
+              size="xs"
+              style={{
+                color: draft.body.length >= tierLimits.maxContentLength
+                  ? theme.colors.error[500]
+                  : theme.colors.text.subtle,
+                textAlign: "right",
+                marginTop: -8,
+              }}
+            >
+              {draft.body.length}/{tierLimits.maxContentLength}
+            </Text>
+          )}
         </ScrollView>
 
         <Animated.View
