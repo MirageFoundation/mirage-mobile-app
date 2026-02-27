@@ -142,6 +142,11 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
           setIsLoading(false);
           videoRef.current?.setStatusAsync({ isMuted }).catch(() => {});
         }}
+        onPlaybackStatusUpdate={(status) => {
+          if (status.isLoaded && status.isPlaying) {
+            setIsLoading(false);
+          }
+        }}
         onReadyForDisplay={(event) => {
           const { width: w, height: h } = event.naturalSize ?? {};
           if (w && h) {
