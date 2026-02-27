@@ -71,6 +71,7 @@ export const HomeTabbedFeed = forwardRef<
   const [isRefreshing, setIsRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const prevTabIndexRef = useRef(activeTabIndex);
+  const [latestTabActivated, setLatestTabActivated] = useState(activeTabIndex === 1);
 
   const magicListRef = useRef<FlatList<Post>>(null);
   const latestListRef = useRef<FlatList<Post>>(null);
@@ -78,6 +79,9 @@ export const HomeTabbedFeed = forwardRef<
   useEffect(() => {
     if (prevTabIndexRef.current !== activeTabIndex) {
       prevTabIndexRef.current = activeTabIndex;
+      if (activeTabIndex === 1) {
+        setLatestTabActivated(true);
+      }
       showBars();
       const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
       requestAnimationFrame(() => {
@@ -103,28 +107,6 @@ export const HomeTabbedFeed = forwardRef<
     [selectedContentTypes],
   );
 
-  useEffect(() => {
-    const trimCache = (by: string) => {
-      const key = queryKeys.posts({
-        limit: 20,
-        feed: baseFeed,
-        by: by as any,
-        allowed_tags: allowedTags || undefined,
-        address: currentUser?.walletAddress ?? undefined,
-        page: undefined,
-      });
-      queryClient.setQueryData(key, (old: any) => {
-        if (!old?.pages || old.pages.length <= 1) return old;
-        return {
-          pages: old.pages.slice(0, 1),
-          pageParams: old.pageParams.slice(0, 1),
-        };
-      });
-    };
-    trimCache("magic");
-    trimCache("newest");
-  }, []);
-
   const magicQuery = useInfinitePosts({
     limit: 20,
     feed: baseFeed,
@@ -137,7 +119,7 @@ export const HomeTabbedFeed = forwardRef<
     feed: baseFeed,
     by: "newest",
     allowed_tags: allowedTags || undefined,
-  });
+  }, { enabled: latestTabActivated });
 
   const transformPosts = useCallback(
     (data: typeof magicQuery.data) => {
