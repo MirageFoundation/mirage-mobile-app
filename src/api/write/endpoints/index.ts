@@ -62,3 +62,7 @@ export type { MarkInboxViewedResponse } from "./inbox";
 // Delete User
 export { deleteUser } from "./delete-user";
 export type { DeleteUserInput } from "./delete-user";
+
+// Award
+export { giveAward } from "./award";
+export type { GiveAwardInput } from "./award";

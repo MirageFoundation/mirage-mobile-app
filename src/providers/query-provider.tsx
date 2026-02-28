@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import { QueryClient, focusManager, onlineManager } from "@tanstack/react-query";
@@ -33,10 +33,16 @@ const queryClient = new QueryClient({
 export { queryClient };
 
 function useAppStateFocus() {
+  const lastFocusTime = useRef(0);
   useEffect(() => {
     const subscription = AppState.addEventListener(
       "change",
       (status: AppStateStatus) => {
+        if (status === "active") {
+          const now = Date.now();
+          if (now - lastFocusTime.current < 2000) return;
+          lastFocusTime.current = now;
+        }
         focusManager.setFocused(status === "active");
       }
     );

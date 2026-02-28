@@ -15,6 +15,7 @@ import {
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { MediaPreviewModal } from "./media-preview-modal";
+import { AwardBadges } from "@/src/components/atoms/award-badges";
 import { PostActions } from "./post-actions";
 import { PostCardContent } from "./post-card-content";
 import { PostCardHeader } from "./post-card-header";
@@ -77,6 +78,7 @@ function arePostCardPropsEqual(
   if (prevPost.comments !== nextPost.comments) return false;
   if (prevPost.hasLiked !== nextPost.hasLiked) return false;
   if (prevPost.hasDisliked !== nextPost.hasDisliked) return false;
+  if (prevPost.awards?.length !== nextPost.awards?.length) return false;
   if (prevPost.isFollowing !== nextPost.isFollowing) return false;
 
   if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
@@ -206,6 +208,15 @@ export const PostCard = memo(function PostCard({
     setShowMediaPreview(false);
   }, []);
 
+  const handleGalleryMediaPress = useCallback((index: number) => {
+    if (!isPostDetail && onMediaPressProp) {
+      onMediaPressProp();
+    } else {
+      setSelectedMediaIndex(index);
+      setShowMediaPreview(true);
+    }
+  }, [isPostDetail, onMediaPressProp]);
+
   return (
     <Pressable
       ref={containerRef}
@@ -229,6 +240,12 @@ export const PostCard = memo(function PostCard({
         directFollowUser={directFollowUser}
         showMoreButton={showMoreButton || isOwnPost}
       />
+
+      {post.awards && post.awards.length > 0 && (
+        <View style={styles.awardBadgesRow}>
+          <AwardBadges awards={post.awards} size="sm" />
+        </View>
+      )}
 
       <PostCardContent
         title={title}
@@ -254,14 +271,7 @@ export const PostCard = memo(function PostCard({
         onRevealContent={onRevealContent}
         onMediaPress={handleMediaPress}
         isPostDetail={isPostDetail}
-        onGalleryMediaPress={(index) => {
-          if (!isPostDetail && onMediaPressProp) {
-            onMediaPressProp();
-          } else {
-            setSelectedMediaIndex(index);
-            setShowMediaPreview(true);
-          }
-        }}
+        onGalleryMediaPress={handleGalleryMediaPress}
       />
 
       {bodyText && !shouldBlurContent && (
@@ -326,5 +336,9 @@ const styles = StyleSheet.create((theme) => ({
   body: {
     marginTop: theme.spacing.sm,
     lineHeight: 18,
+  },
+  awardBadgesRow: {
+    marginVertical: theme.spacing.xs,
+    paddingLeft: 2,
   },
 }));

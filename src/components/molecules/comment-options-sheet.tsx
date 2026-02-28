@@ -31,6 +31,7 @@ type CommentOptionsSheetProps = {
   onDelete?: () => void;
   onReport?: () => void;
   onToggleFollowAuthor?: () => void;
+  onGiveAward?: () => void;
   onDismiss?: () => void;
 };
 
@@ -97,6 +98,7 @@ export const CommentOptionsSheet = forwardRef<
       onDelete,
       onReport,
       onToggleFollowAuthor,
+      onGiveAward,
       onDismiss,
     },
     ref,
@@ -201,6 +203,12 @@ export const CommentOptionsSheet = forwardRef<
       onToggleFollowAuthor?.();
     }, [dismiss, onToggleFollowAuthor]);
 
+    const handleGiveAward = useCallback(() => {
+      triggerHaptic("medium");
+      dismiss();
+      onGiveAward?.();
+    }, [dismiss, onGiveAward]);
+
     const handleSave = useCallback(() => {
       triggerHaptic("medium");
       dismiss();
@@ -274,6 +282,14 @@ export const CommentOptionsSheet = forwardRef<
               title="Copy text"
               onPress={handleCopyText}
             />
+
+            {!isOwnComment && onGiveAward && (
+              <MenuItem
+                iconName="gift-outline"
+                title="Give Award"
+                onPress={handleGiveAward}
+              />
+            )}
 
             {!isOwnComment && (
               <MenuItem

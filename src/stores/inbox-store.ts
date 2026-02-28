@@ -6,11 +6,15 @@ interface InboxState {
   unreadCount: number;
   hasUnread: boolean;
   lastViewedAt: number;
+  highlightBaselineAt: number;
   latestInboxTimestamp: number;
   _suppressUntil: number;
+  readReplyIds: string[];
   setUnreadCount: (count: number) => void;
   setLatestInboxTimestamp: (timestamp: number) => void;
   markAsViewed: (serverTimestamp?: number) => void;
+  markReplyAsRead: (replyId: string) => void;
+  advanceHighlightBaseline: () => void;
   resetForLogout: () => void;
 }
 
@@ -20,8 +24,10 @@ export const useInboxStore = create<InboxState>()(
       unreadCount: 0,
       hasUnread: false,
       lastViewedAt: 0,
+      highlightBaselineAt: 0,
       latestInboxTimestamp: 0,
       _suppressUntil: 0,
+      readReplyIds: [],
 
       setUnreadCount: (count: number) => {
         if (Date.now() < get()._suppressUntil) return;
@@ -45,27 +51,47 @@ export const useInboxStore = create<InboxState>()(
           _suppressUntil: Date.now() + 5_000,
         }),
 
+      markReplyAsRead: (replyId: string) =>
+        set((state) => {
+          if (state.readReplyIds.includes(replyId)) return state;
+          const updated = [...state.readReplyIds, replyId];
+          const trimmed = updated.length > 500 ? updated.slice(-500) : updated;
+          return { readReplyIds: trimmed };
+        }),
+
+      advanceHighlightBaseline: () =>
+        set({
+          highlightBaselineAt: Math.floor(Date.now() / 1000),
+          readReplyIds: [],
+        }),
+
       resetForLogout: () =>
         set({
           unreadCount: 0,
           hasUnread: false,
           latestInboxTimestamp: 0,
+          highlightBaselineAt: 0,
           _suppressUntil: 0,
+          readReplyIds: [],
         }),
     }),
     {
       name: "inbox-store",
-      version: 4,
+      version: 6,
       storage: createJSONStorage(() => mmkvStorage),
       partialize: (state) => ({
         lastViewedAt: state.lastViewedAt,
+        highlightBaselineAt: state.highlightBaselineAt,
+        readReplyIds: state.readReplyIds,
       }),
-      migrate: () => ({
+      migrate: (persisted: any) => ({
         unreadCount: 0,
         hasUnread: false,
-        lastViewedAt: 0,
+        lastViewedAt: persisted?.lastViewedAt ?? 0,
+        highlightBaselineAt: persisted?.highlightBaselineAt ?? persisted?.lastViewedAt ?? 0,
         latestInboxTimestamp: 0,
         _suppressUntil: 0,
+        readReplyIds: persisted?.readReplyIds ?? [],
       }),
     },
   ),

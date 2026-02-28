@@ -35,9 +35,11 @@ export function usePosts(params?: Omit<GetPostsParams, "address">) {
  * Automatically handles pagination
  */
 export function useInfinitePosts(
-  params?: Omit<GetPostsParams, "page" | "address">
+  params?: Omit<GetPostsParams, "page" | "address">,
+  options?: { enabled?: boolean }
 ) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const isInitializing = useAuthStore((s) => s.isInitializing);
 
   const baseParams = {
     ...params,
@@ -53,8 +55,11 @@ export function useInfinitePosts(
       if (!lastPage.has_more) return undefined;
       return lastPage.page + 1;
     },
-    staleTime: 1000 * 60, // 1 minute
-    gcTime: 1000 * 60 * 60 * 4, // 4 hours
+    enabled: !isInitializing && (options?.enabled ?? true),
+    staleTime: 1000 * 60 * 2,
+    gcTime: 1000 * 60 * 60 * 4,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 }
 

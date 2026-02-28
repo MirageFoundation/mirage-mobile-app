@@ -17,10 +17,8 @@ import {
 import {
   ActivityIndicator,
   Dimensions,
-  LayoutAnimation,
   Platform,
   Pressable,
-  UIManager,
   View,
   type GestureResponderEvent,
 } from "react-native";
@@ -30,9 +28,6 @@ import { extractYouTubeVideoId, type ResolvedMedia } from "./post-card-utils";
 import { MediaGallery } from "./media-gallery";
 import { useVideoMuteStore } from "@/src/stores";
 
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEDIA_MAX_HEIGHT = 450;
@@ -165,11 +160,9 @@ export const PostCardMedia = memo(
       }
 
       // Only auto-play if allowed by settings, visible, and screen is active
-      if (isVisible && allowAutoplay && screenActive) {
-        // Autoplay - no loading indicator, just play silently in background
+      if (isVisible && screenActive && (allowAutoplay || feedTappedToPlay)) {
         setIsVideoPlaying(true);
       } else if (!isVisible || !screenActive) {
-        // Pause when not visible or screen not active
         setIsVideoPlaying(false);
         setIsVideoLoading(false);
         userInitiatedPlayRef.current = false;
@@ -182,6 +175,7 @@ export const PostCardMedia = memo(
       allowAutoplay,
       screenActive,
       resolvedMediaUri,
+      feedTappedToPlay,
     ]);
 
     // Apply mute state changes to video
@@ -199,7 +193,6 @@ export const PostCardMedia = memo(
         if (!Number.isFinite(ratio) || ratio <= 0) return;
         setMediaAspectRatio((current) => {
           if (Math.abs(current - ratio) < 0.01) return current;
-          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
           return ratio;
         });
         if (resolvedMediaUri) {
@@ -215,6 +208,8 @@ export const PostCardMedia = memo(
       [resolvedMediaUri],
     );
 
+    const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
+
     const handleVideoToggle = useCallback(async () => {
       if (media?.type !== "video") return;
       if (shouldBlurContent) {
@@ -225,7 +220,6 @@ export const PostCardMedia = memo(
       try {
         const status = await videoRef.current?.getStatusAsync();
         if (!status || !status.isLoaded) {
-          // User tapped play, video not loaded yet - show loading
           userInitiatedPlayRef.current = true;
           setIsVideoLoading(true);
           setIsVideoPlaying(true);
@@ -238,7 +232,6 @@ export const PostCardMedia = memo(
           userInitiatedPlayRef.current = false;
           return;
         }
-        // User manually starting/resuming playback
         userInitiatedPlayRef.current = true;
         if (status.didJustFinish) {
           setIsVideoLoading(true);
@@ -251,9 +244,23 @@ export const PostCardMedia = memo(
       } catch {
         setIsVideoLoading(false);
         userInitiatedPlayRef.current = false;
-        // Ignore transient playback errors.
       }
     }, [media?.type, onRevealContent, shouldBlurContent]);
+
+    const handleFeedVideoTap = useCallback(
+      (event: GestureResponderEvent) => {
+        event.stopPropagation?.();
+        if (isPostDetail) return;
+        if (!allowAutoplay && !isVideoPlaying && !feedTappedToPlay) {
+          setFeedTappedToPlay(true);
+          handleVideoToggle();
+          return;
+        }
+        triggerHaptic("selection");
+        onMediaPress?.();
+      },
+      [isPostDetail, allowAutoplay, isVideoPlaying, feedTappedToPlay, handleVideoToggle, onMediaPress],
+    );
 
     const handlePlaybackStatusUpdate = useCallback(
       (status: AVPlaybackStatus) => {
@@ -377,7 +384,7 @@ export const PostCardMedia = memo(
               }}
             />
           ) : media.type === "video" ? (
-            <Pressable onPress={handleMediaPress} style={styles.media}>
+            <Pressable onPress={isPostDetail ? handleMediaPress : handleFeedVideoTap} style={styles.media}>
               <Video
                 ref={videoRef}
                 source={mediaSource}
@@ -478,28 +485,20 @@ export const PostCardMedia = memo(
                 ) : (
                   <>
                     <Pressable
-                      onPress={handleMediaPress}
+                      onPress={handleFeedVideoTap}
                       style={styles.videoTapArea}
                     />
                     {isVideoLoading || (isVideoPlaying && !mediaLoaded) ? (
                       <View style={styles.loadingContainer}>
                         <ActivityIndicator size="small" color="#fff" />
                       </View>
-                    ) : (
-                      <Pressable
-                        onPress={handleVideoPress}
-                        style={[
-                          styles.playButton,
-                          { opacity: isVideoPlaying ? 0.6 : 1 },
-                        ]}
-                      >
-                        <Ionicons
-                          name={isVideoPlaying ? "pause" : "play"}
-                          size={28}
-                          color="#fff"
-                        />
-                      </Pressable>
-                    )}
+                    ) : !allowAutoplay && !isVideoPlaying && !feedTappedToPlay ? (
+                      <View style={styles.tapToPlayContainer} pointerEvents="none">
+                        <Text size="sm" weight="semibold" numberOfLines={1} style={{ color: "#fff" }}>
+                          Tap to play
+                        </Text>
+                      </View>
+                    ) : null}
                   </>
                 )}
               </View>
@@ -673,6 +672,15 @@ const styles = StyleSheet.create((theme) => ({
   loadingContainer: {
     width: 40,
     height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tapToPlayContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     alignItems: "center",

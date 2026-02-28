@@ -99,3 +99,6 @@ export {
   useAchievements,
   useAchievementsByAddress,
 } from "./use-reward-summary";
+
+// Awards
+export { useAwardConfigs } from "./use-award-configs";

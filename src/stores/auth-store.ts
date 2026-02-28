@@ -4,6 +4,8 @@ import { mmkvStorage } from "./mmkv-storage";
 import * as Sentry from "@sentry/react-native";
 import { walletService } from "@/src/services/wallet-service";
 import { getUserStatus } from "@/src/api/read/endpoints/users";
+import { queryKeys } from "@/src/api/read/query-keys";
+import { queryClient } from "@/src/providers/query-provider";
 import type { WalletMetadata } from "@/src/wallet";
 import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 import { useContentModerationStore } from "./content-moderation-store";
@@ -156,6 +158,11 @@ export const useAuthStore = create<AuthState>()(
 
             getUserStatus({ address: metadata.address })
               .then((userStatus) => {
+                queryClient.setQueryData(
+                  queryKeys.userStatus(metadata.address),
+                  userStatus,
+                );
+
                 const newUserLevel = userStatus.user_level;
                 const newHasUsername = !!userStatus.username;
                 const newTier = getTierName(userStatus.user_level);

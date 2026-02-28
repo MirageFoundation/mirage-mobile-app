@@ -135,6 +135,7 @@ export function transformApiPost(
     hasDisliked,
     isFollowing,
     createdAt: apiPost.timestamp * 1000, // Convert seconds to milliseconds
+    awards: apiPost.awards ?? [],
   };
 }
 

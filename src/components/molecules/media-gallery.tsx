@@ -80,6 +80,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   const isMuted = useVideoMuteStore((s) => s.isMuted);
   const toggleMute = useVideoMuteStore((s) => s.toggleMute);
   const [isLoading, setIsLoading] = useState(true);
+  const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -91,14 +92,24 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
     if (!isActive || !screenActive || !isVisible) {
       setIsPlaying(false);
       videoRef.current?.pauseAsync().catch(() => {});
-    } else if (isActive && screenActive && allowAutoplay && isVisible) {
+    } else if (isActive && screenActive && isVisible && (allowAutoplay || feedTappedToPlay)) {
       setIsPlaying(true);
     }
-  }, [isActive, screenActive, allowAutoplay, isVisible]);
+  }, [isActive, screenActive, allowAutoplay, isVisible, feedTappedToPlay]);
 
   const handlePlayPause = useCallback(() => {
     setIsPlaying((p) => !p);
   }, []);
+
+  const handleFeedVideoTap = useCallback(() => {
+    if (isPostDetail) return;
+    if (!allowAutoplay && !isPlaying && !feedTappedToPlay) {
+      setFeedTappedToPlay(true);
+      setIsPlaying(true);
+      return;
+    }
+    onPress?.();
+  }, [isPostDetail, allowAutoplay, isPlaying, feedTappedToPlay, onPress]);
 
   const handleMuteToggle = useCallback(async () => {
     const newMuted = !isMuted;
@@ -131,6 +142,11 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
           setIsLoading(false);
           videoRef.current?.setStatusAsync({ isMuted }).catch(() => {});
         }}
+        onPlaybackStatusUpdate={(status) => {
+          if (status.isLoaded && status.isPlaying) {
+            setIsLoading(false);
+          }
+        }}
         onReadyForDisplay={(event) => {
           const { width: w, height: h } = event.naturalSize ?? {};
           if (w && h) {
@@ -159,19 +175,18 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
           </>
         ) : (
           <>
-            <Pressable onPress={onPress} style={galleryStyles.videoTapArea} />
+            <Pressable onPress={handleFeedVideoTap} style={galleryStyles.videoTapArea} />
             {isLoading ? (
               <View style={galleryStyles.controlButton}>
                 <ActivityIndicator size="small" color="#fff" />
               </View>
-            ) : (
-              <Pressable
-                onPress={handlePlayPause}
-                style={[galleryStyles.controlButton, { opacity: isPlaying ? 0.6 : 1 }]}
-              >
-                <Ionicons name={isPlaying ? "pause" : "play"} size={28} color="#fff" />
-              </Pressable>
-            )}
+            ) : !allowAutoplay && !isPlaying && !feedTappedToPlay ? (
+              <View style={galleryStyles.tapToPlayContainer} pointerEvents="none">
+                <Text size="sm" weight="semibold" numberOfLines={1} style={{ color: "#fff" }}>
+                  Tap to play
+                </Text>
+              </View>
+            ) : null}
           </>
         )}
       </View>
@@ -462,6 +477,15 @@ const galleryStyles = StyleSheet.create({
   controlButton: {
     width: 40,
     height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tapToPlayContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     alignItems: "center",

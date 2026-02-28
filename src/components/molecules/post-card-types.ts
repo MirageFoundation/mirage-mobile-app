@@ -1,4 +1,5 @@
 import type { ContentWarningType } from "@/src/components/atoms";
+import type { AwardBadge } from "@/src/api/types";
 
 export type PostAuthor = {
   id: string;
@@ -30,4 +31,5 @@ export type Post = {
   hasDisliked?: boolean;
   isFollowing?: boolean;
   createdAt: Date | string | number;
+  awards?: AwardBadge[];
 };

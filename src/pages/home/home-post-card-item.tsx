@@ -36,6 +36,7 @@ function areHomePostCardItemPropsEqual(
   if (prev.comments !== next.comments) return false;
  if (prev.hasLiked !== next.hasLiked) return false;
  if (prev.hasDisliked !== next.hasDisliked) return false;
+ if (prev.awards?.length !== next.awards?.length) return false;
   if (prevProps.feedScreen !== nextProps.feedScreen) return false;
  return true;
 }

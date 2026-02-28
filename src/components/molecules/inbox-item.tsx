@@ -1,4 +1,5 @@
 import type { InboxReply } from "@/src/api/types";
+import { getAwardInfo } from "@/src/data/awards";
 import { TimeAgo } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
@@ -141,9 +142,15 @@ export const InboxItem = memo(function InboxItem({
     [reply.parent_content],
   );
 
+  const isAward = reply.type === "award";
   const isMention = reply.type === "mention";
-  const actionLabel = isMention ? "mentioned you in" : "replied to";
-  const actionIcon = isMention ? "at-outline" : "arrow-undo-outline";
+  const awardInfo = isAward ? getAwardInfo(reply.award_type ?? "") : undefined;
+  const actionLabel = isAward
+    ? `gave your post a '${awardInfo?.label ?? ""}' award`
+    : isMention ? "mentioned you in" : "replied to";
+  const actionIcon = isAward
+    ? "gift-outline"
+    : isMention ? "at-outline" : "arrow-undo-outline";
 
   const { text: replyText, imageUrls } = useMemo(
     () => extractImageUrls(reply.reply_content),
@@ -160,37 +167,31 @@ export const InboxItem = memo(function InboxItem({
         ]}
       >
         <View style={styles.headerTextRow}>
-          <View style={styles.headerLeft}>
-            <Ionicons
-              name={actionIcon}
-              size={16}
-              color={theme.colors.text.subtle}
-            />
+          <Ionicons
+            name={actionIcon}
+            size={16}
+            color={theme.colors.text.subtle}
+            style={styles.headerIcon}
+          />
+          <Text size="sm" style={styles.headerLeft}>
             <Text
               size="sm"
               weight="semibold"
-              numberOfLines={1}
-              style={[
-                styles.headerText,
+              style={
                 getUsernameColor(reply.reply_author_level)
                   ? { color: getUsernameColor(reply.reply_author_level) }
-                  : undefined,
-              ]}
+                  : undefined
+              }
             >
               {reply.reply_username}
             </Text>
-            <Text size="sm" mode="subtle" numberOfLines={1}>
-              {actionLabel}
+            <Text size="sm" mode="subtle">
+              {" "}{actionLabel}{" "}
             </Text>
-            <Text
-              size="sm"
-              mode="subtle"
-              numberOfLines={1}
-              style={styles.parentPreview}
-            >
+            <Text size="sm" mode="subtle">
               {`"${parentPreview}"`}
             </Text>
-          </View>
+          </Text>
           <TimeAgo
             timestamp={reply.reply_timestamp * 1000}
             showSuffix={false}
@@ -243,23 +244,16 @@ const styles = StyleSheet.create((theme) => ({
   },
   headerTextRow: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    alignItems: "flex-start",
     gap: 4,
     marginBottom: theme.spacing.sm,
   },
+  headerIcon: {
+    marginTop: 2,
+  },
   headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
     flex: 1,
     marginRight: theme.spacing.sm,
-  },
-  headerText: {
-    flexShrink: 0,
-  },
-  parentPreview: {
-    flexShrink: 1,
   },
   replyContent: {},
   imageContainer: {

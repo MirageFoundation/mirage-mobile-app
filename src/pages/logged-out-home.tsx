@@ -134,11 +134,7 @@ export function LoggedOutHome() {
       >
         <View style={styles.content}>
           <Text style={styles.title}>
-            Welcome to Mirage <Text style={styles.betaBadge}>BETA</Text>
-          </Text>
-
-          <Text style={[styles.subtitle, { color: theme.colors.brand[500] }]}>
-            Currently in Private Beta — Invite Only
+            Welcome to Mirage
           </Text>
 
           <Text style={styles.description}>
@@ -515,19 +511,6 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: "800",
     textAlign: "center",
     marginBottom: theme.spacing.sm,
-  },
-  betaBadge: {
-    fontSize: 14,
-    lineHeight: 38,
-    fontWeight: "700",
-    letterSpacing: 1,
-  },
-  subtitle: {
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: "600",
-    textAlign: "center",
-    marginBottom: theme.spacing.lg,
   },
   description: {
     fontSize: 15,

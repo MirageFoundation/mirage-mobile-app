@@ -50,6 +50,7 @@ export {
  canonBaseReport,
   canonBaseClaimReward,
   canonBaseDeleteUser,
+  canonBaseAward,
  // Types
  type BaseParams,
  type SetUsernameParams,
@@ -69,6 +70,7 @@ export {
  type ReportParams,
   type ClaimRewardParams,
   type DeleteUserParams,
+  type AwardParams,
 } from "./canonical";
 
 // Envelope builder

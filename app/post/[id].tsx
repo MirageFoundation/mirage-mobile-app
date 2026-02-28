@@ -21,6 +21,8 @@ import {
   Comment,
   CommentInput,
   CommentInputRef,
+  AwardPickerSheet,
+  AwardPickerSheetRef,
   CommentOptionsSheet,
   CommentOptionsSheetRef,
   CommentThread,
@@ -133,7 +135,11 @@ export default function PostDetailScreen() {
   const savedComments = useSavedPostsStore((s) => s.savedComments);
   const optionsSheetRef = useRef<CommentOptionsSheetRef>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
+  const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
+  const [awardTargetId, setAwardTargetId] = useState<string>("");
+  const [awardTargetType, setAwardTargetType] = useState<"post" | "comment">("post");
+  const [awardTargetIsOwn, setAwardTargetIsOwn] = useState(false);
   const commentInputRef = useRef<CommentInputRef>(null);
   const flatListRef = useRef<FlatList<Comment>>(null);
 
@@ -1900,6 +1906,13 @@ export default function PostDetailScreen() {
           onBlockUser={handleBlockCommentAuthor}
           onReport={handleReportComment}
           onToggleFollowAuthor={handleToggleFollowCommentAuthor}
+          onGiveAward={() => {
+            if (!selectedComment) return;
+            setAwardTargetId(selectedComment.id);
+            setAwardTargetType("comment");
+            setAwardTargetIsOwn(currentUser?.id === selectedComment.author.id);
+            setTimeout(() => awardPickerSheetRef.current?.present(), 300);
+          }}
           onDismiss={() => setSelectedComment(null)}
         />
 
@@ -1933,7 +1946,21 @@ export default function PostDetailScreen() {
           onBlockPost={handleBlockPost}
           onBlockUser={handleBlockPostAuthor}
           onReport={handleReportPost}
+          onGiveAward={() => {
+            if (!displayPost) return;
+            setAwardTargetId(displayPost.id);
+            setAwardTargetType("post");
+            setAwardTargetIsOwn(currentUser?.id === displayPost.author.id);
+            setTimeout(() => awardPickerSheetRef.current?.present(), 300);
+          }}
           onDismiss={() => {}}
+        />
+
+        <AwardPickerSheet
+          ref={awardPickerSheetRef}
+          targetId={awardTargetId}
+          targetType={awardTargetType}
+          isOwnContent={awardTargetIsOwn}
         />
 
         {/* Delete confirmation popup */}
