@@ -43,6 +43,8 @@ export {
   useUnblockUser,
   useBlockPost,
   useUnblockPost,
+  useBlockTopic,
+  useUnblockTopic,
 } from "./use-block";
 export type { UseBlockOptions } from "./use-block";
 
@@ -60,3 +62,6 @@ export type { UseReportOptions } from "./use-report";
 
 // Rewards
 export { useClaimReward } from "./use-claim-reward";
+
+// Delete User
+export { useDeleteUser } from "./use-delete-user";

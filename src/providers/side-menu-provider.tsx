@@ -10,10 +10,12 @@ import { useUserStatus } from "@/src/api/read/hooks";
 
 type SideMenuContextType = {
   openSideMenu: () => void;
+  closeSideMenu: () => void;
 };
 
 const SideMenuContext = createContext<SideMenuContextType>({
   openSideMenu: () => {},
+  closeSideMenu: () => {},
 });
 
 export const useSideMenu = () => useContext(SideMenuContext);
@@ -29,6 +31,10 @@ export function SideMenuProvider({ children }: { children: React.ReactNode }) {
     refetchUserStatus();
     sideMenuRef.current?.present();
   }, [refetchUserStatus]);
+
+  const closeSideMenu = useCallback(() => {
+    sideMenuRef.current?.dismissImmediate();
+  }, []);
 
   const handleSettings = useCallback(() => router.push("/settings"), [router]);
   const handleSubscription = useCallback(() => router.push("/subscription"), [router]);
@@ -46,7 +52,7 @@ export function SideMenuProvider({ children }: { children: React.ReactNode }) {
   const handleLogout = useCallback(async () => await logout(), [logout]);
 
   return (
-    <SideMenuContext.Provider value={{ openSideMenu }}>
+    <SideMenuContext.Provider value={{ openSideMenu, closeSideMenu }}>
       {children}
       <SideMenu
         ref={sideMenuRef}

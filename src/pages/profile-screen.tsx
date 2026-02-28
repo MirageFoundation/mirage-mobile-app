@@ -167,7 +167,7 @@ export function ProfileScreen() {
   const { theme } = useUnistyles();
   const queryClient = useQueryClient();
 
-  const { registerProfileRefresh } =
+  const { registerProfileRefresh, showBars } =
     useScrollAnimationContext();
 
   const flatListRef = useRef<FlatList<any>>(null);
@@ -201,6 +201,7 @@ export function ProfileScreen() {
   const globalUnhidePost = useContentModerationStore((s) => s.unhidePost);
   const globalHideComment = useContentModerationStore((s) => s.hideComment);
   const globalUnhideComment = useContentModerationStore((s) => s.unhideComment);
+  const blockTopicOptimistic = useContentModerationStore((s) => s.blockTopic);
 
   const deleteHandler = useDeleteHandler({
     onRollback: (targetId, targetType) => {
@@ -262,8 +263,10 @@ export function ProfileScreen() {
   }, [postsData, getTabType, hiddenPostIds, hiddenCommentIds, commentEditOverrides]);
 
   const uiPosts = useMemo(
-    () => apiPosts.map((post) => transformApiPost(post)),
-    [apiPosts],
+    () => apiPosts.map((post) => transformApiPost(post, {
+      currentUser: user ? { id: user.id, username: user.username } : undefined,
+    })),
+    [apiPosts, user],
   );
 
 const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
@@ -288,6 +291,14 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
           refetchProfile(),
           refetchPosts(),
         ]);
+        if (user?.walletAddress) {
+          queryClient.invalidateQueries({
+            queryKey: ["user", "posts", user.walletAddress],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["user", "blocked", user.walletAddress],
+          });
+        }
       } finally {
         setIsRefreshing(false);
       }
@@ -298,18 +309,24 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
     refetchUserStatus,
     refetchProfile,
     refetchPosts,
+    queryClient,
+    user?.walletAddress,
   ]);
 
   useFocusEffect(
     useCallback(() => {
+      showBars();
       if (user?.walletAddress) {
         refetchUserStatus();
         refetchProfile();
         queryClient.invalidateQueries({
           queryKey: ["user", "posts", user.walletAddress],
         });
+        queryClient.invalidateQueries({
+          queryKey: ["user", "blocked", user.walletAddress],
+        });
       }
-    }, [queryClient, user?.walletAddress, refetchUserStatus, refetchProfile]),
+    }, [showBars, queryClient, user?.walletAddress, refetchUserStatus, refetchProfile]),
   );
 
   const scrollHandler = useAnimatedScrollHandler({
@@ -553,12 +570,14 @@ useEffect(() => {
 
   const handleConfirmBlock = useCallback(() => {
     const pending = blockHandler.pendingBlock;
-    if (pending && pending.type === "post") {
+    if (pending && pending.type === "topic") {
+      blockTopicOptimistic(pending.id);
+    } else if (pending && pending.type === "post") {
       globalHidePost(pending.id);
     }
     setSelectedPost(null);
     blockHandler.confirmBlock();
-  }, [blockHandler, globalHidePost]);
+  }, [blockHandler, globalHidePost, blockTopicOptimistic]);
 
   const handleReportSubmit = useCallback(
     (reason: string) => {
@@ -581,7 +600,8 @@ useEffect(() => {
 
   const handleSwipeTabChange = useCallback((index: number) => {
     setActiveTab(index);
-  }, []);
+    showBars();
+  }, [showBars]);
 
   const { swipeGesture, contentAnimatedStyle, fadeOpacity, completeTransition } = useTabSwipeGesture({
     onTabChange: handleSwipeTabChange,
@@ -590,6 +610,7 @@ useEffect(() => {
 
   const handleTabChange = useCallback((index: number) => {
     if (index === activeTab) return;
+    showBars();
     animatedTabIndex.value = withTiming(index, { duration: 200 });
     fadeOpacity.value = withTiming(
       0,
@@ -601,24 +622,35 @@ useEffect(() => {
         }
       },
     );
-  }, [activeTab, animatedTabIndex, fadeOpacity, completeTransition]);
+  }, [activeTab, showBars, animatedTabIndex, fadeOpacity, completeTransition]);
 
   const handleTabDoubleTap = useCallback(
     async (index: number) => {
+      if (flatListRef.current) {
+        if ("scrollToOffset" in flatListRef.current) {
+          flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+        }
+      }
       setIsRefreshing(true);
       try {
-        await Promise.all([refetchUserStatus(), refetchProfile()]);
+        await Promise.all([
+          refetchUserStatus(),
+          refetchProfile(),
+          refetchPosts(),
+        ]);
         if (user?.walletAddress) {
-          const type = index === 0 ? "submissions" : "comments";
           queryClient.invalidateQueries({
-            queryKey: ["user", "posts", user.walletAddress, type],
+            queryKey: ["user", "posts", user.walletAddress],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["user", "blocked", user.walletAddress],
           });
         }
       } finally {
         setIsRefreshing(false);
       }
     },
-    [refetchUserStatus, refetchProfile, queryClient, user?.walletAddress],
+    [refetchUserStatus, refetchProfile, refetchPosts, queryClient, user?.walletAddress],
   );
 
   const lastFetchTime = useRef(0);
@@ -835,6 +867,7 @@ useEffect(() => {
         isOwnProfile={true}
        onBackPress={handleBackPress}
        onMenuPress={handleMenuPress}
+       onSubscriptionPress={handleMenuSubscription}
      />
 
       <Animated.View

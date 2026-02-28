@@ -250,6 +250,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const globalUnhideComment = useContentModerationStore(
     (s) => s.unhideComment
   );
+  const blockTopicOptimistic = useContentModerationStore((s) => s.blockTopic);
 
   const deleteHandler = useDeleteHandler({
     onRollback: (targetId, targetType) => {
@@ -335,8 +336,10 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   }, [postsData, getTabType, hiddenPostIds, hiddenCommentIds]);
 
   const uiPosts = useMemo(
-    () => apiPosts.map((post) => transformApiPost(post)),
-    [apiPosts]
+    () => apiPosts.map((post) => transformApiPost(post, {
+      currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined,
+    })),
+    [apiPosts, currentUser]
   );
 
   const postsWithVotes = useMemo(() => {
@@ -608,12 +611,14 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
 
   const handleConfirmBlock = useCallback(() => {
     const pending = blockHandler.pendingBlock;
-    if (pending && pending.type === "post") {
+    if (pending && pending.type === "topic") {
+      blockTopicOptimistic(pending.id);
+    } else if (pending && pending.type === "post") {
       globalHidePost(pending.id);
     }
     setSelectedPost(null);
     blockHandler.confirmBlock();
-  }, [blockHandler, globalHidePost]);
+  }, [blockHandler, globalHidePost, blockTopicOptimistic]);
 
   const handleReportSubmit = useCallback(
     (reason: string) => {

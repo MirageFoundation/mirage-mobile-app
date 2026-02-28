@@ -33,10 +33,8 @@ export function useServerList() {
   });
 
   const servers = useMemo(() => {
-    console.log("[useServerList] peersData:", JSON.stringify(peersData));
     if (!peersData?.peers?.length) {
       const current = lastServersRef.current;
-      console.log("[useServerList] No peers, using fallback:", current);
       if (current.includes(currentServer)) return current;
       return [...new Set([currentServer, ...current])];
     }
@@ -44,10 +42,8 @@ export function useServerList() {
     const peerDomains = peersData.peers
       .map((p) => extractDomain(p.moniker))
       .filter((d): d is string => d !== null);
-    console.log("[useServerList] peerDomains:", peerDomains);
 
     const allServers = Array.from(new Set<string>([currentServer, ...peerDomains]));
-    console.log("[useServerList] final servers:", allServers);
     lastServersRef.current = allServers;
     return allServers;
   }, [peersData, currentServer]);

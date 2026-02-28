@@ -14,6 +14,7 @@ import {
 AdultContentPopup,
 ConfirmationPopup,
 FeedHeader,
+NewPostsButton,
 type Post,
  PostOptionsSheet,
  type PostOptionsSheetRef,
@@ -65,9 +66,23 @@ export function HomeScreen() {
 
   const backgroundTimeRef = useRef<number | null>(null);
   const [isFeedRefreshing, setIsFeedRefreshing] = useState(false);
+  const [hasNewPosts, setHasNewPosts] = useState(false);
+  const [newPostAvatars, setNewPostAvatars] = useState<{ userId: string; username: string }[]>([]);
+  const [newPostCount, setNewPostCount] = useState(0);
 
   const handleRefreshingChange = useCallback((refreshing: boolean) => {
     setIsFeedRefreshing(refreshing);
+  }, []);
+
+  const handleNewPostsChange = useCallback((hasNew: boolean, avatars: { userId: string; username: string }[], count: number) => {
+    setHasNewPosts(hasNew);
+    setNewPostAvatars(avatars);
+    setNewPostCount(count);
+  }, []);
+
+  const handleNewPostsPress = useCallback(async () => {
+    await tabbedFeedRef.current?.handleNewPostsPress();
+    setHasNewPosts(false);
   }, []);
 
   useEffect(() => {
@@ -94,6 +109,11 @@ export function HomeScreen() {
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
 
   useEffect(() => {
+    const switchToLatest = useHomePostCardStore.getState().skipNextRefresh;
+    if (switchToLatest) {
+      useHomePostCardStore.getState().setSkipNextRefresh(false);
+      setFeedTabIndex(1);
+    }
     const timer = setTimeout(() => {
       showBars();
       tabbedFeedRef.current?.scrollToTop();
@@ -125,6 +145,7 @@ export function HomeScreen() {
   const hidePost = useContentModerationStore((s) => s.hidePost);
   const unhidePost = useContentModerationStore((s) => s.unhidePost);
   const blockUser = useContentModerationStore((s) => s.blockUser);
+  const blockTopicOptimistic = useContentModerationStore((s) => s.blockTopic);
 
   const hasSeenAdultPrompt = usePreferencesStore((s) => s.hasSeenAdultPrompt);
   const setHasSeenAdultPrompt = usePreferencesStore(
@@ -234,10 +255,13 @@ export function HomeScreen() {
         blockUser(pending.id);
       } else if (pending.type === "post") {
         hidePost(pending.id);
+      } else if (pending.type === "topic") {
+        blockTopicOptimistic(pending.id);
+        showBars();
       }
     }
     blockHandler.confirmBlock();
-  }, [blockHandler, blockUser, hidePost]);
+  }, [blockHandler, blockUser, hidePost, blockTopicOptimistic, showBars]);
 
   const handleConfirmDelete = useCallback(() => {
     const pending = deleteHandler.pendingTarget;
@@ -296,6 +320,13 @@ export function HomeScreen() {
   const handleBlockPostFromCard = useCallback(
     (postId: string) => {
       blockHandler.requestBlockPost(postId);
+    },
+    [blockHandler]
+  );
+
+  const handleBlockTopicFromCard = useCallback(
+    (_postId: string, topic: string) => {
+      blockHandler.requestBlockTopic(topic);
     },
     [blockHandler]
   );
@@ -446,6 +477,7 @@ export function HomeScreen() {
     handleRevealContent,
     handleBlockUserFromCard,
     handleBlockPostFromCard,
+    handleBlockTopicFromCard,
     handleReportFromCard,
   });
 
@@ -463,6 +495,7 @@ export function HomeScreen() {
       handleRevealContent,
       handleBlockUserFromCard,
       handleBlockPostFromCard,
+      handleBlockTopicFromCard,
       handleReportFromCard,
     };
   });
@@ -487,6 +520,7 @@ export function HomeScreen() {
         onBlockUser: (postId, authorId, authorUsername) =>
           handlersRef.current.handleBlockUserFromCard(postId, authorId, authorUsername),
         onBlockPost: (postId) => handlersRef.current.handleBlockPostFromCard(postId),
+        onBlockTopic: (postId, topic) => handlersRef.current.handleBlockTopicFromCard(postId, topic),
         onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
       });
     }, [setHandlers])
@@ -514,8 +548,16 @@ export function HomeScreen() {
         ref={tabbedFeedRef}
         feedType="home"
         activeTabIndex={feedTabIndex}
+        onNewPostsChange={handleNewPostsChange}
       />
 
+      <NewPostsButton
+        visible={hasNewPosts}
+        onPress={handleNewPostsPress}
+        topOffset={insets.top + 44}
+        avatars={newPostAvatars}
+        newPostCount={newPostCount}
+      />
 
       <UpdateBanner
         status={easUpdate.status}

@@ -286,12 +286,50 @@ function subscribeAppState(): void {
   }
 }
 
+const STALE_NOTIFICATION_MS = 5_000;
+const HANDLED_NOTIFICATION_IDS_KEY = "inbox-handled-notification-ids";
+
+function getHandledNotificationIds(): Set<string> {
+  const raw = storage.getString(HANDLED_NOTIFICATION_IDS_KEY);
+  if (!raw) return new Set();
+  try {
+    return new Set(JSON.parse(raw) as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveHandledNotificationIds(ids: Set<string>): void {
+  const arr = Array.from(ids);
+  const trimmed = arr.length > 50 ? arr.slice(arr.length - 50) : arr;
+  storage.set(HANDLED_NOTIFICATION_IDS_KEY, JSON.stringify(trimmed));
+}
+
 function handleNotificationResponse(
   response: Notifications.NotificationResponse | null
 ): void {
   if (!response) return;
   try {
-    const notificationId = response.notification?.request?.identifier ?? `${Date.now()}`;
+    const notificationId = response.notification?.request?.identifier;
+    if (!notificationId) return;
+    const handledNotificationIds = getHandledNotificationIds();
+    if (handledNotificationIds.has(notificationId)) {
+      console.log("[InboxNotifications] Already handled notification:", notificationId);
+      return;
+    }
+    const responseDate = response.notification?.date;
+    if (!responseDate) {
+      console.log("[InboxNotifications] No date on notification, ignoring:", notificationId);
+      return;
+    }
+    const dateMs = responseDate < 1e12 ? responseDate * 1000 : responseDate;
+    const ageMs = Date.now() - dateMs;
+    if (ageMs > STALE_NOTIFICATION_MS) {
+      console.log("[InboxNotifications] Ignoring stale notification response, age:", ageMs);
+      return;
+    }
+    handledNotificationIds.add(notificationId);
+    saveHandledNotificationIds(handledNotificationIds);
     router.push({
       pathname: "/inbox",
       params: { fromNotification: notificationId },

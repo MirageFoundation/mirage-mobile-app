@@ -15,8 +15,6 @@ Sentry.init({
 
   sendDefaultPii: true,
 
-  enableLogs: true,
-
   tracesSampleRate: 0.2,
 
   replaysSessionSampleRate: 0.1,
@@ -104,6 +102,12 @@ export default Sentry.wrap(function RootLayout() {
        />
      <Stack.Screen
        name="saved-posts"
+       options={{
+         animation: "slide_from_right",
+       }}
+     />
+     <Stack.Screen
+       name="delete-account"
        options={{
          animation: "slide_from_right",
        }}

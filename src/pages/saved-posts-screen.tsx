@@ -363,6 +363,7 @@ export function SavedPostsScreen() {
   const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const savedComments = useSavedPostsStore((s) => s.savedComments);
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
+  const blockedTopicNames = useContentModerationStore((s) => s.blockedTopicNames);
   const shareServer = usePreferencesStore((s) => s.shareServer);
 
   const { handleUpvote, handleDownvote } = useVoteHandler({
@@ -389,8 +390,8 @@ export function SavedPostsScreen() {
   });
 
   const visiblePosts = useMemo(
-    () => savedPosts.filter((p) => !hiddenPostIds.has(p.id)),
-    [savedPosts, hiddenPostIds],
+    () => savedPosts.filter((p) => !hiddenPostIds.has(p.id) && !(p.topic && blockedTopicNames.has(p.topic.toLowerCase()))),
+    [savedPosts, hiddenPostIds, blockedTopicNames],
   );
 
   const postsWithOverrides = useMemo(

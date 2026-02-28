@@ -65,6 +65,8 @@ type PostActionsProps = {
   onBlockUser?: () => void;
   /** Callback when block post is pressed */
   onBlockPost?: () => void;
+  onBlockTopic?: () => void;
+  topic?: string;
   onReport?: () => void;
   hideCommentAction?: boolean;
 };
@@ -131,6 +133,8 @@ export const PostActions = memo(function PostActions({
   authorUsername,
   onBlockUser,
   onBlockPost,
+  onBlockTopic,
+  topic,
   onReport,
   hideCommentAction = false,
 }: PostActionsProps) {
@@ -219,6 +223,11 @@ export const PostActions = memo(function PostActions({
   const handleBlockPost = () => {
     triggerHaptic("warning");
     onBlockPost?.();
+  };
+
+  const handleBlockTopic = () => {
+    triggerHaptic("warning");
+    onBlockTopic?.();
   };
 
   const handleReport = () => {
@@ -427,6 +436,25 @@ export const PostActions = memo(function PostActions({
                 </Text>
               </View>
             </MenuOption>
+            {topic && onBlockTopic && (
+              <MenuOption onSelect={handleBlockTopic}>
+                <View style={styles.menuOption}>
+                  <Ionicons
+                    name="pricetag-outline"
+                    size={16}
+                    color={theme.colors.error[500]}
+                  />
+                  <Text
+                    size="lg"
+                    weight="medium"
+                    numberOfLines={1}
+                    style={{ color: theme.colors.error[500] }}
+                  >
+                    Block #{topic}
+                  </Text>
+                </View>
+              </MenuOption>
+            )}
             <MenuOption onSelect={handleReport}>
               <View style={styles.menuOption}>
                 <Ionicons

@@ -84,17 +84,20 @@ export async function processVideo(
   }
 
   try {
-    // Use react-native-video-trim's trim function
     const startTime = options.trimStartMs ?? 0;
     const endTime = options.trimEndMs ?? options.totalDurationMs ?? 0;
-    
-    console.log("[VideoProcessing] Trimming from", startTime, "to", endTime);
-    
-    const result = await trim(inputUri, {
+
+    const inputExtension = inputUri.split('.').pop()?.toLowerCase() || 'mp4';
+    const outputExt = ['mov', 'mp4', 'm4v'].includes(inputExtension) ? inputExtension : 'mp4';
+
+    const cleanUri = inputUri.startsWith('file://') ? inputUri.replace('file://', '') : inputUri;
+
+    console.log("[VideoProcessing] Trimming from", startTime, "to", endTime, "outputExt:", outputExt);
+
+    const result = await trim(cleanUri, {
       startTime,
       endTime,
-      // Note: react-native-video-trim doesn't have a direct "removeAudio" option
-      // Audio removal would need to be handled separately if needed
+      outputExt,
     });
     
     console.log("[VideoProcessing] Success! Output:", result);

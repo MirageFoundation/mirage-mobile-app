@@ -73,7 +73,6 @@ export function SettingRow(props: SettingRowProps) {
             style={[
               styles.icon,
               type === "navigate" && {
-                marginTop: 2,
                 color: theme.colors.error[400],
               },
             ]}

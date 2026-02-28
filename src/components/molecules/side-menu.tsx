@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import {
   forwardRef,
   useCallback,
+  useEffect,
   useImperativeHandle,
   useRef,
   useState,
@@ -73,6 +74,7 @@ type SideMenuProps = {
 export type SideMenuRef = {
   present: () => void;
   dismiss: () => void;
+  dismissImmediate: () => void;
 };
 
 const MenuItem = ({
@@ -332,6 +334,14 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
     const walletAddress = useAuthStore((s) => s.user?.walletAddress);
 
+    useEffect(() => {
+      if (!isLoggedIn && visible) {
+        translateX.value = -MENU_WIDTH;
+        backdropOpacity.value = 0;
+        setVisible(false);
+      }
+    }, [isLoggedIn]);
+
     const { data: userStatus } = useUserStatus();
     const balance = userStatus?.balance
       ? Math.floor(userStatus.balance / 1_000_000)
@@ -370,6 +380,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     useImperativeHandle(ref, () => ({
       present: open,
       dismiss: close,
+      dismissImmediate: () => {
+        translateX.value = -MENU_WIDTH;
+        backdropOpacity.value = 0;
+        setVisible(false);
+      },
     }));
 
     const menuAnimatedStyle = useAnimatedStyle(() => ({
@@ -708,7 +723,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 22
+                          update 27
                         </Text>
                         <Text
                           style={{
@@ -718,7 +733,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          mirage stickers added
+                          delete account, profile changes, recovery phrase
+                          option
                         </Text>
                       </>
                     )}
@@ -759,7 +775,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 22
+                          update 27
                         </Text>
                         <Text
                           style={{
@@ -769,7 +785,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          mirage stickers added
+                          delete account, profile changes, recovery phrase
+                          option
                         </Text>
                       </>
                     )}

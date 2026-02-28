@@ -329,6 +329,41 @@ const handleApiServerChange = useCallback(
         },
       ],
     },
+    {
+      title: "Security",
+      data: [
+        {
+          id: "view-recovery-phrase",
+          component: (
+            <SettingRow
+              type="value"
+              icon="key-outline"
+              title="Recovery Phrase"
+              subtitle="View your wallet recovery phrase"
+              rightText=""
+              onPress={() => router.push("/view-recovery-phrase")}
+            />
+          ),
+        },
+      ],
+    },
+    {
+      title: "Danger Zone",
+      data: [
+        {
+          id: "delete-account",
+          component: (
+            <SettingRow
+              type="navigate"
+              icon="trash-outline"
+              title="Delete Account"
+              subtitle="Permanently delete your account"
+              onPress={() => router.push("/delete-account")}
+            />
+          ),
+        },
+      ],
+    },
     ...(__DEV__ ? [{
       title: "Notifications",
       data: [

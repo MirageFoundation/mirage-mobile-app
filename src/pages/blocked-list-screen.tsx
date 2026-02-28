@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -15,19 +16,26 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { useUserBlocked, useUsernameFromAddress } from "@/src/api/read";
-import { useUnblockUser, useUnblockPost } from "@/src/api/write";
+import { queryKeys } from "@/src/api/read/query-keys";
+import type { UserBlockedResponse } from "@/src/api/types";
+import { useUnblockUser, useUnblockPost, useUnblockTopic } from "@/src/api/write";
 import { Avatar } from "@/src/components/atoms";
 import { ConfirmationPopup } from "@/src/components/molecules";
 import { Box, Icon, Text } from "@/src/components/ui/primitives";
-import { useToast } from "@/src/providers/toast-provider";
+import { useAuthStore, useContentModerationStore } from "@/src/stores";
+import {
+  usePowQueueStore,
+  generateActionId,
+} from "@/src/services/pow-queue";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
-type BlockedTab = "users" | "posts";
+type BlockedTab = "users" | "posts" | "topics";
 
 const TABS: { key: BlockedTab; label: string }[] = [
   { key: "users", label: "Users" },
   { key: "posts", label: "Posts" },
+  { key: "topics", label: "Topics" },
 ];
 
 function SkeletonBox({
@@ -104,11 +112,16 @@ function ListSkeleton({ tab }: { tab: BlockedTab }) {
 
 function EmptyState({ tab }: { tab: BlockedTab }) {
   const { theme } = useUnistyles();
-  const title = tab === "users" ? "No blocked users" : "No blocked posts";
-  const subtitle =
-    tab === "users"
-      ? "Users you block will appear here. You can unblock them anytime."
-      : "Posts you block will appear here. You can unblock them anytime.";
+  const titles: Record<BlockedTab, string> = {
+    users: "No blocked users",
+    posts: "No blocked posts",
+    topics: "No blocked topics",
+  };
+  const subtitles: Record<BlockedTab, string> = {
+    users: "Users you block will appear here. You can unblock them anytime.",
+    posts: "Posts you block will appear here. You can unblock them anytime.",
+    topics: "Topics you block will appear here. You can unblock them anytime.",
+  };
 
   return (
     <View style={styles.emptyContainer}>
@@ -122,14 +135,14 @@ function EmptyState({ tab }: { tab: BlockedTab }) {
         weight="bold"
         style={{ color: theme.colors.text.default, textAlign: "center" }}
       >
-        {title}
+        {titles[tab]}
       </Text>
       <Text
         size="sm"
         mode="subtle"
         style={{ marginTop: 8, textAlign: "center", maxWidth: 280 }}
       >
-        {subtitle}
+        {subtitles[tab]}
       </Text>
     </View>
   );
@@ -219,20 +232,70 @@ function BlockedPostRow({
   );
 }
 
+function BlockedTopicRow({
+  topic,
+  onUnblock,
+}: {
+  topic: string;
+  onUnblock: (topic: string) => void;
+}) {
+  const { theme } = useUnistyles();
+  const router = useRouter();
+
+  return (
+    <Pressable
+      onPress={() => router.push(`/topic/${topic}`)}
+      style={styles.row}
+    >
+      <Icon
+        icon={Ionicons}
+        name="pricetag-outline"
+        size={18}
+        color={theme.colors.text.subtle}
+      />
+      <View style={{ flex: 1, marginLeft: 12 }}>
+        <Text
+          size="sm"
+          weight="medium"
+          style={{ color: theme.colors.text.default }}
+          numberOfLines={1}
+        >
+          #{topic}
+        </Text>
+        <Text size="xs" mode="subtle">
+          Blocked topic
+        </Text>
+      </View>
+      <Pressable
+        onPress={() => onUnblock(topic)}
+        style={[styles.unblockButton, { borderColor: theme.colors.border.subtle }]}
+      >
+        <Text size="xs" weight="bold" style={{ color: theme.colors.text.default }}>
+          Unblock
+        </Text>
+      </Pressable>
+    </Pressable>
+  );
+}
+
 export function BlockedListScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const pagerRef = useRef<PagerView>(null);
-  const toast = useToast();
+  const queryClient = useQueryClient();
+  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
 
   const { data: blockedData, isLoading, refetch } = useUserBlocked();
   const unblockUserMutation = useUnblockUser();
   const unblockPostMutation = useUnblockPost();
+  const unblockTopicMutation = useUnblockTopic();
+  const unblockTopicOptimistic = useContentModerationStore((s) => s.unblockTopic);
+  const enqueue = usePowQueueStore((state) => state.enqueue);
 
   const [activeTab, setActiveTab] = useState<BlockedTab>("users");
   const [confirmTarget, setConfirmTarget] = useState<{
-    type: "user" | "post";
+    type: "user" | "post" | "topic";
     id: string;
   } | null>(null);
 
@@ -244,13 +307,18 @@ export function BlockedListScreen() {
     () => blockedData?.blocked_posts ?? [],
     [blockedData?.blocked_posts],
   );
+  const blockedTopics = useMemo(
+    () => blockedData?.blocked_topics ?? [],
+    [blockedData?.blocked_topics],
+  );
 
   const tabCounts: Record<BlockedTab, number> = useMemo(
     () => ({
       users: blockedUsers.length,
       posts: blockedPosts.length,
+      topics: blockedTopics.length,
     }),
-    [blockedUsers.length, blockedPosts.length],
+    [blockedUsers.length, blockedPosts.length, blockedTopics.length],
   );
 
   const handleBackPress = useCallback(() => {
@@ -259,12 +327,13 @@ export function BlockedListScreen() {
 
   const handleTabPress = useCallback((tab: BlockedTab) => {
     setActiveTab(tab);
-    pagerRef.current?.setPage(tab === "users" ? 0 : 1);
+    const index = TABS.findIndex((t) => t.key === tab);
+    pagerRef.current?.setPage(index);
   }, []);
 
   const handlePageSelected = useCallback((e: any) => {
     const index = e.nativeEvent.position;
-    setActiveTab(index === 0 ? "users" : "posts");
+    setActiveTab(TABS[index].key);
   }, []);
 
   const handleRequestUnblockUser = useCallback((address: string) => {
@@ -275,31 +344,94 @@ export function BlockedListScreen() {
     setConfirmTarget({ type: "post", id: postId });
   }, []);
 
+  const handleRequestUnblockTopic = useCallback((topic: string) => {
+    setConfirmTarget({ type: "topic", id: topic });
+  }, []);
+
+  const optimisticallyRemoveFromList = useCallback(
+    (type: "user" | "post" | "topic", id: string) => {
+      if (!walletAddress) return;
+      const qk = queryKeys.userBlocked(walletAddress);
+      const prev = queryClient.getQueryData<UserBlockedResponse>(qk);
+      if (!prev) return;
+      const updated = { ...prev };
+      if (type === "user") {
+        updated.blocked_users = prev.blocked_users.filter((u) => u !== id);
+      } else if (type === "post") {
+        updated.blocked_posts = prev.blocked_posts.filter((p) => p !== id);
+      } else {
+        updated.blocked_topics = (prev.blocked_topics ?? []).filter((t) => t !== id);
+      }
+      queryClient.setQueryData(qk, updated);
+      return prev;
+    },
+    [walletAddress, queryClient],
+  );
+
   const handleConfirmUnblock = useCallback(() => {
     if (!confirmTarget) return;
     const { type, id } = confirmTarget;
     setConfirmTarget(null);
 
-    if (type === "user") {
-      toast
-        .promise(unblockUserMutation.mutateAsync(id), {
-          loading: "Unblocking user...",
-          success: "User unblocked",
-          error: "Failed to unblock user",
-        })
-        .then(() => refetch())
-        .catch(() => {});
-    } else {
-      toast
-        .promise(unblockPostMutation.mutateAsync(id), {
-          loading: "Unblocking post...",
-          success: "Post unblocked",
-          error: "Failed to unblock post",
-        })
-        .then(() => refetch())
-        .catch(() => {});
+    const actionId = generateActionId();
+    const label =
+      type === "user"
+        ? "Unblocking user"
+        : type === "post"
+          ? "Unblocking post"
+          : "Unblocking topic";
+
+    if (type === "topic") {
+      unblockTopicOptimistic(id);
     }
-  }, [confirmTarget, unblockUserMutation, unblockPostMutation, toast, refetch]);
+
+    const previousData = optimisticallyRemoveFromList(type, id);
+
+    enqueue({
+      id: actionId,
+      type: "unblock",
+      label,
+      execute: async () => {
+        const qk = walletAddress ? queryKeys.userBlocked(walletAddress) : null;
+        if (qk) {
+          await queryClient.cancelQueries({ queryKey: qk });
+        }
+        let result;
+        if (type === "user") {
+          result = await unblockUserMutation.mutateAsync(id);
+        } else if (type === "post") {
+          result = await unblockPostMutation.mutateAsync(id);
+        } else {
+          result = await unblockTopicMutation.mutateAsync(id);
+        }
+        if (qk) {
+          await queryClient.cancelQueries({ queryKey: qk });
+          optimisticallyRemoveFromList(type, id);
+        }
+        return result;
+      },
+      onSuccess: () => {
+        if (walletAddress) {
+          queryClient.cancelQueries({ queryKey: queryKeys.userBlocked(walletAddress) });
+          optimisticallyRemoveFromList(type, id);
+        }
+        setTimeout(async () => {
+          await refetch();
+          optimisticallyRemoveFromList(type, id);
+        }, 3000);
+      },
+      onError: () => {
+        if (previousData && walletAddress) {
+          queryClient.setQueryData(queryKeys.userBlocked(walletAddress), previousData);
+        }
+      },
+      onRollback: () => {
+        if (previousData && walletAddress) {
+          queryClient.setQueryData(queryKeys.userBlocked(walletAddress), previousData);
+        }
+      },
+    });
+  }, [confirmTarget, unblockUserMutation, unblockPostMutation, unblockTopicMutation, unblockTopicOptimistic, enqueue, refetch, optimisticallyRemoveFromList, walletAddress, queryClient]);
 
   const handleCancelUnblock = useCallback(() => {
     setConfirmTarget(null);
@@ -319,6 +451,13 @@ export function BlockedListScreen() {
     [handleRequestUnblockPost],
   );
 
+  const renderTopicItem = useCallback(
+    ({ item }: { item: string }) => (
+      <BlockedTopicRow topic={item} onUnblock={handleRequestUnblockTopic} />
+    ),
+    [handleRequestUnblockTopic],
+  );
+
   const keyExtractor = useCallback((item: string) => item, []);
 
   const usersListEmpty = useCallback(() => {
@@ -330,6 +469,25 @@ export function BlockedListScreen() {
     if (isLoading) return <ListSkeleton tab="posts" />;
     return <EmptyState tab="posts" />;
   }, [isLoading]);
+
+  const topicsListEmpty = useCallback(() => {
+    if (isLoading) return <ListSkeleton tab="topics" />;
+    return <EmptyState tab="topics" />;
+  }, [isLoading]);
+
+  const getConfirmTitle = () => {
+    if (!confirmTarget) return "Unblock?";
+    if (confirmTarget.type === "user") return "Unblock User?";
+    if (confirmTarget.type === "post") return "Unblock Post?";
+    return "Unblock Topic?";
+  };
+
+  const getConfirmMessage = () => {
+    if (!confirmTarget) return "";
+    if (confirmTarget.type === "user") return "You'll see their content in your feed again.";
+    if (confirmTarget.type === "post") return "This post will appear in your feed again.";
+    return "Posts with this topic will appear in your feed again.";
+  };
 
   return (
     <Box flex background="base">
@@ -425,20 +583,25 @@ export function BlockedListScreen() {
             ListEmptyComponent={postsListEmpty}
           />
         </View>
+
+        <View key="topics" style={{ flex: 1 }}>
+          <FlatList
+            data={blockedTopics}
+            renderItem={renderTopicItem}
+            keyExtractor={keyExtractor}
+            contentContainerStyle={{
+              paddingBottom: insets.bottom + 20,
+              flexGrow: blockedTopics.length === 0 ? 1 : undefined,
+            }}
+            ListEmptyComponent={topicsListEmpty}
+          />
+        </View>
       </PagerView>
 
       <ConfirmationPopup
         visible={!!confirmTarget}
-        title={
-          confirmTarget?.type === "user"
-            ? "Unblock User?"
-            : "Unblock Post?"
-        }
-        message={
-          confirmTarget?.type === "user"
-            ? "You'll see their content in your feed again."
-            : "This post will appear in your feed again."
-        }
+        title={getConfirmTitle()}
+        message={getConfirmMessage()}
         icon="ban-outline"
         confirmText="Unblock"
         onConfirm={handleConfirmUnblock}

@@ -20,12 +20,14 @@ import {
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
 import {
+  queryKeys,
   transformApiPosts,
   useInfinitePosts,
   useUserFollowed,
 } from "@/src/api";
 import {
   ConfirmationPopup,
+  NewPostsButton,
   type Post,
   PostCardSkeletonList,
   PostOptionsSheet,
@@ -56,6 +58,7 @@ import {
   useSavedPostsStore,
 } from "@/src/stores";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNewPostsChecker } from "@/src/hooks/use-new-posts-checker";
 
 export function TopicFeedScreen() {
   const { id: topicName } = useLocalSearchParams<{ id: string }>();
@@ -85,14 +88,18 @@ export function TopicFeedScreen() {
   const handleSortChange = useCallback((value: "magic" | "newest") => {
     triggerHaptic("light");
     setSortBy(value);
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    requestAnimationFrame(() => {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    });
   }, []);
 
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
+  const blockedTopicNames = useContentModerationStore((s) => s.blockedTopicNames);
   const hidePost = useContentModerationStore((s) => s.hidePost);
   const unhidePost = useContentModerationStore((s) => s.unhidePost);
   const blockUser = useContentModerationStore((s) => s.blockUser);
+  const blockTopicOptimistic = useContentModerationStore((s) => s.blockTopic);
 
   const selectedContentTypes = usePreferencesStore(
     (s) => s.selectedContentTypes,
@@ -182,13 +189,37 @@ export function TopicFeedScreen() {
       ? uniquePosts.filter((post) => post.user_vote !== -1)
       : uniquePosts;
 
-    const transformedPosts = transformApiPosts(filteredPosts);
+    const transformedPosts = transformApiPosts(filteredPosts, {
+      currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined,
+    });
 
     return transformedPosts.filter(
       (post) =>
-        !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id),
+        !hiddenPostIds.has(post.id) &&
+        !blockedUserIds.has(post.author.id) &&
+        !(post.topic && blockedTopicNames.has(post.topic.toLowerCase())),
     );
-  }, [data, hiddenPostIds, blockedUserIds, hideDownvotedPosts]);
+  }, [data, hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, currentUser]);
+
+  const currentFirstPostId = posts[0]?.id ?? null;
+  const latestTimestamp = useMemo(() => {
+    if (posts.length === 0) return null;
+    let max = 0;
+    for (const p of posts) {
+      const ts = typeof p.createdAt === "number" ? p.createdAt : new Date(p.createdAt).getTime();
+      if (ts > max) max = ts;
+    }
+    return max > 0 ? Math.floor(max / 1000) : null;
+  }, [posts]);
+  const queryClient = useQueryClient();
+
+  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, getPrefetchedData, clearPrefetch } = useNewPostsChecker({
+    topic: topicName,
+    by: sortBy === "magic" ? "magic" : "newest",
+    enabled: true,
+    currentFirstPostId,
+    latestTimestamp,
+  });
 
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
@@ -271,10 +302,12 @@ export function TopicFeedScreen() {
         blockUser(pending.id);
       } else if (pending.type === "post") {
         hidePost(pending.id);
+      } else if (pending.type === "topic") {
+        blockTopicOptimistic(pending.id);
       }
     }
     blockHandler.confirmBlock();
-  }, [blockHandler, blockUser, hidePost]);
+  }, [blockHandler, blockUser, hidePost, blockTopicOptimistic]);
 
   const handleConfirmDelete = useCallback(() => {
     const pending = deleteHandler.pendingTarget;
@@ -333,6 +366,13 @@ export function TopicFeedScreen() {
   const handleBlockPostFromCard = useCallback(
     (postId: string) => {
       blockHandler.requestBlockPost(postId);
+    },
+    [blockHandler],
+  );
+
+  const handleBlockTopicFromCard = useCallback(
+    (_postId: string, topic: string) => {
+      blockHandler.requestBlockTopic(topic);
     },
     [blockHandler],
   );
@@ -414,6 +454,45 @@ export function TopicFeedScreen() {
       setIsManualRefreshing(false);
     }
   }, [refetch]);
+
+  const handleNewPostsPress = useCallback(async () => {
+    try {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    } catch {}
+
+    const postsQueryKey = queryKeys.posts({
+      limit: 20,
+      topic: topicName,
+      by: sortBy,
+      allowed_tags: allowedTags || undefined,
+      address: currentUser?.walletAddress,
+      page: undefined,
+    });
+
+    const prefetched = getPrefetchedData();
+    if (prefetched) {
+      queryClient.setQueryData(postsQueryKey, (oldData: any) => {
+        if (!oldData) {
+          return { pages: [prefetched], pageParams: [1] };
+        }
+        return {
+          ...oldData,
+          pages: [prefetched, ...oldData.pages.slice(1)],
+          pageParams: [1, ...oldData.pageParams.slice(1)],
+        };
+      });
+      clearPrefetch();
+    } else {
+      await handleRefresh();
+    }
+
+    requestAnimationFrame(() => {
+      try {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      } catch {}
+    });
+    dismissNewPosts();
+  }, [topicName, sortBy, allowedTags, currentUser?.walletAddress, queryClient, handleRefresh, dismissNewPosts, getPrefetchedData, clearPrefetch]);
 
   const handleItemVisible = useCallback((index: number) => {
     const totalLoaded = postsLengthRef.current;
@@ -604,6 +683,7 @@ export function TopicFeedScreen() {
     handleRevealContent,
     handleBlockUserFromCard,
     handleBlockPostFromCard,
+    handleBlockTopicFromCard,
     handleReportFromCard,
   });
 
@@ -621,6 +701,7 @@ export function TopicFeedScreen() {
       handleRevealContent,
       handleBlockUserFromCard,
       handleBlockPostFromCard,
+      handleBlockTopicFromCard,
       handleReportFromCard,
     };
   });
@@ -657,6 +738,8 @@ export function TopicFeedScreen() {
           ),
         onBlockPost: (postId) =>
           handlersRef.current.handleBlockPostFromCard(postId),
+        onBlockTopic: (postId, topic) =>
+          handlersRef.current.handleBlockTopicFromCard(postId, topic),
         onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
       });
     }, [setHandlers]),
@@ -824,6 +907,14 @@ export function TopicFeedScreen() {
         refreshControl={refreshControl}
         feedScreen="topic"
         onItemVisible={handleItemVisible}
+      />
+
+      <NewPostsButton
+        visible={hasNewPosts}
+        onPress={handleNewPostsPress}
+        topOffset={insets.top + 52}
+        avatars={newPostAvatars}
+        newPostCount={newPostCount}
       />
 
       <PostOptionsSheet

@@ -45,6 +45,7 @@ type ProfileHeaderBarProps = {
   onFollowPress?: () => void;
   onUnfollowPress?: () => void;
   onMenuPress?: () => void;
+  onSubscriptionPress?: () => void;
 };
 
 type ProfileContentProps = {
@@ -123,6 +124,7 @@ export const ProfileHeaderBar = ({
   onFollowPress,
   onUnfollowPress,
   onMenuPress,
+  onSubscriptionPress,
 }: ProfileHeaderBarProps) => {
   const insets = useSafeAreaInsets();
 
@@ -158,24 +160,26 @@ export const ProfileHeaderBar = ({
             ) : (
               <>
                 <Text
-                  size="md"
+                  size={isOwnProfile ? "lg" : "md"}
                   weight="semibold"
-                  style={[styles.whiteText, { marginBottom: -5 }]}
+                  style={[styles.whiteText, isOwnProfile ? undefined : { marginBottom: -5 }]}
                   numberOfLines={1}
                 >
                   {username}
                 </Text>
-                <Box direction="row" center gap="xs">
-                  <Text size="sm" style={styles.subtleWhiteText}>
-                    {getTierName(userLevel)} Tier
-                  </Text>
-                  <Icon
-                    icon={Ionicons}
-                    name="shield-checkmark"
-                    size={10}
-                    color="rgba(255,255,255,0.7)"
-                  />
-                </Box>
+                {!isOwnProfile && (
+                  <Box direction="row" center gap="xs">
+                    <Text size="sm" style={styles.subtleWhiteText}>
+                      {getTierName(userLevel)} Tier
+                    </Text>
+                    <Icon
+                      icon={Ionicons}
+                      name="shield-checkmark"
+                      size={10}
+                      color="rgba(255,255,255,0.7)"
+                    />
+                  </Box>
+                )}
               </>
             )}
           </Box>
@@ -186,6 +190,26 @@ export const ProfileHeaderBar = ({
             <View style={styles.refreshIndicator}>
               <ActivityIndicator size="small" color="#FFFFFF" />
             </View>
+          )}
+          {isOwnProfile && (
+            <AnimatedPressable
+              scaleAmount={0.9}
+              onPress={() => {
+                triggerHaptic("selection");
+                onSubscriptionPress?.();
+              }}
+              style={styles.tierHeaderBadge}
+            >
+              <Icon
+                icon={Ionicons}
+                name="shield-checkmark"
+                size={16}
+                color="#FFFFFF"
+              />
+              <Text size="md" weight="semibold" style={styles.whiteText}>
+                {getTierName(userLevel)}
+              </Text>
+            </AnimatedPressable>
           )}
           {!isOwnProfile && (
             <AnimatedPressable
@@ -216,13 +240,15 @@ export const ProfileHeaderBar = ({
               </Text>
             </AnimatedPressable>
           )}
-          <IconButton
-            name="ellipsis-horizontal"
-            size="md"
-            color="#FFFFFF"
-            onPress={onMenuPress}
-            style={styles.iconButton}
-          />
+          {!isOwnProfile && (
+            <IconButton
+              name="ellipsis-horizontal"
+              size="md"
+              color="#FFFFFF"
+              onPress={onMenuPress}
+              style={styles.iconButton}
+            />
+          )}
         </Box>
       </Box>
     </Animated.View>
@@ -619,5 +645,14 @@ const styles = StyleSheet.create((theme) => ({
     height: 22,
     borderRadius: 4,
     backgroundColor: "rgba(255,255,255,0.15)",
+  },
+  tierHeaderBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    height: 36,
+    paddingHorizontal: 12,
+    borderRadius: theme.radius.full,
+    backgroundColor: "rgba(0,0,0,0.3)",
   },
 }));

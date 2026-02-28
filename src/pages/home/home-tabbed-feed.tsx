@@ -9,7 +9,7 @@ import {
 } from "react";
 import type { FlatList } from "react-native";
 import type { ReactNode } from "react";
-import { ActivityIndicator, RefreshControl } from "react-native";
+import { ActivityIndicator, Platform, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUnistyles } from "react-native-unistyles";
 
@@ -40,11 +40,15 @@ import {
   usePreferencesStore,
 } from "@/src/stores";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNewPostsChecker, type NewPostAvatar } from "@/src/hooks/use-new-posts-checker";
 
 export type HomeTabbedFeedRef = {
   scrollToTop: (tabIndex?: number) => void;
   refresh: () => Promise<void>;
   isRefreshing: () => boolean;
+  hasNewPosts: () => boolean;
+  handleNewPostsPress: () => Promise<void>;
+  dismissNewPosts: () => void;
 };
 
 type HomeTabbedFeedProps = {
@@ -52,22 +56,35 @@ type HomeTabbedFeedProps = {
   activeTabIndex?: number;
   ListHeaderExtra?: ReactNode;
   onRefreshingChange?: (refreshing: boolean) => void;
+  onNewPostsChange?: (hasNew: boolean, avatars: NewPostAvatar[], count: number) => void;
 };
 
 export const HomeTabbedFeed = forwardRef<
   HomeTabbedFeedRef,
   HomeTabbedFeedProps
->(({ feedType: baseFeed, activeTabIndex = 0, ListHeaderExtra, onRefreshingChange }, ref) => {
+>(({ feedType: baseFeed, activeTabIndex = 0, ListHeaderExtra, onRefreshingChange, onNewPostsChange }, ref) => {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { scrollHandler, registerHomeRefresh, registerFollowingRefresh } = useScrollAnimationContext();
+  const { scrollHandler, registerHomeRefresh, registerFollowingRefresh, showBars } = useScrollAnimationContext();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
+  const prevTabIndexRef = useRef(activeTabIndex);
 
   const magicListRef = useRef<FlatList<Post>>(null);
   const latestListRef = useRef<FlatList<Post>>(null);
+
+  useEffect(() => {
+    if (prevTabIndexRef.current !== activeTabIndex) {
+      prevTabIndexRef.current = activeTabIndex;
+      showBars();
+      const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      });
+    }
+  }, [activeTabIndex, showBars]);
 
   const currentUser = useAuthStore((s) => s.user);
   const selectedContentTypes = usePreferencesStore(
@@ -76,6 +93,7 @@ export const HomeTabbedFeed = forwardRef<
   const hideDownvotedPosts = usePreferencesStore((s) => s.hideDownvotedPosts);
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
+  const blockedTopicNames = useContentModerationStore((s) => s.blockedTopicNames);
 
   const followedUsers = useHomePostCardStore((s) => s.followedUsers);
   const followedTopics = useHomePostCardStore((s) => s.followedTopics);
@@ -138,14 +156,18 @@ export const HomeTabbedFeed = forwardRef<
         ? uniquePosts.filter((post) => post.user_vote !== -1)
         : uniquePosts;
 
-      const transformedPosts = transformApiPosts(filteredPosts);
+      const transformedPosts = transformApiPosts(filteredPosts, {
+        currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined,
+      });
 
       return transformedPosts.filter(
         (post) =>
-          !hiddenPostIds.has(post.id) && !blockedUserIds.has(post.author.id),
+          !hiddenPostIds.has(post.id) &&
+          !blockedUserIds.has(post.author.id) &&
+          !(post.topic && blockedTopicNames.has(post.topic.toLowerCase())),
       );
     },
-    [hiddenPostIds, blockedUserIds, hideDownvotedPosts, baseFeed, followedUsers, followedTopics],
+    [hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, baseFeed, followedUsers, followedTopics, currentUser],
   );
 
   const magicPosts = useMemo(
@@ -238,18 +260,102 @@ export const HomeTabbedFeed = forwardRef<
   const scrollToTop = useCallback((tabIndex?: number) => {
     const targetIndex = tabIndex ?? activeTabIndex;
     const listRef = targetIndex === 0 ? magicListRef : latestListRef;
-    listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    try {
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    } catch {}
+    if (Platform.OS === "android") {
+      requestAnimationFrame(() => {
+        try {
+          listRef.current?.scrollToOffset({ offset: 0, animated: false });
+        } catch {}
+      });
+    }
   }, [activeTabIndex]);
 
   const scrollToTopAndRefresh = useCallback(async () => {
-    scrollToTop();
+    const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
+    try {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    } catch {}
     await handleRefresh();
-  }, [scrollToTop, handleRefresh]);
+    requestAnimationFrame(() => {
+      try {
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      } catch {}
+    });
+  }, [activeTabIndex, handleRefresh]);
 
   useEffect(() => {
     const register = baseFeed === "home" ? registerHomeRefresh : registerFollowingRefresh;
     register(scrollToTopAndRefresh);
   }, [baseFeed, registerHomeRefresh, registerFollowingRefresh, scrollToTopAndRefresh]);
+
+  const activeSortBy = activeTabIndex === 0 ? "magic" : "newest";
+  const activePosts = activeTabIndex === 0 ? magicPosts : latestPosts;
+  const currentFirstPostId = activePosts[0]?.id ?? null;
+  const latestTimestamp = useMemo(() => {
+    if (activePosts.length === 0) return null;
+    let max = 0;
+    for (const p of activePosts) {
+      const ts = typeof p.createdAt === "number" ? p.createdAt : new Date(p.createdAt).getTime();
+      if (ts > max) max = ts;
+    }
+    return max > 0 ? Math.floor(max / 1000) : null;
+  }, [activePosts]);
+
+  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, getPrefetchedData, clearPrefetch } = useNewPostsChecker({
+    feed: baseFeed,
+    by: activeSortBy as "magic" | "newest",
+    enabled: true,
+    currentFirstPostId,
+    latestTimestamp,
+  });
+
+  useEffect(() => {
+    onNewPostsChange?.(hasNewPosts, newPostAvatars, newPostCount);
+  }, [hasNewPosts, newPostAvatars, newPostCount, onNewPostsChange]);
+
+  const handleNewPostsPress = useCallback(async () => {
+    const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
+    try {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    } catch {}
+
+    const sortBy = activeTabIndex === 0 ? "magic" : "newest";
+    const postsQueryKey = queryKeys.posts({
+      limit: 20,
+      feed: baseFeed,
+      by: sortBy as any,
+      allowed_tags: allowedTags || undefined,
+      address: currentUser?.walletAddress,
+      page: undefined,
+    });
+
+    const prefetched = getPrefetchedData();
+    if (prefetched) {
+      queryClient.setQueryData(postsQueryKey, (oldData: any) => {
+        if (!oldData) {
+          return { pages: [prefetched], pageParams: [1] };
+        }
+        return {
+          ...oldData,
+          pages: [prefetched, ...oldData.pages.slice(1)],
+          pageParams: [1, ...oldData.pageParams.slice(1)],
+        };
+      });
+      clearPrefetch();
+    } else {
+      await handleRefresh();
+    }
+
+    requestAnimationFrame(() => {
+      try {
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      } catch {}
+      showBars();
+    });
+    dismissNewPosts();
+  }, [showBars, activeTabIndex, baseFeed, allowedTags, currentUser?.walletAddress, queryClient, handleRefresh, dismissNewPosts, getPrefetchedData, clearPrefetch]);
 
   useImperativeHandle(
     ref,
@@ -257,8 +363,11 @@ export const HomeTabbedFeed = forwardRef<
       scrollToTop,
       refresh: handleRefresh,
       isRefreshing: () => isRefreshingRef.current,
+      hasNewPosts: () => hasNewPosts,
+      handleNewPostsPress,
+      dismissNewPosts,
     }),
-    [scrollToTop, handleRefresh],
+    [scrollToTop, handleRefresh, hasNewPosts, handleNewPostsPress, dismissNewPosts],
   );
 
   const lastMagicFetchTime = useRef(0);

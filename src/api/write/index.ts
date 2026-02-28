@@ -44,12 +44,16 @@ export {
   useUnblockUser,
   useBlockPost,
   useUnblockPost,
+  useBlockTopic,
+  useUnblockTopic,
   // Tokens & Subscription
   useSendTokens,
   useUpgradeLevel,
   useSetAutoRenewal,
   // Moderation
   useReport,
+  // Delete User
+  useDeleteUser,
 } from "./hooks";
 
 // Hook types
@@ -93,12 +97,16 @@ export {
   unblockUser,
   blockPost,
   unblockPost,
+  blockTopic,
+  unblockTopic,
   // Tokens
   sendTokens,
   upgradeLevel,
   setAutoRenewal,
   // Moderation
   report,
+  // Delete User
+  deleteUser,
 } from "./endpoints";
 
 // Endpoint types
@@ -114,6 +122,7 @@ export type {
   SendTokensInput,
   SubscriptionLevel,
   ReportInput,
+  DeleteUserInput,
 } from "./endpoints";
 
 // ============================================
@@ -139,10 +148,13 @@ export {
   canonBaseUnblockPost,
   canonBaseBlockUser,
   canonBaseUnblockUser,
+  canonBaseBlockTopic,
+  canonBaseUnblockTopic,
   canonBaseSendTokens,
   canonBaseUpgradeLevel,
   canonBaseSetAutoRenewal,
   canonBaseReport,
+  canonBaseDeleteUser,
   // Low-level utilities
   canonSignedWithPow,
   uvarint,
@@ -175,8 +187,10 @@ export type {
   FollowTopicParams,
   BlockPostParams,
   BlockUserParams,
+  BlockTopicParams,
   SendTokensParams,
   UpgradeLevelParams,
   SetAutoRenewalParams,
   ReportParams,
+  DeleteUserParams,
 } from "./signing";

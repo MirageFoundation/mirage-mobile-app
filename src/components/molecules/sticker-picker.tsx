@@ -55,10 +55,11 @@ export function StickerPicker({
           onSelect([]);
         } else {
           onSelect([url]);
+          onClose();
         }
       }
     },
-    [multiSelect, selectedStickers, onSelect],
+    [multiSelect, selectedStickers, onSelect, onClose],
   );
 
   const handleDone = useCallback(() => {

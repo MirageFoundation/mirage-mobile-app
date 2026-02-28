@@ -39,6 +39,7 @@ type HomePostCardHandlers = {
   onRevealContent?: (postId: string) => void;
   onBlockUser?: (postId: string, authorId: string, authorUsername: string) => void;
   onBlockPost?: (postId: string) => void;
+  onBlockTopic?: (postId: string, topic: string) => void;
   onReport?: (postId: string) => void;
 };
 
@@ -57,6 +58,7 @@ type HomePostCardState = {
  allowAutoplay: boolean;
   activeFeedScreen: 'home' | 'following' | 'topic' | null;
  shouldScrollToTop: boolean;
+ skipNextRefresh: boolean;
  disabledTopicName?: string;
  setCurrentUserId: (id?: string) => void;
  setFollowedUsers: (users: Set<string>) => void;
@@ -76,6 +78,7 @@ type HomePostCardState = {
   setActiveFeedScreen: (screen: 'home' | 'following' | 'topic' | null) => void;
  triggerScrollToTop: () => void;
  clearScrollToTop: () => void;
+ setSkipNextRefresh: (skip: boolean) => void;
  setDisabledTopicName: (name?: string) => void;
  reset: () => void;
 };
@@ -97,6 +100,7 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
  allowAutoplay: true,
   activeFeedScreen: null,
  shouldScrollToTop: false,
+ skipNextRefresh: false,
  disabledTopicName: undefined,
  setCurrentUserId: (id) => set({ currentUserId: id }),
   setFollowedUsers: (users) => set({ followedUsers: users }),
@@ -173,6 +177,7 @@ setVoteOverride: (postId, override) =>
   setActiveFeedScreen: (screen) => set({ activeFeedScreen: screen }),
  triggerScrollToTop: () => set({ shouldScrollToTop: true }),
  clearScrollToTop: () => set({ shouldScrollToTop: false }),
+ setSkipNextRefresh: (skip) => set({ skipNextRefresh: skip }),
  setDisabledTopicName: (name) => set({ disabledTopicName: name }),
  reset: () => set({
    currentUserId: undefined,
@@ -185,6 +190,7 @@ setVoteOverride: (postId, override) =>
    voteOverrides: {},
    commentCountOverrides: {},
    shouldScrollToTop: false,
+  skipNextRefresh: false,
    disabledTopicName: undefined,
     activeFeedScreen: null,
  }),

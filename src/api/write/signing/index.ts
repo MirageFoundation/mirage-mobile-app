@@ -42,11 +42,14 @@ export {
   canonBaseUnblockPost,
   canonBaseBlockUser,
   canonBaseUnblockUser,
+  canonBaseBlockTopic,
+  canonBaseUnblockTopic,
   canonBaseSendTokens,
  canonBaseUpgradeLevel,
  canonBaseSetAutoRenewal,
  canonBaseReport,
   canonBaseClaimReward,
+  canonBaseDeleteUser,
  // Types
  type BaseParams,
  type SetUsernameParams,
@@ -59,11 +62,13 @@ export {
   type FollowTopicParams,
   type BlockPostParams,
   type BlockUserParams,
+  type BlockTopicParams,
   type SendTokensParams,
  type UpgradeLevelParams,
  type SetAutoRenewalParams,
  type ReportParams,
   type ClaimRewardParams,
+  type DeleteUserParams,
 } from "./canonical";
 
 // Envelope builder

@@ -589,21 +589,6 @@ export function useComment(options: UsePostOptions = {}) {
         if (!isTopLevelComment && !isReplyToNestedComment) return;
 
         affectedRootPostIds.add(queryData.root.post_id);
-        const optimisticComment = buildOptimisticComment(
-          optimisticCommentId,
-          input,
-          address,
-          username,
-          queryData.root,
-        );
-
-        const nextChildren = isTopLevelComment
-          ? [optimisticComment, ...queryData.children]
-          : insertReplyIntoTree(
-              queryData.children,
-              input.parentId,
-              optimisticComment,
-            );
 
         queryClient.setQueryData<CommentsResponse>(queryKey, {
           ...queryData,
@@ -611,7 +596,6 @@ export function useComment(options: UsePostOptions = {}) {
             ...queryData.root,
             comments: (queryData.root.comments ?? 0) + 1,
           },
-          children: nextChildren,
         });
       });
 
@@ -636,32 +620,7 @@ export function useComment(options: UsePostOptions = {}) {
       restoreQuerySnapshots(queryClient, context?.previousPosts);
       restoreQuerySnapshots(queryClient, context?.previousUserPosts);
     },
-    onSuccess: (data, _input, context) => {
-      if (!context?.optimisticCommentId || !data?.tx_hash) return;
-
-      const commentQueries = queryClient.getQueriesData<CommentsResponse>({
-        queryKey: ["comments"],
-      }) as Array<[QueryKey, CommentsResponse | undefined]>;
-
-      commentQueries.forEach(([queryKey, queryData]) => {
-        if (!queryData) return;
-
-        const nextChildren = replaceCommentIdInTree(
-          queryData.children,
-          context.optimisticCommentId,
-          data.tx_hash,
-        );
-
-        if (nextChildren === queryData.children) {
-          return;
-        }
-
-        queryClient.setQueryData<CommentsResponse>(queryKey, {
-          ...queryData,
-          children: nextChildren,
-        });
-      });
-    },
+    onSuccess: () => {},
     onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: ["comments"],

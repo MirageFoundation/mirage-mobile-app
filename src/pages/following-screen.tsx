@@ -13,6 +13,7 @@ import {
 import {
   ConfirmationPopup,
   FeedHeader,
+  NewPostsButton,
   PostOptionsSheet,
   type PostOptionsSheetRef,
   ReportSheet,
@@ -45,9 +46,25 @@ export function FollowingScreen() {
   } = useScrollAnimationContext();
   const { requireAuth, isLoggedIn } = useAuthGuard();
   const toast = useToast();
+  const { showBars } = useScrollAnimationContext();
 
   const currentUser = useAuthStore((s) => s.user);
   const shareServer = usePreferencesStore((s) => s.shareServer);
+
+  const [hasNewPosts, setHasNewPosts] = useState(false);
+  const [newPostAvatars, setNewPostAvatars] = useState<{ userId: string; username: string }[]>([]);
+  const [newPostCount, setNewPostCount] = useState(0);
+
+  const handleNewPostsChange = useCallback((hasNew: boolean, avatars: { userId: string; username: string }[], count: number) => {
+    setHasNewPosts(hasNew);
+    setNewPostAvatars(avatars);
+    setNewPostCount(count);
+  }, []);
+
+  const handleNewPostsPress = useCallback(async () => {
+    await tabbedFeedRef.current?.handleNewPostsPress();
+    setHasNewPosts(false);
+  }, []);
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
@@ -73,6 +90,7 @@ export function FollowingScreen() {
   const hidePost = useContentModerationStore((s) => s.hidePost);
   const unhidePost = useContentModerationStore((s) => s.unhidePost);
   const blockUser = useContentModerationStore((s) => s.blockUser);
+  const blockTopicOptimistic = useContentModerationStore((s) => s.blockTopic);
 
   const { data: followedData } = useUserFollowed();
   const followedUsers = useMemo(
@@ -154,10 +172,13 @@ export function FollowingScreen() {
         blockUser(pending.id);
       } else if (pending.type === "post") {
         hidePost(pending.id);
+      } else if (pending.type === "topic") {
+        blockTopicOptimistic(pending.id);
+        showBars();
       }
     }
     blockHandler.confirmBlock();
-  }, [blockHandler, blockUser, hidePost]);
+  }, [blockHandler, blockUser, hidePost, blockTopicOptimistic, showBars]);
 
   const handleConfirmDelete = useCallback(() => {
     const pending = deleteHandler.pendingTarget;
@@ -216,6 +237,13 @@ export function FollowingScreen() {
   const handleBlockPostFromCard = useCallback(
     (postId: string) => {
       blockHandler.requestBlockPost(postId);
+    },
+    [blockHandler]
+  );
+
+  const handleBlockTopicFromCard = useCallback(
+    (_postId: string, topic: string) => {
+      blockHandler.requestBlockTopic(topic);
     },
     [blockHandler]
   );
@@ -332,6 +360,7 @@ export function FollowingScreen() {
     handleRevealContent,
     handleBlockUserFromCard,
     handleBlockPostFromCard,
+    handleBlockTopicFromCard,
     handleReportFromCard,
   });
 
@@ -349,6 +378,7 @@ export function FollowingScreen() {
       handleRevealContent,
       handleBlockUserFromCard,
       handleBlockPostFromCard,
+      handleBlockTopicFromCard,
       handleReportFromCard,
     };
   });
@@ -373,6 +403,7 @@ export function FollowingScreen() {
         onBlockUser: (postId, authorId, authorUsername) =>
           handlersRef.current.handleBlockUserFromCard(postId, authorId, authorUsername),
         onBlockPost: (postId) => handlersRef.current.handleBlockPostFromCard(postId),
+        onBlockTopic: (postId, topic) => handlersRef.current.handleBlockTopicFromCard(postId, topic),
         onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
       });
     }, [setHandlers])
@@ -393,7 +424,20 @@ export function FollowingScreen() {
         onFeedTypeChange={handleFeedTypeChange}
       />
 
-      <HomeTabbedFeed ref={tabbedFeedRef} feedType="following" activeTabIndex={feedTabIndex} />
+      <HomeTabbedFeed
+        ref={tabbedFeedRef}
+        feedType="following"
+        activeTabIndex={feedTabIndex}
+        onNewPostsChange={handleNewPostsChange}
+      />
+
+      <NewPostsButton
+        visible={hasNewPosts}
+        onPress={handleNewPostsPress}
+        topOffset={insets.top + 44}
+        avatars={newPostAvatars}
+        newPostCount={newPostCount}
+      />
 
       <PostOptionsSheet
         ref={postOptionsSheetRef}

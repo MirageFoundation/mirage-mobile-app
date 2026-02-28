@@ -80,10 +80,14 @@ export default function UsernameScreen() {
   useEffect(() => {
     console.log("[UsernameScreen] activeServer:", activeServer, "savedServer:", savedServer);
     apiClient.setBaseUrl(`https://${activeServer}`);
-    return () => {
-      apiClient.setBaseUrl(`https://${savedServer}`);
-    };
   }, [activeServer]);
+
+  useEffect(() => {
+    return () => {
+      const currentServer = usePreferencesStore.getState().apiServer;
+      apiClient.setBaseUrl(`https://${currentServer}`);
+    };
+  }, []);
 
   const { data: config } = useConfig();
   const { data: nodeConfig } = useNodeConfig();
@@ -234,7 +238,7 @@ export default function UsernameScreen() {
         return;
       }
 
-      setHasUsername(true);
+      setHasUsername(true, username);
 
       triggerHaptic("success");
 
@@ -291,15 +295,15 @@ export default function UsernameScreen() {
 
   const handleClose = useCallback(() => {
     triggerHaptic("selection");
-    apiClient.setBaseUrl(`https://${savedServer}`);
+    apiClient.setBaseUrl(`https://${usePreferencesStore.getState().apiServer}`);
     router.back();
-  }, [router, savedServer]);
+  }, [router]);
 
   const handleLogin = useCallback(() => {
     triggerHaptic("selection");
-    apiClient.setBaseUrl(`https://${savedServer}`);
+    apiClient.setBaseUrl(`https://${usePreferencesStore.getState().apiServer}`);
     router.replace("/(auth)/login");
-  }, [router, savedServer]);
+  }, [router]);
 
   const getStatusIcon = () => {
     switch (status) {
@@ -682,6 +686,7 @@ export default function UsernameScreen() {
                           router.back();
                           return;
                         }
+                        setApiServer(server);
                         toast.success(`Switched to ${server}`);
                       } catch (e) {
                         console.error("[UsernameScreen] Failed to fetch nodeConfig after switch:", e);

@@ -155,8 +155,8 @@ const CommentImage = memo(({
 
   const mediaSource = useMemo(() => ({ uri: url }), [url]);
 
-  const MEDIA_MAX_HEIGHT = 450;
-  const containerWidth = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
+ const MEDIA_MAX_HEIGHT = 450;
+  const containerWidth = (SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING) * 0.6;
   const calculatedHeight = containerWidth / aspectRatio;
   const exceedsMaxHeight = calculatedHeight > MEDIA_MAX_HEIGHT;
   const mediaWrapperStyle = exceedsMaxHeight
@@ -219,8 +219,8 @@ const commentImageStyles = StyleSheet.create((theme) => ({
     borderRadius: theme.radius.md,
     overflow: "hidden",
   },
-  mediaWrapper: {
-    width: "100%",
+ mediaWrapper: {
+    width: "60%",
     backgroundColor: theme.colors.background.subtle,
     borderRadius: theme.radius.md,
     overflow: "hidden",

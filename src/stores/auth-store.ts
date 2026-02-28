@@ -75,7 +75,7 @@ type AuthState = {
   // Actions - User state updates
   setUser: (user: User) => void;
   setUserLevel: (level: number) => void;
-  setHasUsername: (has: boolean) => void;
+  setHasUsername: (has: boolean, username?: string) => void;
   setRecoveryPhrase: (phrase: string | null) => void;
 
   // Actions - Helpers
@@ -279,7 +279,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       confirmWalletCreation: async () => {
-        const { walletAddress, publicKeyBase64 } = get();
+        const { walletAddress, publicKeyBase64, user } = get();
 
         if (!walletAddress) {
           throw new Error("No wallet to confirm");
@@ -293,7 +293,7 @@ export const useAuthStore = create<AuthState>()(
           recoveryPhrase: null,
           user: {
             id: walletAddress,
-            username: null,
+            username: user?.username ?? null,
             walletAddress,
             tier: "Free",
           },
@@ -354,8 +354,20 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      setHasUsername: (has) => {
+      setHasUsername: (has, username) => {
         set({ hasUsername: has });
+
+        if (username) {
+          const { user, walletAddress } = get();
+          set({
+            user: {
+              id: user?.id ?? walletAddress ?? "",
+              username,
+              walletAddress: user?.walletAddress ?? walletAddress ?? "",
+              tier: user?.tier ?? "Free",
+            },
+          });
+        }
 
         walletService.updateMetadata({ hasUsername: has });
       },
