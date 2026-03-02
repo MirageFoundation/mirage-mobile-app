@@ -744,15 +744,17 @@ export function CreateScreen() {
                   </View>
                 )}
 
-                <Pressable
-                  onPress={() => handleRemoveVideo(uri)}
-                  style={styles.videoRemoveButton}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <View style={styles.removeButtonInner}>
-                    <Feather name="x" size={18} color="#fff" />
-                  </View>
-                </Pressable>
+                {!editExpired && (
+                  <Pressable
+                    onPress={() => handleRemoveVideo(uri)}
+                    style={styles.videoRemoveButton}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <View style={styles.removeButtonInner}>
+                      <Feather name="x" size={18} color="#fff" />
+                    </View>
+                  </Pressable>
+                )}
               </Pressable>
             );
           })}
@@ -1026,9 +1028,11 @@ export function CreateScreen() {
                 />
                 <Pressable
                   onPress={handleRemoveLink}
+                  disabled={editExpired}
                   style={[
                     styles.linkClearButton,
                     { backgroundColor: theme.colors.background.subtle },
+                    editExpired && { opacity: 0 },
                   ]}
                 >
                   <Feather
@@ -1081,18 +1085,20 @@ export function CreateScreen() {
                     <View style={styles.mediaTypeBadge}>
                       <Feather name="image" size={12} color="#fff" />
                     </View>
-                    <Pressable
-                      onPress={() => {
-                        const { removeMediaUri } = useDraftStore.getState();
-                        removeMediaUri(uri);
-                      }}
-                      style={styles.videoRemoveButton}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <View style={styles.removeButtonInner}>
-                        <Feather name="x" size={18} color="#fff" />
-                      </View>
-                    </Pressable>
+                    {!editExpired && (
+                      <Pressable
+                        onPress={() => {
+                          const { removeMediaUri } = useDraftStore.getState();
+                          removeMediaUri(uri);
+                        }}
+                        style={styles.videoRemoveButton}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <View style={styles.removeButtonInner}>
+                          <Feather name="x" size={18} color="#fff" />
+                        </View>
+                      </Pressable>
+                    )}
                   </View>
                 ))}
               </ScrollView>
@@ -1118,15 +1124,17 @@ export function CreateScreen() {
                       source={{ uri: url }}
                       style={[styles.videoPlayer, { resizeMode: "contain" }]}
                     />
-                    <Pressable
-                      onPress={() => setSelectedStickers((prev) => prev.filter((s) => s !== url))}
-                      style={[styles.videoRemoveButton, { top: 4, right: 4 }]}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <View style={styles.removeButtonInner}>
-                        <Feather name="x" size={18} color="#fff" />
-                      </View>
-                    </Pressable>
+                    {!editExpired && (
+                      <Pressable
+                        onPress={() => setSelectedStickers((prev) => prev.filter((s) => s !== url))}
+                        style={[styles.videoRemoveButton, { top: 4, right: 4 }]}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <View style={styles.removeButtonInner}>
+                          <Feather name="x" size={18} color="#fff" />
+                        </View>
+                      </Pressable>
+                    )}
                   </View>
                 ))}
               </ScrollView>

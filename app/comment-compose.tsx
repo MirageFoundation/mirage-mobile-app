@@ -515,12 +515,14 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
                     <ActivityIndicator size="small" color="#fff" />
                   </View>
                 )}
-               <Pressable
-                 onPress={handleRemoveAttachment}
-                 style={styles.removeButton}
-               >
-                  <Feather name="x" size={14} color="#fff" />
-                </Pressable>
+               {!editExpired && (
+                 <Pressable
+                   onPress={handleRemoveAttachment}
+                   style={styles.removeButton}
+                 >
+                    <Feather name="x" size={14} color="#fff" />
+                  </Pressable>
+               )}
               </View>
             </Animated.View>
           )}
