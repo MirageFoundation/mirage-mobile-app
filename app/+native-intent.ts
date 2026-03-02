@@ -13,5 +13,9 @@ export function redirectSystemPath({
     console.log("[+native-intent] detected scheme:", scheme);
     setShareScheme(scheme);
   }
+  if (path.includes("dataUrl=") && path.includes("ShareKey")) {
+    console.log("[+native-intent] ✅ Redirecting to /(tabs)/create");
+    return "/(tabs)/create";
+  }
   return path;
 }

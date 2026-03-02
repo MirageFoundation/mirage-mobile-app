@@ -295,13 +295,9 @@ export default function TabLayout() {
   console.log("[TabLayout] hasShareIntent:", hasShareIntent);
 
   useEffect(() => {
-    console.log("[TabLayout] useEffect fired, hasShareIntent:", hasShareIntent);
     if (hasShareIntent && !hasNavigatedRef.current) {
       hasNavigatedRef.current = true;
-      console.log("[TabLayout] ✅ Navigating to /(tabs)/create");
-      setTimeout(() => {
-        router.navigate("/(tabs)/create");
-      }, 100);
+      router.navigate("/(tabs)/create");
     }
     if (!hasShareIntent) {
       hasNavigatedRef.current = false;
