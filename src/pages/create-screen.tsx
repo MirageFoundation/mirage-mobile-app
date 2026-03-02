@@ -1,6 +1,7 @@
 import { Entypo, EvilIcons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinkPreviewCard } from "@/src/components/molecules/link-preview-card";
 import { fetchLinkMeta } from "@/src/utils/fetch-link-meta";
+import * as Sentry from "@sentry/react-native";
 import { ResizeMode, Video } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
@@ -282,7 +283,6 @@ export function CreateScreen() {
 
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const lastProcessedIntentRef = useRef<string | null>(null);
-  console.log("[CreateScreen] hasShareIntent:", hasShareIntent, "shareIntent:", JSON.stringify(shareIntent));
   useEffect(() => {
     if (!hasShareIntent || !shareIntent || isEditMode) return;
 
@@ -290,7 +290,12 @@ export function CreateScreen() {
     if (!intentKey || intentKey === lastProcessedIntentRef.current) return;
     lastProcessedIntentRef.current = intentKey;
 
-    console.log("[CreateScreen] ✅ Processing share intent:", JSON.stringify(shareIntent));
+    Sentry.addBreadcrumb({
+      category: "share-intent",
+      message: "Processing share intent",
+      data: { type: shareIntent.type, webUrl: shareIntent.webUrl, hasText: !!shareIntent.text, fileCount: shareIntent.files?.length ?? 0 },
+      level: "info",
+    });
 
     clearDraft();
     setShowLinkInput(false);
@@ -309,25 +314,23 @@ export function CreateScreen() {
 
     setTimeout(() => {
       if (shareIntent.text && !shareIntent.webUrl) {
-        console.log("[CreateScreen] Setting body text:", shareIntent.text);
         updateDraft({ body: shareIntent.text });
       }
       if (shareIntent.webUrl) {
-        console.log("[CreateScreen] Setting link:", shareIntent.webUrl);
         setShowLinkInput(true);
         setLinkUrl(shareIntent.webUrl);
         setAttachment("link", shareIntent.webUrl);
         updateDraft({ linkUrl: shareIntent.webUrl });
         fetchLinkMeta(shareIntent.webUrl).then((meta) => {
           if (meta.title) {
-            console.log("[CreateScreen] Setting title from meta:", meta.title);
             updateDraft({ title: meta.title.slice(0, tierLimits.maxTitleLength) });
           }
+        }).catch((err) => {
+          Sentry.captureException(err, { tags: { feature: "share-intent-meta" } });
         });
       }
       if (shareIntent.files?.length) {
         const file = shareIntent.files[0];
-        console.log("[CreateScreen] Setting file:", file.path, "mimeType:", file.mimeType);
         if (file.mimeType?.startsWith("image/")) {
           setAttachment("image", file.path);
         } else if (file.mimeType?.startsWith("video/")) {

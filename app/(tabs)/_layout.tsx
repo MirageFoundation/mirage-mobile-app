@@ -292,7 +292,6 @@ function TabsContent() {
 export default function TabLayout() {
   const { hasShareIntent } = useShareIntentContext();
   const hasNavigatedRef = useRef(false);
-  console.log("[TabLayout] hasShareIntent:", hasShareIntent);
 
   useEffect(() => {
     if (hasShareIntent && !hasNavigatedRef.current) {

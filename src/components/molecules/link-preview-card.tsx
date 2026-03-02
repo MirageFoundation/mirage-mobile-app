@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
@@ -15,18 +15,21 @@ export function LinkPreviewCard({ url }: LinkPreviewCardProps) {
   const [meta, setMeta] = useState<LinkMeta | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadMeta = useCallback(async () => {
-    console.log("[LinkPreview] fetching meta for:", url);
-    setLoading(true);
-    const result = await fetchLinkMeta(url);
-    console.log("[LinkPreview] result:", JSON.stringify(result));
-    setMeta(result);
-    setLoading(false);
-  }, [url]);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    loadMeta();
-  }, [loadMeta]);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setLoading(true);
+    setMeta(null);
+    debounceRef.current = setTimeout(async () => {
+      const result = await fetchLinkMeta(url);
+      setMeta(result);
+      setLoading(false);
+    }, 750);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [url]);
 
   if (loading) {
     return (
