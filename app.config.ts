@@ -6,7 +6,7 @@ const bundleIdentifier = env
   : `talk.mirage.mobile`;
 const scheme = env ? `mirage${env}` : `mirage`;
 
-const name = env ? `mirage (${env.toUpperCase()})` : "mirage";
+const name = env ? `Mirage (${env.toUpperCase()})` : "Mirage";
 
 export default ({ config }: ConfigContext): ExpoConfig => {
   const slug = "mirage";
