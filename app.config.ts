@@ -48,6 +48,17 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     plugins: [
       [
+        "expo-share-intent",
+        {
+          iosActivationRules: {
+            NSExtensionActivationSupportsText: true,
+            NSExtensionActivationSupportsWebURLWithMaxCount: 1,
+            NSExtensionActivationSupportsImageWithMaxCount: 1,
+          },
+          androidIntentFilters: ["text/*", "image/*", "video/*"],
+        },
+      ],
+      [
         "@sentry/react-native/expo",
         {
           url: "https://sentry.io/",

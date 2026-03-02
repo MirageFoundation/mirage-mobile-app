@@ -15,14 +15,16 @@ import {
 } from "@/src/providers/scroll-animation-context";
 import { useAuthStore, useUIStore } from "@/src/stores";
 import { useInboxStore } from "@/src/stores/inbox-store";
+import { useShareIntentContext } from "expo-share-intent";
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
+import { Tabs, router } from "expo-router";
 import {
   Pressable,
   StyleSheet as RNStyleSheet,
   Text,
   View,
 } from "react-native";
+import { useEffect, useRef } from "react";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -288,6 +290,24 @@ function TabsContent() {
 }
 
 export default function TabLayout() {
+  const { hasShareIntent } = useShareIntentContext();
+  const hasNavigatedRef = useRef(false);
+  console.log("[TabLayout] hasShareIntent:", hasShareIntent);
+
+  useEffect(() => {
+    console.log("[TabLayout] useEffect fired, hasShareIntent:", hasShareIntent);
+    if (hasShareIntent && !hasNavigatedRef.current) {
+      hasNavigatedRef.current = true;
+      console.log("[TabLayout] ✅ Navigating to /(tabs)/create");
+      setTimeout(() => {
+        router.navigate("/(tabs)/create");
+      }, 100);
+    }
+    if (!hasShareIntent) {
+      hasNavigatedRef.current = false;
+    }
+  }, [hasShareIntent]);
+
   return (
     <ScrollAnimationProvider>
       <SideMenuProvider>

@@ -1,7 +1,10 @@
 import { Entypo, EvilIcons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { LinkPreviewCard } from "@/src/components/molecules/link-preview-card";
+import { fetchLinkMeta } from "@/src/utils/fetch-link-meta";
 import { ResizeMode, Video } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
+import { useShareIntentContext } from "expo-share-intent";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -232,7 +235,10 @@ export function CreateScreen() {
   // Clean up stale attachment state on mount
   useEffect(() => {
     if (isEditMode) return;
-    if (draft.attachmentType === "link" && !draft.linkUrl) {
+    if (draft.attachmentType === "link" && draft.linkUrl) {
+      setShowLinkInput(true);
+      setLinkUrl(draft.linkUrl);
+    } else if (draft.attachmentType === "link" && !draft.linkUrl) {
       removeAttachment();
     } else if (
       (draft.attachmentType === "image" || draft.attachmentType === "video") &&
@@ -273,6 +279,65 @@ export function CreateScreen() {
       } catch {}
     }
   }, [isEditMode]);
+
+  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
+  const lastProcessedIntentRef = useRef<string | null>(null);
+  console.log("[CreateScreen] hasShareIntent:", hasShareIntent, "shareIntent:", JSON.stringify(shareIntent));
+  useEffect(() => {
+    if (!hasShareIntent || !shareIntent || isEditMode) return;
+
+    const intentKey = shareIntent.webUrl ?? shareIntent.text ?? shareIntent.files?.[0]?.path ?? null;
+    if (!intentKey || intentKey === lastProcessedIntentRef.current) return;
+    lastProcessedIntentRef.current = intentKey;
+
+    console.log("[CreateScreen] ✅ Processing share intent:", JSON.stringify(shareIntent));
+
+    clearDraft();
+    setShowLinkInput(false);
+    setLinkUrl("");
+    setLinkError(null);
+    removeAttachment();
+    setImageDimensions(null);
+    setSelectedContentWarning("");
+    setSelectedStickers([]);
+    VIDEO_UPLOADS.clear();
+    setVideoUploadState({});
+    VIDEO_META.clear();
+    _handledVideoParam = null;
+    setIsVideoMuted(false);
+    setIsVideoPlaying(false);
+
+    setTimeout(() => {
+      if (shareIntent.text && !shareIntent.webUrl) {
+        console.log("[CreateScreen] Setting body text:", shareIntent.text);
+        updateDraft({ body: shareIntent.text });
+      }
+      if (shareIntent.webUrl) {
+        console.log("[CreateScreen] Setting link:", shareIntent.webUrl);
+        setShowLinkInput(true);
+        setLinkUrl(shareIntent.webUrl);
+        setAttachment("link", shareIntent.webUrl);
+        updateDraft({ linkUrl: shareIntent.webUrl });
+        fetchLinkMeta(shareIntent.webUrl).then((meta) => {
+          if (meta.title) {
+            console.log("[CreateScreen] Setting title from meta:", meta.title);
+            updateDraft({ title: meta.title.slice(0, tierLimits.maxTitleLength) });
+          }
+        });
+      }
+      if (shareIntent.files?.length) {
+        const file = shareIntent.files[0];
+        console.log("[CreateScreen] Setting file:", file.path, "mimeType:", file.mimeType);
+        if (file.mimeType?.startsWith("image/")) {
+          setAttachment("image", file.path);
+        } else if (file.mimeType?.startsWith("video/")) {
+          setAttachment("video", file.path);
+          startVideoUpload(file.path);
+        }
+      }
+      resetShareIntent();
+    }, 50);
+  }, [hasShareIntent, shareIntent]);
 
   // Handle video returned from editor
   useEffect(() => {
@@ -1025,6 +1090,7 @@ export function CreateScreen() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardType="url"
+                  multiline
                 />
                 <Pressable
                   onPress={handleRemoveLink}
@@ -1063,6 +1129,10 @@ export function CreateScreen() {
                 </View>
               )}
             </Animated.View>
+          )}
+
+          {showLinkInput && linkUrl && !linkError && (
+            <LinkPreviewCard url={linkUrl} />
           )}
 
           {draft.attachmentType === "image" && draft.mediaUris.length > 0 && (
@@ -1461,7 +1531,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   linkInputWrapper: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
   },
   linkInput: {
     flex: 1,
