@@ -1,4 +1,5 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
+import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { useFocusEffect } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
@@ -98,6 +99,8 @@ const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
  const p = prev.post;
  const n = next.post;
  if (p.id !== n.id) return false;
+ if (p.title !== n.title) return false;
+ if (p.body !== n.body) return false;
  if (p.likes !== n.likes) return false;
  if (p.dislikes !== n.dislikes) return false;
  if (p.comments !== n.comments) return false;
@@ -127,10 +130,20 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  onCommentPress: (postId: string) => void;
  onMorePress: (postId: string) => void;
 }) {
+ const editOverride = usePostEditStore((s) => s.overrides[post.id]);
+ const displayPost = editOverride ? {
+   ...post,
+   title: editOverride.title,
+   body: editOverride.content || undefined,
+   topic: editOverride.topic ?? post.topic,
+   media: editOverride.media
+     ? editOverride.media.map((url: string) => ({ uri: url, type: "image" as const }))
+     : post.media,
+ } : post;
  return (
   <Animated.View style={contentAnimatedStyle}>
    <MemoizedPostCardItem
-    post={post}
+    post={displayPost}
     isOwnPost={true}
     showUrlCard={false}
     onPostPress={onPostPress}
@@ -251,10 +264,19 @@ export function ProfileScreen() {
     limit: 20,
   });
 
+  const [focusVersion, setFocusVersion] = useState(0);
+
  const apiPosts = useMemo(() => {
+   const postOverrides = usePostEditStore.getState().overrides;
    const allPosts = postsData?.pages.flatMap((page) => page.posts) ?? [];
    if (getTabType() === "submissions") {
-     return allPosts.filter((post) => !hiddenPostIds.has(post.post_id));
+     return allPosts
+       .filter((post) => !hiddenPostIds.has(post.post_id))
+       .map((post) => {
+         const editOv = postOverrides[post.post_id];
+         if (!editOv) return post;
+         return { ...post, title: editOv.title, content: editOv.content, topic: editOv.topic ?? post.topic, media: editOv.media ?? post.media };
+       });
    }
     return allPosts
       .filter((post) => !hiddenCommentIds.has(post.post_id))
@@ -262,7 +284,7 @@ export function ProfileScreen() {
         const override = commentEditOverrides[post.post_id];
         return override !== undefined ? { ...post, content: override } : post;
       });
-  }, [postsData, getTabType, hiddenPostIds, hiddenCommentIds, commentEditOverrides]);
+  }, [postsData, getTabType, hiddenPostIds, hiddenCommentIds, commentEditOverrides, focusVersion]);
 
   const uiPosts = useMemo(
     () => apiPosts.map((post) => transformApiPost(post, {
@@ -318,6 +340,7 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
   useFocusEffect(
     useCallback(() => {
       showBars();
+      setFocusVersion((v) => v + 1);
       if (user?.walletAddress) {
         refetchUserStatus();
         refetchProfile();
@@ -909,7 +932,8 @@ useEffect(() => {
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.5}
           ListFooterComponent={ListFooterComponent}
-          removeClippedSubviews={true}
+          extraData={focusVersion}
+          removeClippedSubviews={false}
           maxToRenderPerBatch={5}
           windowSize={5}
           initialNumToRender={7}

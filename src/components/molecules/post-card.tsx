@@ -73,6 +73,8 @@ function arePostCardPropsEqual(
   const nextPost = nextProps.post;
 
   if (prevPost.id !== nextPost.id) return false;
+  if (prevPost.title !== nextPost.title) return false;
+  if (prevPost.body !== nextPost.body) return false;
   if (prevPost.likes !== nextPost.likes) return false;
   if (prevPost.dislikes !== nextPost.dislikes) return false;
   if (prevPost.comments !== nextPost.comments) return false;

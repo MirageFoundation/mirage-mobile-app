@@ -1,6 +1,9 @@
 import { Entypo, EvilIcons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinkPreviewCard } from "@/src/components/molecules/link-preview-card";
+import { markEditJustCompleted } from "@/src/utils/edit-post";
+import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { fetchLinkMeta } from "@/src/utils/fetch-link-meta";
+import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
 import { ResizeMode, Video } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
@@ -196,6 +199,7 @@ export function CreateScreen() {
       });
   }, [toast]);
 
+  const queryClient = useQueryClient();
   const txProgress = useTransactionProgress();
   const postMutation = usePost({ onPoWProgress: txProgress.updatePoWProgress });
   const editMutation = useEdit({ onPoWProgress: txProgress.updatePoWProgress });
@@ -468,57 +472,138 @@ export function CreateScreen() {
         result = await postMutation.mutateAsync(postInput);
       }
 
-      txProgress.setPhase("confirming");
-      let confirmed = false;
-      if (result?.tx_hash) {
-        for (let i = 0; i < 30; i++) {
-          await new Promise((r) => setTimeout(r, 2000));
-          try {
-            const status = await getTxStatus({ hash: result.tx_hash });
-            if (status.found && status.indexed) {
-              confirmed = true;
-              break;
-            }
-          } catch {}
-        }
-      }
+      if (isEditMode) {
+        txProgress.setSuccess(result?.tx_hash);
 
-      txProgress.setSuccess(result?.tx_hash);
+        usePostEditStore.getState().setOverride(editPostId, {
+          title: draft.title.trim(),
+          content: content || "",
+          topic,
+          tag: selectedContentWarning || undefined,
+          media: mediaUrls.length > 0 ? mediaUrls : undefined,
+          editedAt: Math.floor(Date.now() / 1000),
+        });
 
-      setSelectedContentWarning("");
-      setSelectedStickers([]);
-      setShowLinkInput(false);
-      setLinkUrl("");
-      setLinkError(null);
-      setImageDimensions(null);
-      VIDEO_UPLOADS.clear();
-      setVideoUploadState({});
-      VIDEO_META.clear();
-      _handledVideoParam = null;
-      setIsVideoMuted(false);
+        setTimeout(() => {
+          usePostEditStore.getState().clearOverride(editPostId);
+        }, 120000);
 
-      clearDraft();
+        const nowSeconds = Math.floor(Date.now() / 1000);
+        const updatePostInCache = (post: any) => {
+          if (post?.post_id !== editPostId) return post;
+          return {
+            ...post,
+            title: draft.title.trim(),
+            content,
+            tag: selectedContentWarning || post.tag,
+            topic: topic || post.topic,
+            media: mediaUrls.length > 0 ? mediaUrls : post.media,
+            edited_at: nowSeconds,
+          };
+        };
+        const applyToData = (data: any) => {
+          if (!data) return data;
+          if (data.pages && Array.isArray(data.pages)) {
+            return {
+              ...data,
+              pages: data.pages.map((page: any) => ({
+                ...page,
+                posts: page.posts.map(updatePostInCache),
+              })),
+            };
+          }
+          if (data.posts && Array.isArray(data.posts)) {
+            return { ...data, posts: data.posts.map(updatePostInCache) };
+          }
+          return data;
+        };
+        queryClient.getQueriesData({ queryKey: ["posts"] }).forEach(([key]) => {
+          queryClient.setQueryData(key, (old: any) => applyToData(old));
+        });
+        queryClient.getQueriesData({ queryKey: ["user", "posts"] }).forEach(([key]) => {
+          queryClient.setQueryData(key, (old: any) => applyToData(old));
+        });
+        queryClient.getQueriesData<any>({ queryKey: ["comments"] }).forEach(([key, data]) => {
+          if (data?.root?.post_id === editPostId) {
+            queryClient.setQueryData(key, {
+              ...data,
+              root: {
+                ...data.root,
+                title: draft.title.trim(),
+                content,
+                tag: selectedContentWarning || data.root.tag,
+                topic: topic || data.root.topic,
+                media: mediaUrls.length > 0 ? mediaUrls : data.root.media,
+                edited_at: nowSeconds,
+              },
+            });
+          }
+        });
 
-      setIsSubmitting(false);
+        setSelectedContentWarning("");
+        setSelectedStickers([]);
+        setShowLinkInput(false);
+        setLinkUrl("");
+        setLinkError(null);
+        setImageDimensions(null);
+        VIDEO_UPLOADS.clear();
+        setVideoUploadState({});
+        VIDEO_META.clear();
+        _handledVideoParam = null;
+        setIsVideoMuted(false);
+        clearDraft();
+        setIsSubmitting(false);
 
-      if (!isEditMode) {
-        triggerScrollToTop();
-      }
-
-      setTimeout(() => {
-        txProgress.hideModal();
-        useHomePostCardStore.getState().setSkipNextRefresh(true);
-        if (isEditMode) {
+        markEditJustCompleted();
+        setTimeout(() => {
+          txProgress.hideModal();
           router.back();
-        } else {
-          router.replace("/(tabs)/");
+        }, 500);
+      } else {
+        txProgress.setPhase("confirming");
+        let confirmed = false;
+        if (result?.tx_hash) {
+          for (let i = 0; i < 30; i++) {
+            await new Promise((r) => setTimeout(r, 2000));
+            try {
+              const status = await getTxStatus({ hash: result.tx_hash });
+              if (status.found && status.indexed) {
+                confirmed = true;
+                break;
+              }
+            } catch {}
+          }
         }
-      }, 1000);
+
+        txProgress.setSuccess(result?.tx_hash);
+
+        setSelectedContentWarning("");
+        setSelectedStickers([]);
+        setShowLinkInput(false);
+        setLinkUrl("");
+        setLinkError(null);
+        setImageDimensions(null);
+        VIDEO_UPLOADS.clear();
+        setVideoUploadState({});
+        VIDEO_META.clear();
+        _handledVideoParam = null;
+        setIsVideoMuted(false);
+        clearDraft();
+        setIsSubmitting(false);
+        triggerScrollToTop();
+
+        setTimeout(() => {
+          txProgress.hideModal();
+          useHomePostCardStore.getState().setSkipNextRefresh(true);
+          router.replace("/(tabs)/");
+        }, 1000);
+      }
     } catch (error) {
       setIsSubmitting(false);
 
-      const errorMessage =
-        error instanceof Error ? error.message : isEditMode ? "Failed to edit post" : "Failed to create post";
+      const serverError = (error as any)?.response?.data?.error;
+      const fallback = isEditMode ? "Failed to edit post" : "Failed to create post";
+      const errorMessage = serverError || (error instanceof Error ? error.message : fallback);
       txProgress.setError(errorMessage);
     }
   }, [
@@ -535,6 +620,7 @@ export function CreateScreen() {
     isVideoMuted,
     router,
     txProgress,
+    queryClient,
   ]);
 
   const handleCommunitySelect = useCallback(

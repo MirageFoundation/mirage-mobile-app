@@ -86,7 +86,7 @@ export const PowQueueToast = () => {
   const displayLabel = isShowingResult
     ? lastCompletedAction.success
       ? getSuccessLabel(lastCompletedAction.type)
-      : "Failed"
+      : lastCompletedAction.errorMessage || "Failed"
     : currentAction?.label || queue[0]?.label || "Processing…";
 
   const animateIn = () => {
@@ -354,7 +354,7 @@ export const PowQueueToast = () => {
     const overlayColors = getColors(overlayData);
     const overlayLabel = overlayData.success
       ? getSuccessLabel(overlayData.type as any)
-      : "Failed";
+      : (overlayData as any).errorMessage || "Failed";
 
     return (
       <Animated.View

@@ -1,6 +1,7 @@
 import type { ContentWarningType } from "@/src/components/atoms";
 import type { Post as UIPost } from "@/src/components/molecules";
 import type { Post as ApiPost } from "../../types";
+import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { calculateDisplayPoints } from "../endpoints/posts";
 
 const VIDEO_EXTENSIONS = new Set([
@@ -102,6 +103,12 @@ export function transformApiPost(
   // Check if the post author is in the followed users list
   const isFollowing = followedUsers.includes(apiPost.user_id);
 
+  const editOverride = usePostEditStore.getState().overrides[apiPost.post_id];
+  const title = editOverride?.title ?? apiPost.title;
+  const content = editOverride?.content ?? apiPost.content;
+  const topic = editOverride?.topic ?? apiPost.topic;
+  const mediaList = editOverride?.media ?? apiPost.media;
+
   return {
     id: apiPost.post_id,
     author: {
@@ -111,11 +118,11 @@ export function transformApiPost(
         : apiPost.username,
       avatarSeed: apiPost.username,
     },
-    title: apiPost.title,
-    body: apiPost.content || undefined,
-    topic: apiPost.topic || undefined,
-    media: apiPost.media && apiPost.media.length > 0
-      ? apiPost.media.map((url) => ({
+    title,
+    body: content || undefined,
+    topic: topic || undefined,
+    media: mediaList && mediaList.length > 0
+      ? mediaList.map((url) => ({
           uri: url,
           type: getMediaTypeFromUrl(url),
         }))

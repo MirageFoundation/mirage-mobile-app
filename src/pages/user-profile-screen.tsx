@@ -1,4 +1,5 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
+import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Clipboard from "expo-clipboard";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -100,6 +101,8 @@ const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
  const p = prev.post;
  const n = next.post;
  if (p.id !== n.id) return false;
+ if (p.title !== n.title) return false;
+ if (p.body !== n.body) return false;
  if (p.likes !== n.likes) return false;
  if (p.dislikes !== n.dislikes) return false;
  if (p.comments !== n.comments) return false;
@@ -143,10 +146,20 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  onBlockPost: (postId: string) => void;
  onReport: (postId: string) => void;
 }) {
+ const editOverride = usePostEditStore((s) => s.overrides[post.id]);
+ const displayPost = editOverride ? {
+   ...post,
+   title: editOverride.title,
+   body: editOverride.content || undefined,
+   topic: editOverride.topic ?? post.topic,
+   media: editOverride.media
+     ? editOverride.media.map((url: string) => ({ uri: url, type: "image" as const }))
+     : post.media,
+ } : post;
  return (
   <Animated.View style={contentAnimatedStyle}>
    <MemoizedPostCardItem
-    post={post}
+    post={displayPost}
     isOwnPost={isOwnProfile}
     showUrlCard={false}
     showFollowButton={false}
@@ -329,13 +342,21 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
 
   const fetchNextPage = _fetchNextPage;
 
+  const postEditOverrides = usePostEditStore((s) => s.overrides);
+
   const apiPosts = useMemo(() => {
     const allPosts = postsData?.pages.flatMap((page) => page.posts) ?? [];
     if (getTabType() === "submissions") {
-      return allPosts.filter((post) => !hiddenPostIds.has(post.post_id));
+      return allPosts
+        .filter((post) => !hiddenPostIds.has(post.post_id))
+        .map((post) => {
+          const ov = postEditOverrides[post.post_id];
+          if (!ov) return post;
+          return { ...post, title: ov.title, content: ov.content, topic: ov.topic ?? post.topic, media: ov.media ?? post.media };
+        });
     }
     return allPosts.filter((post) => !hiddenCommentIds.has(post.post_id));
-  }, [postsData, getTabType, hiddenPostIds, hiddenCommentIds]);
+  }, [postsData, getTabType, hiddenPostIds, hiddenCommentIds, postEditOverrides]);
 
   const uiPosts = useMemo(
     () => apiPosts.map((post) => transformApiPost(post, {

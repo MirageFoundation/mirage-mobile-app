@@ -1,4 +1,5 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
+import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -177,6 +178,8 @@ export function TopicFeedScreen() {
     by: sortBy,
   });
 
+  const postEditOverrides = usePostEditStore((s) => s.overrides);
+
   const posts = useMemo(() => {
     if (!data?.pages) return [];
     const allPosts = data.pages.flatMap((page) => page.posts);
@@ -193,7 +196,13 @@ export function TopicFeedScreen() {
       ? uniquePosts.filter((post) => post.user_vote !== -1)
       : uniquePosts;
 
-    const transformedPosts = transformApiPosts(filteredPosts, {
+    const patchedPosts = filteredPosts.map((post) => {
+      const ov = postEditOverrides[post.post_id];
+      if (!ov) return post;
+      return { ...post, title: ov.title, content: ov.content, topic: ov.topic ?? post.topic, media: ov.media ?? post.media };
+    });
+
+    const transformedPosts = transformApiPosts(patchedPosts, {
       currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined,
     });
 
@@ -203,7 +212,7 @@ export function TopicFeedScreen() {
         !blockedUserIds.has(post.author.id) &&
         !(post.topic && blockedTopicNames.has(post.topic.toLowerCase())),
     );
-  }, [data, hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, currentUser]);
+  }, [data, hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, currentUser, postEditOverrides]);
 
   const currentFirstPostId = posts[0]?.id ?? null;
   const latestTimestamp = useMemo(() => {

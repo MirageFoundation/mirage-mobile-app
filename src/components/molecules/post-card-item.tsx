@@ -1,6 +1,7 @@
-import { memo, useCallback } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { PostCard } from "./post-card";
 import type { Post } from "./post-card-types";
+import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { logPress } from "@/src/utils/press-logger";
 
 type PostCardItemProps = {
@@ -81,6 +82,20 @@ onPostPress,
   onBlockTopic,
   onReport,
 }: PostCardItemProps) {
+  const editOverride = usePostEditStore((s) => s.overrides[post.id]);
+  const displayPost = useMemo(() => {
+    if (!editOverride) return post;
+    return {
+      ...post,
+      title: editOverride.title,
+      body: editOverride.content || undefined,
+      topic: editOverride.topic ?? post.topic,
+      media: editOverride.media
+        ? editOverride.media.map((url) => ({ uri: url, type: "image" as const }))
+        : post.media,
+    };
+  }, [post, editOverride]);
+
   const handlePostPress = useCallback(() => {
     logPress({ name: "post_card_item", postId: post.id });
     onPostPress?.(post.id);
@@ -158,7 +173,7 @@ onPostPress,
 
  return (
    <PostCard
-     post={post}
+     post={displayPost}
      isOwnPost={isOwnPost}
      isVisible={isVisible}
      isTopicFollowed={isTopicFollowed}

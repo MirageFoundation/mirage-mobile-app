@@ -762,15 +762,6 @@ export function useEdit(options: UsePostOptions = {}) {
       restoreQuerySnapshots(queryClient, context?.previousComments);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["posts"], refetchType: "inactive" });
-      queryClient.invalidateQueries({ queryKey: ["comments"], refetchType: "inactive" });
-
-      if (address) {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.userPosts(address),
-          refetchType: "inactive",
-        });
-      }
     },
   });
 }

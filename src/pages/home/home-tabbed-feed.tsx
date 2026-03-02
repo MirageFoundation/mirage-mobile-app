@@ -19,6 +19,7 @@ import {
   transformApiPosts,
   useInfinitePosts,
 } from "@/src/api";
+import { usePostEditStore } from "@/src/stores/post-edit-store";
 import {
   PostCardSkeleton,
   PostCardSkeletonList,
@@ -121,6 +122,20 @@ export const HomeTabbedFeed = forwardRef<
     allowed_tags: allowedTags || undefined,
   }, { enabled: latestTabActivated });
 
+  const postEditOverrides = usePostEditStore((s) => s.overrides);
+
+  const applyPostEditOverrides = useCallback(
+    (posts: any[]) => {
+      if (Object.keys(postEditOverrides).length === 0) return posts;
+      return posts.map((post: any) => {
+        const ov = postEditOverrides[post.post_id];
+        if (!ov) return post;
+        return { ...post, title: ov.title, content: ov.content, topic: ov.topic ?? post.topic, media: ov.media ?? post.media };
+      });
+    },
+    [postEditOverrides],
+  );
+
   const transformPosts = useCallback(
     (data: typeof magicQuery.data) => {
       if (!data?.pages) return [];
@@ -138,7 +153,9 @@ export const HomeTabbedFeed = forwardRef<
         ? uniquePosts.filter((post) => post.user_vote !== -1)
         : uniquePosts;
 
-      const transformedPosts = transformApiPosts(filteredPosts, {
+      const patchedPosts = applyPostEditOverrides(filteredPosts);
+
+      const transformedPosts = transformApiPosts(patchedPosts, {
         currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined,
       });
 
@@ -149,7 +166,7 @@ export const HomeTabbedFeed = forwardRef<
           !(post.topic && blockedTopicNames.has(post.topic.toLowerCase())),
       );
     },
-    [hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, baseFeed, followedUsers, followedTopics, currentUser],
+    [hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, baseFeed, followedUsers, followedTopics, currentUser, applyPostEditOverrides],
   );
 
   const magicPosts = useMemo(
@@ -162,7 +179,7 @@ export const HomeTabbedFeed = forwardRef<
           (post.topic && followedTopics.has(post.topic)),
       );
     },
-    [magicQuery.data, transformPosts, baseFeed, followedUsers, followedTopics],
+    [magicQuery.data, transformPosts, baseFeed, followedUsers, followedTopics, postEditOverrides],
   );
 
   const latestPosts = useMemo(
@@ -175,7 +192,7 @@ export const HomeTabbedFeed = forwardRef<
           (post.topic && followedTopics.has(post.topic)),
       );
     },
-    [latestQuery.data, transformPosts, baseFeed, followedUsers, followedTopics],
+    [latestQuery.data, transformPosts, baseFeed, followedUsers, followedTopics, postEditOverrides],
   );
 
   const handleRefresh = useCallback(async () => {

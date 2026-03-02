@@ -3,6 +3,7 @@ import type { Post } from "@/src/components/molecules";
 import { PostCard } from "@/src/components/molecules";
 import { logPress } from "@/src/utils/press-logger";
 import { getShareBaseUrl } from "@/src/stores";
+import { usePostEditStore } from "@/src/stores/post-edit-store";
 import {
   useHomePostCardStore,
   useAllowAutoplay,
@@ -175,24 +176,40 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     getHandlers().onReport?.(p.id);
   }, []);
 
+  const editOverride = usePostEditStore((s) => s.overrides[post.id]);
+
   const displayPost = useMemo(() => {
+    let result = post;
     const needsFollowingUpdate = (post.isFollowing ?? false) !== isFollowing;
     const needsVoteUpdate = !!voteOverride;
     const needsCommentCountUpdate = !!commentCountOverride;
-    if (!needsFollowingUpdate && !needsVoteUpdate && !needsCommentCountUpdate) return post;
-    return {
-      ...post,
-      isFollowing,
-      ...(voteOverride && {
-        likes: voteOverride.likes ?? post.likes,
-        hasLiked: voteOverride.hasLiked ?? post.hasLiked,
-        hasDisliked: voteOverride.hasDisliked ?? post.hasDisliked,
-      }),
-      ...(commentCountOverride && {
-        comments: post.comments + (commentCountOverride.commentDelta ?? 0),
-      }),
-    };
-  }, [post, isFollowing, voteOverride, commentCountOverride]);
+    if (needsFollowingUpdate || needsVoteUpdate || needsCommentCountUpdate) {
+      result = {
+        ...result,
+        isFollowing,
+        ...(voteOverride && {
+          likes: voteOverride.likes ?? post.likes,
+          hasLiked: voteOverride.hasLiked ?? post.hasLiked,
+          hasDisliked: voteOverride.hasDisliked ?? post.hasDisliked,
+        }),
+        ...(commentCountOverride && {
+          comments: post.comments + (commentCountOverride.commentDelta ?? 0),
+        }),
+      };
+    }
+    if (editOverride) {
+      result = {
+        ...result,
+        title: editOverride.title,
+        body: editOverride.content || undefined,
+        topic: editOverride.topic ?? result.topic,
+        media: editOverride.media
+          ? editOverride.media.map((url) => ({ uri: url, type: "image" as const }))
+          : result.media,
+      };
+    }
+    return result;
+  }, [post, isFollowing, voteOverride, commentCountOverride, editOverride]);
 
   return (
    <PostCard
