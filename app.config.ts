@@ -15,7 +15,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name,
     slug,
-    version: "1.0.0",
+    version: "1.0.1",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: scheme,
@@ -27,12 +27,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         UIBackgroundModes: ["fetch", "remote-notification"],
-        LSApplicationQueriesSchemes: [
-          "whatsapp",
-          "tg",
-          "instagram",
-          "sms",
-        ],
+        LSApplicationQueriesSchemes: ["whatsapp", "tg", "instagram", "sms"],
       },
     },
     android: {
@@ -55,10 +50,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       [
         "@sentry/react-native/expo",
         {
-          "url": "https://sentry.io/",
-          "project": "react-native",
-          "organization": "mirage-q4"
-        }
+          url: "https://sentry.io/",
+          project: "react-native",
+          organization: "mirage-q4",
+        },
       ],
       "expo-router",
       [

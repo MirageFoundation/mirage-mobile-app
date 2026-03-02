@@ -1,3 +1,4 @@
+import { navigateToEditPost } from "@/src/utils/edit-post";
 import * as Clipboard from "expo-clipboard";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -561,6 +562,11 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     [postsById]
   );
 
+  const handleEditPost = useCallback(() => {
+    if (!selectedPost) return;
+    navigateToEditPost(router, selectedPost);
+  }, [selectedPost, router]);
+
   const handleDeletePost = useCallback(() => {
     if (!selectedPost) return;
     deleteHandler.requestDelete(selectedPost.id, "post");
@@ -994,6 +1000,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
             saved ? "You can find it in your saved items." : "Removed from saved items.",
           );
         }}
+        onEdit={handleEditPost}
         onDelete={handleDeletePost}
         onBlockPost={handleBlockPost}
         onReport={handleReportPost}

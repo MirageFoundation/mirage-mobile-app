@@ -38,3 +38,33 @@ const DEFAULT_POST_LIMITS: TierPostLimits = TIER_POST_LIMITS[0];
 export const getTierPostLimits = (level: number): TierPostLimits => {
   return TIER_POST_LIMITS[level] ?? DEFAULT_POST_LIMITS;
 };
+
+const TIER_EDIT_TIME_LIMITS_MINUTES: Record<number, number> = {
+  0: 10,
+  1: 60,
+  2: 360,
+  3: 720,
+  100: Infinity,
+};
+
+export const getEditTimeLimitMinutes = (level: number): number => {
+  return TIER_EDIT_TIME_LIMITS_MINUTES[level] ?? TIER_EDIT_TIME_LIMITS_MINUTES[0];
+};
+
+export const canEditContent = (
+  level: number,
+  createdAtSeconds: number,
+): { allowed: boolean; remainingMinutes: number; limitMinutes: number } => {
+  const limitMinutes = getEditTimeLimitMinutes(level);
+  if (limitMinutes === Infinity) {
+    return { allowed: true, remainingMinutes: Infinity, limitMinutes };
+  }
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const elapsedMinutes = (nowSeconds - createdAtSeconds) / 60;
+  const remainingMinutes = Math.max(0, Math.ceil(limitMinutes - elapsedMinutes));
+  return {
+    allowed: elapsedMinutes < limitMinutes,
+    remainingMinutes,
+    limitMinutes,
+  };
+};

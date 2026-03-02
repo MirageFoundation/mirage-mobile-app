@@ -1284,6 +1284,9 @@ export default function PostDetailScreen() {
   const handleEditComment = useCallback(() => {
     if (!selectedComment || !id || selectedComment.id.startsWith("optimistic-"))
       return;
+    const commentCreatedAt = selectedComment.createdAt instanceof Date
+      ? Math.floor(selectedComment.createdAt.getTime() / 1000)
+      : Math.floor(Number(selectedComment.createdAt) / (Number(selectedComment.createdAt) > 1e12 ? 1000 : 1));
     const params: Record<string, string> = {
       postId: id,
       postTitle: displayPost?.title ?? "",
@@ -1291,12 +1294,37 @@ export default function PostDetailScreen() {
       editCommentId: selectedComment.id,
       editParentId: selectedComment.parentId ?? id,
       editContent: selectedComment.content,
+      editCreatedAt: String(commentCreatedAt),
     };
     if (displayPost?.media?.[0]?.uri) {
       params.postThumbnail = displayPost.media[0].uri;
     }
     router.push({ pathname: "/comment-compose", params });
   }, [selectedComment, id, displayPost, router]);
+
+  const handleEditPost = useCallback(() => {
+    if (!displayPost) return;
+    const postData = commentsData?.root;
+    const createdAtSeconds = postData?.timestamp ?? (
+      displayPost.createdAt instanceof Date
+        ? Math.floor(displayPost.createdAt.getTime() / 1000)
+        : Math.floor(Number(displayPost.createdAt) / (Number(displayPost.createdAt) > 1e12 ? 1000 : 1))
+    );
+    const editParams: Record<string, string> = {
+      editPostId: displayPost.id,
+      editTopic: displayPost.topic ?? "general",
+      editTitle: displayPost.title,
+      editBody: displayPost.body ?? postData?.content ?? "",
+      editTag: postData?.tag ?? "",
+      editCreatedAt: String(createdAtSeconds),
+    };
+    if (postData?.media && postData.media.length > 0) {
+      editParams.editMedia = JSON.stringify(postData.media);
+    } else if (displayPost.media && displayPost.media.length > 0) {
+      editParams.editMedia = JSON.stringify(displayPost.media.map((m) => m.uri));
+    }
+    router.push({ pathname: "/edit-post", params: editParams });
+  }, [displayPost, commentsData, router]);
 
   // Handler for deleting the post
   const handleDeletePost = useCallback(() => {
@@ -1943,6 +1971,7 @@ export default function PostDetailScreen() {
             );
           }}
           onDelete={handleDeletePost}
+          onEdit={handleEditPost}
           onBlockPost={handleBlockPost}
           onBlockUser={handleBlockPostAuthor}
           onReport={handleReportPost}

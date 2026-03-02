@@ -1,3 +1,4 @@
+import { navigateToEditPost } from "@/src/utils/edit-post";
 import { useFocusEffect } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
@@ -541,6 +542,11 @@ useEffect(() => {
     [postsById],
   );
 
+  const handleEditPost = useCallback(() => {
+    if (!selectedPost) return;
+    navigateToEditPost(router, selectedPost);
+  }, [selectedPost, router]);
+
   const handleDeletePost = useCallback(() => {
     if (!selectedPost) return;
     deleteHandler.requestDelete(selectedPost.id, "post");
@@ -938,6 +944,7 @@ useEffect(() => {
             saved ? "You can find it in your saved items." : "Removed from saved items.",
           );
         }}
+        onEdit={handleEditPost}
         onDelete={handleDeletePost}
         onBlockPost={handleBlockPost}
         onReport={handleReportPost}

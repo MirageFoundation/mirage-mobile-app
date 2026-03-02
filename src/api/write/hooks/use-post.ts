@@ -684,14 +684,91 @@ export function useEdit(options: UsePostOptions = {}) {
       const wallet = await getWallet();
       return editPost(wallet, input, options.onPoWProgress);
     },
-    onSuccess: () => {
-      // Invalidate all post/comment caches
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
-      queryClient.invalidateQueries({ queryKey: ["comments"] });
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: ["posts"] });
+      await queryClient.cancelQueries({ queryKey: ["comments"] });
+      if (address) {
+        await queryClient.cancelQueries({ queryKey: queryKeys.userPosts(address) });
+      }
+
+      const previousPosts = queryClient.getQueriesData({ queryKey: ["posts"] }) as Array<[QueryKey, unknown]>;
+      const previousUserPosts = queryClient.getQueriesData({ queryKey: ["user", "posts"] }) as Array<[QueryKey, unknown]>;
+      const previousComments = queryClient.getQueriesData({ queryKey: ["comments"] }) as Array<[QueryKey, unknown]>;
+
+      const nowSeconds = Math.floor(Date.now() / 1000);
+
+      const updatePost = (post: ApiPost): ApiPost => {
+        if (post.post_id !== input.postId) return post;
+        return {
+          ...post,
+          title: input.title,
+          content: input.content,
+          tag: input.tag ?? post.tag,
+          topic: input.topic ?? post.topic,
+          media: input.media ?? post.media,
+          edited_at: nowSeconds,
+        };
+      };
+
+      const applyToPostsData = (data: unknown): { nextData: unknown; didUpdate: boolean } => {
+        if (!data) return { nextData: data, didUpdate: false };
+        if (isInfinitePostsData(data)) {
+          let didUpdate = false;
+          const nextPages = data.pages.map((page) => {
+            const nextPosts = page.posts.map((p) => {
+              const updated = updatePost(p);
+              if (updated !== p) didUpdate = true;
+              return updated;
+            });
+            return { ...page, posts: nextPosts };
+          });
+          return { nextData: didUpdate ? { ...data, pages: nextPages } : data, didUpdate };
+        }
+        const singleData = data as PostsResponse;
+        let didUpdate = false;
+        const nextPosts = singleData.posts.map((p) => {
+          const updated = updatePost(p);
+          if (updated !== p) didUpdate = true;
+          return updated;
+        });
+        return { nextData: didUpdate ? { ...singleData, posts: nextPosts } : data, didUpdate };
+      };
+
+      updateQueriesWithReducer(queryClient, ["posts"], applyToPostsData);
+      updateQueriesWithReducer(queryClient, ["user", "posts"], applyToPostsData);
+
+      const commentsQueries = queryClient.getQueriesData<CommentsResponse>({ queryKey: ["comments"] });
+      commentsQueries.forEach(([queryKey, queryData]) => {
+        if (!queryData?.root || queryData.root.post_id !== input.postId) return;
+        queryClient.setQueryData<CommentsResponse>(queryKey, {
+          ...queryData,
+          root: {
+            ...queryData.root,
+            title: input.title,
+            content: input.content,
+            tag: input.tag ?? queryData.root.tag,
+            topic: input.topic ?? queryData.root.topic,
+            media: input.media ?? queryData.root.media,
+            edited_at: nowSeconds,
+          },
+        });
+      });
+
+      return { previousPosts, previousUserPosts, previousComments };
+    },
+    onError: (_error, _input, context) => {
+      restoreQuerySnapshots(queryClient, context?.previousPosts);
+      restoreQuerySnapshots(queryClient, context?.previousUserPosts);
+      restoreQuerySnapshots(queryClient, context?.previousComments);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["posts"], refetchType: "inactive" });
+      queryClient.invalidateQueries({ queryKey: ["comments"], refetchType: "inactive" });
 
       if (address) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.userPosts(address),
+          refetchType: "inactive",
         });
       }
     },

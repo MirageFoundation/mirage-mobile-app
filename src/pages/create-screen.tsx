@@ -24,8 +24,8 @@ import {
   uploadImageAndGetUrl,
   uploadVideoAndGetUrl,
 } from "@/src/api/read/hooks/use-upload-media";
-import { usePost, type CreatePostMutationInput } from "@/src/api/write";
-import type { ContentTag } from "@/src/api/write/endpoints/posts";
+import { usePost, useEdit, type CreatePostMutationInput } from "@/src/api/write";
+import type { ContentTag, EditPostInput } from "@/src/api/write/endpoints/posts";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useToast } from "@/src/providers/toast-provider";
@@ -35,7 +35,7 @@ import { getTxStatus } from "@/src/api/read/endpoints/tx";
 import { useDraftStore, type Community } from "@/src/stores/draft-store";
 import { useHomePostCardStore } from "./home/home-post-card-store";
 import { useUserLevel } from "@/src/stores/auth-store";
-import { getTierPostLimits } from "@/src/utils/tiers";
+import { getTierPostLimits, canEditContent } from "@/src/utils/tiers";
 
 import { CommunitySelectionModal } from "./create/community-selection-modal";
 import { StickerPicker } from "@/src/components/molecules/sticker-picker";
@@ -73,7 +73,7 @@ export function CreateScreen() {
   const userLevel = useUserLevel();
   const tierLimits = useMemo(() => getTierPostLimits(userLevel), [userLevel]);
 
-  // Get params from video editor
+  // Get params from video editor or edit mode
   const params = useLocalSearchParams<{
     videoUri?: string;
     originalVideoUri?: string;
@@ -83,7 +83,22 @@ export function CreateScreen() {
     trimStart?: string;
     trimEnd?: string;
     isMuted?: string;
+    editPostId?: string;
+    editTopic?: string;
+    editTitle?: string;
+    editBody?: string;
+    editTag?: string;
+    editMedia?: string;
+    editCreatedAt?: string;
   }>();
+
+  const isEditMode = !!params.editPostId;
+  const editPostId = params.editPostId ?? "";
+
+  const editability = useMemo(() => {
+    if (!isEditMode || !params.editCreatedAt) return null;
+    return canEditContent(userLevel, parseInt(params.editCreatedAt, 10));
+  }, [isEditMode, params.editCreatedAt, userLevel]);
 
   const { draft, updateDraft, clearDraft, setAttachment, removeAttachment } =
     useDraftStore();
@@ -179,6 +194,7 @@ export function CreateScreen() {
 
   const txProgress = useTransactionProgress();
   const postMutation = usePost({ onPoWProgress: txProgress.updatePoWProgress });
+  const editMutation = useEdit({ onPoWProgress: txProgress.updatePoWProgress });
   const triggerScrollToTop = useHomePostCardStore((s) => s.triggerScrollToTop);
 
   const screenWidth = Dimensions.get("window").width;
@@ -189,8 +205,11 @@ export function CreateScreen() {
     const hasCommunity = draft.community !== null;
     const videoStillUploading =
       draft.attachmentType === "video" && isUploadingVideo;
-    return hasTitleContent && hasCommunity && !videoStillUploading;
-  }, [draft.title, draft.community, draft.attachmentType, isUploadingVideo]);
+    const editBlocked = isEditMode && editability && !editability.allowed;
+    return hasTitleContent && hasCommunity && !videoStillUploading && !editBlocked;
+  }, [draft.title, draft.community, draft.attachmentType, isUploadingVideo, isEditMode, editability]);
+
+  const editExpired = isEditMode && editability !== null && !editability.allowed;
 
   const hasAttachment = useMemo(() => {
     return showLinkInput || draft.attachmentType !== null;
@@ -212,7 +231,7 @@ export function CreateScreen() {
 
   // Clean up stale attachment state on mount
   useEffect(() => {
-    // If attachmentType is set but there's no actual content, clear it
+    if (isEditMode) return;
     if (draft.attachmentType === "link" && !draft.linkUrl) {
       removeAttachment();
     } else if (
@@ -222,6 +241,38 @@ export function CreateScreen() {
       removeAttachment();
     }
   }, []);
+
+  const editInitializedRef = useRef(false);
+  useEffect(() => {
+    if (!isEditMode || editInitializedRef.current) return;
+    editInitializedRef.current = true;
+
+    const topic = params.editTopic ?? "general";
+    const community: Community = {
+      id: topic,
+      name: topic,
+      memberCount: 0,
+      isSubscribed: true,
+    };
+    updateDraft({
+      community,
+      title: params.editTitle ?? "",
+      body: params.editBody ?? "",
+    });
+
+    if (params.editTag) {
+      setSelectedContentWarning(params.editTag as ContentTag);
+    }
+
+    if (params.editMedia) {
+      try {
+        const mediaUrls = JSON.parse(params.editMedia) as string[];
+        if (mediaUrls.length > 0) {
+          setSelectedStickers(mediaUrls);
+        }
+      } catch {}
+    }
+  }, [isEditMode]);
 
   // Handle video returned from editor
   useEffect(() => {
@@ -323,20 +374,31 @@ export function CreateScreen() {
         ? "general"
         : (draft.community?.id ?? "general");
 
-      const postInput: CreatePostMutationInput = {
-        topic,
-        title: draft.title.trim(),
-        content: content,
-        tag: selectedContentWarning,
-        media: mediaUrls.length > 0 ? mediaUrls : undefined,
-        optimisticMediaUrl: mediaUrls[0] ?? undefined,
-        optimisticMediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
-      };
-
-      console.log("[CreatePost] Submitting post:", postInput);
-
       txProgress.setPhase("signing");
-      const result = await postMutation.mutateAsync(postInput);
+
+      let result;
+      if (isEditMode) {
+        const editInput: EditPostInput = {
+          postId: editPostId,
+          topic,
+          title: draft.title.trim(),
+          content: content,
+          tag: selectedContentWarning,
+          media: mediaUrls.length > 0 ? mediaUrls : undefined,
+        };
+        result = await editMutation.mutateAsync(editInput);
+      } else {
+        const postInput: CreatePostMutationInput = {
+          topic,
+          title: draft.title.trim(),
+          content: content,
+          tag: selectedContentWarning,
+          media: mediaUrls.length > 0 ? mediaUrls : undefined,
+          optimisticMediaUrl: mediaUrls[0] ?? undefined,
+          optimisticMediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+        };
+        result = await postMutation.mutateAsync(postInput);
+      }
 
       txProgress.setPhase("confirming");
       let confirmed = false;
@@ -355,8 +417,6 @@ export function CreateScreen() {
 
       txProgress.setSuccess(result?.tx_hash);
 
-      console.log("[CreatePost] Post created successfully:", result);
-
       setSelectedContentWarning("");
       setSelectedStickers([]);
       setShowLinkInput(false);
@@ -373,20 +433,24 @@ export function CreateScreen() {
 
       setIsSubmitting(false);
 
-      triggerScrollToTop();
+      if (!isEditMode) {
+        triggerScrollToTop();
+      }
 
       setTimeout(() => {
         txProgress.hideModal();
-       useHomePostCardStore.getState().setSkipNextRefresh(true);
-        router.replace("/(tabs)/");
+        useHomePostCardStore.getState().setSkipNextRefresh(true);
+        if (isEditMode) {
+          router.back();
+        } else {
+          router.replace("/(tabs)/");
+        }
       }, 1000);
     } catch (error) {
-      console.error("[CreatePost] Error creating post:", error);
-
       setIsSubmitting(false);
 
       const errorMessage =
-        error instanceof Error ? error.message : "Failed to create post";
+        error instanceof Error ? error.message : isEditMode ? "Failed to edit post" : "Failed to create post";
       txProgress.setError(errorMessage);
     }
   }, [
@@ -395,6 +459,9 @@ export function CreateScreen() {
     draft,
     clearDraft,
     postMutation,
+    editMutation,
+    isEditMode,
+    editPostId,
     toast,
     selectedContentWarning,
     isVideoMuted,
@@ -600,7 +667,7 @@ export function CreateScreen() {
     setIsVideoMuted((prev) => !prev);
   }, []);
 
-  const TAB_BAR_HEIGHT = 60;
+  const TAB_BAR_HEIGHT = isEditMode ? 0 : 60;
 
   const renderVideoPreview = () => {
     if (draft.attachmentType !== "video" || draft.mediaUris.length === 0) {
@@ -765,10 +832,26 @@ export function CreateScreen() {
               },
             ]}
           >
-            Post
+            {isEditMode ? "Save" : "Post"}
           </Button.Text>
         </Button>
       </View>
+
+      {isEditMode && editability && !editability.allowed && (
+        <View style={{ marginHorizontal: 16, marginVertical: 8, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: theme.colors.error[500] + "20", borderRadius: 10 }}>
+          <Text size="sm" style={{ color: theme.colors.error[500] }}>
+            Editing time has expired. Your tier allows editing up to {editability.limitMinutes} minutes after publishing.
+          </Text>
+        </View>
+      )}
+
+      {isEditMode && editability && editability.allowed && editability.remainingMinutes !== Infinity && (
+        <View style={{ marginHorizontal: 16, marginVertical: 8, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: theme.colors.warning[500] + "15", borderRadius: 10 }}>
+          <Text size="sm" style={{ color: theme.colors.warning[500] }}>
+            {editability.remainingMinutes} min remaining to edit this post
+          </Text>
+        </View>
+      )}
 
       <KeyboardAvoidingView
         behavior="padding"
@@ -844,7 +927,7 @@ export function CreateScreen() {
 
           <TextInput
             ref={titleInputRef}
-            style={[styles.titleInput, { color: theme.colors.text.default }]}
+            style={[styles.titleInput, { color: theme.colors.text.default }, editExpired && { opacity: 0.5 }]}
             placeholder="Title"
             placeholderTextColor={theme.colors.text.subtle}
             value={draft.title}
@@ -858,6 +941,7 @@ export function CreateScreen() {
             returnKeyType="next"
             onSubmitEditing={() => bodyInputRef.current?.focus()}
             blurOnSubmit={false}
+            editable={!editExpired}
           />
           <Text
             size="xs"
@@ -1051,7 +1135,7 @@ export function CreateScreen() {
 
           <TextInput
             ref={bodyInputRef}
-            style={[styles.bodyInput, { color: theme.colors.text.default }]}
+            style={[styles.bodyInput, { color: theme.colors.text.default }, editExpired && { opacity: 0.5 }]}
             placeholder="body text (optional)"
             placeholderTextColor={theme.colors.text.subtle}
             value={draft.body}
@@ -1067,6 +1151,7 @@ export function CreateScreen() {
             onSelectionChange={(e) => {
               bodySelectionRef.current = e.nativeEvent.selection;
             }}
+            editable={!editExpired}
           />
           {draft.body.length > 0 && (
             <Text
@@ -1097,10 +1182,10 @@ export function CreateScreen() {
             },
           ]}
         >
-          <View style={styles.mediaBarContent}>
+          <View style={[styles.mediaBarContent, editExpired && { opacity: 0.4 }]} pointerEvents={editExpired ? "none" : "auto"}>
             <Pressable
               onPress={handleLinkPress}
-              disabled={hasAttachment && !showLinkInput}
+              disabled={editExpired || (hasAttachment && !showLinkInput)}
               style={[
                 styles.mediaButton,
                 hasAttachment && !showLinkInput && styles.mediaButtonDisabled,
@@ -1289,8 +1374,8 @@ export function CreateScreen() {
       <TransactionProgressModal
         visible={txProgress.isVisible}
         progress={txProgress.progress}
-        title="Creating Post"
-        description="Your post is being published to the blockchain"
+        title={isEditMode ? "Editing Post" : "Creating Post"}
+        description={isEditMode ? "Your edit is being published to the blockchain" : "Your post is being published to the blockchain"}
         onDismiss={() => {
           txProgress.hideModal();
           setIsSubmitting(false);

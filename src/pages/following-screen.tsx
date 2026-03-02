@@ -1,3 +1,4 @@
+import { navigateToEditPost } from "@/src/utils/edit-post";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -258,6 +259,11 @@ export function FollowingScreen() {
     [reportHandler]
   );
 
+  const handleEditPost = useCallback(() => {
+    if (!selectedPost) return;
+    navigateToEditPost(router, selectedPost);
+  }, [selectedPost, router]);
+
   const handleDeletePost = useCallback(() => {
     if (selectedPost) {
       deleteHandler.requestDelete(selectedPost.id, "post");
@@ -465,6 +471,7 @@ export function FollowingScreen() {
         onReport={handleReport}
         onBlockUser={handleBlockUser}
         onHidePost={handleHidePost}
+        onEdit={handleEditPost}
         onDelete={handleDeletePost}
         onGiveAward={() => {
           if (!selectedPost) return;

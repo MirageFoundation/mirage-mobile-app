@@ -1,3 +1,4 @@
+import { navigateToEditPost } from "@/src/utils/edit-post";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -387,6 +388,11 @@ export function TopicFeedScreen() {
     },
     [reportHandler],
   );
+
+  const handleEditPost = useCallback(() => {
+    if (!selectedPost) return;
+    navigateToEditPost(router, selectedPost);
+  }, [selectedPost, router]);
 
   const handleDeletePost = useCallback(() => {
     if (selectedPost) {
@@ -944,6 +950,7 @@ export function TopicFeedScreen() {
         onReport={handleReport}
         onBlockUser={handleBlockUser}
         onHidePost={handleHidePost}
+        onEdit={handleEditPost}
         onDelete={handleDeletePost}
         onGiveAward={() => {
           if (!selectedPost) return;

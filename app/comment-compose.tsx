@@ -29,6 +29,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { StickerPicker } from "@/src/components/molecules/sticker-picker";
 import { MEME_STICKERS } from "@/src/data/stickers";
+import { useUserLevel } from "@/src/stores/auth-store";
+import { canEditContent } from "@/src/utils/tiers";
 
 type InputMode = "keyboard" | "link" | "gif" | "photo";
 
@@ -89,6 +91,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
     editCommentId,
     editParentId,
     editContent,
+    editCreatedAt,
  } = useLocalSearchParams<{
    postId: string;
    postTitle: string;
@@ -101,9 +104,16 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
    editCommentId?: string;
    editParentId?: string;
    editContent?: string;
+   editCreatedAt?: string;
  }>();
 
   const isEditMode = !!editCommentId;
+  const userLevel = useUserLevel();
+
+  const editability = useMemo(() => {
+    if (!isEditMode || !editCreatedAt) return null;
+    return canEditContent(userLevel, parseInt(editCreatedAt, 10));
+  }, [isEditMode, editCreatedAt, userLevel]);
 
   const initialText = useMemo(() => {
     if (isEditMode && editContent) {
@@ -151,7 +161,9 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const [showStickerPicker, setShowStickerPicker] = useState(false);
 
   const hasAttachment = selectedImageUri !== null || selectedGifUrl !== null;
-  const canSubmit = text.trim().length > 0 || hasAttachment;
+  const editBlocked = isEditMode && editability && !editability.allowed;
+  const editExpired = !!editBlocked;
+  const canSubmit = (text.trim().length > 0 || hasAttachment) && !editExpired;
  const canAddLink = linkName.trim().length > 0 && linkUrl.trim().length > 0;
 
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
@@ -400,6 +412,22 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
           ) : null}
        </View>
 
+        {isEditMode && editability && !editability.allowed && (
+          <View style={{ marginHorizontal: 16, marginVertical: 8, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: theme.colors.error[500] + "20", borderRadius: 10 }}>
+            <Text size="sm" style={{ color: theme.colors.error[500] }}>
+              Editing time has expired. Your tier allows editing up to {editability.limitMinutes} minutes after publishing.
+            </Text>
+          </View>
+        )}
+
+        {isEditMode && editability && editability.allowed && editability.remainingMinutes !== Infinity && (
+          <View style={{ marginHorizontal: 16, marginVertical: 8, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: theme.colors.warning[500] + "15", borderRadius: 10 }}>
+            <Text size="sm" style={{ color: theme.colors.warning[500] }}>
+              {editability.remainingMinutes} min remaining to edit this comment
+            </Text>
+          </View>
+        )}
+
         {/* Scrollable content area */}
         <ScrollView
           style={styles.contentArea}
@@ -501,14 +529,15 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
           {inputMode !== "link" && (
             <TextInput
               ref={inputRef}
-              style={[styles.textInput, { color: theme.colors.text.default }]}
+              style={[styles.textInput, { color: theme.colors.text.default }, editExpired && { opacity: 0.5 }]}
               placeholder="Comment"
               placeholderTextColor={theme.colors.text.subtle}
               value={text}
               onChangeText={setText}
               multiline
               maxLength={2000}
-              autoFocus
+              autoFocus={!editExpired}
+              editable={!editExpired}
               selection={selection}
               onSelectionChange={(e) => {
                 selectionRef.current = e.nativeEvent.selection;
@@ -631,7 +660,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
            },
          ]}
        >
-          <View style={styles.toolbarLeft}>
+          <View style={[styles.toolbarLeft, editExpired && { opacity: 0.4 }]} pointerEvents={editExpired ? "none" : "auto"}>
             <Pressable
               onPress={() => handleModeChange("keyboard")}
               style={[

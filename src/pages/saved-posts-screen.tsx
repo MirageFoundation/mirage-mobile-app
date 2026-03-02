@@ -1,3 +1,4 @@
+import { navigateToEditPost } from "@/src/utils/edit-post";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
@@ -469,6 +470,11 @@ export function SavedPostsScreen() {
     [router],
   );
 
+  const handleEditPost = useCallback(() => {
+    if (!selectedPost) return;
+    navigateToEditPost(router, selectedPost);
+  }, [selectedPost, router]);
+
   const handleSavePost = useCallback(() => {
     if (!selectedPost) return;
     const saved = useSavedPostsStore.getState().toggleSavePost(selectedPost);
@@ -736,6 +742,7 @@ export function SavedPostsScreen() {
         isOwnPost={currentUser?.id === selectedPost?.author.id}
         isSaved={selectedPost ? savedPosts.some((p) => p.id === selectedPost.id) : false}
         onSave={handleSavePost}
+        onEdit={handleEditPost}
         onCopyText={handleCopyText}
         onDismiss={() => setSelectedPost(null)}
       />
