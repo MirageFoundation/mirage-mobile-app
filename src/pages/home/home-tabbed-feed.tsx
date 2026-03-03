@@ -74,10 +74,12 @@ export const HomeTabbedFeed = forwardRef<
   const isRefreshingRef = useRef(false);
   const prevTabIndexRef = useRef(activeTabIndex);
   const [latestTabActivated, setLatestTabActivated] = useState(activeTabIndex === 1);
+  const latestTabRefreshedRef = useRef(false);
 
   const magicListRef = useRef<FlatList<Post>>(null);
   const latestListRef = useRef<FlatList<Post>>(null);
   const dismissNewPostsRef = useRef<(() => void) | null>(null);
+  const handleRefreshRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     if (prevTabIndexRef.current !== activeTabIndex) {
@@ -90,6 +92,10 @@ export const HomeTabbedFeed = forwardRef<
       requestAnimationFrame(() => {
         listRef.current?.scrollToOffset({ offset: 0, animated: false });
       });
+      if (activeTabIndex === 1 && !latestTabRefreshedRef.current) {
+        latestTabRefreshedRef.current = true;
+        setTimeout(() => handleRefreshRef.current?.(), 100);
+      }
     }
   }, [activeTabIndex, showBars]);
 
@@ -258,6 +264,7 @@ export const HomeTabbedFeed = forwardRef<
     queryClient,
     onRefreshingChange,
   ]);
+  handleRefreshRef.current = handleRefresh;
 
   const scrollToTop = useCallback((tabIndex?: number) => {
     const targetIndex = tabIndex ?? activeTabIndex;
@@ -489,11 +496,13 @@ export const HomeTabbedFeed = forwardRef<
     [baseFeed],
   );
 
+  const activeQueryLoading = activeTabIndex === 0 ? magicQuery.isLoading : latestQuery.isLoading;
+
   const ListHeader = useCallback(() => {
     return (
       <>
         {ListHeaderExtra}
-        {isRefreshing && (
+        {(isRefreshing || activeQueryLoading) && (
           <Box center p="md">
             <ActivityIndicator
               size="small"
@@ -509,6 +518,7 @@ export const HomeTabbedFeed = forwardRef<
     activeTabIndex,
     ListHeaderExtra,
     isRefreshing,
+    activeQueryLoading,
     theme.colors.text.subtle,
   ]);
 
