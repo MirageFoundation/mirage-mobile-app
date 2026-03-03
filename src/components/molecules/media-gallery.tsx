@@ -81,10 +81,17 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   const toggleMute = useVideoMuteStore((s) => s.toggleMute);
   const [isLoading, setIsLoading] = useState(true);
   const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    loadingTimeoutRef.current = setTimeout(() => {
+      setIsLoading(false);
+    }, 8000);
     return () => {
       videoRef.current?.pauseAsync().catch(() => {});
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -140,11 +147,13 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
         useNativeControls={false}
         onLoad={() => {
           setIsLoading(false);
+          if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
           videoRef.current?.setStatusAsync({ isMuted }).catch(() => {});
         }}
         onPlaybackStatusUpdate={(status) => {
-          if (status.isLoaded && status.isPlaying) {
+          if (status.isLoaded && (status.isPlaying || status.durationMillis)) {
             setIsLoading(false);
+            if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
           }
         }}
         onReadyForDisplay={(event) => {
@@ -236,6 +245,19 @@ const GalleryImageItem = memo(function GalleryImageItem({
   onAspectRatioDetected?: (uri: string, ratio: number) => void;
 }) {
   const [loaded, setLoaded] = useState(false);
+  const imageLoadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    imageLoadTimeoutRef.current = setTimeout(() => {
+      setLoaded(true);
+    }, 5000);
+    return () => {
+      if (imageLoadTimeoutRef.current) {
+        clearTimeout(imageLoadTimeoutRef.current);
+      }
+    };
+  }, [item.uri]);
+
   return (
     <Pressable onPress={onPress} style={{ width, height, overflow: "hidden" }}>
       <Image
@@ -245,6 +267,7 @@ const GalleryImageItem = memo(function GalleryImageItem({
         cachePolicy="memory-disk"
         onLoad={({ source }) => {
           setLoaded(true);
+          if (imageLoadTimeoutRef.current) clearTimeout(imageLoadTimeoutRef.current);
           const w = source?.width;
           const h = source?.height;
           if (w && h) {

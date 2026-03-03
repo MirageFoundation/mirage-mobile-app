@@ -14,6 +14,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
+import { type ImageLoadEventData } from "expo-image";
 import {
   ActivityIndicator,
   Dimensions,
@@ -98,6 +99,7 @@ export const PostCardMedia = memo(
     const toggleMute = useVideoMuteStore((s) => s.toggleMute);
     const [mediaLoaded, setMediaLoaded] = useState(false);
     const videoRef = useRef<Video | null>(null);
+    const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const aspectRatioLockedRef = useRef(false);
     const userInitiatedPlayRef = useRef(false);
@@ -118,6 +120,9 @@ export const PostCardMedia = memo(
     useEffect(() => {
       return () => {
         videoRef.current?.pauseAsync().catch(() => {});
+        if (loadingTimeoutRef.current) {
+          clearTimeout(loadingTimeoutRef.current);
+        }
       };
     }, []);
 
@@ -125,6 +130,13 @@ export const PostCardMedia = memo(
 
     useEffect(() => {
       setMediaLoaded(false);
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+      loadingTimeoutRef.current = setTimeout(() => {
+        setMediaLoaded(true);
+        setIsVideoLoading(false);
+      }, 8000);
     }, [resolvedMediaUri]);
 
     const cachedAspectRatio = resolvedMediaUri
@@ -273,11 +285,11 @@ export const PostCardMedia = memo(
         if (!status.isLoaded) {
           return;
         }
-        if (status.isPlaying && !status.isBuffering) {
+        if (status.isPlaying) {
           setIsVideoLoading(false);
           setMediaLoaded(true);
           userInitiatedPlayRef.current = false;
-        } else if (status.isBuffering) {
+        } else if (status.isBuffering && !status.isPlaying) {
           setIsVideoLoading(true);
         }
       },
@@ -400,7 +412,8 @@ export const PostCardMedia = memo(
                 isLooping={true}
                 isMuted={isMuted}
                 useNativeControls={false}
-                onLoad={() => {
+              onLoad={() => {
+                  setMediaLoaded(true);
                   videoRef.current?.setStatusAsync({ isMuted }).catch(() => {});
                 }}
                 onReadyForDisplay={(event) => {
