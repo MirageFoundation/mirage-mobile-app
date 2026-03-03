@@ -100,8 +100,9 @@ export const PostCardMedia = memo(
     const videoRef = useRef<Video | null>(null);
 
     const aspectRatioLockedRef = useRef(false);
-    // Track if user manually initiated playback (vs autoplay)
     const userInitiatedPlayRef = useRef(false);
+    const prevShouldBlurRef = useRef(shouldBlurContent);
+    const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
 
     useImperativeHandle(ref, () => ({
       pauseVideo: () => {
@@ -156,10 +157,18 @@ export const PostCardMedia = memo(
         setIsVideoPlaying(false);
         setIsVideoLoading(false);
         userInitiatedPlayRef.current = false;
+        prevShouldBlurRef.current = shouldBlurContent;
         return;
       }
 
-      // Only auto-play if allowed by settings, visible, and screen is active
+      const wasBlurred = prevShouldBlurRef.current;
+      prevShouldBlurRef.current = shouldBlurContent;
+
+      if (wasBlurred && !shouldBlurContent && screenActive && (allowAutoplay || feedTappedToPlay)) {
+        setIsVideoPlaying(true);
+        videoRef.current?.playAsync().catch(() => {});
+      }
+
       if (isVisible && screenActive && (allowAutoplay || feedTappedToPlay)) {
         setIsVideoPlaying(true);
       } else if (!isVisible || !screenActive) {
@@ -178,7 +187,6 @@ export const PostCardMedia = memo(
       feedTappedToPlay,
     ]);
 
-    // Apply mute state changes to video
     useEffect(() => {
       if (videoRef.current && media?.type === "video") {
         videoRef.current.setStatusAsync({ isMuted }).catch(() => {});
@@ -207,8 +215,6 @@ export const PostCardMedia = memo(
       () => ({ uri: resolvedMediaUri ?? "" }),
       [resolvedMediaUri],
     );
-
-    const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
 
     const handleVideoToggle = useCallback(async () => {
       if (media?.type !== "video") return;

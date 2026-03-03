@@ -1,6 +1,7 @@
 import {
   memo,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   forwardRef,
@@ -20,6 +21,14 @@ import { HomePostCardItem } from "./home-post-card-item";
 import { useHomePostCardStore } from "./home-post-card-store";
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Post>);
+
+const isPlayableMedia = (m: { type?: string; uri?: string }) =>
+  m.type === "video" ||
+  m.type === "youtube" ||
+  (m.type === "gif" && typeof m.uri === "string" && m.uri.includes("redgifs.com"));
+
+const hasPlayableVideo = (post?: { media?: Array<{ type?: string; uri?: string }> }) =>
+  !!post?.media?.some(isPlayableMedia);
 
 type HomePostListProps = {
  data: Post[];
@@ -61,8 +70,11 @@ const HomePostListInner = function HomePostListInner(
   const onItemVisibleRef = useRef(onItemVisible);
   onItemVisibleRef.current = onItemVisible;
 
+  const feedScreenRef = useRef(feedScreen);
+  feedScreenRef.current = feedScreen;
+
   const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 50,
+    viewAreaCoveragePercentThreshold: 11,
     minimumViewTime: 100,
   }).current;
 
@@ -75,8 +87,23 @@ const HomePostListInner = function HomePostListInner(
       );
       setVisiblePostIds(visibleIds);
 
-      const firstVisible = viewableItems.find((item) => item.isViewable && item.item?.id);
-      setActiveVideoPostId(firstVisible?.item?.id ?? null);
+      const visibleItems = viewableItems.filter((item) => item.isViewable && item.item?.id);
+      const videoItems = visibleItems.filter(
+        (item) => hasPlayableVideo(item.item)
+      );
+      if (videoItems.length > 0) {
+        const midIdx = Math.floor((visibleItems.length - 1) / 2);
+        const midListIndex = visibleItems[midIdx]?.index ?? 0;
+        let best = videoItems[0];
+        let bestDist = Math.abs((best.index ?? 0) - midListIndex);
+        for (let i = 1; i < videoItems.length; i++) {
+          const d = Math.abs((videoItems[i].index ?? 0) - midListIndex);
+          if (d < bestDist) { best = videoItems[i]; bestDist = d; }
+        }
+        setActiveVideoPostId(feedScreenRef.current, best.item.id);
+      } else {
+        setActiveVideoPostId(feedScreenRef.current, null);
+      }
 
      const maxIndex = viewableItems.reduce((max, item) => {
        if (item.isViewable && item.index != null && item.index > max) return item.index;
@@ -85,6 +112,27 @@ const HomePostListInner = function HomePostListInner(
      if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
     }
   ).current;
+
+  useEffect(() => {
+    if (!data || data.length === 0) return;
+    const currentActive = useHomePostCardStore.getState().activeVideoPostIds[feedScreen];
+    if (
+      currentActive &&
+      data.some(
+        (p) =>
+          p.id === currentActive &&
+          hasPlayableVideo(p)
+      )
+    ) {
+      return;
+    }
+    const firstVideo = data.find(
+      (p) => hasPlayableVideo(p)
+    );
+    if (firstVideo) {
+      setActiveVideoPostId(feedScreen, firstVideo.id);
+    }
+  }, [data, feedScreen, setActiveVideoPostId]);
 
  const renderItem = useCallback<ListRenderItem<Post>>(
     ({ item }) => <HomePostCardItem post={item} feedScreen={feedScreen} />,

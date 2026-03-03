@@ -9,6 +9,7 @@ import {
   FlatList,
   Share,
   View,
+  type ViewToken,
 } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -107,6 +108,7 @@ const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
  if (p.hasLiked !== n.hasLiked) return false;
  if (p.hasDisliked !== n.hasDisliked) return false;
  if (p.awards?.length !== n.awards?.length) return false;
+ if (prev.isVisible !== next.isVisible) return false;
  return true;
 });
 const MemoizedProfileCommentItem = memo(ProfileCommentItem, (prev, next) => {
@@ -118,6 +120,7 @@ const MemoizedProfileCommentItem = memo(ProfileCommentItem, (prev, next) => {
 const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  post,
  contentAnimatedStyle,
+ isVisible,
  onPostPress,
  onAuthorPress,
  onCommentPress,
@@ -125,6 +128,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
 }: {
  post: Post;
  contentAnimatedStyle: any;
+ isVisible?: boolean;
  onPostPress: (postId: string) => void;
  onAuthorPress: (authorId: string) => void;
  onCommentPress: (postId: string) => void;
@@ -145,6 +149,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
    <MemoizedPostCardItem
     post={displayPost}
     isOwnPost={true}
+    isVisible={isVisible}
     showUrlCard={false}
     onPostPress={onPostPress}
     onAuthorPress={onAuthorPress}
@@ -683,6 +688,59 @@ useEffect(() => {
     [refetchUserStatus, refetchProfile, refetchPosts, queryClient, user?.walletAddress],
   );
 
+  const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeTab !== 0) return;
+    const firstVideo = uiPosts.find(
+      (p) =>
+        p.media?.some(
+          (m) =>
+            m.type === "video" ||
+            m.type === "youtube" ||
+            (m.type === "gif" && typeof m.uri === "string" && m.uri.includes("redgifs.com")),
+        )
+    );
+    if (firstVideo && !activeVideoPostId) {
+      setActiveVideoPostId(firstVideo.id);
+    }
+  }, [uiPosts, activeTab]);
+
+  const profileViewabilityConfig = useRef({
+    viewAreaCoveragePercentThreshold: 11,
+    minimumViewTime: 100,
+  }).current;
+
+  const onProfileViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      const visibleItems = viewableItems.filter(
+        (item) => item.isViewable && item.item && typeof item.item === "object" && "id" in item.item
+      );
+      const videoItems = visibleItems.filter(
+        (item) =>
+          item.item.media?.some(
+            (m: any) =>
+              m.type === "video" ||
+              m.type === "youtube" ||
+              (m.type === "gif" && typeof m.uri === "string" && m.uri.includes("redgifs.com")),
+          )
+      );
+      if (videoItems.length > 0) {
+        const midIdx = Math.floor((visibleItems.length - 1) / 2);
+        const midListIndex = visibleItems[midIdx]?.index ?? 0;
+        let best = videoItems[0];
+        let bestDist = Math.abs((best.index ?? 0) - midListIndex);
+        for (let i = 1; i < videoItems.length; i++) {
+          const d = Math.abs((videoItems[i].index ?? 0) - midListIndex);
+          if (d < bestDist) { best = videoItems[i]; bestDist = d; }
+        }
+        setActiveVideoPostId(best.item.id);
+      } else {
+        setActiveVideoPostId(null);
+      }
+    }
+  ).current;
+
   const lastFetchTime = useRef(0);
   const isFetchingRef = useRef(false);
 
@@ -762,6 +820,7 @@ useEffect(() => {
             <AnimatedPostWrapper
              post={cleanPost}
              contentAnimatedStyle={contentAnimatedStyle}
+             isVisible={activeVideoPostId === item.id}
              onPostPress={handlePostPress}
              onAuthorPress={handleAuthorPress}
              onCommentPress={handlePostPress}
@@ -803,6 +862,7 @@ useEffect(() => {
       animatedTabIndex,
       contentAnimatedStyle,
       postsWithoutWarnings,
+      activeVideoPostId,
       ],
     );
 
@@ -940,6 +1000,8 @@ useEffect(() => {
           updateCellsBatchingPeriod={100}
           bounces={true}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          viewabilityConfig={profileViewabilityConfig}
+          onViewableItemsChanged={onProfileViewableItemsChanged}
         />
       </GestureDetector>
 

@@ -1,5 +1,5 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
-import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
@@ -347,14 +347,18 @@ export function FollowingScreen() {
     setShareServer(shareServer);
   }, [shareServer, setShareServer]);
 
-  const isFocused = useIsFocused();
-
-  useEffect(() => {
-    setActiveFeedScreen(isFocused ? 'following' : null);
-    if (isFocused) {
+  useFocusEffect(
+    useCallback(() => {
+      setActiveFeedScreen('following');
       setDisabledTopicName(undefined);
-    }
-  }, [isFocused, setActiveFeedScreen, setDisabledTopicName]);
+      return () => {
+        const current = useHomePostCardStore.getState().activeFeedScreen;
+        if (current === 'following') {
+          setActiveFeedScreen(null);
+        }
+      };
+    }, [setActiveFeedScreen, setDisabledTopicName]),
+  );
 
   const handlersRef = useRef({
     handlePostPress,

@@ -1,5 +1,5 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
-import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, View, type AppStateStatus } from "react-native";
@@ -463,14 +463,18 @@ export function HomeScreen() {
     setAllowAutoplay(allowAutoplay);
   }, [allowAutoplay, setAllowAutoplay]);
 
-  const isFocused = useIsFocused();
-
-  useEffect(() => {
-    setActiveFeedScreen(isFocused ? 'home' : null);
-    if (isFocused) {
+  useFocusEffect(
+    useCallback(() => {
+      setActiveFeedScreen('home');
       setDisabledTopicName(undefined);
-    }
-  }, [isFocused, setActiveFeedScreen, setDisabledTopicName]);
+      return () => {
+        const current = useHomePostCardStore.getState().activeFeedScreen;
+        if (current === 'home') {
+          setActiveFeedScreen(null);
+        }
+      };
+    }, [setActiveFeedScreen, setDisabledTopicName]),
+  );
 
   const handlersRef = useRef({
     handlePostPress,

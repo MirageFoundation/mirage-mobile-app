@@ -49,7 +49,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  post,
   feedScreen,
 }: HomePostCardItemProps) {
- const isVisible = useIsPostVisible(post.id);
+ const isVisible = useIsPostVisible(post.id, feedScreen);
  const isFollowing = useIsFollowing(post.author.id);
  const isTopicFollowed = useIsTopicFollowed(post.topic);
  const contentRevealed = useIsPostRevealed(post.id);
@@ -149,7 +149,16 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     const p = postRef.current;
     logPress({ name: "post_reveal", postId: p.id });
     getHandlers().onRevealContent?.(p.id);
-  }, []);
+    const hasVideo = p.media?.some(
+      (m) =>
+        m.type === "video" ||
+        m.type === "youtube" ||
+        (m.type === "gif" && typeof m.uri === "string" && m.uri.includes("redgifs.com")),
+    );
+    if (hasVideo) {
+      useHomePostCardStore.getState().setActiveVideoPostId(feedScreen, p.id);
+    }
+  }, [feedScreen]);
 
   const handleBlockUser = useCallback(() => {
     const p = postRef.current;

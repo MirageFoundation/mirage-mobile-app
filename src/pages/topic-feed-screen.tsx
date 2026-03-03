@@ -1,7 +1,7 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FlatList } from "react-native";
@@ -678,16 +678,18 @@ export function TopicFeedScreen() {
     setAllowAutoplay(allowAutoplay);
   }, [allowAutoplay, setAllowAutoplay]);
 
-  const isFocused = useIsFocused();
-
-  useEffect(() => {
-    setActiveFeedScreen(isFocused ? "topic" : null);
-    if (isFocused) {
+  useFocusEffect(
+    useCallback(() => {
+      setActiveFeedScreen("topic");
       setDisabledTopicName(topicName);
-    } else {
-      setDisabledTopicName(undefined);
-    }
-  }, [isFocused, setActiveFeedScreen, setDisabledTopicName, topicName]);
+      return () => {
+        const current = useHomePostCardStore.getState().activeFeedScreen;
+        if (current === "topic") {
+          setActiveFeedScreen(null);
+        }
+      };
+    }, [setActiveFeedScreen, setDisabledTopicName, topicName]),
+  );
 
   const handlersRef = useRef({
     handlePostPress,

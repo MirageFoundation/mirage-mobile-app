@@ -10,6 +10,7 @@ import {
   ListRenderItem,
   Share,
   View,
+  type ViewToken,
 } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -109,6 +110,8 @@ const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
  if (p.hasLiked !== n.hasLiked) return false;
  if (p.hasDisliked !== n.hasDisliked) return false;
  if (p.awards?.length !== n.awards?.length) return false;
+ if (prev.isVisible !== next.isVisible) return false;
+ if (prev.contentRevealed !== next.contentRevealed) return false;
  return true;
 });
 const MemoizedProfileCommentItem = memo(ProfileCommentItem, (prev, next) => {
@@ -121,6 +124,8 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  post,
  contentAnimatedStyle,
  isOwnProfile,
+ isVisible,
+ contentRevealed,
  shareUrl,
  onPostPress,
  onAuthorPress,
@@ -131,10 +136,13 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  onBlockUser,
  onBlockPost,
  onReport,
+ onRevealContent,
 }: {
  post: Post;
  contentAnimatedStyle: any;
  isOwnProfile: boolean;
+ isVisible?: boolean;
+ contentRevealed?: boolean;
  shareUrl: string;
  onPostPress: (postId: string) => void;
  onAuthorPress: (authorId: string) => void;
@@ -145,6 +153,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  onBlockUser: (postId: string, authorId: string, authorUsername: string) => void;
  onBlockPost: (postId: string) => void;
  onReport: (postId: string) => void;
+ onRevealContent?: (postId: string) => void;
 }) {
  const editOverride = usePostEditStore((s) => s.overrides[post.id]);
  const displayPost = editOverride ? {
@@ -161,6 +170,8 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
    <MemoizedPostCardItem
     post={displayPost}
     isOwnPost={isOwnProfile}
+    isVisible={isVisible}
+    contentRevealed={contentRevealed}
     showUrlCard={false}
     showFollowButton={false}
     shareUrl={shareUrl}
@@ -173,6 +184,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
     onBlockUser={onBlockUser}
     onBlockPost={onBlockPost}
     onReport={onReport}
+    onRevealContent={onRevealContent}
    />
   </Animated.View>
  );
@@ -733,6 +745,80 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, activeTab, isBlocked]);
 
+  const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
+  const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
+
+  const handleRevealContent = useCallback((postId: string) => {
+    setRevealedPosts((prev) => {
+      const next = new Set(prev);
+      next.add(postId);
+      return next;
+    });
+    const post = postsWithVotes.find((p) => p.id === postId);
+    if (
+      post?.media?.some(
+        (m) =>
+          m.type === "video" ||
+          m.type === "youtube" ||
+          (m.type === "gif" && typeof m.uri === "string" && m.uri.includes("redgifs.com")),
+      )
+    ) {
+      setActiveVideoPostId(postId);
+    }
+  }, [postsWithVotes]);
+
+  useEffect(() => {
+    if (activeTab !== 0) return;
+    const posts = postsWithVotes;
+    const firstVideo = posts.find(
+      (p) =>
+        p.media?.some(
+          (m) =>
+            m.type === "video" ||
+            m.type === "youtube" ||
+            (m.type === "gif" && typeof m.uri === "string" && m.uri.includes("redgifs.com")),
+        )
+    );
+    if (firstVideo) {
+      setActiveVideoPostId(firstVideo.id);
+    }
+  }, [postsWithVotes, activeTab]);
+
+  const profileViewabilityConfig = useRef({
+    viewAreaCoveragePercentThreshold: 11,
+    minimumViewTime: 100,
+  }).current;
+
+  const onProfileViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      const visibleItems = viewableItems.filter(
+        (item) => item.isViewable && item.item && typeof item.item === "object" && "id" in item.item
+      );
+      const videoItems = visibleItems.filter(
+        (item) =>
+          item.item.media?.some(
+            (m: any) =>
+              m.type === "video" ||
+              m.type === "youtube" ||
+              (m.type === "gif" && typeof m.uri === "string" && m.uri.includes("redgifs.com")),
+          )
+      );
+      if (videoItems.length > 0) {
+        const midIdx = Math.floor((visibleItems.length - 1) / 2);
+        const midListIndex = visibleItems[midIdx]?.index ?? 0;
+        let best = videoItems[0];
+        let bestDist = Math.abs((best.index ?? 0) - midListIndex);
+        for (let i = 1; i < videoItems.length; i++) {
+          const d = Math.abs((videoItems[i].index ?? 0) - midListIndex);
+          if (d < bestDist) { best = videoItems[i]; bestDist = d; }
+        }
+        setActiveVideoPostId(best.item.id);
+      } else {
+        setActiveVideoPostId(null);
+      }
+    }
+  ).current;
+
   const keyExtractor = useCallback(
     (item: Post | ApiPost | "header" | "tabs", index: number) => {
       if (item === "header") return "header";
@@ -784,6 +870,8 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
            post={item}
            contentAnimatedStyle={contentAnimatedStyle}
            isOwnProfile={isOwnProfile}
+           isVisible={activeVideoPostId === item.id}
+           contentRevealed={revealedPosts.has(item.id)}
            shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
            onPostPress={handlePostPress}
            onAuthorPress={handleAuthorPress}
@@ -794,6 +882,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
            onBlockUser={handleBlockUserFromCard}
            onBlockPost={handleBlockPostFromCard}
            onReport={handleReportFromCard}
+           onRevealContent={handleRevealContent}
           />
          );
        }
@@ -837,6 +926,9 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
        handleReportFromCard,
       animatedTabIndex,
       contentAnimatedStyle,
+      activeVideoPostId,
+      revealedPosts,
+      handleRevealContent,
     ]
   );
 
@@ -983,13 +1075,15 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.3}
           ListFooterComponent={ListFooterComponent}
-          removeClippedSubviews={true}
+          removeClippedSubviews={false}
           maxToRenderPerBatch={5}
           windowSize={5}
           initialNumToRender={7}
           updateCellsBatchingPeriod={100}
           bounces={true}
           maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          viewabilityConfig={profileViewabilityConfig}
+          onViewableItemsChanged={onProfileViewableItemsChanged}
         />
       </GestureDetector>
 
