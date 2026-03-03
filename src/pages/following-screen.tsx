@@ -2,7 +2,7 @@ import { navigateToEditPost } from "@/src/utils/edit-post";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View } from "react-native";
+import { AppState, View, type AppStateStatus } from "react-native";
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -70,6 +70,30 @@ export function FollowingScreen() {
   }, []);
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
+  const backgroundTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      if (nextState === "background" || nextState === "inactive") {
+        if (!backgroundTimeRef.current) {
+          backgroundTimeRef.current = Date.now();
+        }
+        return;
+      }
+      if (nextState === "active" && backgroundTimeRef.current) {
+        const duration = Date.now() - backgroundTimeRef.current;
+        backgroundTimeRef.current = null;
+        if (duration >= 15 * 60 * 1000) {
+          showBars();
+          tabbedFeedRef.current?.scrollToTop();
+          tabbedFeedRef.current?.checkNewPosts();
+        }
+      }
+    };
+    const sub = AppState.addEventListener("change", handleAppStateChange);
+    return () => sub.remove();
+  }, [showBars]);
+
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);

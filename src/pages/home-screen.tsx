@@ -100,14 +100,15 @@ export function HomeScreen() {
         const duration = Date.now() - backgroundTimeRef.current;
         backgroundTimeRef.current = null;
         if (duration >= 15 * 60 * 1000) {
+          showBars();
           tabbedFeedRef.current?.scrollToTop();
-          tabbedFeedRef.current?.refresh();
+          tabbedFeedRef.current?.checkNewPosts();
         }
       }
     };
     const sub = AppState.addEventListener("change", handleAppStateChange);
     return () => sub.remove();
-  }, []);
+  }, [showBars]);
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
 
@@ -120,6 +121,7 @@ export function HomeScreen() {
     const timer = setTimeout(() => {
       showBars();
       tabbedFeedRef.current?.scrollToTop();
+      tabbedFeedRef.current?.refresh();
     }, 300);
     return () => clearTimeout(timer);
   }, []);

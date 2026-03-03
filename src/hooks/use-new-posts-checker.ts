@@ -128,7 +128,19 @@ export function useNewPostsChecker({
     setHasNewPosts(false);
     setNewPostAvatars([]);
     setNewPostCount(0);
+    baselineIdRef.current = null;
+    baselineTimestampRef.current = null;
     prefetchedDataRef.current = null;
+  }, []);
+
+  const resetBaseline = useCallback((newFirstPostId: string | null, newTimestamp: number | null) => {
+    hasNewPostsRef.current = false;
+    setHasNewPosts(false);
+    setNewPostAvatars([]);
+    setNewPostCount(0);
+    prefetchedDataRef.current = null;
+    if (newFirstPostId) baselineIdRef.current = newFirstPostId;
+    if (newTimestamp) baselineTimestampRef.current = newTimestamp;
   }, []);
 
   const getPrefetchedData = useCallback(() => {
@@ -139,5 +151,5 @@ export function useNewPostsChecker({
     prefetchedDataRef.current = null;
   }, []);
 
-  return { hasNewPosts, newPostAvatars, newPostCount, dismiss, checkNow: checkForNewPosts, getPrefetchedData, clearPrefetch };
+  return { hasNewPosts, newPostAvatars, newPostCount, dismiss, resetBaseline, checkNow: checkForNewPosts, getPrefetchedData, clearPrefetch };
 }

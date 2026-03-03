@@ -50,6 +50,7 @@ export type HomeTabbedFeedRef = {
   hasNewPosts: () => boolean;
   handleNewPostsPress: () => Promise<void>;
   dismissNewPosts: () => void;
+  checkNewPosts: () => void;
 };
 
 type HomeTabbedFeedProps = {
@@ -76,6 +77,7 @@ export const HomeTabbedFeed = forwardRef<
 
   const magicListRef = useRef<FlatList<Post>>(null);
   const latestListRef = useRef<FlatList<Post>>(null);
+  const dismissNewPostsRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (prevTabIndexRef.current !== activeTabIndex) {
@@ -246,6 +248,7 @@ export const HomeTabbedFeed = forwardRef<
       isRefreshingRef.current = false;
       setIsRefreshing(false);
       onRefreshingChange?.(false);
+      dismissNewPostsRef.current?.();
     }
   }, [
     activeTabIndex,
@@ -282,6 +285,7 @@ export const HomeTabbedFeed = forwardRef<
         listRef.current?.scrollToOffset({ offset: 0, animated: false });
       } catch {}
     });
+    dismissNewPostsRef.current?.();
   }, [activeTabIndex, handleRefresh]);
 
   useEffect(() => {
@@ -302,7 +306,7 @@ export const HomeTabbedFeed = forwardRef<
     return max > 0 ? Math.floor(max / 1000) : null;
   }, [activePosts]);
 
-  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, getPrefetchedData, clearPrefetch } = useNewPostsChecker({
+  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, resetBaseline, checkNow, getPrefetchedData, clearPrefetch } = useNewPostsChecker({
     feed: baseFeed,
     by: activeSortBy as "magic" | "newest",
     allowed_tags: allowedTags || undefined,
@@ -310,6 +314,7 @@ export const HomeTabbedFeed = forwardRef<
     currentFirstPostId,
     latestTimestamp,
   });
+  dismissNewPostsRef.current = dismissNewPosts;
 
   useEffect(() => {
     onNewPostsChange?.(hasNewPosts, newPostAvatars, newPostCount);
@@ -354,8 +359,8 @@ export const HomeTabbedFeed = forwardRef<
       } catch {}
       showBars();
     });
-    dismissNewPosts();
-  }, [showBars, activeTabIndex, baseFeed, allowedTags, currentUser?.walletAddress, queryClient, handleRefresh, dismissNewPosts, getPrefetchedData, clearPrefetch]);
+    resetBaseline(null, Math.floor(Date.now() / 1000));
+  }, [showBars, activeTabIndex, baseFeed, allowedTags, currentUser?.walletAddress, queryClient, handleRefresh, resetBaseline, getPrefetchedData, clearPrefetch]);
 
   useImperativeHandle(
     ref,
@@ -366,8 +371,9 @@ export const HomeTabbedFeed = forwardRef<
       hasNewPosts: () => hasNewPosts,
       handleNewPostsPress,
       dismissNewPosts,
+      checkNewPosts: checkNow,
     }),
-    [scrollToTop, handleRefresh, hasNewPosts, handleNewPostsPress, dismissNewPosts],
+    [scrollToTop, handleRefresh, hasNewPosts, handleNewPostsPress, dismissNewPosts, checkNow],
   );
 
   const lastMagicFetchTime = useRef(0);

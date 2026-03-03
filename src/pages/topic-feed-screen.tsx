@@ -226,7 +226,7 @@ export function TopicFeedScreen() {
   }, [posts]);
   const queryClient = useQueryClient();
 
-  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, getPrefetchedData, clearPrefetch } = useNewPostsChecker({
+  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, resetBaseline, getPrefetchedData, clearPrefetch } = useNewPostsChecker({
     topic: topicName,
     by: sortBy === "magic" ? "magic" : "newest",
     allowed_tags: allowedTags || undefined,
@@ -234,6 +234,8 @@ export function TopicFeedScreen() {
     currentFirstPostId,
     latestTimestamp,
   });
+  const dismissNewPostsRef = useRef<(() => void) | null>(null);
+  dismissNewPostsRef.current = dismissNewPosts;
 
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
@@ -471,6 +473,7 @@ export function TopicFeedScreen() {
       console.error("Failed to refresh topic feed:", error);
     } finally {
       setIsManualRefreshing(false);
+      dismissNewPostsRef.current?.();
     }
   }, [refetch]);
 
@@ -510,8 +513,8 @@ export function TopicFeedScreen() {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
       } catch {}
     });
-    dismissNewPosts();
-  }, [topicName, sortBy, allowedTags, currentUser?.walletAddress, queryClient, handleRefresh, dismissNewPosts, getPrefetchedData, clearPrefetch]);
+    resetBaseline(null, Math.floor(Date.now() / 1000));
+  }, [topicName, sortBy, allowedTags, currentUser?.walletAddress, queryClient, handleRefresh, resetBaseline, getPrefetchedData, clearPrefetch]);
 
   const handleItemVisible = useCallback((index: number) => {
     const totalLoaded = postsLengthRef.current;
