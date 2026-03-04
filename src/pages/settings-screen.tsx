@@ -39,7 +39,6 @@ const sidebarCountOptions: ValueOption<number>[] = [
   { value: 5, label: "5" },
   { value: 7, label: "7" },
   { value: 10, label: "10" },
-  { value: -1, label: "Show All" },
 ];
 
 // Video autoplay network options

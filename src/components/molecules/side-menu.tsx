@@ -168,7 +168,7 @@ const SectionHeader = ({
             size="sm"
             weight="semibold"
           >
-            Show All
+            Show More
           </Text>
         </Pressable>
       )}
@@ -347,11 +347,15 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       ? Math.floor(userStatus.balance / 1_000_000)
       : 0;
 
+    const { topicsBeforeShowMore, peopleBeforeShowMore } = usePreferencesStore();
+
     const { data: followedData, isLoading: isLoadingFollowed } =
       useUserFollowed();
 
-    const followedUsers = followedData?.followed_users?.slice(0, 5) ?? [];
-    const followedTopics = followedData?.followed_topics?.slice(0, 5) ?? [];
+    const allFollowedUsers = followedData?.followed_users ?? [];
+    const allFollowedTopics = followedData?.followed_topics ?? [];
+    const followedUsers = peopleBeforeShowMore === -1 ? allFollowedUsers : allFollowedUsers.slice(0, peopleBeforeShowMore);
+    const followedTopics = topicsBeforeShowMore === -1 ? allFollowedTopics : allFollowedTopics.slice(0, topicsBeforeShowMore);
 
     const translateX = useSharedValue(-MENU_WIDTH);
     const backdropOpacity = useSharedValue(0);
@@ -608,7 +612,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   <SectionHeader
                     title="Followed Users"
                     onShowMore={
-                      followedUsers.length > 0
+                      allFollowedUsers.length > followedUsers.length
                         ? handleShowMoreFollowing
                         : undefined
                     }
@@ -645,7 +649,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   <SectionHeader
                     title="Followed Topics"
                     onShowMore={
-                      followedTopics.length > 0
+                      allFollowedTopics.length > followedTopics.length
                         ? handleShowMoreFollowing
                         : undefined
                     }
