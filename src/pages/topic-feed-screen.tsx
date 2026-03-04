@@ -213,6 +213,10 @@ export function TopicFeedScreen() {
   }, [data, hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, currentUser, postEditOverrides]);
 
   const firstPostId = posts[0]?.id ?? null;
+  const topThreePostIds = useMemo(() =>
+    posts.slice(0, 3).map((p) => p.id),
+    [posts],
+  );
   const currentPostIds = useMemo(() => {
     const ids = new Set<string>();
     const pageSize = 20;
@@ -229,6 +233,7 @@ export function TopicFeedScreen() {
     enabled: true,
     currentPostIds,
     firstPostId,
+    topThreePostIds,
   });
   const dismissNewPostsRef = useRef<(() => void) | null>(null);
   dismissNewPostsRef.current = dismissNewPosts;
@@ -485,7 +490,7 @@ export function TopicFeedScreen() {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
       } catch {}
     });
-    resetBaseline(null, null);
+    resetBaseline(null, null, null);
   }, [handleRefresh, resetBaseline]);
 
   const handleItemVisible = useCallback((index: number) => {

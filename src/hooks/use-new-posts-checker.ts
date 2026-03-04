@@ -18,6 +18,7 @@ type UseNewPostsCheckerOptions = {
   intervalMs?: number;
   currentPostIds?: Set<string>;
   firstPostId?: string | null;
+  topThreePostIds?: string[];
 };
 
 export function useNewPostsChecker({
@@ -29,12 +30,14 @@ export function useNewPostsChecker({
   intervalMs = 30_000,
   currentPostIds,
   firstPostId = null,
+  topThreePostIds = [],
 }: UseNewPostsCheckerOptions) {
   const [hasNewPosts, setHasNewPosts] = useState(false);
   const [newPostAvatars, setNewPostAvatars] = useState<NewPostAvatar[]>([]);
   const [newPostCount, setNewPostCount] = useState(0);
   const baselinePostIdsRef = useRef<Set<string>>(new Set());
   const baselineFirstPostIdRef = useRef<string | null>(null);
+  const baselineTopThreeRef = useRef<Set<string>>(new Set());
   const hasNewPostsRef = useRef(false);
   const isFocused = useIsFocused();
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
@@ -52,6 +55,12 @@ export function useNewPostsChecker({
   }, [firstPostId]);
 
   useEffect(() => {
+    if (!hasNewPostsRef.current && topThreePostIds.length > 0) {
+      baselineTopThreeRef.current = new Set(topThreePostIds);
+    }
+  }, [topThreePostIds]);
+
+  useEffect(() => {
     hasNewPostsRef.current = false;
     setHasNewPosts(false);
     setNewPostAvatars([]);
@@ -60,6 +69,7 @@ export function useNewPostsChecker({
       baselinePostIdsRef.current = currentPostIds;
     }
     baselineFirstPostIdRef.current = firstPostId;
+    baselineTopThreeRef.current = new Set(topThreePostIds);
   }, [feed, by, topic]);
 
   const extractNewPostInfo = useCallback((data: PostsResponse, knownIds: Set<string>): { avatars: NewPostAvatar[]; count: number } => {
@@ -92,7 +102,17 @@ export function useNewPostsChecker({
       });
       const fetchedFirstPostId = result.posts[0]?.post_id ?? null;
       const firstPostChanged = !!fetchedFirstPostId && fetchedFirstPostId !== baselineFirstPostIdRef.current;
-      const { avatars, count } = extractNewPostInfo(result, baselinePostIdsRef.current);
+      const { count } = extractNewPostInfo(result, baselinePostIdsRef.current);
+      const oldTopThree = baselineTopThreeRef.current;
+      const avatars: NewPostAvatar[] = [];
+      const seen = new Set<string>();
+      for (let i = 0; i < Math.min(result.posts.length, 3); i++) {
+        const post = result.posts[i];
+        if (!oldTopThree.has(post.post_id) && !seen.has(post.user_id)) {
+          seen.add(post.user_id);
+          avatars.push({ userId: post.user_id, username: post.username });
+        }
+      }
       if (firstPostChanged) {
         setNewPostAvatars(avatars);
         setNewPostCount(Math.max(count, 1));
@@ -131,9 +151,10 @@ export function useNewPostsChecker({
     setNewPostCount(0);
     baselinePostIdsRef.current = new Set();
     baselineFirstPostIdRef.current = null;
+    baselineTopThreeRef.current = new Set();
   }, []);
 
-  const resetBaseline = useCallback((newPostIds: Set<string> | null, newFirstPostId: string | null) => {
+  const resetBaseline = useCallback((newPostIds: Set<string> | null, newFirstPostId: string | null, newTopThree: string[] | null) => {
     hasNewPostsRef.current = false;
     setHasNewPosts(false);
     setNewPostAvatars([]);
@@ -143,6 +164,9 @@ export function useNewPostsChecker({
     }
     if (newFirstPostId) {
       baselineFirstPostIdRef.current = newFirstPostId;
+    }
+    if (newTopThree && newTopThree.length > 0) {
+      baselineTopThreeRef.current = new Set(newTopThree);
     }
   }, []);
 

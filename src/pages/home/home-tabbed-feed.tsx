@@ -303,6 +303,10 @@ export const HomeTabbedFeed = forwardRef<
   const activeSortBy = activeTabIndex === 0 ? "magic" : "newest";
   const activePosts = activeTabIndex === 0 ? magicPosts : latestPosts;
   const firstPostId = activePosts[0]?.id ?? null;
+  const topThreePostIds = useMemo(() =>
+    activePosts.slice(0, 3).map((p) => p.id),
+    [activePosts],
+  );
   const currentPostIds = useMemo(() => {
     const ids = new Set<string>();
     const pageSize = 20;
@@ -319,6 +323,7 @@ export const HomeTabbedFeed = forwardRef<
     enabled: true,
     currentPostIds,
     firstPostId,
+    topThreePostIds,
   });
   dismissNewPostsRef.current = dismissNewPosts;
 
@@ -340,7 +345,7 @@ export const HomeTabbedFeed = forwardRef<
         listRef.current?.scrollToOffset({ offset: 0, animated: false });
       } catch {}
     });
-    resetBaseline(null, null);
+    resetBaseline(null, null, null);
   }, [showBars, activeTabIndex, handleRefresh, resetBaseline]);
 
   useImperativeHandle(
