@@ -356,31 +356,46 @@ export function CreateScreen() {
                 const arrayBuffer = await response.arrayBuffer();
                 console.log("[CreatePost] Video size:", arrayBuffer.byteLength, "bytes");
                 if (arrayBuffer.byteLength > 1000) {
-                  if (meta.audioUrl) {
-                    try {
-                      console.log("[CreatePost] Downloading audio for merge:", meta.audioUrl);
-                      const audioRes = await fetch(meta.audioUrl);
-                      if (audioRes.ok) {
+                  const audioUrlsToTry = meta.audioUrls?.length > 0
+                    ? meta.audioUrls
+                    : meta.audioUrl
+                      ? [meta.audioUrl]
+                      : [];
+                  if (audioUrlsToTry.length > 0) {
+                    for (const tryAudioUrl of audioUrlsToTry) {
+                      if (videoDownloaded) break;
+                      try {
+                        console.log("[CreatePost] Trying audio URL:", tryAudioUrl);
+                        const audioRes = await fetch(tryAudioUrl, {
+                          headers: {
+                            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+                            "Referer": "https://www.reddit.com/",
+                            "Accept": "*/*",
+                          },
+                        });
+                        console.log("[CreatePost] Audio response:", audioRes.status, audioRes.headers.get("content-type"));
+                        if (!audioRes.ok) continue;
                         const audioBuffer = await audioRes.arrayBuffer();
                         console.log("[CreatePost] Audio size:", audioBuffer.byteLength, "bytes");
-                        if (audioBuffer.byteLength > 500) {
-                          console.log("[CreatePost] Merging audio+video with mp4box...");
-                          const mergedBuffer = await mergeAudioVideo(arrayBuffer, audioBuffer);
-                          console.log("[CreatePost] Merged size:", mergedBuffer.byteLength, "bytes");
-                          const mergedFile = new ExpoFile(Paths.cache, `shared_link_merged_${Date.now()}.mp4`);
-                          mergedFile.write(new Uint8Array(mergedBuffer));
-                          setAttachment("video", mergedFile.uri);
-                          startVideoUpload(mergedFile.uri);
-                          videoDownloaded = true;
-                          console.log("[CreatePost] Merged video+audio successfully:", mergedFile.uri);
-                        } else {
-                          console.log("[CreatePost] Audio too small, using video only");
+                        if (audioBuffer.byteLength < 500) continue;
+                        const audioContentType = audioRes.headers.get("content-type") ?? "";
+                        if (audioContentType.includes("text/html") || audioContentType.includes("text/xml")) {
+                          console.log("[CreatePost] Audio URL returned HTML, skipping");
+                          continue;
                         }
-                      } else {
-                        console.log("[CreatePost] Audio fetch failed:", audioRes.status);
+                        console.log("[CreatePost] Merging audio+video with mp4box...");
+                        const mergedBuffer = await mergeAudioVideo(arrayBuffer, audioBuffer);
+                        console.log("[CreatePost] Merged size:", mergedBuffer.byteLength, "bytes");
+                        const mergedFile = new ExpoFile(Paths.cache, `shared_link_merged_${Date.now()}.mp4`);
+                        mergedFile.write(new Uint8Array(mergedBuffer));
+                        setAttachment("video", mergedFile.uri);
+                        startVideoUpload(mergedFile.uri);
+                        videoDownloaded = true;
+                        console.log("[CreatePost] Merged video+audio successfully:", mergedFile.uri);
+                        break;
+                      } catch (mergeErr) {
+                        console.log("[CreatePost] Audio attempt failed for", tryAudioUrl, ":", mergeErr);
                       }
-                    } catch (mergeErr) {
-                      console.log("[CreatePost] Audio merge failed, using video only:", mergeErr);
                     }
                   }
                   if (!videoDownloaded) {

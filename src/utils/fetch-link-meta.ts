@@ -4,6 +4,7 @@ export type LinkMeta = {
   image: string | null;
   video: string | null;
   audioUrl: string | null;
+  audioUrls: string[];
   siteName: string | null;
   domain: string;
 };
@@ -118,13 +119,30 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
 
     const redditVideo = post.secure_media?.reddit_video ?? post.media?.reddit_video;
     let audioUrl: string | null = null;
+    let audioUrls: string[] = [];
     if (redditVideo) {
       videoUrl = redditVideo.fallback_url ?? redditVideo.dash_url ?? redditVideo.hls_url ?? null;
       console.log("[fetchLinkMeta] Reddit video from media:", videoUrl);
       if (videoUrl) {
-        const baseUrl = videoUrl.replace(/DASH_\d+\.mp4.*$/, "");
-        audioUrl = baseUrl + "DASH_AUDIO_128.mp4";
-        console.log("[fetchLinkMeta] Reddit audio URL:", audioUrl);
+        try {
+          const vUrl = new URL(videoUrl);
+          const pathParts = vUrl.pathname.split("/");
+          const fileIdx = pathParts.findIndex((p) => /^(DASH_|CMAF_|HLS_)/i.test(p) || /\.(mp4|mpd|m3u8)$/i.test(p));
+          const basePath = fileIdx > 0 ? pathParts.slice(0, fileIdx).join("/") + "/" : vUrl.pathname.replace(/\/[^/]+$/, "/");
+          const base = `${vUrl.origin}${basePath}`;
+          audioUrl = `${base}DASH_AUDIO_128.mp4`;
+          audioUrls = [
+            `${base}DASH_AUDIO_128.mp4`,
+            `${base}DASH_AUDIO_64.mp4`,
+            `${base}CMAF_AUDIO_128.mp4`,
+            `${base}CMAF_AUDIO_64.mp4`,
+            `${base}audio`,
+            `${base}audio.mp4`,
+          ];
+          console.log("[fetchLinkMeta] Reddit audio URLs:", audioUrls);
+        } catch {
+          console.log("[fetchLinkMeta] Failed to construct audio URL from:", videoUrl);
+        }
       }
     }
 
@@ -134,9 +152,23 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       if (crossVideo) {
         videoUrl = crossVideo.fallback_url ?? crossVideo.dash_url ?? crossVideo.hls_url ?? null;
         console.log("[fetchLinkMeta] Reddit video from crosspost:", videoUrl);
-        if (videoUrl && !audioUrl) {
-          const baseUrl = videoUrl.replace(/DASH_\d+\.mp4.*$/, "");
-          audioUrl = baseUrl + "DASH_AUDIO_128.mp4";
+        if (videoUrl && audioUrls.length === 0) {
+          try {
+            const vUrl = new URL(videoUrl);
+            const pathParts = vUrl.pathname.split("/");
+            const fileIdx = pathParts.findIndex((p) => /^(DASH_|CMAF_|HLS_)/i.test(p) || /\.(mp4|mpd|m3u8)$/i.test(p));
+            const basePath = fileIdx > 0 ? pathParts.slice(0, fileIdx).join("/") + "/" : vUrl.pathname.replace(/\/[^/]+$/, "/");
+            const base = `${vUrl.origin}${basePath}`;
+            audioUrl = `${base}DASH_AUDIO_128.mp4`;
+            audioUrls = [
+              `${base}DASH_AUDIO_128.mp4`,
+              `${base}DASH_AUDIO_64.mp4`,
+              `${base}CMAF_AUDIO_128.mp4`,
+              `${base}CMAF_AUDIO_64.mp4`,
+              `${base}audio`,
+              `${base}audio.mp4`,
+            ];
+          } catch {}
         }
       }
     }
@@ -158,6 +190,7 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       image: imageUrl,
       video: videoUrl,
       audioUrl,
+      audioUrls,
       siteName: "Reddit",
     };
   } catch (err) {
@@ -565,6 +598,7 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
     let image: string | null = null;
     let video: string | null = null;
     let audioUrl: string | null = null;
+    let audioUrls: string[] = [];
     let siteName: string | null = null;
 
     if (isRedditUrl(url)) {
@@ -575,6 +609,7 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       image = reddit.image ?? null;
       video = reddit.video ?? null;
       audioUrl = reddit.audioUrl ?? null;
+      audioUrls = reddit.audioUrls ?? [];
       siteName = reddit.siteName ?? null;
     }
 
@@ -662,10 +697,11 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       image: decodeHtml(image),
       video: decodeHtml(video),
       audioUrl: decodeHtml(audioUrl),
+      audioUrls: audioUrls.map((u) => decodeHtml(u)!),
       siteName: decodeHtml(siteName),
       domain,
     };
   } catch {
-    return { title: null, description: null, image: null, video: null, audioUrl: null, siteName: null, domain };
+    return { title: null, description: null, image: null, video: null, audioUrl: null, audioUrls: [], siteName: null, domain };
   }
 }
