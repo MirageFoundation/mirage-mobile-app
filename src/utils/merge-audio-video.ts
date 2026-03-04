@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react-native";
 import { createFile, MP4BoxBuffer, type ISOFile, type Sample, type Movie } from "mp4box";
 
 export async function mergeAudioVideo(
@@ -51,13 +52,19 @@ export async function mergeAudioVideo(
   const vTrack = videoParsed.info.tracks.find((t) => t.video)!;
   const aTrack = audioParsed.info.tracks.find((t) => t.audio)!;
 
-  console.log("[mergeAV] Video:", vTrack.codec, vTrack.video?.width, "x", vTrack.video?.height, "samples:", videoParsed.samples.length, "stsd:", videoParsed.stsdEntries.length);
-  console.log("[mergeAV] Audio:", aTrack.codec, "rate:", aTrack.audio?.sample_rate, "ch:", aTrack.audio?.channel_count, "samples:", audioParsed.samples.length, "stsd:", audioParsed.stsdEntries.length);
-
-  if (videoParsed.stsdEntries.length > 0) {
-    const entry = videoParsed.stsdEntries[0];
-    console.log("[mergeAV] Video stsd[0] type:", entry.type, "has avcC:", !!entry.avcC, "has hvcC:", !!entry.hvcC, "boxes:", entry.boxes?.length);
-  }
+  Sentry.addBreadcrumb({
+    category: "merge-av",
+    message: "Merging audio+video",
+    data: {
+      videoCodec: vTrack.codec,
+      videoSamples: videoParsed.samples.length,
+      audioCodec: aTrack.codec,
+      audioSamples: audioParsed.samples.length,
+      videoStsd: videoParsed.stsdEntries.length,
+      audioStsd: audioParsed.stsdEntries.length,
+    },
+    level: "info",
+  });
 
   const outputFile = createFile() as ISOFile;
   outputFile.init({
@@ -90,11 +97,9 @@ export async function mergeAudioVideo(
 
   if (outVideoTrak && videoParsed.stsdEntries.length > 0) {
     outVideoTrak.mdia.minf.stbl.stsd.entries = videoParsed.stsdEntries;
-    console.log("[mergeAV] Replaced video stsd entries with source entries");
   }
   if (outAudioTrak && audioParsed.stsdEntries.length > 0) {
     outAudioTrak.mdia.minf.stbl.stsd.entries = audioParsed.stsdEntries;
-    console.log("[mergeAV] Replaced audio stsd entries with source entries");
   }
 
   for (const sample of videoParsed.samples) {
@@ -115,12 +120,14 @@ export async function mergeAudioVideo(
     });
   }
 
-  console.log("[mergeAV] Wrote", videoParsed.samples.length, "video +", audioParsed.samples.length, "audio samples");
-
-  const finalVideoStsd = outVideoTrak?.mdia?.minf?.stbl?.stsd;
-  console.log("[mergeAV] Final video stsd entries:", finalVideoStsd?.entries?.length, "type:", finalVideoStsd?.entries?.[0]?.type, "has avcC:", !!finalVideoStsd?.entries?.[0]?.avcC);
-
   const ds = outputFile.getBuffer();
-  console.log("[mergeAV] Output buffer size:", ds.buffer.byteLength);
+
+  Sentry.addBreadcrumb({
+    category: "merge-av",
+    message: "Merge complete",
+    data: { outputSize: ds.buffer.byteLength },
+    level: "info",
+  });
+
   return ds.buffer as ArrayBuffer;
 }

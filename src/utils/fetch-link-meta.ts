@@ -1,3 +1,5 @@
+import * as Sentry from "@sentry/react-native";
+
 export type LinkMeta = {
   title: string | null;
   description: string | null;
@@ -81,13 +83,11 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
         });
         if (redirectRes.url && redirectRes.url !== url) {
           resolvedUrl = redirectRes.url;
-          console.log("[fetchLinkMeta] Reddit short URL resolved to:", resolvedUrl);
         }
       } catch {}
     }
 
-    let jsonUrl = resolvedUrl.replace(/\?.*$/, "").replace(/\/$/, "") + ".json";
-    console.log("[fetchLinkMeta] Fetching Reddit JSON:", jsonUrl);
+    const jsonUrl = resolvedUrl.replace(/\?.*$/, "").replace(/\/$/, "") + ".json";
 
     const res = await fetch(jsonUrl, {
       signal,
@@ -97,24 +97,14 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       },
       redirect: "follow",
     });
-    console.log("[fetchLinkMeta] Reddit JSON response status:", res.status);
-    if (!res.ok) {
-      const body = await res.text();
-      console.log("[fetchLinkMeta] Reddit JSON error body:", body.slice(0, 200));
-      return {};
-    }
+    if (!res.ok) return {};
 
     const raw = await res.text();
-    console.log("[fetchLinkMeta] Reddit JSON response length:", raw.length, "first 200 chars:", raw.slice(0, 200));
     const data = JSON.parse(raw);
 
     const listing = Array.isArray(data) ? data[0] : data;
     const post = listing?.data?.children?.[0]?.data;
     if (!post) return {};
-
-    console.log("[fetchLinkMeta] Reddit post keys:", Object.keys(post).filter(k =>
-      ["title", "selftext", "thumbnail", "url", "is_video", "media", "secure_media", "preview", "crosspost_parent_list"].includes(k)
-    ));
 
     let videoUrl: string | null = null;
     let imageUrl: string | null = null;
@@ -124,7 +114,6 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
     let audioUrls: string[] = [];
     if (redditVideo) {
       videoUrl = redditVideo.fallback_url ?? redditVideo.dash_url ?? redditVideo.hls_url ?? null;
-      console.log("[fetchLinkMeta] Reddit video from media:", videoUrl);
       if (videoUrl) {
         try {
           const vUrl = new URL(videoUrl);
@@ -141,10 +130,7 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
             `${base}audio`,
             `${base}audio.mp4`,
           ];
-          console.log("[fetchLinkMeta] Reddit audio URLs:", audioUrls);
-        } catch {
-          console.log("[fetchLinkMeta] Failed to construct audio URL from:", videoUrl);
-        }
+        } catch {}
       }
     }
 
@@ -153,7 +139,6 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       const crossVideo = crosspost.secure_media?.reddit_video ?? crosspost.media?.reddit_video;
       if (crossVideo) {
         videoUrl = crossVideo.fallback_url ?? crossVideo.dash_url ?? crossVideo.hls_url ?? null;
-        console.log("[fetchLinkMeta] Reddit video from crosspost:", videoUrl);
         if (videoUrl && audioUrls.length === 0) {
           try {
             const vUrl = new URL(videoUrl);
@@ -177,7 +162,6 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
 
     if (!videoUrl && post.preview?.reddit_video_preview) {
       videoUrl = post.preview.reddit_video_preview.fallback_url ?? null;
-      console.log("[fetchLinkMeta] Reddit video from preview:", videoUrl);
     }
 
     if (post.preview?.images?.[0]?.source?.url) {
@@ -202,7 +186,6 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
           videos.push(media.s.mp4.replace(/&amp;/g, "&"));
         }
       }
-      console.log("[fetchLinkMeta] Reddit gallery - images:", images.length, "videos:", videos.length);
     }
 
     if (images.length === 0 && post.preview?.images) {
@@ -218,6 +201,13 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       videos.unshift(videoUrl);
     }
 
+    Sentry.addBreadcrumb({
+      category: "link-meta",
+      message: "Reddit meta extracted",
+      data: { hasVideo: !!videoUrl, hasAudio: audioUrls.length > 0, imageCount: images.length, isGallery: !!post.is_gallery },
+      level: "info",
+    });
+
     return {
       title: post.title ?? null,
       description: post.selftext?.slice(0, 500) ?? null,
@@ -230,7 +220,12 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       siteName: "Reddit",
     };
   } catch (err) {
-    console.log("[fetchLinkMeta] Reddit JSON fetch failed:", err);
+    Sentry.addBreadcrumb({
+      category: "link-meta",
+      message: "Reddit fetch failed",
+      data: { error: String(err) },
+      level: "warning",
+    });
     return {};
   }
 }
@@ -300,12 +295,10 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
   let embedCaption: string | null = null;
   let allImages: string[] = [];
   const shortcode = extractInstagramShortcode(url);
-  console.log("[fetchLinkMeta] Instagram shortcode:", shortcode);
 
   if (shortcode) {
     try {
       const embedUrl = `https://www.instagram.com/p/${shortcode}/embed/`;
-      console.log("[fetchLinkMeta] Fetching Instagram embed:", embedUrl);
       const res = await fetch(embedUrl, {
         signal,
         headers: {
@@ -316,7 +309,6 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
       });
       if (res.ok) {
         const html = await res.text();
-        console.log("[fetchLinkMeta] Instagram embed HTML length:", html.length);
 
         let videoUrl: string | null = null;
 
@@ -324,7 +316,6 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
           ?? html.match(/<video[^>]*>[\s\S]*?<source[^>]+src=["']([^"']+)["']/i);
         if (videoSrcMatch?.[1]) {
           videoUrl = videoSrcMatch[1].replace(/&amp;/g, "&");
-          console.log("[fetchLinkMeta] Instagram video from embed <video>:", videoUrl);
         }
 
         const videoKeys = ["video_url", "video_versions", "contentUrl"];
@@ -344,12 +335,10 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
               }
             }
             if (endIdx > 0) {
-              const rawUrl = urlPart.slice(0, endIdx);
-              videoUrl = rawUrl
+              videoUrl = urlPart.slice(0, endIdx)
                 .replace(/\\/g, "")
                 .replace(/u0026/g, "&")
                 .replace(/u00253D/g, "=");
-              console.log(`[fetchLinkMeta] Instagram video from '${key}':`, videoUrl);
               break;
             }
           }
@@ -359,7 +348,6 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
           const allHttps = [...html.matchAll(/https?:\/\/[^\s"'\\]+\.mp4[^\s"'\\]*/gi)];
           if (allHttps.length > 0) {
             videoUrl = allHttps[0][0].replace(/\\/g, "").replace(/u0026/g, "&");
-            console.log("[fetchLinkMeta] Instagram video from mp4 scan:", videoUrl);
           }
         }
 
@@ -377,9 +365,14 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
 
         const embedImages = extractInstagramImages(html);
         if (embedImages.length > 0) allImages = embedImages;
-        console.log("[fetchLinkMeta] Instagram embed result - video:", videoUrl, "image:", !!imageUrl, "carousel:", allImages.length);
 
         if (videoUrl) {
+          Sentry.addBreadcrumb({
+            category: "link-meta",
+            message: "Instagram video extracted from embed",
+            data: { shortcode, carouselCount: allImages.length },
+            level: "info",
+          });
           return {
             title: caption,
             description: null,
@@ -392,18 +385,20 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
 
         embedImage = imageUrl;
         embedCaption = caption;
-      } else {
-        console.log("[fetchLinkMeta] Instagram embed status:", res.status);
       }
     } catch (err) {
-      console.log("[fetchLinkMeta] Instagram embed failed:", err);
+      Sentry.addBreadcrumb({
+        category: "link-meta",
+        message: "Instagram embed failed",
+        data: { shortcode, error: String(err) },
+        level: "warning",
+      });
     }
   }
 
   if (shortcode) {
     try {
       const graphqlUrl = `https://www.instagram.com/graphql/query/?query_hash=b3055c01b4b222b8a47dc12b090e4e64&variables=${encodeURIComponent(JSON.stringify({ shortcode }))}`;
-      console.log("[fetchLinkMeta] Trying Instagram GraphQL for shortcode:", shortcode);
       const res = await fetch(graphqlUrl, {
         signal,
         headers: {
@@ -415,7 +410,6 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
       });
       if (res.ok) {
         const text = await res.text();
-        console.log("[fetchLinkMeta] GraphQL response length:", text.length);
         const data = JSON.parse(text);
         const media = data?.data?.shortcode_media;
         if (media) {
@@ -428,11 +422,15 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
               const node = edge.node;
               if (node?.display_url) allImages.push(node.display_url);
             }
-            console.log("[fetchLinkMeta] GraphQL carousel images:", allImages.length);
           }
 
-          console.log("[fetchLinkMeta] GraphQL video:", videoUrl, "image:", !!imageUrl);
           if (videoUrl || imageUrl) {
+            Sentry.addBreadcrumb({
+              category: "link-meta",
+              message: "Instagram meta from GraphQL",
+              data: { shortcode, hasVideo: !!videoUrl, carouselCount: allImages.length },
+              level: "info",
+            });
             return {
               title: caption?.slice(0, 200) ?? embedCaption ?? null,
               description: null,
@@ -443,16 +441,11 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
             };
           }
         }
-      } else {
-        console.log("[fetchLinkMeta] GraphQL status:", res.status);
       }
-    } catch (err) {
-      console.log("[fetchLinkMeta] GraphQL failed:", err);
-    }
+    } catch {}
   }
 
   try {
-    console.log("[fetchLinkMeta] Fetching Instagram page directly:", url);
     const res = await fetch(url, {
       signal,
       headers: {
@@ -463,7 +456,6 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
     });
     if (res.ok) {
       const html = await res.text();
-      console.log("[fetchLinkMeta] Instagram page HTML length:", html.length);
 
       let videoUrl = getMeta(html, "video") ?? getMeta(html, "video:url") ?? getMeta(html, "video:secure_url");
       const imageUrl = getMeta(html, "image");
@@ -486,7 +478,6 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
             }
             if (endIdx > 0) {
               videoUrl = urlPart.slice(0, endIdx).replace(/\\/g, "").replace(/u0026/g, "&").replace(/u00253D/g, "=");
-              console.log("[fetchLinkMeta] Instagram video from page indexOf:", videoUrl);
             }
           }
         }
@@ -496,7 +487,13 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
         const pageImages = extractInstagramImages(html);
         if (pageImages.length > 0) allImages = pageImages;
       }
-      console.log("[fetchLinkMeta] Instagram page result - video:", videoUrl, "image:", !!imageUrl, "carousel:", allImages.length);
+
+      Sentry.addBreadcrumb({
+        category: "link-meta",
+        message: "Instagram meta from direct page",
+        data: { hasVideo: !!videoUrl, hasImage: !!imageUrl, carouselCount: allImages.length },
+        level: "info",
+      });
 
       return {
         title: title ?? embedCaption ?? null,
@@ -508,7 +505,12 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
       };
     }
   } catch (err) {
-    console.log("[fetchLinkMeta] Instagram direct fetch failed:", err);
+    Sentry.addBreadcrumb({
+      category: "link-meta",
+      message: "Instagram direct fetch failed",
+      data: { error: String(err) },
+      level: "warning",
+    });
   }
 
   return {};
@@ -706,7 +708,6 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
 
     if (isRedditUrl(url)) {
       const reddit = await fetchRedditVideo(url, controller.signal);
-      console.log("[fetchLinkMeta] Reddit result:", JSON.stringify(reddit, null, 2));
       title = reddit.title ?? null;
       description = reddit.description ?? null;
       image = reddit.image ?? null;
@@ -724,6 +725,7 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       if (ig.description) description = description ?? ig.description;
       if (ig.image) image = image ?? ig.image;
       if (ig.video) video = ig.video;
+      if (ig.images?.length) images = ig.images;
       siteName = siteName ?? ig.siteName ?? null;
     }
 
@@ -770,12 +772,9 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
                 }
               }
               if (images.length > 0 && !image) image = images[0];
-              console.log("[fetchLinkMeta] fxtwitter API - images:", images.length, "videos:", videos.length);
             }
           }
-        } catch (apiErr) {
-          console.log("[fetchLinkMeta] fxtwitter API failed:", apiErr);
-        }
+        } catch {}
 
         if (!title || !description) {
           html = await fetchHtml(fxUrl, controller.signal, true);
@@ -836,6 +835,21 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
 
     if (image && images.length === 0) images.push(image);
     if (video && videos.length === 0) videos.push(video);
+
+    Sentry.addBreadcrumb({
+      category: "link-meta",
+      message: "Link meta fetched",
+      data: {
+        domain,
+        hasTitle: !!title,
+        hasVideo: !!video,
+        hasImage: !!image,
+        imageCount: images.length,
+        videoCount: videos.length,
+        hasAudio: audioUrls.length > 0,
+      },
+      level: "info",
+    });
 
     return {
       title: decodeHtml(title),

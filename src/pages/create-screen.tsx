@@ -183,7 +183,6 @@ export function CreateScreen() {
       }));
     })
       .then((url) => {
-        console.log("[CreatePost] Video uploaded:", url);
         VIDEO_UPLOADS.set(uri, { url, uploading: false, progress: 100, error: null });
         videoUploadStateRef.current((prev) => ({
           ...prev,
@@ -192,7 +191,7 @@ export function CreateScreen() {
         triggerHaptic("success");
       })
       .catch((err) => {
-        console.error("[CreatePost] Video upload failed:", err);
+        Sentry.addBreadcrumb({ category: "video-upload", message: "Video upload failed", data: { error: String(err) }, level: "error" });
         const msg = err instanceof Error ? err.message : "Upload failed";
         VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg });
         videoUploadStateRef.current((prev) => ({
@@ -328,7 +327,12 @@ export function CreateScreen() {
       if (shareIntent.webUrl) {
         setIsProcessingShareLink(true);
         fetchLinkMeta(shareIntent.webUrl).then(async (meta) => {
-          console.log("[CreatePost] Link meta:", JSON.stringify(meta, null, 2));
+          Sentry.addBreadcrumb({
+            category: "share-intent",
+            message: "Link meta fetched",
+            data: { domain: meta.domain, hasTitle: !!meta.title, hasVideo: !!meta.video, imageCount: meta.images?.length ?? 0 },
+            level: "info",
+          });
           if (meta.title) {
             updateDraft({ title: meta.title.slice(0, tierLimits.maxTitleLength) });
           }
@@ -342,11 +346,9 @@ export function CreateScreen() {
 
           if (meta.video) {
             try {
-              console.log("[CreatePost] Attempting video download:", meta.video);
               const response = await fetch(meta.video);
               const contentType = response.headers.get("content-type") ?? "";
               const videoUrl = response.url;
-              console.log("[CreatePost] Video response - status:", response.status, "content-type:", contentType, "final url:", videoUrl);
 
               const isVideoContent = contentType.startsWith("video/") || contentType.startsWith("application/octet-stream");
               const hasVideoExtension = /\.(mp4|mov|webm|m3u8|ts)(\?|#|$)/i.test(videoUrl || meta.video);
@@ -358,7 +360,6 @@ export function CreateScreen() {
                   : (videoUrl || meta.video).match(/\.(mp4|mov|webm|m3u8)/i)?.[1] ?? "mp4";
                 const destFile = new ExpoFile(Paths.cache, `shared_link_video_${Date.now()}.${ext}`);
                 const arrayBuffer = await response.arrayBuffer();
-                console.log("[CreatePost] Video size:", arrayBuffer.byteLength, "bytes");
                 if (arrayBuffer.byteLength > 1000) {
                   const audioUrlsToTry = meta.audioUrls?.length > 0
                     ? meta.audioUrls
@@ -369,7 +370,6 @@ export function CreateScreen() {
                     for (const tryAudioUrl of audioUrlsToTry) {
                       if (videoDownloaded) break;
                       try {
-                        console.log("[CreatePost] Trying audio URL:", tryAudioUrl);
                         const audioRes = await fetch(tryAudioUrl, {
                           headers: {
                             "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
@@ -377,28 +377,21 @@ export function CreateScreen() {
                             "Accept": "*/*",
                           },
                         });
-                        console.log("[CreatePost] Audio response:", audioRes.status, audioRes.headers.get("content-type"));
                         if (!audioRes.ok) continue;
                         const audioBuffer = await audioRes.arrayBuffer();
-                        console.log("[CreatePost] Audio size:", audioBuffer.byteLength, "bytes");
                         if (audioBuffer.byteLength < 500) continue;
                         const audioContentType = audioRes.headers.get("content-type") ?? "";
-                        if (audioContentType.includes("text/html") || audioContentType.includes("text/xml")) {
-                          console.log("[CreatePost] Audio URL returned HTML, skipping");
-                          continue;
-                        }
-                        console.log("[CreatePost] Merging audio+video with mp4box...");
+                        if (audioContentType.includes("text/html") || audioContentType.includes("text/xml")) continue;
                         const mergedBuffer = await mergeAudioVideo(arrayBuffer, audioBuffer);
-                        console.log("[CreatePost] Merged size:", mergedBuffer.byteLength, "bytes");
                         const mergedFile = new ExpoFile(Paths.cache, `shared_link_merged_${Date.now()}.mp4`);
                         mergedFile.write(new Uint8Array(mergedBuffer));
                         setAttachment("video", mergedFile.uri);
                         startVideoUpload(mergedFile.uri);
                         videoDownloaded = true;
-                        console.log("[CreatePost] Merged video+audio successfully:", mergedFile.uri);
+                        Sentry.addBreadcrumb({ category: "share-intent", message: "Audio+video merged", level: "info" });
                         break;
                       } catch (mergeErr) {
-                        console.log("[CreatePost] Audio attempt failed for", tryAudioUrl, ":", mergeErr);
+                        Sentry.addBreadcrumb({ category: "share-intent", message: "Audio merge attempt failed", data: { error: String(mergeErr) }, level: "warning" });
                       }
                     }
                   }
@@ -407,16 +400,10 @@ export function CreateScreen() {
                     setAttachment("video", destFile.uri);
                     startVideoUpload(destFile.uri);
                     videoDownloaded = true;
-                    console.log("[CreatePost] Video saved (no audio merge):", destFile.uri);
                   }
-                } else {
-                  console.log("[CreatePost] Video response too small, likely not a real video");
                 }
-              } else {
-                console.log("[CreatePost] Video URL is not downloadable (content-type:", contentType, "), skipping video");
               }
             } catch (vidErr) {
-              console.log("[CreatePost] Video download failed:", vidErr);
               Sentry.addBreadcrumb({
                 category: "share-intent",
                 message: "Failed to download OG video",
@@ -433,7 +420,6 @@ export function CreateScreen() {
                 ? [meta.image]
                 : [];
             if (imagesToDownload.length > 0) {
-              console.log("[CreatePost] Downloading", imagesToDownload.length, "images");
               for (let i = 0; i < imagesToDownload.length; i++) {
                 try {
                   const imgUrl = imagesToDownload[i];
@@ -445,11 +431,9 @@ export function CreateScreen() {
                     if (arrayBuffer.byteLength > 500) {
                       destFile.write(new Uint8Array(arrayBuffer));
                       setAttachment("image", destFile.uri);
-                      console.log("[CreatePost] Image", i + 1, "downloaded:", destFile.uri);
                     }
                   }
                 } catch (imgErr) {
-                  console.log("[CreatePost] Image", i + 1, "download failed:", imgErr);
                   Sentry.addBreadcrumb({
                     category: "share-intent",
                     message: "Failed to download OG image",
@@ -493,8 +477,6 @@ export function CreateScreen() {
     if (_handledVideoParam === params.videoUri) return;
 
     _handledVideoParam = params.videoUri;
-    console.log("[CreatePost] Received video from editor:", params.videoUri);
-
     const oldUri = params.replacingUri || null;
     const origUri = params.originalVideoUri ?? params.videoUri;
     const w = params.videoWidth ? parseInt(params.videoWidth) : 1920;
@@ -547,14 +529,12 @@ export function CreateScreen() {
 
       if (draft.attachmentType === "image" && draft.mediaUris.length > 0) {
         try {
-          console.log("[CreatePost] Uploading images...", draft.mediaUris.length);
           const uploads = await Promise.all(
             draft.mediaUris.map((uri) => uploadImageAndGetUrl(uri))
           );
           mediaUrls.push(...uploads);
-          console.log("[CreatePost] Images uploaded successfully:", mediaUrls);
         } catch (error) {
-          console.error("[CreatePost] Image upload failed:", error);
+          Sentry.addBreadcrumb({ category: "image-upload", message: "Image upload failed", data: { error: String(error) }, level: "error" });
           toast.error(
             "Image upload failed",
             error instanceof Error ? error.message : "Please try again",
@@ -566,9 +546,7 @@ export function CreateScreen() {
       }
 
       if (draft.attachmentType === "video") {
-        console.log("[CreatePost] VIDEO_UPLOADS entries:", VIDEO_UPLOADS.size);
         for (const [uri, entry] of VIDEO_UPLOADS) {
-          console.log("[CreatePost] Video entry:", uri, "url:", entry.url, "uploading:", entry.uploading);
           if (entry.url) {
             mediaUrls.push(entry.url);
           }
