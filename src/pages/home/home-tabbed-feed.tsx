@@ -302,24 +302,23 @@ export const HomeTabbedFeed = forwardRef<
 
   const activeSortBy = activeTabIndex === 0 ? "magic" : "newest";
   const activePosts = activeTabIndex === 0 ? magicPosts : latestPosts;
-  const currentFirstPostId = activePosts[0]?.id ?? null;
-  const latestTimestamp = useMemo(() => {
-    if (activePosts.length === 0) return null;
-    let max = 0;
-    for (const p of activePosts) {
-      const ts = typeof p.createdAt === "number" ? p.createdAt : new Date(p.createdAt).getTime();
-      if (ts > max) max = ts;
+  const firstPostId = activePosts[0]?.id ?? null;
+  const currentPostIds = useMemo(() => {
+    const ids = new Set<string>();
+    const pageSize = 20;
+    for (let i = 0; i < Math.min(activePosts.length, pageSize); i++) {
+      ids.add(activePosts[i].id);
     }
-    return max > 0 ? Math.floor(max / 1000) : null;
+    return ids;
   }, [activePosts]);
 
-  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, resetBaseline, checkNow, getPrefetchedData, clearPrefetch } = useNewPostsChecker({
+  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, resetBaseline, checkNow } = useNewPostsChecker({
     feed: baseFeed,
     by: activeSortBy as "magic" | "newest",
     allowed_tags: allowedTags || undefined,
     enabled: true,
-    currentFirstPostId,
-    latestTimestamp,
+    currentPostIds,
+    firstPostId,
   });
   dismissNewPostsRef.current = dismissNewPosts;
 
@@ -333,41 +332,16 @@ export const HomeTabbedFeed = forwardRef<
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
     } catch {}
 
-    const sortBy = activeTabIndex === 0 ? "magic" : "newest";
-    const postsQueryKey = queryKeys.posts({
-      limit: 20,
-      feed: baseFeed,
-      by: sortBy as any,
-      allowed_tags: allowedTags || undefined,
-      address: currentUser?.walletAddress,
-      page: undefined,
-    });
-
-    const prefetched = getPrefetchedData();
-    if (prefetched) {
-      queryClient.setQueryData(postsQueryKey, (oldData: any) => {
-        if (!oldData) {
-          return { pages: [prefetched], pageParams: [1] };
-        }
-        return {
-          ...oldData,
-          pages: [prefetched, ...oldData.pages.slice(1)],
-          pageParams: [1, ...oldData.pageParams.slice(1)],
-        };
-      });
-      clearPrefetch();
-    } else {
-      await handleRefresh();
-    }
+    showBars();
+    await handleRefresh();
 
     requestAnimationFrame(() => {
       try {
         listRef.current?.scrollToOffset({ offset: 0, animated: false });
       } catch {}
-      showBars();
     });
-    resetBaseline(null, Math.floor(Date.now() / 1000));
-  }, [showBars, activeTabIndex, baseFeed, allowedTags, currentUser?.walletAddress, queryClient, handleRefresh, resetBaseline, getPrefetchedData, clearPrefetch]);
+    resetBaseline(null, null);
+  }, [showBars, activeTabIndex, handleRefresh, resetBaseline]);
 
   useImperativeHandle(
     ref,

@@ -25,6 +25,7 @@ import {
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
+import { storage } from "@/src/stores";
 
 import { useAuthGuard, useBlockHandler, useDeleteHandler, useFollowHandler, useReportHandler, useVoteHandler, type VoteResult } from "@/src/hooks";
 import {
@@ -77,22 +78,22 @@ export function FollowingScreen() {
       if (nextState === "background" || nextState === "inactive") {
         if (!backgroundTimeRef.current) {
           backgroundTimeRef.current = Date.now();
+          storage.set("app_was_backgrounded", "true");
+          storage.set("app_last_foreground_time", Date.now().toString());
         }
         return;
       }
       if (nextState === "active" && backgroundTimeRef.current) {
-        const duration = Date.now() - backgroundTimeRef.current;
         backgroundTimeRef.current = null;
-        if (duration >= 15 * 60 * 1000) {
-          showBars();
-          tabbedFeedRef.current?.scrollToTop();
+        storage.remove("app_was_backgrounded");
+        setTimeout(() => {
           tabbedFeedRef.current?.checkNewPosts();
-        }
+        }, 500);
       }
     };
     const sub = AppState.addEventListener("change", handleAppStateChange);
     return () => sub.remove();
-  }, [showBars]);
+  }, []);
 
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);

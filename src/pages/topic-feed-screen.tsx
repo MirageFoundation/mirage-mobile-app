@@ -22,7 +22,6 @@ import {
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
 import {
-  queryKeys,
   transformApiPosts,
   useInfinitePosts,
   useUserFollowed,
@@ -61,7 +60,6 @@ import {
   usePreferencesStore,
   useSavedPostsStore,
 } from "@/src/stores";
-import { useQueryClient } from "@tanstack/react-query";
 import { useNewPostsChecker } from "@/src/hooks/use-new-posts-checker";
 
 export function TopicFeedScreen() {
@@ -214,25 +212,23 @@ export function TopicFeedScreen() {
     );
   }, [data, hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, currentUser, postEditOverrides]);
 
-  const currentFirstPostId = posts[0]?.id ?? null;
-  const latestTimestamp = useMemo(() => {
-    if (posts.length === 0) return null;
-    let max = 0;
-    for (const p of posts) {
-      const ts = typeof p.createdAt === "number" ? p.createdAt : new Date(p.createdAt).getTime();
-      if (ts > max) max = ts;
+  const firstPostId = posts[0]?.id ?? null;
+  const currentPostIds = useMemo(() => {
+    const ids = new Set<string>();
+    const pageSize = 20;
+    for (let i = 0; i < Math.min(posts.length, pageSize); i++) {
+      ids.add(posts[i].id);
     }
-    return max > 0 ? Math.floor(max / 1000) : null;
+    return ids;
   }, [posts]);
-  const queryClient = useQueryClient();
 
-  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, resetBaseline, getPrefetchedData, clearPrefetch } = useNewPostsChecker({
+  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, resetBaseline } = useNewPostsChecker({
     topic: topicName,
     by: sortBy === "magic" ? "magic" : "newest",
     allowed_tags: allowedTags || undefined,
     enabled: true,
-    currentFirstPostId,
-    latestTimestamp,
+    currentPostIds,
+    firstPostId,
   });
   const dismissNewPostsRef = useRef<(() => void) | null>(null);
   dismissNewPostsRef.current = dismissNewPosts;
@@ -482,39 +478,15 @@ export function TopicFeedScreen() {
       flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
     } catch {}
 
-    const postsQueryKey = queryKeys.posts({
-      limit: 20,
-      topic: topicName,
-      by: sortBy,
-      allowed_tags: allowedTags || undefined,
-      address: currentUser?.walletAddress,
-      page: undefined,
-    });
-
-    const prefetched = getPrefetchedData();
-    if (prefetched) {
-      queryClient.setQueryData(postsQueryKey, (oldData: any) => {
-        if (!oldData) {
-          return { pages: [prefetched], pageParams: [1] };
-        }
-        return {
-          ...oldData,
-          pages: [prefetched, ...oldData.pages.slice(1)],
-          pageParams: [1, ...oldData.pageParams.slice(1)],
-        };
-      });
-      clearPrefetch();
-    } else {
-      await handleRefresh();
-    }
+    await handleRefresh();
 
     requestAnimationFrame(() => {
       try {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
       } catch {}
     });
-    resetBaseline(null, Math.floor(Date.now() / 1000));
-  }, [topicName, sortBy, allowedTags, currentUser?.walletAddress, queryClient, handleRefresh, resetBaseline, getPrefetchedData, clearPrefetch]);
+    resetBaseline(null, null);
+  }, [handleRefresh, resetBaseline]);
 
   const handleItemVisible = useCallback((index: number) => {
     const totalLoaded = postsLengthRef.current;

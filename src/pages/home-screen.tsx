@@ -27,6 +27,7 @@ UpdateBanner,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
+import { storage } from "@/src/stores";
 import {
   useAuthGuard,
   useBlockHandler,
@@ -93,22 +94,22 @@ export function HomeScreen() {
       if (nextState === "background" || nextState === "inactive") {
         if (!backgroundTimeRef.current) {
           backgroundTimeRef.current = Date.now();
+          storage.set("app_was_backgrounded", "true");
+          storage.set("app_last_foreground_time", Date.now().toString());
         }
         return;
       }
       if (nextState === "active" && backgroundTimeRef.current) {
-        const duration = Date.now() - backgroundTimeRef.current;
         backgroundTimeRef.current = null;
-        if (duration >= 15 * 60 * 1000) {
-          showBars();
-          tabbedFeedRef.current?.scrollToTop();
+        storage.remove("app_was_backgrounded");
+        setTimeout(() => {
           tabbedFeedRef.current?.checkNewPosts();
-        }
+        }, 500);
       }
     };
     const sub = AppState.addEventListener("change", handleAppStateChange);
     return () => sub.remove();
-  }, [showBars]);
+  }, []);
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
 
@@ -117,6 +118,22 @@ export function HomeScreen() {
     if (switchToLatest) {
       useHomePostCardStore.getState().setSkipNextRefresh(false);
       setFeedTabIndex(1);
+    }
+    const wasBackgrounded = storage.getString("app_was_backgrounded");
+    storage.remove("app_was_backgrounded");
+    if (wasBackgrounded) {
+      const lastForeground = Number(storage.getString("app_last_foreground_time") ?? "0");
+      const elapsed = Date.now() - lastForeground;
+      const timer = elapsed >= 2 * 60 * 60 * 1000
+        ? setTimeout(() => {
+            showBars();
+            tabbedFeedRef.current?.scrollToTop();
+            tabbedFeedRef.current?.refresh();
+          }, 300)
+        : setTimeout(() => {
+            tabbedFeedRef.current?.checkNewPosts();
+          }, 300);
+      return () => clearTimeout(timer);
     }
     const timer = setTimeout(() => {
       showBars();
