@@ -3,6 +3,7 @@ export type LinkMeta = {
   description: string | null;
   image: string | null;
   video: string | null;
+  audioUrl: string | null;
   siteName: string | null;
   domain: string;
 };
@@ -55,47 +56,599 @@ async function fetchHtml(url: string, signal: AbortSignal, useBot = false): Prom
   return res.text();
 }
 
+function isRedditUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "").replace(/^m\./, "").replace(/^old\./, "");
+    return host === "reddit.com" || host.endsWith(".reddit.com");
+  } catch {
+    return false;
+  }
+}
+
+async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Partial<LinkMeta>> {
+  try {
+    let resolvedUrl = url;
+    if (/redd\.it/i.test(url) || /\/s\/[a-zA-Z0-9]+/i.test(url)) {
+      try {
+        const redirectRes = await fetch(url, {
+          signal,
+          method: "HEAD",
+          redirect: "follow",
+          headers: { "User-Agent": BROWSER_UA },
+        });
+        if (redirectRes.url && redirectRes.url !== url) {
+          resolvedUrl = redirectRes.url;
+          console.log("[fetchLinkMeta] Reddit short URL resolved to:", resolvedUrl);
+        }
+      } catch {}
+    }
+
+    let jsonUrl = resolvedUrl.replace(/\?.*$/, "").replace(/\/$/, "") + ".json";
+    console.log("[fetchLinkMeta] Fetching Reddit JSON:", jsonUrl);
+
+    const res = await fetch(jsonUrl, {
+      signal,
+      headers: {
+        "User-Agent": "MirageApp/1.0",
+        Accept: "application/json",
+      },
+      redirect: "follow",
+    });
+    console.log("[fetchLinkMeta] Reddit JSON response status:", res.status);
+    if (!res.ok) {
+      const body = await res.text();
+      console.log("[fetchLinkMeta] Reddit JSON error body:", body.slice(0, 200));
+      return {};
+    }
+
+    const raw = await res.text();
+    console.log("[fetchLinkMeta] Reddit JSON response length:", raw.length, "first 200 chars:", raw.slice(0, 200));
+    const data = JSON.parse(raw);
+
+    const listing = Array.isArray(data) ? data[0] : data;
+    const post = listing?.data?.children?.[0]?.data;
+    if (!post) return {};
+
+    console.log("[fetchLinkMeta] Reddit post keys:", Object.keys(post).filter(k =>
+      ["title", "selftext", "thumbnail", "url", "is_video", "media", "secure_media", "preview", "crosspost_parent_list"].includes(k)
+    ));
+
+    let videoUrl: string | null = null;
+    let imageUrl: string | null = null;
+
+    const redditVideo = post.secure_media?.reddit_video ?? post.media?.reddit_video;
+    let audioUrl: string | null = null;
+    if (redditVideo) {
+      videoUrl = redditVideo.fallback_url ?? redditVideo.dash_url ?? redditVideo.hls_url ?? null;
+      console.log("[fetchLinkMeta] Reddit video from media:", videoUrl);
+      if (videoUrl) {
+        const baseUrl = videoUrl.replace(/DASH_\d+\.mp4.*$/, "");
+        audioUrl = baseUrl + "DASH_AUDIO_128.mp4";
+        console.log("[fetchLinkMeta] Reddit audio URL:", audioUrl);
+      }
+    }
+
+    if (!videoUrl && post.crosspost_parent_list?.length > 0) {
+      const crosspost = post.crosspost_parent_list[0];
+      const crossVideo = crosspost.secure_media?.reddit_video ?? crosspost.media?.reddit_video;
+      if (crossVideo) {
+        videoUrl = crossVideo.fallback_url ?? crossVideo.dash_url ?? crossVideo.hls_url ?? null;
+        console.log("[fetchLinkMeta] Reddit video from crosspost:", videoUrl);
+        if (videoUrl && !audioUrl) {
+          const baseUrl = videoUrl.replace(/DASH_\d+\.mp4.*$/, "");
+          audioUrl = baseUrl + "DASH_AUDIO_128.mp4";
+        }
+      }
+    }
+
+    if (!videoUrl && post.preview?.reddit_video_preview) {
+      videoUrl = post.preview.reddit_video_preview.fallback_url ?? null;
+      console.log("[fetchLinkMeta] Reddit video from preview:", videoUrl);
+    }
+
+    if (post.preview?.images?.[0]?.source?.url) {
+      imageUrl = post.preview.images[0].source.url.replace(/&amp;/g, "&");
+    } else if (post.thumbnail && post.thumbnail !== "default" && post.thumbnail !== "self" && post.thumbnail !== "nsfw") {
+      imageUrl = post.thumbnail;
+    }
+
+    return {
+      title: post.title ?? null,
+      description: post.selftext?.slice(0, 500) ?? null,
+      image: imageUrl,
+      video: videoUrl,
+      audioUrl,
+      siteName: "Reddit",
+    };
+  } catch (err) {
+    console.log("[fetchLinkMeta] Reddit JSON fetch failed:", err);
+    return {};
+  }
+}
+
+function isInstagramUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "").replace(/^m\./, "");
+    return host === "instagram.com";
+  } catch {
+    return false;
+  }
+}
+
+function extractInstagramShortcode(url: string): string | null {
+  const match = url.match(/\/(p|reel|reels|tv)\/([A-Za-z0-9_-]+)/);
+  return match?.[2] ?? null;
+}
+
+async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Partial<LinkMeta>> {
+  let embedImage: string | null = null;
+  let embedCaption: string | null = null;
+  const shortcode = extractInstagramShortcode(url);
+  console.log("[fetchLinkMeta] Instagram shortcode:", shortcode);
+
+  if (shortcode) {
+    try {
+      const embedUrl = `https://www.instagram.com/p/${shortcode}/embed/`;
+      console.log("[fetchLinkMeta] Fetching Instagram embed:", embedUrl);
+      const res = await fetch(embedUrl, {
+        signal,
+        headers: {
+          "User-Agent": BROWSER_UA,
+          Accept: "text/html",
+        },
+        redirect: "follow",
+      });
+      if (res.ok) {
+        const html = await res.text();
+        console.log("[fetchLinkMeta] Instagram embed HTML length:", html.length);
+
+        let videoUrl: string | null = null;
+
+        const videoSrcMatch = html.match(/<video[^>]+src=["']([^"']+)["']/i)
+          ?? html.match(/<video[^>]*>[\s\S]*?<source[^>]+src=["']([^"']+)["']/i);
+        if (videoSrcMatch?.[1]) {
+          videoUrl = videoSrcMatch[1].replace(/&amp;/g, "&");
+          console.log("[fetchLinkMeta] Instagram video from embed <video>:", videoUrl);
+        }
+
+        const videoKeys = ["video_url", "video_versions", "contentUrl"];
+        if (!videoUrl) {
+          for (const key of videoKeys) {
+            const keyIdx = html.indexOf(key);
+            if (keyIdx === -1) continue;
+            const afterKey = html.slice(keyIdx, keyIdx + 3000);
+            const httpsIdx = afterKey.indexOf("https:");
+            if (httpsIdx === -1) continue;
+            const urlPart = afterKey.slice(httpsIdx);
+            let endIdx = 0;
+            for (let i = 0; i < urlPart.length && i < 2000; i++) {
+              if (urlPart[i] === '"' || urlPart[i] === "'" || urlPart[i] === " " || urlPart[i] === "\n") {
+                endIdx = i;
+                break;
+              }
+            }
+            if (endIdx > 0) {
+              const rawUrl = urlPart.slice(0, endIdx);
+              videoUrl = rawUrl
+                .replace(/\\/g, "")
+                .replace(/u0026/g, "&")
+                .replace(/u00253D/g, "=");
+              console.log(`[fetchLinkMeta] Instagram video from '${key}':`, videoUrl);
+              break;
+            }
+          }
+        }
+
+        if (!videoUrl) {
+          const allHttps = [...html.matchAll(/https?:\/\/[^\s"'\\]+\.mp4[^\s"'\\]*/gi)];
+          if (allHttps.length > 0) {
+            videoUrl = allHttps[0][0].replace(/\\/g, "").replace(/u0026/g, "&");
+            console.log("[fetchLinkMeta] Instagram video from mp4 scan:", videoUrl);
+          }
+        }
+
+        let imageUrl = getMeta(html, "image");
+        if (!imageUrl) {
+          const imgMatch = html.match(/<img[^>]+class="[^"]*EmbeddedMediaImage[^"]*"[^>]+src=["']([^"']+)["']/i)
+            ?? html.match(/<img[^>]+src=["'](https:\/\/scontent[^"']+)["']/i);
+          if (imgMatch?.[1]) {
+            imageUrl = imgMatch[1].replace(/&amp;/g, "&");
+          }
+        }
+
+        const titleMatch = html.match(/<div[^>]*class="[^"]*Caption[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+        const caption = titleMatch?.[1]?.replace(/<[^>]+>/g, "").trim().slice(0, 200) ?? null;
+
+        console.log("[fetchLinkMeta] Instagram embed result - video:", videoUrl, "image:", !!imageUrl);
+
+        if (videoUrl) {
+          return {
+            title: caption,
+            description: null,
+            image: imageUrl,
+            video: videoUrl,
+            siteName: "Instagram",
+          };
+        }
+
+        embedImage = imageUrl;
+        embedCaption = caption;
+      } else {
+        console.log("[fetchLinkMeta] Instagram embed status:", res.status);
+      }
+    } catch (err) {
+      console.log("[fetchLinkMeta] Instagram embed failed:", err);
+    }
+  }
+
+  if (shortcode) {
+    try {
+      const graphqlUrl = `https://www.instagram.com/graphql/query/?query_hash=b3055c01b4b222b8a47dc12b090e4e64&variables=${encodeURIComponent(JSON.stringify({ shortcode }))}`;
+      console.log("[fetchLinkMeta] Trying Instagram GraphQL for shortcode:", shortcode);
+      const res = await fetch(graphqlUrl, {
+        signal,
+        headers: {
+          "User-Agent": BROWSER_UA,
+          Accept: "*/*",
+          "X-IG-App-ID": "936619743392459",
+        },
+        redirect: "follow",
+      });
+      if (res.ok) {
+        const text = await res.text();
+        console.log("[fetchLinkMeta] GraphQL response length:", text.length);
+        const data = JSON.parse(text);
+        const media = data?.data?.shortcode_media;
+        if (media) {
+          const videoUrl = media.video_url ?? null;
+          const imageUrl = media.display_url ?? null;
+          const caption = media.edge_media_to_caption?.edges?.[0]?.node?.text ?? null;
+          console.log("[fetchLinkMeta] GraphQL video:", videoUrl, "image:", !!imageUrl);
+          if (videoUrl || imageUrl) {
+            return {
+              title: caption?.slice(0, 200) ?? embedCaption ?? null,
+              description: null,
+              image: imageUrl ?? embedImage ?? null,
+              video: videoUrl,
+              siteName: "Instagram",
+            };
+          }
+        }
+      } else {
+        console.log("[fetchLinkMeta] GraphQL status:", res.status);
+      }
+    } catch (err) {
+      console.log("[fetchLinkMeta] GraphQL failed:", err);
+    }
+  }
+
+  try {
+    console.log("[fetchLinkMeta] Fetching Instagram page directly:", url);
+    const res = await fetch(url, {
+      signal,
+      headers: {
+        "User-Agent": BROWSER_UA,
+        Accept: "text/html",
+      },
+      redirect: "follow",
+    });
+    if (res.ok) {
+      const html = await res.text();
+      console.log("[fetchLinkMeta] Instagram page HTML length:", html.length);
+
+      let videoUrl = getMeta(html, "video") ?? getMeta(html, "video:url") ?? getMeta(html, "video:secure_url");
+      const imageUrl = getMeta(html, "image");
+      const title = getMeta(html, "title");
+      const description = getMeta(html, "description");
+
+      if (!videoUrl) {
+        const vidIdx = html.indexOf("video_url");
+        if (vidIdx !== -1) {
+          const afterKey = html.slice(vidIdx, vidIdx + 3000);
+          const httpsIdx = afterKey.indexOf("https:");
+          if (httpsIdx !== -1) {
+            const urlPart = afterKey.slice(httpsIdx);
+            let endIdx = 0;
+            for (let i = 0; i < urlPart.length && i < 2000; i++) {
+              if (urlPart[i] === '"' || urlPart[i] === "'" || urlPart[i] === " " || urlPart[i] === "\n") {
+                endIdx = i;
+                break;
+              }
+            }
+            if (endIdx > 0) {
+              videoUrl = urlPart.slice(0, endIdx).replace(/\\/g, "").replace(/u0026/g, "&").replace(/u00253D/g, "=");
+              console.log("[fetchLinkMeta] Instagram video from page indexOf:", videoUrl);
+            }
+          }
+        }
+      }
+
+      console.log("[fetchLinkMeta] Instagram page result - video:", videoUrl, "image:", !!imageUrl);
+
+      return {
+        title: title ?? embedCaption ?? null,
+        description,
+        image: imageUrl ?? embedImage ?? null,
+        video: videoUrl,
+        siteName: "Instagram",
+      };
+    }
+  } catch (err) {
+    console.log("[fetchLinkMeta] Instagram direct fetch failed:", err);
+  }
+
+  return {};
+}
+
+function isTikTokUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "").replace(/^m\./, "");
+    return host === "tiktok.com" || host === "vm.tiktok.com";
+  } catch {
+    return false;
+  }
+}
+
+async function fetchTikTokMeta(url: string, signal: AbortSignal): Promise<Partial<LinkMeta>> {
+  try {
+    const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
+    const res = await fetch(oembedUrl, { signal, headers: { Accept: "application/json" } });
+    if (!res.ok) return {};
+    const data = await res.json();
+
+    let videoUrl: string | null = null;
+    const embedHtml = data.html ?? "";
+    const embedSrc = embedHtml.match(/src=["']([^"']+)["']/)?.[1];
+    if (embedSrc) {
+      try {
+        const embedRes = await fetch(embedSrc, {
+          signal,
+          headers: { "User-Agent": BROWSER_UA },
+          redirect: "follow",
+        });
+        const embedBody = await embedRes.text();
+        const directVideo = embedBody.match(/"playAddr":"([^"]+)"/)?.[1]
+          ?? embedBody.match(/"downloadAddr":"([^"]+)"/)?.[1];
+        if (directVideo) {
+          videoUrl = directVideo.replace(/\\u002F/g, "/");
+        }
+      } catch {}
+    }
+
+    return {
+      title: data.title ?? null,
+      description: data.author_name ? `by ${data.author_name}` : null,
+      image: data.thumbnail_url ?? null,
+      video: videoUrl,
+      siteName: "TikTok",
+    };
+  } catch {
+    return {};
+  }
+}
+
+const OEMBED_PROVIDERS: Record<string, (url: string) => string> = {
+  "youtube.com": (url) => `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
+  "youtu.be": (url) => `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
+  "vimeo.com": (url) => `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(url)}`,
+  "flickr.com": (url) => `https://www.flickr.com/services/oembed/?url=${encodeURIComponent(url)}&format=json`,
+  "soundcloud.com": (url) => `https://soundcloud.com/oembed?url=${encodeURIComponent(url)}&format=json`,
+  "spotify.com": (url) => `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`,
+};
+
+function getOembedUrl(url: string): string | null {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "").replace(/^m\./, "");
+    for (const [domain, builder] of Object.entries(OEMBED_PROVIDERS)) {
+      if (host === domain || host.endsWith(`.${domain}`)) return builder(url);
+    }
+  } catch {}
+  return null;
+}
+
+async function fetchOembed(url: string, signal: AbortSignal): Promise<Partial<LinkMeta>> {
+  const oembedUrl = getOembedUrl(url);
+  if (!oembedUrl) return {};
+  try {
+    const res = await fetch(oembedUrl, { signal, headers: { Accept: "application/json" } });
+    if (!res.ok) return {};
+    const data = await res.json();
+    return {
+      title: data.title ?? null,
+      description: data.description ?? data.author_name ?? null,
+      image: data.thumbnail_url ?? null,
+      video: data.html?.match(/src=["']([^"']+)["']/)?.[1] ?? null,
+      siteName: data.provider_name ?? null,
+    };
+  } catch {
+    return {};
+  }
+}
+
+const IGNORE_IMAGE_PATTERNS = /logo|icon|favicon|badge|avatar|emoji|pixel|tracking|spacer|button|banner-ad|sprite/i;
+const IMAGE_EXTENSIONS = /\.(jpg|jpeg|png|gif|webp|avif|svg)(\?|$)/i;
+
+function extractImagesFromHtml(html: string, baseUrl: string): string | null {
+  const candidates: { src: string; score: number }[] = [];
+
+  const imgTags = html.match(/<img[^>]+>/gi) ?? [];
+  for (const tag of imgTags) {
+    const src = tag.match(/src=["']([^"']+)["']/i)?.[1];
+    if (!src || IGNORE_IMAGE_PATTERNS.test(src)) continue;
+
+    let score = 0;
+    const width = parseInt(tag.match(/width=["']?(\d+)/i)?.[1] ?? "0");
+    const height = parseInt(tag.match(/height=["']?(\d+)/i)?.[1] ?? "0");
+    if (width > 300 && height > 200) score += 5;
+    else if (width > 100 && height > 100) score += 2;
+    else if (width > 0 && width < 50) continue;
+
+    if (/hero|featured|main|content|article|post|thumb/i.test(tag)) score += 3;
+    if (IMAGE_EXTENSIONS.test(src)) score += 1;
+
+    const resolved = resolveUrl(src, baseUrl);
+    if (resolved) candidates.push({ src: resolved, score });
+  }
+
+  const pictureSourceTags = html.match(/<source[^>]+srcset=["'][^"']+["'][^>]*>/gi) ?? [];
+  for (const tag of pictureSourceTags) {
+    const srcset = tag.match(/srcset=["']([^"']+)["']/i)?.[1];
+    if (!srcset) continue;
+    const firstSrc = srcset.split(",")[0]?.trim().split(/\s+/)[0];
+    if (firstSrc && !IGNORE_IMAGE_PATTERNS.test(firstSrc)) {
+      const resolved = resolveUrl(firstSrc, baseUrl);
+      if (resolved) candidates.push({ src: resolved, score: 2 });
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0]?.src ?? null;
+}
+
+function extractVideosFromHtml(html: string, baseUrl: string): string | null {
+  const videoSrcMatch = html.match(/<video[^>]*>[\s\S]*?<source[^>]+src=["']([^"']+)["']/i);
+  if (videoSrcMatch?.[1]) {
+    const resolved = resolveUrl(videoSrcMatch[1], baseUrl);
+    if (resolved) return resolved;
+  }
+
+  const videoDirectMatch = html.match(/<video[^>]+src=["']([^"']+)["']/i);
+  if (videoDirectMatch?.[1]) {
+    const resolved = resolveUrl(videoDirectMatch[1], baseUrl);
+    if (resolved) return resolved;
+  }
+
+  const iframeSrc = html.match(/<iframe[^>]+src=["']([^"']+)["']/i)?.[1];
+  if (iframeSrc && /youtube|vimeo|dailymotion|streamable/i.test(iframeSrc)) {
+    return resolveUrl(iframeSrc, baseUrl);
+  }
+
+  return null;
+}
+
+function resolveUrl(src: string, baseUrl: string): string | null {
+  try {
+    if (src.startsWith("data:")) return null;
+    if (src.startsWith("//")) return `https:${src}`;
+    if (src.startsWith("http")) return src;
+    return new URL(src, baseUrl).toString();
+  } catch {
+    return null;
+  }
+}
+
+function extractJsonLd(html: string): Partial<LinkMeta> {
+  const match = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
+  if (!match?.[1]) return {};
+  try {
+    const data = JSON.parse(match[1]);
+    const item = Array.isArray(data) ? data[0] : data;
+    return {
+      title: item.headline ?? item.name ?? null,
+      description: item.description ?? null,
+      image: typeof item.image === "string" ? item.image : item.image?.url ?? item.thumbnailUrl ?? null,
+      video: item.contentUrl ?? item.embedUrl ?? null,
+    };
+  } catch {
+    return {};
+  }
+}
+
 export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
   const domain = new URL(url).hostname.replace(/^www\./, "");
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), 15000);
 
-    const fxUrl = useFxTwitter(url);
-    let html: string;
     let title: string | null = null;
     let description: string | null = null;
     let image: string | null = null;
     let video: string | null = null;
+    let audioUrl: string | null = null;
     let siteName: string | null = null;
+
+    if (isRedditUrl(url)) {
+      const reddit = await fetchRedditVideo(url, controller.signal);
+      console.log("[fetchLinkMeta] Reddit result:", JSON.stringify(reddit, null, 2));
+      title = reddit.title ?? null;
+      description = reddit.description ?? null;
+      image = reddit.image ?? null;
+      video = reddit.video ?? null;
+      audioUrl = reddit.audioUrl ?? null;
+      siteName = reddit.siteName ?? null;
+    }
+
+    if (isInstagramUrl(url) && !video) {
+      const ig = await fetchInstagramMeta(url, controller.signal);
+      if (ig.title) title = title ?? ig.title;
+      if (ig.description) description = description ?? ig.description;
+      if (ig.image) image = image ?? ig.image;
+      if (ig.video) video = ig.video;
+      siteName = siteName ?? ig.siteName ?? null;
+    }
+
+    if (isTikTokUrl(url) && !video) {
+      const tt = await fetchTikTokMeta(url, controller.signal);
+      if (tt.title) title = title ?? tt.title;
+      if (tt.description) description = description ?? tt.description;
+      if (tt.image) image = image ?? tt.image;
+      if (tt.video) video = tt.video;
+      siteName = siteName ?? tt.siteName ?? null;
+    }
+
+    const fxUrl = useFxTwitter(url);
+    let html: string | null = null;
 
     if (fxUrl) {
       try {
         html = await fetchHtml(fxUrl, controller.signal, true);
-        title = getMeta(html, "title");
-        description = getMeta(html, "description");
-        image = getMeta(html, "image");
-        video = getMeta(html, "video") ?? getMeta(html, "video:url") ?? getMeta(html, "video:secure_url");
-        siteName = getMeta(html, "site_name") ?? "X";
+        if (!title) title = getMeta(html, "title");
+        if (!description) description = getMeta(html, "description");
+        if (!image) image = getMeta(html, "image");
+        if (!video) video = getMeta(html, "video") ?? getMeta(html, "video:url") ?? getMeta(html, "video:secure_url");
+        if (!siteName) siteName = getMeta(html, "site_name") ?? "X";
       } catch {
         html = await fetchHtml(url, controller.signal);
       }
-    } else {
-      html = await fetchHtml(url, controller.signal);
     }
 
-    if (!title) title = getMeta(html!, "title");
-    if (!description) description = getMeta(html!, "description");
-    if (!image) image = getMeta(html!, "image");
-    if (!video) video = getMeta(html!, "video") ?? getMeta(html!, "video:url") ?? getMeta(html!, "video:secure_url");
-    if (!siteName) siteName = getMeta(html!, "site_name");
+    if (!title || !description || !image || !video) {
+      if (!html) html = await fetchHtml(url, controller.signal);
 
-    if (!title) {
-      title = html!.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() ?? null;
+      if (!title) title = getMeta(html, "title");
+      if (!description) description = getMeta(html, "description");
+      if (!image) image = getMeta(html, "image");
+      if (!video) video = getMeta(html, "video") ?? getMeta(html, "video:url") ?? getMeta(html, "video:secure_url");
+      if (!siteName) siteName = getMeta(html, "site_name");
+
+      if (!title) {
+        title = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() ?? null;
+      }
+
+      if (!image || !title || !video) {
+        const jsonLd = extractJsonLd(html);
+        if (!title && jsonLd.title) title = jsonLd.title;
+        if (!description && jsonLd.description) description = jsonLd.description;
+        if (!image && jsonLd.image) image = jsonLd.image;
+        if (!video && jsonLd.video) video = jsonLd.video;
+      }
+
+      if (!image) {
+        image = extractImagesFromHtml(html, url);
+      }
+
+      if (!video) {
+        video = extractVideosFromHtml(html, url);
+      }
     }
 
-    if (!image && video) {
-      image = getMeta(html!, "image") ?? getMeta(html!, "image:src");
+    if (!image || !video) {
+      const oembed = await fetchOembed(url, controller.signal);
+      if (!title && oembed.title) title = oembed.title;
+      if (!description && oembed.description) description = oembed.description;
+      if (!image && oembed.image) image = oembed.image;
+      if (!video && oembed.video) video = oembed.video;
+      if (!siteName && oembed.siteName) siteName = oembed.siteName;
     }
 
     clearTimeout(timeout);
@@ -108,10 +661,11 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       description: decodeHtml(description),
       image: decodeHtml(image),
       video: decodeHtml(video),
+      audioUrl: decodeHtml(audioUrl),
       siteName: decodeHtml(siteName),
       domain,
     };
   } catch {
-    return { title: null, description: null, image: null, video: null, siteName: null, domain };
+    return { title: null, description: null, image: null, video: null, audioUrl: null, siteName: null, domain };
   }
 }

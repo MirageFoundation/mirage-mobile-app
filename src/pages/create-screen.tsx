@@ -3,10 +3,12 @@ import { LinkPreviewCard } from "@/src/components/molecules/link-preview-card";
 import { markEditJustCompleted } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { fetchLinkMeta } from "@/src/utils/fetch-link-meta";
+import { mergeAudioVideo } from "@/src/utils/merge-audio-video";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
 import { ResizeMode, Video } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
+import { Paths, File as ExpoFile } from "expo-file-system";
 import { router, useLocalSearchParams } from "expo-router";
 import { useShareIntentContext } from "expo-share-intent";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -321,15 +323,118 @@ export function CreateScreen() {
         updateDraft({ body: shareIntent.text });
       }
       if (shareIntent.webUrl) {
-        setShowLinkInput(true);
-        setLinkUrl(shareIntent.webUrl);
-        setAttachment("link", shareIntent.webUrl);
-        updateDraft({ linkUrl: shareIntent.webUrl });
-        fetchLinkMeta(shareIntent.webUrl).then((meta) => {
+        fetchLinkMeta(shareIntent.webUrl).then(async (meta) => {
+          console.log("[CreatePost] Link meta:", JSON.stringify(meta, null, 2));
           if (meta.title) {
             updateDraft({ title: meta.title.slice(0, tierLimits.maxTitleLength) });
           }
-        }).catch((err) => {
+          const bodyParts: string[] = [];
+          if (meta.description) {
+            bodyParts.push(meta.description.slice(0, tierLimits.maxContentLength));
+          }
+          updateDraft({ body: bodyParts.join("\n\n") });
+
+          let videoDownloaded = false;
+
+          if (meta.video) {
+            try {
+              console.log("[CreatePost] Attempting video download:", meta.video);
+              const response = await fetch(meta.video);
+              const contentType = response.headers.get("content-type") ?? "";
+              const videoUrl = response.url;
+              console.log("[CreatePost] Video response - status:", response.status, "content-type:", contentType, "final url:", videoUrl);
+
+              const isVideoContent = contentType.startsWith("video/") || contentType.startsWith("application/octet-stream");
+              const hasVideoExtension = /\.(mp4|mov|webm|m3u8|ts)(\?|#|$)/i.test(videoUrl || meta.video);
+
+              if (response.ok && (isVideoContent || hasVideoExtension)) {
+                const ext = contentType.includes("mp4") ? "mp4"
+                  : contentType.includes("webm") ? "webm"
+                  : contentType.includes("quicktime") ? "mov"
+                  : (videoUrl || meta.video).match(/\.(mp4|mov|webm|m3u8)/i)?.[1] ?? "mp4";
+                const destFile = new ExpoFile(Paths.cache, `shared_link_video_${Date.now()}.${ext}`);
+                const arrayBuffer = await response.arrayBuffer();
+                console.log("[CreatePost] Video size:", arrayBuffer.byteLength, "bytes");
+                if (arrayBuffer.byteLength > 1000) {
+                  if (meta.audioUrl) {
+                    try {
+                      console.log("[CreatePost] Downloading audio for merge:", meta.audioUrl);
+                      const audioRes = await fetch(meta.audioUrl);
+                      if (audioRes.ok) {
+                        const audioBuffer = await audioRes.arrayBuffer();
+                        console.log("[CreatePost] Audio size:", audioBuffer.byteLength, "bytes");
+                        if (audioBuffer.byteLength > 500) {
+                          console.log("[CreatePost] Merging audio+video with mp4box...");
+                          const mergedBuffer = await mergeAudioVideo(arrayBuffer, audioBuffer);
+                          console.log("[CreatePost] Merged size:", mergedBuffer.byteLength, "bytes");
+                          const mergedFile = new ExpoFile(Paths.cache, `shared_link_merged_${Date.now()}.mp4`);
+                          mergedFile.write(new Uint8Array(mergedBuffer));
+                          setAttachment("video", mergedFile.uri);
+                          startVideoUpload(mergedFile.uri);
+                          videoDownloaded = true;
+                          console.log("[CreatePost] Merged video+audio successfully:", mergedFile.uri);
+                        } else {
+                          console.log("[CreatePost] Audio too small, using video only");
+                        }
+                      } else {
+                        console.log("[CreatePost] Audio fetch failed:", audioRes.status);
+                      }
+                    } catch (mergeErr) {
+                      console.log("[CreatePost] Audio merge failed, using video only:", mergeErr);
+                    }
+                  }
+                  if (!videoDownloaded) {
+                    destFile.write(new Uint8Array(arrayBuffer));
+                    setAttachment("video", destFile.uri);
+                    startVideoUpload(destFile.uri);
+                    videoDownloaded = true;
+                    console.log("[CreatePost] Video saved (no audio merge):", destFile.uri);
+                  }
+                } else {
+                  console.log("[CreatePost] Video response too small, likely not a real video");
+                }
+              } else {
+                console.log("[CreatePost] Video URL is not downloadable (content-type:", contentType, "), skipping video");
+              }
+            } catch (vidErr) {
+              console.log("[CreatePost] Video download failed:", vidErr);
+              Sentry.addBreadcrumb({
+                category: "share-intent",
+                message: "Failed to download OG video",
+                data: { video: meta.video, error: String(vidErr) },
+                level: "warning",
+              });
+            }
+          }
+
+          if (!videoDownloaded && meta.image) {
+            try {
+              const ext = meta.image.match(/\.(jpg|jpeg|png|gif|webp)/i)?.[1] ?? "jpg";
+              const destFile = new ExpoFile(Paths.cache, `shared_link_image_${Date.now()}.${ext}`);
+              const response = await fetch(meta.image);
+              if (response.ok) {
+                const arrayBuffer = await response.arrayBuffer();
+                destFile.write(new Uint8Array(arrayBuffer));
+                setAttachment("image", destFile.uri);
+              }
+            } catch (imgErr) {
+              Sentry.addBreadcrumb({
+                category: "share-intent",
+                message: "Failed to download OG image",
+                data: { image: meta.image, error: String(imgErr) },
+                level: "warning",
+              });
+            }
+          }
+
+          if (!videoDownloaded) {
+            const currentBody = useDraftStore.getState().draft.body;
+            const link = shareIntent.webUrl!;
+            const newBody = currentBody ? `${currentBody}\n\n${link}` : link;
+            updateDraft({ body: newBody });
+          }
+        }).catch((err: any) => {
+          updateDraft({ body: shareIntent.webUrl! });
           Sentry.captureException(err, { tags: { feature: "share-intent-meta" } });
         });
       }
