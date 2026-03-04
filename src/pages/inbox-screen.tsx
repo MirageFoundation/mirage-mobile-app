@@ -249,7 +249,7 @@ export function InboxScreen() {
             tintColor={theme.colors.primary[500]}
           />
         }
-        removeClippedSubviews={true}
+        removeClippedSubviews={false}
         maxToRenderPerBatch={10}
         windowSize={10}
         initialNumToRender={10}
