@@ -5,6 +5,8 @@ export type LinkMeta = {
   video: string | null;
   audioUrl: string | null;
   audioUrls: string[];
+  images: string[];
+  videos: string[];
   siteName: string | null;
   domain: string;
 };
@@ -184,13 +186,47 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       imageUrl = post.thumbnail;
     }
 
+    const images: string[] = [];
+    const videos: string[] = [];
+
+    if (post.is_gallery && post.media_metadata && post.gallery_data?.items) {
+      for (const item of post.gallery_data.items) {
+        const mediaId = item.media_id;
+        const media = post.media_metadata[mediaId];
+        if (!media) continue;
+        if (media.e === "Image" && media.s?.u) {
+          images.push(media.s.u.replace(/&amp;/g, "&"));
+        } else if (media.e === "AnimatedImage" && media.s?.gif) {
+          images.push(media.s.gif.replace(/&amp;/g, "&"));
+        } else if (media.e === "RedditVideo" && media.s?.mp4) {
+          videos.push(media.s.mp4.replace(/&amp;/g, "&"));
+        }
+      }
+      console.log("[fetchLinkMeta] Reddit gallery - images:", images.length, "videos:", videos.length);
+    }
+
+    if (images.length === 0 && post.preview?.images) {
+      for (const img of post.preview.images) {
+        if (img.source?.url) {
+          const u = img.source.url.replace(/&amp;/g, "&");
+          if (!images.includes(u)) images.push(u);
+        }
+      }
+    }
+
+    if (videoUrl && !videos.includes(videoUrl)) {
+      videos.unshift(videoUrl);
+    }
+
     return {
       title: post.title ?? null,
       description: post.selftext?.slice(0, 500) ?? null,
-      image: imageUrl,
+      image: images[0] ?? imageUrl,
       video: videoUrl,
       audioUrl,
       audioUrls,
+      images,
+      videos,
       siteName: "Reddit",
     };
   } catch (err) {
@@ -213,9 +249,56 @@ function extractInstagramShortcode(url: string): string | null {
   return match?.[2] ?? null;
 }
 
+function extractInstagramImages(html: string): string[] {
+  const images: string[] = [];
+  const seen = new Set<string>();
+
+  const addUrl = (raw: string) => {
+    const cleaned = raw.replace(/\\/g, "").replace(/u0026/g, "&").replace(/u00253D/g, "=").replace(/&amp;/g, "&");
+    const key = cleaned.split("?")[0];
+    if (!seen.has(key) && cleaned.startsWith("https://")) {
+      seen.add(key);
+      images.push(cleaned);
+    }
+  };
+
+  const displayUrlPattern = /display_url["\s:\\]+["']?(https?:[^"'\s,\\]+)/gi;
+  let match;
+  while ((match = displayUrlPattern.exec(html)) !== null) {
+    addUrl(match[1]);
+  }
+
+  if (images.length === 0) {
+    const sidecarPattern = /edge_sidecar_to_children[\s\S]*?edges[\s\S]*?\[([\s\S]*?)\]/;
+    const sidecar = html.match(sidecarPattern);
+    if (sidecar) {
+      const urls = [...sidecar[1].matchAll(/display_url["\s:\\]+["']?(https?:[^"'\s,\\]+)/gi)];
+      for (const u of urls) addUrl(u[1]);
+    }
+  }
+
+  if (images.length <= 1) {
+    const imgPattern = /https:\/\/scontent[a-z0-9.-]*\.cdninstagram\.com\/v\/[^\s"'\\]+\.jpg[^\s"'\\]*/gi;
+    const scontentUrls = [...html.matchAll(imgPattern)];
+    for (const m of scontentUrls) {
+      const cleaned = m[0].replace(/\\/g, "").replace(/u0026/g, "&");
+      if (/s\d{3,4}x\d{3,4}/.test(cleaned) || /dst-jpg/.test(cleaned)) {
+        const key = cleaned.split("?")[0];
+        if (!seen.has(key)) {
+          seen.add(key);
+          images.push(cleaned);
+        }
+      }
+    }
+  }
+
+  return images;
+}
+
 async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Partial<LinkMeta>> {
   let embedImage: string | null = null;
   let embedCaption: string | null = null;
+  let allImages: string[] = [];
   const shortcode = extractInstagramShortcode(url);
   console.log("[fetchLinkMeta] Instagram shortcode:", shortcode);
 
@@ -292,7 +375,9 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
         const titleMatch = html.match(/<div[^>]*class="[^"]*Caption[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
         const caption = titleMatch?.[1]?.replace(/<[^>]+>/g, "").trim().slice(0, 200) ?? null;
 
-        console.log("[fetchLinkMeta] Instagram embed result - video:", videoUrl, "image:", !!imageUrl);
+        const embedImages = extractInstagramImages(html);
+        if (embedImages.length > 0) allImages = embedImages;
+        console.log("[fetchLinkMeta] Instagram embed result - video:", videoUrl, "image:", !!imageUrl, "carousel:", allImages.length);
 
         if (videoUrl) {
           return {
@@ -300,6 +385,7 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
             description: null,
             image: imageUrl,
             video: videoUrl,
+            images: allImages,
             siteName: "Instagram",
           };
         }
@@ -336,6 +422,15 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
           const videoUrl = media.video_url ?? null;
           const imageUrl = media.display_url ?? null;
           const caption = media.edge_media_to_caption?.edges?.[0]?.node?.text ?? null;
+
+          if (media.edge_sidecar_to_children?.edges) {
+            for (const edge of media.edge_sidecar_to_children.edges) {
+              const node = edge.node;
+              if (node?.display_url) allImages.push(node.display_url);
+            }
+            console.log("[fetchLinkMeta] GraphQL carousel images:", allImages.length);
+          }
+
           console.log("[fetchLinkMeta] GraphQL video:", videoUrl, "image:", !!imageUrl);
           if (videoUrl || imageUrl) {
             return {
@@ -343,6 +438,7 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
               description: null,
               image: imageUrl ?? embedImage ?? null,
               video: videoUrl,
+              images: allImages,
               siteName: "Instagram",
             };
           }
@@ -396,13 +492,18 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
         }
       }
 
-      console.log("[fetchLinkMeta] Instagram page result - video:", videoUrl, "image:", !!imageUrl);
+      if (allImages.length === 0) {
+        const pageImages = extractInstagramImages(html);
+        if (pageImages.length > 0) allImages = pageImages;
+      }
+      console.log("[fetchLinkMeta] Instagram page result - video:", videoUrl, "image:", !!imageUrl, "carousel:", allImages.length);
 
       return {
         title: title ?? embedCaption ?? null,
         description,
         image: imageUrl ?? embedImage ?? null,
         video: videoUrl,
+        images: allImages,
         siteName: "Instagram",
       };
     }
@@ -599,6 +700,8 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
     let video: string | null = null;
     let audioUrl: string | null = null;
     let audioUrls: string[] = [];
+    let images: string[] = [];
+    let videos: string[] = [];
     let siteName: string | null = null;
 
     if (isRedditUrl(url)) {
@@ -610,6 +713,8 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       video = reddit.video ?? null;
       audioUrl = reddit.audioUrl ?? null;
       audioUrls = reddit.audioUrls ?? [];
+      images = reddit.images ?? [];
+      videos = reddit.videos ?? [];
       siteName = reddit.siteName ?? null;
     }
 
@@ -636,12 +741,50 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
 
     if (fxUrl) {
       try {
-        html = await fetchHtml(fxUrl, controller.signal, true);
-        if (!title) title = getMeta(html, "title");
-        if (!description) description = getMeta(html, "description");
-        if (!image) image = getMeta(html, "image");
-        if (!video) video = getMeta(html, "video") ?? getMeta(html, "video:url") ?? getMeta(html, "video:secure_url");
-        if (!siteName) siteName = getMeta(html, "site_name") ?? "X";
+        const apiUrl = fxUrl.replace("fxtwitter.com", "api.fxtwitter.com");
+        try {
+          const apiRes = await fetch(apiUrl, {
+            signal: controller.signal,
+            headers: { Accept: "application/json" },
+          });
+          if (apiRes.ok) {
+            const apiData = await apiRes.json();
+            const tweet = apiData?.tweet;
+            if (tweet) {
+              if (!title) title = tweet.author?.name ? `${tweet.author.name} (@${tweet.author.screen_name})` : null;
+              if (!description) description = tweet.text ?? null;
+              if (!siteName) siteName = "X";
+              const media = tweet.media?.all ?? tweet.media?.photos ?? [];
+              for (const m of media) {
+                if (m.type === "photo" && m.url) {
+                  images.push(m.url);
+                } else if (m.type === "video" && m.url) {
+                  videos.push(m.url);
+                  if (!video) video = m.url;
+                } else if (m.type === "gif" && m.url) {
+                  videos.push(m.url);
+                  if (!video) video = m.url;
+                }
+                if (!image && (m.thumbnail_url || m.url)) {
+                  image = m.thumbnail_url ?? m.url;
+                }
+              }
+              if (images.length > 0 && !image) image = images[0];
+              console.log("[fetchLinkMeta] fxtwitter API - images:", images.length, "videos:", videos.length);
+            }
+          }
+        } catch (apiErr) {
+          console.log("[fetchLinkMeta] fxtwitter API failed:", apiErr);
+        }
+
+        if (!title || !description) {
+          html = await fetchHtml(fxUrl, controller.signal, true);
+          if (!title) title = getMeta(html, "title");
+          if (!description) description = getMeta(html, "description");
+          if (!image) image = getMeta(html, "image");
+          if (!video) video = getMeta(html, "video") ?? getMeta(html, "video:url") ?? getMeta(html, "video:secure_url");
+          if (!siteName) siteName = getMeta(html, "site_name") ?? "X";
+        }
       } catch {
         html = await fetchHtml(url, controller.signal);
       }
@@ -691,6 +834,9 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
     const decodeHtml = (s: string | null) =>
       s?.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'") ?? null;
 
+    if (image && images.length === 0) images.push(image);
+    if (video && videos.length === 0) videos.push(video);
+
     return {
       title: decodeHtml(title),
       description: decodeHtml(description),
@@ -698,10 +844,12 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       video: decodeHtml(video),
       audioUrl: decodeHtml(audioUrl),
       audioUrls: audioUrls.map((u) => decodeHtml(u)!),
+      images: images.map((u) => decodeHtml(u)!),
+      videos: videos.map((u) => decodeHtml(u)!),
       siteName: decodeHtml(siteName),
       domain,
     };
   } catch {
-    return { title: null, description: null, image: null, video: null, audioUrl: null, audioUrls: [], siteName: null, domain };
+    return { title: null, description: null, image: null, video: null, audioUrl: null, audioUrls: [], images: [], videos: [], siteName: null, domain };
   }
 }

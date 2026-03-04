@@ -25,6 +25,7 @@ import {
   View,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { BlurView } from "expo-blur";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -77,7 +78,8 @@ const VIDEO_META = new Map<string, VideoMeta>();
 let _handledVideoParam: string | null = null;
 
 export function CreateScreen() {
-  const { theme } = useUnistyles();
+  const { theme, rt } = useUnistyles();
+  const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
   const userLevel = useUserLevel();
   const tierLimits = useMemo(() => getTierPostLimits(userLevel), [userLevel]);
@@ -155,6 +157,7 @@ export function CreateScreen() {
   videoUploadStateRef.current = setVideoUploadState;
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [isProcessingShareLink, setIsProcessingShareLink] = useState(false);
 
   const toast = useToast();
 
@@ -323,6 +326,7 @@ export function CreateScreen() {
         updateDraft({ body: shareIntent.text });
       }
       if (shareIntent.webUrl) {
+        setIsProcessingShareLink(true);
         fetchLinkMeta(shareIntent.webUrl).then(async (meta) => {
           console.log("[CreatePost] Link meta:", JSON.stringify(meta, null, 2));
           if (meta.title) {
@@ -422,27 +426,42 @@ export function CreateScreen() {
             }
           }
 
-          if (!videoDownloaded && meta.image) {
-            try {
-              const ext = meta.image.match(/\.(jpg|jpeg|png|gif|webp)/i)?.[1] ?? "jpg";
-              const destFile = new ExpoFile(Paths.cache, `shared_link_image_${Date.now()}.${ext}`);
-              const response = await fetch(meta.image);
-              if (response.ok) {
-                const arrayBuffer = await response.arrayBuffer();
-                destFile.write(new Uint8Array(arrayBuffer));
-                setAttachment("image", destFile.uri);
+          if (!videoDownloaded) {
+            const imagesToDownload = meta.images?.length > 0
+              ? meta.images.slice(0, 10)
+              : meta.image
+                ? [meta.image]
+                : [];
+            if (imagesToDownload.length > 0) {
+              console.log("[CreatePost] Downloading", imagesToDownload.length, "images");
+              for (let i = 0; i < imagesToDownload.length; i++) {
+                try {
+                  const imgUrl = imagesToDownload[i];
+                  const ext = imgUrl.match(/\.(jpg|jpeg|png|gif|webp)/i)?.[1] ?? "jpg";
+                  const destFile = new ExpoFile(Paths.cache, `shared_link_image_${Date.now()}_${i}.${ext}`);
+                  const response = await fetch(imgUrl);
+                  if (response.ok) {
+                    const arrayBuffer = await response.arrayBuffer();
+                    if (arrayBuffer.byteLength > 500) {
+                      destFile.write(new Uint8Array(arrayBuffer));
+                      setAttachment("image", destFile.uri);
+                      console.log("[CreatePost] Image", i + 1, "downloaded:", destFile.uri);
+                    }
+                  }
+                } catch (imgErr) {
+                  console.log("[CreatePost] Image", i + 1, "download failed:", imgErr);
+                  Sentry.addBreadcrumb({
+                    category: "share-intent",
+                    message: "Failed to download OG image",
+                    data: { image: imagesToDownload[i], error: String(imgErr) },
+                    level: "warning",
+                  });
+                }
               }
-            } catch (imgErr) {
-              Sentry.addBreadcrumb({
-                category: "share-intent",
-                message: "Failed to download OG image",
-                data: { image: meta.image, error: String(imgErr) },
-                level: "warning",
-              });
             }
           }
 
-          if (!videoDownloaded) {
+          if (!videoDownloaded && meta.video) {
             const currentBody = useDraftStore.getState().draft.body;
             const link = shareIntent.webUrl!;
             const newBody = currentBody ? `${currentBody}\n\n${link}` : link;
@@ -451,6 +470,8 @@ export function CreateScreen() {
         }).catch((err: any) => {
           updateDraft({ body: shareIntent.webUrl! });
           Sentry.captureException(err, { tags: { feature: "share-intent-meta" } });
+        }).finally(() => {
+          setIsProcessingShareLink(false);
         });
       }
       if (shareIntent.files?.length) {
@@ -1062,6 +1083,29 @@ export function CreateScreen() {
 
   return (
     <Box flex background="base" style={{ paddingTop: insets.top }}>
+      {isProcessingShareLink && (
+        <View style={styles.shareLinkOverlay}>
+          <BlurView
+            intensity={50}
+            tint={isDark ? "dark" : "light"}
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+          />
+          <View
+            style={[
+              styles.shareLinkOverlayContent,
+              {
+                backgroundColor: isDark
+                  ? "rgba(25, 25, 25, 0.98)"
+                  : "rgba(255, 255, 255, 0.98)",
+              },
+            ]}
+          >
+            <ActivityIndicator size="large" color={isDark ? "#fff" : theme.colors.brand[500]} />
+            <Text size="lg" weight="bold" style={styles.shareLinkOverlayTitle}>Extracting Content</Text>
+            <Text size="sm" style={styles.shareLinkOverlayText}>Fetching media from shared link...</Text>
+          </View>
+        </View>
+      )}
       <View style={styles.header}>
         <Button
           variant="ghost"
@@ -2022,5 +2066,34 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  shareLinkOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: theme.spacing.lg,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  shareLinkOverlayContent: {
+    width: "100%",
+    maxWidth: 340,
+    borderRadius: theme.radius.xl,
+    padding: theme.spacing.xl,
+    paddingTop: theme.spacing.xxl,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.3,
+    shadowRadius: 32,
+    elevation: 16,
+  },
+  shareLinkOverlayTitle: {
+    textAlign: "center" as const,
+    marginBottom: theme.spacing.xs,
+  },
+  shareLinkOverlayText: {
+    textAlign: "center" as const,
+    paddingHorizontal: theme.spacing.md,
   },
 }));
