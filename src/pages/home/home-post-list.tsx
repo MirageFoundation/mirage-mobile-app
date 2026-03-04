@@ -161,9 +161,9 @@ const HomePostListInner = function HomePostListInner(
       keyboardDismissMode="on-drag"
       viewabilityConfig={viewabilityConfig}
       onViewableItemsChanged={onViewableItemsChanged}
-      removeClippedSubviews={true}
-      maxToRenderPerBatch={3}
-      windowSize={5}
+      removeClippedSubviews={Platform.OS !== "android"}
+      maxToRenderPerBatch={Platform.OS === "android" ? 5 : 3}
+      windowSize={Platform.OS === "android" ? 7 : 5}
       initialNumToRender={4}
       updateCellsBatchingPeriod={100}
       getItemLayout={undefined}

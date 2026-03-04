@@ -333,12 +333,21 @@ export const HomeTabbedFeed = forwardRef<
 
   const handleNewPostsPress = useCallback(async () => {
     const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
+
+    setIsRefreshing(true);
+    onRefreshingChange?.(true);
+
     try {
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
     } catch {}
 
     showBars();
-    await handleRefresh();
+
+    const minDelay = new Promise<void>((r) => setTimeout(r, 600));
+    await Promise.all([handleRefresh(), minDelay]);
+
+    setIsRefreshing(false);
+    onRefreshingChange?.(false);
 
     requestAnimationFrame(() => {
       try {
@@ -346,7 +355,7 @@ export const HomeTabbedFeed = forwardRef<
       } catch {}
     });
     resetBaseline(null, null, null);
-  }, [showBars, activeTabIndex, handleRefresh, resetBaseline]);
+  }, [showBars, activeTabIndex, handleRefresh, resetBaseline, onRefreshingChange]);
 
   useImperativeHandle(
     ref,
@@ -477,41 +486,37 @@ export const HomeTabbedFeed = forwardRef<
 
   const activeQueryLoading = activeTabIndex === 0 ? magicQuery.isLoading : latestQuery.isLoading;
 
-  const ListHeader = useCallback(() => {
-    return (
-      <>
-        {ListHeaderExtra}
-        {(isRefreshing || activeQueryLoading) && (
-          <Box center p="md">
-            <ActivityIndicator
-              size="small"
-              color={theme.colors.text.subtle}
-            />
-          </Box>
-        )}
-        {baseFeed === "home" && activeTabIndex === 0 && <QuestsSummaryCard />}
-      </>
-    );
-  }, [
-    baseFeed,
-    activeTabIndex,
+  const showHeaderSpinner = isRefreshing || activeQueryLoading;
+  const showQuests = baseFeed === "home" && activeTabIndex === 0;
+
+  const ListHeader = useMemo(() => (
+    <>
+      {ListHeaderExtra}
+      {showHeaderSpinner && (
+        <Box center p="md">
+          <ActivityIndicator
+            size="small"
+            color={theme.colors.text.subtle}
+          />
+        </Box>
+      )}
+      {showQuests && <QuestsSummaryCard />}
+    </>
+  ), [
     ListHeaderExtra,
-    isRefreshing,
-    activeQueryLoading,
+    showHeaderSpinner,
+    showQuests,
     theme.colors.text.subtle,
   ]);
 
-  const ListFooter = useCallback(() => {
-    const query = activeTabIndex === 0 ? magicQuery : latestQuery;
-    if (query.isFetchingNextPage) {
+  const isFetchingNext = activeTabIndex === 0 ? magicQuery.isFetchingNextPage : latestQuery.isFetchingNextPage;
+
+  const ListFooter = useMemo(() => {
+    if (isFetchingNext) {
       return <PostCardSkeleton showMedia={false} showBody={true} />;
     }
     return <Box p="sm" />;
-  }, [
-    activeTabIndex,
-    magicQuery.isFetchingNextPage,
-    latestQuery.isFetchingNextPage,
-  ]);
+  }, [isFetchingNext]);
 
   const listContentStyle = useMemo(
     () => ({
@@ -522,6 +527,8 @@ export const HomeTabbedFeed = forwardRef<
     [insets.bottom, insets.top],
   );
 
+  const progressViewOffset = insets.top + HEADER_HEIGHT;
+
   const refreshControl = useMemo(
     () => (
       <RefreshControl
@@ -529,10 +536,10 @@ export const HomeTabbedFeed = forwardRef<
         onRefresh={handleRefresh}
         tintColor="transparent"
         colors={["transparent"]}
-        progressViewOffset={insets.top + HEADER_HEIGHT}
+        progressViewOffset={progressViewOffset}
       />
     ),
-    [handleRefresh, insets.top, isRefreshing],
+    [handleRefresh, progressViewOffset, isRefreshing],
   );
 
   const posts = activeTabIndex === 0 ? magicPosts : latestPosts;
@@ -541,7 +548,7 @@ export const HomeTabbedFeed = forwardRef<
   const onItemVisible =
     activeTabIndex === 0 ? handleMagicItemVisible : handleLatestItemVisible;
 
-  const ListEmpty = useCallback(
+  const ListEmpty = useMemo(
     () =>
       createListEmptyComponent(
         query.isLoading,
