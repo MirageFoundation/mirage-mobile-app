@@ -63,7 +63,7 @@ export function useNewPostsChecker({
     if (baselineTimestampRef.current == null) return;
     try {
       const result = await getPosts({
-        limit: 20,
+        limit: 10,
         feed: topic ? undefined : feed,
         by,
         topic: topic || undefined,

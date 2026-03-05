@@ -108,10 +108,12 @@ export const ScrollAnimationProvider = ({
     headerTranslateY.value = withTiming(0, { duration: 200 });
     tabBarTranslateY.value = withTiming(0, { duration: 200 });
     isHidden.value = false;
+    isFirstScroll.value = true;
+    lastScrollY.value = 0;
     isProgrammaticScroll.value = true;
     setTimeout(() => {
       isProgrammaticScroll.value = false;
-    }, 500);
+    }, 2000);
   }, [headerTranslateY, tabBarTranslateY]);
 
   const registerHomeRefresh = useCallback((callback: () => void) => {

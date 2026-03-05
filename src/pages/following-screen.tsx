@@ -94,11 +94,14 @@ export function FollowingScreen() {
         if (duration >= 2 * 60 * 60 * 1000) {
           setTimeout(async () => {
             showBars();
-            tabbedFeedRef.current?.scrollToTop();
+            tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
             await tabbedFeedRef.current?.refresh({ fetchAllNew: true });
-            tabbedFeedRef.current?.scrollToTop();
             tabbedFeedRef.current?.dismissNewPosts();
             setHasNewPosts(false);
+            requestAnimationFrame(() => {
+              tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
+              showBars();
+            });
           }, 300);
         } else {
           setTimeout(() => {

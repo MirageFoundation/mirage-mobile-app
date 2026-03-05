@@ -44,7 +44,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNewPostsChecker, type NewPostAvatar } from "@/src/hooks/use-new-posts-checker";
 
 export type HomeTabbedFeedRef = {
-  scrollToTop: (tabIndex?: number) => void;
+  scrollToTop: (tabIndex?: number, options?: { animated?: boolean }) => void;
   refresh: (options?: { fetchAllNew?: boolean }) => Promise<void>;
   isRefreshing: () => boolean;
   hasNewPosts: () => boolean;
@@ -117,18 +117,18 @@ export const HomeTabbedFeed = forwardRef<
   );
 
   const magicQuery = useInfinitePosts({
-    limit: 20,
+    limit: 10,
     feed: baseFeed,
     by: "magic",
     allowed_tags: allowedTags || undefined,
-  });
+  }, { pageLimit: 20 });
 
   const latestQuery = useInfinitePosts({
-    limit: 20,
+    limit: 10,
     feed: baseFeed,
     by: "newest",
     allowed_tags: allowedTags || undefined,
-  }, { enabled: latestTabActivated });
+  }, { enabled: latestTabActivated, pageLimit: 20 });
 
   const postEditOverrides = usePostEditStore((s) => s.overrides);
 
@@ -215,7 +215,7 @@ export const HomeTabbedFeed = forwardRef<
       const sortBy = activeTabIndex === 0 ? "magic" : "newest";
 
       const postsQueryKey = queryKeys.posts({
-        limit: 20,
+        limit: 10,
         feed: baseFeed,
         by: sortBy as any,
         allowed_tags: allowedTags || undefined,
@@ -225,7 +225,7 @@ export const HomeTabbedFeed = forwardRef<
 
       const fetchPage = (page: number) =>
         getPosts({
-          limit: 20,
+          limit: page === 1 ? 10 : 20,
           feed: baseFeed,
           by: sortBy as any,
           allowed_tags: allowedTags || undefined,
@@ -305,11 +305,11 @@ export const HomeTabbedFeed = forwardRef<
   ]);
   handleRefreshRef.current = handleRefresh;
 
-  const scrollToTop = useCallback((tabIndex?: number) => {
+  const scrollToTop = useCallback((tabIndex?: number, options?: { animated?: boolean }) => {
     const targetIndex = tabIndex ?? activeTabIndex;
     const listRef = targetIndex === 0 ? magicListRef : latestListRef;
     try {
-      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      listRef.current?.scrollToOffset({ offset: 0, animated: options?.animated ?? true });
     } catch {}
     if (Platform.OS === "android") {
       requestAnimationFrame(() => {
@@ -409,7 +409,7 @@ export const HomeTabbedFeed = forwardRef<
   const lastLatestFetchTime = useRef(0);
   const isLatestFetching = useRef(false);
 
-  const PREFETCH_THRESHOLD = 14;
+  const PREFETCH_THRESHOLD = 5;
   const PAGE_SIZE = 20;
 
   const magicQueryRef = useRef(magicQuery);
@@ -517,8 +517,22 @@ export const HomeTabbedFeed = forwardRef<
   );
 
   const activeQueryLoading = activeTabIndex === 0 ? magicQuery.isLoading : latestQuery.isLoading;
+  const initialLoadDone = useRef(false);
 
-  const showHeaderSpinner = isRefreshing || activeQueryLoading;
+  useEffect(() => {
+    if (!initialLoadDone.current && !activeQueryLoading) {
+      initialLoadDone.current = true;
+      requestAnimationFrame(() => {
+        const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
+        try {
+          listRef.current?.scrollToOffset({ offset: 0, animated: false });
+        } catch {}
+        showBars();
+      });
+    }
+  }, [activeQueryLoading, activeTabIndex, showBars]);
+
+  const showHeaderSpinner = isRefreshing && !activeQueryLoading;
   const showQuests = baseFeed === "home" && activeTabIndex === 0;
 
   const ListHeader = useMemo(() => (

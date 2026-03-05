@@ -6,6 +6,9 @@ import { walletService } from "@/src/services/wallet-service";
 import { getUserStatus } from "@/src/api/read/endpoints/users";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { queryClient } from "@/src/providers/query-provider";
+import { getPosts } from "@/src/api/read/endpoints/posts";
+import { usePreferencesStore } from "./preferences-store";
+import { getAllowedTagsFromContentTypes } from "./preferences-store";
 import type { WalletMetadata } from "@/src/wallet";
 import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 import { useContentModerationStore } from "./content-moderation-store";
@@ -124,6 +127,19 @@ export const useAuthStore = create<AuthState>()(
           const hasWallet = await walletService.hasWallet();
 
           if (!hasWallet) {
+            const contentTypes = usePreferencesStore.getState().selectedContentTypes;
+            const allowedTags = getAllowedTagsFromContentTypes(contentTypes) || undefined;
+            const prefetchParams = {
+              limit: 10,
+              feed: "home" as const,
+              by: "magic" as const,
+              allowed_tags: allowedTags,
+            };
+            queryClient.prefetchInfiniteQuery({
+              queryKey: queryKeys.posts({ ...prefetchParams, page: undefined }),
+              queryFn: ({ pageParam = 1 }) => getPosts({ ...prefetchParams, page: pageParam }),
+              initialPageParam: 1,
+            });
             set({
               isLoggedIn: false,
               walletAddress: null,
@@ -154,6 +170,21 @@ export const useAuthStore = create<AuthState>()(
                 tier: "Free",
               },
               isInitializing: false,
+            });
+
+            const contentTypes = usePreferencesStore.getState().selectedContentTypes;
+            const allowedTags = getAllowedTagsFromContentTypes(contentTypes) || undefined;
+            const prefetchParams = {
+              limit: 10,
+              feed: "home" as const,
+              by: "magic" as const,
+              allowed_tags: allowedTags,
+              address: metadata.address,
+            };
+            queryClient.prefetchInfiniteQuery({
+              queryKey: queryKeys.posts({ ...prefetchParams, page: undefined }),
+              queryFn: ({ pageParam = 1 }) => getPosts({ ...prefetchParams, page: pageParam }),
+              initialPageParam: 1,
             });
 
             getUserStatus({ address: metadata.address })

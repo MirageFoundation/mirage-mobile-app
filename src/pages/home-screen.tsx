@@ -114,12 +114,15 @@ export function HomeScreen() {
             isAutoRefreshingRef.current = true;
             setHasNewPosts(false);
             showBars();
-            tabbedFeedRef.current?.scrollToTop();
+            tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
             await tabbedFeedRef.current?.refresh({ fetchAllNew: true });
-            tabbedFeedRef.current?.scrollToTop();
             tabbedFeedRef.current?.dismissNewPosts();
             setHasNewPosts(false);
             isAutoRefreshingRef.current = false;
+            requestAnimationFrame(() => {
+              tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
+              showBars();
+            });
           }, 300);
         } else {
           setTimeout(() => {
@@ -140,6 +143,7 @@ export function HomeScreen() {
       useHomePostCardStore.getState().setSkipNextRefresh(false);
       setFeedTabIndex(1);
     }
+    showBars();
     const wasBackgrounded = storage.getString("app_was_backgrounded");
     storage.remove("app_was_backgrounded");
     if (wasBackgrounded) {
@@ -150,12 +154,15 @@ export function HomeScreen() {
             isAutoRefreshingRef.current = true;
             setHasNewPosts(false);
             showBars();
-            tabbedFeedRef.current?.scrollToTop();
+            tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
             await tabbedFeedRef.current?.refresh({ fetchAllNew: true });
-            tabbedFeedRef.current?.scrollToTop();
             tabbedFeedRef.current?.dismissNewPosts();
             setHasNewPosts(false);
             isAutoRefreshingRef.current = false;
+            requestAnimationFrame(() => {
+              tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
+              showBars();
+            });
           }, 300)
         : setTimeout(() => {
             tabbedFeedRef.current?.checkNewPosts();

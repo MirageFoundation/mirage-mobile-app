@@ -171,11 +171,11 @@ export function TopicFeedScreen() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfinitePosts({
-    limit: 20,
+    limit: 10,
     topic: topicName,
     allowed_tags: allowedTags || undefined,
     by: sortBy,
-  });
+  }, { pageLimit: 20 });
 
   const postEditOverrides = usePostEditStore((s) => s.overrides);
 
