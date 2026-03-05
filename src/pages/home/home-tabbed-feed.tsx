@@ -341,28 +341,26 @@ export const HomeTabbedFeed = forwardRef<
 
   const activeSortBy = activeTabIndex === 0 ? "magic" : "newest";
   const activePosts = activeTabIndex === 0 ? magicPosts : latestPosts;
-  const firstPostId = activePosts[0]?.id ?? null;
-  const topThreePostIds = useMemo(() =>
-    activePosts.slice(0, 3).map((p) => p.id),
-    [activePosts],
-  );
-  const currentPostIds = useMemo(() => {
-    const ids = new Set<string>();
-    const pageSize = 20;
-    for (let i = 0; i < Math.min(activePosts.length, pageSize); i++) {
-      ids.add(activePosts[i].id);
+  const activeQuery = activeTabIndex === 0 ? magicQuery : latestQuery;
+
+  const latestPostTimestamp = useMemo(() => {
+    const pages = activeQuery.data?.pages;
+    if (!pages || pages.length === 0) return null;
+    const firstPage = pages[0];
+    if (!firstPage.posts || firstPage.posts.length === 0) return null;
+    let maxTs = 0;
+    for (const post of firstPage.posts) {
+      if (post.timestamp > maxTs) maxTs = post.timestamp;
     }
-    return ids;
-  }, [activePosts]);
+    return maxTs > 0 ? maxTs : null;
+  }, [activeQuery.data?.pages]);
 
   const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, resetBaseline, checkNow } = useNewPostsChecker({
     feed: baseFeed,
     by: activeSortBy as "magic" | "newest",
     allowed_tags: allowedTags || undefined,
     enabled: true,
-    currentPostIds,
-    firstPostId,
-    topThreePostIds,
+    latestPostTimestamp,
   });
   dismissNewPostsRef.current = dismissNewPosts;
 
@@ -387,7 +385,7 @@ export const HomeTabbedFeed = forwardRef<
         listRef.current?.scrollToOffset({ offset: 0, animated: false });
       } catch {}
     });
-    resetBaseline(null, null, null);
+    resetBaseline(null);
   }, [showBars, activeTabIndex, handleRefresh, resetBaseline]);
 
   useImperativeHandle(

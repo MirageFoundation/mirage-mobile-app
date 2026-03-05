@@ -130,7 +130,7 @@ export function HomeScreen() {
     if (wasBackgrounded) {
       const lastForeground = Number(storage.getString("app_last_foreground_time") ?? "0");
       const elapsed = Date.now() - lastForeground;
-      const timer = elapsed >= 5 * 60 * 1000
+      const timer = elapsed >= 2 * 60 * 60 * 1000
         ? setTimeout(async () => {
             isAutoRefreshingRef.current = true;
             setHasNewPosts(false);

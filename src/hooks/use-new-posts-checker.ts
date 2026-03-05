@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useIsFocused } from "@react-navigation/native";
-import { getPosts, type PostsResponse } from "@/src/api";
+import { getPosts } from "@/src/api";
 import { useAuthStore } from "@/src/stores";
 import { useAppState } from "./use-app-state";
 
@@ -16,9 +16,7 @@ type UseNewPostsCheckerOptions = {
   allowed_tags?: string;
   enabled?: boolean;
   intervalMs?: number;
-  currentPostIds?: Set<string>;
-  firstPostId?: string | null;
-  topThreePostIds?: string[];
+  latestPostTimestamp?: number | null;
 };
 
 export function useNewPostsChecker({
@@ -28,68 +26,32 @@ export function useNewPostsChecker({
   allowed_tags,
   enabled = true,
   intervalMs = 30_000,
-  currentPostIds,
-  firstPostId = null,
-  topThreePostIds = [],
+  latestPostTimestamp = null,
 }: UseNewPostsCheckerOptions) {
   const [hasNewPosts, setHasNewPosts] = useState(false);
   const [newPostAvatars, setNewPostAvatars] = useState<NewPostAvatar[]>([]);
   const [newPostCount, setNewPostCount] = useState(0);
-  const baselinePostIdsRef = useRef<Set<string>>(new Set());
-  const baselineFirstPostIdRef = useRef<string | null>(null);
-  const baselineTopThreeRef = useRef<Set<string>>(new Set());
+  const baselineTimestampRef = useRef<number | null>(null);
   const hasNewPostsRef = useRef(false);
   const isFocused = useIsFocused();
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
 
   useEffect(() => {
-    if (!hasNewPostsRef.current && currentPostIds && currentPostIds.size > 0) {
-      baselinePostIdsRef.current = currentPostIds;
+    if (!hasNewPostsRef.current && latestPostTimestamp != null) {
+      baselineTimestampRef.current = latestPostTimestamp;
     }
-  }, [currentPostIds]);
-
-  useEffect(() => {
-    if (!hasNewPostsRef.current && firstPostId) {
-      baselineFirstPostIdRef.current = firstPostId;
-    }
-  }, [firstPostId]);
-
-  useEffect(() => {
-    if (!hasNewPostsRef.current && topThreePostIds.length > 0) {
-      baselineTopThreeRef.current = new Set(topThreePostIds);
-    }
-  }, [topThreePostIds]);
+  }, [latestPostTimestamp]);
 
   useEffect(() => {
     hasNewPostsRef.current = false;
     setHasNewPosts(false);
     setNewPostAvatars([]);
     setNewPostCount(0);
-    if (currentPostIds && currentPostIds.size > 0) {
-      baselinePostIdsRef.current = currentPostIds;
-    }
-    baselineFirstPostIdRef.current = firstPostId;
-    baselineTopThreeRef.current = new Set(topThreePostIds);
+    baselineTimestampRef.current = latestPostTimestamp;
   }, [feed, by, topic]);
 
-  const extractNewPostInfo = useCallback((data: PostsResponse, knownIds: Set<string>): { avatars: NewPostAvatar[]; count: number } => {
-    if (knownIds.size === 0) return { avatars: [], count: 0 };
-    const avatars: NewPostAvatar[] = [];
-    const seen = new Set<string>();
-    let count = 0;
-    for (const post of data.posts) {
-      if (knownIds.has(post.post_id)) continue;
-      count++;
-      if (!seen.has(post.user_id) && avatars.length < 3) {
-        seen.add(post.user_id);
-        avatars.push({ userId: post.user_id, username: post.username });
-      }
-    }
-    return { avatars, count };
-  }, []);
-
   const checkForNewPosts = useCallback(async () => {
-    if (baselinePostIdsRef.current.size === 0) return;
+    if (baselineTimestampRef.current == null) return;
     try {
       const result = await getPosts({
         limit: 20,
@@ -100,22 +62,21 @@ export function useNewPostsChecker({
         address: walletAddress ?? undefined,
         page: 1,
       });
-      const fetchedFirstPostId = result.posts[0]?.post_id ?? null;
-      const firstPostChanged = !!fetchedFirstPostId && fetchedFirstPostId !== baselineFirstPostIdRef.current;
-      const { count } = extractNewPostInfo(result, baselinePostIdsRef.current);
-      const oldTopThree = baselineTopThreeRef.current;
-      const avatars: NewPostAvatar[] = [];
-      const seen = new Set<string>();
-      for (let i = 0; i < Math.min(result.posts.length, 3); i++) {
-        const post = result.posts[i];
-        if (!oldTopThree.has(post.post_id) && !seen.has(post.user_id)) {
-          seen.add(post.user_id);
-          avatars.push({ userId: post.user_id, username: post.username });
+
+      const baseline = baselineTimestampRef.current!;
+      const newerPosts = result.posts.filter((p) => p.timestamp > baseline);
+
+      if (newerPosts.length > 0) {
+        const avatars: NewPostAvatar[] = [];
+        const seen = new Set<string>();
+        for (const post of newerPosts) {
+          if (!seen.has(post.user_id) && avatars.length < 3) {
+            seen.add(post.user_id);
+            avatars.push({ userId: post.user_id, username: post.username });
+          }
         }
-      }
-      if (firstPostChanged) {
         setNewPostAvatars(avatars);
-        setNewPostCount(Math.max(count, 1));
+        setNewPostCount(newerPosts.length);
         if (!hasNewPostsRef.current) {
           hasNewPostsRef.current = true;
           setHasNewPosts(true);
@@ -127,7 +88,7 @@ export function useNewPostsChecker({
         setNewPostCount(0);
       }
     } catch {}
-  }, [feed, by, topic, allowed_tags, walletAddress, extractNewPostInfo]);
+  }, [feed, by, topic, allowed_tags, walletAddress]);
 
   useEffect(() => {
     if (!enabled || !isFocused) return;
@@ -149,24 +110,16 @@ export function useNewPostsChecker({
     setHasNewPosts(false);
     setNewPostAvatars([]);
     setNewPostCount(0);
-    baselinePostIdsRef.current = new Set();
-    baselineFirstPostIdRef.current = null;
-    baselineTopThreeRef.current = new Set();
+    baselineTimestampRef.current = null;
   }, []);
 
-  const resetBaseline = useCallback((newPostIds: Set<string> | null, newFirstPostId: string | null, newTopThree: string[] | null) => {
+  const resetBaseline = useCallback((newTimestamp: number | null) => {
     hasNewPostsRef.current = false;
     setHasNewPosts(false);
     setNewPostAvatars([]);
     setNewPostCount(0);
-    if (newPostIds && newPostIds.size > 0) {
-      baselinePostIdsRef.current = newPostIds;
-    }
-    if (newFirstPostId) {
-      baselineFirstPostIdRef.current = newFirstPostId;
-    }
-    if (newTopThree && newTopThree.length > 0) {
-      baselineTopThreeRef.current = new Set(newTopThree);
+    if (newTimestamp != null) {
+      baselineTimestampRef.current = newTimestamp;
     }
   }, []);
 

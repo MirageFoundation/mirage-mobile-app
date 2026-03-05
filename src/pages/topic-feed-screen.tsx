@@ -213,28 +213,24 @@ export function TopicFeedScreen() {
     );
   }, [data, hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, currentUser, postEditOverrides]);
 
-  const firstPostId = posts[0]?.id ?? null;
-  const topThreePostIds = useMemo(() =>
-    posts.slice(0, 3).map((p) => p.id),
-    [posts],
-  );
-  const currentPostIds = useMemo(() => {
-    const ids = new Set<string>();
-    const pageSize = 20;
-    for (let i = 0; i < Math.min(posts.length, pageSize); i++) {
-      ids.add(posts[i].id);
+  const latestPostTimestamp = useMemo(() => {
+    const pages = data?.pages;
+    if (!pages || pages.length === 0) return null;
+    const firstPage = pages[0];
+    if (!firstPage.posts || firstPage.posts.length === 0) return null;
+    let maxTs = 0;
+    for (const post of firstPage.posts) {
+      if (post.timestamp > maxTs) maxTs = post.timestamp;
     }
-    return ids;
-  }, [posts]);
+    return maxTs > 0 ? maxTs : null;
+  }, [data?.pages]);
 
   const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, resetBaseline } = useNewPostsChecker({
     topic: topicName,
     by: sortBy === "magic" ? "magic" : "newest",
     allowed_tags: allowedTags || undefined,
     enabled: true,
-    currentPostIds,
-    firstPostId,
-    topThreePostIds,
+    latestPostTimestamp,
   });
   const dismissNewPostsRef = useRef<(() => void) | null>(null);
   dismissNewPostsRef.current = dismissNewPosts;
@@ -492,7 +488,7 @@ export function TopicFeedScreen() {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
       } catch {}
     });
-    resetBaseline(null, null, null);
+    resetBaseline(null);
     setIsBannerLoading(false);
   }, [handleRefresh, resetBaseline]);
 
