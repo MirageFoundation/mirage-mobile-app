@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect } from "react";
-import { Pressable, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -25,6 +25,7 @@ type NewPostsButtonProps = {
   topOffset?: number;
   avatars?: NewPostAvatar[];
   newPostCount?: number;
+  loading?: boolean;
 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -35,6 +36,7 @@ export const NewPostsButton = ({
   topOffset,
   avatars = [],
   newPostCount = 0,
+  loading = false,
 }: NewPostsButtonProps) => {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
@@ -85,7 +87,11 @@ export const NewPostsButton = ({
         end={{ x: 1, y: 0 }}
         style={styles.gradient}
       >
-        <Ionicons name="arrow-up" size={14} color="#fff" />
+        {loading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Ionicons name="arrow-up" size={14} color="#fff" />
+        )}
         {showAvatars && (
           <View style={[styles.avatarStack, { width: avatarStackWidth }]}>
             {displayAvatars.map((avatar, index) => (

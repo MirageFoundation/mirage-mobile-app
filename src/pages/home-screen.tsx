@@ -69,6 +69,7 @@ export function HomeScreen() {
 
 
   const backgroundTimeRef = useRef<number | null>(null);
+  const isAutoRefreshingRef = useRef(false);
   const [isFeedRefreshing, setIsFeedRefreshing] = useState(false);
   const [hasNewPosts, setHasNewPosts] = useState(false);
   const [newPostAvatars, setNewPostAvatars] = useState<{ userId: string; username: string }[]>([]);
@@ -79,13 +80,18 @@ export function HomeScreen() {
   }, []);
 
   const handleNewPostsChange = useCallback((hasNew: boolean, avatars: { userId: string; username: string }[], count: number) => {
+    if (isAutoRefreshingRef.current) return;
     setHasNewPosts(hasNew);
     setNewPostAvatars(avatars);
     setNewPostCount(count);
   }, []);
 
+  const [isBannerLoading, setIsBannerLoading] = useState(false);
+
   const handleNewPostsPress = useCallback(async () => {
+    setIsBannerLoading(true);
     await tabbedFeedRef.current?.handleNewPostsPress();
+    setIsBannerLoading(false);
     setHasNewPosts(false);
   }, []);
 
@@ -124,11 +130,17 @@ export function HomeScreen() {
     if (wasBackgrounded) {
       const lastForeground = Number(storage.getString("app_last_foreground_time") ?? "0");
       const elapsed = Date.now() - lastForeground;
-      const timer = elapsed >= 2 * 60 * 60 * 1000
-        ? setTimeout(() => {
+      const timer = elapsed >= 5 * 60 * 1000
+        ? setTimeout(async () => {
+            isAutoRefreshingRef.current = true;
+            setHasNewPosts(false);
             showBars();
             tabbedFeedRef.current?.scrollToTop();
-            tabbedFeedRef.current?.refresh({ fetchAllNew: true });
+            await tabbedFeedRef.current?.refresh({ fetchAllNew: true });
+            tabbedFeedRef.current?.scrollToTop();
+            tabbedFeedRef.current?.dismissNewPosts();
+            setHasNewPosts(false);
+            isAutoRefreshingRef.current = false;
           }, 300)
         : setTimeout(() => {
             tabbedFeedRef.current?.checkNewPosts();
@@ -582,6 +594,7 @@ export function HomeScreen() {
         topOffset={insets.top + 44}
         avatars={newPostAvatars}
         newPostCount={newPostCount}
+        loading={isBannerLoading}
       />
 
       <UpdateBanner

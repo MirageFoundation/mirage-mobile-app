@@ -203,11 +203,14 @@ export const HomeTabbedFeed = forwardRef<
     [latestQuery.data, transformPosts, baseFeed, followedUsers, followedTopics, postEditOverrides],
   );
 
-  const handleRefresh = useCallback(async (options?: { fetchAllNew?: boolean }) => {
+  const handleRefresh = useCallback(async (options?: { fetchAllNew?: boolean; silent?: boolean }) => {
     if (isRefreshingRef.current) return;
     isRefreshingRef.current = true;
-    setIsRefreshing(true);
-    onRefreshingChange?.(true);
+    if (!options?.silent) {
+      dismissNewPostsRef.current?.();
+      setIsRefreshing(true);
+      onRefreshingChange?.(true);
+    }
     try {
       const sortBy = activeTabIndex === 0 ? "magic" : "newest";
 
@@ -287,9 +290,10 @@ export const HomeTabbedFeed = forwardRef<
       console.error("Failed to refresh feed:", error);
     } finally {
       isRefreshingRef.current = false;
-      setIsRefreshing(false);
-      onRefreshingChange?.(false);
-      dismissNewPostsRef.current?.();
+      if (!options?.silent) {
+        setIsRefreshing(false);
+        onRefreshingChange?.(false);
+      }
     }
   }, [
     activeTabIndex,
@@ -321,13 +325,13 @@ export const HomeTabbedFeed = forwardRef<
     try {
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
     } catch {}
+    dismissNewPostsRef.current?.();
     await handleRefresh();
     requestAnimationFrame(() => {
       try {
         listRef.current?.scrollToOffset({ offset: 0, animated: false });
       } catch {}
     });
-    dismissNewPostsRef.current?.();
   }, [activeTabIndex, handleRefresh]);
 
   useEffect(() => {
@@ -369,9 +373,6 @@ export const HomeTabbedFeed = forwardRef<
   const handleNewPostsPress = useCallback(async () => {
     const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
 
-    setIsRefreshing(true);
-    onRefreshingChange?.(true);
-
     try {
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
     } catch {}
@@ -379,10 +380,7 @@ export const HomeTabbedFeed = forwardRef<
     showBars();
 
     const minDelay = new Promise<void>((r) => setTimeout(r, 600));
-    await Promise.all([handleRefresh(), minDelay]);
-
-    setIsRefreshing(false);
-    onRefreshingChange?.(false);
+    await Promise.all([handleRefresh({ silent: true }), minDelay]);
 
     requestAnimationFrame(() => {
       try {
@@ -390,7 +388,7 @@ export const HomeTabbedFeed = forwardRef<
       } catch {}
     });
     resetBaseline(null, null, null);
-  }, [showBars, activeTabIndex, handleRefresh, resetBaseline, onRefreshingChange]);
+  }, [showBars, activeTabIndex, handleRefresh, resetBaseline]);
 
   useImperativeHandle(
     ref,

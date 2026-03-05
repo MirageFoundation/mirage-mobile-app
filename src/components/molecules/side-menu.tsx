@@ -347,15 +347,22 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       ? Math.floor(userStatus.balance / 1_000_000)
       : 0;
 
-    const { topicsBeforeShowMore, peopleBeforeShowMore } = usePreferencesStore();
+    const { topicsBeforeShowMore, peopleBeforeShowMore } =
+      usePreferencesStore();
 
     const { data: followedData, isLoading: isLoadingFollowed } =
       useUserFollowed();
 
     const allFollowedUsers = followedData?.followed_users ?? [];
     const allFollowedTopics = followedData?.followed_topics ?? [];
-    const followedUsers = peopleBeforeShowMore === -1 ? allFollowedUsers : allFollowedUsers.slice(0, peopleBeforeShowMore);
-    const followedTopics = topicsBeforeShowMore === -1 ? allFollowedTopics : allFollowedTopics.slice(0, topicsBeforeShowMore);
+    const followedUsers =
+      peopleBeforeShowMore === -1
+        ? allFollowedUsers
+        : allFollowedUsers.slice(0, peopleBeforeShowMore);
+    const followedTopics =
+      topicsBeforeShowMore === -1
+        ? allFollowedTopics
+        : allFollowedTopics.slice(0, topicsBeforeShowMore);
 
     const translateX = useSharedValue(-MENU_WIDTH);
     const backdropOpacity = useSharedValue(0);
@@ -727,7 +734,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 43
+                          update 44
                         </Text>
                         <Text
                           style={{
@@ -778,7 +785,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 43
+                          update 44
                         </Text>
                         <Text
                           style={{

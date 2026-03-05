@@ -78,6 +78,7 @@ export function TopicFeedScreen() {
   const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const [isBannerLoading, setIsBannerLoading] = useState(false);
   const [sortBy, setSortBy] = useState<"magic" | "newest">("magic");
 
   const SORT_OPTIONS = useMemo(
@@ -479,6 +480,7 @@ export function TopicFeedScreen() {
   }, [refetch]);
 
   const handleNewPostsPress = useCallback(async () => {
+    setIsBannerLoading(true);
     try {
       flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
     } catch {}
@@ -491,6 +493,7 @@ export function TopicFeedScreen() {
       } catch {}
     });
     resetBaseline(null, null, null);
+    setIsBannerLoading(false);
   }, [handleRefresh, resetBaseline]);
 
   const handleItemVisible = useCallback((index: number) => {
@@ -916,6 +919,7 @@ export function TopicFeedScreen() {
         topOffset={insets.top + 52}
         avatars={newPostAvatars}
         newPostCount={newPostCount}
+        loading={isBannerLoading}
       />
 
       <PostOptionsSheet
