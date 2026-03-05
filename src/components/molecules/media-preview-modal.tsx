@@ -2,11 +2,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import YoutubePlayer, { type YoutubeIframeRef } from "react-native-youtube-iframe";
 import {
   ActivityIndicator,
   Dimensions,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   View,
 } from "react-native";
@@ -30,6 +32,11 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 import { Text } from "@/src/components/ui/primitives";
 import { useVideoMuteStore } from "@/src/stores";
+import {
+  YouTubeAutoplayEmbed,
+  type YouTubeAutoplayEmbedRef,
+} from "./youtube-autoplay-embed";
+import { extractYouTubeVideoId } from "./post-card-utils";
 
 const PreviewVideoItem = memo(function PreviewVideoItem({
   item,
@@ -117,6 +124,173 @@ const PreviewVideoItem = memo(function PreviewVideoItem({
   );
 });
 
+const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
+  item,
+  width,
+  isActive,
+}: {
+  item: ResolvedMedia;
+  width: number;
+  isActive: boolean;
+}) {
+  const embedRef = useRef<YouTubeAutoplayEmbedRef | null>(null);
+  const iframeRef = useRef<YoutubeIframeRef | null>(null);
+  const insets = useSafeAreaInsets();
+  const [playing, setPlaying] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const muted = useVideoMuteStore((s) => s.isMuted);
+  const toggleMute = useVideoMuteStore((s) => s.toggleMute);
+
+  const videoId = extractYouTubeVideoId(item.uri) ?? "";
+  const isAndroid = Platform.OS === "android";
+  const youtubeHeight = Math.max(240, SCREEN_HEIGHT - (insets.top + insets.bottom + 32));
+
+  useEffect(() => {
+    if (!isActive) {
+      setPlaying(false);
+      if (isAndroid) {
+        embedRef.current?.pause();
+      }
+    }
+  }, [isActive, isAndroid]);
+
+  const handleTogglePlay = useCallback(() => {
+    setPlaying((prev) => {
+      const next = !prev;
+      if (isAndroid) {
+        if (next) {
+          embedRef.current?.play();
+        } else {
+          embedRef.current?.pause();
+        }
+      }
+      return next;
+    });
+  }, [isAndroid]);
+
+  const handleToggleMute = useCallback(() => {
+    const nextMuted = !muted;
+    toggleMute();
+    if (isAndroid) {
+      embedRef.current?.setMuted(nextMuted);
+    }
+  }, [muted, toggleMute, isAndroid]);
+
+  const handleSeekBy = useCallback(
+    async (seconds: number) => {
+      if (isAndroid) {
+        embedRef.current?.seekBy(seconds);
+        return;
+      }
+      try {
+        const current = await iframeRef.current?.getCurrentTime();
+        if (typeof current === "number") {
+          const next = Math.max(current + seconds, 0);
+          iframeRef.current?.seekTo(next, true);
+        }
+      } catch {}
+    },
+    [isAndroid],
+  );
+
+  return (
+    <View
+      style={{
+        width,
+        height: SCREEN_HEIGHT,
+        justifyContent: "center",
+        alignItems: "center",
+        paddingTop: insets.top + 12,
+        paddingBottom: insets.bottom + 12,
+      }}
+    >
+      <Pressable
+        onPress={isAndroid ? undefined : handleTogglePlay}
+        style={{ width, height: youtubeHeight }}
+      >
+        {isAndroid ? (
+          <YouTubeAutoplayEmbed
+            ref={embedRef}
+            height={youtubeHeight}
+            videoId={videoId}
+            play={playing && isActive}
+            muted={muted}
+            autoplay={true}
+            controls={false}
+            loop={true}
+            allowFullscreen={false}
+            onPress={handleTogglePlay}
+            onReady={() => setIsLoading(false)}
+            onPlaying={() => {
+              setIsLoading(false);
+              setPlaying(true);
+            }}
+            onStateChange={(state) => {
+              if (state === "playing") {
+                setPlaying(true);
+                setIsLoading(false);
+              }
+              if (state === "paused" || state === "ended") {
+                setPlaying(false);
+              }
+            }}
+          />
+        ) : (
+          <YoutubePlayer
+            ref={iframeRef}
+            height={youtubeHeight}
+            videoId={videoId}
+            play={playing && isActive}
+            mute={muted}
+            forceAndroidAutoplay={false}
+            initialPlayerParams={{
+              controls: false,
+              preventFullScreen: false,
+              rel: false,
+            }}
+            onReady={() => setIsLoading(false)}
+            onChangeState={(event: string) => {
+              if (event === "playing") {
+                setPlaying(true);
+                setIsLoading(false);
+              }
+              if (event === "paused" || event === "ended") {
+                setPlaying(false);
+              }
+            }}
+            webViewProps={{
+              allowsInlineMediaPlayback: true,
+              mediaPlaybackRequiresUserAction: false,
+            }}
+          />
+        )}
+
+      </Pressable>
+
+      <View style={[previewVideoStyles.youtubeControlsRow, { bottom: insets.bottom + 96 }]}>
+        <Pressable onPress={() => handleSeekBy(-10)} style={previewVideoStyles.youtubeControlButton}>
+          <Ionicons name="play-back" size={22} color="#fff" />
+        </Pressable>
+        <Pressable onPress={handleTogglePlay} style={previewVideoStyles.youtubeControlButton}>
+          <Ionicons name={playing ? "pause" : "play"} size={32} color="#fff" />
+        </Pressable>
+        <Pressable onPress={() => handleSeekBy(10)} style={previewVideoStyles.youtubeControlButton}>
+          <Ionicons name="play-forward" size={22} color="#fff" />
+        </Pressable>
+      </View>
+      <Pressable
+        onPress={handleToggleMute}
+        style={[previewVideoStyles.muteButton, { bottom: insets.bottom + 56 }]}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <View style={previewVideoStyles.muteButtonInner}>
+          <Ionicons name={muted ? "volume-mute" : "volume-high"} size={22} color="#fff" />
+        </View>
+      </Pressable>
+    </View>
+  );
+});
+
 const previewVideoStyles = StyleSheet.create({
   playOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -140,6 +314,21 @@ const previewVideoStyles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  youtubeControlsRow: {
+    position: "absolute",
+    bottom: 96,
+    alignSelf: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  youtubeControlButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     alignItems: "center",
     justifyContent: "center",
@@ -339,6 +528,8 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
             renderItem={({ item, index }) =>
               item.type === "video" ? (
                 <PreviewVideoItem item={item} width={SCREEN_WIDTH} isActive={index === activeGalleryIndex} />
+              ) : item.type === "youtube" ? (
+                <PreviewYouTubeItem item={item} width={SCREEN_WIDTH} isActive={index === activeGalleryIndex} />
               ) : (
                 <View style={styles.mediaContainer}>
                   <Image
@@ -362,6 +553,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
   }
 
   const isVideo = media!.type === "video";
+  const isYouTube = media!.type === "youtube";
   const isGif = media!.type === "gif";
   const isImage = media!.type === "image";
 
@@ -433,7 +625,11 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
             </Pressable>
           )}
 
-          {isLoading && (
+          {isYouTube && (
+            <PreviewYouTubeItem item={media!} width={SCREEN_WIDTH} isActive={visible} />
+          )}
+
+          {!isYouTube && isLoading && (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#fff" />
             </View>

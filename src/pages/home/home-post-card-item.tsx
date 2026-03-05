@@ -1,6 +1,7 @@
 import { memo, useCallback, useMemo, useRef, useEffect } from "react";
 import type { Post } from "@/src/components/molecules";
 import { PostCard } from "@/src/components/molecules";
+import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { logPress } from "@/src/utils/press-logger";
 import { getShareBaseUrl } from "@/src/stores";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
@@ -149,13 +150,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     const p = postRef.current;
     logPress({ name: "post_reveal", postId: p.id });
     getHandlers().onRevealContent?.(p.id);
-    const hasVideo = p.media?.some(
-      (m) =>
-        m.type === "video" ||
-        m.type === "youtube" ||
-        (m.type === "gif" && typeof m.uri === "string" && m.uri.includes("redgifs.com")),
-    );
-    if (hasVideo) {
+    if (postHasPlayableVideo(p)) {
       useHomePostCardStore.getState().setActiveVideoPostId(feedScreen, p.id);
     }
   }, [feedScreen]);

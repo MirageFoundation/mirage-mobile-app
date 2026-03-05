@@ -7,6 +7,7 @@ import { logPress } from "@/src/utils/press-logger";
 type PostCardItemProps = {
   post: Post;
  isVisible?: boolean;
+ screenActive?: boolean;
  isOwnPost?: boolean;
  isTopicFollowed?: boolean;
  contentRevealed?: boolean;
@@ -57,12 +58,14 @@ function arePostCardItemPropsEqual(
   if (prev.awards?.length !== next.awards?.length) return false;
   if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
   if (prevProps.isVisible !== nextProps.isVisible) return false;
+  if (prevProps.screenActive !== nextProps.screenActive) return false;
   return true;
 }
 
 export const PostCardItem = memo(function PostCardItem({
 post,
 isVisible = false,
+screenActive = true,
 isOwnPost = false,
 isTopicFollowed = false,
 contentRevealed = false,
@@ -186,6 +189,7 @@ onPostPress,
      isVisible={isVisible}
      isTopicFollowed={isTopicFollowed}
       showFollowButton={showFollowButton}
+     screenActive={screenActive}
     onPress={handlePostPress}
     onAuthorPress={handleAuthorPress}
      onMorePress={handleMorePress}

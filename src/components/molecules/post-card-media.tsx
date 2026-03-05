@@ -28,6 +28,10 @@ import YoutubePlayer from "react-native-youtube-iframe";
 import { extractYouTubeVideoId, type ResolvedMedia } from "./post-card-utils";
 import { MediaGallery } from "./media-gallery";
 import { useVideoMuteStore } from "@/src/stores";
+import {
+  YouTubeAutoplayEmbed,
+  type YouTubeAutoplayEmbedRef,
+} from "./youtube-autoplay-embed";
 
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -99,6 +103,7 @@ export const PostCardMedia = memo(
     const toggleMute = useVideoMuteStore((s) => s.toggleMute);
     const [mediaLoaded, setMediaLoaded] = useState(false);
     const videoRef = useRef<Video | null>(null);
+    const youtubeEmbedRef = useRef<YouTubeAutoplayEmbedRef | null>(null);
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const aspectRatioLockedRef = useRef(false);
@@ -110,10 +115,11 @@ export const PostCardMedia = memo(
       pauseVideo: () => {
         if (videoRef.current) {
           videoRef.current.pauseAsync().catch(() => {});
-          setIsVideoPlaying(false);
-          setIsVideoLoading(false);
-          userInitiatedPlayRef.current = false;
         }
+        youtubeEmbedRef.current?.pause();
+        setIsVideoPlaying(false);
+        setIsVideoLoading(false);
+        userInitiatedPlayRef.current = false;
       },
     }));
 
@@ -165,6 +171,10 @@ export const PostCardMedia = memo(
 
     useEffect(() => {
       const isPlayable = media?.type === "video" || media?.type === "youtube";
+      const canAutoPlayCurrentMedia =
+        media?.type === "youtube"
+          ? ((Platform.OS === "android" && allowAutoplay) || feedTappedToPlay)
+          : (allowAutoplay || feedTappedToPlay);
       if (!isPlayable || shouldBlurContent) {
         setIsVideoPlaying(false);
         setIsVideoLoading(false);
@@ -176,12 +186,12 @@ export const PostCardMedia = memo(
       const wasBlurred = prevShouldBlurRef.current;
       prevShouldBlurRef.current = shouldBlurContent;
 
-      if (wasBlurred && !shouldBlurContent && screenActive && (allowAutoplay || feedTappedToPlay)) {
+      if (wasBlurred && !shouldBlurContent && screenActive && canAutoPlayCurrentMedia) {
         setIsVideoPlaying(true);
         videoRef.current?.playAsync().catch(() => {});
       }
 
-      if (isVisible && screenActive && (allowAutoplay || feedTappedToPlay)) {
+      if (isVisible && screenActive && canAutoPlayCurrentMedia) {
         setIsVideoPlaying(true);
       } else if (!isVisible || !screenActive) {
         setIsVideoPlaying(false);
@@ -199,11 +209,25 @@ export const PostCardMedia = memo(
       feedTappedToPlay,
     ]);
 
+    const shouldAutoPlayYouTube = Platform.OS === "android" && allowAutoplay;
+
     useEffect(() => {
       if (videoRef.current && media?.type === "video") {
         videoRef.current.setStatusAsync({ isMuted }).catch(() => {});
       }
     }, [isMuted, media?.type]);
+
+    const shouldUseAndroidYouTubeEmbed =
+      media?.type === "youtube" && Platform.OS === "android";
+
+    const effectiveYouTubeMuted = isPostDetail ? isMuted : true;
+
+    const shouldPlayYouTube =
+      media?.type === "youtube" &&
+      isVideoPlaying &&
+      isVisible &&
+      screenActive &&
+      !shouldBlurContent;
 
     const updateMediaAspectRatioFromSize = useCallback(
       (width?: number, height?: number) => {
@@ -280,6 +304,20 @@ export const PostCardMedia = memo(
       [isPostDetail, allowAutoplay, isVideoPlaying, feedTappedToPlay, handleVideoToggle, onMediaPress],
     );
 
+    const handleFeedYouTubeTap = useCallback(
+      (event: GestureResponderEvent) => {
+        event.stopPropagation?.();
+        if (isPostDetail) return;
+        if (!shouldAutoPlayYouTube && !isVideoPlaying && !feedTappedToPlay) {
+          setFeedTappedToPlay(true);
+          return;
+        }
+        triggerHaptic("selection");
+        onMediaPress?.();
+      },
+      [isPostDetail, shouldAutoPlayYouTube, isVideoPlaying, feedTappedToPlay, onMediaPress],
+    );
+
     const handlePlaybackStatusUpdate = useCallback(
       (status: AVPlaybackStatus) => {
         if (!status.isLoaded) {
@@ -311,6 +349,13 @@ export const PostCardMedia = memo(
         const newMutedState = !isMuted;
         toggleMute();
 
+        if (media?.type === "youtube") {
+          if (shouldUseAndroidYouTubeEmbed) {
+            youtubeEmbedRef.current?.setMuted(newMutedState);
+          }
+          return;
+        }
+
         // When unmuting, we need to pause and resume to initialize audio
         if (videoRef.current) {
           try {
@@ -326,7 +371,45 @@ export const PostCardMedia = memo(
           } catch {}
         }
       },
-      [isMuted, toggleMute],
+      [isMuted, toggleMute, media?.type, shouldUseAndroidYouTubeEmbed],
+    );
+
+    const handleYouTubeTogglePlay = useCallback(
+      (event: GestureResponderEvent) => {
+        event.stopPropagation?.();
+        setIsVideoPlaying((prev) => {
+          const next = !prev;
+          if (shouldUseAndroidYouTubeEmbed) {
+            if (next) {
+              youtubeEmbedRef.current?.play();
+            } else {
+              youtubeEmbedRef.current?.pause();
+            }
+          }
+          return next;
+        });
+      },
+      [shouldUseAndroidYouTubeEmbed],
+    );
+
+    const handleYouTubeSeekBack = useCallback(
+      (event: GestureResponderEvent) => {
+        event.stopPropagation?.();
+        if (shouldUseAndroidYouTubeEmbed) {
+          youtubeEmbedRef.current?.seekBy(-10);
+        }
+      },
+      [shouldUseAndroidYouTubeEmbed],
+    );
+
+    const handleYouTubeSeekForward = useCallback(
+      (event: GestureResponderEvent) => {
+        event.stopPropagation?.();
+        if (shouldUseAndroidYouTubeEmbed) {
+          youtubeEmbedRef.current?.seekBy(10);
+        }
+      },
+      [shouldUseAndroidYouTubeEmbed],
     );
 
     const handleMediaPress = useCallback(
@@ -392,15 +475,99 @@ export const PostCardMedia = memo(
       <View style={styles.mediaContainer}>
         <View style={[styles.mediaWrapper, mediaWrapperStyle]}>
           {media.type === "youtube" ? (
-            <YoutubePlayer
-              height={exceedsMaxHeight ? MEDIA_MAX_HEIGHT : calculatedHeight}
-              videoId={extractYouTubeVideoId(media.uri) ?? ""}
-              play={isVideoPlaying && isVisible && screenActive}
-              onReady={() => setMediaLoaded(true)}
-              webViewProps={{
-                allowsInlineMediaPlayback: true,
-              }}
-            />
+            <>
+              {shouldUseAndroidYouTubeEmbed ? (
+                <YouTubeAutoplayEmbed
+                  ref={youtubeEmbedRef}
+                  height={exceedsMaxHeight ? MEDIA_MAX_HEIGHT : calculatedHeight}
+                  videoId={extractYouTubeVideoId(media.uri) ?? ""}
+                  play={shouldPlayYouTube}
+                  muted={effectiveYouTubeMuted}
+                  autoplay={isVisible && screenActive && !shouldBlurContent && (shouldAutoPlayYouTube || feedTappedToPlay)}
+                  controls={false}
+                  loop={true}
+                  allowFullscreen={false}
+                  onPress={isPostDetail ? handleYouTubeTogglePlay : undefined}
+                  onReady={() => {
+                    setMediaLoaded(true);
+                  }}
+                  onPlaying={() => {
+                    setMediaLoaded(true);
+                    setIsVideoLoading(false);
+                    setIsVideoPlaying(true);
+                  }}
+                  onStateChange={(state) => {
+                    if (state === "playing") {
+                      setIsVideoPlaying(true);
+                      setMediaLoaded(true);
+                    }
+                    if (state === "paused" || state === "ended") {
+                      setIsVideoPlaying(false);
+                    }
+                  }}
+                />
+              ) : (
+                <YoutubePlayer
+                  height={exceedsMaxHeight ? MEDIA_MAX_HEIGHT : calculatedHeight}
+                  videoId={extractYouTubeVideoId(media.uri) ?? ""}
+                  play={shouldPlayYouTube}
+                  mute={effectiveYouTubeMuted}
+                  forceAndroidAutoplay={Platform.OS === "android" && !isPostDetail}
+                  initialPlayerParams={{
+                    controls: isPostDetail,
+                    preventFullScreen: !isPostDetail,
+                    rel: false,
+                    loop: true,
+                  }}
+                  onReady={() => {
+                    setMediaLoaded(true);
+                  }}
+                  onChangeState={(event: string) => {
+                    if (event === "playing") {
+                      setMediaLoaded(true);
+                      setIsVideoPlaying(true);
+                    }
+                    if (event === "paused" || event === "ended") {
+                      setIsVideoPlaying(false);
+                    }
+                  }}
+                  webViewProps={{
+                    allowsInlineMediaPlayback: true,
+                    mediaPlaybackRequiresUserAction: false,
+                  }}
+                />
+              )}
+              {!isPostDetail && !shouldBlurContent && (
+                <View style={styles.playOverlay}>
+                  <Pressable
+                    onPress={handleFeedYouTubeTap}
+                    style={styles.videoTapArea}
+                  />
+                  {!shouldAutoPlayYouTube && !isVideoPlaying && !feedTappedToPlay ? (
+                    <View style={styles.tapToPlayContainer} pointerEvents="none">
+                      <Text size="sm" weight="semibold" numberOfLines={1} style={{ color: "#fff" }}>
+                        Tap to play
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              )}
+              {isPostDetail && shouldUseAndroidYouTubeEmbed && !shouldBlurContent && (
+                <View style={styles.youtubeControlsContainer} pointerEvents="box-none">
+                  <View style={styles.youtubeControlsRow}>
+                    <Pressable onPress={handleYouTubeSeekBack} style={styles.youtubeControlButton}>
+                      <Ionicons name="play-back" size={18} color="#fff" />
+                    </Pressable>
+                    <Pressable onPress={handleYouTubeTogglePlay} style={styles.youtubeControlButton}>
+                      <Ionicons name={isVideoPlaying ? "pause" : "play"} size={18} color="#fff" />
+                    </Pressable>
+                    <Pressable onPress={handleYouTubeSeekForward} style={styles.youtubeControlButton}>
+                      <Ionicons name="play-forward" size={18} color="#fff" />
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+            </>
           ) : media.type === "video" ? (
             <Pressable onPress={isPostDetail ? handleMediaPress : handleFeedVideoTap} style={styles.media}>
               <Video
@@ -472,7 +639,7 @@ export const PostCardMedia = memo(
             </Pressable>
           )}
 
-          {!mediaLoaded && !shouldBlurContent && (
+          {!mediaLoaded && !shouldBlurContent && media.type !== "youtube" && (
             <View style={[styles.skeletonOverlay]}>
               <ActivityIndicator size="small" color="rgba(150,150,150,0.6)" />
             </View>
@@ -523,9 +690,9 @@ export const PostCardMedia = memo(
               </View>
             )}
 
-          {media.type === "video" &&
+          {(media.type === "video" || media.type === "youtube") &&
             !shouldBlurContent &&
-            !isVideoProcessing &&
+            (media.type !== "video" || !isVideoProcessing) &&
             isPostDetail && (
               <Pressable
                 onPress={() => {
@@ -541,9 +708,9 @@ export const PostCardMedia = memo(
             )}
 
           {/* Mute/Unmute button for videos */}
-          {media.type === "video" &&
+          {(media.type === "video" || media.type === "youtube") &&
             !shouldBlurContent &&
-            !isVideoProcessing && (
+            (media.type !== "video" || !isVideoProcessing) && (
               <Pressable
                 onPress={handleMuteToggle}
                 style={styles.muteButton}
@@ -705,6 +872,27 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
+  youtubeControlsContainer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: theme.spacing.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 25,
+  },
+  youtubeControlsRow: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+  },
+  youtubeControlButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(0, 0, 0, 0.65)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   processingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0, 0, 0, 0.75)",
@@ -715,6 +903,8 @@ const styles = StyleSheet.create((theme) => ({
     position: "absolute",
     bottom: theme.spacing.sm,
     right: theme.spacing.sm,
+    zIndex: 30,
+    elevation: 4,
   },
   muteButtonInner: {
     width: 32,

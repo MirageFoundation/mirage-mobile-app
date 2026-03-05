@@ -1,6 +1,7 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Clipboard from "expo-clipboard";
+import { useIsFocused } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -55,6 +56,7 @@ import {
 } from "@/src/components/molecules";
 import { PostCardItem } from "@/src/components/molecules/post-card-item";
 import { PostCardSkeletonList } from "@/src/components/molecules/post-card-skeleton";
+import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { ProfileCommentItem } from "@/src/components/molecules/profile-comment-item";
 import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { UserProfileContentAnimated } from "@/src/components/molecules/user-profile-content-animated";
@@ -111,6 +113,7 @@ const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
  if (p.hasDisliked !== n.hasDisliked) return false;
  if (p.awards?.length !== n.awards?.length) return false;
  if (prev.isVisible !== next.isVisible) return false;
+ if (prev.screenActive !== next.screenActive) return false;
  if (prev.contentRevealed !== next.contentRevealed) return false;
  return true;
 });
@@ -125,6 +128,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  contentAnimatedStyle,
  isOwnProfile,
  isVisible,
+ screenActive,
  contentRevealed,
  shareUrl,
  onPostPress,
@@ -143,6 +147,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  contentAnimatedStyle: any;
  isOwnProfile: boolean;
  isVisible?: boolean;
+ screenActive?: boolean;
  contentRevealed?: boolean;
  shareUrl: string;
  onPostPress: (postId: string) => void;
@@ -173,6 +178,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
     post={displayPost}
     isOwnPost={isOwnProfile}
     isVisible={isVisible}
+    screenActive={screenActive}
     contentRevealed={contentRevealed}
     showUrlCard={false}
     showFollowButton={false}
@@ -214,9 +220,9 @@ const AnimatedCommentWrapper = memo(function AnimatedCommentWrapper({
 
 export function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  console.log('[UserProfileScreen] RENDER - v3 with refetchOnMount:false');
 
   const router = useRouter();
+  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const queryClient = useQueryClient();
@@ -765,14 +771,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
       return next;
     });
     const post = postsWithVotes.find((p) => p.id === postId);
-    if (
-      post?.media?.some(
-        (m) =>
-          m.type === "video" ||
-          m.type === "youtube" ||
-          (m.type === "gif" && typeof m.uri === "string" && m.uri.includes("redgifs.com")),
-      )
-    ) {
+    if (postHasPlayableVideo(post)) {
       setActiveVideoPostId(postId);
     }
   }, [postsWithVotes]);
@@ -780,15 +779,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   useEffect(() => {
     if (activeTab !== 0) return;
     const posts = postsWithVotes;
-    const firstVideo = posts.find(
-      (p) =>
-        p.media?.some(
-          (m) =>
-            m.type === "video" ||
-            m.type === "youtube" ||
-            (m.type === "gif" && typeof m.uri === "string" && m.uri.includes("redgifs.com")),
-        )
-    );
+    const firstVideo = posts.find((p) => postHasPlayableVideo(p));
     if (firstVideo) {
       setActiveVideoPostId(firstVideo.id);
     }
@@ -805,13 +796,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         (item) => item.isViewable && item.item && typeof item.item === "object" && "id" in item.item
       );
       const videoItems = visibleItems.filter(
-        (item) =>
-          item.item.media?.some(
-            (m: any) =>
-              m.type === "video" ||
-              m.type === "youtube" ||
-              (m.type === "gif" && typeof m.uri === "string" && m.uri.includes("redgifs.com")),
-          )
+        (item) => postHasPlayableVideo(item.item)
       );
       if (videoItems.length > 0) {
         const midIdx = Math.floor((visibleItems.length - 1) / 2);
@@ -881,6 +866,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
            contentAnimatedStyle={contentAnimatedStyle}
            isOwnProfile={isOwnProfile}
            isVisible={activeVideoPostId === item.id}
+           screenActive={isFocused}
            contentRevealed={revealedPosts.has(item.id)}
            shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
            onPostPress={handlePostPress}
@@ -938,6 +924,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
       animatedTabIndex,
       contentAnimatedStyle,
       activeVideoPostId,
+      isFocused,
       revealedPosts,
       handleRevealContent,
     ]

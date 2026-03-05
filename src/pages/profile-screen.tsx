@@ -1,6 +1,6 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -47,6 +47,7 @@ import {
 } from "@/src/components/molecules";
 import { PostCardItem } from "@/src/components/molecules/post-card-item";
 import { PostCardSkeletonList } from "@/src/components/molecules/post-card-skeleton";
+import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { ProfileCommentItem } from "@/src/components/molecules/profile-comment-item";
 import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { ProfileContentAnimated } from "@/src/components/molecules/profile-content-animated";
@@ -109,6 +110,7 @@ const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
  if (p.hasDisliked !== n.hasDisliked) return false;
  if (p.awards?.length !== n.awards?.length) return false;
  if (prev.isVisible !== next.isVisible) return false;
+ if (prev.screenActive !== next.screenActive) return false;
  return true;
 });
 const MemoizedProfileCommentItem = memo(ProfileCommentItem, (prev, next) => {
@@ -121,6 +123,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  post,
  contentAnimatedStyle,
  isVisible,
+ screenActive,
  onPostPress,
  onAuthorPress,
  onCommentPress,
@@ -130,6 +133,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  post: Post;
  contentAnimatedStyle: any;
  isVisible?: boolean;
+ screenActive?: boolean;
  onPostPress: (postId: string) => void;
  onAuthorPress: (authorId: string) => void;
  onCommentPress: (postId: string) => void;
@@ -152,6 +156,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
     post={displayPost}
     isOwnPost={true}
     isVisible={isVisible}
+   screenActive={screenActive}
     showUrlCard={false}
     onPostPress={onPostPress}
     onAuthorPress={onAuthorPress}
@@ -184,6 +189,7 @@ const AnimatedCommentWrapper = memo(function AnimatedCommentWrapper({
 
 export function ProfileScreen() {
   const router = useRouter();
+  const isFocused = useIsFocused();
   const user = useAuthStore((s) => s.user);
   const shareServer = usePreferencesStore((s) => s.shareServer);
   const insets = useSafeAreaInsets();
@@ -702,19 +708,16 @@ useEffect(() => {
 
   useEffect(() => {
     if (activeTab !== 0) return;
-    const firstVideo = uiPosts.find(
-      (p) =>
-        p.media?.some(
-          (m) =>
-            m.type === "video" ||
-            m.type === "youtube" ||
-            (m.type === "gif" && typeof m.uri === "string" && m.uri.includes("redgifs.com")),
-        )
-    );
-    if (firstVideo && !activeVideoPostId) {
+    const hasCurrentActive =
+      !!activeVideoPostId &&
+      uiPosts.some((p) => p.id === activeVideoPostId && postHasPlayableVideo(p));
+    if (hasCurrentActive) return;
+
+    const firstVideo = uiPosts.find((p) => postHasPlayableVideo(p));
+    if (firstVideo) {
       setActiveVideoPostId(firstVideo.id);
     }
-  }, [uiPosts, activeTab]);
+  }, [uiPosts, activeTab, activeVideoPostId]);
 
   const profileViewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 11,
@@ -727,13 +730,7 @@ useEffect(() => {
         (item) => item.isViewable && item.item && typeof item.item === "object" && "id" in item.item
       );
       const videoItems = visibleItems.filter(
-        (item) =>
-          item.item.media?.some(
-            (m: any) =>
-              m.type === "video" ||
-              m.type === "youtube" ||
-              (m.type === "gif" && typeof m.uri === "string" && m.uri.includes("redgifs.com")),
-          )
+        (item) => postHasPlayableVideo(item.item)
       );
       if (videoItems.length > 0) {
         const midIdx = Math.floor((visibleItems.length - 1) / 2);
@@ -831,6 +828,7 @@ useEffect(() => {
              post={cleanPost}
              contentAnimatedStyle={contentAnimatedStyle}
              isVisible={activeVideoPostId === item.id}
+             screenActive={isFocused}
              onPostPress={handlePostPress}
              onAuthorPress={handleAuthorPress}
              onCommentPress={handlePostPress}
@@ -874,6 +872,7 @@ useEffect(() => {
       contentAnimatedStyle,
       postsWithoutWarnings,
       activeVideoPostId,
+      isFocused,
       ],
     );
 

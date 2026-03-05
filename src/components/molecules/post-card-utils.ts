@@ -291,3 +291,16 @@ export function resolvePostContent(
     extraMediaCount: isOgThumbnail ? 0 : extraMediaCount,
   };
 }
+
+export function postHasPlayableVideo(post?: { media?: Array<{ type?: string; uri?: string }>; body?: string }): boolean {
+  const hasMediaVideo = !!post?.media?.some(
+    (m) =>
+      m.type === "video" ||
+      m.type === "youtube" ||
+      (m.type === "gif" && typeof m.uri === "string" && m.uri.includes("redgifs.com")),
+  );
+  if (hasMediaVideo) return true;
+  if (!post?.body) return false;
+  const url = extractFirstUrl(post.body);
+  return !!url && isYouTubeUrl(url);
+}

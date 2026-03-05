@@ -2,6 +2,7 @@ import { navigateToEditPost } from "@/src/utils/edit-post";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Dimensions, FlatList, Pressable, View } from "react-native";
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
@@ -347,6 +348,7 @@ export function SavedPostsScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const isFocused = useIsFocused();
   const toast = useToast();
   const { requireAuth } = useAuthGuard();
 
@@ -420,6 +422,13 @@ export function SavedPostsScreen() {
   const handleAuthorPress = useCallback(
     (authorId: string) => {
       router.push(`/user/${authorId}`);
+    },
+    [router],
+  );
+
+  const handleTopicPress = useCallback(
+    (topic: string) => {
+      router.push(`/topic/${encodeURIComponent(topic)}`);
     },
     [router],
   );
@@ -521,11 +530,14 @@ export function SavedPostsScreen() {
     ({ item }: { item: Post }) => (
       <PostCardItem
         post={item}
+        isVisible={true}
+        screenActive={isFocused}
         isOwnPost={currentUser?.id === item.author.id}
         shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
         showUrlCard={false}
         onPostPress={handlePostPress}
         onAuthorPress={handleAuthorPress}
+        onTopicPress={handleTopicPress}
         onMorePress={handleMorePress}
         onLikePress={handleLikePress}
         onDislikePress={handleDislikePress}
@@ -537,10 +549,12 @@ export function SavedPostsScreen() {
       shareServer,
       handlePostPress,
       handleAuthorPress,
+      handleTopicPress,
       handleMorePress,
       handleLikePress,
       handleDislikePress,
       handleCommentPress,
+      isFocused,
     ],
   );
 

@@ -18,7 +18,24 @@ const VIDEO_EXTENSIONS = new Set([
 ]);
 const GIF_EXTENSIONS = new Set(["gif"]);
 
-function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" {
+const YOUTUBE_HOSTNAMES = new Set([
+  "youtube.com",
+  "www.youtube.com",
+  "m.youtube.com",
+  "youtu.be",
+]);
+
+function isYouTubeUrl(url: string): boolean {
+  try {
+    const parsedUrl = new URL(url);
+    return YOUTUBE_HOSTNAMES.has(parsedUrl.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" | "youtube" {
+  if (isYouTubeUrl(url)) return "youtube";
   try {
     const parsedUrl = new URL(url);
     if (parsedUrl.hostname.includes("cloudflarestream.com")) {

@@ -17,18 +17,11 @@ import {
 } from "react-native";
 import Animated from "react-native-reanimated";
 import type { Post } from "@/src/components/molecules";
+import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { HomePostCardItem } from "./home-post-card-item";
 import { useHomePostCardStore } from "./home-post-card-store";
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Post>);
-
-const isPlayableMedia = (m: { type?: string; uri?: string }) =>
-  m.type === "video" ||
-  m.type === "youtube" ||
-  (m.type === "gif" && typeof m.uri === "string" && m.uri.includes("redgifs.com"));
-
-const hasPlayableVideo = (post?: { media?: Array<{ type?: string; uri?: string }> }) =>
-  !!post?.media?.some(isPlayableMedia);
 
 type HomePostListProps = {
  data: Post[];
@@ -89,7 +82,7 @@ const HomePostListInner = function HomePostListInner(
 
       const visibleItems = viewableItems.filter((item) => item.isViewable && item.item?.id);
       const videoItems = visibleItems.filter(
-        (item) => hasPlayableVideo(item.item)
+        (item) => postHasPlayableVideo(item.item)
       );
       if (videoItems.length > 0) {
         const midIdx = Math.floor((visibleItems.length - 1) / 2);
@@ -121,13 +114,13 @@ const HomePostListInner = function HomePostListInner(
       data.some(
         (p) =>
           p.id === currentActive &&
-          hasPlayableVideo(p)
+          postHasPlayableVideo(p)
       )
     ) {
       return;
     }
     const firstVideo = data.find(
-      (p) => hasPlayableVideo(p)
+      (p) => postHasPlayableVideo(p)
     );
     if (firstVideo) {
       setActiveVideoPostId(feedScreen, firstVideo.id);
