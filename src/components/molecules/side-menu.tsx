@@ -734,7 +734,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 49
+                          update 50
                         </Text>
                         <Text
                           style={{
@@ -744,7 +744,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          reloading issue fix, time based new posts check
+                          reloading issue fix, time based new posts check,utube
+                          embeded video android only
                         </Text>
                       </>
                     )}
@@ -785,7 +786,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 49
+                          update 50
                         </Text>
                         <Text
                           style={{
@@ -795,7 +796,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          reloading issue fix, time based new posts check
+                          reloading issue fix, time based new posts check,utube
+                          embeded video android only
                         </Text>
                       </>
                     )}
