@@ -125,6 +125,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  onAuthorPress,
  onCommentPress,
  onMorePress,
+  onTopicPress,
 }: {
  post: Post;
  contentAnimatedStyle: any;
@@ -133,6 +134,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  onAuthorPress: (authorId: string) => void;
  onCommentPress: (postId: string) => void;
  onMorePress: (postId: string) => void;
+  onTopicPress: (topic: string) => void;
 }) {
  const editOverride = usePostEditStore((s) => s.overrides[post.id]);
  const displayPost = editOverride ? {
@@ -155,6 +157,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
     onAuthorPress={onAuthorPress}
     onCommentPress={onCommentPress}
     onMorePress={onMorePress}
+   onTopicPress={onTopicPress}
    />
   </Animated.View>
  );
@@ -551,6 +554,13 @@ useEffect(() => {
     [router],
   );
 
+  const handleTopicPress = useCallback(
+    (topic: string) => {
+      router.push(`/topic/${encodeURIComponent(topic)}`);
+    },
+    [router],
+  );
+
   const postsById = useMemo(() => {
     const map = new Map<string, Post>();
     for (const post of uiPosts) {
@@ -825,6 +835,7 @@ useEffect(() => {
              onAuthorPress={handleAuthorPress}
              onCommentPress={handlePostPress}
              onMorePress={handlePostMorePress}
+             onTopicPress={handleTopicPress}
             />
           );
         }

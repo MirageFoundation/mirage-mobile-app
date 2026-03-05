@@ -137,6 +137,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  onBlockPost,
  onReport,
  onRevealContent,
+  onTopicPress,
 }: {
  post: Post;
  contentAnimatedStyle: any;
@@ -154,6 +155,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  onBlockPost: (postId: string) => void;
  onReport: (postId: string) => void;
  onRevealContent?: (postId: string) => void;
+  onTopicPress: (topic: string) => void;
 }) {
  const editOverride = usePostEditStore((s) => s.overrides[post.id]);
  const displayPost = editOverride ? {
@@ -185,6 +187,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
     onBlockPost={onBlockPost}
     onReport={onReport}
     onRevealContent={onRevealContent}
+   onTopicPress={onTopicPress}
    />
   </Animated.View>
  );
@@ -576,6 +579,13 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     [router, userAddress, id, displayUsername, toast]
  );
 
+  const handleTopicPress = useCallback(
+    (topic: string) => {
+      router.push(`/topic/${encodeURIComponent(topic)}`);
+    },
+    [router],
+  );
+
   const postsById = useMemo(() => {
     const map = new Map<string, Post>();
     for (const post of uiPosts) {
@@ -883,6 +893,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
            onBlockPost={handleBlockPostFromCard}
            onReport={handleReportFromCard}
            onRevealContent={handleRevealContent}
+           onTopicPress={handleTopicPress}
           />
          );
        }

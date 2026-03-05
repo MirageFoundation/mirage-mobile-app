@@ -40,6 +40,7 @@ type PostCardItemProps = {
   onBlockPost?: (postId: string) => void;
   onBlockTopic?: (postId: string, topic: string) => void;
   onReport?: (postId: string) => void;
+  onTopicPress?: (topic: string) => void;
 };
 
 function arePostCardItemPropsEqual(
@@ -81,6 +82,7 @@ onPostPress,
   onBlockPost,
   onBlockTopic,
   onReport,
+  onTopicPress,
 }: PostCardItemProps) {
   const editOverride = usePostEditStore((s) => s.overrides[post.id]);
   const displayPost = useMemo(() => {
@@ -171,6 +173,12 @@ onPostPress,
     onReport?.(post.id);
   }, [onReport, post.id]);
 
+  const handleTopicPress = useCallback(() => {
+    if (!post.topic) return;
+    logPress({ name: "post_topic_press", postId: post.id });
+    onTopicPress?.(post.topic);
+  }, [onTopicPress, post.topic, post.id]);
+
  return (
    <PostCard
      post={displayPost}
@@ -191,6 +199,7 @@ onPostPress,
     onBlockPost={handleBlockPost}
     onBlockTopic={handleBlockTopic}
     onReport={handleReport}
+    onTopicPress={handleTopicPress}
      onMediaPress={handlePostPress}
     contentRevealed={contentRevealed}
      shareUrl={shareUrl}
