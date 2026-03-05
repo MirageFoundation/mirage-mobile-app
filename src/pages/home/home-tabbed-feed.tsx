@@ -45,7 +45,7 @@ import { useNewPostsChecker, type NewPostAvatar } from "@/src/hooks/use-new-post
 
 export type HomeTabbedFeedRef = {
   scrollToTop: (tabIndex?: number) => void;
-  refresh: () => Promise<void>;
+  refresh: (options?: { fetchAllNew?: boolean }) => Promise<void>;
   isRefreshing: () => boolean;
   hasNewPosts: () => boolean;
   handleNewPostsPress: () => Promise<void>;
@@ -203,22 +203,13 @@ export const HomeTabbedFeed = forwardRef<
     [latestQuery.data, transformPosts, baseFeed, followedUsers, followedTopics, postEditOverrides],
   );
 
-  const handleRefresh = useCallback(async () => {
+  const handleRefresh = useCallback(async (options?: { fetchAllNew?: boolean }) => {
     if (isRefreshingRef.current) return;
     isRefreshingRef.current = true;
     setIsRefreshing(true);
     onRefreshingChange?.(true);
     try {
       const sortBy = activeTabIndex === 0 ? "magic" : "newest";
-
-      const newFirstPage = await getPosts({
-        limit: 20,
-        feed: baseFeed,
-        by: sortBy as any,
-        allowed_tags: allowedTags || undefined,
-        address: currentUser?.walletAddress,
-        page: 1,
-      });
 
       const postsQueryKey = queryKeys.posts({
         limit: 20,
@@ -229,19 +220,63 @@ export const HomeTabbedFeed = forwardRef<
         page: undefined,
       });
 
-      queryClient.setQueryData(postsQueryKey, (oldData: any) => {
-        if (!oldData) {
-          return {
-            pages: [newFirstPage],
-            pageParams: [1],
-          };
+      const fetchPage = (page: number) =>
+        getPosts({
+          limit: 20,
+          feed: baseFeed,
+          by: sortBy as any,
+          allowed_tags: allowedTags || undefined,
+          address: currentUser?.walletAddress,
+          page,
+        });
+
+      const newFirstPage = await fetchPage(1);
+
+      if (options?.fetchAllNew) {
+        const existingData: any = queryClient.getQueryData(postsQueryKey);
+        const existingIds = new Set<string>();
+        if (existingData?.pages) {
+          for (const page of existingData.pages) {
+            for (const post of page.posts) {
+              existingIds.add(post.post_id);
+            }
+          }
         }
-        return {
-          ...oldData,
-          pages: [newFirstPage, ...oldData.pages.slice(1)],
-          pageParams: [1, ...oldData.pageParams.slice(1)],
-        };
-      });
+
+        const newPages = [newFirstPage];
+        const newPageParams = [1];
+        let hasOverlap = newFirstPage.posts.some((p: any) => existingIds.has(p.post_id));
+        let nextPage = 2;
+        const MAX_PAGES = 10;
+
+        while (!hasOverlap && newFirstPage.has_more && nextPage <= MAX_PAGES) {
+          const page = await fetchPage(nextPage);
+          newPages.push(page);
+          newPageParams.push(nextPage);
+          hasOverlap = page.posts.some((p: any) => existingIds.has(p.post_id));
+          if (!page.has_more) break;
+          nextPage++;
+        }
+
+        queryClient.setQueryData(postsQueryKey, {
+          pages: newPages,
+          pageParams: newPageParams,
+        });
+      } else {
+        queryClient.setQueryData(postsQueryKey, (oldData: any) => {
+          if (!oldData) {
+            return {
+              pages: [newFirstPage],
+              pageParams: [1],
+            };
+          }
+          return {
+            ...oldData,
+            pages: [newFirstPage, ...oldData.pages.slice(1)],
+            pageParams: [1, ...oldData.pageParams.slice(1)],
+          };
+        });
+      }
 
       if (currentUser?.walletAddress) {
         queryClient.invalidateQueries({

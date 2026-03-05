@@ -128,19 +128,13 @@ export function HomeScreen() {
         ? setTimeout(() => {
             showBars();
             tabbedFeedRef.current?.scrollToTop();
-            tabbedFeedRef.current?.refresh();
+            tabbedFeedRef.current?.refresh({ fetchAllNew: true });
           }, 300)
         : setTimeout(() => {
             tabbedFeedRef.current?.checkNewPosts();
           }, 300);
       return () => clearTimeout(timer);
     }
-    const timer = setTimeout(() => {
-      showBars();
-      tabbedFeedRef.current?.scrollToTop();
-      tabbedFeedRef.current?.refresh();
-    }, 300);
-    return () => clearTimeout(timer);
   }, []);
 
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);

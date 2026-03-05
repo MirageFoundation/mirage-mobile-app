@@ -1,7 +1,6 @@
-import { useEffect, useRef } from "react";
-import { AppState, type AppStateStatus } from "react-native";
+import { useEffect } from "react";
 import NetInfo from "@react-native-community/netinfo";
-import { QueryClient, focusManager, onlineManager } from "@tanstack/react-query";
+import { QueryClient, onlineManager } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { storage } from "@/src/stores/mmkv-storage";
@@ -24,31 +23,13 @@ const queryClient = new QueryClient({
       staleTime: 1000 * 60 * 5, // 5 minutes
       gcTime: 1000 * 60 * 60 * 24, // 24 hours (cacheTime renamed to gcTime in v5)
       retry: 2,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
       refetchOnReconnect: true,
     },
   },
 });
 
 export { queryClient };
-
-function useAppStateFocus() {
-  const lastFocusTime = useRef(0);
-  useEffect(() => {
-    const subscription = AppState.addEventListener(
-      "change",
-      (status: AppStateStatus) => {
-        if (status === "active") {
-          const now = Date.now();
-          if (now - lastFocusTime.current < 2000) return;
-          lastFocusTime.current = now;
-        }
-        focusManager.setFocused(status === "active");
-      }
-    );
-    return () => subscription.remove();
-  }, []);
-}
 
 function useOnlineManager() {
   useEffect(() => {
@@ -60,7 +41,6 @@ function useOnlineManager() {
 }
 
 export const QueryProvider = ({ children }: { children: React.ReactNode }) => {
-  useAppStateFocus();
   useOnlineManager();
 
   return (
