@@ -14,6 +14,7 @@ type PostCardItemProps = {
  shareUrl?: string;
   showFollowButton?: boolean;
   showUrlCard?: boolean;
+  allowAutoplay?: boolean;
  onPostPress?: (postId: string) => void;
   onAuthorPress?: (authorId: string) => void;
   onMorePress?: (postId: string) => void;
@@ -59,6 +60,7 @@ function arePostCardItemPropsEqual(
   if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
   if (prevProps.isVisible !== nextProps.isVisible) return false;
   if (prevProps.screenActive !== nextProps.screenActive) return false;
+  if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
   return true;
 }
 
@@ -72,6 +74,7 @@ contentRevealed = false,
 shareUrl,
   showFollowButton = true,
   showUrlCard,
+  allowAutoplay,
 onPostPress,
   onAuthorPress,
   onMorePress,
@@ -190,6 +193,7 @@ onPostPress,
      isTopicFollowed={isTopicFollowed}
       showFollowButton={showFollowButton}
      screenActive={screenActive}
+     allowAutoplay={allowAutoplay}
     onPress={handlePostPress}
     onAuthorPress={handleAuthorPress}
      onMorePress={handleMorePress}

@@ -32,7 +32,9 @@ import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { TimeAgo } from "@/src/components/atoms";
 import {
   useAuthGuard,
+  useNetworkState,
   useVoteHandler,
+  shouldAutoplayVideo,
   type VoteResult,
 } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
@@ -368,6 +370,15 @@ export function SavedPostsScreen() {
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedTopicNames = useContentModerationStore((s) => s.blockedTopicNames);
   const shareServer = usePreferencesStore((s) => s.shareServer);
+  const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
+  const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
+
+  const { networkType } = useNetworkState();
+
+  const allowAutoplay = useMemo(
+    () => shouldAutoplayVideo(autoPlayVideos, videoAutoplayNetwork, networkType),
+    [autoPlayVideos, videoAutoplayNetwork, networkType],
+  );
 
   const { handleUpvote, handleDownvote } = useVoteHandler({
     onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
@@ -535,6 +546,7 @@ export function SavedPostsScreen() {
         isOwnPost={currentUser?.id === item.author.id}
         shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
         showUrlCard={false}
+        allowAutoplay={allowAutoplay}
         onPostPress={handlePostPress}
         onAuthorPress={handleAuthorPress}
         onTopicPress={handleTopicPress}
@@ -547,6 +559,7 @@ export function SavedPostsScreen() {
     [
       currentUser?.id,
       shareServer,
+      allowAutoplay,
       handlePostPress,
       handleAuthorPress,
       handleTopicPress,
