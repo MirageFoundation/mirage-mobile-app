@@ -15,6 +15,8 @@ const persister = createSyncStoragePersister({
   key: "mirage-query-cache",
 });
 
+const EXCLUDED_QUERY_KEYS = ["posts", "comments", "inbox"];
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -34,7 +36,18 @@ export const QueryProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <PersistQueryClientProvider
       client={queryClient}
-      persistOptions={{ persister }}
+      persistOptions={{
+        persister,
+        dehydrateOptions: {
+          shouldDehydrateQuery: (query) => {
+            const key = query.queryKey[0];
+            if (typeof key === "string" && EXCLUDED_QUERY_KEYS.includes(key)) {
+              return false;
+            }
+            return query.state.status === "success";
+          },
+        },
+      }}
       onSuccess={() => {}}
     >
       {children}
