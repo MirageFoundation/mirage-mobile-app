@@ -11,6 +11,7 @@ import { memo, useRef } from "react";
 import {
   Animated,
   Pressable,
+  Platform,
   Share,
   View,
   type StyleProp,
@@ -215,9 +216,10 @@ export const PostActions = memo(function PostActions({
     if (shareUrl) {
       try {
         await Share.share({
-          message: shareUrl,
-          url: shareUrl,
-          title: shareTitle,
+          ...(Platform.OS === "ios"
+            ? { url: shareUrl }
+            : { message: shareUrl }),
+          title: shareTitle ?? "",
         });
       } catch {
         // User cancelled or share failed - silent fail
