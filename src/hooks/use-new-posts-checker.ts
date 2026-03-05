@@ -42,6 +42,15 @@ export function useNewPostsChecker({
     }
   }, [latestPostTimestamp]);
 
+  const pendingBaselineRestore = useRef(false);
+
+  useEffect(() => {
+    if (pendingBaselineRestore.current && latestPostTimestamp != null) {
+      pendingBaselineRestore.current = false;
+      baselineTimestampRef.current = latestPostTimestamp;
+    }
+  });
+
   useEffect(() => {
     hasNewPostsRef.current = false;
     setHasNewPosts(false);
@@ -113,6 +122,9 @@ export function useNewPostsChecker({
     setHasNewPosts(false);
     setNewPostAvatars([]);
     setNewPostCount(0);
+    if (newTimestamp == null) {
+      pendingBaselineRestore.current = true;
+    }
     baselineTimestampRef.current = newTimestamp;
   }, []);
 

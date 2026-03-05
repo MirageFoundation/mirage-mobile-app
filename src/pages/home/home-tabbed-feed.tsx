@@ -378,7 +378,7 @@ export const HomeTabbedFeed = forwardRef<
     showBars();
 
     const minDelay = new Promise<void>((r) => setTimeout(r, 600));
-    await Promise.all([handleRefresh({ silent: true }), minDelay]);
+    await Promise.all([handleRefresh({ silent: true, fetchAllNew: true }), minDelay]);
 
     requestAnimationFrame(() => {
       try {
