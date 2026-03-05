@@ -384,6 +384,7 @@ export const HomeTabbedFeed = forwardRef<
       try {
         listRef.current?.scrollToOffset({ offset: 0, animated: false });
       } catch {}
+      showBars();
     });
     resetBaseline(null);
   }, [showBars, activeTabIndex, handleRefresh, resetBaseline]);

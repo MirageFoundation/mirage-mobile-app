@@ -118,9 +118,7 @@ export function useNewPostsChecker({
     setHasNewPosts(false);
     setNewPostAvatars([]);
     setNewPostCount(0);
-    if (newTimestamp != null) {
-      baselineTimestampRef.current = newTimestamp;
-    }
+    baselineTimestampRef.current = newTimestamp;
   }, []);
 
   return { hasNewPosts, newPostAvatars, newPostCount, dismiss, resetBaseline, checkNow: checkForNewPosts };

@@ -60,6 +60,7 @@ export function useInfinitePosts(
     gcTime: 1000 * 60 * 60 * 4,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
+    refetchOnReconnect: false,
   });
 }
 
