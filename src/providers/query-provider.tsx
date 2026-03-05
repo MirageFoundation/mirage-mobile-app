@@ -35,6 +35,7 @@ export const QueryProvider = ({ children }: { children: React.ReactNode }) => {
     <PersistQueryClientProvider
       client={queryClient}
       persistOptions={{ persister }}
+      onSuccess={() => {}}
     >
       {children}
     </PersistQueryClientProvider>
