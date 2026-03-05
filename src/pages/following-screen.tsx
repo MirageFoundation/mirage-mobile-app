@@ -65,8 +65,12 @@ export function FollowingScreen() {
     setNewPostCount(count);
   }, []);
 
+  const [isBannerLoading, setIsBannerLoading] = useState(false);
+
   const handleNewPostsPress = useCallback(async () => {
+    setIsBannerLoading(true);
     await tabbedFeedRef.current?.handleNewPostsPress();
+    setIsBannerLoading(false);
     setHasNewPosts(false);
   }, []);
 
@@ -475,6 +479,7 @@ export function FollowingScreen() {
         topOffset={insets.top + 44}
         avatars={newPostAvatars}
         newPostCount={newPostCount}
+        loading={isBannerLoading}
       />
 
       <PostOptionsSheet

@@ -81,11 +81,6 @@ export function useNewPostsChecker({
           hasNewPostsRef.current = true;
           setHasNewPosts(true);
         }
-      } else if (hasNewPostsRef.current) {
-        hasNewPostsRef.current = false;
-        setHasNewPosts(false);
-        setNewPostAvatars([]);
-        setNewPostCount(0);
       }
     } catch {}
   }, [feed, by, topic, allowed_tags, walletAddress]);
