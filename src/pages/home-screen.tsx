@@ -106,11 +106,26 @@ export function HomeScreen() {
         return;
       }
       if (nextState === "active" && backgroundTimeRef.current) {
+        const duration = Date.now() - backgroundTimeRef.current;
         backgroundTimeRef.current = null;
         storage.remove("app_was_backgrounded");
-        setTimeout(() => {
-          tabbedFeedRef.current?.checkNewPosts();
-        }, 500);
+        if (duration >= 2 * 60 * 60 * 1000) {
+          setTimeout(async () => {
+            isAutoRefreshingRef.current = true;
+            setHasNewPosts(false);
+            showBars();
+            tabbedFeedRef.current?.scrollToTop();
+            await tabbedFeedRef.current?.refresh({ fetchAllNew: true });
+            tabbedFeedRef.current?.scrollToTop();
+            tabbedFeedRef.current?.dismissNewPosts();
+            setHasNewPosts(false);
+            isAutoRefreshingRef.current = false;
+          }, 300);
+        } else {
+          setTimeout(() => {
+            tabbedFeedRef.current?.checkNewPosts();
+          }, 500);
+        }
       }
     };
     const sub = AppState.addEventListener("change", handleAppStateChange);
@@ -127,24 +142,30 @@ export function HomeScreen() {
     }
     const wasBackgrounded = storage.getString("app_was_backgrounded");
     storage.remove("app_was_backgrounded");
+    const doAutoRefresh = () => {
+      return setTimeout(async () => {
+        isAutoRefreshingRef.current = true;
+        setHasNewPosts(false);
+        showBars();
+        tabbedFeedRef.current?.scrollToTop();
+        await tabbedFeedRef.current?.refresh({ fetchAllNew: true });
+        tabbedFeedRef.current?.scrollToTop();
+        tabbedFeedRef.current?.dismissNewPosts();
+        setHasNewPosts(false);
+        isAutoRefreshingRef.current = false;
+      }, 300);
+    };
     if (wasBackgrounded) {
       const lastForeground = Number(storage.getString("app_last_foreground_time") ?? "0");
       const elapsed = Date.now() - lastForeground;
       const timer = elapsed >= 2 * 60 * 60 * 1000
-        ? setTimeout(async () => {
-            isAutoRefreshingRef.current = true;
-            setHasNewPosts(false);
-            showBars();
-            tabbedFeedRef.current?.scrollToTop();
-            await tabbedFeedRef.current?.refresh({ fetchAllNew: true });
-            tabbedFeedRef.current?.scrollToTop();
-            tabbedFeedRef.current?.dismissNewPosts();
-            setHasNewPosts(false);
-            isAutoRefreshingRef.current = false;
-          }, 300)
+        ? doAutoRefresh()
         : setTimeout(() => {
             tabbedFeedRef.current?.checkNewPosts();
           }, 300);
+      return () => clearTimeout(timer);
+    } else {
+      const timer = doAutoRefresh();
       return () => clearTimeout(timer);
     }
   }, []);

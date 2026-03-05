@@ -88,11 +88,23 @@ export function FollowingScreen() {
         return;
       }
       if (nextState === "active" && backgroundTimeRef.current) {
+        const duration = Date.now() - backgroundTimeRef.current;
         backgroundTimeRef.current = null;
         storage.remove("app_was_backgrounded");
-        setTimeout(() => {
-          tabbedFeedRef.current?.checkNewPosts();
-        }, 500);
+        if (duration >= 2 * 60 * 60 * 1000) {
+          setTimeout(async () => {
+            showBars();
+            tabbedFeedRef.current?.scrollToTop();
+            await tabbedFeedRef.current?.refresh({ fetchAllNew: true });
+            tabbedFeedRef.current?.scrollToTop();
+            tabbedFeedRef.current?.dismissNewPosts();
+            setHasNewPosts(false);
+          }, 300);
+        } else {
+          setTimeout(() => {
+            tabbedFeedRef.current?.checkNewPosts();
+          }, 500);
+        }
       }
     };
     const sub = AppState.addEventListener("change", handleAppStateChange);
