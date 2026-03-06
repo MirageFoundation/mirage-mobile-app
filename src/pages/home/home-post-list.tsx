@@ -11,6 +11,7 @@ import {
 } from "react";
 import {
   FlatList,
+  InteractionManager,
   Platform,
   type ListRenderItem,
   type ViewToken,
@@ -67,42 +68,64 @@ const HomePostListInner = function HomePostListInner(
   feedScreenRef.current = feedScreen;
 
   const viewabilityConfig = useRef({
-    viewAreaCoveragePercentThreshold: 11,
-    minimumViewTime: 100,
+    viewAreaCoveragePercentThreshold: 30,
+    minimumViewTime: 300,
   }).current;
+
+  const pendingViewableRef = useRef<ViewToken[] | null>(null);
+  const deferHandleRef = useRef<ReturnType<typeof setTimeout> | ReturnType<typeof InteractionManager.runAfterInteractions> | null>(null);
+
+  const flushViewability = () => {
+    const items = pendingViewableRef.current;
+    if (!items) return;
+
+    const visibleIds = new Set(
+      items
+        .filter((item) => item.isViewable && item.item?.id)
+        .map((item) => item.item.id)
+    );
+    setVisiblePostIds(visibleIds);
+
+    const visibleItems = items.filter((item) => item.isViewable && item.item?.id);
+    const videoItems = visibleItems.filter(
+      (item) => postHasPlayableVideo(item.item)
+    );
+    if (videoItems.length > 0) {
+      const midIdx = Math.floor((visibleItems.length - 1) / 2);
+      const midListIndex = visibleItems[midIdx]?.index ?? 0;
+      let best = videoItems[0];
+      let bestDist = Math.abs((best.index ?? 0) - midListIndex);
+      for (let i = 1; i < videoItems.length; i++) {
+        const d = Math.abs((videoItems[i].index ?? 0) - midListIndex);
+        if (d < bestDist) { best = videoItems[i]; bestDist = d; }
+      }
+      setActiveVideoPostId(feedScreenRef.current, best.item.id);
+    } else {
+      setActiveVideoPostId(feedScreenRef.current, null);
+    }
+
+    const maxIndex = items.reduce((max, item) => {
+      if (item.isViewable && item.index != null && item.index > max) return item.index;
+      return max;
+    }, -1);
+    if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
+  };
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      const visibleIds = new Set(
-        viewableItems
-          .filter((item) => item.isViewable && item.item?.id)
-          .map((item) => item.item.id)
-      );
-      setVisiblePostIds(visibleIds);
+      pendingViewableRef.current = viewableItems;
 
-      const visibleItems = viewableItems.filter((item) => item.isViewable && item.item?.id);
-      const videoItems = visibleItems.filter(
-        (item) => postHasPlayableVideo(item.item)
-      );
-      if (videoItems.length > 0) {
-        const midIdx = Math.floor((visibleItems.length - 1) / 2);
-        const midListIndex = visibleItems[midIdx]?.index ?? 0;
-        let best = videoItems[0];
-        let bestDist = Math.abs((best.index ?? 0) - midListIndex);
-        for (let i = 1; i < videoItems.length; i++) {
-          const d = Math.abs((videoItems[i].index ?? 0) - midListIndex);
-          if (d < bestDist) { best = videoItems[i]; bestDist = d; }
+      if (Platform.OS === "android") {
+        if (deferHandleRef.current !== null) {
+          clearTimeout(deferHandleRef.current as ReturnType<typeof setTimeout>);
         }
-        setActiveVideoPostId(feedScreenRef.current, best.item.id);
+        deferHandleRef.current = setTimeout(flushViewability, 150);
       } else {
-        setActiveVideoPostId(feedScreenRef.current, null);
+        if (deferHandleRef.current !== null) {
+          (deferHandleRef.current as ReturnType<typeof InteractionManager.runAfterInteractions>).cancel();
+        }
+        deferHandleRef.current = InteractionManager.runAfterInteractions(flushViewability);
       }
-
-     const maxIndex = viewableItems.reduce((max, item) => {
-       if (item.isViewable && item.index != null && item.index > max) return item.index;
-       return max;
-     }, -1);
-     if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
     }
   ).current;
 
@@ -134,6 +157,18 @@ const HomePostListInner = function HomePostListInner(
 
   const keyExtractor = useMemo(() => (item: Post) => item.id, []);
 
+  const handleMomentumScrollEnd = useCallback(() => {
+    if (deferHandleRef.current !== null) {
+      if (Platform.OS === "android") {
+        clearTimeout(deferHandleRef.current as ReturnType<typeof setTimeout>);
+      } else {
+        (deferHandleRef.current as ReturnType<typeof InteractionManager.runAfterInteractions>).cancel();
+      }
+      deferHandleRef.current = null;
+    }
+    flushViewability();
+  }, []);
+
   return (
     <AnimatedFlatList
       ref={ref}
@@ -141,7 +176,7 @@ const HomePostListInner = function HomePostListInner(
       renderItem={renderItem}
       keyExtractor={keyExtractor}
       onScroll={onScroll}
-      scrollEventThrottle={16}
+      scrollEventThrottle={32}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={contentContainerStyle}
       ListHeaderComponent={ListHeaderComponent}
@@ -154,11 +189,12 @@ const HomePostListInner = function HomePostListInner(
       keyboardDismissMode="on-drag"
       viewabilityConfig={viewabilityConfig}
       onViewableItemsChanged={onViewableItemsChanged}
-      removeClippedSubviews={Platform.OS !== "android"}
-      maxToRenderPerBatch={Platform.OS === "android" ? 5 : 3}
-      windowSize={Platform.OS === "android" ? 7 : 5}
-      initialNumToRender={4}
-      updateCellsBatchingPeriod={100}
+      onMomentumScrollEnd={handleMomentumScrollEnd}
+      removeClippedSubviews={true}
+      maxToRenderPerBatch={Platform.OS === "android" ? 3 : 5}
+      windowSize={Platform.OS === "android" ? 5 : 7}
+      initialNumToRender={3}
+      updateCellsBatchingPeriod={Platform.OS === "android" ? 150 : 100}
       getItemLayout={undefined}
       maintainVisibleContentPosition={Platform.OS === "android" ? undefined : { minIndexForVisible: 0 }}
     />

@@ -174,7 +174,7 @@ export const HomeTabbedFeed = forwardRef<
           !(post.topic && blockedTopicNames.has(post.topic.toLowerCase())),
       );
     },
-    [hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, baseFeed, followedUsers, followedTopics, currentUser, applyPostEditOverrides],
+    [hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, currentUser, applyPostEditOverrides],
   );
 
   const magicPosts = useMemo(
