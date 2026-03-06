@@ -1,11 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
+import * as ScreenOrientation from "expo-screen-orientation";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import YoutubePlayer, { type YoutubeIframeRef } from "react-native-youtube-iframe";
 import {
   ActivityIndicator,
-  Dimensions,
   FlatList,
   Modal,
   Platform,
@@ -28,9 +28,8 @@ import { StyleSheet } from "react-native-unistyles";
 
 import type { ResolvedMedia } from "./post-card-utils";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-
 import { Text } from "@/src/components/ui/primitives";
+import { useScreenOrientation } from "@/src/hooks/use-screen-orientation";
 import { useVideoMuteStore, useVideoPositionStore } from "@/src/stores";
 import {
   YouTubeAutoplayEmbed,
@@ -41,10 +40,12 @@ import { extractYouTubeVideoId } from "./post-card-utils";
 const PreviewVideoItem = memo(function PreviewVideoItem({
   item,
   width,
+  height,
   isActive,
 }: {
   item: ResolvedMedia;
   width: number;
+  height: number;
   isActive: boolean;
 }) {
   const ref = useRef<Video>(null);
@@ -80,8 +81,8 @@ const PreviewVideoItem = memo(function PreviewVideoItem({
   }, [muted, toggleMute]);
 
   return (
-    <View style={{ width, height: SCREEN_HEIGHT, justifyContent: "center", alignItems: "center" }}>
-      <Pressable onPress={handleTogglePlay} style={{ width, height: SCREEN_HEIGHT }}>
+    <View style={{ width, height, justifyContent: "center", alignItems: "center" }}>
+      <Pressable onPress={handleTogglePlay} style={{ width, height }}>
         <Video
           ref={ref}
           source={{ uri: item.uri }}
@@ -127,10 +128,12 @@ const PreviewVideoItem = memo(function PreviewVideoItem({
 const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
   item,
   width,
+  height,
   isActive,
 }: {
   item: ResolvedMedia;
   width: number;
+  height: number;
   isActive: boolean;
 }) {
   const embedRef = useRef<YouTubeAutoplayEmbedRef | null>(null);
@@ -143,7 +146,7 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
 
   const videoId = extractYouTubeVideoId(item.uri) ?? "";
   const isAndroid = Platform.OS === "android";
-  const youtubeHeight = Math.max(240, SCREEN_HEIGHT - (insets.top + insets.bottom + 32));
+  const youtubeHeight = Math.max(240, height - (insets.top + insets.bottom + 32));
   const getPosition = useVideoPositionStore((s) => s.getPosition);
   const setPositionStore = useVideoPositionStore((s) => s.setPosition);
   const hasRestoredRef = useRef(false);
@@ -232,7 +235,7 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
     <View
       style={{
         width,
-        height: SCREEN_HEIGHT,
+        height,
         justifyContent: "center",
         alignItems: "center",
         paddingTop: insets.top + 12,
@@ -393,6 +396,21 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
   onClose,
 }: MediaPreviewModalProps) {
   const insets = useSafeAreaInsets();
+  const { screenWidth, screenHeight } = useScreenOrientation();
+
+  useEffect(() => {
+    if (visible) {
+      console.log("[MediaPreview] Setting orientation to DEFAULT (all but upside down)");
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.DEFAULT)
+        .then(() => console.log("[MediaPreview] Orientation unlocked for rotation"))
+        .catch((e) => console.warn("[MediaPreview] lockAsync failed:", e));
+    } else {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    }
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    };
+  }, [visible]);
   const videoRef = useRef<Video | null>(null);
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const isMuted = useVideoMuteStore((s) => s.isMuted);
@@ -538,6 +556,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
         animationType="fade"
         onRequestClose={handleClose}
         statusBarTranslucent
+        supportedOrientations={["portrait", "landscape"]}
       >
         <View style={styles.container}>
           <Pressable
@@ -558,22 +577,22 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
             showsHorizontalScrollIndicator={false}
             initialScrollIndex={initialIndex}
             getItemLayout={(_, index) => ({
-              length: SCREEN_WIDTH,
-              offset: SCREEN_WIDTH * index,
+              length: screenWidth,
+              offset: screenWidth * index,
               index,
             })}
             onMomentumScrollEnd={(e) => {
-              const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+              const idx = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
               setActiveGalleryIndex(idx);
             }}
             keyExtractor={(item, index) => `${item.uri}-${index}`}
             renderItem={({ item, index }) =>
               item.type === "video" ? (
-                <PreviewVideoItem item={item} width={SCREEN_WIDTH} isActive={index === activeGalleryIndex} />
+                <PreviewVideoItem item={item} width={screenWidth} height={screenHeight} isActive={index === activeGalleryIndex} />
               ) : item.type === "youtube" ? (
-                <PreviewYouTubeItem item={item} width={SCREEN_WIDTH} isActive={index === activeGalleryIndex} />
+                <PreviewYouTubeItem item={item} width={screenWidth} height={screenHeight} isActive={index === activeGalleryIndex} />
               ) : (
-                <View style={styles.mediaContainer}>
+                <View style={[styles.mediaContainer, { width: screenWidth, height: screenHeight }]}>
                   <Image
                     source={{ uri: item.uri }}
                     style={styles.fullMedia}
@@ -606,6 +625,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
       animationType="fade"
       onRequestClose={handleClose}
       statusBarTranslucent
+      supportedOrientations={["portrait", "landscape"]}
     >
       <GestureHandlerRootView style={styles.gestureRoot}>
         <View style={styles.container}>
@@ -621,7 +641,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
 
           {isImage && (
             <GestureDetector gesture={composedGesture}>
-              <Animated.View style={[styles.mediaContainer, animatedStyle]}>
+              <Animated.View style={[styles.mediaContainer, { width: screenWidth, height: screenHeight }, animatedStyle]}>
                 <Image
                   source={{ uri: media!.uri }}
                   style={styles.fullMedia}
@@ -633,7 +653,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
           )}
 
           {isGif && (
-            <View style={styles.mediaContainer}>
+            <View style={[styles.mediaContainer, { width: screenWidth, height: screenHeight }]}>
               <Image
                 source={{ uri: media!.uri }}
                 style={styles.fullMedia}
@@ -644,7 +664,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
           )}
 
           {isVideo && (
-            <Pressable style={styles.mediaContainer} onPress={handleVideoToggle}>
+            <Pressable style={[styles.mediaContainer, { width: screenWidth, height: screenHeight }]} onPress={handleVideoToggle}>
               <Video
                 ref={videoRef}
                 source={{ uri: media!.uri }}
@@ -668,7 +688,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
           )}
 
           {isYouTube && (
-            <PreviewYouTubeItem item={media!} width={SCREEN_WIDTH} isActive={visible} />
+            <PreviewYouTubeItem item={media!} width={screenWidth} height={screenHeight} isActive={visible} />
           )}
 
           {!isYouTube && isLoading && (
@@ -722,8 +742,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   mediaContainer: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },

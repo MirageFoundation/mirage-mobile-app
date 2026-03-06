@@ -16,13 +16,14 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     name,
     slug,
     version: "1.0.3",
-    orientation: "portrait",
+    orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: scheme,
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
       supportsTablet: false,
+      requireFullScreen: true,
       bundleIdentifier: bundleIdentifier,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
@@ -115,6 +116,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         },
       ],
       "expo-notifications",
+      [
+        "expo-screen-orientation",
+        {
+          initialOrientation: "PORTRAIT",
+        },
+      ],
     ],
     experiments: {
       typedRoutes: true,

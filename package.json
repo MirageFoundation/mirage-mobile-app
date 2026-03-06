@@ -53,6 +53,7 @@
     "expo-notifications": "^0.32.16",
     "expo-router": "~6.0.21",
     "expo-screen-capture": "~8.0.9",
+    "expo-screen-orientation": "~9.0.8",
     "expo-secure-store": "~15.0.8",
     "expo-share-intent": "^6.0.0",
     "expo-sharing": "~14.0.8",
