@@ -106,13 +106,14 @@ export const PostCardMedia = memo(
     const [mediaLoaded, setMediaLoaded] = useState(false);
     const videoRef = useRef<Video | null>(null);
     const youtubeEmbedRef = useRef<YouTubeAutoplayEmbedRef | null>(null);
-    const youtubeIframeRef = useRef<YoutubeIframeRef | null>(null);
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const playRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     const aspectRatioLockedRef = useRef(false);
     const userInitiatedPlayRef = useRef(false);
     const prevShouldBlurRef = useRef(shouldBlurContent);
     const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
+    const feedTapCooldownRef = useRef(false);
 
     const youtubeVideoId = media?.type === "youtube" ? (extractYouTubeVideoId(media.uri) ?? "") : "";
     const getPosition = useVideoPositionStore((s) => s.getPosition);
@@ -132,18 +133,15 @@ export const PostCardMedia = memo(
     }, [youtubeVideoId, setPosition]);
 
     const restoreYouTubePosition = useCallback(() => {
+      if (Platform.OS !== "android") return;
       if (!youtubeVideoId || hasRestoredPositionRef.current) return;
       const saved = getPosition(youtubeVideoId);
       if (saved > 2) {
         hasRestoredPositionRef.current = true;
         setTimeout(() => {
-          if (Platform.OS === "android") {
-            youtubeEmbedRef.current?.seekTo(saved);
-            setTimeout(() => youtubeEmbedRef.current?.play(), 500);
-          } else {
-            youtubeIframeRef.current?.seekTo(saved, true);
-          }
-        }, 400);
+          youtubeEmbedRef.current?.seekTo(saved);
+          setTimeout(() => youtubeEmbedRef.current?.play(), 600);
+        }, 600);
       }
     }, [youtubeVideoId, getPosition]);
 
@@ -169,6 +167,9 @@ export const PostCardMedia = memo(
         videoRef.current?.pauseAsync().catch(() => {});
         if (loadingTimeoutRef.current) {
           clearTimeout(loadingTimeoutRef.current);
+        }
+        if (playRetryRef.current) {
+          clearInterval(playRetryRef.current);
         }
       };
     }, []);
@@ -237,11 +238,26 @@ export const PostCardMedia = memo(
         if (media?.type === "youtube") {
           hasRestoredPositionRef.current = false;
           if (Platform.OS === "android") {
-            setTimeout(() => youtubeEmbedRef.current?.play(), 300);
+            setIsVideoLoading(true);
+            if (playRetryRef.current) clearInterval(playRetryRef.current);
+            let attempts = 0;
+            playRetryRef.current = setInterval(() => {
+              attempts++;
+              youtubeEmbedRef.current?.play();
+              if (attempts >= 10) {
+                if (playRetryRef.current) clearInterval(playRetryRef.current);
+                playRetryRef.current = null;
+                setIsVideoLoading(false);
+              }
+            }, 500);
           }
         }
       } else if (!isVisible || !screenActive) {
         if (media?.type === "youtube") saveYouTubePositionSync();
+        if (playRetryRef.current) {
+          clearInterval(playRetryRef.current);
+          playRetryRef.current = null;
+        }
         setIsVideoPlaying(false);
         setIsVideoLoading(false);
         userInitiatedPlayRef.current = false;
@@ -259,17 +275,6 @@ export const PostCardMedia = memo(
     ]);
 
     const shouldAutoPlayYouTube = Platform.OS === "android" && allowAutoplay;
-
-    useEffect(() => {
-      if (media?.type !== "youtube" || Platform.OS === "android" || !isVideoPlaying) return;
-      const interval = setInterval(async () => {
-        try {
-          const t = await youtubeIframeRef.current?.getCurrentTime();
-          if (typeof t === "number") lastKnownYouTubeTimeRef.current = t;
-        } catch {}
-      }, 1000);
-      return () => clearInterval(interval);
-    }, [media?.type, isVideoPlaying]);
 
     useEffect(() => {
       if (videoRef.current && media?.type === "video") {
@@ -555,6 +560,10 @@ export const PostCardMedia = memo(
                     setMediaLoaded(true);
                     setIsVideoLoading(false);
                     setIsVideoPlaying(true);
+                    if (playRetryRef.current) {
+                      clearInterval(playRetryRef.current);
+                      playRetryRef.current = null;
+                    }
                     restoreYouTubePosition();
                   }}
                   onTimeUpdate={handleYouTubeTimeUpdate}
@@ -563,6 +572,10 @@ export const PostCardMedia = memo(
                       setIsVideoPlaying(true);
                       setIsVideoLoading(false);
                       setMediaLoaded(true);
+                      if (playRetryRef.current) {
+                        clearInterval(playRetryRef.current);
+                        playRetryRef.current = null;
+                      }
                     }
                     if (state === "paused" || state === "ended") {
                       setIsVideoPlaying(false);
@@ -571,7 +584,6 @@ export const PostCardMedia = memo(
                 />
               ) : (
                 <YoutubePlayer
-                  ref={youtubeIframeRef}
                   height={exceedsMaxHeight ? MEDIA_MAX_HEIGHT : calculatedHeight}
                   videoId={extractYouTubeVideoId(media.uri) ?? ""}
                   play={shouldPlayYouTube}
@@ -589,9 +601,7 @@ export const PostCardMedia = memo(
                   onChangeState={(event: string) => {
                     if (event === "playing") {
                       setMediaLoaded(true);
-                      setIsVideoLoading(false);
                       setIsVideoPlaying(true);
-                      restoreYouTubePosition();
                     }
                     if (event === "paused" || event === "ended") {
                       setIsVideoPlaying(false);
@@ -609,7 +619,7 @@ export const PostCardMedia = memo(
                     onPress={handleFeedYouTubeTap}
                     style={styles.videoTapArea}
                   />
-                  {!shouldAutoPlayYouTube && !isVideoPlaying && !feedTappedToPlay ? (
+                  {Platform.OS === "android" && !shouldAutoPlayYouTube && !isVideoPlaying && !feedTappedToPlay ? (
                     <View style={styles.tapToPlayContainer} pointerEvents="none">
                       <Text size="sm" weight="semibold" numberOfLines={1} style={{ color: "#fff" }}>
                         Tap to play
@@ -711,6 +721,14 @@ export const PostCardMedia = memo(
             </View>
           )}
 
+          {media.type === "youtube" && isVideoLoading && !shouldBlurContent && (
+            <View style={styles.playOverlay} pointerEvents="none">
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#fff" />
+              </View>
+            </View>
+          )}
+
           {media.type === "video" &&
             !shouldBlurContent &&
             !isVideoProcessing && (
@@ -756,9 +774,9 @@ export const PostCardMedia = memo(
               </View>
             )}
 
-          {(media.type === "video" || media.type === "youtube") &&
+          {media.type === "video" &&
             !shouldBlurContent &&
-            (media.type !== "video" || !isVideoProcessing) &&
+            !isVideoProcessing &&
             isPostDetail && (
               <Pressable
                 onPress={() => {
@@ -776,7 +794,8 @@ export const PostCardMedia = memo(
           {/* Mute/Unmute button for videos */}
           {(media.type === "video" || media.type === "youtube") &&
             !shouldBlurContent &&
-            (media.type !== "video" || !isVideoProcessing) && (
+            (media.type !== "video" || !isVideoProcessing) &&
+            !(media.type === "youtube" && (Platform.OS === "ios" || isPostDetail)) && (
               <Pressable
                 onPress={handleMuteToggle}
                 style={styles.muteButton}

@@ -165,18 +165,15 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
   }, []);
 
   const restorePosition = useCallback(() => {
+    if (!isAndroid) return;
     if (!videoId || hasRestoredRef.current) return;
     const saved = getPosition(videoId);
     if (saved > 2) {
       hasRestoredRef.current = true;
       setTimeout(() => {
-        if (isAndroid) {
-          embedRef.current?.seekTo(saved);
-          setTimeout(() => embedRef.current?.play(), 500);
-        } else {
-          iframeRef.current?.seekTo(saved, true);
-        }
-      }, 400);
+        embedRef.current?.seekTo(saved);
+        setTimeout(() => embedRef.current?.play(), 600);
+      }, 600);
     }
   }, [videoId, isAndroid, getPosition]);
 
@@ -191,18 +188,6 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
       hasRestoredRef.current = false;
     }
   }, [isActive, isAndroid, savePositionSync]);
-
-  useEffect(() => {
-    if (!isAndroid && playing && isActive) {
-      const interval = setInterval(async () => {
-        try {
-          const t = await iframeRef.current?.getCurrentTime();
-          if (typeof t === "number") lastKnownTimeRef.current = t;
-        } catch {}
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [isAndroid, playing, isActive]);
 
   const handleTogglePlay = useCallback(() => {
     setPlaying((prev) => {
@@ -320,26 +305,30 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
 
       </Pressable>
 
-      <View style={[previewVideoStyles.youtubeControlsRow, { bottom: insets.bottom + 96 }]}>
-        <Pressable onPress={() => handleSeekBy(-10)} style={previewVideoStyles.youtubeControlButton}>
-          <Ionicons name="play-back" size={22} color="#fff" />
-        </Pressable>
-        <Pressable onPress={handleTogglePlay} style={previewVideoStyles.youtubeControlButton}>
-          <Ionicons name={playing ? "pause" : "play"} size={32} color="#fff" />
-        </Pressable>
-        <Pressable onPress={() => handleSeekBy(10)} style={previewVideoStyles.youtubeControlButton}>
-          <Ionicons name="play-forward" size={22} color="#fff" />
-        </Pressable>
-      </View>
-      <Pressable
-        onPress={handleToggleMute}
-        style={[previewVideoStyles.muteButton, { bottom: insets.bottom + 56 }]}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      >
-        <View style={previewVideoStyles.muteButtonInner}>
-          <Ionicons name={muted ? "volume-mute" : "volume-high"} size={22} color="#fff" />
+      {isAndroid && (
+        <View style={[previewVideoStyles.youtubeControlsRow, { bottom: insets.bottom + 96 }]}>
+          <Pressable onPress={() => handleSeekBy(-10)} style={previewVideoStyles.youtubeControlButton}>
+            <Ionicons name="play-back" size={22} color="#fff" />
+          </Pressable>
+          <Pressable onPress={handleTogglePlay} style={previewVideoStyles.youtubeControlButton}>
+            <Ionicons name={playing ? "pause" : "play"} size={32} color="#fff" />
+          </Pressable>
+          <Pressable onPress={() => handleSeekBy(10)} style={previewVideoStyles.youtubeControlButton}>
+            <Ionicons name="play-forward" size={22} color="#fff" />
+          </Pressable>
         </View>
-      </Pressable>
+      )}
+      {isAndroid && (
+        <Pressable
+          onPress={handleToggleMute}
+          style={[previewVideoStyles.muteButton, { bottom: insets.bottom + 56 }]}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <View style={previewVideoStyles.muteButtonInner}>
+            <Ionicons name={muted ? "volume-mute" : "volume-high"} size={22} color="#fff" />
+          </View>
+        </Pressable>
+      )}
     </View>
   );
 });
