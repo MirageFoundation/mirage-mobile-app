@@ -373,7 +373,7 @@ export const PostCardMedia = memo(
       (event: GestureResponderEvent) => {
         event.stopPropagation?.();
         if (isPostDetail) return;
-        if (!shouldAutoPlayYouTube && !isVideoPlaying && !feedTappedToPlay) {
+        if (Platform.OS === "android" && !shouldAutoPlayYouTube && !isVideoPlaying && !feedTappedToPlay) {
           setFeedTappedToPlay(true);
           return;
         }
