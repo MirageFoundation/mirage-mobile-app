@@ -2,9 +2,9 @@ import { navigateToEditPost } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import type { FlashListRef } from "@shopify/flash-list";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FlatList } from "react-native";
 import {
   ActivityIndicator,
   Pressable,
@@ -40,7 +40,6 @@ import {
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import {
-  useAuthGuard,
   useBlockHandler,
   useDeleteHandler,
   useFollowHandler,
@@ -67,10 +66,9 @@ export function TopicFeedScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { requireAuth } = useAuthGuard();
   const toast = useToast();
 
-  const flatListRef = useRef<FlatList<Post>>(null);
+  const flatListRef = useRef<FlashListRef<Post>>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
@@ -597,9 +595,6 @@ export function TopicFeedScreen() {
   );
   const setFollowedTopicsStore = useHomePostCardStore(
     (state) => state.setFollowedTopics,
-  );
-  const setFollowLoadingUsersStore = useHomePostCardStore(
-    (state) => state.setFollowLoadingUsers,
   );
   const setRevealedPostsStore = useHomePostCardStore(
     (state) => state.setRevealedPosts,

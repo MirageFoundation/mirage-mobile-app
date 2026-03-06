@@ -1,7 +1,7 @@
 {
   "name": "mirage",
   "main": "index.ts",
-  "version": "1.0.5",
+  "version": "1.0.4",
   "scripts": {
     "start": "expo start",
     "postinstall": "patch-package",
@@ -21,6 +21,7 @@
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
     "@sentry/react-native": "^7.13.0",
+    "@shopify/flash-list": "^2.3.0",
     "@somesoap/react-native-image-palette": "^1.2.2",
     "@tanstack/query-sync-storage-persister": "^5.90.18",
     "@tanstack/react-query": "^5.90.12",

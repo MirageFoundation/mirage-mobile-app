@@ -7,9 +7,14 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import type { FlatList } from "react-native";
+import type { FlashListRef } from "@shopify/flash-list";
 import type { ReactNode } from "react";
-import { ActivityIndicator, Platform, RefreshControl } from "react-native";
+import {
+  ActivityIndicator,
+  InteractionManager,
+  Platform,
+  RefreshControl,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUnistyles } from "react-native-unistyles";
 
@@ -21,7 +26,6 @@ import {
 } from "@/src/api";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import {
-  PostCardSkeleton,
   PostCardSkeletonList,
   QuestsSummaryCard,
   type Post,
@@ -76,8 +80,8 @@ export const HomeTabbedFeed = forwardRef<
   const [latestTabActivated, setLatestTabActivated] = useState(activeTabIndex === 1);
   const latestTabRefreshedRef = useRef(false);
 
-  const magicListRef = useRef<FlatList<Post>>(null);
-  const latestListRef = useRef<FlatList<Post>>(null);
+  const magicListRef = useRef<FlashListRef<Post>>(null);
+  const latestListRef = useRef<FlashListRef<Post>>(null);
   const dismissNewPostsRef = useRef<(() => void) | null>(null);
   const handleRefreshRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -116,21 +120,28 @@ export const HomeTabbedFeed = forwardRef<
     [selectedContentTypes],
   );
 
+  const INITIAL_PAGE_SIZE = 10;
+  const NEXT_PAGE_SIZE = 12;
+
+  const currentUserId = currentUser?.id;
+  const currentUsername = currentUser?.username ?? null;
+
   const magicQuery = useInfinitePosts({
-    limit: 10,
+    limit: INITIAL_PAGE_SIZE,
     feed: baseFeed,
     by: "magic",
     allowed_tags: allowedTags || undefined,
-  }, { pageLimit: 20 });
+  }, { pageLimit: NEXT_PAGE_SIZE });
 
   const latestQuery = useInfinitePosts({
-    limit: 10,
+    limit: INITIAL_PAGE_SIZE,
     feed: baseFeed,
     by: "newest",
     allowed_tags: allowedTags || undefined,
-  }, { enabled: latestTabActivated, pageLimit: 20 });
+  }, { enabled: latestTabActivated, pageLimit: NEXT_PAGE_SIZE });
 
   const postEditOverrides = usePostEditStore((s) => s.overrides);
+  const transformedPageCacheRef = useRef(new WeakMap<object, Post[]>());
 
   const applyPostEditOverrides = useCallback(
     (posts: any[]) => {
@@ -144,37 +155,66 @@ export const HomeTabbedFeed = forwardRef<
     [postEditOverrides],
   );
 
-  const transformPosts = useCallback(
-    (data: typeof magicQuery.data) => {
-      if (!data?.pages) return [];
-      const allPosts = data.pages.flatMap((page) => page.posts);
+  useEffect(() => {
+    transformedPageCacheRef.current = new WeakMap();
+  }, [
+    applyPostEditOverrides,
+    blockedTopicNames,
+    blockedUserIds,
+    currentUserId,
+    currentUsername,
+    hiddenPostIds,
+    hideDownvotedPosts,
+  ]);
 
-      const uniquePostsMap = new Map<string, (typeof allPosts)[0]>();
-      for (const post of allPosts) {
-        if (!uniquePostsMap.has(post.post_id)) {
-          uniquePostsMap.set(post.post_id, post);
+  const transformPosts = useCallback(
+    (data: { pages?: { posts: any[] }[] } | undefined) => {
+      if (!data?.pages) return [];
+      const uniquePostIds = new Set<string>();
+      const transformedPosts: Post[] = [];
+
+      for (const page of data.pages) {
+        let cachedPagePosts = transformedPageCacheRef.current.get(page);
+
+        if (!cachedPagePosts) {
+          const pagePosts = hideDownvotedPosts
+            ? page.posts.filter((post) => post.user_vote !== -1)
+            : page.posts;
+
+          const patchedPosts = applyPostEditOverrides(pagePosts);
+
+          cachedPagePosts = transformApiPosts(patchedPosts, {
+            currentUser: currentUserId
+              ? { id: currentUserId, username: currentUsername }
+              : undefined,
+          }).filter(
+            (post) =>
+              !hiddenPostIds.has(post.id) &&
+              !blockedUserIds.has(post.author.id) &&
+              !(post.topic && blockedTopicNames.has(post.topic.toLowerCase())),
+          );
+
+          transformedPageCacheRef.current.set(page, cachedPagePosts);
+        }
+
+        for (const post of cachedPagePosts) {
+          if (uniquePostIds.has(post.id)) continue;
+          uniquePostIds.add(post.id);
+          transformedPosts.push(post);
         }
       }
-      const uniquePosts = Array.from(uniquePostsMap.values());
 
-      const filteredPosts = hideDownvotedPosts
-        ? uniquePosts.filter((post) => post.user_vote !== -1)
-        : uniquePosts;
-
-      const patchedPosts = applyPostEditOverrides(filteredPosts);
-
-      const transformedPosts = transformApiPosts(patchedPosts, {
-        currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined,
-      });
-
-      return transformedPosts.filter(
-        (post) =>
-          !hiddenPostIds.has(post.id) &&
-          !blockedUserIds.has(post.author.id) &&
-          !(post.topic && blockedTopicNames.has(post.topic.toLowerCase())),
-      );
+      return transformedPosts;
     },
-    [hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, currentUser, applyPostEditOverrides],
+    [
+      applyPostEditOverrides,
+      blockedTopicNames,
+      blockedUserIds,
+      currentUserId,
+      currentUsername,
+      hiddenPostIds,
+      hideDownvotedPosts,
+    ],
   );
 
   const magicPosts = useMemo(
@@ -187,7 +227,7 @@ export const HomeTabbedFeed = forwardRef<
           (post.topic && followedTopics.has(post.topic)),
       );
     },
-    [magicQuery.data, transformPosts, baseFeed, followedUsers, followedTopics, postEditOverrides],
+    [magicQuery.data, transformPosts, baseFeed, followedUsers, followedTopics],
   );
 
   const latestPosts = useMemo(
@@ -200,7 +240,7 @@ export const HomeTabbedFeed = forwardRef<
           (post.topic && followedTopics.has(post.topic)),
       );
     },
-    [latestQuery.data, transformPosts, baseFeed, followedUsers, followedTopics, postEditOverrides],
+    [latestQuery.data, transformPosts, baseFeed, followedUsers, followedTopics],
   );
 
   const handleRefresh = useCallback(async (options?: { fetchAllNew?: boolean; silent?: boolean }) => {
@@ -215,7 +255,7 @@ export const HomeTabbedFeed = forwardRef<
       const sortBy = activeTabIndex === 0 ? "magic" : "newest";
 
       const postsQueryKey = queryKeys.posts({
-        limit: 10,
+        limit: INITIAL_PAGE_SIZE,
         feed: baseFeed,
         by: sortBy as any,
         allowed_tags: allowedTags || undefined,
@@ -225,7 +265,7 @@ export const HomeTabbedFeed = forwardRef<
 
       const fetchPage = (page: number) =>
         getPosts({
-          limit: page === 1 ? 10 : 20,
+          limit: page === 1 ? INITIAL_PAGE_SIZE : NEXT_PAGE_SIZE,
           feed: baseFeed,
           by: sortBy as any,
           allowed_tags: allowedTags || undefined,
@@ -300,6 +340,8 @@ export const HomeTabbedFeed = forwardRef<
     baseFeed,
     allowedTags,
     currentUser?.walletAddress,
+    INITIAL_PAGE_SIZE,
+    NEXT_PAGE_SIZE,
     queryClient,
     onRefreshingChange,
   ]);
@@ -340,7 +382,6 @@ export const HomeTabbedFeed = forwardRef<
   }, [baseFeed, registerHomeRefresh, registerFollowingRefresh, scrollToTopAndRefresh]);
 
   const activeSortBy = activeTabIndex === 0 ? "magic" : "newest";
-  const activePosts = activeTabIndex === 0 ? magicPosts : latestPosts;
   const activeQuery = activeTabIndex === 0 ? magicQuery : latestQuery;
 
   const latestPostTimestamp = useMemo(() => {
@@ -405,12 +446,18 @@ export const HomeTabbedFeed = forwardRef<
 
   const lastMagicFetchTime = useRef(0);
   const isMagicFetching = useRef(false);
+  const magicFetchTaskRef = useRef<ReturnType<
+    typeof InteractionManager.runAfterInteractions
+  > | null>(null);
 
   const lastLatestFetchTime = useRef(0);
   const isLatestFetching = useRef(false);
+  const latestFetchTaskRef = useRef<ReturnType<
+    typeof InteractionManager.runAfterInteractions
+  > | null>(null);
 
-  const PREFETCH_THRESHOLD = 5;
-  const PAGE_SIZE = 20;
+  const PREFETCH_THRESHOLD = Platform.OS === "android" ? 2 : 5;
+  const PAGE_SIZE = NEXT_PAGE_SIZE;
 
   const magicQueryRef = useRef(magicQuery);
   magicQueryRef.current = magicQuery;
@@ -421,6 +468,13 @@ export const HomeTabbedFeed = forwardRef<
   latestQueryRef.current = latestQuery;
   const latestPostsLengthRef = useRef(latestPosts.length);
   latestPostsLengthRef.current = latestPosts.length;
+
+  useEffect(() => {
+    return () => {
+      magicFetchTaskRef.current?.cancel();
+      latestFetchTaskRef.current?.cancel();
+    };
+  }, []);
 
   const handleMagicItemVisible = useCallback((index: number) => {
     const totalLoaded = magicPostsLengthRef.current;
@@ -437,11 +491,28 @@ export const HomeTabbedFeed = forwardRef<
     ) {
       lastMagicFetchTime.current = now;
       isMagicFetching.current = true;
-      q.fetchNextPage().finally(() => {
-        isMagicFetching.current = false;
-      });
+      const runFetch = () => {
+        magicFetchTaskRef.current = null;
+        const latestQuery = magicQueryRef.current;
+        if (!latestQuery.hasNextPage || latestQuery.isFetchingNextPage) {
+          isMagicFetching.current = false;
+          return;
+        }
+        latestQuery.fetchNextPage().finally(() => {
+          isMagicFetching.current = false;
+        });
+      };
+
+      if (Platform.OS === "android") {
+        magicFetchTaskRef.current?.cancel();
+        magicFetchTaskRef.current = InteractionManager.runAfterInteractions(
+          runFetch,
+        );
+      } else {
+        runFetch();
+      }
     }
-  }, []);
+  }, [PAGE_SIZE, PREFETCH_THRESHOLD]);
 
   const handleLatestItemVisible = useCallback((index: number) => {
     const totalLoaded = latestPostsLengthRef.current;
@@ -458,11 +529,28 @@ export const HomeTabbedFeed = forwardRef<
     ) {
       lastLatestFetchTime.current = now;
       isLatestFetching.current = true;
-      q.fetchNextPage().finally(() => {
-        isLatestFetching.current = false;
-      });
+      const runFetch = () => {
+        latestFetchTaskRef.current = null;
+        const latestQuery = latestQueryRef.current;
+        if (!latestQuery.hasNextPage || latestQuery.isFetchingNextPage) {
+          isLatestFetching.current = false;
+          return;
+        }
+        latestQuery.fetchNextPage().finally(() => {
+          isLatestFetching.current = false;
+        });
+      };
+
+      if (Platform.OS === "android") {
+        latestFetchTaskRef.current?.cancel();
+        latestFetchTaskRef.current = InteractionManager.runAfterInteractions(
+          runFetch,
+        );
+      } else {
+        runFetch();
+      }
     }
-  }, []);
+  }, [PAGE_SIZE, PREFETCH_THRESHOLD]);
 
   const createListEmptyComponent = useCallback(
     (isLoading: boolean, isError: boolean, errorMessage?: string) => {
@@ -559,10 +647,17 @@ export const HomeTabbedFeed = forwardRef<
 
   const ListFooter = useMemo(() => {
     if (isFetchingNext) {
-      return <PostCardSkeleton showMedia={false} showBody={true} />;
+      return (
+        <Box center p="md">
+          <ActivityIndicator
+            size="small"
+            color={theme.colors.text.subtle}
+          />
+        </Box>
+      );
     }
     return <Box p="sm" />;
-  }, [isFetchingNext]);
+  }, [isFetchingNext, theme.colors.text.subtle]);
 
   const listContentStyle = useMemo(
     () => ({

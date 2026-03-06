@@ -10,19 +10,21 @@ import {
   type ComponentType,
 } from "react";
 import {
-  FlatList,
   InteractionManager,
   Platform,
   type ListRenderItem,
   type ViewToken,
 } from "react-native";
+import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import Animated from "react-native-reanimated";
 import type { Post } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { HomePostCardItem } from "./home-post-card-item";
 import { useHomePostCardStore } from "./home-post-card-store";
 
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Post>);
+const AnimatedFlashList = Animated.createAnimatedComponent(
+  FlashList as ComponentType<any>,
+);
 
 type HomePostListProps = {
  data: Post[];
@@ -52,11 +54,8 @@ const HomePostListInner = function HomePostListInner(
     feedScreen,
    onItemVisible,
  }: HomePostListProps,
- ref: Ref<FlatList<Post>>
+ ref: Ref<FlashListRef<Post>>
 ) {
-  const setVisiblePostIds = useHomePostCardStore(
-    (state) => state.setVisiblePostIds
-  );
   const setActiveVideoPostId = useHomePostCardStore(
     (state) => state.setActiveVideoPostId
   );
@@ -75,16 +74,28 @@ const HomePostListInner = function HomePostListInner(
   const pendingViewableRef = useRef<ViewToken[] | null>(null);
   const deferHandleRef = useRef<ReturnType<typeof setTimeout> | ReturnType<typeof InteractionManager.runAfterInteractions> | null>(null);
 
-  const flushViewability = () => {
+  const cancelDeferredFlush = useCallback(() => {
+    if (deferHandleRef.current === null) return;
+
+    if (Platform.OS === "android") {
+      const handle = deferHandleRef.current as
+        | ReturnType<typeof setTimeout>
+        | ReturnType<typeof InteractionManager.runAfterInteractions>;
+      if (typeof handle === "object" && "cancel" in handle) {
+        handle.cancel();
+      } else {
+        clearTimeout(handle as ReturnType<typeof setTimeout>);
+      }
+    } else {
+      (deferHandleRef.current as ReturnType<typeof InteractionManager.runAfterInteractions>).cancel();
+    }
+
+    deferHandleRef.current = null;
+  }, []);
+
+  const flushViewability = useCallback(() => {
     const items = pendingViewableRef.current;
     if (!items) return;
-
-    const visibleIds = new Set(
-      items
-        .filter((item) => item.isViewable && item.item?.id)
-        .map((item) => item.item.id)
-    );
-    setVisiblePostIds(visibleIds);
 
     const visibleItems = items.filter((item) => item.isViewable && item.item?.id);
     const videoItems = visibleItems.filter(
@@ -109,25 +120,30 @@ const HomePostListInner = function HomePostListInner(
       return max;
     }, -1);
     if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
-  };
+  }, [setActiveVideoPostId]);
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       pendingViewableRef.current = viewableItems;
 
       if (Platform.OS === "android") {
-        if (deferHandleRef.current !== null) {
-          clearTimeout(deferHandleRef.current as ReturnType<typeof setTimeout>);
-        }
-        deferHandleRef.current = setTimeout(flushViewability, 150);
+        cancelDeferredFlush();
+        deferHandleRef.current = setTimeout(() => {
+          deferHandleRef.current = null;
+          flushViewability();
+        }, 150);
       } else {
-        if (deferHandleRef.current !== null) {
-          (deferHandleRef.current as ReturnType<typeof InteractionManager.runAfterInteractions>).cancel();
-        }
+        cancelDeferredFlush();
         deferHandleRef.current = InteractionManager.runAfterInteractions(flushViewability);
       }
     }
   ).current;
+
+  useEffect(() => {
+    return () => {
+      cancelDeferredFlush();
+    };
+  }, [cancelDeferredFlush]);
 
   useEffect(() => {
     if (!data || data.length === 0) return;
@@ -156,29 +172,38 @@ const HomePostListInner = function HomePostListInner(
  );
 
   const keyExtractor = useMemo(() => (item: Post) => item.id, []);
+  const getItemType = useCallback(
+    (item: Post) => (item.media?.length ? "media-post" : "text-post"),
+    [],
+  );
 
   const handleMomentumScrollEnd = useCallback(() => {
-    if (deferHandleRef.current !== null) {
-      if (Platform.OS === "android") {
-        clearTimeout(deferHandleRef.current as ReturnType<typeof setTimeout>);
-      } else {
-        (deferHandleRef.current as ReturnType<typeof InteractionManager.runAfterInteractions>).cancel();
-      }
-      deferHandleRef.current = null;
+    cancelDeferredFlush();
+    if (Platform.OS === "android") {
+      deferHandleRef.current = InteractionManager.runAfterInteractions(() => {
+        deferHandleRef.current = null;
+        requestAnimationFrame(() => {
+          flushViewability();
+        });
+      });
+      return;
     }
     flushViewability();
-  }, []);
+  }, [cancelDeferredFlush, flushViewability]);
 
   return (
-    <AnimatedFlatList
+    <AnimatedFlashList
       ref={ref}
       data={data}
       renderItem={renderItem}
       keyExtractor={keyExtractor}
+      getItemType={getItemType}
+      estimatedItemSize={420}
+      drawDistance={Platform.OS === "android" ? 250 : 300}
       onScroll={onScroll}
       scrollEventThrottle={32}
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={contentContainerStyle}
+      contentContainerStyle={contentContainerStyle as any}
       ListHeaderComponent={ListHeaderComponent}
       ListEmptyComponent={ListEmptyComponent}
       ListFooterComponent={ListFooterComponent}
@@ -190,13 +215,7 @@ const HomePostListInner = function HomePostListInner(
       viewabilityConfig={viewabilityConfig}
       onViewableItemsChanged={onViewableItemsChanged}
       onMomentumScrollEnd={handleMomentumScrollEnd}
-      removeClippedSubviews={true}
-      maxToRenderPerBatch={Platform.OS === "android" ? 3 : 5}
-      windowSize={Platform.OS === "android" ? 3 : 7}
-      initialNumToRender={3}
-      updateCellsBatchingPeriod={Platform.OS === "android" ? 150 : 100}
-      getItemLayout={undefined}
-      maintainVisibleContentPosition={Platform.OS === "android" ? undefined : { minIndexForVisible: 0 }}
+      maintainVisibleContentPosition={{ disabled: true }}
     />
   );
 };

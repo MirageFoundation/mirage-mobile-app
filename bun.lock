@@ -14,6 +14,7 @@
         "@react-navigation/elements": "^2.6.3",
         "@react-navigation/native": "^7.1.8",
         "@sentry/react-native": "^7.13.0",
+        "@shopify/flash-list": "^2.3.0",
         "@somesoap/react-native-image-palette": "^1.2.2",
         "@tanstack/query-sync-storage-persister": "^5.90.18",
         "@tanstack/react-query": "^5.90.12",
@@ -564,6 +565,8 @@
     "@sentry/react-native": ["@sentry/react-native@7.13.0", "", { "dependencies": { "@sentry/babel-plugin-component-annotate": "4.9.1", "@sentry/browser": "10.38.0", "@sentry/cli": "2.58.4", "@sentry/core": "10.38.0", "@sentry/react": "10.38.0", "@sentry/types": "10.38.0" }, "peerDependencies": { "expo": ">=49.0.0", "react": ">=17.0.0", "react-native": ">=0.65.0" }, "optionalPeers": ["expo"], "bin": { "sentry-expo-upload-sourcemaps": "scripts/expo-upload-sourcemaps.js" } }, "sha512-pKY+rln3CEnhnG21eUXcl/yeG5fkNruqXXjEikE5FjsyLmJi2POAGwT4tlupyHtG3fQT5mp06QI7bQdpAuH4Xw=="],
 
     "@sentry/types": ["@sentry/types@10.38.0", "", { "dependencies": { "@sentry/core": "10.38.0" } }, "sha512-DoeyTv/TvnoVDhHgdyv/wehieAKdyjLjEMtPOqqq/AjkP02BxeC0JYUrrWKOjV0wdLq5ZP8jKcCX8GN7awZonQ=="],
+
+    "@shopify/flash-list": ["@shopify/flash-list@2.3.0", "", { "peerDependencies": { "@babel/runtime": "*", "react": "*", "react-native": "*" } }, "sha512-DR7VuN8KJHTYj9zv1/IhpqrMBMQyeeW/DCWCbVQAAkWhHrc6ylIbXOY+qK93CuHABV+dNHXK/3V6p4wCSW/+wA=="],
 
     "@sinclair/typebox": ["@sinclair/typebox@0.27.10", "", {}, "sha512-MTBk/3jGLNB2tVxv6uLlFh1iu64iYOQ2PbdOSK3NW8JZsmlaOh2q6sdtKowBhfw8QFLmYNzTW4/oK4uATIi6ZA=="],
 
