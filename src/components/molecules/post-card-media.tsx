@@ -116,6 +116,8 @@ export const PostCardMedia = memo(
     const feedTapCooldownRef = useRef(false);
 
     const youtubeVideoId = media?.type === "youtube" ? (extractYouTubeVideoId(media.uri) ?? "") : "";
+    const shouldLazyMount = Platform.OS === "android" && !isPostDetail;
+    const youtubeThumbnailUri = youtubeVideoId ? `https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg` : "";
     const getPosition = useVideoPositionStore((s) => s.getPosition);
     const setPosition = useVideoPositionStore((s) => s.setPosition);
     const lastKnownYouTubeTimeRef = useRef(0);
@@ -541,7 +543,22 @@ export const PostCardMedia = memo(
         <View style={[styles.mediaWrapper, mediaWrapperStyle]}>
           {media.type === "youtube" ? (
             <>
-              {shouldUseAndroidYouTubeEmbed ? (
+              {shouldLazyMount && !isVisible ? (
+                <Pressable onPress={handleFeedYouTubeTap} style={styles.media}>
+                  <Image
+                    source={{ uri: youtubeThumbnailUri }}
+                    style={styles.media}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    recyclingKey={youtubeThumbnailUri}
+                  />
+                  <View style={styles.playOverlay} pointerEvents="none">
+                    <View style={styles.playButton}>
+                      <Ionicons name="play" size={28} color="#fff" />
+                    </View>
+                  </View>
+                </Pressable>
+              ) : shouldUseAndroidYouTubeEmbed ? (
                 <YouTubeAutoplayEmbed
                   ref={youtubeEmbedRef}
                   height={exceedsMaxHeight ? MEDIA_MAX_HEIGHT : calculatedHeight}
@@ -658,6 +675,15 @@ export const PostCardMedia = memo(
               )}
             </>
           ) : media.type === "video" ? (
+            shouldLazyMount && !isVisible ? (
+              <Pressable onPress={handleFeedVideoTap} style={styles.media}>
+                <View style={[styles.media, styles.videoPlaceholder]}>
+                  <View style={styles.playButton}>
+                    <Ionicons name="play" size={28} color="#fff" />
+                  </View>
+                </View>
+              </Pressable>
+            ) : (
             <Pressable onPress={isPostDetail ? handleMediaPress : handleFeedVideoTap} style={styles.media}>
               <Video
                 ref={videoRef}
@@ -711,6 +737,7 @@ export const PostCardMedia = memo(
                 }}
               />
             </Pressable>
+            )
           ) : (
             <Pressable onPress={handleMediaPress} style={styles.media}>
               <Image
@@ -718,6 +745,7 @@ export const PostCardMedia = memo(
                 style={styles.media}
                 contentFit="cover"
                 cachePolicy="memory-disk"
+                recyclingKey={resolvedMediaUri}
                 onLoad={({ source }) => {
                   updateMediaAspectRatioFromSize(source?.width, source?.height);
                   setMediaLoaded(true);
@@ -967,6 +995,11 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  videoPlaceholder: {
+    backgroundColor: "rgba(0, 0, 0, 0.15)",
     alignItems: "center",
     justifyContent: "center",
   },

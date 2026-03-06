@@ -192,7 +192,7 @@ const HomePostListInner = function HomePostListInner(
       onMomentumScrollEnd={handleMomentumScrollEnd}
       removeClippedSubviews={true}
       maxToRenderPerBatch={Platform.OS === "android" ? 3 : 5}
-      windowSize={Platform.OS === "android" ? 5 : 7}
+      windowSize={Platform.OS === "android" ? 3 : 7}
       initialNumToRender={3}
       updateCellsBatchingPeriod={Platform.OS === "android" ? 150 : 100}
       getItemLayout={undefined}
