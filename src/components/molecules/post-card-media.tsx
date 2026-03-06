@@ -629,19 +629,32 @@ export const PostCardMedia = memo(
                 </View>
               )}
               {isPostDetail && shouldUseAndroidYouTubeEmbed && !shouldBlurContent && (
-                <View style={styles.youtubeControlsContainer} pointerEvents="box-none">
-                  <View style={styles.youtubeControlsRow}>
-                    <Pressable onPress={handleYouTubeSeekBack} style={styles.youtubeControlButton}>
-                      <Ionicons name="play-back" size={18} color="#fff" />
-                    </Pressable>
-                    <Pressable onPress={handleYouTubeTogglePlay} style={styles.youtubeControlButton}>
-                      <Ionicons name={isVideoPlaying ? "pause" : "play"} size={18} color="#fff" />
-                    </Pressable>
-                    <Pressable onPress={handleYouTubeSeekForward} style={styles.youtubeControlButton}>
-                      <Ionicons name="play-forward" size={18} color="#fff" />
-                    </Pressable>
+                <>
+                  <View style={styles.youtubeControlsContainer} pointerEvents="box-none">
+                    <View style={styles.youtubeControlsRow}>
+                      <Pressable onPress={handleYouTubeSeekBack} style={styles.youtubeControlButton}>
+                        <Ionicons name="play-back" size={18} color="#fff" />
+                      </Pressable>
+                      <Pressable onPress={handleYouTubeTogglePlay} style={styles.youtubeControlButton}>
+                        <Ionicons name={isVideoPlaying ? "pause" : "play"} size={18} color="#fff" />
+                      </Pressable>
+                      <Pressable onPress={handleYouTubeSeekForward} style={styles.youtubeControlButton}>
+                        <Ionicons name="play-forward" size={18} color="#fff" />
+                      </Pressable>
+                    </View>
                   </View>
-                </View>
+                  <Pressable
+                    onPress={() => {
+                      onMediaPress?.();
+                    }}
+                    style={styles.fullscreenButton}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <View style={styles.fullscreenButtonInner}>
+                      <Ionicons name="expand" size={16} color="#fff" />
+                    </View>
+                  </Pressable>
+                </>
               )}
             </>
           ) : media.type === "video" ? (
@@ -795,7 +808,7 @@ export const PostCardMedia = memo(
           {(media.type === "video" || media.type === "youtube") &&
             !shouldBlurContent &&
             (media.type !== "video" || !isVideoProcessing) &&
-            !(media.type === "youtube" && (Platform.OS === "ios" || isPostDetail)) && (
+            !(media.type === "youtube" && Platform.OS === "ios") && (
               <Pressable
                 onPress={handleMuteToggle}
                 style={styles.muteButton}

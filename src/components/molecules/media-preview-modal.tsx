@@ -143,6 +143,8 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
   const [isLoading, setIsLoading] = useState(true);
   const muted = useVideoMuteStore((s) => s.isMuted);
   const toggleMute = useVideoMuteStore((s) => s.toggleMute);
+  const [controlsVisible, setControlsVisible] = useState(false);
+  const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const videoId = extractYouTubeVideoId(item.uri) ?? "";
   const isAndroid = Platform.OS === "android";
@@ -151,6 +153,29 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
   const setPositionStore = useVideoPositionStore((s) => s.setPosition);
   const hasRestoredRef = useRef(false);
   const lastKnownTimeRef = useRef(0);
+
+  const showControlsTemporarily = useCallback(() => {
+    setControlsVisible(true);
+    if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+    controlsTimerRef.current = setTimeout(() => {
+      setControlsVisible(false);
+    }, 2000);
+  }, []);
+
+  const handleScreenTap = useCallback(() => {
+    if (controlsVisible) {
+      if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+      setControlsVisible(false);
+    } else {
+      showControlsTemporarily();
+    }
+  }, [controlsVisible, showControlsTemporarily]);
+
+  useEffect(() => {
+    return () => {
+      if (controlsTimerRef.current) clearTimeout(controlsTimerRef.current);
+    };
+  }, []);
 
   const savePositionSync = useCallback(() => {
     if (!videoId) return;
@@ -238,12 +263,10 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
         height,
         justifyContent: "center",
         alignItems: "center",
-        paddingTop: insets.top + 12,
-        paddingBottom: insets.bottom + 12,
       }}
     >
       <Pressable
-        onPress={isAndroid ? undefined : handleTogglePlay}
+        onPress={isAndroid ? handleScreenTap : handleTogglePlay}
         style={{ width, height: youtubeHeight }}
       >
         {isAndroid ? (
@@ -257,7 +280,7 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
             controls={false}
             loop={true}
             allowFullscreen={false}
-            onPress={handleTogglePlay}
+            onPress={handleScreenTap}
             onReady={() => setIsLoading(false)}
             onPlaying={() => {
               setIsLoading(false);
@@ -308,23 +331,25 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
 
       </Pressable>
 
-      {isAndroid && (
-        <View style={[previewVideoStyles.youtubeControlsRow, { bottom: insets.bottom + 96 }]}>
-          <Pressable onPress={() => handleSeekBy(-10)} style={previewVideoStyles.youtubeControlButton}>
-            <Ionicons name="play-back" size={22} color="#fff" />
-          </Pressable>
-          <Pressable onPress={handleTogglePlay} style={previewVideoStyles.youtubeControlButton}>
-            <Ionicons name={playing ? "pause" : "play"} size={32} color="#fff" />
-          </Pressable>
-          <Pressable onPress={() => handleSeekBy(10)} style={previewVideoStyles.youtubeControlButton}>
-            <Ionicons name="play-forward" size={22} color="#fff" />
-          </Pressable>
+      {isAndroid && controlsVisible && (
+        <View style={previewVideoStyles.centerControlsOverlay} pointerEvents="box-none">
+          <View style={previewVideoStyles.centerControlsRow}>
+            <Pressable onPress={() => { handleSeekBy(-10); showControlsTemporarily(); }} style={previewVideoStyles.youtubeControlButton}>
+              <Ionicons name="play-back" size={22} color="#fff" />
+            </Pressable>
+            <Pressable onPress={() => { handleTogglePlay(); showControlsTemporarily(); }} style={previewVideoStyles.centerPlayButton}>
+              <Ionicons name={playing ? "pause" : "play"} size={36} color="#fff" />
+            </Pressable>
+            <Pressable onPress={() => { handleSeekBy(10); showControlsTemporarily(); }} style={previewVideoStyles.youtubeControlButton}>
+              <Ionicons name="play-forward" size={22} color="#fff" />
+            </Pressable>
+          </View>
         </View>
       )}
       {isAndroid && (
         <Pressable
           onPress={handleToggleMute}
-          style={[previewVideoStyles.muteButton, { bottom: insets.bottom + 56 }]}
+          style={[previewVideoStyles.muteButton, { bottom: insets.bottom + 10, right: 16 }]}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <View style={previewVideoStyles.muteButtonInner}>
@@ -363,12 +388,24 @@ const previewVideoStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  youtubeControlsRow: {
-    position: "absolute",
-    bottom: 96,
-    alignSelf: "center",
+  centerControlsOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 50,
+  },
+  centerControlsRow: {
     flexDirection: "row",
-    gap: 10,
+    alignItems: "center",
+    gap: 24,
+  },
+  centerPlayButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   youtubeControlButton: {
     width: 52,
@@ -699,7 +736,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
 
           {isVideo && (
             <Pressable
-              style={[styles.muteButton, { bottom: insets.bottom + 20 }]}
+              style={[styles.muteButton, { bottom: insets.bottom + 10 }]}
               onPress={handleMuteToggle}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
@@ -770,7 +807,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   muteButton: {
     position: "absolute",
-    right: 20,
+    right: 16,
     zIndex: 100,
   },
   controlButtonInner: {
