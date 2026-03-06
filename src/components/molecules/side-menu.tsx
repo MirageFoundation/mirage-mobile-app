@@ -577,8 +577,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   />
                   <MenuItem
                     iconName="card-outline"
-                    title="Subscription"
-                    subtitle="Manage your plan"
+                    title="Perks"
+                    subtitle="Manage your tier"
                     onPress={createHandler(onSubscription)}
                   />
                   <SectionFooter />

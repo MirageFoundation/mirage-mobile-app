@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Modal, Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -16,15 +16,13 @@ type ActivePlanCardProps = {
   onToggleAutoRenew?: () => void;
 };
 
-// Plan colors for visual distinction
 const PLAN_COLORS: Record<string, string> = {
-  Free: "#6B7280", // Gray
-  Trusted: "#3B82F6", // Blue
-  Established: "#8B5CF6", // Purple
-  Distinguished: "#F59E0B", // Amber/Gold
+  Free: "#6B7280",
+  Trusted: "#3B82F6",
+  Established: "#8B5CF6",
+  Distinguished: "#F59E0B",
 };
 
-// Plan icons
 const PLAN_ICONS: Record<string, string> = {
   Free: "person-outline",
   Trusted: "shield-checkmark-outline",
@@ -32,7 +30,6 @@ const PLAN_ICONS: Record<string, string> = {
   Distinguished: "diamond-outline",
 };
 
-// Info text for balance and reserve
 const BALANCE_INFO =
   "Spendable wallet balance in MIRAGE.\nThis is what a subscription will be paid with.";
 const RESERVE_INFO =
@@ -100,7 +97,7 @@ function formatTimeUntil(unixSeconds: number): string | null {
   return `${mins}m`;
 }
 
-export function ActivePlanCard({
+export const ActivePlanCard = memo(function ActivePlanCard({
   planTitle,
   balance,
   reserve,
@@ -115,7 +112,6 @@ export function ActivePlanCard({
   const isFree = planTitle === "Free";
   const renewalTime = subscriptionExpiry ? formatTimeUntil(subscriptionExpiry) : null;
 
-  // Info popup state
   const [showBalanceInfo, setShowBalanceInfo] = useState(false);
   const [showReserveInfo, setShowReserveInfo] = useState(false);
 
@@ -129,22 +125,62 @@ export function ActivePlanCard({
     setShowReserveInfo(true);
   }, []);
 
+  const handleCloseBalanceInfo = useCallback(() => setShowBalanceInfo(false), []);
+  const handleCloseReserveInfo = useCallback(() => setShowReserveInfo(false), []);
+
+  const containerStyle = useMemo(
+    () => [styles.container, { backgroundColor: theme.colors.background.default }],
+    [theme.colors.background.default]
+  );
+
+  const iconBgStyle = useMemo(
+    () => [styles.iconContainer, { backgroundColor: `${planColor}20` }],
+    [planColor]
+  );
+
+  const titleStyle = useMemo(
+    () => ({ color: theme.colors.text.default }),
+    [theme.colors.text.default]
+  );
+
+  const renewBadgeStyle = useMemo(
+    () => ({
+      backgroundColor: autoRenewLoading
+        ? theme.colors.background.subtle
+        : autoRenew
+          ? `${planColor}20`
+          : `${theme.colors.error[500]}15`,
+    }),
+    [autoRenewLoading, autoRenew, planColor, theme.colors.background.subtle, theme.colors.error]
+  );
+
+  const renewTextStyle = useMemo(
+    () => ({
+      color: autoRenewLoading
+        ? theme.colors.text.subtle
+        : autoRenew
+          ? planColor
+          : theme.colors.error[500],
+    }),
+    [autoRenewLoading, autoRenew, planColor, theme.colors.text.subtle, theme.colors.error]
+  );
+
+  const renewalTimeColor = autoRenew ? theme.colors.text.subtle : theme.colors.error[500];
+
+  const renewalTimeStyle = useMemo(
+    () => ({ color: renewalTimeColor }),
+    [renewalTimeColor]
+  );
+
+  const verticalDividerStyle = useMemo(
+    () => [styles.verticalDivider, { backgroundColor: theme.colors.border.subtle }],
+    [theme.colors.border.subtle]
+  );
+
   return (
-    <Box
-      rounded="lg"
-      p="md"
-      style={[
-        styles.container,
-        { backgroundColor: theme.colors.background.default },
-      ]}
-    >
-      {/* Plan Title with Icon */}
+    <Box rounded="lg" p="md" style={containerStyle}>
       <Box direction="row" alignItems="center" gap="sm">
-        <Box
-          center
-          rounded="md"
-          style={[styles.iconContainer, { backgroundColor: `${planColor}20` }]}
-        >
+        <Box center rounded="md" style={iconBgStyle}>
           <Icon
             icon={Ionicons}
             name={planIcon as any}
@@ -154,13 +190,9 @@ export function ActivePlanCard({
         </Box>
         <Box flex>
           <Text size="xs" mode="subtle" style={styles.label}>
-            CURRENT PLAN
+            CURRENT TIER
           </Text>
-          <Text
-            size="xxl"
-            weight="semibold"
-            style={{ color: theme.colors.text.default }}
-          >
+          <Text size="xxl" weight="semibold" style={titleStyle}>
             {planTitle}
           </Text>
         </Box>
@@ -170,29 +202,8 @@ export function ActivePlanCard({
             disabled={autoRenewLoading}
             hitSlop={8}
           >
-            <Box
-              px="sm"
-              py="xs"
-              rounded="full"
-              style={{
-                backgroundColor: autoRenewLoading
-                  ? theme.colors.background.subtle
-                  : autoRenew
-                    ? `${planColor}20`
-                    : `${theme.colors.error[500]}15`,
-              }}
-            >
-              <Text
-                size="xs"
-                weight="semibold"
-                style={{
-                  color: autoRenewLoading
-                    ? theme.colors.text.subtle
-                    : autoRenew
-                      ? planColor
-                      : theme.colors.error[500],
-                }}
-              >
+            <Box px="sm" py="xs" rounded="full" style={renewBadgeStyle}>
+              <Text size="xs" weight="semibold" style={renewTextStyle}>
                 {autoRenewLoading ? "Processing..." : autoRenew ? "AUTO-RENEW" : "NOT RENEWING"}
               </Text>
             </Box>
@@ -206,9 +217,9 @@ export function ActivePlanCard({
             icon={Ionicons}
             name="time-outline"
             size={14}
-            color={autoRenew ? theme.colors.text.subtle : theme.colors.error[500]}
+            color={renewalTimeColor}
           />
-          <Text size="xs" style={{ color: autoRenew ? theme.colors.text.subtle : theme.colors.error[500] }}>
+          <Text size="xs" style={renewalTimeStyle}>
             {autoRenew ? `Renews in ${renewalTime}` : `Expires in ${renewalTime}`}
           </Text>
         </Box>
@@ -216,9 +227,7 @@ export function ActivePlanCard({
 
       <Divider style={styles.divider} size="extraThin" />
 
-      {/* Balance & Reserve Stats */}
       <Box direction="row" gap="md">
-        {/* Balance */}
         <Pressable
           style={styles.statPressable}
           onPress={handleBalancePress}
@@ -242,15 +251,8 @@ export function ActivePlanCard({
           </Box>
         </Pressable>
 
-        {/* Vertical Divider */}
-        <View
-          style={[
-            styles.verticalDivider,
-            { backgroundColor: theme.colors.border.subtle },
-          ]}
-        />
+        <View style={verticalDividerStyle} />
 
-        {/* Reserve */}
         <Pressable
           style={styles.statPressable}
           onPress={handleReservePress}
@@ -275,22 +277,20 @@ export function ActivePlanCard({
         </Pressable>
       </Box>
 
-      {/* Balance Info Popup */}
       <InfoPopup
         visible={showBalanceInfo}
         text={BALANCE_INFO}
-        onClose={() => setShowBalanceInfo(false)}
+        onClose={handleCloseBalanceInfo}
       />
 
-      {/* Reserve Info Popup */}
       <InfoPopup
         visible={showReserveInfo}
         text={RESERVE_INFO}
-        onClose={() => setShowReserveInfo(false)}
+        onClose={handleCloseReserveInfo}
       />
     </Box>
   );
-}
+});
 
 const styles = StyleSheet.create((theme) => ({
   container: {

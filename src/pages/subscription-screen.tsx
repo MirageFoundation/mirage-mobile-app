@@ -490,7 +490,7 @@ export function SubscriptionScreen() {
           <EvilIcons name="close" size={28} color={theme.colors.text.default} />
         </Pressable>
         <Text size="lg" weight="medium">
-          Subscription
+          Perks
         </Text>
         <View style={styles.placeholder} />
       </View>
@@ -519,7 +519,7 @@ export function SubscriptionScreen() {
 
           <Box px="md" mb="sm">
             <Text size="xs" weight="semibold" mode="subtle" style={styles.sectionTitle}>
-              AVAILABLE PLANS
+              AVAILABLE TIERS
             </Text>
           </Box>
 
@@ -548,7 +548,7 @@ export function SubscriptionScreen() {
               ]}
             >
               <Text size="sm" mode="subtle" style={styles.disclaimerText}>
-                Subscriptions are billed every subscription period in MIRAGE tokens.
+                Perks are billed every subscription period in MIRAGE tokens.
                 Tokens are burned on payment. If renewal fails due to insufficient
                 balance, you will be downgraded to Free.
               </Text>
