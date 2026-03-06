@@ -8,7 +8,9 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
+  InteractionManager,
   ListRenderItem,
+  Platform,
   Share,
   View,
   type ViewToken,
@@ -786,33 +788,65 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   }, [postsWithVotes, activeTab]);
 
   const profileViewabilityConfig = useRef({
-    viewAreaCoveragePercentThreshold: 11,
-    minimumViewTime: 100,
+    viewAreaCoveragePercentThreshold: 30,
+    minimumViewTime: 300,
   }).current;
+
+  const pendingProfileViewableRef = useRef<ViewToken[] | null>(null);
+  const profileDeferHandleRef = useRef<ReturnType<typeof setTimeout> | ReturnType<typeof InteractionManager.runAfterInteractions> | null>(null);
+
+  const flushProfileViewability = () => {
+    const items = pendingProfileViewableRef.current;
+    if (!items) return;
+    const visibleItems = items.filter(
+      (item) => item.isViewable && item.item && typeof item.item === "object" && "id" in item.item
+    );
+    const videoItems = visibleItems.filter(
+      (item) => postHasPlayableVideo(item.item)
+    );
+    if (videoItems.length > 0) {
+      const midIdx = Math.floor((visibleItems.length - 1) / 2);
+      const midListIndex = visibleItems[midIdx]?.index ?? 0;
+      let best = videoItems[0];
+      let bestDist = Math.abs((best.index ?? 0) - midListIndex);
+      for (let i = 1; i < videoItems.length; i++) {
+        const d = Math.abs((videoItems[i].index ?? 0) - midListIndex);
+        if (d < bestDist) { best = videoItems[i]; bestDist = d; }
+      }
+      setActiveVideoPostId(best.item.id);
+    } else {
+      setActiveVideoPostId(null);
+    }
+  };
 
   const onProfileViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      const visibleItems = viewableItems.filter(
-        (item) => item.isViewable && item.item && typeof item.item === "object" && "id" in item.item
-      );
-      const videoItems = visibleItems.filter(
-        (item) => postHasPlayableVideo(item.item)
-      );
-      if (videoItems.length > 0) {
-        const midIdx = Math.floor((visibleItems.length - 1) / 2);
-        const midListIndex = visibleItems[midIdx]?.index ?? 0;
-        let best = videoItems[0];
-        let bestDist = Math.abs((best.index ?? 0) - midListIndex);
-        for (let i = 1; i < videoItems.length; i++) {
-          const d = Math.abs((videoItems[i].index ?? 0) - midListIndex);
-          if (d < bestDist) { best = videoItems[i]; bestDist = d; }
+      pendingProfileViewableRef.current = viewableItems;
+      if (Platform.OS === "android") {
+        if (profileDeferHandleRef.current !== null) {
+          clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
         }
-        setActiveVideoPostId(best.item.id);
+        profileDeferHandleRef.current = setTimeout(flushProfileViewability, 150);
       } else {
-        setActiveVideoPostId(null);
+        if (profileDeferHandleRef.current !== null) {
+          (profileDeferHandleRef.current as ReturnType<typeof InteractionManager.runAfterInteractions>).cancel();
+        }
+        profileDeferHandleRef.current = InteractionManager.runAfterInteractions(flushProfileViewability);
       }
     }
   ).current;
+
+  const handleProfileMomentumScrollEnd = useCallback(() => {
+    if (profileDeferHandleRef.current !== null) {
+      if (Platform.OS === "android") {
+        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+      } else {
+        (profileDeferHandleRef.current as ReturnType<typeof InteractionManager.runAfterInteractions>).cancel();
+      }
+      profileDeferHandleRef.current = null;
+    }
+    flushProfileViewability();
+  }, []);
 
   const keyExtractor = useCallback(
     (item: Post | ApiPost | "header" | "tabs", index: number) => {
@@ -1067,21 +1101,22 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           onScroll={scrollHandler}
-          scrollEventThrottle={16}
+          scrollEventThrottle={32}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={contentContainerStyle}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.3}
           ListFooterComponent={ListFooterComponent}
-          removeClippedSubviews={false}
-          maxToRenderPerBatch={5}
-          windowSize={5}
-          initialNumToRender={7}
-          updateCellsBatchingPeriod={100}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={Platform.OS === "android" ? 3 : 5}
+          windowSize={Platform.OS === "android" ? 3 : 5}
+          initialNumToRender={4}
+          updateCellsBatchingPeriod={Platform.OS === "android" ? 150 : 100}
           bounces={true}
-          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          maintainVisibleContentPosition={Platform.OS === "android" ? undefined : { minIndexForVisible: 0 }}
           viewabilityConfig={profileViewabilityConfig}
           onViewableItemsChanged={onProfileViewableItemsChanged}
+          onMomentumScrollEnd={handleProfileMomentumScrollEnd}
         />
       </GestureDetector>
 
