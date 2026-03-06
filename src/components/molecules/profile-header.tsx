@@ -129,21 +129,23 @@ export const ProfileHeaderBar = ({
   const insets = useSafeAreaInsets();
 
   const headerBgStyle = useAnimatedStyle(() => {
-    if (!scrollY) return { backgroundColor: "rgba(0,0,0,0)" };
+    if (!scrollY) return { opacity: 0 };
 
-    const backgroundColor = interpolateColor(
+    const opacity = interpolate(
       scrollY.value,
-      [0, SCROLL_THRESHOLD * 0.3, SCROLL_THRESHOLD * 0.7, SCROLL_THRESHOLD],
-      ["rgba(0,0,0,0)", "rgba(0,0,0,0)", "#000000", "#000000"],
+      [SCROLL_THRESHOLD * 0.3, SCROLL_THRESHOLD * 0.7],
+      [0, 1],
+      'clamp',
     );
 
-    return { backgroundColor };
+    return { opacity };
   });
 
   return (
-    <Animated.View
-      style={[styles.headerBar, { paddingTop: insets.top }, headerBgStyle]}
+    <View
+      style={[styles.headerBar, { paddingTop: insets.top }]}
     >
+      <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#000000' }, headerBgStyle]} />
       <Box direction="row" center px="md" py="sm" style={styles.headerRow}>
         <Box direction="row" center gap="xs">
           <IconButton
@@ -251,7 +253,7 @@ export const ProfileHeaderBar = ({
           )}
         </Box>
       </Box>
-    </Animated.View>
+    </View>
   );
 };
 

@@ -8,14 +8,22 @@ const DEFAULT_NODES = [
   "https://mirage.talk", // fallback
 ];
 
+const MAX_CONCURRENT_REQUESTS = 6;
+const RATE_LIMIT_RETRY_DELAY = 1000;
+const MAX_RATE_LIMIT_RETRIES = 3;
+
 class ApiClient {
   private client: AxiosInstance;
   private nodeList: string[];
   private currentNodeIndex: number;
+  private activeRequests: number;
+  private requestQueue: Array<() => void>;
 
   constructor() {
     this.nodeList = DEFAULT_NODES;
     this.currentNodeIndex = 0;
+    this.activeRequests = 0;
+    this.requestQueue = [];
 
     this.client = axios.create({
       baseURL: this.getBaseUrl(),
@@ -155,6 +163,32 @@ class ApiClient {
    * GET request
    */
   async get<T, P = unknown>(path: string, params?: P): Promise<T> {
+    return this.withConcurrencyLimit(() => this.executeGet<T, P>(path, params));
+  }
+
+  private async withConcurrencyLimit<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.activeRequests >= MAX_CONCURRENT_REQUESTS) {
+      await new Promise<void>((resolve) => {
+        this.requestQueue.push(resolve);
+      });
+    }
+    this.activeRequests++;
+    try {
+      return await fn();
+    } finally {
+      this.activeRequests--;
+      if (this.requestQueue.length > 0) {
+        const next = this.requestQueue.shift();
+        next?.();
+      }
+    }
+  }
+
+  private async executeGet<T, P = unknown>(
+    path: string,
+    params?: P,
+    retryCount = 0,
+  ): Promise<T> {
     console.log(
       `[ApiClient] GET ${path}`,
       params ? `with params: ${JSON.stringify(params)}` : "no params"
@@ -171,6 +205,16 @@ class ApiClient {
       const errorData = error?.response?.data;
       const errorMessage = error?.message;
       const status = error?.response?.status;
+
+      if (status === 429 && retryCount < MAX_RATE_LIMIT_RETRIES) {
+        const delay = RATE_LIMIT_RETRY_DELAY * Math.pow(2, retryCount);
+        console.log(
+          `[ApiClient] Rate limited on ${path}, retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RATE_LIMIT_RETRIES})`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        return this.executeGet<T, P>(path, params, retryCount + 1);
+      }
+
       Sentry.addBreadcrumb({
         category: "api",
         message: `GET ${path} failed`,

@@ -123,7 +123,6 @@ const MemoizedProfileCommentItem = memo(ProfileCommentItem, (prev, next) => {
 
 const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  post,
- contentAnimatedStyle,
  isVisible,
  screenActive,
  onPostPress,
@@ -133,7 +132,6 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
   onTopicPress,
 }: {
  post: Post;
- contentAnimatedStyle: any;
  isVisible?: boolean;
  screenActive?: boolean;
  onPostPress: (postId: string) => void;
@@ -153,7 +151,6 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
      : post.media,
  } : post;
  return (
-  <Animated.View style={contentAnimatedStyle}>
    <MemoizedPostCardItem
     post={displayPost}
     isOwnPost={true}
@@ -166,26 +163,21 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
     onMorePress={onMorePress}
    onTopicPress={onTopicPress}
    />
-  </Animated.View>
  );
 });
 
-const AnimatedCommentWrapper = memo(function AnimatedCommentWrapper({
+const MemoizedCommentWrapper = memo(function MemoizedCommentWrapper({
  comment,
- contentAnimatedStyle,
  onPress,
 }: {
  comment: ApiPost;
- contentAnimatedStyle: any;
  onPress: (commentId: string, rootPostId: string) => void;
 }) {
  return (
-  <Animated.View style={contentAnimatedStyle}>
    <MemoizedProfileCommentItem
     comment={comment}
     onPress={onPress}
    />
-  </Animated.View>
  );
 });
 
@@ -860,7 +852,6 @@ useEffect(() => {
           return (
             <AnimatedPostWrapper
              post={cleanPost}
-             contentAnimatedStyle={contentAnimatedStyle}
              isVisible={activeVideoPostId === item.id}
              screenActive={isFocused}
              onPostPress={handlePostPress}
@@ -874,9 +865,8 @@ useEffect(() => {
 
        if (activeTab === 1 && "post_id" in item) {
          return (
-           <AnimatedCommentWrapper
+           <MemoizedCommentWrapper
             comment={item}
-            contentAnimatedStyle={contentAnimatedStyle}
             onPress={handleCommentPress}
            />
          );
@@ -903,7 +893,6 @@ useEffect(() => {
         handlePostMorePress,
        handleCommentPress,
       animatedTabIndex,
-      contentAnimatedStyle,
       postsWithoutWarnings,
       activeVideoPostId,
       isFocused,
@@ -913,51 +902,39 @@ useEffect(() => {
  const ListFooterComponent = useCallback(() => {
     if (activeTab === 2) {
       return (
-        <Animated.View style={contentAnimatedStyle}>
           <ProfileAboutTab
             userAddress={user?.walletAddress}
             isOwnProfile={true}
             onBlockedPress={handleBlockedPress}
           />
-        </Animated.View>
       );
     }
 
     if (isLoadingPosts) {
-      return (
-        <Animated.View style={contentAnimatedStyle}>
-          {activeTab === 0 ? (
+      return activeTab === 0 ? (
             <PostCardSkeletonList count={3} />
           ) : (
             <ProfilePostsSkeleton count={5} type="comments" />
-          )}
-        </Animated.View>
-      );
+          );
     }
 
     if (listData.length <= 2) {
       const tabType = activeTab === 0 ? "posts" : "comments";
       return (
-        <Animated.View style={contentAnimatedStyle}>
           <ProfileEmptyState
             tabType={tabType}
             onSettingsPress={handleSettingsPress}
             isOwnProfile={true}
           />
-        </Animated.View>
       );
     }
 
     if (isFetchingNextPage) {
-      return (
-        <Animated.View style={contentAnimatedStyle}>
-          {activeTab === 0 ? (
+      return activeTab === 0 ? (
             <PostCardSkeletonList count={1} />
           ) : (
             <ProfilePostsSkeleton count={2} type="comments" />
-          )}
-        </Animated.View>
-      );
+          );
     }
 
     return <View style={styles.bottomSpacer} />;
@@ -969,7 +946,6 @@ useEffect(() => {
     handleSettingsPress,
     user?.walletAddress,
     handleBlockedPress,
-    contentAnimatedStyle,
   ]);
 
   const stickyTabsAnimatedStyle = useAnimatedStyle(() => {
@@ -1030,7 +1006,7 @@ useEffect(() => {
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           onScroll={scrollHandler}
-          scrollEventThrottle={32}
+          scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={contentContainerStyle}
           onEndReached={handleEndReached}
