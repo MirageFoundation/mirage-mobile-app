@@ -1,4 +1,5 @@
 import { EvilIcons } from "@expo/vector-icons";
+import * as Sentry from "@sentry/react-native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, View } from "react-native";
@@ -40,6 +41,20 @@ const formatMirageBalance = (umirage: number): number => {
 };
 
 const fmt = (n: string | number) => Number(n).toLocaleString();
+
+function captureSubscriptionException(
+  error: unknown,
+  action: string,
+  extra?: Record<string, unknown>
+) {
+  Sentry.captureException(error, {
+    tags: {
+      feature: "subscription",
+      action,
+    },
+    extra,
+  });
+}
 
 function buildShortFeatures(tier: TierInfo, isFree: boolean): PlanFeature[] {
   const features: PlanFeature[] = [];
@@ -278,12 +293,23 @@ export function SubscriptionScreen() {
   const [optimisticAutoRenew, setOptimisticAutoRenew] = useState<boolean | null>(null);
   const [autoRenewProcessing, setAutoRenewProcessing] = useState(false);
 
-  if (statusError) {
+  useEffect(() => {
+    if (!statusError) {
+      return;
+    }
+
     console.error("[SubscriptionScreen] Failed to fetch user status:", statusError);
-  }
-  if (configError) {
+    captureSubscriptionException(statusError, "fetch-user-status");
+  }, [statusError]);
+
+  useEffect(() => {
+    if (!configError) {
+      return;
+    }
+
     console.error("[SubscriptionScreen] Failed to fetch config/tiers:", configError);
-  }
+    captureSubscriptionException(configError, "fetch-config");
+  }, [configError]);
 
   const plans: Plan[] = useMemo(() => {
     if (!config?.tiers?.length) return [];
@@ -319,8 +345,22 @@ export function SubscriptionScreen() {
       const planIndex = plans.findIndex((p) => p.id === planId);
       if (planIndex < 0) return;
 
+      const targetPlan = plans[planIndex];
+
       triggerHaptic("medium");
       setSubscribingPlanId(planId);
+      Sentry.addBreadcrumb({
+        category: "subscription",
+        message: "Subscription action started",
+        level: "info",
+        data: {
+          planId,
+          planIndex,
+          isDowngradeToFree: planIndex === 0,
+          effectiveAutoRenew,
+          targetCost: targetPlan?.cost,
+        },
+      });
 
       if (planIndex === 0) {
         if (!effectiveAutoRenew) return;
@@ -336,6 +376,10 @@ export function SubscriptionScreen() {
             setSubscribingPlanId(null);
             setAutoRenewProcessing(false);
             console.error("[SubscriptionScreen] Failed to cancel auto-renew:", error);
+            captureSubscriptionException(error, "cancel-auto-renew", {
+              planId,
+              planIndex,
+            });
             triggerHaptic("error");
             Alert.alert(
               "Downgrade Failed",
@@ -357,6 +401,11 @@ export function SubscriptionScreen() {
           setSubscribingPlanId(null);
           setOptimisticLevel(null);
           console.error("[SubscriptionScreen] Failed to subscribe:", error);
+          captureSubscriptionException(error, "upgrade-plan", {
+            planId,
+            planIndex,
+            targetCost: targetPlan?.cost,
+          });
           triggerHaptic("error");
           Alert.alert(
             "Subscription Failed",
@@ -378,6 +427,15 @@ export function SubscriptionScreen() {
     const newValue = !effectiveAutoRenew;
     triggerHaptic("medium");
     setAutoRenewProcessing(true);
+    Sentry.addBreadcrumb({
+      category: "subscription",
+      message: "Auto-renew toggled",
+      level: "info",
+      data: {
+        currentValue: effectiveAutoRenew,
+        nextValue: newValue,
+      },
+    });
     autoRenewalMutation.mutate(newValue, {
       onSuccess: () => {
         setAutoRenewProcessing(false);
@@ -386,6 +444,11 @@ export function SubscriptionScreen() {
       },
       onError: (error) => {
         setAutoRenewProcessing(false);
+        console.error("[SubscriptionScreen] Failed to update auto-renew:", error);
+        captureSubscriptionException(error, "toggle-auto-renew", {
+          currentValue: effectiveAutoRenew,
+          nextValue: newValue,
+        });
         triggerHaptic("error");
         Alert.alert(
           "Failed",

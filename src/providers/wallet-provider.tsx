@@ -1,4 +1,5 @@
 import React, { memo, useEffect } from "react";
+import * as Sentry from "@sentry/react-native";
 import { useAuthStore } from "@/src/stores";
 
 /**
@@ -14,6 +15,12 @@ export const WalletProvider = memo(({ children }: { children: React.ReactNode })
     // Initialize wallet on mount
     initializeWallet().catch((error) => {
       console.error("[WalletProvider] Failed to initialize wallet:", error);
+      Sentry.captureException(error, {
+        tags: {
+          feature: "wallet",
+          action: "initialize",
+        },
+      });
     });
   }, [initializeWallet]);
 

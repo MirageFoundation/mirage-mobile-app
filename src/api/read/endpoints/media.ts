@@ -5,6 +5,7 @@
  */
 
 import { api } from "@/src/api/client";
+import * as Sentry from "@sentry/react-native";
 import type { ImageUploadResponse, VideoUploadResponse } from "@/src/api/types";
 
 // ============================================
@@ -15,6 +16,32 @@ export type MediaType = "image" | "video";
 
 export interface GetUploadUrlParams {
   type: MediaType;
+}
+
+function getFileNameFromUri(localUri: string): string {
+  return localUri.split("/").pop() || "unknown";
+}
+
+function captureMediaUploadException(
+  error: unknown,
+  mediaType: MediaType,
+  stage: string,
+  localUri: string,
+  contentType: string,
+  extra?: Record<string, unknown>
+) {
+  Sentry.captureException(error, {
+    tags: {
+      feature: "media-upload",
+      media_type: mediaType,
+      stage,
+    },
+    extra: {
+      fileName: getFileNameFromUri(localUri),
+      contentType,
+      ...extra,
+    },
+  });
 }
 
 // ============================================
@@ -79,7 +106,7 @@ export async function uploadToSignedUrl(
   const formData = new FormData();
   
   // Extract filename from URI
-  const filename = localUri.split("/").pop() || "image.jpg";
+  const filename = getFileNameFromUri(localUri) || "image.jpg";
   
   // Append the file - React Native handles file:// URIs
   // @ts-expect-error - React Native FormData accepts this format
@@ -103,7 +130,13 @@ export async function uploadToSignedUrl(
   if (!response.ok) {
     const errorText = await response.text().catch(() => "Unknown error");
     console.error("[MediaUpload] Upload failed:", response.status, errorText);
-    throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+    throw Object.assign(
+      new Error(`Upload failed: ${response.status} ${response.statusText}`),
+      {
+        status: response.status,
+        responseText: errorText,
+      }
+    );
   }
 
   const result = await response.json().catch(() => ({}));
@@ -157,6 +190,15 @@ export async function uploadImage(
   contentType: string = "image/jpeg"
 ): Promise<UploadImageResult> {
   console.log("[MediaUpload] uploadImage called with:", { localUri, contentType });
+  Sentry.addBreadcrumb({
+    category: "media-upload",
+    message: "Starting image upload",
+    level: "info",
+    data: {
+      fileName: getFileNameFromUri(localUri),
+      contentType,
+    },
+  });
 
   // 1. Get the signed upload URL
   console.log("[MediaUpload] Getting upload URL from API...");
@@ -166,6 +208,7 @@ export async function uploadImage(
     console.log("[MediaUpload] Got upload response:", uploadResponse);
   } catch (error) {
     console.error("[MediaUpload] Failed to get upload URL:", error);
+    captureMediaUploadException(error, "image", "get-upload-url", localUri, contentType);
     throw error;
   }
 
@@ -176,6 +219,10 @@ export async function uploadImage(
     console.log("[MediaUpload] File uploaded successfully");
   } catch (error) {
     console.error("[MediaUpload] Failed to upload file:", error);
+    captureMediaUploadException(error, "image", "upload-file", localUri, contentType, {
+      status: (error as { status?: number }).status,
+      responseText: (error as { responseText?: string }).responseText,
+    });
     throw error;
   }
 
@@ -280,7 +327,12 @@ export async function uploadVideoToSignedUrl(
         resolve();
       } else {
         console.error("[VideoUpload] Upload failed:", xhr.status, xhr.responseText);
-        reject(new Error(`Upload failed: ${xhr.status}`));
+        reject(
+          Object.assign(new Error(`Upload failed: ${xhr.status}`), {
+            status: xhr.status,
+            responseText: xhr.responseText,
+          })
+        );
       }
     });
 
@@ -316,6 +368,15 @@ export async function uploadVideo(
   onProgress?: UploadProgressCallback
 ): Promise<UploadVideoResult> {
   console.log("[VideoUpload] uploadVideo called with:", { localUri, contentType });
+  Sentry.addBreadcrumb({
+    category: "media-upload",
+    message: "Starting video upload",
+    level: "info",
+    data: {
+      fileName: getFileNameFromUri(localUri),
+      contentType,
+    },
+  });
 
   console.log("[VideoUpload] Getting upload URL from API...");
   let uploadResponse: VideoUploadResponse;
@@ -334,6 +395,7 @@ export async function uploadVideo(
     }
   } catch (error) {
     console.error("[VideoUpload] Failed to get upload URL:", error);
+    captureMediaUploadException(error, "video", "get-upload-url", localUri, contentType);
     throw error;
   }
 
@@ -348,6 +410,10 @@ export async function uploadVideo(
     console.log("[VideoUpload] File uploaded successfully");
   } catch (error) {
     console.error("[VideoUpload] Failed to upload file:", error);
+    captureMediaUploadException(error, "video", "upload-file", localUri, contentType, {
+      status: (error as { status?: number }).status,
+      responseText: (error as { responseText?: string }).responseText,
+    });
     throw error;
   }
 
