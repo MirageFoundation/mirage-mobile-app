@@ -10,11 +10,13 @@ import {
   InteractionManager,
   Platform,
   Share,
+  useWindowDimensions,
   View,
   type ViewToken,
 } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  useAnimatedReaction,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
@@ -29,6 +31,8 @@ import {
   useProfile,
   useUserStatus,
 } from "@/src/api/read";
+import { getUserPosts } from "@/src/api/read/endpoints/posts";
+import { queryKeys } from "@/src/api/read/query-keys";
 import { transformApiPost } from "@/src/api/read/utils";
 import type { Post as ApiPost } from "@/src/api/types";
 import {
@@ -53,6 +57,7 @@ import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils
 import { ProfileCommentItem } from "@/src/components/molecules/profile-comment-item";
 import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { ProfileContentAnimated } from "@/src/components/molecules/profile-content-animated";
+import { PROFILE_TAB_BAR_HEIGHT } from "@/src/components/molecules/profile-tabs";
 import { Box } from "@/src/components/ui/primitives";
 import {
   useBlockHandler,
@@ -187,6 +192,7 @@ export function ProfileScreen() {
   const user = useAuthStore((s) => s.user);
   const shareServer = usePreferencesStore((s) => s.shareServer);
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { theme } = useUnistyles();
   const queryClient = useQueryClient();
 
@@ -211,6 +217,7 @@ export function ProfileScreen() {
   const animatedTabIndex = useSharedValue(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [isTabsSticky, setIsTabsSticky] = useState(false);
 
   const menuSheetRef = useRef<ProfileMenuSheetRef>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
@@ -255,6 +262,10 @@ export function ProfileScreen() {
 
   const headerHeight = insets.top + HEADER_BAR_HEIGHT;
   const stickyThreshold = PROFILE_CONTENT_HEIGHT;
+  const minimumContentHeight = useMemo(
+    () => windowHeight + stickyThreshold + 1,
+    [windowHeight, stickyThreshold],
+  );
 
   const getTabType = useCallback((): "submissions" | "comments" => {
     return activeTab === 0 ? "submissions" : "comments";
@@ -273,6 +284,27 @@ export function ProfileScreen() {
   });
 
   const [focusVersion, setFocusVersion] = useState(0);
+
+  useEffect(() => {
+    if (!user?.walletAddress) return;
+
+    queryClient.prefetchInfiniteQuery({
+      queryKey: queryKeys.userPosts(user.walletAddress, "comments"),
+      queryFn: ({ pageParam = 1 }) =>
+        getUserPosts({
+          owner: user.walletAddress,
+          address: user.walletAddress,
+          page: pageParam,
+          type: "comments",
+          limit: 20,
+        }),
+      initialPageParam: 1,
+      getNextPageParam: (lastPage) => {
+        if (!lastPage.has_more) return undefined;
+        return lastPage.page + 1;
+      },
+    });
+  }, [queryClient, user?.walletAddress]);
 
  const apiPosts = useMemo(() => {
    const postOverrides = usePostEditStore.getState().overrides;
@@ -834,6 +866,10 @@ useEffect(() => {
         }
 
         if (item === "tabs") {
+          if (isTabsSticky) {
+            return <View style={styles.inlineTabPlaceholder} />;
+          }
+
           return (
             <View>
               <ProfileTabBar
@@ -850,25 +886,29 @@ useEffect(() => {
         if (activeTab === 0 && "id" in item) {
           const cleanPost = postsWithoutWarnings.get(item.id) || item;
           return (
-            <AnimatedPostWrapper
-             post={cleanPost}
-             isVisible={activeVideoPostId === item.id}
-             screenActive={isFocused}
-             onPostPress={handlePostPress}
-             onAuthorPress={handleAuthorPress}
-             onCommentPress={handlePostPress}
-             onMorePress={handlePostMorePress}
-             onTopicPress={handleTopicPress}
-            />
+            <Animated.View style={contentAnimatedStyle}>
+              <AnimatedPostWrapper
+               post={cleanPost}
+               isVisible={activeVideoPostId === item.id}
+               screenActive={isFocused}
+               onPostPress={handlePostPress}
+               onAuthorPress={handleAuthorPress}
+               onCommentPress={handlePostPress}
+               onMorePress={handlePostMorePress}
+               onTopicPress={handleTopicPress}
+              />
+            </Animated.View>
           );
         }
 
        if (activeTab === 1 && "post_id" in item) {
          return (
-           <MemoizedCommentWrapper
-            comment={item}
-            onPress={handleCommentPress}
-           />
+           <Animated.View style={contentAnimatedStyle}>
+             <MemoizedCommentWrapper
+              comment={item}
+              onPress={handleCommentPress}
+             />
+           </Animated.View>
          );
        }
 
@@ -885,6 +925,7 @@ useEffect(() => {
        handleEditUsernamePress,
         isLoading,
        headerHeight,
+        isTabsSticky,
         activeTab,
         handleTabChange,
         handleTabDoubleTap,
@@ -892,6 +933,7 @@ useEffect(() => {
         handleAuthorPress,
         handlePostMorePress,
        handleCommentPress,
+      contentAnimatedStyle,
       animatedTabIndex,
       postsWithoutWarnings,
       activeVideoPostId,
@@ -902,42 +944,58 @@ useEffect(() => {
  const ListFooterComponent = useCallback(() => {
     if (activeTab === 2) {
       return (
-          <ProfileAboutTab
-            userAddress={user?.walletAddress}
-            isOwnProfile={true}
-            onBlockedPress={handleBlockedPress}
-          />
+          <Animated.View style={contentAnimatedStyle}>
+            <ProfileAboutTab
+              userAddress={user?.walletAddress}
+              isOwnProfile={true}
+              onBlockedPress={handleBlockedPress}
+            />
+          </Animated.View>
       );
     }
 
     if (isLoadingPosts) {
       return activeTab === 0 ? (
-            <PostCardSkeletonList count={3} />
+            <Animated.View style={contentAnimatedStyle}>
+              <PostCardSkeletonList count={3} />
+            </Animated.View>
           ) : (
-            <ProfilePostsSkeleton count={5} type="comments" />
+            <Animated.View style={contentAnimatedStyle}>
+              <ProfilePostsSkeleton count={5} type="comments" />
+            </Animated.View>
           );
     }
 
     if (listData.length <= 2) {
       const tabType = activeTab === 0 ? "posts" : "comments";
       return (
-          <ProfileEmptyState
-            tabType={tabType}
-            onSettingsPress={handleSettingsPress}
-            isOwnProfile={true}
-          />
+          <Animated.View style={contentAnimatedStyle}>
+            <ProfileEmptyState
+              tabType={tabType}
+              onSettingsPress={handleSettingsPress}
+              isOwnProfile={true}
+            />
+          </Animated.View>
       );
     }
 
     if (isFetchingNextPage) {
       return activeTab === 0 ? (
-            <PostCardSkeletonList count={1} />
+            <Animated.View style={contentAnimatedStyle}>
+              <PostCardSkeletonList count={1} />
+            </Animated.View>
           ) : (
-            <ProfilePostsSkeleton count={2} type="comments" />
+            <Animated.View style={contentAnimatedStyle}>
+              <ProfilePostsSkeleton count={2} type="comments" />
+            </Animated.View>
           );
     }
 
-    return <View style={styles.bottomSpacer} />;
+    return (
+      <Animated.View style={contentAnimatedStyle}>
+        <View style={styles.bottomSpacer} />
+      </Animated.View>
+    );
   }, [
     activeTab,
     isLoadingPosts,
@@ -946,6 +1004,7 @@ useEffect(() => {
     handleSettingsPress,
     user?.walletAddress,
     handleBlockedPress,
+    contentAnimatedStyle,
   ]);
 
   const stickyTabsAnimatedStyle = useAnimatedStyle(() => {
@@ -956,13 +1015,24 @@ useEffect(() => {
     } as any;
   });
 
+  useAnimatedReaction(
+    () => scrollY.value >= stickyThreshold,
+    (nextIsSticky, previousIsSticky) => {
+      if (nextIsSticky !== previousIsSticky) {
+        runOnJS(setIsTabsSticky)(nextIsSticky);
+      }
+    },
+    [stickyThreshold],
+  );
+
   const contentContainerStyle = useMemo(
     () => ({
       paddingTop: headerHeight,
       paddingBottom: insets.bottom + 20,
       flexGrow: 1,
+      minHeight: minimumContentHeight,
     }),
-    [headerHeight, insets.bottom],
+    [headerHeight, insets.bottom, minimumContentHeight],
   );
 
   return (
@@ -1001,6 +1071,7 @@ useEffect(() => {
 
       <GestureDetector gesture={swipeGesture}>
         <AnimatedFlatList
+          style={styles.list}
           ref={flatListRef as any}
           data={listData}
           renderItem={renderItem}
@@ -1019,7 +1090,6 @@ useEffect(() => {
           initialNumToRender={4}
           updateCellsBatchingPeriod={Platform.OS === "android" ? 150 : 100}
           bounces={true}
-          maintainVisibleContentPosition={Platform.OS === "android" ? undefined : { minIndexForVisible: 0 }}
           viewabilityConfig={profileViewabilityConfig}
           onViewableItemsChanged={onProfileViewableItemsChanged}
           onMomentumScrollEnd={handleProfileMomentumScrollEnd}
@@ -1103,6 +1173,13 @@ useEffect(() => {
 }
 
 const styles = StyleSheet.create((theme) => ({
+  list: {
+    flex: 1,
+  },
+  inlineTabPlaceholder: {
+    height: PROFILE_TAB_BAR_HEIGHT,
+    backgroundColor: theme.colors.background.default,
+  },
   stickyTabBar: {
     position: "absolute",
     left: 0,

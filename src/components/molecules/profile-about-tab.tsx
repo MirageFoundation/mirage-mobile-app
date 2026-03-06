@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, View } from "react-native";
+import { Pressable, useWindowDimensions, View } from "react-native";
 import Animated, {
   interpolate,
   useAnimatedStyle,
@@ -604,6 +604,7 @@ export function ProfileAboutTab({
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { height: windowHeight } = useWindowDimensions();
 
   const { data: ownPreferences, isLoading: isLoadingOwnPrefs } =
     usePreferences();
@@ -664,11 +665,15 @@ export function ProfileAboutTab({
   const blockedUsersCount = blockedData?.blocked_users?.length ?? 0;
   const blockedPostsCount = blockedData?.blocked_posts?.length ?? 0;
   const blockedTopicsCount = blockedData?.blocked_topics?.length ?? 0;
+  const shouldShowPreferenceSkeletons =
+    isLoadingPrefs && topics.length === 0 && authors.length === 0;
+  const shouldShowSimilarSkeleton =
+    isLoadingSimilar && similar.length === 0;
 
   const isLoading =
     isLoadingPrefs || isLoadingSimilar || isLoadingProfile || isLoadingStatus;
 
-  if (isLoading && !preferences && !similarUsers && !profile) {
+  if (isLoading && !preferences && !similarUsers && !profile && !userStatus) {
     return <AboutSkeleton />;
   }
 
@@ -708,7 +713,15 @@ export function ProfileAboutTab({
   }
 
   return (
-    <View style={[styles.container, { paddingBottom: insets.bottom + 40 }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          minHeight: windowHeight,
+          paddingBottom: insets.bottom + 40,
+        },
+      ]}
+    >
       {isOwnProfile && (blockedUsersCount > 0 || blockedPostsCount > 0 || blockedTopicsCount > 0) && (
         <Pressable
           onPress={onBlockedPress}
@@ -744,6 +757,13 @@ export function ProfileAboutTab({
             color={theme.colors.text.subtle}
           />
         </Pressable>
+      )}
+
+      {shouldShowPreferenceSkeletons && (
+        <>
+          <SectionSkeleton />
+          <SectionSkeleton />
+        </>
       )}
 
       {topics.length > 0 && (
@@ -788,6 +808,8 @@ export function ProfileAboutTab({
         </ExpandableSection>
       )}
 
+      {shouldShowSimilarSkeleton && <SectionSkeleton />}
+
       {similar.length > 0 && (
         <ExpandableSection
           title="Similar Users"
@@ -804,7 +826,7 @@ export function ProfileAboutTab({
         </ExpandableSection>
       )}
 
-      {!hasAlgoData && !isLoading && (
+      {!hasAlgoData && !isLoadingPrefs && !isLoadingSimilar && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text
