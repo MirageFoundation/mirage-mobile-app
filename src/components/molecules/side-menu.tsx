@@ -744,7 +744,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          flashlist update
+                          sentry logs and ota update crash fix
                         </Text>
                       </>
                     )}
@@ -795,7 +795,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          flashlist update
+                          sentry logs and ota update crash fix
                         </Text>
                       </>
                     )}
