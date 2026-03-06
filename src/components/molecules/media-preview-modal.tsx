@@ -31,7 +31,7 @@ import type { ResolvedMedia } from "./post-card-utils";
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 import { Text } from "@/src/components/ui/primitives";
-import { useVideoMuteStore } from "@/src/stores";
+import { useVideoMuteStore, useVideoPositionStore } from "@/src/stores";
 import {
   YouTubeAutoplayEmbed,
   type YouTubeAutoplayEmbedRef,
@@ -144,15 +144,65 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
   const videoId = extractYouTubeVideoId(item.uri) ?? "";
   const isAndroid = Platform.OS === "android";
   const youtubeHeight = Math.max(240, SCREEN_HEIGHT - (insets.top + insets.bottom + 32));
+  const getPosition = useVideoPositionStore((s) => s.getPosition);
+  const setPositionStore = useVideoPositionStore((s) => s.setPosition);
+  const hasRestoredRef = useRef(false);
+  const lastKnownTimeRef = useRef(0);
+
+  const savePositionSync = useCallback(() => {
+    if (!videoId) return;
+    if (isAndroid) {
+      const t = embedRef.current?.getLastKnownTime?.() ?? lastKnownTimeRef.current;
+      if (t > 2) setPositionStore(videoId, t);
+    } else {
+      const t = lastKnownTimeRef.current;
+      if (t > 2) setPositionStore(videoId, t);
+    }
+  }, [videoId, isAndroid, setPositionStore]);
+
+  const handleTimeUpdate = useCallback((seconds: number) => {
+    lastKnownTimeRef.current = seconds;
+  }, []);
+
+  const restorePosition = useCallback(() => {
+    if (!videoId || hasRestoredRef.current) return;
+    const saved = getPosition(videoId);
+    if (saved > 2) {
+      hasRestoredRef.current = true;
+      setTimeout(() => {
+        if (isAndroid) {
+          embedRef.current?.seekTo(saved);
+          setTimeout(() => embedRef.current?.play(), 500);
+        } else {
+          iframeRef.current?.seekTo(saved, true);
+        }
+      }, 400);
+    }
+  }, [videoId, isAndroid, getPosition]);
 
   useEffect(() => {
     if (!isActive) {
+      savePositionSync();
       setPlaying(false);
       if (isAndroid) {
         embedRef.current?.pause();
       }
+    } else {
+      hasRestoredRef.current = false;
     }
-  }, [isActive, isAndroid]);
+  }, [isActive, isAndroid, savePositionSync]);
+
+  useEffect(() => {
+    if (!isAndroid && playing && isActive) {
+      const interval = setInterval(async () => {
+        try {
+          const t = await iframeRef.current?.getCurrentTime();
+          if (typeof t === "number") lastKnownTimeRef.current = t;
+        } catch {}
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [isAndroid, playing, isActive]);
 
   const handleTogglePlay = useCallback(() => {
     setPlaying((prev) => {
@@ -224,7 +274,9 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
             onPlaying={() => {
               setIsLoading(false);
               setPlaying(true);
+              restorePosition();
             }}
+            onTimeUpdate={handleTimeUpdate}
             onStateChange={(state) => {
               if (state === "playing") {
                 setPlaying(true);
@@ -253,6 +305,7 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
               if (event === "playing") {
                 setPlaying(true);
                 setIsLoading(false);
+                restorePosition();
               }
               if (event === "paused" || event === "ended") {
                 setPlaying(false);

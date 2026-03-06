@@ -24,6 +24,9 @@ export type YouTubeAutoplayEmbedRef = {
   play: () => void;
   pause: () => void;
   seekBy: (seconds: number) => void;
+  seekTo: (seconds: number) => void;
+  getCurrentTime: () => Promise<number>;
+  getLastKnownTime: () => number;
   setMuted: (muted: boolean) => void;
 };
 
@@ -40,6 +43,7 @@ type YouTubeAutoplayEmbedProps = {
   onReady?: () => void;
   onPlaying?: () => void;
   onStateChange?: (state: YouTubeAutoplayEmbedState) => void;
+  onTimeUpdate?: (seconds: number) => void;
 };
 
 const CUSTOM_USER_AGENT =
@@ -103,7 +107,10 @@ function onYouTubeIframeAPIReady(){
         }
       },
       onStateChange: function(e){
-        if (e.data === YT.PlayerState.PLAYING) post('playing');
+        if (e.data === YT.PlayerState.PLAYING) {
+          post('playing');
+          startTimeReporter();
+        }
         if (e.data === YT.PlayerState.PAUSED) post('paused');
         if (e.data === YT.PlayerState.ENDED) post('ended');
         if (e.data === YT.PlayerState.BUFFERING) post('buffering');
@@ -114,6 +121,20 @@ function onYouTubeIframeAPIReady(){
       }
     }
   });
+}
+
+var timeReporterInterval = null;
+function startTimeReporter(){
+  if (timeReporterInterval) clearInterval(timeReporterInterval);
+  timeReporterInterval = setInterval(function(){
+    if (player && player.getCurrentTime && player.getPlayerState && player.getPlayerState() === YT.PlayerState.PLAYING) {
+      var t = player.getCurrentTime() || 0;
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'timeUpdate', seconds: t }));
+    } else {
+      clearInterval(timeReporterInterval);
+      timeReporterInterval = null;
+    }
+  }, 1000);
 }
 
 function handleAction(raw){
@@ -129,6 +150,13 @@ function handleAction(raw){
       var next = now + (Number(msg.seconds) || 0);
       if (next < 0) next = 0;
       player.seekTo(next, true);
+    }
+    if (msg.action === 'seekTo' && player.seekTo) {
+      player.seekTo(Number(msg.seconds) || 0, true);
+    }
+    if (msg.action === 'getCurrentTime' && player.getCurrentTime) {
+      var t = player.getCurrentTime() || 0;
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'currentTime', seconds: t, requestId: msg.requestId }));
     }
   } catch(err) {}
 }
@@ -172,6 +200,7 @@ const YouTubeAutoplayEmbedInner = forwardRef<
     onReady,
     onPlaying,
     onStateChange,
+    onTimeUpdate,
   },
   ref,
 ) {
@@ -179,6 +208,8 @@ const YouTubeAutoplayEmbedInner = forwardRef<
   const isReadyRef = useRef(false);
   const latestPlayRef = useRef(play);
   const latestMutedRef = useRef(muted);
+  const currentTimeResolversRef = useRef<Map<string, (id: string, seconds: number) => void>>(new Map());
+  const lastKnownTimeRef = useRef(0);
 
   const html = useMemo(
     () =>
@@ -202,6 +233,26 @@ const YouTubeAutoplayEmbedInner = forwardRef<
       play: () => postPlayerMessage({ action: "play" }),
       pause: () => postPlayerMessage({ action: "pause" }),
       seekBy: (seconds: number) => postPlayerMessage({ action: "seekBy", seconds }),
+      seekTo: (seconds: number) => postPlayerMessage({ action: "seekTo", seconds }),
+      getCurrentTime: () =>
+        new Promise<number>((resolve) => {
+          const requestId = String(Date.now()) + Math.random();
+          const handler = (id: string, seconds: number) => {
+            if (id === requestId) {
+              currentTimeResolversRef.current.delete(requestId);
+              resolve(seconds);
+            }
+          };
+          currentTimeResolversRef.current.set(requestId, handler);
+          postPlayerMessage({ action: "getCurrentTime", requestId });
+          setTimeout(() => {
+            if (currentTimeResolversRef.current.has(requestId)) {
+              currentTimeResolversRef.current.delete(requestId);
+              resolve(0);
+            }
+          }, 2000);
+        }),
+      getLastKnownTime: () => lastKnownTimeRef.current,
       setMuted: (nextMuted: boolean) => {
         postPlayerMessage({ action: nextMuted ? "mute" : "unmute" });
       },
@@ -224,8 +275,20 @@ const YouTubeAutoplayEmbedInner = forwardRef<
   const handleWebMessage = useCallback(
     (event: WebViewMessageEvent) => {
       try {
-        const data = JSON.parse(event.nativeEvent.data) as { type?: YouTubeAutoplayEmbedState };
+        const data = JSON.parse(event.nativeEvent.data) as { type?: YouTubeAutoplayEmbedState | "currentTime" | "timeUpdate"; seconds?: number; requestId?: string };
         if (!data.type) return;
+
+        if (data.type === "currentTime" && data.requestId) {
+          const resolver = currentTimeResolversRef.current.get(data.requestId);
+          resolver?.(data.requestId, data.seconds ?? 0);
+          return;
+        }
+
+        if (data.type === "timeUpdate" && typeof data.seconds === "number") {
+          lastKnownTimeRef.current = data.seconds;
+          onTimeUpdate?.(data.seconds);
+          return;
+        }
 
         if (data.type === "ready") {
           isReadyRef.current = true;
@@ -238,7 +301,9 @@ const YouTubeAutoplayEmbedInner = forwardRef<
           onPlaying?.();
         }
 
-        onStateChange?.(data.type);
+        if (data.type !== "currentTime" && data.type !== "timeUpdate") {
+          onStateChange?.(data.type);
+        }
 
         if (data.type === "autoplayBlocked" && latestPlayRef.current) {
           setTimeout(() => {
@@ -247,7 +312,7 @@ const YouTubeAutoplayEmbedInner = forwardRef<
         }
       } catch {}
     },
-    [onReady, onPlaying, onStateChange, postPlayerMessage],
+    [onReady, onPlaying, onStateChange, onTimeUpdate, postPlayerMessage],
   );
 
   return (

@@ -25,9 +25,10 @@ import {
 } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import YoutubePlayer from "react-native-youtube-iframe";
+import type { YoutubeIframeRef } from "react-native-youtube-iframe";
 import { extractYouTubeVideoId, type ResolvedMedia } from "./post-card-utils";
 import { MediaGallery } from "./media-gallery";
-import { useVideoMuteStore } from "@/src/stores";
+import { useVideoMuteStore, useVideoPositionStore } from "@/src/stores";
 import {
   YouTubeAutoplayEmbed,
   type YouTubeAutoplayEmbedRef,
@@ -101,9 +102,11 @@ export const PostCardMedia = memo(
     const [isVideoProcessing, setIsVideoProcessing] = useState(false);
     const isMuted = useVideoMuteStore((s) => s.isMuted);
     const toggleMute = useVideoMuteStore((s) => s.toggleMute);
+    const setMuted = useVideoMuteStore((s) => s.setMuted);
     const [mediaLoaded, setMediaLoaded] = useState(false);
     const videoRef = useRef<Video | null>(null);
     const youtubeEmbedRef = useRef<YouTubeAutoplayEmbedRef | null>(null);
+    const youtubeIframeRef = useRef<YoutubeIframeRef | null>(null);
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const aspectRatioLockedRef = useRef(false);
@@ -111,11 +114,49 @@ export const PostCardMedia = memo(
     const prevShouldBlurRef = useRef(shouldBlurContent);
     const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
 
+    const youtubeVideoId = media?.type === "youtube" ? (extractYouTubeVideoId(media.uri) ?? "") : "";
+    const getPosition = useVideoPositionStore((s) => s.getPosition);
+    const setPosition = useVideoPositionStore((s) => s.setPosition);
+    const lastKnownYouTubeTimeRef = useRef(0);
+    const hasRestoredPositionRef = useRef(false);
+
+    const saveYouTubePositionSync = useCallback(() => {
+      if (!youtubeVideoId) return;
+      if (Platform.OS === "android") {
+        const t = youtubeEmbedRef.current?.getLastKnownTime?.() ?? lastKnownYouTubeTimeRef.current;
+        if (t > 2) setPosition(youtubeVideoId, t);
+      } else {
+        const t = lastKnownYouTubeTimeRef.current;
+        if (t > 2) setPosition(youtubeVideoId, t);
+      }
+    }, [youtubeVideoId, setPosition]);
+
+    const restoreYouTubePosition = useCallback(() => {
+      if (!youtubeVideoId || hasRestoredPositionRef.current) return;
+      const saved = getPosition(youtubeVideoId);
+      if (saved > 2) {
+        hasRestoredPositionRef.current = true;
+        setTimeout(() => {
+          if (Platform.OS === "android") {
+            youtubeEmbedRef.current?.seekTo(saved);
+            setTimeout(() => youtubeEmbedRef.current?.play(), 500);
+          } else {
+            youtubeIframeRef.current?.seekTo(saved, true);
+          }
+        }, 400);
+      }
+    }, [youtubeVideoId, getPosition]);
+
+    const handleYouTubeTimeUpdate = useCallback((seconds: number) => {
+      lastKnownYouTubeTimeRef.current = seconds;
+    }, []);
+
     useImperativeHandle(ref, () => ({
       pauseVideo: () => {
         if (videoRef.current) {
           videoRef.current.pauseAsync().catch(() => {});
         }
+        saveYouTubePositionSync();
         youtubeEmbedRef.current?.pause();
         setIsVideoPlaying(false);
         setIsVideoLoading(false);
@@ -193,7 +234,14 @@ export const PostCardMedia = memo(
 
       if (isVisible && screenActive && canAutoPlayCurrentMedia) {
         setIsVideoPlaying(true);
+        if (media?.type === "youtube") {
+          hasRestoredPositionRef.current = false;
+          if (Platform.OS === "android") {
+            setTimeout(() => youtubeEmbedRef.current?.play(), 300);
+          }
+        }
       } else if (!isVisible || !screenActive) {
+        if (media?.type === "youtube") saveYouTubePositionSync();
         setIsVideoPlaying(false);
         setIsVideoLoading(false);
         userInitiatedPlayRef.current = false;
@@ -207,9 +255,21 @@ export const PostCardMedia = memo(
       screenActive,
       resolvedMediaUri,
       feedTappedToPlay,
+      saveYouTubePositionSync,
     ]);
 
     const shouldAutoPlayYouTube = Platform.OS === "android" && allowAutoplay;
+
+    useEffect(() => {
+      if (media?.type !== "youtube" || Platform.OS === "android" || !isVideoPlaying) return;
+      const interval = setInterval(async () => {
+        try {
+          const t = await youtubeIframeRef.current?.getCurrentTime();
+          if (typeof t === "number") lastKnownYouTubeTimeRef.current = t;
+        } catch {}
+      }, 1000);
+      return () => clearInterval(interval);
+    }, [media?.type, isVideoPlaying]);
 
     useEffect(() => {
       if (videoRef.current && media?.type === "video") {
@@ -220,7 +280,7 @@ export const PostCardMedia = memo(
     const shouldUseAndroidYouTubeEmbed =
       media?.type === "youtube" && Platform.OS === "android";
 
-    const effectiveYouTubeMuted = isPostDetail ? isMuted : true;
+    const effectiveYouTubeMuted = isMuted;
 
     const shouldPlayYouTube =
       media?.type === "youtube" &&
@@ -495,10 +555,13 @@ export const PostCardMedia = memo(
                     setMediaLoaded(true);
                     setIsVideoLoading(false);
                     setIsVideoPlaying(true);
+                    restoreYouTubePosition();
                   }}
+                  onTimeUpdate={handleYouTubeTimeUpdate}
                   onStateChange={(state) => {
                     if (state === "playing") {
                       setIsVideoPlaying(true);
+                      setIsVideoLoading(false);
                       setMediaLoaded(true);
                     }
                     if (state === "paused" || state === "ended") {
@@ -508,6 +571,7 @@ export const PostCardMedia = memo(
                 />
               ) : (
                 <YoutubePlayer
+                  ref={youtubeIframeRef}
                   height={exceedsMaxHeight ? MEDIA_MAX_HEIGHT : calculatedHeight}
                   videoId={extractYouTubeVideoId(media.uri) ?? ""}
                   play={shouldPlayYouTube}
@@ -525,7 +589,9 @@ export const PostCardMedia = memo(
                   onChangeState={(event: string) => {
                     if (event === "playing") {
                       setMediaLoaded(true);
+                      setIsVideoLoading(false);
                       setIsVideoPlaying(true);
+                      restoreYouTubePosition();
                     }
                     if (event === "paused" || event === "ended") {
                       setIsVideoPlaying(false);
