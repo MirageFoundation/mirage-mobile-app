@@ -169,7 +169,7 @@ export function NetworkMonitor() {
               <View style={styles.iconContainer}>
                 <Ionicons
                   name={isOffline ? "cloud-offline" : "cloud-done"}
-                  size={14}
+                  size={18}
                   color={iconColor}
                 />
               </View>
@@ -190,7 +190,7 @@ export function NetworkMonitor() {
             <View style={styles.iconContainer}>
               <Ionicons
                 name={isOffline ? "cloud-offline" : "cloud-done"}
-                size={14}
+                size={18}
                 color={iconColor}
               />
             </View>
@@ -239,11 +239,11 @@ const styles = StyleSheet.create((theme) => ({
     gap: 6,
   },
   iconContainer: {
-    width: 14,
-    height: 14,
+    width: 20,
+    height: 20,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 5,
+    marginRight: 2,
   },
   labelText: {
     fontSize: 11,
