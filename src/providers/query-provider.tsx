@@ -1,21 +1,8 @@
 import * as Sentry from "@sentry/react-native";
-import { MutationCache, QueryCache, QueryClient, onlineManager } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { storage } from "@/src/stores/mmkv-storage";
-import * as Network from "expo-network";
-
-onlineManager.setEventListener((setOnline) => {
-  const interval = setInterval(async () => {
-    try {
-      const state = await Network.getNetworkStateAsync();
-      setOnline(state.isConnected ?? false);
-    } catch {
-      setOnline(true);
-    }
-  }, 5000);
-  return () => clearInterval(interval);
-});
 
 // MMKV adapter for TanStack Query (sync because MMKV is synchronous)
 const mmkvQueryStorage = {
