@@ -105,6 +105,7 @@ export const PostCardMedia = memo(
     const toggleMute = useVideoMuteStore((s) => s.toggleMute);
     const setMuted = useVideoMuteStore((s) => s.setMuted);
     const [mediaLoaded, setMediaLoaded] = useState(false);
+    const [mediaRetryKey, setMediaRetryKey] = useState(0);
     const { isConnected } = useNetworkState();
     const videoRef = useRef<Video | null>(null);
     const youtubeEmbedRef = useRef<YouTubeAutoplayEmbedRef | null>(null);
@@ -514,11 +515,12 @@ export const PostCardMedia = memo(
           clearTimeout(loadingTimeoutRef.current);
           loadingTimeoutRef.current = null;
         }
-      } else if (isVideoProcessing) {
+      } else if (isVideoProcessing || imageError) {
         setIsVideoProcessing(false);
         setMediaLoaded(false);
         setImageError(false);
         setIsVideoLoading(false);
+        setMediaRetryKey((k) => k + 1);
       }
     }, [isConnected]);
 
@@ -728,6 +730,7 @@ export const PostCardMedia = memo(
             ) : (
             <Pressable onPress={isPostDetail ? handleMediaPress : handleFeedVideoTap} style={styles.media}>
               <Video
+                key={mediaRetryKey}
                 ref={videoRef}
                 source={mediaSource}
                 style={styles.media}
