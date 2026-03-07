@@ -11,6 +11,7 @@ import { ThemeContextProvider } from "./theme-context";
 import { ThemeProvider } from "./theme-provider";
 import { ToastProvider } from "./toast-provider";
 import { PowQueueToast } from "@/src/components/ui/pow-queue-toast";
+import { NetworkMonitor } from "@/src/components/network-monitor";
 import { WalletProvider } from "./wallet-provider";
 import { initInboxNotifications } from "@/src/services/inbox-notifications";
 
@@ -46,6 +47,7 @@ export const RootProvider = memo(
             <AuthProviders>
               <ToastProvider>
                 <PowQueueToast />
+               <NetworkMonitor />
                 <BottomSheetModalProvider>{children}</BottomSheetModalProvider>
               </ToastProvider>
             </AuthProviders>
