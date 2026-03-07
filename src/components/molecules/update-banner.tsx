@@ -156,8 +156,9 @@ export const UpdateBanner = ({
 const styles = StyleSheet.create((theme) => ({
   container: {
     position: "absolute",
-    left: 48,
-    right: 48,
+    left: 0,
+    right: 0,
+    alignItems: "center",
     zIndex: 9999,
   },
   blurContainer: {
@@ -178,7 +179,5 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  textContainer: {
-    flex: 1,
-  },
+  textContainer: {},
 }));
