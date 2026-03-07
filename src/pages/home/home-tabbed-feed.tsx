@@ -26,6 +26,7 @@ import {
 } from "@/src/api";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import {
+  PostCardSkeleton,
   PostCardSkeletonList,
   QuestsSummaryCard,
   type Post,
@@ -647,17 +648,10 @@ export const HomeTabbedFeed = forwardRef<
 
   const ListFooter = useMemo(() => {
     if (isFetchingNext) {
-      return (
-        <Box center p="md">
-          <ActivityIndicator
-            size="small"
-            color={theme.colors.text.subtle}
-          />
-        </Box>
-      );
+      return <PostCardSkeleton showMedia={false} showBody={true} />;
     }
     return <Box p="sm" />;
-  }, [isFetchingNext, theme.colors.text.subtle]);
+  }, [isFetchingNext]);
 
   const listContentStyle = useMemo(
     () => ({
