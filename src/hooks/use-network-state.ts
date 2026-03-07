@@ -1,5 +1,5 @@
 import * as Network from "expo-network";
-import { useEffect, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 
 export type NetworkType = "wifi" | "cellular" | "unknown" | "none";
 
@@ -42,11 +42,21 @@ export function useNetworkState(): NetworkState {
           networkType = "cellular";
         }
 
-        setState({
+        const next = {
           isConnected,
           networkType,
           isWifi: networkType === "wifi",
           isCellular: networkType === "cellular",
+        };
+        startTransition(() => {
+          setState((prev) => {
+            if (
+              prev.isConnected === next.isConnected &&
+              prev.networkType === next.networkType
+            )
+              return prev;
+            return next;
+          });
         });
       } catch (error) {
         console.warn("[useNetworkState] Failed to get network state:", error);

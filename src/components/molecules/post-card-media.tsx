@@ -187,17 +187,15 @@ export const PostCardMedia = memo(
       resolvedMediaUriRef.current = resolvedMediaUri;
       if (uriChanged) {
         setMediaLoaded(false);
-      }
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
-      if (isConnected && !mediaLoaded) {
+        if (loadingTimeoutRef.current) {
+          clearTimeout(loadingTimeoutRef.current);
+        }
         loadingTimeoutRef.current = setTimeout(() => {
           setMediaLoaded(true);
           setIsVideoLoading(false);
         }, 8000);
       }
-    }, [resolvedMediaUri, isConnected]);
+    }, [resolvedMediaUri]);
 
     const cachedAspectRatio = resolvedMediaUri
       ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
@@ -509,18 +507,24 @@ export const PostCardMedia = memo(
     const shouldHideOnError =
       imageError && !isCloudflareVideo && !isVideoProcessing;
 
+    const wasOfflineRef = useRef(false);
     useEffect(() => {
       if (!isConnected) {
+        wasOfflineRef.current = true;
         if (loadingTimeoutRef.current) {
           clearTimeout(loadingTimeoutRef.current);
           loadingTimeoutRef.current = null;
         }
-      } else if (isVideoProcessing || imageError) {
-        setIsVideoProcessing(false);
-        setMediaLoaded(false);
-        setImageError(false);
-        setIsVideoLoading(false);
-        setMediaRetryKey((k) => k + 1);
+      } else if (wasOfflineRef.current && (isVideoProcessing || imageError)) {
+        wasOfflineRef.current = false;
+        setTimeout(() => {
+          setIsVideoProcessing(false);
+          setImageError(false);
+          setIsVideoLoading(false);
+          setMediaRetryKey((k) => k + 1);
+        }, 500);
+      } else {
+        wasOfflineRef.current = false;
       }
     }, [isConnected]);
 
