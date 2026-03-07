@@ -22,7 +22,7 @@ export function NetworkMonitor() {
         offlineToastId.current = toast.show("error", {
           title: "No connection",
           description: "You're offline. Some features may not work.",
-          duration: 5000,
+          duration: 0,
         });
       }
       return;
@@ -35,7 +35,7 @@ export function NetworkMonitor() {
       offlineToastId.current = toast.show("error", {
         title: "No connection",
         description: "You're offline. Some features may not work.",
-        duration: 5000,
+        duration: 0,
       });
     }
 

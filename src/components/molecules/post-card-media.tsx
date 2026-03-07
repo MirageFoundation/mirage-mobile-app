@@ -33,6 +33,7 @@ import {
   YouTubeAutoplayEmbed,
   type YouTubeAutoplayEmbedRef,
 } from "./youtube-autoplay-embed";
+import { useNetworkState } from "@/src/hooks/use-network-state";
 
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -104,6 +105,7 @@ export const PostCardMedia = memo(
     const toggleMute = useVideoMuteStore((s) => s.toggleMute);
     const setMuted = useVideoMuteStore((s) => s.setMuted);
     const [mediaLoaded, setMediaLoaded] = useState(false);
+    const { isConnected } = useNetworkState();
     const videoRef = useRef<Video | null>(null);
     const youtubeEmbedRef = useRef<YouTubeAutoplayEmbedRef | null>(null);
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -183,11 +185,13 @@ export const PostCardMedia = memo(
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
       }
-      loadingTimeoutRef.current = setTimeout(() => {
-        setMediaLoaded(true);
-        setIsVideoLoading(false);
-      }, 8000);
-    }, [resolvedMediaUri]);
+      if (isConnected) {
+        loadingTimeoutRef.current = setTimeout(() => {
+          setMediaLoaded(true);
+          setIsVideoLoading(false);
+        }, 8000);
+      }
+    }, [resolvedMediaUri, isConnected]);
 
     const cachedAspectRatio = resolvedMediaUri
       ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
@@ -499,6 +503,16 @@ export const PostCardMedia = memo(
     const shouldHideOnError =
       imageError && !isCloudflareVideo && !isVideoProcessing;
 
+    useEffect(() => {
+      if (!isConnected) {
+        if (loadingTimeoutRef.current) {
+          clearTimeout(loadingTimeoutRef.current);
+          loadingTimeoutRef.current = null;
+        }
+      }
+    }, [isConnected]);
+
+    // Calculate if media would exceed max height
     // Calculate if media would exceed max height - if so, use fixed height instead of aspect ratio
     const containerWidth = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
     const calculatedHeight = containerWidth / mediaAspectRatio;
@@ -525,6 +539,24 @@ export const PostCardMedia = memo(
              shouldBlurContent={shouldBlurContent}
              onRevealContent={onRevealContent}
             />
+            {!isConnected && !shouldBlurContent && !mediaLoaded && (
+              <View style={styles.processingOverlay}>
+                <Ionicons name="cloud-offline-outline" size={32} color="#fff" />
+                <Text
+                  size="sm"
+                  weight="semibold"
+                  style={{ color: "#fff", marginTop: 8 }}
+                >
+                  No connection
+                </Text>
+                <Text
+                  size="xs"
+                  style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}
+                >
+                  Check your network and try again
+                </Text>
+              </View>
+            )}
           </View>
         </View>
       );
@@ -756,7 +788,7 @@ export const PostCardMedia = memo(
             </Pressable>
           )}
 
-          {!mediaLoaded && !shouldBlurContent && media.type !== "youtube" && (
+          {!mediaLoaded && !shouldBlurContent && media.type !== "youtube" && isConnected && (
             <View style={[styles.skeletonOverlay]}>
               <ActivityIndicator size="small" color="rgba(150,150,150,0.6)" />
             </View>
@@ -853,7 +885,7 @@ export const PostCardMedia = memo(
             )}
 
           {/* Video processing overlay for Cloudflare Stream */}
-          {isVideoProcessing && isCloudflareVideo && (
+          {isVideoProcessing && isCloudflareVideo && isConnected && (
             <View style={styles.processingOverlay}>
               <ActivityIndicator size="large" color="#fff" />
               <Text
@@ -868,6 +900,25 @@ export const PostCardMedia = memo(
                 style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}
               >
                 This may take a few moments
+              </Text>
+            </View>
+          )}
+
+          {!isConnected && !shouldBlurContent && !mediaLoaded && (
+            <View style={styles.processingOverlay}>
+              <Ionicons name="cloud-offline-outline" size={32} color="#fff" />
+              <Text
+                size="sm"
+                weight="semibold"
+                style={{ color: "#fff", marginTop: 8 }}
+              >
+                No connection
+              </Text>
+              <Text
+                size="xs"
+                style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}
+              >
+                Check your network and try again
               </Text>
             </View>
           )}
