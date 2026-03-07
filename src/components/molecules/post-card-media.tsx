@@ -180,12 +180,17 @@ export const PostCardMedia = memo(
 
     const resolvedMediaUri = media?.uri;
 
+    const resolvedMediaUriRef = useRef(resolvedMediaUri);
     useEffect(() => {
-      setMediaLoaded(false);
+      const uriChanged = resolvedMediaUriRef.current !== resolvedMediaUri;
+      resolvedMediaUriRef.current = resolvedMediaUri;
+      if (uriChanged) {
+        setMediaLoaded(false);
+      }
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
       }
-      if (isConnected) {
+      if (isConnected && !mediaLoaded) {
         loadingTimeoutRef.current = setTimeout(() => {
           setMediaLoaded(true);
           setIsVideoLoading(false);
@@ -509,6 +514,11 @@ export const PostCardMedia = memo(
           clearTimeout(loadingTimeoutRef.current);
           loadingTimeoutRef.current = null;
         }
+      } else if (isVideoProcessing) {
+        setIsVideoProcessing(false);
+        setMediaLoaded(false);
+        setImageError(false);
+        setIsVideoLoading(false);
       }
     }, [isConnected]);
 
@@ -788,7 +798,7 @@ export const PostCardMedia = memo(
             </Pressable>
           )}
 
-          {!mediaLoaded && !shouldBlurContent && media.type !== "youtube" && isConnected && (
+          {!mediaLoaded && !shouldBlurContent && media.type !== "youtube" && isConnected && !isVideoProcessing && (
             <View style={[styles.skeletonOverlay]}>
               <ActivityIndicator size="small" color="rgba(150,150,150,0.6)" />
             </View>
