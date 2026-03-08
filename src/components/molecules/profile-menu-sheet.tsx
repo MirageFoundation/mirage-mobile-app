@@ -227,11 +227,6 @@ export const ProfileMenuSheet = forwardRef<
               onPress={handleSettings}
             />
 
-            <MenuItem
-              iconName="card-outline"
-              title="Perks"
-              onPress={handleSubscription}
-            />
 
             <MenuItem
               iconName="globe-outline"

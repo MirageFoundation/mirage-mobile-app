@@ -409,23 +409,6 @@ export function ChangeUsernameScreen() {
                 >
                   Changing username is not available for the basic tier. Upgrade your plan to change your username.
                 </Text>
-                <Pressable
-                  onPress={() => router.push("/subscription")}
-                  style={({ pressed }) => [
-                    { marginTop: 12, alignSelf: "flex-end", opacity: pressed ? 0.8 : 1 },
-                  ]}
-                >
-                  <LinearGradient
-                    colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={{ borderRadius: 8, paddingVertical: 8, paddingHorizontal: 16 }}
-                  >
-                    <Text size="sm" weight="bold" style={{ color: "#FFFFFF" }}>
-                      Upgrade Plan
-                    </Text>
-                  </LinearGradient>
-                </Pressable>
               </Box>
             )}
           </View>
