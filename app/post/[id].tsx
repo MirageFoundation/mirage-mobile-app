@@ -1200,7 +1200,7 @@ export default function PostDetailScreen() {
   }, [wasDismissed, setWasDismissed]);
 
   useEffect(() => {
-    if (pendingComment) {
+    if (pendingComment && pendingComment.postId === id) {
       handleSubmitComment(
         pendingComment.text,
         pendingComment.imageUri,
@@ -1208,10 +1208,10 @@ export default function PostDetailScreen() {
       );
       clearPendingComment();
     }
-  }, [pendingComment, handleSubmitComment, clearPendingComment]);
+  }, [pendingComment, handleSubmitComment, clearPendingComment, id]);
 
   useEffect(() => {
-    if (pendingEdit) {
+    if (pendingEdit && pendingEdit.postId === id && pendingEdit.source === "post") {
       const { commentId, parentId, text, imageUri, gifUrl } = pendingEdit;
       clearPendingEdit();
 
@@ -1295,6 +1295,7 @@ export default function PostDetailScreen() {
       editParentId: selectedComment.parentId ?? id,
       editContent: selectedComment.content,
       editCreatedAt: String(commentCreatedAt),
+      editSource: "post",
     };
     if (displayPost?.media?.[0]?.uri) {
       params.postThumbnail = displayPost.media[0].uri;

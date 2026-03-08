@@ -1,6 +1,8 @@
 import { create } from "zustand";
 
 type PendingComment = {
+  postId: string;
+  replyToId?: string | null;
   text: string;
   imageUri?: string | null;
   gifUrl?: string | null;
@@ -8,6 +10,8 @@ type PendingComment = {
 };
 
 type PendingEdit = {
+  postId: string;
+  source: "post" | "profile";
   commentId: string;
   parentId: string;
   text: string;

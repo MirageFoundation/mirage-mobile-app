@@ -92,6 +92,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
     editParentId,
     editContent,
     editCreatedAt,
+    editSource,
  } = useLocalSearchParams<{
    postId: string;
    postTitle: string;
@@ -105,6 +106,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
    editParentId?: string;
    editContent?: string;
    editCreatedAt?: string;
+   editSource?: "post" | "profile";
  }>();
 
   const isEditMode = !!editCommentId;
@@ -200,6 +202,8 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
     triggerHaptic("medium");
     if (isEditMode && editCommentId && editParentId) {
       setPendingEdit({
+        postId: postId!,
+        source: (editSource as "post" | "profile") || "post",
         commentId: editCommentId,
         parentId: editParentId,
         text: text.trim(),
@@ -208,6 +212,8 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
       });
     } else {
       setPendingComment({
+        postId: postId!,
+        replyToId: replyToId ?? null,
         text: text.trim(),
         imageUri: selectedImageUri,
         gifUrl: selectedGifUrl,

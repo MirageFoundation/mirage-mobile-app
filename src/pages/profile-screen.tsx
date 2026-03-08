@@ -515,6 +515,7 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
         editCommentId: comment.post_id,
         editParentId: comment.root_post_id || rootPostId,
         editContent: comment.content,
+        editSource: "profile",
       };
       router.push({ pathname: "/comment-compose", params });
     },
@@ -529,7 +530,7 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
   );
 
 useEffect(() => {
-  if (pendingEdit) {
+  if (pendingEdit && pendingEdit.source === "profile") {
     const { commentId, parentId, text, imageUri, gifUrl } = pendingEdit;
     clearPendingEdit();
 
