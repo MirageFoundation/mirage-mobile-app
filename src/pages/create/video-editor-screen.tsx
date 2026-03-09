@@ -361,8 +361,8 @@ export function VideoEditorScreen() {
           </View>
 
           {/* Instructions */}
-          <Text size="xs" mode="subtle" style={styles.instructions}>
-            Drag the handles to trim your video (max 59 seconds)
+          <Text size="sm" mode="subtle" style={styles.instructions}>
+            Maximum duration: 59 seconds
           </Text>
         </View>
 
