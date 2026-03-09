@@ -171,7 +171,7 @@ export const PostCardHeader = memo(function PostCardHeader({
               numberOfLines={1}
               style={subtleTextStyle}
             >
-              @{author.username.toLowerCase()}
+              @{author.username}
             </Text>
           </Pressable>
         </View>
