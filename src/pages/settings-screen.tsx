@@ -22,6 +22,7 @@ import { useToast } from "@/src/providers/toast-provider";
 import { usePreferencesStore, type ThemeMode, type ApiServer, type VideoAutoplayNetwork } from "@/src/stores";
 import { useServerList } from "@/src/hooks/use-server-list";
 import { runInboxCheckNow, sendTestNotification, resetAndTestInboxNotification, getNotificationDebugInfo } from "@/src/services/inbox-notifications";
+import { useCloudflareErrorStore } from "@/src/stores/cloudflare-error-store";
 
 // Auto-collapse threshold options
 const collapseThresholdOptions: ValueOption<number | null>[] = [
@@ -445,6 +446,26 @@ const handleApiServerChange = useCallback(
               onPress={() => {
                 Sentry.captureException(new Error("First error"));
                 toast.success("Test error sent to Sentry!");
+              }}
+            />
+          ),
+        },
+      ],
+    },
+    {
+      title: "Cloudflare Error",
+      data: [
+        {
+          id: "test-cloudflare-error",
+          component: (
+            <SettingRow
+              type="navigate"
+              icon="cloud-offline-outline"
+              title="Test Cloudflare Error Toast"
+              subtitle="Simulate a Cloudflare 5xx error"
+              onPress={() => {
+                useCloudflareErrorStore.getState().setHasError(true);
+                toast.success("Cloudflare error simulated!");
               }}
             />
           ),

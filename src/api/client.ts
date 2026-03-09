@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/react-native";
 import * as Network from "expo-network";
 import { walletService } from "@/src/services/wallet-service";
 import { useInboxStore } from "@/src/stores/inbox-store";
+import { useCloudflareErrorStore } from "@/src/stores/cloudflare-error-store";
 
 const DEFAULT_NODES = [
   "https://mirage.talk",
@@ -205,6 +206,7 @@ class ApiClient {
         ),
       });
       console.log(`[ApiClient] GET ${path} success`);
+      useCloudflareErrorStore.getState().setHasError(false);
       return response.data;
     } catch (error: any) {
       const errorData = error?.response?.data;
@@ -232,6 +234,7 @@ class ApiClient {
         data: { status, errorMessage, errorData },
       });
       if (status && status >= 500) {
+        useCloudflareErrorStore.getState().setHasError(true);
         Sentry.captureException(error, {
           tags: { api_method: "GET", api_path: path },
           extra: { status, errorData },
@@ -261,6 +264,7 @@ class ApiClient {
     try {
       const response = await this.client.post<T>(`/api${path}`, data);
       console.log(`[ApiClient] POST ${path} success:`, response.data);
+      useCloudflareErrorStore.getState().setHasError(false);
       return response.data;
     } catch (error: any) {
       const status = error?.response?.status;
@@ -276,6 +280,7 @@ class ApiClient {
         data: { status, errorData: errorData || error?.message },
       });
       if (status && status >= 500) {
+        useCloudflareErrorStore.getState().setHasError(true);
         Sentry.captureException(error, {
           tags: { api_method: "POST", api_path: path },
           extra: { status, errorData },
