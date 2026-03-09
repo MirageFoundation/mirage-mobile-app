@@ -56,8 +56,8 @@ const HomePostListInner = function HomePostListInner(
  }: HomePostListProps,
  ref: Ref<FlashListRef<Post>>
 ) {
-  const setActiveVideoPostId = useHomePostCardStore(
-    (state) => state.setActiveVideoPostId
+  const setVideoViewability = useHomePostCardStore(
+    (state) => state.setVideoViewability
   );
 
   const onItemVisibleRef = useRef(onItemVisible);
@@ -101,6 +101,11 @@ const HomePostListInner = function HomePostListInner(
     const videoItems = visibleItems.filter(
       (item) => postHasPlayableVideo(item.item)
     );
+    if (visibleItems.length === 0) return;
+
+    const visibleVideoIds = new Set(videoItems.map((item) => item.item.id));
+    let activeId: string | null = null;
+
     if (videoItems.length > 0) {
       const midIdx = Math.floor((visibleItems.length - 1) / 2);
       const midListIndex = visibleItems[midIdx]?.index ?? 0;
@@ -110,17 +115,17 @@ const HomePostListInner = function HomePostListInner(
         const d = Math.abs((videoItems[i].index ?? 0) - midListIndex);
         if (d < bestDist) { best = videoItems[i]; bestDist = d; }
       }
-      setActiveVideoPostId(feedScreenRef.current, best.item.id);
-    } else {
-      setActiveVideoPostId(feedScreenRef.current, null);
+      activeId = best.item.id;
     }
+
+    setVideoViewability(feedScreenRef.current, visibleVideoIds, activeId);
 
     const maxIndex = items.reduce((max, item) => {
       if (item.isViewable && item.index != null && item.index > max) return item.index;
       return max;
     }, -1);
     if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
-  }, [setActiveVideoPostId]);
+  }, [setVideoViewability]);
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
@@ -162,9 +167,9 @@ const HomePostListInner = function HomePostListInner(
       (p) => postHasPlayableVideo(p)
     );
     if (firstVideo) {
-      setActiveVideoPostId(feedScreen, firstVideo.id);
+      setVideoViewability(feedScreen, new Set([firstVideo.id]), firstVideo.id);
     }
-  }, [data, feedScreen, setActiveVideoPostId]);
+  }, [data, feedScreen, setVideoViewability]);
 
  const renderItem = useCallback<ListRenderItem<Post>>(
     ({ item }) => <HomePostCardItem post={item} feedScreen={feedScreen} />,
@@ -199,7 +204,7 @@ const HomePostListInner = function HomePostListInner(
       keyExtractor={keyExtractor}
       getItemType={getItemType}
       estimatedItemSize={420}
-      drawDistance={Platform.OS === "android" ? 250 : 300}
+      drawDistance={Platform.OS === "android" ? 500 : 600}
       onScroll={onScroll}
       scrollEventThrottle={32}
       showsVerticalScrollIndicator={false}

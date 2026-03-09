@@ -13,7 +13,7 @@ import {
   useIsTopicFollowed,
   useIsOwnPost,
   useIsPostRevealed,
-  useIsPostVisible,
+  useVideoVisibility,
   useShareServer,
   useVoteOverride,
   useCommentCountOverride,
@@ -50,7 +50,9 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  post,
   feedScreen,
 }: HomePostCardItemProps) {
- const isVisible = useIsPostVisible(post.id, feedScreen);
+ const visibility = useVideoVisibility(post.id, feedScreen);
+ const isVisible = (visibility & 2) !== 0;
+ const isFocused = (visibility & 1) !== 0;
  const isFollowing = useIsFollowing(post.author.id);
  const isTopicFollowed = useIsTopicFollowed(post.topic);
  const contentRevealed = useIsPostRevealed(post.id);
@@ -220,6 +222,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
      post={displayPost}
      isOwnPost={isOwnPost}
      isVisible={isVisible}
+     isFocused={isFocused}
      isTopicFollowed={isTopicFollowed}
       showFollowButton={true}
      showUrlCard={false}

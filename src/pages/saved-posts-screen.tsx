@@ -4,7 +4,7 @@ import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Dimensions, FlatList, Pressable, View } from "react-native";
+import { ActivityIndicator, Dimensions, FlatList, Platform, Pressable, View } from "react-native";
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
 import Animated, {
   interpolate,
@@ -747,6 +747,9 @@ export function SavedPostsScreen() {
                 renderItem={renderPostItem}
                 contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
                 showsVerticalScrollIndicator={false}
+                windowSize={Platform.OS === "android" ? 7 : 9}
+                maxToRenderPerBatch={Platform.OS === "android" ? 5 : 7}
+                initialNumToRender={5}
               />
             )
           ) : savedComments.length === 0 ? (

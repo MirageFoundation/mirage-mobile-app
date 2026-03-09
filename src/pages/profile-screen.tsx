@@ -117,6 +117,7 @@ const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
  if (p.hasDisliked !== n.hasDisliked) return false;
  if (p.awards?.length !== n.awards?.length) return false;
  if (prev.isVisible !== next.isVisible) return false;
+ if (prev.isFocused !== next.isFocused) return false;
  if (prev.screenActive !== next.screenActive) return false;
  return true;
 });
@@ -129,6 +130,7 @@ const MemoizedProfileCommentItem = memo(ProfileCommentItem, (prev, next) => {
 const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  post,
  isVisible,
+ isFocused,
  screenActive,
  onPostPress,
  onAuthorPress,
@@ -138,6 +140,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
 }: {
  post: Post;
  isVisible?: boolean;
+ isFocused?: boolean;
  screenActive?: boolean;
  onPostPress: (postId: string) => void;
  onAuthorPress: (authorId: string) => void;
@@ -160,6 +163,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
     post={displayPost}
     isOwnPost={true}
     isVisible={isVisible}
+    isFocused={isFocused}
    screenActive={screenActive}
     showUrlCard={false}
     onPostPress={onPostPress}
@@ -732,6 +736,7 @@ useEffect(() => {
   );
 
   const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
+  const [visibleVideoPostIds, setVisibleVideoPostIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (activeTab !== 0) return;
@@ -743,6 +748,7 @@ useEffect(() => {
     const firstVideo = uiPosts.find((p) => postHasPlayableVideo(p));
     if (firstVideo) {
       setActiveVideoPostId(firstVideo.id);
+      setVisibleVideoPostIds(new Set([firstVideo.id]));
     }
   }, [uiPosts, activeTab, activeVideoPostId]);
 
@@ -760,9 +766,12 @@ useEffect(() => {
     const visibleItems = items.filter(
       (item) => item.isViewable && item.item && typeof item.item === "object" && "id" in item.item
     );
+    if (visibleItems.length === 0) return;
     const videoItems = visibleItems.filter(
       (item) => postHasPlayableVideo(item.item)
     );
+    const newVisibleIds = new Set(videoItems.map((item) => item.item.id));
+    setVisibleVideoPostIds(newVisibleIds);
     if (videoItems.length > 0) {
       const midIdx = Math.floor((visibleItems.length - 1) / 2);
       const midListIndex = visibleItems[midIdx]?.index ?? 0;
@@ -890,7 +899,8 @@ useEffect(() => {
             <Animated.View style={contentAnimatedStyle}>
               <AnimatedPostWrapper
                post={cleanPost}
-               isVisible={activeVideoPostId === item.id}
+               isVisible={visibleVideoPostIds.has(item.id)}
+               isFocused={activeVideoPostId === item.id}
                screenActive={isFocused}
                onPostPress={handlePostPress}
                onAuthorPress={handleAuthorPress}
@@ -1086,10 +1096,10 @@ useEffect(() => {
           ListFooterComponent={ListFooterComponent}
           extraData={focusVersion}
           removeClippedSubviews={true}
-          maxToRenderPerBatch={Platform.OS === "android" ? 3 : 5}
-          windowSize={Platform.OS === "android" ? 3 : 5}
-          initialNumToRender={4}
-          updateCellsBatchingPeriod={Platform.OS === "android" ? 150 : 100}
+          maxToRenderPerBatch={Platform.OS === "android" ? 5 : 7}
+          windowSize={Platform.OS === "android" ? 7 : 9}
+          initialNumToRender={5}
+          updateCellsBatchingPeriod={Platform.OS === "android" ? 100 : 50}
           bounces={true}
           viewabilityConfig={profileViewabilityConfig}
           onViewableItemsChanged={onProfileViewableItemsChanged}

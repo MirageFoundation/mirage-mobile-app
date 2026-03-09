@@ -120,6 +120,7 @@ const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
  if (p.hasDisliked !== n.hasDisliked) return false;
  if (p.awards?.length !== n.awards?.length) return false;
  if (prev.isVisible !== next.isVisible) return false;
+ if (prev.isFocused !== next.isFocused) return false;
  if (prev.screenActive !== next.screenActive) return false;
  if (prev.contentRevealed !== next.contentRevealed) return false;
  return true;
@@ -134,6 +135,7 @@ const PostWrapper = memo(function PostWrapper({
  post,
  isOwnProfile,
  isVisible,
+ isFocused,
  screenActive,
  contentRevealed,
  shareUrl,
@@ -152,6 +154,7 @@ const PostWrapper = memo(function PostWrapper({
  post: Post;
  isOwnProfile: boolean;
  isVisible?: boolean;
+ isFocused?: boolean;
  screenActive?: boolean;
  contentRevealed?: boolean;
  shareUrl: string;
@@ -182,6 +185,7 @@ const PostWrapper = memo(function PostWrapper({
     post={displayPost}
     isOwnPost={isOwnProfile}
     isVisible={isVisible}
+    isFocused={isFocused}
     screenActive={screenActive}
     contentRevealed={contentRevealed}
     showUrlCard={false}
@@ -788,6 +792,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, activeTab, isBlocked]);
 
   const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
+  const [visibleVideoPostIds, setVisibleVideoPostIds] = useState<Set<string>>(new Set());
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
   const handleRevealContent = useCallback((postId: string) => {
@@ -799,6 +804,11 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     const post = postsWithVotes.find((p) => p.id === postId);
     if (postHasPlayableVideo(post)) {
       setActiveVideoPostId(postId);
+      setVisibleVideoPostIds((prev) => {
+        const next = new Set(prev);
+        next.add(postId);
+        return next;
+      });
     }
   }, [postsWithVotes]);
 
@@ -808,6 +818,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     const firstVideo = posts.find((p) => postHasPlayableVideo(p));
     if (firstVideo) {
       setActiveVideoPostId(firstVideo.id);
+      setVisibleVideoPostIds(new Set([firstVideo.id]));
     }
   }, [postsWithVotes, activeTab]);
 
@@ -825,9 +836,12 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     const visibleItems = items.filter(
       (item) => item.isViewable && item.item && typeof item.item === "object" && "id" in item.item
     );
+    if (visibleItems.length === 0) return;
     const videoItems = visibleItems.filter(
       (item) => postHasPlayableVideo(item.item)
     );
+    const newVisibleIds = new Set(videoItems.map((item) => item.item.id));
+    setVisibleVideoPostIds(newVisibleIds);
     if (videoItems.length > 0) {
       const midIdx = Math.floor((visibleItems.length - 1) / 2);
       const midListIndex = visibleItems[midIdx]?.index ?? 0;
@@ -927,7 +941,8 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
             <PostWrapper
              post={item}
              isOwnProfile={isOwnProfile}
-             isVisible={activeVideoPostId === item.id}
+             isVisible={visibleVideoPostIds.has(item.id)}
+             isFocused={activeVideoPostId === item.id}
              screenActive={isFocused}
              contentRevealed={revealedPosts.has(item.id)}
              shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
@@ -1155,10 +1170,10 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           onEndReachedThreshold={0.3}
           ListFooterComponent={ListFooterComponent}
           removeClippedSubviews={true}
-          maxToRenderPerBatch={Platform.OS === "android" ? 3 : 5}
-          windowSize={Platform.OS === "android" ? 3 : 5}
-          initialNumToRender={4}
-          updateCellsBatchingPeriod={Platform.OS === "android" ? 150 : 100}
+          maxToRenderPerBatch={Platform.OS === "android" ? 5 : 7}
+          windowSize={Platform.OS === "android" ? 7 : 9}
+          initialNumToRender={5}
+          updateCellsBatchingPeriod={Platform.OS === "android" ? 100 : 50}
           bounces={true}
           viewabilityConfig={profileViewabilityConfig}
           onViewableItemsChanged={onProfileViewableItemsChanged}

@@ -29,6 +29,8 @@ type PostCardProps = {
   post: Post;
   isOwnPost?: boolean;
   isVisible?: boolean;
+  /** Whether this is the focused video post (for sound) */
+  isFocused?: boolean;
   /** Whether to show the follow button (default: true) */
   showFollowButton?: boolean;
   /** Whether the topic is followed */
@@ -85,6 +87,7 @@ function arePostCardPropsEqual(
 
   if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
   if (prevProps.isVisible !== nextProps.isVisible) return false;
+  if (prevProps.isFocused !== nextProps.isFocused) return false;
   if (prevProps.showFollowButton !== nextProps.showFollowButton) return false;
   if (prevProps.isTopicFollowed !== nextProps.isTopicFollowed) return false;
   if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
@@ -104,6 +107,7 @@ export const PostCard = memo(function PostCard({
   post,
   isOwnPost = false,
   isVisible = false,
+  isFocused,
   showFollowButton = true,
   isTopicFollowed = false,
   allowAutoplay = true,
@@ -265,6 +269,7 @@ export const PostCard = memo(function PostCard({
         media={resolvedContent.resolvedMedia}
         mediaList={resolvedContent.resolvedMediaList}
         isVisible={isVisible}
+        isFocused={isFocused ?? isVisible}
         shouldBlurContent={shouldBlurContent}
         hasMultipleMedia={resolvedContent.hasMultipleMedia}
         extraMediaCount={resolvedContent.extraMediaCount}

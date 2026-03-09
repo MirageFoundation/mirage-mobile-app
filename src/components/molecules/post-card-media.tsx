@@ -48,22 +48,29 @@ type PostCardMediaProps = {
   media?: ResolvedMedia;
   mediaList?: ResolvedMedia[];
   isVisible: boolean;
+  isFocused?: boolean;
   shouldBlurContent: boolean;
   hasMultipleMedia: boolean;
   extraMediaCount: number;
-  /** Whether video autoplay is allowed based on user settings and network */
   allowAutoplay?: boolean;
-  /** Whether the screen/feed is active (for pausing videos when navigating away) */
   screenActive?: boolean;
   onRevealContent?: () => void;
-  /** Called when media is pressed (for opening preview) */
   onMediaPress?: () => void;
   onGalleryMediaPress?: (index: number) => void;
-  /** Whether this is shown in post detail screen */
   isPostDetail?: boolean;
 };
 
 const MEDIA_ASPECT_RATIO_CACHE = new Map<string, number>();
+const MEDIA_LOADED_CACHE = new Set<string>();
+
+function getVideoThumbnailUri(uri?: string): string {
+  if (!uri) return "";
+  if (uri.includes("cloudflarestream.com") || uri.includes("videodelivery.net")) {
+    const match = uri.match(/(?:cloudflarestream\.com|videodelivery\.net)\/([a-zA-Z0-9]+)/);
+    if (match?.[1]) return `https://videodelivery.net/${match[1]}/thumbnails/thumbnail.jpg?time=1s&width=480`;
+  }
+  return "";
+}
 
 function getMediaAspectRatio(media?: ResolvedMedia): number {
   if (!media) return 16 / 9;
@@ -85,6 +92,7 @@ export const PostCardMedia = memo(
       media,
       mediaList,
       isVisible,
+      isFocused = true,
       shouldBlurContent,
       hasMultipleMedia,
       extraMediaCount,
@@ -101,16 +109,18 @@ export const PostCardMedia = memo(
     const [isVideoPlaying, setIsVideoPlaying] = useState(false);
     const [isVideoLoading, setIsVideoLoading] = useState(false);
     const [isVideoProcessing, setIsVideoProcessing] = useState(false);
-    const isMuted = useVideoMuteStore((s) => s.isMuted);
+    const globalMuted = useVideoMuteStore((s) => s.isMuted);
     const toggleMute = useVideoMuteStore((s) => s.toggleMute);
     const setMuted = useVideoMuteStore((s) => s.setMuted);
-    const [mediaLoaded, setMediaLoaded] = useState(false);
+    const effectiveMuted = isPostDetail ? globalMuted : (globalMuted || !isFocused);
+    const [mediaLoaded, setMediaLoaded] = useState(() => media?.uri ? MEDIA_LOADED_CACHE.has(media.uri) : false);
     const [mediaRetryKey, setMediaRetryKey] = useState(0);
     const { isConnected } = useNetworkState();
     const videoRef = useRef<Video | null>(null);
     const youtubeEmbedRef = useRef<YouTubeAutoplayEmbedRef | null>(null);
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const playRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const pauseDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const aspectRatioLockedRef = useRef(false);
     const userInitiatedPlayRef = useRef(false);
@@ -119,7 +129,9 @@ export const PostCardMedia = memo(
     const feedTapCooldownRef = useRef(false);
 
     const youtubeVideoId = media?.type === "youtube" ? (extractYouTubeVideoId(media.uri) ?? "") : "";
-    const shouldLazyMount = Platform.OS === "android" && !isPostDetail;
+    const shouldLazyMountYouTube = Platform.OS === "android" && !isPostDetail;
+    const shouldLazyMountVideo = Platform.OS === "android" && !isPostDetail && !(media?.uri && MEDIA_LOADED_CACHE.has(media.uri));
+    const videoThumbnailUri = media?.type === "video" ? getVideoThumbnailUri(media.uri) : "";
     const youtubeThumbnailUri = youtubeVideoId ? `https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg` : "";
     const getPosition = useVideoPositionStore((s) => s.getPosition);
     const setPosition = useVideoPositionStore((s) => s.setPosition);
@@ -176,6 +188,9 @@ export const PostCardMedia = memo(
         if (playRetryRef.current) {
           clearInterval(playRetryRef.current);
         }
+        if (pauseDelayRef.current) {
+          clearTimeout(pauseDelayRef.current);
+        }
       };
     }, []);
 
@@ -186,40 +201,48 @@ export const PostCardMedia = memo(
       const uriChanged = resolvedMediaUriRef.current !== resolvedMediaUri;
       resolvedMediaUriRef.current = resolvedMediaUri;
       if (uriChanged) {
-        setMediaLoaded(false);
-        if (loadingTimeoutRef.current) {
-          clearTimeout(loadingTimeoutRef.current);
+        const wasLoaded = resolvedMediaUri ? MEDIA_LOADED_CACHE.has(resolvedMediaUri) : false;
+        setMediaLoaded(wasLoaded);
+        if (!wasLoaded) {
+          if (loadingTimeoutRef.current) {
+            clearTimeout(loadingTimeoutRef.current);
+          }
+          loadingTimeoutRef.current = setTimeout(() => {
+            setMediaLoaded(true);
+            if (resolvedMediaUri) MEDIA_LOADED_CACHE.add(resolvedMediaUri);
+            setIsVideoLoading(false);
+          }, 8000);
         }
-        loadingTimeoutRef.current = setTimeout(() => {
-          setMediaLoaded(true);
-          setIsVideoLoading(false);
-        }, 8000);
       }
     }, [resolvedMediaUri]);
 
     const cachedAspectRatio = resolvedMediaUri
       ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
       : undefined;
-    const [mediaAspectRatio, setMediaAspectRatio] = useState(
-      cachedAspectRatio ?? getMediaAspectRatio(media),
-    );
+    const initialAspectRatio = cachedAspectRatio ?? getMediaAspectRatio(media);
+    const [mediaAspectRatio, setMediaAspectRatio] = useState(initialAspectRatio);
 
-    useEffect(() => {
-      if (!media) return;
-      const cached = resolvedMediaUri
-        ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
-        : undefined;
-      if (cached) {
-        setMediaAspectRatio((current) =>
-          Math.abs(current - cached) < 0.01 ? current : cached,
-        );
+    if (cachedAspectRatio && !aspectRatioLockedRef.current) {
+      aspectRatioLockedRef.current = true;
+    }
+
+    const prevMediaUriRef = useRef(resolvedMediaUri);
+    if (prevMediaUriRef.current !== resolvedMediaUri) {
+      prevMediaUriRef.current = resolvedMediaUri;
+      const newCached = resolvedMediaUri ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri) : undefined;
+      if (newCached) {
+        if (Math.abs(mediaAspectRatio - newCached) >= 0.01) {
+          setMediaAspectRatio(newCached);
+        }
         aspectRatioLockedRef.current = true;
-        return;
+      } else {
+        const computed = getMediaAspectRatio(media);
+        if (Math.abs(mediaAspectRatio - computed) >= 0.01) {
+          setMediaAspectRatio(computed);
+        }
+        aspectRatioLockedRef.current = false;
       }
-
-      setMediaAspectRatio(getMediaAspectRatio(media));
-      aspectRatioLockedRef.current = false;
-    }, [media, resolvedMediaUri]);
+    }
 
     useEffect(() => {
       const isPlayable = media?.type === "video" || media?.type === "youtube";
@@ -244,6 +267,10 @@ export const PostCardMedia = memo(
       }
 
       if (isVisible && screenActive && canAutoPlayCurrentMedia) {
+        if (pauseDelayRef.current) {
+          clearTimeout(pauseDelayRef.current);
+          pauseDelayRef.current = null;
+        }
         setIsVideoPlaying(true);
         if (media?.type === "youtube") {
           hasRestoredPositionRef.current = false;
@@ -262,7 +289,11 @@ export const PostCardMedia = memo(
             }, 500);
           }
         }
-      } else if (!isVisible || !screenActive) {
+      } else if (!screenActive) {
+        if (pauseDelayRef.current) {
+          clearTimeout(pauseDelayRef.current);
+          pauseDelayRef.current = null;
+        }
         if (media?.type === "youtube") saveYouTubePositionSync();
         if (playRetryRef.current) {
           clearInterval(playRetryRef.current);
@@ -272,6 +303,21 @@ export const PostCardMedia = memo(
         setIsVideoLoading(false);
         userInitiatedPlayRef.current = false;
         videoRef.current?.pauseAsync().catch(() => {});
+      } else if (!isVisible) {
+        if (!pauseDelayRef.current) {
+          pauseDelayRef.current = setTimeout(() => {
+            pauseDelayRef.current = null;
+            if (media?.type === "youtube") saveYouTubePositionSync();
+            if (playRetryRef.current) {
+              clearInterval(playRetryRef.current);
+              playRetryRef.current = null;
+            }
+            setIsVideoPlaying(false);
+            setIsVideoLoading(false);
+            userInitiatedPlayRef.current = false;
+            videoRef.current?.pauseAsync().catch(() => {});
+          }, 400);
+        }
       }
     }, [
       media?.type,
@@ -288,19 +334,18 @@ export const PostCardMedia = memo(
 
     useEffect(() => {
       if (videoRef.current && media?.type === "video") {
-        videoRef.current.setStatusAsync({ isMuted }).catch(() => {});
+        videoRef.current.setStatusAsync({ isMuted: effectiveMuted }).catch(() => {});
       }
-    }, [isMuted, media?.type]);
+    }, [effectiveMuted, media?.type]);
 
     const shouldUseAndroidYouTubeEmbed =
       media?.type === "youtube" && Platform.OS === "android";
 
-    const effectiveYouTubeMuted = isMuted;
+    const effectiveYouTubeMuted = effectiveMuted;
 
     const shouldPlayYouTube =
       media?.type === "youtube" &&
       isVideoPlaying &&
-      isVisible &&
       screenActive &&
       !shouldBlurContent;
 
@@ -393,6 +438,9 @@ export const PostCardMedia = memo(
       [isPostDetail, shouldAutoPlayYouTube, isVideoPlaying, feedTappedToPlay, onMediaPress],
     );
 
+    const resolvedMediaUriForCacheRef = useRef(media?.uri);
+    resolvedMediaUriForCacheRef.current = media?.uri;
+
     const handlePlaybackStatusUpdate = useCallback(
       (status: AVPlaybackStatus) => {
         if (!status.isLoaded) {
@@ -401,9 +449,13 @@ export const PostCardMedia = memo(
         if (status.isPlaying) {
           setIsVideoLoading(false);
           setMediaLoaded(true);
+          if (resolvedMediaUriForCacheRef.current) MEDIA_LOADED_CACHE.add(resolvedMediaUriForCacheRef.current);
           userInitiatedPlayRef.current = false;
         } else if (status.isBuffering && !status.isPlaying) {
-          setIsVideoLoading(true);
+          const uri = resolvedMediaUriForCacheRef.current;
+          if (!uri || !MEDIA_LOADED_CACHE.has(uri)) {
+            setIsVideoLoading(true);
+          }
         }
       },
       [],
@@ -421,32 +473,31 @@ export const PostCardMedia = memo(
       async (event: GestureResponderEvent) => {
         event.stopPropagation?.();
         triggerHaptic("light");
-        const newMutedState = !isMuted;
+        const newGlobalMuted = !globalMuted;
         toggleMute();
 
         if (media?.type === "youtube") {
           if (shouldUseAndroidYouTubeEmbed) {
-            youtubeEmbedRef.current?.setMuted(newMutedState);
+            const newEffective = isPostDetail ? newGlobalMuted : (newGlobalMuted || !isFocused);
+            youtubeEmbedRef.current?.setMuted(newEffective);
           }
           return;
         }
 
-        // When unmuting, we need to pause and resume to initialize audio
         if (videoRef.current) {
           try {
-            if (!newMutedState) {
-              // Unmuting: pause, set unmuted, then play to initialize audio
+            const newEffective = isPostDetail ? newGlobalMuted : (newGlobalMuted || !isFocused);
+            if (!newEffective) {
               await videoRef.current.pauseAsync();
               await videoRef.current.setStatusAsync({ isMuted: false });
               await videoRef.current.playAsync();
             } else {
-              // Muting: just set the status
               await videoRef.current.setStatusAsync({ isMuted: true });
             }
           } catch {}
         }
       },
-      [isMuted, toggleMute, media?.type, shouldUseAndroidYouTubeEmbed],
+      [globalMuted, toggleMute, media?.type, shouldUseAndroidYouTubeEmbed, isFocused, isPostDetail],
     );
 
     const handleYouTubeTogglePlay = useCallback(
@@ -551,6 +602,7 @@ export const PostCardMedia = memo(
               screenActive={screenActive}
               allowAutoplay={allowAutoplay}
               isVisible={isVisible}
+              isFocused={isFocused}
               isPostDetail={isPostDetail}
              shouldBlurContent={shouldBlurContent}
              onRevealContent={onRevealContent}
@@ -591,7 +643,7 @@ export const PostCardMedia = memo(
         <View style={[styles.mediaWrapper, mediaWrapperStyle]}>
           {media.type === "youtube" ? (
             <>
-              {shouldLazyMount && !isVisible ? (
+              {shouldLazyMountYouTube && !isVisible ? (
                 <Pressable onPress={handleFeedYouTubeTap} style={styles.media}>
                   <Image
                     source={{ uri: youtubeThumbnailUri }}
@@ -723,9 +775,20 @@ export const PostCardMedia = memo(
               )}
             </>
           ) : media.type === "video" ? (
-            shouldLazyMount && !isVisible ? (
+            shouldLazyMountVideo && !isVisible ? (
               <Pressable onPress={handleFeedVideoTap} style={styles.media}>
-                <View style={[styles.media, styles.videoPlaceholder]}>
+                {videoThumbnailUri ? (
+                  <Image
+                    source={{ uri: videoThumbnailUri }}
+                    style={styles.media}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    recyclingKey={videoThumbnailUri}
+                  />
+                ) : (
+                  <View style={[styles.media, styles.videoPlaceholder]} />
+                )}
+                <View style={styles.playOverlay} pointerEvents="none">
                   <View style={styles.playButton}>
                     <Ionicons name="play" size={28} color="#fff" />
                   </View>
@@ -733,24 +796,35 @@ export const PostCardMedia = memo(
               </Pressable>
             ) : (
             <Pressable onPress={isPostDetail ? handleMediaPress : handleFeedVideoTap} style={styles.media}>
+              {videoThumbnailUri && !mediaLoaded && !(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri)) ? (
+                <Image
+                  source={{ uri: videoThumbnailUri }}
+                  style={[styles.media, { position: "absolute", zIndex: 0 }]}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  recyclingKey={videoThumbnailUri}
+                />
+              ) : null}
               <Video
                 key={mediaRetryKey}
                 ref={videoRef}
                 source={mediaSource}
                 style={styles.media}
                 resizeMode={ResizeMode.COVER}
-                shouldPlay={isVideoPlaying && screenActive && isVisible}
+                shouldPlay={isVideoPlaying && screenActive}
                 isLooping={true}
-                isMuted={isMuted}
+                isMuted={effectiveMuted}
                 useNativeControls={false}
               onLoad={() => {
                   setMediaLoaded(true);
-                  videoRef.current?.setStatusAsync({ isMuted }).catch(() => {});
+                  if (resolvedMediaUri) MEDIA_LOADED_CACHE.add(resolvedMediaUri);
+                  videoRef.current?.setStatusAsync({ isMuted: effectiveMuted }).catch(() => {});
                 }}
                 onReadyForDisplay={(event) => {
                   const { width, height } = event.naturalSize ?? {};
                   updateMediaAspectRatioFromSize(width, height);
                   setMediaLoaded(true);
+                  if (resolvedMediaUri) MEDIA_LOADED_CACHE.add(resolvedMediaUri);
                   // Video is ready to display - hide loading if user initiated
                   if (userInitiatedPlayRef.current) {
                     setIsVideoLoading(false);
@@ -760,8 +834,7 @@ export const PostCardMedia = memo(
                   if (isVideoProcessing) {
                     setIsVideoProcessing(false);
                   }
-                  // Ensure mute state is applied
-                  videoRef.current?.setStatusAsync({ isMuted }).catch(() => {});
+                  videoRef.current?.setStatusAsync({ isMuted: effectiveMuted }).catch(() => {});
                 }}
                 onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
                 onError={(error) => {
@@ -805,7 +878,7 @@ export const PostCardMedia = memo(
             </Pressable>
           )}
 
-          {!mediaLoaded && !shouldBlurContent && media.type !== "youtube" && isConnected && !isVideoProcessing && (
+          {!mediaLoaded && !(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri)) && !shouldBlurContent && media.type !== "youtube" && isConnected && !isVideoProcessing && (
             <View style={[styles.skeletonOverlay]}>
               <ActivityIndicator size="small" color="rgba(150,150,150,0.6)" />
             </View>
@@ -829,7 +902,7 @@ export const PostCardMedia = memo(
                       onPress={handleVideoPress}
                       style={styles.videoTapArea}
                     />
-                    {isVideoLoading || (isVideoPlaying && !mediaLoaded) ? (
+                    {(isVideoLoading && !(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri))) || (isVideoPlaying && !mediaLoaded && !(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri))) ? (
                       <View
                         style={styles.loadingContainer}
                         pointerEvents="none"
@@ -848,7 +921,7 @@ export const PostCardMedia = memo(
                       onPress={handleFeedVideoTap}
                       style={styles.videoTapArea}
                     />
-                    {isVideoLoading || (isVideoPlaying && !mediaLoaded) ? (
+                    {(isVideoLoading && !(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri))) || (isVideoPlaying && !mediaLoaded && !(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri))) ? (
                       <View style={styles.loadingContainer}>
                         <ActivityIndicator size="small" color="#fff" />
                       </View>
@@ -893,7 +966,7 @@ export const PostCardMedia = memo(
               >
                 <View style={styles.muteButtonInner}>
                   <Ionicons
-                    name={isMuted ? "volume-mute" : "volume-high"}
+                    name={globalMuted ? "volume-mute" : "volume-high"}
                     size={16}
                     color="#fff"
                   />
