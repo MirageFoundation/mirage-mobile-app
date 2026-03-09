@@ -1,12 +1,14 @@
 import { Entypo, EvilIcons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { LinkPreviewCard } from "@/src/components/molecules/link-preview-card";
 import { markEditJustCompleted } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { fetchLinkMeta } from "@/src/utils/fetch-link-meta";
 import { mergeAudioVideo } from "@/src/utils/merge-audio-video";
+import { trimToMaxDuration } from "@/src/utils/video-processing";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
-import { ResizeMode, Video } from "expo-av";
+import { Audio, ResizeMode, Video } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import { Paths, File as ExpoFile } from "expo-file-system";
 import { router, useLocalSearchParams } from "expo-router";
@@ -158,6 +160,17 @@ export function CreateScreen() {
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isProcessingShareLink, setIsProcessingShareLink] = useState(false);
+  const [isPreparingVideo, setIsPreparingVideo] = useState(false);
+  const navigatedToEditorRef = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (navigatedToEditorRef.current) {
+        navigatedToEditorRef.current = false;
+        setIsPreparingVideo(false);
+      }
+    }, [])
+  );
 
   const toast = useToast();
 
@@ -399,8 +412,17 @@ export function CreateScreen() {
                         const mergedBuffer = await mergeAudioVideo(arrayBuffer, audioBuffer);
                         const mergedFile = new ExpoFile(Paths.cache, `shared_link_merged_${Date.now()}.mp4`);
                         mergedFile.write(new Uint8Array(mergedBuffer));
-                        setAttachment("video", mergedFile.uri);
-                        startVideoUpload(mergedFile.uri);
+                        let finalUri = mergedFile.uri;
+                        try {
+                          const { sound } = await Audio.Sound.createAsync({ uri: mergedFile.uri });
+                          const status = await sound.getStatusAsync();
+                          await sound.unloadAsync();
+                          if (status.isLoaded && status.durationMillis && status.durationMillis > 59000) {
+                            finalUri = await trimToMaxDuration(mergedFile.uri, status.durationMillis);
+                          }
+                        } catch {}
+                        setAttachment("video", finalUri);
+                        startVideoUpload(finalUri);
                         videoDownloaded = true;
                         Sentry.addBreadcrumb({ category: "share-intent", message: "Audio+video merged", level: "info" });
                         break;
@@ -411,8 +433,17 @@ export function CreateScreen() {
                   }
                   if (!videoDownloaded) {
                     destFile.write(new Uint8Array(arrayBuffer));
-                    setAttachment("video", destFile.uri);
-                    startVideoUpload(destFile.uri);
+                    let finalUri = destFile.uri;
+                    try {
+                      const { sound } = await Audio.Sound.createAsync({ uri: destFile.uri });
+                      const status = await sound.getStatusAsync();
+                      await sound.unloadAsync();
+                      if (status.isLoaded && status.durationMillis && status.durationMillis > 59000) {
+                        finalUri = await trimToMaxDuration(destFile.uri, status.durationMillis);
+                      }
+                    } catch {}
+                    setAttachment("video", finalUri);
+                    startVideoUpload(finalUri);
                     videoDownloaded = true;
                   }
                 }
@@ -509,6 +540,7 @@ export function CreateScreen() {
       setAttachment("video", params.videoUri);
     }
     setIsVideoMuted(params.isMuted === "1");
+    setIsPreparingVideo(false);
     startVideoUpload(params.videoUri);
   }, [params.videoUri, params.originalVideoUri, params.replacingUri, params.videoWidth, params.videoHeight, params.trimStart, params.trimEnd, params.isMuted]);
 
@@ -854,25 +886,48 @@ export function CreateScreen() {
     if (draft.mediaUris.length >= 10) return;
     triggerHaptic("selection");
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["videos"],
-      allowsEditing: false,
-      quality: 0.8,
-      videoMaxDuration: 300,
-    });
+    try {
+      const permResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permResult.granted) {
+        toast.error("Permission required", "Please allow access to your photo library");
+        return;
+      }
 
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      router.push({
-        pathname: "/video-editor",
-        params: {
-          uri: asset.uri,
-          width: asset.width?.toString() ?? "1920",
-          height: asset.height?.toString() ?? "1080",
-        },
+      setIsPreparingVideo(true);
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["videos"],
+        allowsEditing: false,
+        quality: 1,
+        videoExportPreset: ImagePicker.VideoExportPreset.HighestQuality,
+        preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Automatic,
       });
+
+      if (result.canceled) {
+        setIsPreparingVideo(false);
+        return;
+      }
+
+      if (result.assets[0]) {
+        navigatedToEditorRef.current = true;
+        const asset = result.assets[0];
+        setTimeout(() => {
+          router.push({
+            pathname: "/video-editor",
+            params: {
+              uri: asset.uri,
+              width: asset.width?.toString() ?? "1920",
+              height: asset.height?.toString() ?? "1080",
+            },
+          });
+        }, 100);
+      }
+    } catch (err) {
+      setIsPreparingVideo(false);
+      console.warn("[CreateScreen] Video picker failed:", err);
+      toast.error("Couldn't load video", "Try a different video or re-download it from iCloud");
     }
-  }, [hasAttachment, draft.attachmentType, draft.mediaUris.length]);
+  }, [hasAttachment, draft.attachmentType, draft.mediaUris.length, toast]);
 
   const handlePollPress = useCallback(() => {
     if (hasAttachment) return;
@@ -1096,6 +1151,11 @@ export function CreateScreen() {
             <Text size="lg" weight="bold" style={styles.shareLinkOverlayTitle}>Extracting Content</Text>
             <Text size="sm" style={styles.shareLinkOverlayText}>Fetching media from shared link...</Text>
           </View>
+        </View>
+      )}
+      {isPreparingVideo && (
+        <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 100, backgroundColor: "rgba(0, 0, 0, 0.5)", justifyContent: "center", alignItems: "center" }}>
+          <ActivityIndicator size="large" color="#fff" />
         </View>
       )}
       <View style={styles.header}>

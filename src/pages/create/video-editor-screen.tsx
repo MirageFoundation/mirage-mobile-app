@@ -26,6 +26,7 @@ const SCREEN_WIDTH = Dimensions.get("window").width;
 const TIMELINE_PADDING = 24;
 const TIMELINE_WIDTH = SCREEN_WIDTH - TIMELINE_PADDING * 2;
 const MIN_TRIM_DURATION = 1000; // 1 second minimum
+const MAX_TRIM_DURATION = 59000; // 59 seconds maximum
 
 export function VideoEditorScreen() {
   const { theme } = useUnistyles();
@@ -59,15 +60,18 @@ export function VideoEditorScreen() {
 
   useEffect(() => {
     if (duration > 0 && trimEnd === 0) {
-      setTrimEnd(duration);
-      rightTrimPosition.value = TIMELINE_WIDTH;
+      const maxEnd = Math.min(duration, MAX_TRIM_DURATION);
+      setTrimEnd(maxEnd);
+      rightTrimPosition.value = (maxEnd / duration) * TIMELINE_WIDTH;
     }
     if (duration > 0 && initialTrimStartMs > 0) {
       leftTrimPosition.value = (initialTrimStartMs / duration) * TIMELINE_WIDTH;
       videoRef.current?.setPositionAsync(initialTrimStartMs).catch(() => {});
     }
     if (duration > 0 && initialTrimEndMs > 0 && initialTrimEndMs < duration) {
-      rightTrimPosition.value = (initialTrimEndMs / duration) * TIMELINE_WIDTH;
+      const clampedEnd = Math.min(initialTrimEndMs, initialTrimStartMs + MAX_TRIM_DURATION);
+      setTrimEnd(clampedEnd);
+      rightTrimPosition.value = (clampedEnd / duration) * TIMELINE_WIDTH;
     }
   }, [duration]);
 
@@ -76,7 +80,7 @@ export function VideoEditorScreen() {
     
     if (status.durationMillis && duration === 0) {
       setDuration(status.durationMillis);
-      setTrimEnd(status.durationMillis);
+      setTrimEnd(Math.min(status.durationMillis, MAX_TRIM_DURATION));
     }
     
     setCurrentPosition(status.positionMillis);
@@ -111,13 +115,15 @@ export function VideoEditorScreen() {
     
     if (isLeft) {
       const maxStart = trimEnd - MIN_TRIM_DURATION;
-      const clampedTime = Math.max(0, Math.min(newTime, maxStart));
+      const minStart = trimEnd - MAX_TRIM_DURATION;
+      const clampedTime = Math.max(Math.max(0, minStart), Math.min(newTime, maxStart));
       setTrimStart(clampedTime);
       leftTrimPosition.value = (clampedTime / duration) * TIMELINE_WIDTH;
       videoRef.current?.setPositionAsync(clampedTime).catch(() => {});
     } else {
       const minEnd = trimStart + MIN_TRIM_DURATION;
-      const clampedTime = Math.max(minEnd, Math.min(newTime, duration));
+      const maxEnd = Math.min(duration, trimStart + MAX_TRIM_DURATION);
+      const clampedTime = Math.max(minEnd, Math.min(newTime, maxEnd));
       setTrimEnd(clampedTime);
       rightTrimPosition.value = (clampedTime / duration) * TIMELINE_WIDTH;
       videoRef.current?.setPositionAsync(clampedTime).catch(() => {});
@@ -301,6 +307,11 @@ export function VideoEditorScreen() {
             <Text size="sm" mode="subtle">
               Selected: {formatTime(trimDuration)} / {formatTime(duration)}
             </Text>
+          {trimDuration > MAX_TRIM_DURATION && (
+            <Text size="xs" style={{ color: theme.colors.error[500], marginTop: 2 }}>
+              Video exceeds 59 second limit
+            </Text>
+          )}
           </View>
 
           {/* Timeline */}
@@ -351,7 +362,7 @@ export function VideoEditorScreen() {
 
           {/* Instructions */}
           <Text size="xs" mode="subtle" style={styles.instructions}>
-            Drag the handles to trim your video
+            Drag the handles to trim your video (max 59 seconds)
           </Text>
         </View>
 
