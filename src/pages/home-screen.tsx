@@ -265,9 +265,13 @@ export function HomeScreen() {
   }, [setAdultContent, setHasSeenAdultPrompt]);
 
   const revealedPostsRef = useRef<Set<string>>(new Set());
+  const isNavigatingRef = useRef(false);
 
   const handlePostPress = useCallback(
     (postId: string) => {
+      if (isNavigatingRef.current) return;
+      isNavigatingRef.current = true;
+      setTimeout(() => { isNavigatingRef.current = false; }, 500);
       const isRevealed = revealedPostsRef.current.has(postId);
       router.push(`/post/${postId}${isRevealed ? '?reveal=true' : ''}`);
     },

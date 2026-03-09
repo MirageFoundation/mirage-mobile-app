@@ -1200,15 +1200,12 @@ export default function PostDetailScreen() {
   }, [wasDismissed, setWasDismissed]);
 
   useEffect(() => {
-    if (pendingComment && pendingComment.postId === id) {
-      handleSubmitComment(
-        pendingComment.text,
-        pendingComment.imageUri,
-        pendingComment.gifUrl,
-      );
-      clearPendingComment();
-    }
-  }, [pendingComment, handleSubmitComment, clearPendingComment, id]);
+    if (!pendingComment || pendingComment.postId !== id) return;
+    const current = useCommentComposeStore.getState().pendingComment;
+    if (!current || current.postId !== id) return;
+    useCommentComposeStore.getState().clearPendingComment();
+    handleSubmitComment(current.text, current.imageUri, current.gifUrl);
+  }, [pendingComment, id]);
 
   useEffect(() => {
     if (pendingEdit && pendingEdit.postId === id && pendingEdit.source === "post") {
