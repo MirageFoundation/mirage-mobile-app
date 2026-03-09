@@ -579,13 +579,10 @@ export const PostCardMedia = memo(
       }
     }, [isConnected]);
 
-    // Calculate if media would exceed max height
-    // Calculate if media would exceed max height - if so, use fixed height instead of aspect ratio
     const containerWidth = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
     const calculatedHeight = containerWidth / mediaAspectRatio;
     const exceedsMaxHeight = calculatedHeight > MEDIA_MAX_HEIGHT;
 
-    // When height exceeds max, use fixed height. Otherwise use aspect ratio for natural sizing
     const mediaWrapperStyle = exceedsMaxHeight
       ? { height: MEDIA_MAX_HEIGHT }
       : { aspectRatio: mediaAspectRatio };

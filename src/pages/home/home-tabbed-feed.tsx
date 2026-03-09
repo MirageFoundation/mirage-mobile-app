@@ -457,7 +457,7 @@ export const HomeTabbedFeed = forwardRef<
     typeof InteractionManager.runAfterInteractions
   > | null>(null);
 
-  const PREFETCH_THRESHOLD = Platform.OS === "android" ? 2 : 5;
+  const PREFETCH_THRESHOLD = 6;
   const PAGE_SIZE = NEXT_PAGE_SIZE;
 
   const magicQueryRef = useRef(magicQuery);
@@ -504,14 +504,8 @@ export const HomeTabbedFeed = forwardRef<
         });
       };
 
-      if (Platform.OS === "android") {
-        magicFetchTaskRef.current?.cancel();
-        magicFetchTaskRef.current = InteractionManager.runAfterInteractions(
-          runFetch,
-        );
-      } else {
-        runFetch();
-      }
+      magicFetchTaskRef.current?.cancel();
+      runFetch();
     }
   }, [PAGE_SIZE, PREFETCH_THRESHOLD]);
 
@@ -542,14 +536,8 @@ export const HomeTabbedFeed = forwardRef<
         });
       };
 
-      if (Platform.OS === "android") {
-        latestFetchTaskRef.current?.cancel();
-        latestFetchTaskRef.current = InteractionManager.runAfterInteractions(
-          runFetch,
-        );
-      } else {
-        runFetch();
-      }
+      latestFetchTaskRef.current?.cancel();
+      runFetch();
     }
   }, [PAGE_SIZE, PREFETCH_THRESHOLD]);
 

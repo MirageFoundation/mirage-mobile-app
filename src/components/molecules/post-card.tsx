@@ -7,6 +7,8 @@ import { usePreferencesStore } from "@/src/stores";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   Linking,
+  PixelRatio,
+  Platform,
   Pressable,
   View,
   type StyleProp,
@@ -228,6 +230,8 @@ export const PostCard = memo(function PostCard({
       ref={containerRef}
       onPress={handlePress}
       style={[styles.container, style]}
+      shouldRasterizeIOS={true}
+      renderToHardwareTextureAndroid={true}
     >
       <PostCardHeader
         author={author}

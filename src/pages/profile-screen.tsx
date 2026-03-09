@@ -7,7 +7,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
-  InteractionManager,
   Platform,
   Share,
   useWindowDimensions,
@@ -758,7 +757,7 @@ useEffect(() => {
   }).current;
 
   const pendingProfileViewableRef = useRef<ViewToken[] | null>(null);
-  const profileDeferHandleRef = useRef<ReturnType<typeof setTimeout> | ReturnType<typeof InteractionManager.runAfterInteractions> | null>(null);
+  const profileDeferHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flushProfileViewability = () => {
     const items = pendingProfileViewableRef.current;
@@ -795,25 +794,24 @@ useEffect(() => {
           clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
         }
         profileDeferHandleRef.current = setTimeout(flushProfileViewability, 150);
-      } else {
-        if (profileDeferHandleRef.current !== null) {
-          (profileDeferHandleRef.current as ReturnType<typeof InteractionManager.runAfterInteractions>).cancel();
-        }
-        profileDeferHandleRef.current = InteractionManager.runAfterInteractions(flushProfileViewability);
       }
     }
   ).current;
 
   const handleProfileMomentumScrollEnd = useCallback(() => {
     if (profileDeferHandleRef.current !== null) {
-      if (Platform.OS === "android") {
-        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
-      } else {
-        (profileDeferHandleRef.current as ReturnType<typeof InteractionManager.runAfterInteractions>).cancel();
-      }
+      clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
       profileDeferHandleRef.current = null;
     }
-    flushProfileViewability();
+    if (Platform.OS === "ios") {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(flushProfileViewability);
+      });
+    } else {
+      setTimeout(() => {
+        requestAnimationFrame(flushProfileViewability);
+      }, 50);
+    }
   }, []);
 
   const lastFetchTime = useRef(0);
@@ -1088,7 +1086,7 @@ useEffect(() => {
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           onScroll={scrollHandler}
-          scrollEventThrottle={16}
+          scrollEventThrottle={Platform.OS === "ios" ? 64 : 16}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={contentContainerStyle}
           onEndReached={handleEndReached}

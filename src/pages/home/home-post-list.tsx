@@ -10,7 +10,6 @@ import {
   type ComponentType,
 } from "react";
 import {
-  InteractionManager,
   Platform,
   type ListRenderItem,
   type ViewToken,
@@ -72,24 +71,11 @@ const HomePostListInner = function HomePostListInner(
   }).current;
 
   const pendingViewableRef = useRef<ViewToken[] | null>(null);
-  const deferHandleRef = useRef<ReturnType<typeof setTimeout> | ReturnType<typeof InteractionManager.runAfterInteractions> | null>(null);
+  const deferHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cancelDeferredFlush = useCallback(() => {
     if (deferHandleRef.current === null) return;
-
-    if (Platform.OS === "android") {
-      const handle = deferHandleRef.current as
-        | ReturnType<typeof setTimeout>
-        | ReturnType<typeof InteractionManager.runAfterInteractions>;
-      if (typeof handle === "object" && "cancel" in handle) {
-        handle.cancel();
-      } else {
-        clearTimeout(handle as ReturnType<typeof setTimeout>);
-      }
-    } else {
-      (deferHandleRef.current as ReturnType<typeof InteractionManager.runAfterInteractions>).cancel();
-    }
-
+    clearTimeout(deferHandleRef.current as ReturnType<typeof setTimeout>);
     deferHandleRef.current = null;
   }, []);
 
@@ -127,19 +113,30 @@ const HomePostListInner = function HomePostListInner(
     if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
   }, [setVideoViewability]);
 
+  const itemVisibleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       pendingViewableRef.current = viewableItems;
 
-      if (Platform.OS === "android") {
+      const maxIndex = viewableItems.reduce((max, item) => {
+        if (item.isViewable && item.index != null && item.index > max) return item.index;
+        return max;
+      }, -1);
+
+      if (Platform.OS === "ios") {
+        if (itemVisibleTimerRef.current) clearTimeout(itemVisibleTimerRef.current);
+        itemVisibleTimerRef.current = setTimeout(() => {
+          itemVisibleTimerRef.current = null;
+          if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
+        }, 200);
+      } else {
+        if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
         cancelDeferredFlush();
         deferHandleRef.current = setTimeout(() => {
           deferHandleRef.current = null;
           flushViewability();
         }, 150);
-      } else {
-        cancelDeferredFlush();
-        deferHandleRef.current = InteractionManager.runAfterInteractions(flushViewability);
       }
     }
   ).current;
@@ -184,16 +181,20 @@ const HomePostListInner = function HomePostListInner(
 
   const handleMomentumScrollEnd = useCallback(() => {
     cancelDeferredFlush();
-    if (Platform.OS === "android") {
-      deferHandleRef.current = InteractionManager.runAfterInteractions(() => {
-        deferHandleRef.current = null;
+    if (Platform.OS === "ios") {
+      requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           flushViewability();
         });
       });
-      return;
+    } else {
+      deferHandleRef.current = setTimeout(() => {
+        deferHandleRef.current = null;
+        requestAnimationFrame(() => {
+          flushViewability();
+        });
+      }, 50);
     }
-    flushViewability();
   }, [cancelDeferredFlush, flushViewability]);
 
   return (
@@ -206,7 +207,7 @@ const HomePostListInner = function HomePostListInner(
       estimatedItemSize={420}
       drawDistance={Platform.OS === "android" ? 500 : 600}
       onScroll={onScroll}
-      scrollEventThrottle={32}
+      scrollEventThrottle={Platform.OS === "ios" ? 64 : 32}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={contentContainerStyle as any}
       ListHeaderComponent={ListHeaderComponent}
@@ -220,7 +221,6 @@ const HomePostListInner = function HomePostListInner(
       viewabilityConfig={viewabilityConfig}
       onViewableItemsChanged={onViewableItemsChanged}
       onMomentumScrollEnd={handleMomentumScrollEnd}
-      maintainVisibleContentPosition={{ disabled: true }}
     />
   );
 };
