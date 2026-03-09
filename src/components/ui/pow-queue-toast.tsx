@@ -13,6 +13,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { usePowQueueStore, getSuccessLabel } from "@/src/services/pow-queue";
 import { getPowProgress } from "@/src/wallet";
+import { useToastLayoutStore } from "@/src/stores/toast-layout-store";
 import { Text } from "./primitives";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -135,6 +136,7 @@ export const PowQueueToast = () => {
     ]).start(() => {
       setIsVisible(false);
       isAnimatingOutRef.current = false;
+      useToastLayoutStore.getState().setPowQueueToastHeight(0);
     });
   };
 
@@ -238,6 +240,11 @@ export const PowQueueToast = () => {
   }, [isShowingProcessing, isVisible]);
 
   if (!isVisible) return null;
+
+  const handleLayout = (e: any) => {
+    const height = e.nativeEvent.layout.height;
+    useToastLayoutStore.getState().setPowQueueToastHeight(height);
+  };
 
   const isDark = rt.themeName === "dark";
 
@@ -438,6 +445,7 @@ export const PowQueueToast = () => {
   return (
     <Animated.View
       pointerEvents="box-none"
+      onLayout={handleLayout}
       style={[
         styles.container,
         {

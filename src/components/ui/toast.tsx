@@ -18,6 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
+import { useToastLayoutStore } from "@/src/stores/toast-layout-store";
 import { Text } from "./primitives";
 
 /**
@@ -68,6 +69,7 @@ export const Toast = ({
 }: ToastProps) => {
   const { theme, rt } = useUnistyles();
   const insets = useSafeAreaInsets();
+  const powToastHeight = useToastLayoutStore((s) => s.powQueueToastHeight);
   const translateY = useRef(new Animated.Value(-50)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.95)).current;
@@ -211,7 +213,7 @@ export const Toast = ({
       style={[
         styles.container,
         {
-          top: insets.top + 4,
+          top: insets.top + 4 + (powToastHeight > 0 ? powToastHeight + 8 : 0),
           transform: [{ translateY }, { scale }],
           opacity,
         },
