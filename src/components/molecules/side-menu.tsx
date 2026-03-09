@@ -734,7 +734,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 63
+                          update 64
                         </Text>
                         <Text
                           style={{
@@ -745,7 +745,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           weight="light"
                         >
                           video loading,ios lag fix,anon- not showing for new
-                          user fix,double comment in single post fix
+                          user fix,double comment in single post
+                          fix,notification icon in status bar,auto fill topic,
+                          video limit of 59 seconds in post creation,case
+                          sensitive username,mark inbox seen,cloudflare error
+                          handling,some toast UI fix, different toast
+                          overlapping fix
                         </Text>
                       </>
                     )}
@@ -786,7 +791,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 63
+                          update 64
                         </Text>
                         <Text
                           style={{
@@ -797,7 +802,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           weight="light"
                         >
                           video loading,ios lag fix,anon- not showing for new
-                          user fix,double comment in single post fix
+                          user fix,double comment in single post
+                          fix,notification icon in status bar,auto fill topic,
+                          video limit of 59 seconds in post creation,case
+                          sensitive username,mark inbox seen,cloudflare error
+                          handling,some toast UI fix, different toast
+                          overlapping fix
                         </Text>
                       </>
                     )}
