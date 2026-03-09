@@ -15,7 +15,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name,
     slug,
-    version: "1.0.5",
+    version: "1.0.6",
     orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: scheme,
@@ -115,7 +115,13 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           photosPermission: "$(PRODUCT_NAME) needs access to your Photos.",
         },
       ],
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          icon: "./assets/images/android-icon-monochrome.png",
+          color: "#000000",
+        },
+      ],
       [
         "expo-screen-orientation",
         {

@@ -308,7 +308,7 @@ function subscribeAppState(): void {
   }
 }
 
-const STALE_NOTIFICATION_MS = 5_000;
+const STALE_NOTIFICATION_MS = 60_000;
 const HANDLED_NOTIFICATION_IDS_KEY = "inbox-handled-notification-ids";
 
 function getHandledNotificationIds(): Set<string> {
@@ -353,7 +353,7 @@ function handleNotificationResponse(
     handledNotificationIds.add(notificationId);
     saveHandledNotificationIds(handledNotificationIds);
     router.push({
-      pathname: "/inbox",
+      pathname: "/(tabs)/inbox",
       params: { fromNotification: notificationId },
     });
   } catch (error) {
@@ -371,18 +371,16 @@ function subscribeNotificationResponses(): void {
       handleNotificationResponse(response);
     });
 
-  if (Platform.OS !== "android") {
-    Notifications.getLastNotificationResponseAsync()
-      .then((response) => {
-        handleNotificationResponse(response);
-      })
-      .catch((error) => {
-        console.error(
-          "[InboxNotifications] Failed to read last notification response:",
-          error,
-        );
-      });
-  }
+  Notifications.getLastNotificationResponseAsync()
+    .then((response) => {
+      handleNotificationResponse(response);
+    })
+    .catch((error) => {
+      console.error(
+        "[InboxNotifications] Failed to read last notification response:",
+        error,
+      );
+    });
 }
 
 function subscribeInboxSignals(): void {
