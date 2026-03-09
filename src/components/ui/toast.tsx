@@ -149,7 +149,7 @@ export const Toast = ({
         return theme.colors.primary[500];
       case "info":
       default:
-        return theme.colors.text.default;
+        return theme.colors.primary[500];
     }
   };
 
@@ -163,7 +163,7 @@ export const Toast = ({
         return theme.colors.primary[500] + "40";
       case "info":
       default:
-        return theme.colors.border.default;
+        return theme.colors.primary[500] + "40";
     }
   };
 
@@ -176,7 +176,7 @@ export const Toast = ({
       ? {
           intensity: 80,
           tint: isDark ? ("dark" as const) : ("light" as const),
-          style: [styles.blurContainer, { borderColor: getBorderColor() }],
+          style: [styles.blurInner],
         }
       : {
           style: [
@@ -221,9 +221,48 @@ export const Toast = ({
         onPress={toast.action ? toast.action : toast.type !== "loading" ? handleDismiss : undefined}
         onLongPress={hasMultiple ? onNext : undefined}
       >
+        {Platform.OS === "ios" ? (
+          <View style={[styles.borderWrap, { borderColor: getBorderColor() }]}>
+            <ToastWrapper {...wrapperProps}>
+              <View style={styles.content}>
+                <View style={styles.iconContainer}>
+                  {toast.type === "loading" ? (
+                    <ActivityIndicator size="small" color={getIconColor()} />
+                  ) : (
+                    <Ionicons
+                      name={ICON_MAP[toast.type]}
+                      size={16}
+                      color={getIconColor()}
+                    />
+                  )}
+                </View>
+                <View style={styles.textContainer}>
+                  <Text size="xs" weight="semibold" numberOfLines={1}>
+                    {toast.title}
+                  </Text>
+                </View>
+                <View style={styles.rightSection}>
+                  {hasMultiple && (
+                    <Pressable onPress={onNext} style={[styles.counterBadge, { backgroundColor: badgeBackground }]}>
+                      <Text size="xs" weight="bold" style={styles.counterText}>
+                        {currentIndex + 1}/{totalCount}
+                      </Text>
+                    </Pressable>
+                  )}
+                  {toast.type === "loading" && (
+                    <View style={[styles.timerContainer, { backgroundColor: timerBackground }]}>
+                      <Text size="xs" weight="medium" style={styles.timerText}>
+                        {formatElapsedTime(elapsedMs)}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </ToastWrapper>
+          </View>
+        ) : (
         <ToastWrapper {...wrapperProps}>
           <View style={styles.content}>
-            {/* Icon */}
             <View style={styles.iconContainer}>
               {toast.type === "loading" ? (
                 <ActivityIndicator size="small" color={getIconColor()} />
@@ -235,17 +274,12 @@ export const Toast = ({
                 />
               )}
             </View>
-
-            {/* Text */}
             <View style={styles.textContainer}>
               <Text size="xs" weight="semibold" numberOfLines={1}>
                 {toast.title}
               </Text>
             </View>
-
-            {/* Right side content */}
             <View style={styles.rightSection}>
-              {/* Counter badge for multiple toasts */}
               {hasMultiple && (
                 <Pressable onPress={onNext} style={[styles.counterBadge, { backgroundColor: badgeBackground }]}>
                   <Text size="xs" weight="bold" style={styles.counterText}>
@@ -253,8 +287,6 @@ export const Toast = ({
                   </Text>
                 </Pressable>
               )}
-
-              {/* Timer for loading */}
               {toast.type === "loading" && (
                 <View style={[styles.timerContainer, { backgroundColor: timerBackground }]}>
                   <Text size="xs" weight="medium" style={styles.timerText}>
@@ -262,10 +294,10 @@ export const Toast = ({
                   </Text>
                 </View>
               )}
-
             </View>
           </View>
         </ToastWrapper>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -314,8 +346,17 @@ const styles = StyleSheet.create((theme) => ({
   },
   blurContainer: {
     overflow: "hidden",
-    borderRadius: 9999,
+    borderRadius: 12,
     borderWidth: 1,
+  },
+  blurInner: {
+    overflow: "hidden",
+    borderRadius: 11,
+  },
+  borderWrap: {
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: "hidden",
   },
   content: {
     flexDirection: "row",
