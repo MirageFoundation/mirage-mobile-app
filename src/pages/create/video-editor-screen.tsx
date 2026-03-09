@@ -366,21 +366,22 @@ export function VideoEditorScreen() {
           </Text>
         </View>
 
-        {/* Processing overlay */}
-        {isProcessing && (
-          <View style={styles.processingOverlay}>
-            <View style={styles.processingContent}>
-              <ActivityIndicator size="large" color={theme.colors.brand[500]} />
-              <Text size="md" weight="medium" style={{ marginTop: 16 }}>
-                Processing video...
-              </Text>
-              <Text size="sm" mode="subtle" style={{ marginTop: 4 }}>
-                Trimming video
-              </Text>
-            </View>
-          </View>
-        )}
       </Box>
+
+      {/* Processing overlay */}
+      {isProcessing && (
+        <View style={styles.processingOverlay}>
+          <View style={styles.processingContent}>
+            <ActivityIndicator size="large" color={theme.colors.brand[500]} />
+            <Text size="md" weight="medium" style={{ marginTop: 16 }}>
+              Processing video...
+            </Text>
+            <Text size="sm" mode="subtle" style={{ marginTop: 4 }}>
+              Trimming video
+            </Text>
+          </View>
+        </View>
+      )}
     </GestureHandlerRootView>
   );
 }
