@@ -320,6 +320,20 @@ export function CreateScreen() {
     setIsVideoMuted(false);
     setIsVideoPlaying(false);
 
+    const redditMatch = (shareIntent.webUrl ?? shareIntent.text ?? "").match(/reddit\.com\/r\/([^/]+)/i);
+    if (redditMatch) {
+      const topicName = redditMatch[1].toLowerCase();
+      updateDraft({
+        community: {
+          id: topicName,
+          name: topicName,
+          memberCount: 0,
+          isSubscribed: false,
+          isNewTopic: true,
+        },
+      });
+    }
+
     setTimeout(() => {
       if (shareIntent.text && !shareIntent.webUrl) {
         updateDraft({ body: shareIntent.text });
