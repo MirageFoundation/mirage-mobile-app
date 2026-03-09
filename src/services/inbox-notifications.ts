@@ -308,7 +308,7 @@ function subscribeAppState(): void {
   }
 }
 
-const STALE_NOTIFICATION_MS = 60_000;
+const STALE_NOTIFICATION_MS = 5 * 60_000;
 const HANDLED_NOTIFICATION_IDS_KEY = "inbox-handled-notification-ids";
 
 function getHandledNotificationIds(): Set<string> {
@@ -352,10 +352,22 @@ function handleNotificationResponse(
     }
     handledNotificationIds.add(notificationId);
     saveHandledNotificationIds(handledNotificationIds);
-    router.push({
-      pathname: "/(tabs)/inbox",
-      params: { fromNotification: notificationId },
-    });
+    const navigateToInbox = () => {
+      router.navigate({
+        pathname: "/(tabs)/inbox",
+        params: { fromNotification: notificationId },
+      });
+    };
+    if (AppState.currentState !== "active") {
+      const sub = AppState.addEventListener("change", (state) => {
+        if (state === "active") {
+          sub.remove();
+          setTimeout(navigateToInbox, 500);
+        }
+      });
+    } else {
+      setTimeout(navigateToInbox, 300);
+    }
   } catch (error) {
     console.error("[InboxNotifications] Failed to navigate from notification:", error);
     Sentry.captureException(error, {

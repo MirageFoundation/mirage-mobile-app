@@ -22,6 +22,10 @@ export {
   CommentOptionsSheet,
   type CommentOptionsSheetRef,
 } from "./comment-options-sheet";
+export {
+  InboxOptionsSheet,
+  type InboxOptionsSheetRef,
+} from "./inbox-options-sheet";
 export { CommentThread } from "./comment-thread";
 
 // Moderation & Actions
