@@ -575,12 +575,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     subtitle="Complete tasks for rewards"
                     onPress={createHandler(onQuests)}
                   />
-                  <MenuItem
-                    iconName="card-outline"
-                    title="Perks"
-                    subtitle="Manage your tier"
-                    onPress={createHandler(onSubscription)}
-                  />
                   <SectionFooter />
 
                   {/* Content Section */}

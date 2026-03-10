@@ -194,12 +194,7 @@ export const ProfileHeaderBar = ({
             </View>
           )}
           {isOwnProfile && (
-            <AnimatedPressable
-              scaleAmount={0.9}
-              onPress={() => {
-                triggerHaptic("selection");
-                onSubscriptionPress?.();
-              }}
+            <View
               style={styles.tierHeaderBadge}
             >
               <Icon
@@ -211,7 +206,7 @@ export const ProfileHeaderBar = ({
               <Text size="md" weight="semibold" style={styles.whiteText}>
                 {getTierName(userLevel)}
               </Text>
-            </AnimatedPressable>
+            </View>
           )}
           {!isOwnProfile && (
             <AnimatedPressable
