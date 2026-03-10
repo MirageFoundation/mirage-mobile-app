@@ -54,7 +54,7 @@ export function useInfinitePosts(
       getPosts({ ...baseParams, page: pageParam, limit: pageParam === 1 ? baseParams.limit : (pageLimit ?? baseParams.limit) }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
-      if (!lastPage.has_more) return undefined;
+      if (!lastPage?.has_more) return undefined;
       return lastPage.page + 1;
     },
     enabled: !isInitializing && (options?.enabled ?? true),
@@ -112,7 +112,7 @@ export function useInfiniteUserPosts(
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
-      if (!lastPage.has_more) return undefined;
+      if (!lastPage?.has_more) return undefined;
       return lastPage.page + 1;
     },
     enabled: !!owner,

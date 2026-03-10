@@ -303,7 +303,7 @@ export function ProfileScreen() {
         }),
       initialPageParam: 1,
       getNextPageParam: (lastPage) => {
-        if (!lastPage.has_more) return undefined;
+        if (!lastPage?.has_more) return undefined;
         return lastPage.page + 1;
       },
     });
