@@ -507,10 +507,6 @@ export function usePost(options: UsePostOptions = {}) {
         queryKey: ["topics"],
         refetchType: "inactive",
       });
-      queryClient.invalidateQueries({
-        queryKey: ["searchTopics"],
-        refetchType: "inactive",
-      });
     },
   });
 }

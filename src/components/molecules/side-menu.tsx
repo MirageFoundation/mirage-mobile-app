@@ -734,7 +734,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 65
+                          update 66
                         </Text>
                         <Text
                           style={{
@@ -744,13 +744,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          video loading,ios lag fix,anon- not showing for new
-                          user fix,double comment in single post
-                          fix,notification icon in status bar,auto fill topic,
-                          video limit of 59 seconds in post creation,case
-                          sensitive username,mark inbox seen,cloudflare error
-                          handling,some toast UI fix, different toast
-                          overlapping fix
+                          link extraction from shared reddit post, comment lenth
+                          check added,recovery phrase UI fix, error handling for
+                          network error while posting, try again in create post
+                          not working fixed, some toast text changes,
                         </Text>
                       </>
                     )}
@@ -791,7 +788,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 65
+                          update 66
                         </Text>
                         <Text
                           style={{
@@ -801,13 +798,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          video loading,ios lag fix,anon- not showing for new
-                          user fix,double comment in single post
-                          fix,notification icon in status bar,auto fill topic,
-                          video limit of 59 seconds in post creation,case
-                          sensitive username,mark inbox seen,cloudflare error
-                          handling,some toast UI fix, different toast
-                          overlapping fix
+                          link extraction from shared reddit post, comment lenth
+                          check added,recovery phrase UI fix, error handling for
+                          network error while posting, try again in create post
+                          not working fixed, some toast text changes,
                         </Text>
                       </>
                     )}
