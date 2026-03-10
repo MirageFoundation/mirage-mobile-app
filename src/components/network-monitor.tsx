@@ -179,7 +179,7 @@ export function NetworkMonitor() {
                 numberOfLines={1}
                 style={styles.labelText}
               >
-                {isOffline ? "No connection" : "Back online"}
+                {isOffline ? "No internet connection" : "Back online"}
               </Text>
             </View>
           </ToastWrapper>
@@ -200,7 +200,7 @@ export function NetworkMonitor() {
               numberOfLines={1}
               style={styles.labelText}
             >
-              {isOffline ? "No connection" : "Back online"}
+              {isOffline ? "No internet connection" : "Back online"}
             </Text>
           </View>
         </ToastWrapper>

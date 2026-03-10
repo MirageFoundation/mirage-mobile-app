@@ -612,9 +612,9 @@ export const PostCardMedia = memo(
                   weight="semibold"
                   style={{ color: "#fff", marginTop: 8 }}
                 >
-                  No connection
+                  No internet connection
                 </Text>
-                <Text
+                <Text>
                   size="xs"
                   style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}
                 >
@@ -999,7 +999,7 @@ export const PostCardMedia = memo(
                 weight="semibold"
                 style={{ color: "#fff", marginTop: 8 }}
               >
-                No connection
+                No internet connection
               </Text>
               <Text
                 size="xs"
