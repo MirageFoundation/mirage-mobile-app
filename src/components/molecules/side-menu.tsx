@@ -734,7 +734,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 66
+                          update 68
                         </Text>
                         <Text
                           style={{
@@ -747,7 +747,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           link extraction from shared reddit post, comment lenth
                           check added,recovery phrase UI fix, error handling for
                           network error while posting, try again in create post
-                          not working fixed, some toast text changes,
+                          not working fixed, some toast text changes,toasts
+                          overlapping fix, several errors from sentry log fixed,
+                          some minor UI changes in search topic in create
+                          post,network error handling while pow
                         </Text>
                       </>
                     )}
@@ -788,7 +791,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 66
+                          update 68
                         </Text>
                         <Text
                           style={{
@@ -801,7 +804,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           link extraction from shared reddit post, comment lenth
                           check added,recovery phrase UI fix, error handling for
                           network error while posting, try again in create post
-                          not working fixed, some toast text changes,
+                          not working fixed, some toast text changes,toasts
+                          overlapping fix, several errors from sentry log fixed,
+                          some minor UI changes in search topic in create
+                          post,network error handling while pow
                         </Text>
                       </>
                     )}
