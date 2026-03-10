@@ -1797,7 +1797,11 @@ export function CreateScreen() {
           txProgress.hideModal();
           setIsSubmitting(false);
         }}
-        onRetry={handlePost}
+        onRetry={() => {
+          txProgress.reset();
+          setIsSubmitting(false);
+          setTimeout(() => handlePost(), 100);
+        }}
       />
     </Box>
   );
