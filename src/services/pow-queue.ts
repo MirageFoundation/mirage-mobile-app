@@ -296,8 +296,13 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
         wasCancelled = true;
       } else {
         const err = error instanceof Error ? error : new Error(String(error));
+        const isNetworkError =
+          (error as any)?.code === "ERR_NETWORK" ||
+          (error as any)?.message === "Network Error";
         const serverMsg = (error as any)?.response?.data?.error;
-        const displayMsg = serverMsg || err.message || "Something went wrong";
+        const displayMsg = isNetworkError
+          ? "No internet connection"
+          : serverMsg || err.message || "Something went wrong";
         Sentry.captureException(err, {
           tags: { action: "pow_action", pow_type: nextAction.type },
           extra: { actionId: nextAction.id, label: nextAction.label },

@@ -17,7 +17,8 @@ import { useToastLayoutStore } from "@/src/stores/toast-layout-store";
 import { Text } from "./primitives";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
-const TOAST_WIDTH = Math.round(SCREEN_WIDTH * 0.42);
+const TOAST_MIN_WIDTH = Math.round(SCREEN_WIDTH * 0.42);
+const TOAST_MAX_WIDTH = Math.round(SCREEN_WIDTH * 0.6);
 
 type PowPhase = "preparing" | "solving" | "submitting";
 
@@ -304,7 +305,7 @@ export const PowQueueToast = () => {
             <Text
               size="xs"
               weight="semibold"
-              numberOfLines={1}
+              numberOfLines={2}
               style={styles.labelText}
             >
               {displayLabel}
@@ -443,37 +444,43 @@ export const PowQueueToast = () => {
         };
 
   return (
-    <Animated.View
+    <View
       pointerEvents="box-none"
       onLayout={handleLayout}
-      style={[
-        styles.container,
-        {
-          top: insets.top + 4,
+      style={[styles.container, { top: insets.top + 4 }]}
+    >
+      <Animated.View
+        style={{
           transform: [{ translateY }, { scale }],
           opacity,
-        },
-      ]}
-    >
-      {Platform.OS === "ios" ? (
-        <View style={[styles.borderWrap, { borderColor: colors.border }]}>
-          {renderToastContent(wrapperProps)}
+        }}
+      >
+        <View style={styles.innerWrap}>
+          {Platform.OS === "ios" ? (
+            <View style={[styles.borderWrap, { borderColor: colors.border }]}>
+              {renderToastContent(wrapperProps)}
+            </View>
+          ) : (
+            renderToastContent(wrapperProps)
+          )}
+          {renderOverlay()}
         </View>
-      ) : (
-        renderToastContent(wrapperProps)
-      )}
-      {renderOverlay()}
-    </Animated.View>
+      </Animated.View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create((theme) => ({
   container: {
     position: "absolute",
-    width: TOAST_WIDTH,
-    alignSelf: "center",
-    left: (SCREEN_WIDTH - TOAST_WIDTH) / 2,
+    left: 0,
+    right: 0,
+    alignItems: "center",
     zIndex: 9999,
+  },
+  innerWrap: {
+    minWidth: TOAST_MIN_WIDTH,
+    maxWidth: TOAST_MAX_WIDTH,
   },
   blurContainer: {
     overflow: "hidden",
@@ -507,18 +514,20 @@ const styles = StyleSheet.create((theme) => ({
     marginRight: 2,
   },
   labelText: {
-    flex: 1,
-    fontSize: 11,
+    flexShrink: 1,
+    flexGrow: 0,
+    fontSize: 12,
   },
   phaseText: {
     fontSize: 12,
-    marginLeft: 25,
+    marginLeft: 28,
   },
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginTop: 1,
+    marginLeft: 28,
   },
   statText: {
     fontSize: 12,
