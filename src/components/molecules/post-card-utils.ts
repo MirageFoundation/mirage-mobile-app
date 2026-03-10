@@ -273,7 +273,7 @@ export function resolvePostContent(
 
   return {
     extractedUrl,
-    bodyWithoutUrl: isOgThumbnail ? body : bodyWithoutUrl,
+    bodyWithoutUrl: (isOgThumbnail || !bodyVideoUrl) ? body : bodyWithoutUrl,
     displayDomain,
     bodyVideoUrl,
     resolvedMedia: finalMedia,

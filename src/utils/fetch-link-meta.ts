@@ -11,6 +11,7 @@ export type LinkMeta = {
   videos: string[];
   siteName: string | null;
   domain: string;
+  externalUrl: string | null;
 };
 
 const BROWSER_UA =
@@ -86,6 +87,11 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
         }
       } catch {}
     }
+    console.log("[fetchRedditVideo] URL resolution:", {
+      originalUrl: url,
+      resolvedUrl,
+      didRedirect: resolvedUrl !== url,
+    });
 
     const jsonUrl = resolvedUrl.replace(/\?.*$/, "").replace(/\/$/, "") + ".json";
 
@@ -104,7 +110,22 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
 
     const listing = Array.isArray(data) ? data[0] : data;
     const post = listing?.data?.children?.[0]?.data;
-    if (!post) return {};
+    if (!post) {
+      console.log("[fetchRedditVideo] No post data found in JSON response");
+      return {};
+    }
+    console.log("[fetchRedditVideo] Post data:", {
+      title: post.title,
+      url: post.url,
+      domain: post.domain,
+      isVideo: post.is_video,
+      isSelf: post.is_self,
+      isGallery: post.is_gallery,
+      hasSecureMedia: !!post.secure_media,
+      hasMedia: !!post.media,
+      hasCrosspost: post.crosspost_parent_list?.length > 0,
+      postHint: post.post_hint,
+    });
 
     let videoUrl: string | null = null;
     let imageUrl: string | null = null;
@@ -208,6 +229,16 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       level: "info",
     });
 
+    console.log("[fetchRedditVideo] Extracted media:", {
+      videoUrl,
+      audioUrl,
+      audioUrlsCount: audioUrls.length,
+      imageUrl,
+      imagesCount: images.length,
+      videosCount: videos.length,
+      postUrl: post.url,
+    });
+
     return {
       title: post.title ?? null,
       description: post.selftext?.slice(0, 500) ?? null,
@@ -218,6 +249,7 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       images,
       videos,
       siteName: "Reddit",
+      externalUrl: !post.is_self && post.url && !post.url.startsWith("https://www.reddit.com") && !post.url.startsWith("https://reddit.com") && !post.url.startsWith("https://i.redd.it") && !post.url.startsWith("https://v.redd.it") ? post.url : null,
     };
   } catch (err) {
     Sentry.addBreadcrumb({
@@ -705,6 +737,7 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
     let images: string[] = [];
     let videos: string[] = [];
     let siteName: string | null = null;
+    let externalUrl: string | null = null;
 
     if (isRedditUrl(url)) {
       const reddit = await fetchRedditVideo(url, controller.signal);
@@ -717,6 +750,7 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       images = reddit.images ?? [];
       videos = reddit.videos ?? [];
       siteName = reddit.siteName ?? null;
+      externalUrl = reddit.externalUrl ?? null;
     }
 
     if (isInstagramUrl(url) && !video) {
@@ -862,8 +896,9 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       videos: videos.map((u) => decodeHtml(u)!),
       siteName: decodeHtml(siteName),
       domain,
+      externalUrl: decodeHtml(externalUrl),
     };
   } catch {
-    return { title: null, description: null, image: null, video: null, audioUrl: null, audioUrls: [], images: [], videos: [], siteName: null, domain };
+    return { title: null, description: null, image: null, video: null, audioUrl: null, audioUrls: [], images: [], videos: [], siteName: null, domain, externalUrl: null };
   }
 }

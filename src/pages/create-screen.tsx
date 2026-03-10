@@ -311,6 +311,13 @@ export function CreateScreen() {
     if (!intentKey || intentKey === lastProcessedIntentRef.current) return;
     lastProcessedIntentRef.current = intentKey;
 
+    console.log("[CreateScreen] Share intent received:", {
+      type: shareIntent.type,
+      webUrl: shareIntent.webUrl,
+      text: shareIntent.text,
+      files: shareIntent.files,
+    });
+
     Sentry.addBreadcrumb({
       category: "share-intent",
       message: "Processing share intent",
@@ -354,6 +361,17 @@ export function CreateScreen() {
       if (shareIntent.webUrl) {
         setIsProcessingShareLink(true);
         fetchLinkMeta(shareIntent.webUrl).then(async (meta) => {
+          console.log("[CreateScreen] Link meta extracted:", {
+            url: shareIntent.webUrl,
+            title: meta.title,
+            description: meta.description,
+            domain: meta.domain,
+            image: meta.image,
+            images: meta.images,
+            video: meta.video,
+            audioUrl: meta.audioUrl,
+            audioUrls: meta.audioUrls,
+          });
           Sentry.addBreadcrumb({
             category: "share-intent",
             message: "Link meta fetched",
@@ -368,6 +386,18 @@ export function CreateScreen() {
             bodyParts.push(meta.description.slice(0, tierLimits.maxContentLength));
           }
           updateDraft({ body: bodyParts.join("\n\n") });
+          console.log("[CreateScreen] Draft auto-filled:", {
+            title: meta.title?.slice(0, tierLimits.maxTitleLength),
+            body: bodyParts.join("\n\n").slice(0, 200),
+            community: redditMatch ? redditMatch[1].toLowerCase() : null,
+          });
+
+          if (meta.externalUrl) {
+            console.log("[CreateScreen] External link detected:", meta.externalUrl);
+            setShowLinkInput(true);
+            setLinkUrl(meta.externalUrl);
+            updateDraft({ linkUrl: meta.externalUrl });
+          }
 
           let videoDownloaded = false;
 
@@ -496,6 +526,10 @@ export function CreateScreen() {
             const newBody = currentBody ? `${currentBody}\n\n${link}` : link;
             updateDraft({ body: newBody });
           }
+
+          if (meta.externalUrl) {
+            updateDraft({ linkUrl: meta.externalUrl });
+          }
         }).catch((err: any) => {
           updateDraft({ body: shareIntent.webUrl! });
           Sentry.captureException(err, { tags: { feature: "share-intent-meta" } });
@@ -604,6 +638,14 @@ export function CreateScreen() {
       if (draft.linkUrl) {
         content = content ? `${draft.linkUrl}\n\n${content}` : draft.linkUrl;
       }
+
+      console.log("[CreateScreen] Submitting post:", {
+        title: draft.title.trim().slice(0, 50),
+        linkUrl: draft.linkUrl,
+        contentPreview: content?.slice(0, 200),
+        attachmentType: draft.attachmentType,
+        mediaCount: mediaUrls.length,
+      });
 
       const isUserProfile =
         draft.community?.description === "Post to your profile";
