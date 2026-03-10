@@ -381,7 +381,7 @@ export const CommunitySelectionModal = ({
             style={[styles.cancelButtonContainer, cancelButtonAnimatedStyle]}
           >
             <Pressable onPress={handleCancel} hitSlop={8}>
-              <Text size="md" style={{ color: "rgb(29,68,150)" }}>
+              <Text size="md" style={{ color: theme.colors.brand[500] }}>
                 Cancel
               </Text>
             </Pressable>
