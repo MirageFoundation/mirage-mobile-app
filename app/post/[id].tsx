@@ -1744,17 +1744,26 @@ export default function PostDetailScreen() {
           >
             Failed to load comments
           </Text>
+          <Text
+            size="sm"
+            mode="subtle"
+            style={{ marginTop: 4, textAlign: "center" }}
+          >
+            Something went wrong. Please check your connection and try again.
+          </Text>
           <Pressable
             onPress={() => refetchComments()}
             style={{
-              marginTop: 12,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-              backgroundColor: theme.colors.primary[500],
+              marginTop: 16,
+              paddingHorizontal: 20,
+              paddingVertical: 10,
+              borderWidth: 1,
+              borderColor: theme.colors.border.default,
               borderRadius: 8,
+              backgroundColor: theme.colors.background.subtle,
             }}
           >
-            <Text size="sm" weight="medium" style={{ color: "#FFFFFF" }}>
+            <Text size="sm" weight="medium">
               Try again
             </Text>
           </Pressable>
