@@ -7,10 +7,12 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { useNetworkState } from "@/src/hooks/use-network-state";
 import { useAppState } from "@/src/hooks/use-app-state";
+import { useTopToastStack } from "@/src/stores/toast-layout-store";
 import { Text } from "@/src/components/ui/primitives";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const TOAST_WIDTH = Math.round(SCREEN_WIDTH * 0.46);
+const TOAST_STACK_ID = "network-monitor";
 
 export function NetworkMonitor() {
   const { isConnected } = useNetworkState();
@@ -26,6 +28,7 @@ export function NetworkMonitor() {
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.95)).current;
   const dismissTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { offset, onLayout } = useTopToastStack(TOAST_STACK_ID, isVisible);
 
   useAppState({ onForeground: () => {} });
 
@@ -156,14 +159,36 @@ export function NetworkMonitor() {
       style={[
         styles.container,
         {
-          top: insets.top + 4,
+          top: insets.top + 4 + offset,
           transform: [{ translateY }, { scale }],
           opacity,
         },
       ]}
     >
-      {Platform.OS === "ios" ? (
-        <View style={[styles.borderWrap, { borderColor }]}>
+      <View onLayout={onLayout}>
+        {Platform.OS === "ios" ? (
+          <View style={[styles.borderWrap, { borderColor }]}>
+            <ToastWrapper {...wrapperProps}>
+              <View style={styles.content}>
+                <View style={styles.iconContainer}>
+                  <Ionicons
+                    name={isOffline ? "cloud-offline" : "cloud-done"}
+                    size={18}
+                    color={iconColor}
+                  />
+                </View>
+                <Text
+                  size="xs"
+                  weight="semibold"
+                  numberOfLines={1}
+                  style={styles.labelText}
+                >
+                  {isOffline ? "No internet connection" : "Back online"}
+                </Text>
+              </View>
+            </ToastWrapper>
+          </View>
+        ) : (
           <ToastWrapper {...wrapperProps}>
             <View style={styles.content}>
               <View style={styles.iconContainer}>
@@ -183,28 +208,8 @@ export function NetworkMonitor() {
               </Text>
             </View>
           </ToastWrapper>
-        </View>
-      ) : (
-        <ToastWrapper {...wrapperProps}>
-          <View style={styles.content}>
-            <View style={styles.iconContainer}>
-              <Ionicons
-                name={isOffline ? "cloud-offline" : "cloud-done"}
-                size={18}
-                color={iconColor}
-              />
-            </View>
-            <Text
-              size="xs"
-              weight="semibold"
-              numberOfLines={1}
-              style={styles.labelText}
-            >
-              {isOffline ? "No internet connection" : "Back online"}
-            </Text>
-          </View>
-        </ToastWrapper>
-      )}
+        )}
+      </View>
     </Animated.View>
   );
 }

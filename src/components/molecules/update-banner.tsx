@@ -12,6 +12,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Text } from "@/src/components/ui/primitives";
 import type { EasUpdateStatus } from "@/src/hooks/use-eas-update";
+import { useTopToastStack } from "@/src/stores/toast-layout-store";
+
+const TOAST_STACK_ID = "update-banner";
 
 type UpdateBannerProps = {
   status: EasUpdateStatus;
@@ -31,6 +34,7 @@ export const UpdateBanner = ({
   const scale = useRef(new Animated.Value(0.95)).current;
 
   const visible = status !== "idle";
+  const { offset, onLayout } = useTopToastStack(TOAST_STACK_ID, visible);
   const isInstalling = status === "installing";
   const isError = status === "error";
   const isDark = rt.themeName === "dark";
@@ -140,13 +144,16 @@ export const UpdateBanner = ({
       style={[
         styles.container,
         {
-          top: insets.top + 4,
+          top: insets.top + 4 + offset,
           transform: [{ translateY }, { scale }],
           opacity,
         },
       ]}
     >
-      <Pressable onPress={isInstalling ? undefined : onInstall}>
+      <Pressable
+        onLayout={onLayout}
+        onPress={isInstalling ? undefined : onInstall}
+      >
         {Platform.OS === "ios" ? (
           <View style={[styles.borderWrap, { borderColor }]}>
             <ToastWrapper {...wrapperProps}>

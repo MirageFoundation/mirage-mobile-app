@@ -18,8 +18,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { useToastLayoutStore } from "@/src/stores/toast-layout-store";
+import { useTopToastStack } from "@/src/stores/toast-layout-store";
 import { Text } from "./primitives";
+
+const TOAST_STACK_ID = "app-toast";
 
 /**
  * Format elapsed time in a compact way
@@ -51,6 +53,8 @@ interface ToastProps {
   currentIndex: number;
   totalCount: number;
   onNext?: () => void;
+  offset: number;
+  onLayout: (event: any) => void;
 }
 
 const ICON_MAP: Record<ToastType, keyof typeof Ionicons.glyphMap> = {
@@ -66,10 +70,11 @@ export const Toast = ({
   currentIndex,
   totalCount,
   onNext,
+  offset,
+  onLayout,
 }: ToastProps) => {
   const { theme, rt } = useUnistyles();
   const insets = useSafeAreaInsets();
-  const powToastHeight = useToastLayoutStore((s) => s.powQueueToastHeight);
   const translateY = useRef(new Animated.Value(-50)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.95)).current;
@@ -213,13 +218,14 @@ export const Toast = ({
       style={[
         styles.container,
         {
-          top: insets.top + 4 + (powToastHeight > 0 ? powToastHeight + 8 : 0),
+          top: insets.top + 4 + offset,
           transform: [{ translateY }, { scale }],
           opacity,
         },
       ]}
     >
       <Pressable
+        onLayout={onLayout}
         onPress={toast.action ? toast.action : toast.type !== "loading" ? handleDismiss : undefined}
         onLongPress={hasMultiple ? onNext : undefined}
       >
@@ -239,7 +245,12 @@ export const Toast = ({
                   )}
                 </View>
                 <View style={styles.textContainer}>
-                  <Text size="xs" weight="semibold" numberOfLines={1}>
+                  <Text
+                    size="xs"
+                    weight="semibold"
+                    numberOfLines={2}
+                    style={styles.labelText}
+                  >
                     {toast.title}
                   </Text>
                 </View>
@@ -277,7 +288,12 @@ export const Toast = ({
               )}
             </View>
             <View style={styles.textContainer}>
-              <Text size="xs" weight="semibold" numberOfLines={1}>
+              <Text
+                size="xs"
+                weight="semibold"
+                numberOfLines={2}
+                style={styles.labelText}
+              >
                 {toast.title}
               </Text>
             </View>
@@ -314,6 +330,8 @@ interface ToastContainerProps {
 }
 
 export const ToastContainer = ({ toasts, onDismiss }: ToastContainerProps) => {
+  const { offset, onLayout } = useTopToastStack(TOAST_STACK_ID, toasts.length > 0);
+
   if (toasts.length === 0) return null;
 
   // Show oldest toast first (first in array), newest are queued
@@ -334,6 +352,8 @@ export const ToastContainer = ({ toasts, onDismiss }: ToastContainerProps) => {
       currentIndex={0}
       totalCount={toasts.length}
       onNext={handleNext}
+      offset={offset}
+      onLayout={onLayout}
     />
   );
 };
@@ -375,6 +395,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   textContainer: {
     flexShrink: 1,
+  },
+  labelText: {
+    flexShrink: 1,
+    flexGrow: 0,
+    fontSize: 12,
   },
   rightSection: {
     flexDirection: "row",
