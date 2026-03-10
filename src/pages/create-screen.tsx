@@ -1345,11 +1345,7 @@ export function CreateScreen() {
             placeholder="Title"
             placeholderTextColor={theme.colors.text.subtle}
             value={draft.title}
-            onChangeText={(text) => {
-              if (text.length <= tierLimits.maxTitleLength) {
-                updateDraft({ title: text });
-              }
-            }}
+            onChangeText={(text) => updateDraft({ title: text })}
             multiline
             maxLength={tierLimits.maxTitleLength}
             returnKeyType="next"
@@ -1564,11 +1560,7 @@ export function CreateScreen() {
             placeholder="body text (optional)"
             placeholderTextColor={theme.colors.text.subtle}
             value={draft.body}
-            onChangeText={(text) => {
-              if (text.length <= tierLimits.maxContentLength) {
-                updateDraft({ body: text });
-              }
-            }}
+            onChangeText={(text) => updateDraft({ body: text })}
             multiline
             maxLength={tierLimits.maxContentLength}
             textAlignVertical="top"

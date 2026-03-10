@@ -30,7 +30,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { StickerPicker } from "@/src/components/molecules/sticker-picker";
 import { MEME_STICKERS } from "@/src/data/stickers";
 import { useUserLevel } from "@/src/stores/auth-store";
-import { canEditContent } from "@/src/utils/tiers";
+import { canEditContent, getTierPostLimits } from "@/src/utils/tiers";
 
 type InputMode = "keyboard" | "link" | "gif" | "photo";
 
@@ -112,6 +112,8 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const isEditMode = !!editCommentId;
   const userLevel = useUserLevel();
 
+  const tierLimits = useMemo(() => getTierPostLimits(userLevel), [userLevel]);
+
   const editability = useMemo(() => {
     if (!isEditMode || !editCreatedAt) return null;
     return canEditContent(userLevel, parseInt(editCreatedAt, 10));
@@ -163,6 +165,9 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const [showStickerPicker, setShowStickerPicker] = useState(false);
 
   const hasAttachment = selectedImageUri !== null || selectedGifUrl !== null;
+  const attachmentUrl = selectedImageUri || selectedGifUrl;
+  const attachmentOverhead = attachmentUrl ? attachmentUrl.length + 2 : 0;
+  const effectiveMaxLength = Math.max(1, tierLimits.maxContentLength - attachmentOverhead);
   const editBlocked = isEditMode && editability && !editability.allowed;
   const editExpired = !!editBlocked;
   const canSubmit = (text.trim().length > 0 || hasAttachment) && !editExpired;
@@ -535,22 +540,38 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
 
           {/* Text input */}
           {inputMode !== "link" && (
-            <TextInput
-              ref={inputRef}
-              style={[styles.textInput, { color: theme.colors.text.default }, editExpired && { opacity: 0.5 }]}
-              placeholder="Comment"
-              placeholderTextColor={theme.colors.text.subtle}
-              value={text}
-              onChangeText={setText}
-              multiline
-              maxLength={2000}
-              autoFocus={!editExpired}
-              editable={!editExpired}
-              selection={selection}
-              onSelectionChange={(e) => {
-                selectionRef.current = e.nativeEvent.selection;
-              }}
-            />
+            <>
+              <TextInput
+                ref={inputRef}
+                style={[styles.textInput, { color: theme.colors.text.default }, editExpired && { opacity: 0.5 }]}
+                placeholder="Comment"
+                placeholderTextColor={theme.colors.text.subtle}
+                value={text}
+                onChangeText={setText}
+                multiline
+                maxLength={effectiveMaxLength}
+                autoFocus={!editExpired}
+                editable={!editExpired}
+                selection={selection}
+                onSelectionChange={(e) => {
+                  selectionRef.current = e.nativeEvent.selection;
+                }}
+              />
+              {text.length > 0 && (
+                <Text
+                  size="xs"
+                  style={{
+                    color: text.length >= effectiveMaxLength
+                      ? theme.colors.error[500]
+                      : theme.colors.text.subtle,
+                    textAlign: "right",
+                    marginTop: -8,
+                  }}
+                >
+                  {text.length}/{effectiveMaxLength}
+                </Text>
+              )}
+            </>
           )}
         </ScrollView>
 
