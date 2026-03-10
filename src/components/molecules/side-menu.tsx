@@ -736,7 +736,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 68
+                          update 69
                         </Text>
                         <Text
                           style={{
@@ -752,7 +752,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           not working fixed, some toast text changes,toasts
                           overlapping fix, several errors from sentry log fixed,
                           some minor UI changes in search topic in create
-                          post,network error handling while pow
+                          post,network error handling while pow,error handling
+                          for mirage link not openeing, added perks and
+                          subscription page to be platform specifuc
                         </Text>
                       </>
                     )}
@@ -793,7 +795,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 68
+                          update 69
                         </Text>
                         <Text
                           style={{
@@ -809,7 +811,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           not working fixed, some toast text changes,toasts
                           overlapping fix, several errors from sentry log fixed,
                           some minor UI changes in search topic in create
-                          post,network error handling while pow
+                          post,network error handling while pow,error handling
+                          for mirage link not openeing, added perks and
+                          subscription page to be platform specifuc
                         </Text>
                       </>
                     )}
