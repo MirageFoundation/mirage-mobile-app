@@ -593,7 +593,8 @@ export function CreateScreen() {
   }, [isSubmitting, clearDraft]);
 
   const handlePost = useCallback(async () => {
-    if (!canPost || isSubmitting || txProgress.isVisible) return;
+    if (!canPost || isSubmitting) return;
+    if (txProgress.isVisible && txProgress.progress.phase !== "error") return;
 
     Keyboard.dismiss();
     setIsSubmitting(true);
@@ -1798,9 +1799,8 @@ export function CreateScreen() {
           setIsSubmitting(false);
         }}
         onRetry={() => {
-          txProgress.reset();
           setIsSubmitting(false);
-          setTimeout(() => handlePost(), 100);
+          handlePost();
         }}
       />
     </Box>
