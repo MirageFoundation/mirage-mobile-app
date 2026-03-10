@@ -809,10 +809,17 @@ export function CreateScreen() {
     } catch (error) {
       setIsSubmitting(false);
 
-      const serverError = (error as any)?.response?.data?.error;
-      const fallback = isEditMode ? "Failed to edit post" : "Failed to create post";
-      const errorMessage = serverError || (error instanceof Error ? error.message : fallback);
-      txProgress.setError(errorMessage);
+      const isNetworkError =
+        (error as any)?.code === "ERR_NETWORK" ||
+        (error as any)?.message === "Network Error";
+      if (isNetworkError) {
+        txProgress.setError("No internet connection. Please check your network and try again.");
+      } else {
+        const serverError = (error as any)?.response?.data?.error;
+        const fallback = isEditMode ? "Failed to edit post" : "Failed to create post";
+        const errorMessage = serverError || (error instanceof Error ? error.message : fallback);
+        txProgress.setError(errorMessage);
+      }
     }
   }, [
     canPost,
