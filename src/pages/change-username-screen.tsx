@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
+  Platform,
   Pressable,
   ScrollView,
   View,
@@ -409,6 +410,20 @@ export function ChangeUsernameScreen() {
                 >
                   Changing username is not available for the basic tier. Upgrade your plan to change your username.
                 </Text>
+                {Platform.OS !== "ios" && (
+                  <Pressable
+                    onPress={() => router.push("/subscription")}
+                    style={{ marginTop: 12 }}
+                  >
+                    <Text
+                      size="sm"
+                      weight="semibold"
+                      style={{ color: theme.colors.primary[500] }}
+                    >
+                      Update Subscription
+                    </Text>
+                  </Pressable>
+                )}
               </Box>
             )}
           </View>

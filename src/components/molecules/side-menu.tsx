@@ -563,6 +563,14 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   <SectionFooter />
 
                   <SectionHeader title="Rewards & Plans" />
+                  {Platform.OS !== "ios" && (
+                    <MenuItem
+                      iconName="diamond-outline"
+                      title="Perks"
+                      subtitle="Update subscription"
+                      onPress={createHandler(onSubscription)}
+                    />
+                  )}
                   <MenuItem
                     iconName="gift-outline"
                     title="Invite a Friend"

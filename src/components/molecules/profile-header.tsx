@@ -10,6 +10,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   Animated as RNAnimated,
   View,
@@ -194,7 +195,8 @@ export const ProfileHeaderBar = ({
             </View>
           )}
           {isOwnProfile && (
-            <View
+            <Pressable
+              onPress={Platform.OS !== "ios" ? onSubscriptionPress : undefined}
               style={styles.tierHeaderBadge}
             >
               <Icon
@@ -206,7 +208,7 @@ export const ProfileHeaderBar = ({
               <Text size="md" weight="semibold" style={styles.whiteText}>
                 {getTierName(userLevel)}
               </Text>
-            </View>
+            </Pressable>
           )}
           {!isOwnProfile && (
             <AnimatedPressable
