@@ -765,7 +765,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           posts,notification sent so many times fix,scroll to
                           top on latest feed type not working fixed,username
                           color on posts and comments and search results posts
-                          according to there level
+                          according to there level,app icon size increase in
+                          status bar android
                         </Text>
                       </>
                     )}
@@ -827,7 +828,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           posts,notification sent so many times fix,scroll to
                           top on latest feed type not working fixed,username
                           color on posts and comments and search results posts
-                          according to there level
+                          according to there level,app icon size increase in
+                          status bar android
                         </Text>
                       </>
                     )}
