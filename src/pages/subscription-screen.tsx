@@ -16,7 +16,6 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useUserStatus, useConfig } from "@/src/api/read";
 import type { TierInfo, ConfigResponse } from "@/src/api/types";
 import { useUpgradeLevel, useSetAutoRenewal } from "@/src/api/write/hooks";
-import type { SubscriptionLevel } from "@/src/api/write/endpoints/tokens";
 import {
   ActivePlanCard,
   PlanCard,
@@ -27,11 +26,12 @@ import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { formatCompactNumber } from "@/src/utils/format-number";
 
+import { getTierIndex, TIER_LEVEL_FROM_INDEX } from "@/src/utils/tiers";
+
 const TIER_UI: { id: string; title: string; color: string; icon: string }[] = [
   { id: "free", title: "Free", color: "#6B7280", icon: "person-outline" },
-  { id: "trusted", title: "Trusted", color: "#3B82F6", icon: "shield-checkmark-outline" },
-  { id: "established", title: "Established", color: "#8B5CF6", icon: "star-outline" },
-  { id: "distinguished", title: "Distinguished", color: "#F59E0B", icon: "diamond-outline" },
+  { id: "subscriber", title: "Subscriber", color: "#F59E0B", icon: "shield-checkmark-outline" },
+  { id: "agent", title: "Agent", color: "#EF4444", icon: "diamond-outline" },
 ];
 
 const UMIRAGE = 1_000_000;
@@ -68,12 +68,12 @@ function buildShortFeatures(tier: TierInfo, isFree: boolean): PlanFeature[] {
   features.push({ text: `Up to ${fmt(tier.max_content_length)} characters` });
   features.push({ text: `Follow up to ${fmt(tier.max_followed_topics)} topics and ${fmt(tier.max_followed_users)} users` });
 
-  if (tier.eligible_for_mod) {
-    features.push({ text: "Eligible for moderator" });
+  if (tier.can_be_agent) {
+    features.push({ text: "Eligible to be Agent" });
   }
 
-  if (tier.can_change_name) {
-    features.push({ text: "Change username" });
+  if (tier.can_remove_anon) {
+    features.push({ text: "Remove Anon- prefix" });
   }
 
   if (tier.can_have_avatar || tier.can_have_biography) {
@@ -96,30 +96,20 @@ function buildFullFeatures(tier: TierInfo, isFree: boolean, costLabel: string): 
     features.push({ text: `Subscription cost: ${costLabel}.` });
   }
 
-  features.push({ text: `Follow up to ${fmt(tier.max_followed_mods)} moderators.` });
+  features.push({ text: `Enable up to ${fmt(tier.max_enabled_agents)} agents.` });
   features.push({ text: `Follow up to ${fmt(tier.max_followed_users)} users.` });
   features.push({ text: `Follow up to ${fmt(tier.max_followed_topics)} topics.` });
   features.push({ text: `Block up to ${fmt(tier.max_blocked_users)} users.` });
   features.push({ text: `Block up to ${fmt(tier.max_blocked_posts)} posts.` });
-
-  const qualityPosts = Number(tier.max_quality_posts);
-  if (qualityPosts > 0) {
-    features.push({ text: `Mark up to ${fmt(qualityPosts)} posts as high quality.` });
-  } else {
-    features.push({ text: "Cannot mark posts as high quality." });
-  }
-
-  features.push({ text: `Post titles up to ${fmt(tier.max_title_length)} characters.` });
+  features.push({ text: `Block up to ${fmt(tier.max_blocked_topics)} topics.` });
   features.push({ text: `Post content up to ${fmt(tier.max_content_length)} characters.` });
-  features.push({ text: `Edit posts for up to ${fmt(tier.editing_time_mins)} minutes after publishing.` });
-  features.push({ text: `Posts are archived after approximately ${fmt(tier.archive_duration_days)} days.` });
   features.push({ text: `Vote weight: ${tier.vote_weight.toFixed(2)}x.` });
 
   features.push({
-    text: tier.eligible_for_mod ? "Eligible to be moderator." : "Ineligible to be moderator.",
+    text: tier.can_be_agent ? "Eligible to be Agent." : "Not eligible to be Agent.",
   });
   features.push({
-    text: tier.can_change_name ? "Can change username." : "Cannot change username.",
+    text: tier.can_remove_anon ? "Can remove Anon- prefix." : "Cannot remove Anon- prefix.",
   });
   features.push({
     text: tier.can_have_biography ? "Profile biography available." : "Profile biography not available.",
@@ -130,9 +120,6 @@ function buildFullFeatures(tier: TierInfo, isFree: boolean, costLabel: string): 
   features.push({
     text: tier.can_have_banner ? "Profile banner available." : "Profile banner not available.",
   });
-
-  const awardLabels = ["Cannot give awards.", "Can give basic awards.", "Can give more awards.", "Can give all award types."];
-  features.push({ text: awardLabels[tier.award_permissions] ?? awardLabels[0] });
 
   if (isFree) {
     features.push({ text: "Uses proof-of-work (PoW) for posts and votes." });
@@ -247,7 +234,7 @@ function SubscriptionSkeleton() {
 
       <SkeletonBox width={120} height={12} style={{ marginBottom: 12 }} />
 
-      {[0, 1, 2, 3].map((i) => (
+      {[0, 1, 2].map((i) => (
         <Box
           key={i}
           rounded="lg"
@@ -318,12 +305,13 @@ export function SubscriptionScreen() {
 
   const serverLevel = userStatus?.user_level ?? 0;
   const userLevel = optimisticLevel ?? serverLevel;
-  const currentPlanId = TIER_UI[userLevel]?.id ?? "free";
+  const currentPlanId = TIER_UI[getTierIndex(userLevel)]?.id ?? "free";
 
   const activePlanIndex = plans.findIndex((p) => p.id === currentPlanId);
 
-  const optimisticCost = optimisticLevel !== null && config?.tiers?.[optimisticLevel]
-    ? Number(config.tiers[optimisticLevel].period_fee)
+  const tierIdx = optimisticLevel !== null ? getTierIndex(optimisticLevel) : -1;
+  const optimisticCost = tierIdx >= 0 && config?.tiers?.[tierIdx]
+    ? Number(config.tiers[tierIdx].period_fee)
     : 0;
   const balance = userStatus
     ? formatMirageBalance(userStatus.balance - optimisticCost)
@@ -331,7 +319,7 @@ export function SubscriptionScreen() {
   const reserve = userStatus ? formatMirageBalance(userStatus.reserve_funds) : 0;
 
   const currentPlanData = plans.find((p) => p.id === currentPlanId);
-  const currentPlanTitle = currentPlanData?.title || TIER_UI[userLevel]?.title || "Free";
+  const currentPlanTitle = currentPlanData?.title || TIER_UI[getTierIndex(userLevel)]?.title || "Free";
 
   const effectiveAutoRenew = optimisticAutoRenew ?? userStatus?.auto_renew;
 
@@ -390,9 +378,12 @@ export function SubscriptionScreen() {
         return;
       }
 
-      setOptimisticLevel(planIndex);
+      const targetLevel = TIER_LEVEL_FROM_INDEX[planIndex];
+      if (targetLevel === undefined) return;
 
-      upgradeMutation.mutate(planIndex as SubscriptionLevel, {
+      setOptimisticLevel(targetLevel);
+
+      upgradeMutation.mutate(targetLevel as 1 | 10, {
         onSuccess: () => {
           setSubscribingPlanId(null);
           triggerHaptic("success");

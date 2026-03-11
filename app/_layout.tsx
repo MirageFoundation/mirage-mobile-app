@@ -117,6 +117,12 @@ export default Sentry.wrap(function RootLayout() {
          animation: "slide_from_right",
        }}
      />
+     <Stack.Screen
+       name="agents"
+       options={{
+         animation: "slide_from_right",
+       }}
+     />
      </Stack>
       <ThemedStatusBar />
       <AuthSheet />

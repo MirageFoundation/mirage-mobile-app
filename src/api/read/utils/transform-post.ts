@@ -160,6 +160,9 @@ export function transformApiPost(
     isFollowing,
     createdAt: apiPost.timestamp * 1000, // Convert seconds to milliseconds
     awards: apiPost.awards ?? [],
+    agentEdited: apiPost.agent_edited ?? false,
+    agentEditsMeta: apiPost.agent_edits_meta,
+    appendices: apiPost.appendices,
   };
 }
 

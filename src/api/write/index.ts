@@ -35,10 +35,15 @@ export {
   useUnfollowUser,
   useFollowTopic,
   useUnfollowTopic,
-  useFollowModerator,
-  useUnfollowModerator,
+  useEnableAgent,
+  useDisableAgent,
   useToggleFollowUser,
   useToggleFollowTopic,
+  // Agents
+  useSetAgents,
+  useAnnotate,
+  // Biography
+  useSetBiography,
   // Block
   useBlockUser,
   useUnblockUser,
@@ -93,14 +98,19 @@ export {
   unfollowUser,
   followTopic,
   unfollowTopic,
-  followModerator,
-  unfollowModerator,
+  enableAgent,
+  disableAgent,
+  setAgents,
   blockUser,
   unblockUser,
   blockPost,
   unblockPost,
   blockTopic,
   unblockTopic,
+  // Biography
+  setBiography,
+  // Annotate
+  annotate,
   // Tokens
   sendTokens,
   upgradeLevel,
@@ -128,6 +138,7 @@ export type {
   ReportInput,
   DeleteUserInput,
   GiveAwardInput,
+  AnnotateInput,
 } from "./endpoints";
 
 // ============================================
@@ -143,8 +154,11 @@ export {
   canonBaseEdit,
   canonBaseVote,
   canonBaseDelete,
-  canonBaseFollowModerator,
-  canonBaseUnfollowModerator,
+  canonBaseEnableAgent,
+  canonBaseDisableAgent,
+  canonBaseSetAgents,
+  canonBaseSetBiography,
+  canonBaseAnnotate,
   canonBaseFollowUser,
   canonBaseUnfollowUser,
   canonBaseFollowTopic,
@@ -188,7 +202,10 @@ export type {
   EditParams,
   VoteParams,
   DeleteParams,
-  FollowModeratorParams,
+  EnableAgentParams,
+  SetAgentsParams,
+  SetBiographyParams,
+  AnnotateParams,
   FollowUserParams,
   FollowTopicParams,
   BlockPostParams,

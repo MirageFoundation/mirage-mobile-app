@@ -30,12 +30,19 @@ export {
   useUnfollowUser,
   useFollowTopic,
   useUnfollowTopic,
-  useFollowModerator,
-  useUnfollowModerator,
+  useEnableAgent,
+  useDisableAgent,
   useToggleFollowUser,
   useToggleFollowTopic,
 } from "./use-follow";
 export type { UseFollowOptions, ToggleFollowUserParams, ToggleFollowTopicParams } from "./use-follow";
+
+// Agents
+export { useSetAgents } from "./use-set-agents";
+export { useAnnotate } from "./use-annotate";
+
+// Biography
+export { useSetBiography } from "./use-set-biography";
 
 // Block
 export {

@@ -18,16 +18,14 @@ type ActivePlanCardProps = {
 
 const PLAN_COLORS: Record<string, string> = {
   Free: "#6B7280",
-  Trusted: "#3B82F6",
-  Established: "#8B5CF6",
-  Distinguished: "#F59E0B",
+  Subscriber: "#F59E0B",
+  Agent: "#EF4444",
 };
 
 const PLAN_ICONS: Record<string, string> = {
   Free: "person-outline",
-  Trusted: "shield-checkmark-outline",
-  Established: "star-outline",
-  Distinguished: "diamond-outline",
+  Subscriber: "shield-checkmark-outline",
+  Agent: "diamond-outline",
 };
 
 const BALANCE_INFO =

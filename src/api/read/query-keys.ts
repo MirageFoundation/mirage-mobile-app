@@ -70,4 +70,7 @@ export const queryKeys = {
  // Rewards
  rewardSummary: (address: string) => ["rewards", "summary", address] as const,
  achievements: (address: string) => ["rewards", "achievements", address] as const,
+
+ // Agents
+ agents: () => ["agents"] as const,
 } as const;

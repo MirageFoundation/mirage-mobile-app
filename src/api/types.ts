@@ -45,21 +45,18 @@ export interface TierInfo {
   period_fee: string;
   vote_weight: number;
   max_content_length: string;
-  max_title_length: string;
   max_followed_users: string;
   max_followed_topics: string;
-  max_followed_mods: string;
   max_blocked_users: string;
   max_blocked_posts: string;
-  max_quality_posts: string;
-  editing_time_mins: string;
-  archive_duration_days: string;
-  award_permissions: number;
-  eligible_for_mod: boolean;
-  can_change_name: boolean;
+  max_blocked_topics: string;
+  max_enabled_agents: string;
+  can_be_agent: boolean;
+  can_remove_anon: boolean;
   can_have_biography: boolean;
   can_have_avatar: boolean;
   can_have_banner: boolean;
+  can_have_flair: boolean;
 }
 
 export interface AwardConfig {
@@ -130,7 +127,7 @@ export interface RecentVote {
 export interface UserStatusResponse {
   username: string | null;
   balance: number; // umirage
-  user_level: number; // 0 = free, 1-3 = paid
+  user_level: number; // 0 = free, 1 = subscriber, 10 = agent
   subscription_expiry: number; // unix seconds or 0
   auto_renew: boolean;
   reserve_funds: number; // umirage
@@ -146,22 +143,23 @@ export interface ProfileResponse {
   subscription_expiry: number;
   auto_renew: boolean;
   reserve_funds: number;
-  is_moderator: boolean;
   biography: string;
   avatar: string;
   banner: string;
+  flair: string;
 
   // Lists
+  enabled_agents: string[];
   followed_users: string[];
   followed_topics: string[];
-  followed_moderators: string[];
   blocked_users: string[];
   blocked_posts: string[];
-  quality_posts: string[];
+  blocked_topics: string[];
+  balance: number;
 }
 
 export interface UserFollowedResponse {
-  followed_moderators: string[];
+  enabled_agents: string[];
   followed_topics: string[];
   followed_users: string[];
 }
@@ -191,6 +189,7 @@ export interface SimilarUsersResponse {
 export interface UserInfo {
   address: string;
   username: string;
+  level?: number;
 }
 
 export interface UsersResponse {
@@ -224,6 +223,9 @@ export interface Post {
   user_vote: number; // -1, 0, 1
   user_weight: number; // viewer's weighted contribution
   awards?: AwardBadge[];
+  agent_edited?: boolean;
+  agent_edits_meta?: Record<string, string>;
+  appendices?: { agent: string; text: string }[];
 }
 
 export interface PostsResponse {

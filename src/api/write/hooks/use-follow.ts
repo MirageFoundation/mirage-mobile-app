@@ -6,12 +6,12 @@ import { queryKeys } from "@/src/api/read/query-keys";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  followModerator,
   followTopic,
   followUser,
-  unfollowModerator,
   unfollowTopic,
   unfollowUser,
+  enableAgent,
+  disableAgent,
 } from "../endpoints/social";
 import type { PoWProgress, WriteResponse } from "../signing";
 
@@ -131,17 +131,17 @@ export function useUnfollowTopic(options: UseFollowOptions = {}) {
 }
 
 // ============================================
-// Moderator Follow Hooks
+// Agent Enable/Disable Hooks
 // ============================================
 
-export function useFollowModerator(options: UseFollowOptions = {}) {
+export function useEnableAgent(options: UseFollowOptions = {}) {
   const queryClient = useQueryClient();
   const { getWallet, address } = useWallet();
 
   return useMutation({
-    mutationFn: async (moderatorAddress: string) => {
+    mutationFn: async (agentAddress: string) => {
       const wallet = await getWallet();
-      return followModerator(wallet, moderatorAddress, options.onPoWProgress);
+      return enableAgent(wallet, agentAddress, options.onPoWProgress);
     },
     onSuccess: () => {
       if (address) {
@@ -152,20 +152,20 @@ export function useFollowModerator(options: UseFollowOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      // Following moderators affects content filtering
+      // Enabling agents affects content filtering
       queryClient.invalidateQueries({ queryKey: ["posts"] });
     },
   });
 }
 
-export function useUnfollowModerator(options: UseFollowOptions = {}) {
+export function useDisableAgent(options: UseFollowOptions = {}) {
   const queryClient = useQueryClient();
   const { getWallet, address } = useWallet();
 
   return useMutation({
-    mutationFn: async (moderatorAddress: string) => {
+    mutationFn: async (agentAddress: string) => {
       const wallet = await getWallet();
-      return unfollowModerator(wallet, moderatorAddress, options.onPoWProgress);
+      return disableAgent(wallet, agentAddress, options.onPoWProgress);
     },
     onSuccess: () => {
       if (address) {
@@ -234,7 +234,7 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
         ? queryClient.getQueryData<{
             followed_users: string[];
             followed_topics: string[];
-            followed_moderators: string[];
+            enabled_agents: string[];
           }>(queryKeys.userFollowed(address))
         : undefined;
 
@@ -243,13 +243,13 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
         queryClient.setQueryData<{
           followed_users: string[];
           followed_topics: string[];
-          followed_moderators: string[];
+          enabled_agents: string[];
         }>(queryKeys.userFollowed(address), (old) => {
           if (!old) {
             return {
               followed_users: [],
               followed_topics: isCurrentlyFollowing ? [] : [topic],
-              followed_moderators: [],
+              enabled_agents: [],
             };
           }
           const newFollowedTopics = isCurrentlyFollowing
@@ -398,7 +398,7 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
         ? queryClient.getQueryData<{
             followed_users: string[];
             followed_topics: string[];
-            followed_moderators: string[];
+            enabled_agents: string[];
           }>(queryKeys.userFollowed(address))
         : undefined;
 
@@ -407,14 +407,14 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
         queryClient.setQueryData<{
           followed_users: string[];
           followed_topics: string[];
-          followed_moderators: string[];
+          enabled_agents: string[];
         }>(queryKeys.userFollowed(address), (old) => {
           if (!old) {
             // If no cache exists, create a new one with just this user
             return {
               followed_users: isCurrentlyFollowing ? [] : [userAddress],
               followed_topics: [],
-              followed_moderators: [],
+              enabled_agents: [],
             };
           }
           const newFollowedUsers = isCurrentlyFollowing

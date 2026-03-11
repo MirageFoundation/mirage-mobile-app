@@ -24,6 +24,7 @@ import { PostCardHeader } from "./post-card-header";
 import { PostCardMedia } from "./post-card-media";
 import type { Post } from "./post-card-types";
 import { resolvePostContent } from "./post-card-utils";
+import { Ionicons } from "@expo/vector-icons";
 
 export type { Post, PostAuthor, PostMedia } from "./post-card-types";
 
@@ -299,6 +300,24 @@ export const PostCard = memo(function PostCard({
         </View>
       )}
 
+      {post.agentEdited && (
+        <View style={styles.agentBadge}>
+          <Ionicons name="shield-checkmark" size={14} color={theme.colors.text.subtle} />
+          <Text size="xs" mode="subtle"> Agent modified</Text>
+        </View>
+      )}
+
+      {post.appendices && post.appendices.length > 0 && (
+        <View style={styles.appendicesContainer}>
+          {post.appendices.map((appendix, idx) => (
+            <View key={idx} style={[styles.appendix, { borderLeftColor: theme.colors.border.default }]}>
+              <Text size="xs" mode="subtle" weight="semibold">{appendix.agent.slice(0, 12)}…</Text>
+              <MarkdownContent content={appendix.text} />
+            </View>
+          ))}
+        </View>
+      )}
+
       <PostActions
         likes={likes}
         dislikes={dislikes}
@@ -351,5 +370,20 @@ const styles = StyleSheet.create((theme) => ({
   awardBadgesRow: {
     marginVertical: theme.spacing.xs,
     paddingLeft: 2,
+  },
+  agentBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: theme.spacing.xs,
+    gap: 4,
+  },
+  appendicesContainer: {
+    marginTop: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  appendix: {
+    borderLeftWidth: 3,
+    paddingLeft: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
   },
 }));

@@ -52,7 +52,7 @@ export function ChangeUsernameScreen() {
   const serverLevel = userStatus?.user_level ?? 0;
   const userLevel = Math.max(serverLevel, storeUserLevel);
   const currentUsername = userStatus?.username ?? user?.username ?? "";
-  const canChangeName = userLevel > 0;
+  const canChangeName = userLevel >= 1;
 
   const [username, setUsername] = useState("");
   const [status, setStatus] = useState<UsernameStatus>("idle");

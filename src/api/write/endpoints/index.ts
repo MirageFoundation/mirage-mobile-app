@@ -33,8 +33,9 @@ export {
   unfollowUser,
   followTopic,
   unfollowTopic,
-  followModerator,
-  unfollowModerator,
+  enableAgent,
+  disableAgent,
+  setAgents,
   blockUser,
   unblockUser,
   blockPost,
@@ -42,6 +43,13 @@ export {
   blockTopic,
   unblockTopic,
 } from "./social";
+
+// Biography
+export { setBiography } from "./biography";
+
+// Annotate (Agent-only)
+export { annotate } from "./annotate";
+export type { AnnotateInput } from "./annotate";
 
 // Tokens & Subscription
 export { sendTokens, upgradeLevel, setAutoRenewal } from "./tokens";

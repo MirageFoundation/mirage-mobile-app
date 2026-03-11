@@ -28,7 +28,7 @@ export interface SendTokensInput {
   amount: number;
 }
 
-export type SubscriptionLevel = 1 | 2 | 3;
+export type SubscriptionLevel = 1 | 10;
 
 // ============================================
 // Send Tokens

@@ -9,7 +9,7 @@ import {
 import { useAuthStore } from "@/src/stores";
 
 /**
- * Get current user's followed users, topics, and moderators
+ * Get current user's followed users, topics, and enabled agents
  * Only enabled when wallet is connected
  */
 export function useUserFollowed() {

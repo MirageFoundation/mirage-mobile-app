@@ -63,6 +63,7 @@ type SideMenuProps = {
   onHistory?: () => void;
   onFollowing?: () => void;
   onTopics?: () => void;
+  onAgents?: () => void;
   onInviteAndEarn?: () => void;
   onQuests?: () => void;
   onHelp?: () => void;
@@ -305,6 +306,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       onHistory,
       onFollowing,
       onTopics,
+      onAgents,
       onInviteAndEarn,
       onQuests,
       onHelp,
@@ -614,6 +616,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     title="Topics"
                     subtitle="Explore all topics"
                     onPress={createHandler(onTopics)}
+                  />
+                  <MenuItem
+                    iconName="shield-checkmark-outline"
+                    title="Agents"
+                    subtitle="Browse and enable agents"
+                    onPress={createHandler(onAgents)}
                   />
                   <SectionFooter />
 

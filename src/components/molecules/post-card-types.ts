@@ -32,4 +32,7 @@ export type Post = {
   isFollowing?: boolean;
   createdAt: Date | string | number;
   awards?: AwardBadge[];
+  agentEdited?: boolean;
+  agentEditsMeta?: Record<string, string>;
+  appendices?: { agent: string; text: string }[];
 };

@@ -41,11 +41,19 @@ function autoLinkUrls(content: string): string {
 type MarkdownContentProps = {
   content: string;
   onLinkPress?: (url: string) => void;
+  color?: string;
+  size?: "xs" | "sm" | "md";
+  weight?: "light" | "regular" | "medium";
+  boldColor?: string;
 };
 
 export const MarkdownContent = memo(function MarkdownContent({
   content,
   onLinkPress,
+  color,
+  size,
+  weight,
+  boldColor,
 }: MarkdownContentProps) {
   const { theme } = useUnistyles();
 
@@ -65,12 +73,17 @@ export const MarkdownContent = memo(function MarkdownContent({
     [onLinkPress],
   );
 
+  const textColor = color ?? theme.colors.text.default;
+  const fontSize = size ? theme.typography.size[size] : theme.typography.size.md;
+  const fontWeight = weight ? theme.typography.weight[weight] : undefined;
+
   const markdownStyles = useMemo<StyleMap>(
     () => ({
       root: {
         fontFamily: theme.typography.family.mono,
-        fontSize: theme.typography.size.md,
-        lineHeight: theme.typography.size.md * theme.typography.leading.normal,
+        fontSize,
+        lineHeight: fontSize * theme.typography.leading.normal,
+        ...(fontWeight && { fontWeight }),
       },
       heading1: {
         color: theme.colors.text.default,
@@ -113,10 +126,10 @@ export const MarkdownContent = memo(function MarkdownContent({
       },
       paragraph: {
         marginBottom: theme.spacing.xs,
-        color: theme.colors.text.default,
+        color: textColor,
       },
       text: {
-        color: theme.colors.text.default,
+        color: textColor,
       },
       link: {
         color: "#3B82F6",
@@ -124,11 +137,11 @@ export const MarkdownContent = memo(function MarkdownContent({
       },
       strong: {
         fontWeight: theme.typography.weight.bold,
-        color: theme.colors.text.default,
+        color: boldColor ?? textColor,
       },
       emphasis: {
         fontStyle: "italic",
-        color: theme.colors.text.default,
+        color: textColor,
       },
       code: {
         backgroundColor: theme.colors.background.subtle,
@@ -183,7 +196,7 @@ export const MarkdownContent = memo(function MarkdownContent({
         marginVertical: theme.spacing.sm,
       },
     }),
-    [theme],
+    [theme, textColor, fontSize, fontWeight, boldColor],
   );
 
   const renderRules = useMemo<RenderRules>(

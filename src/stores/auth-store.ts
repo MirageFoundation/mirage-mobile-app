@@ -40,7 +40,7 @@ const MOCK_USER: User = {
   id: "user_123",
   username: "sonali",
   walletAddress: "mirage1mockaddress123456789",
-  tier: "Premium",
+  tier: "Free",
   avatar: undefined,
   followerCount: 128,
 };
@@ -57,7 +57,7 @@ type AuthState = {
   // Wallet state
   walletAddress: string | null;
   publicKeyBase64: string | null;
-  userLevel: number; // 0 = free, 1-3 = paid tiers
+  userLevel: number; // 0 = free, 1 = subscriber, 10 = agent
   hasUsername: boolean;
 
   // Onboarding state

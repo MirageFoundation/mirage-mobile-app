@@ -1,5 +1,6 @@
 import { getUserStatus } from "@/src/api/read/endpoints/users";
 import { getNodeConfig } from "@/src/api/read/endpoints/parameters";
+import { getTierName } from "@/src/utils/tiers";
 import { RecoveryPhraseInput } from "@/src/components/molecules";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
@@ -154,8 +155,7 @@ export default function LoginScreen() {
               username: userStatus.username,
               walletAddress,
               tier:
-                ["Free", "Basic", "Premium", "Pro"][userStatus.user_level] ||
-                "Free",
+                getTierName(userStatus.user_level),
             });
           }
         } catch (apiError) {

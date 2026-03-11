@@ -1,8 +1,9 @@
 /**
  * Social Write Endpoints
  *
- * Follow/Unfollow users, topics, moderators
- * Block/Unblock users, posts
+ * Follow/Unfollow users, topics
+ * Enable/Disable/Set agents
+ * Block/Unblock users, posts, topics
  */
 
 import { api } from "@/src/api/client";
@@ -13,8 +14,9 @@ import {
   canonBaseUnfollowUser,
   canonBaseFollowTopic,
   canonBaseUnfollowTopic,
-  canonBaseFollowModerator,
-  canonBaseUnfollowModerator,
+  canonBaseEnableAgent,
+  canonBaseDisableAgent,
+  canonBaseSetAgents,
   canonBaseBlockUser,
   canonBaseUnblockUser,
   canonBaseBlockPost,
@@ -29,9 +31,6 @@ import { withPowRetry } from "../utils/retry-pow";
 // Follow User
 // ============================================
 
-/**
- * Follow a user
- */
 export async function followUser(
   wallet: MirageWallet,
   userAddress: string,
@@ -52,9 +51,6 @@ export async function followUser(
   }, "followUser");
 }
 
-/**
- * Unfollow a user
- */
 export async function unfollowUser(
   wallet: MirageWallet,
   userAddress: string,
@@ -79,9 +75,6 @@ export async function unfollowUser(
 // Follow Topic
 // ============================================
 
-/**
- * Follow a topic
- */
 export async function followTopic(
   wallet: MirageWallet,
   topic: string,
@@ -102,9 +95,6 @@ export async function followTopic(
   }, "followTopic");
 }
 
-/**
- * Unfollow a topic
- */
 export async function unfollowTopic(
   wallet: MirageWallet,
   topic: string,
@@ -126,62 +116,73 @@ export async function unfollowTopic(
 }
 
 // ============================================
-// Follow Moderator
+// Enable/Disable Agent
 // ============================================
 
-/**
- * Follow a moderator
- */
-export async function followModerator(
+export async function enableAgent(
   wallet: MirageWallet,
-  moderatorAddress: string,
+  agentAddress: string,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
   return withPowRetry(async () => {
     const payload = await buildSignedEnvelope({
       wallet,
-      baseBuilder: canonBaseFollowModerator,
+      baseBuilder: canonBaseEnableAgent,
       payloadFields: {
         target: wallet.address,
-        moderator: moderatorAddress,
+        agent: agentAddress,
       },
       onPoWProgress,
     });
 
-    return api.post<WriteResponse>("/core/follow_moderator", payload);
-  }, "followModerator");
+    return api.post<WriteResponse>("/core/enable_agent", payload);
+  }, "enableAgent");
 }
 
-/**
- * Unfollow a moderator
- */
-export async function unfollowModerator(
+export async function disableAgent(
   wallet: MirageWallet,
-  moderatorAddress: string,
+  agentAddress: string,
   onPoWProgress?: PoWProgressCallback
 ): Promise<WriteResponse> {
   return withPowRetry(async () => {
     const payload = await buildSignedEnvelope({
       wallet,
-      baseBuilder: canonBaseUnfollowModerator,
+      baseBuilder: canonBaseDisableAgent,
       payloadFields: {
         target: wallet.address,
-        moderator: moderatorAddress,
+        agent: agentAddress,
       },
       onPoWProgress,
     });
 
-    return api.post<WriteResponse>("/core/unfollow_moderator", payload);
-  }, "unfollowModerator");
+    return api.post<WriteResponse>("/core/disable_agent", payload);
+  }, "disableAgent");
+}
+
+export async function setAgents(
+  wallet: MirageWallet,
+  agents: string[],
+  onPoWProgress?: PoWProgressCallback
+): Promise<WriteResponse> {
+  return withPowRetry(async () => {
+    const payload = await buildSignedEnvelope({
+      wallet,
+      baseBuilder: canonBaseSetAgents,
+      payloadFields: {
+        target: wallet.address,
+        agents,
+      },
+      onPoWProgress,
+    });
+
+    return api.post<WriteResponse>("/core/set_agents", payload);
+  }, "setAgents");
 }
 
 // ============================================
 // Block User
 // ============================================
 
-/**
- * Block a user
- */
 export async function blockUser(
   wallet: MirageWallet,
   userAddress: string,
@@ -201,9 +202,6 @@ export async function blockUser(
   }, "blockUser");
 }
 
-/**
- * Unblock a user
- */
 export async function unblockUser(
   wallet: MirageWallet,
   userAddress: string,
@@ -227,9 +225,6 @@ export async function unblockUser(
 // Block Post
 // ============================================
 
-/**
- * Block a post
- */
 export async function blockPost(
   wallet: MirageWallet,
   postId: string,
@@ -249,9 +244,6 @@ export async function blockPost(
   }, "blockPost");
 }
 
-/**
- * Unblock a post
- */
 export async function unblockPost(
   wallet: MirageWallet,
   postId: string,

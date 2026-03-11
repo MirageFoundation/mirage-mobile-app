@@ -318,30 +318,30 @@ export function canonBaseDelete(params: DeleteParams): Uint8Array {
   );
 }
 
-// --- MsgFollowModerator / MsgUnfollowModerator ---
+// --- MsgEnableAgent / MsgDisableAgent ---
 
-export interface FollowModeratorParams extends BaseParams {
+export interface EnableAgentParams extends BaseParams {
   /** Your address */
   target: string;
-  /** Moderator address to follow/unfollow */
-  moderator: string;
+  /** Agent address to enable/disable */
+  agent: string;
 }
 
-export function canonBaseFollowModerator(params: FollowModeratorParams): Uint8Array {
+export function canonBaseEnableAgent(params: EnableAgentParams): Uint8Array {
   return concatBytes(
-    prefix("MsgFollowModerator"),
+    prefix("MsgEnableAgent"),
     encodeHeader(params),
     encString(100, params.target),
-    encString(101, params.moderator)
+    encString(101, params.agent)
   );
 }
 
-export function canonBaseUnfollowModerator(params: FollowModeratorParams): Uint8Array {
+export function canonBaseDisableAgent(params: EnableAgentParams): Uint8Array {
   return concatBytes(
-    prefix("MsgUnfollowModerator"),
+    prefix("MsgDisableAgent"),
     encodeHeader(params),
     encString(100, params.target),
-    encString(101, params.moderator)
+    encString(101, params.agent)
   );
 }
 
@@ -497,7 +497,7 @@ export interface UpgradeLevelParams {
   pubkey33: Uint8Array;
   lastBlockHashBytes: Uint8Array;
   timestampMs: number;
-  /** Target level: 1, 2, or 3 */
+  /** Target level: 1 (Subscriber) or 10 (Agent) */
   level: number;
 }
 
@@ -613,4 +613,66 @@ export function canonBaseAward(params: AwardParams): Uint8Array {
     encString(100, params.target),
     encString(101, params.award_type)
   );
+}
+
+// --- MsgSetBiography ---
+
+export interface SetBiographyParams extends BaseParams {
+  target: string;
+  biography: string;
+}
+
+export function canonBaseSetBiography(params: SetBiographyParams): Uint8Array {
+  return concatBytes(
+    prefix("MsgSetBiography"),
+    encodeHeader(params),
+    encString(100, params.target),
+    encString(101, params.biography)
+  );
+}
+
+// --- MsgSetAgents ---
+
+export interface SetAgentsParams extends BaseParams {
+  target: string;
+  agents: string[];
+}
+
+export function canonBaseSetAgents(params: SetAgentsParams): Uint8Array {
+  const base = concatBytes(
+    prefix("MsgSetAgents"),
+    encodeHeader(params),
+    encString(100, params.target)
+  );
+  if (!params.agents || params.agents.length === 0) return base;
+  const agentFields = params.agents.map((addr) => encString(101, addr));
+  return concatBytes(base, ...agentFields);
+}
+
+// --- MsgAnnotate (Agent-only) ---
+
+export interface AnnotateParams extends BaseParams {
+  topic: string;
+  title: string;
+  content: string;
+  tag: string;
+  override: string;
+  media?: string[];
+  appendix: string;
+}
+
+export function canonBaseAnnotate(params: AnnotateParams): Uint8Array {
+  const base = concatBytes(
+    prefix("MsgAnnotate"),
+    encodeHeader(params),
+    encString(100, params.topic),
+    encString(101, params.title),
+    encString(102, params.content),
+    encString(103, params.tag),
+    encString(104, params.override)
+  );
+  const mediaFields = (params.media && params.media.length > 0)
+    ? params.media.map((url) => encString(105, url))
+    : [];
+  return concatBytes(base, ...mediaFields, encString(106, params.appendix));
 }

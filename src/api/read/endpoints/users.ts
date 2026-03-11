@@ -52,7 +52,7 @@ export interface GetUserFollowedParams {
 }
 
 /**
- * Get user's followed users, topics, and moderators
+ * Get user's followed users, topics, and enabled agents
  */
 export async function getUserFollowed(
   params: GetUserFollowedParams
