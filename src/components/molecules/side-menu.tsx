@@ -744,7 +744,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 71
+                          update 72
                         </Text>
                         <Text
                           style={{
@@ -757,7 +757,15 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           sentry errors,react native 6 error fix,react native T,
                           1d and 1c error fix (better error handling on video
                           upload fails in midle for any reason such as no
-                          internet connection etc)
+                          internet connection etc),Sentry log react native 1A
+                          error fix(sentry background scanning), agents
+                          implementation, agents option in side menu, agents
+                          screen created,can enable or disable agents, can
+                          reorder the agent priority,agent modified addition in
+                          posts,notification sent so many times fix,scroll to
+                          top on latest feed type not working fixed,username
+                          color on posts and comments and search results posts
+                          according to there level
                         </Text>
                       </>
                     )}
@@ -798,7 +806,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 71
+                          update 72
                         </Text>
                         <Text
                           style={{
@@ -811,7 +819,15 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           sentry errors,react native 6 error fix,react native T,
                           1d and 1c error fix (better error handling on video
                           upload fails in midle for any reason such as no
-                          internet connection etc)
+                          internet connection etc),Sentry log react native 1A
+                          error fix(sentry background scanning), agents
+                          implementation, agents option in side menu, agents
+                          screen created,can enable or disable agents, can
+                          reorder the agent priority,agent modified addition in
+                          posts,notification sent so many times fix,scroll to
+                          top on latest feed type not working fixed,username
+                          color on posts and comments and search results posts
+                          according to there level
                         </Text>
                       </>
                     )}
