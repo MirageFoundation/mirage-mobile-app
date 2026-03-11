@@ -20,7 +20,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     icon: "./assets/images/icon.png",
     scheme: scheme,
     userInterfaceStyle: "automatic",
-    newArchEnabled: true,
     ios: {
       supportsTablet: false,
       requireFullScreen: true,
@@ -82,6 +81,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       ],
       "expo-secure-store",
       "expo-web-browser",
+      "expo-image",
+      "expo-sharing",
       [
         "expo-build-properties",
         {
