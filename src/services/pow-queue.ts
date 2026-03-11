@@ -15,8 +15,9 @@
  */
 
 import { create } from "zustand";
-import { InteractionManager } from "react-native";
+import { AppState, InteractionManager } from "react-native";
 import * as Sentry from "@sentry/react-native";
+import * as Network from "expo-network";
 import { cancelPow } from "@/src/wallet";
 
 export type PowActionType =
@@ -72,6 +73,8 @@ const RESULT_DISPLAY_DELAY_MS = 800;
 const SUCCESS_SYNC_DELAY_MS = 500;
 const NATIVE_CLEANUP_TIMEOUT_MS = 500;
 const SUCCESS_OVERLAY_DURATION_MS = 2000;
+const MAX_NETWORK_RETRIES = 3;
+const NETWORK_RETRY_BACKOFF_MS = 2000;
 
 let actionIdCounter = 0;
 
@@ -145,6 +148,71 @@ export const getSuccessLabel = (type: PowActionType): string => {
 let isProcessingLock = false;
 let currentCancelReject: ((reason?: unknown) => void) | null = null;
 let successOverlayTimeout: ReturnType<typeof setTimeout> | null = null;
+
+const isNetworkError = (error: unknown): boolean =>
+  (error as any)?.code === "ERR_NETWORK" ||
+  (error as any)?.message === "Network Error";
+
+const waitForConnectivity = (): Promise<void> => {
+  return new Promise((resolve) => {
+    const check = async () => {
+      const appActive = AppState.currentState === "active";
+      const net = await Network.getNetworkStateAsync();
+      if (appActive && net.isConnected) {
+        resolve();
+        return;
+      }
+      const subs: { remove: () => void }[] = [];
+      const cleanup = () => subs.forEach((s) => s.remove());
+      const recheck = async () => {
+        const a = AppState.currentState === "active";
+        const n = await Network.getNetworkStateAsync();
+        if (a && n.isConnected) {
+          cleanup();
+          resolve();
+        }
+      };
+      subs.push(AppState.addEventListener("change", () => recheck()));
+      const interval = setInterval(async () => {
+        await recheck();
+        if (AppState.currentState === "active") {
+          const n = await Network.getNetworkStateAsync();
+          if (n.isConnected) clearInterval(interval);
+        }
+      }, 3000);
+      subs.push({ remove: () => clearInterval(interval) });
+    };
+    check();
+  });
+};
+
+const executeWithNetworkRetry = async <T>(
+  fn: () => Promise<T>,
+  cancelPromise: Promise<never>,
+): Promise<T> => {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= MAX_NETWORK_RETRIES; attempt++) {
+    try {
+      const result = await Promise.race([fn(), cancelPromise]);
+      return result;
+    } catch (error) {
+      const msg = String((error as Error)?.message || "");
+      if (msg === "pow_cancelled") throw error;
+      if (!isNetworkError(error)) throw error;
+      lastError = error;
+      if (attempt < MAX_NETWORK_RETRIES) {
+        Sentry.addBreadcrumb({
+          category: "pow",
+          message: `Network error, waiting for connectivity (attempt ${attempt + 1}/${MAX_NETWORK_RETRIES})`,
+          level: "warning",
+        });
+        await waitForConnectivity();
+        await new Promise((r) => setTimeout(r, NETWORK_RETRY_BACKOFF_MS * (attempt + 1)));
+      }
+    }
+  }
+  throw lastError;
+};
 
 export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   queue: [],
@@ -264,8 +332,13 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     cancelPromise.catch(() => {});
 
     try {
-      executePromise = nextAction.execute();
-      const result = await Promise.race([executePromise, cancelPromise]);
+      const result = await executeWithNetworkRetry(
+        () => {
+          executePromise = nextAction.execute();
+          return executePromise;
+        },
+        cancelPromise,
+      );
 
       currentCancelReject = null;
     nextAction.onSuccess?.(result);
@@ -296,17 +369,16 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
         wasCancelled = true;
       } else {
         const err = error instanceof Error ? error : new Error(String(error));
-        const isNetworkError =
-          (error as any)?.code === "ERR_NETWORK" ||
-          (error as any)?.message === "Network Error";
         const serverMsg = (error as any)?.response?.data?.error;
-        const displayMsg = isNetworkError
+        const displayMsg = isNetworkError(error)
           ? "No internet connection"
           : serverMsg || err.message || "Something went wrong";
-        Sentry.captureException(err, {
-          tags: { action: "pow_action", pow_type: nextAction.type },
-          extra: { actionId: nextAction.id, label: nextAction.label },
-        });
+        if (!isNetworkError(error)) {
+          Sentry.captureException(err, {
+            tags: { action: "pow_action", pow_type: nextAction.type },
+            extra: { actionId: nextAction.id, label: nextAction.label },
+          });
+        }
         nextAction.onRollback?.();
         nextAction.onError?.(err);
 
