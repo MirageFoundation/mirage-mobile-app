@@ -744,7 +744,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 72
+                          update 73
                         </Text>
                         <Text
                           style={{
@@ -764,7 +764,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           reorder the agent priority,agent modified addition in
                           posts,notification sent so many times fix,scroll to
                           top on latest feed type not working fixed,username
-                          color on posts and comments and search results posts
+                          color on posts and comments and search results
                           according to there level,app icon size increase in
                           status bar android
                         </Text>
@@ -807,7 +807,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 72
+                          update 73
                         </Text>
                         <Text
                           style={{
@@ -827,7 +827,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           reorder the agent priority,agent modified addition in
                           posts,notification sent so many times fix,scroll to
                           top on latest feed type not working fixed,username
-                          color on posts and comments and search results posts
+                          color on posts and comments and search results
                           according to there level,app icon size increase in
                           status bar android
                         </Text>
