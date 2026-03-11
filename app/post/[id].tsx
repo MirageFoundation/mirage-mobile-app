@@ -1324,6 +1324,24 @@ export default function PostDetailScreen() {
     router.push({ pathname: "/edit-post", params: editParams });
   }, [displayPost, commentsData, router]);
 
+  const handleAnnotatePost = useCallback(() => {
+    if (!displayPost) return;
+    const postData = commentsData?.root;
+    const annotateParams: Record<string, string> = {
+      postId: displayPost.id,
+      postTitle: displayPost.title,
+      postTopic: displayPost.topic ?? "",
+      postContent: displayPost.body ?? postData?.content ?? "",
+      postTag: postData?.tag ?? "",
+      postLikes: String(displayPost.likes ?? 0),
+      postComments: String(displayPost.comments ?? 0),
+    };
+    if (displayPost.media?.[0]?.uri) {
+      annotateParams.postThumbnail = displayPost.media[0].uri;
+    }
+    router.push({ pathname: "/annotate", params: annotateParams });
+  }, [displayPost, commentsData, router]);
+
   // Handler for deleting the post
   const handleDeletePost = useCallback(() => {
     if (!displayPost) return;
@@ -1989,6 +2007,7 @@ export default function PostDetailScreen() {
             setAwardTargetIsOwn(currentUser?.id === displayPost.author.id);
             setTimeout(() => awardPickerSheetRef.current?.present(), 300);
           }}
+          onAnnotate={handleAnnotatePost}
           onDismiss={() => {}}
         />
 

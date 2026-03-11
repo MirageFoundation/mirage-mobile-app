@@ -32,7 +32,8 @@ export type PowActionType =
   | "unfollow"
   | "block"
   | "unblock"
-  | "report";
+  | "report"
+  | "annotate";
 
 export interface PowAction<T = unknown> {
   id: string;
@@ -109,6 +110,8 @@ export const getActionLabel = (type: PowActionType): string => {
       return "Unblocking";
     case "report":
       return "Reporting";
+    case "annotate":
+      return "Annotating";
     default:
       return "Processing";
   }
@@ -140,6 +143,8 @@ export const getSuccessLabel = (type: PowActionType): string => {
       return "Unblocked";
     case "report":
       return "Reported";
+    case "annotate":
+      return "Annotated";
     default:
       return "Done";
   }

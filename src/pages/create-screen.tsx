@@ -1296,9 +1296,8 @@ export function CreateScreen() {
             {
               backgroundColor:
                 canPost && !isSubmitting
-                  ? "rgb(29,68,150)"
+                  ? theme.colors.brand[500]
                   : theme.colors.background.subtle,
-              paddingHorizontal: 10,
             },
           ]}
         >
@@ -1308,8 +1307,8 @@ export function CreateScreen() {
               {
                 color:
                   canPost && !isSubmitting
-                    ? "#fff"
-                    : theme.colors.text.emphasis,
+                    ? "#FFFFFF"
+                    : theme.colors.text.subtle,
               },
             ]}
           >
@@ -1908,8 +1907,8 @@ const styles = StyleSheet.create((theme) => ({
     height: 40,
   },
   postButton: {
-    paddingHorizontal: theme.spacing.md,
-    height: 36,
+    paddingHorizontal: theme.spacing.md + 4,
+    paddingVertical: theme.spacing.xs + 2,
     borderRadius: theme.radius.full,
   },
   postButtonDisabled: {
@@ -1917,7 +1916,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   postButtonText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   scrollContent: {
     paddingHorizontal: theme.spacing.md,
