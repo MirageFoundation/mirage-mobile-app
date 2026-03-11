@@ -540,7 +540,12 @@ export function SearchScreen() {
             <View style={styles.postResultContent}>
               {/* Avatar + Username + dot + time ago - all in one row */}
               <View style={styles.postResultHeader}>
-                <Text size="sm" mode="subtle" weight="medium" numberOfLines={1}>
+                <Text
+                  size="sm"
+                  weight="medium"
+                  numberOfLines={1}
+                  style={(item.level ?? item.author_level ?? item.user_level) ? { color: getUsernameColor(item.level ?? item.author_level ?? item.user_level ?? 0) } : (item.new_user ?? item.author_is_new) ? { color: "rgb(94,194,106)" } : { color: theme.colors.text.subtle }}
+                >
                   @{item.username || "anonymous"}
                 </Text>
                 <Text size="sm" mode="subtle">
