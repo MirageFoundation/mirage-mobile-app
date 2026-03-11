@@ -48,6 +48,15 @@ function getFileNameFromUri(localUri: string): string {
   return localUri.split("/").pop() || "unknown";
 }
 
+function isNetworkError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return msg.includes("Network") ||
+    msg.includes("network") ||
+    msg.includes("timed out") ||
+    msg.includes("no result") ||
+    (error as any)?.code === "ERR_NETWORK";
+}
+
 function captureMediaUploadException(
   error: unknown,
   mediaType: MediaType,
@@ -56,6 +65,7 @@ function captureMediaUploadException(
   contentType: string,
   extra?: Record<string, unknown>
 ) {
+  if (isNetworkError(error)) return;
   Sentry.captureException(error, {
     tags: {
       feature: "media-upload",
