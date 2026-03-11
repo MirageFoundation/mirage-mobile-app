@@ -144,7 +144,11 @@ async function seedExistingReplies(walletAddress: string): Promise<void> {
   }
 }
 
-async function performInboxCheck(): Promise<BackgroundFetch.BackgroundFetchResult> {
+async function performInboxCheck(
+  trigger: "background" | "foreground" | "manual" | "signal"
+): Promise<BackgroundFetch.BackgroundFetchResult> {
+  const shouldSendNotifications = trigger === "background" || trigger === "signal";
+
   try {
     const walletAddress = useAuthStore.getState().walletAddress;
     console.log("[InboxNotifications] walletAddress:", walletAddress);
@@ -160,16 +164,22 @@ async function performInboxCheck(): Promise<BackgroundFetch.BackgroundFetchResul
       return BackgroundFetch.BackgroundFetchResult.NoData;
     }
 
-    const { status } = await Notifications.getPermissionsAsync();
-    console.log("[InboxNotifications] Permission status:", status);
-    if (status !== "granted") {
-      return BackgroundFetch.BackgroundFetchResult.NoData;
+    if (shouldSendNotifications) {
+      const { status } = await Notifications.getPermissionsAsync();
+      console.log("[InboxNotifications] Permission status:", status);
+      if (status !== "granted") {
+        return BackgroundFetch.BackgroundFetchResult.NoData;
+      }
     }
 
     const networkState = await Network.getNetworkStateAsync();
     if (!networkState.isConnected) {
       console.log("[InboxNotifications] Offline, skipping inbox check");
       return BackgroundFetch.BackgroundFetchResult.NoData;
+    }
+
+    if (trigger === "foreground") {
+      await Notifications.dismissAllNotificationsAsync();
     }
 
     const inbox = await api.get<InboxResponse>("/get_inbox", {
@@ -213,29 +223,36 @@ async function performInboxCheck(): Promise<BackgroundFetch.BackgroundFetchResul
     }
 
     for (const reply of unreadReplies) {
-      console.log("[InboxNotifications] Scheduling notification for:", reply.reply_id);
-      const id = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: getNotificationTitle(reply),
-          body: truncate(reply.reply_content, 150),
-          data: {
-            rootPostId: reply.root_post_id,
-            replyId: reply.reply_id,
-          },
-          ...(Platform.OS === "android" && {
-            categoryIdentifier: "inbox",
-          }),
-        },
-        trigger: null,
-      });
-      console.log("[InboxNotifications] Scheduled notification id:", id);
       notifiedIds.add(reply.reply_id);
+      saveNotifiedIds(notifiedIds);
+
+      if (shouldSendNotifications) {
+        console.log("[InboxNotifications] Scheduling notification for:", reply.reply_id);
+        const id = await Notifications.scheduleNotificationAsync({
+          content: {
+            title: getNotificationTitle(reply),
+            body: truncate(reply.reply_content, 150),
+            data: {
+              rootPostId: reply.root_post_id,
+              replyId: reply.reply_id,
+            },
+            ...(Platform.OS === "android" && {
+              categoryIdentifier: "inbox",
+            }),
+          },
+          trigger: null,
+        });
+        console.log("[InboxNotifications] Scheduled notification id:", id);
+      } else {
+        console.log("[InboxNotifications] Silently marked as notified:", reply.reply_id);
+      }
     }
 
-    saveNotifiedIds(notifiedIds);
     storage.set(LAST_CHECK_KEY, Date.now().toString());
 
-    return BackgroundFetch.BackgroundFetchResult.NewData;
+    return shouldSendNotifications && unreadReplies.length > 0
+      ? BackgroundFetch.BackgroundFetchResult.NewData
+      : BackgroundFetch.BackgroundFetchResult.NoData;
   } catch (error) {
     if (axios.isAxiosError(error) && error.message === "Network Error") {
       console.log("[InboxNotifications] Check skipped: device is offline");
@@ -266,7 +283,7 @@ async function runInboxCheck(
 
   isCheckInFlight = true;
   try {
-    return await performInboxCheck();
+    return await performInboxCheck(trigger);
   } finally {
     isCheckInFlight = false;
   }
