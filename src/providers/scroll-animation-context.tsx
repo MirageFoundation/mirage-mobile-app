@@ -31,6 +31,7 @@ type ScrollAnimationContextType = {
   subTabBarAnimatedStyle: ReturnType<typeof useAnimatedStyle>;
   headerTranslateY: SharedValue<number>;
   tabBarTranslateY: SharedValue<number>;
+  scrollY: SharedValue<number>;
   registerHomeRefresh: (callback: () => void) => void;
   registerFollowingRefresh: (callback: () => void) => void;
   registerProfileRefresh: (callback: () => void) => void;
@@ -166,6 +167,7 @@ export const ScrollAnimationProvider = ({
       subTabBarAnimatedStyle: headerAnimatedStyle,
       headerTranslateY,
       tabBarTranslateY,
+      scrollY: lastScrollY,
       registerHomeRefresh,
       registerFollowingRefresh,
       registerProfileRefresh,
@@ -180,6 +182,7 @@ export const ScrollAnimationProvider = ({
       tabBarAnimatedStyle,
       headerTranslateY,
       tabBarTranslateY,
+      lastScrollY,
       registerHomeRefresh,
       registerFollowingRefresh,
       registerProfileRefresh,
@@ -205,6 +208,11 @@ export const useScrollAnimationContext = () => {
     );
   }
   return context;
+};
+
+export const useScrollY = (): SharedValue<number> | null => {
+  const context = useContext(ScrollAnimationContext);
+  return context?.scrollY ?? null;
 };
 
 export { HEADER_HEIGHT, TAB_BAR_HEIGHT };

@@ -112,7 +112,11 @@ export const PostCardMedia = memo(
     const globalMuted = useVideoMuteStore((s) => s.isMuted);
     const toggleMute = useVideoMuteStore((s) => s.toggleMute);
     const setMuted = useVideoMuteStore((s) => s.setMuted);
-    const effectiveMuted = isPostDetail ? globalMuted : (globalMuted || !isFocused);
+    const effectiveMuted = isPostDetail
+      ? globalMuted
+      : allowAutoplay
+        ? (globalMuted || !isFocused)
+        : globalMuted;
     const [mediaLoaded, setMediaLoaded] = useState(() => media?.uri ? MEDIA_LOADED_CACHE.has(media.uri) : false);
     const [mediaRetryKey, setMediaRetryKey] = useState(0);
     const { isConnected } = useNetworkState();
@@ -130,7 +134,6 @@ export const PostCardMedia = memo(
 
     const youtubeVideoId = media?.type === "youtube" ? (extractYouTubeVideoId(media.uri) ?? "") : "";
     const shouldLazyMountYouTube = Platform.OS === "android" && !isPostDetail;
-    const shouldLazyMountVideo = Platform.OS === "android" && !isPostDetail && !(media?.uri && MEDIA_LOADED_CACHE.has(media.uri));
     const videoThumbnailUri = media?.type === "video" ? getVideoThumbnailUri(media.uri) : "";
     const youtubeThumbnailUri = youtubeVideoId ? `https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg` : "";
     const getPosition = useVideoPositionStore((s) => s.getPosition);
@@ -478,7 +481,11 @@ export const PostCardMedia = memo(
 
         if (media?.type === "youtube") {
           if (shouldUseAndroidYouTubeEmbed) {
-            const newEffective = isPostDetail ? newGlobalMuted : (newGlobalMuted || !isFocused);
+            const newEffective = isPostDetail
+              ? newGlobalMuted
+              : allowAutoplay
+                ? (newGlobalMuted || !isFocused)
+                : newGlobalMuted;
             youtubeEmbedRef.current?.setMuted(newEffective);
           }
           return;
@@ -486,7 +493,11 @@ export const PostCardMedia = memo(
 
         if (videoRef.current) {
           try {
-            const newEffective = isPostDetail ? newGlobalMuted : (newGlobalMuted || !isFocused);
+            const newEffective = isPostDetail
+              ? newGlobalMuted
+              : allowAutoplay
+                ? (newGlobalMuted || !isFocused)
+                : newGlobalMuted;
             if (!newEffective) {
               await videoRef.current.pauseAsync();
               await videoRef.current.setStatusAsync({ isMuted: false });
@@ -497,7 +508,7 @@ export const PostCardMedia = memo(
           } catch {}
         }
       },
-      [globalMuted, toggleMute, media?.type, shouldUseAndroidYouTubeEmbed, isFocused, isPostDetail],
+      [globalMuted, toggleMute, media?.type, shouldUseAndroidYouTubeEmbed, isFocused, isPostDetail, allowAutoplay],
     );
 
     const handleYouTubeTogglePlay = useCallback(
@@ -772,26 +783,6 @@ export const PostCardMedia = memo(
               )}
             </>
           ) : media.type === "video" ? (
-            shouldLazyMountVideo && !isVisible ? (
-              <Pressable onPress={handleFeedVideoTap} style={styles.media}>
-                {videoThumbnailUri ? (
-                  <Image
-                    source={{ uri: videoThumbnailUri }}
-                    style={styles.media}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    recyclingKey={videoThumbnailUri}
-                  />
-                ) : (
-                  <View style={[styles.media, styles.videoPlaceholder]} />
-                )}
-                <View style={styles.playOverlay} pointerEvents="none">
-                  <View style={styles.playButton}>
-                    <Ionicons name="play" size={28} color="#fff" />
-                  </View>
-                </View>
-              </Pressable>
-            ) : (
             <Pressable onPress={isPostDetail ? handleMediaPress : handleFeedVideoTap} style={styles.media}>
               {videoThumbnailUri && !mediaLoaded && !(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri)) ? (
                 <Image
@@ -856,7 +847,6 @@ export const PostCardMedia = memo(
                 }}
               />
             </Pressable>
-            )
           ) : (
             <Pressable onPress={handleMediaPress} style={styles.media}>
               <Image

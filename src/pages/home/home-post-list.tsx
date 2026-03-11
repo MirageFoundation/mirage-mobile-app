@@ -10,6 +10,7 @@ import {
   type ComponentType,
 } from "react";
 import {
+  Dimensions,
   Platform,
   type ListRenderItem,
   type ViewToken,
@@ -20,10 +21,14 @@ import type { Post } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { HomePostCardItem } from "./home-post-card-item";
 import { useHomePostCardStore } from "./home-post-card-store";
+import { useScrollY } from "@/src/providers/scroll-animation-context";
 
 const AnimatedFlashList = Animated.createAnimatedComponent(
   FlashList as ComponentType<any>,
 );
+
+const SCREEN_HEIGHT = Dimensions.get("window").height;
+const ESTIMATED_ITEM_SIZE = 420;
 
 type HomePostListProps = {
  data: Post[];
@@ -58,6 +63,7 @@ const HomePostListInner = function HomePostListInner(
   const setVideoViewability = useHomePostCardStore(
     (state) => state.setVideoViewability
   );
+  const scrollY = useScrollY();
 
   const onItemVisibleRef = useRef(onItemVisible);
   onItemVisibleRef.current = onItemVisible;
@@ -66,8 +72,8 @@ const HomePostListInner = function HomePostListInner(
   feedScreenRef.current = feedScreen;
 
   const viewabilityConfig = useRef({
-    viewAreaCoveragePercentThreshold: 30,
-    minimumViewTime: 300,
+    viewAreaCoveragePercentThreshold: 1,
+    minimumViewTime: 150,
   }).current;
 
   const pendingViewableRef = useRef<ViewToken[] | null>(null);
@@ -78,6 +84,9 @@ const HomePostListInner = function HomePostListInner(
     clearTimeout(deferHandleRef.current as ReturnType<typeof setTimeout>);
     deferHandleRef.current = null;
   }, []);
+
+  const scrollYRef = useRef(scrollY);
+  scrollYRef.current = scrollY;
 
   const flushViewability = useCallback(() => {
     const items = pendingViewableRef.current;
@@ -93,12 +102,21 @@ const HomePostListInner = function HomePostListInner(
     let activeId: string | null = null;
 
     if (videoItems.length > 0) {
-      const midIdx = Math.floor((visibleItems.length - 1) / 2);
-      const midListIndex = visibleItems[midIdx]?.index ?? 0;
+      let centerIndex: number;
+      const sv = scrollYRef.current;
+      if (sv) {
+        const viewportCenterY = sv.value + SCREEN_HEIGHT / 2;
+        centerIndex = viewportCenterY / ESTIMATED_ITEM_SIZE;
+      } else {
+        const firstIdx = visibleItems[0]?.index ?? 0;
+        const lastIdx = visibleItems[visibleItems.length - 1]?.index ?? 0;
+        centerIndex = (firstIdx + lastIdx) / 2;
+      }
+
       let best = videoItems[0];
-      let bestDist = Math.abs((best.index ?? 0) - midListIndex);
+      let bestDist = Math.abs((best.index ?? 0) - centerIndex);
       for (let i = 1; i < videoItems.length; i++) {
-        const d = Math.abs((videoItems[i].index ?? 0) - midListIndex);
+        const d = Math.abs((videoItems[i].index ?? 0) - centerIndex);
         if (d < bestDist) { best = videoItems[i]; bestDist = d; }
       }
       activeId = best.item.id;
@@ -129,6 +147,7 @@ const HomePostListInner = function HomePostListInner(
         itemVisibleTimerRef.current = setTimeout(() => {
           itemVisibleTimerRef.current = null;
           if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
+          flushViewability();
         }, 200);
       } else {
         if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
@@ -204,8 +223,8 @@ const HomePostListInner = function HomePostListInner(
       renderItem={renderItem}
       keyExtractor={keyExtractor}
       getItemType={getItemType}
-      estimatedItemSize={420}
-      drawDistance={Platform.OS === "android" ? 500 : 600}
+      estimatedItemSize={ESTIMATED_ITEM_SIZE}
+      drawDistance={Platform.OS === "android" ? 1500 : 2000}
       onScroll={onScroll}
       scrollEventThrottle={Platform.OS === "ios" ? 64 : 32}
       showsVerticalScrollIndicator={false}
