@@ -1,6 +1,7 @@
 import {
   memo,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   forwardRef,
@@ -9,17 +10,20 @@ import {
   type ComponentType,
 } from "react";
 import {
-  FlatList,
   Platform,
   type ListRenderItem,
   type ViewToken,
 } from "react-native";
+import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import Animated from "react-native-reanimated";
 import type { Post } from "@/src/components/molecules";
+import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { HomePostCardItem } from "./home-post-card-item";
 import { useHomePostCardStore } from "./home-post-card-store";
 
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList<Post>);
+const AnimatedFlashList = Animated.createAnimatedComponent(
+  FlashList as ComponentType<any>,
+);
 
 type HomePostListProps = {
  data: Post[];
@@ -49,42 +53,120 @@ const HomePostListInner = function HomePostListInner(
     feedScreen,
    onItemVisible,
  }: HomePostListProps,
- ref: Ref<FlatList<Post>>
+ ref: Ref<FlashListRef<Post>>
 ) {
-  const setVisiblePostIds = useHomePostCardStore(
-    (state) => state.setVisiblePostIds
-  );
-  const setActiveVideoPostId = useHomePostCardStore(
-    (state) => state.setActiveVideoPostId
+  const setVideoViewability = useHomePostCardStore(
+    (state) => state.setVideoViewability
   );
 
   const onItemVisibleRef = useRef(onItemVisible);
   onItemVisibleRef.current = onItemVisible;
 
+  const feedScreenRef = useRef(feedScreen);
+  feedScreenRef.current = feedScreen;
+
   const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 50,
-    minimumViewTime: 100,
+    viewAreaCoveragePercentThreshold: 30,
+    minimumViewTime: 300,
   }).current;
+
+  const pendingViewableRef = useRef<ViewToken[] | null>(null);
+  const deferHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelDeferredFlush = useCallback(() => {
+    if (deferHandleRef.current === null) return;
+    clearTimeout(deferHandleRef.current as ReturnType<typeof setTimeout>);
+    deferHandleRef.current = null;
+  }, []);
+
+  const flushViewability = useCallback(() => {
+    const items = pendingViewableRef.current;
+    if (!items) return;
+
+    const visibleItems = items.filter((item) => item.isViewable && item.item?.id);
+    const videoItems = visibleItems.filter(
+      (item) => postHasPlayableVideo(item.item)
+    );
+    if (visibleItems.length === 0) return;
+
+    const visibleVideoIds = new Set(videoItems.map((item) => item.item.id));
+    let activeId: string | null = null;
+
+    if (videoItems.length > 0) {
+      const midIdx = Math.floor((visibleItems.length - 1) / 2);
+      const midListIndex = visibleItems[midIdx]?.index ?? 0;
+      let best = videoItems[0];
+      let bestDist = Math.abs((best.index ?? 0) - midListIndex);
+      for (let i = 1; i < videoItems.length; i++) {
+        const d = Math.abs((videoItems[i].index ?? 0) - midListIndex);
+        if (d < bestDist) { best = videoItems[i]; bestDist = d; }
+      }
+      activeId = best.item.id;
+    }
+
+    setVideoViewability(feedScreenRef.current, visibleVideoIds, activeId);
+
+    const maxIndex = items.reduce((max, item) => {
+      if (item.isViewable && item.index != null && item.index > max) return item.index;
+      return max;
+    }, -1);
+    if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
+  }, [setVideoViewability]);
+
+  const itemVisibleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      const visibleIds = new Set(
-        viewableItems
-          .filter((item) => item.isViewable && item.item?.id)
-          .map((item) => item.item.id)
-      );
-      setVisiblePostIds(visibleIds);
+      pendingViewableRef.current = viewableItems;
 
-      const firstVisible = viewableItems.find((item) => item.isViewable && item.item?.id);
-      setActiveVideoPostId(firstVisible?.item?.id ?? null);
+      const maxIndex = viewableItems.reduce((max, item) => {
+        if (item.isViewable && item.index != null && item.index > max) return item.index;
+        return max;
+      }, -1);
 
-     const maxIndex = viewableItems.reduce((max, item) => {
-       if (item.isViewable && item.index != null && item.index > max) return item.index;
-       return max;
-     }, -1);
-     if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
+      if (Platform.OS === "ios") {
+        if (itemVisibleTimerRef.current) clearTimeout(itemVisibleTimerRef.current);
+        itemVisibleTimerRef.current = setTimeout(() => {
+          itemVisibleTimerRef.current = null;
+          if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
+        }, 200);
+      } else {
+        if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
+        cancelDeferredFlush();
+        deferHandleRef.current = setTimeout(() => {
+          deferHandleRef.current = null;
+          flushViewability();
+        }, 150);
+      }
     }
   ).current;
+
+  useEffect(() => {
+    return () => {
+      cancelDeferredFlush();
+    };
+  }, [cancelDeferredFlush]);
+
+  useEffect(() => {
+    if (!data || data.length === 0) return;
+    const currentActive = useHomePostCardStore.getState().activeVideoPostIds[feedScreen];
+    if (
+      currentActive &&
+      data.some(
+        (p) =>
+          p.id === currentActive &&
+          postHasPlayableVideo(p)
+      )
+    ) {
+      return;
+    }
+    const firstVideo = data.find(
+      (p) => postHasPlayableVideo(p)
+    );
+    if (firstVideo) {
+      setVideoViewability(feedScreen, new Set([firstVideo.id]), firstVideo.id);
+    }
+  }, [data, feedScreen, setVideoViewability]);
 
  const renderItem = useCallback<ListRenderItem<Post>>(
     ({ item }) => <HomePostCardItem post={item} feedScreen={feedScreen} />,
@@ -92,17 +174,42 @@ const HomePostListInner = function HomePostListInner(
  );
 
   const keyExtractor = useMemo(() => (item: Post) => item.id, []);
+  const getItemType = useCallback(
+    (item: Post) => (item.media?.length ? "media-post" : "text-post"),
+    [],
+  );
+
+  const handleMomentumScrollEnd = useCallback(() => {
+    cancelDeferredFlush();
+    if (Platform.OS === "ios") {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          flushViewability();
+        });
+      });
+    } else {
+      deferHandleRef.current = setTimeout(() => {
+        deferHandleRef.current = null;
+        requestAnimationFrame(() => {
+          flushViewability();
+        });
+      }, 50);
+    }
+  }, [cancelDeferredFlush, flushViewability]);
 
   return (
-    <AnimatedFlatList
+    <AnimatedFlashList
       ref={ref}
       data={data}
       renderItem={renderItem}
       keyExtractor={keyExtractor}
+      getItemType={getItemType}
+      estimatedItemSize={420}
+      drawDistance={Platform.OS === "android" ? 500 : 600}
       onScroll={onScroll}
-      scrollEventThrottle={16}
+      scrollEventThrottle={Platform.OS === "ios" ? 64 : 32}
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={contentContainerStyle}
+      contentContainerStyle={contentContainerStyle as any}
       ListHeaderComponent={ListHeaderComponent}
       ListEmptyComponent={ListEmptyComponent}
       ListFooterComponent={ListFooterComponent}
@@ -113,13 +220,7 @@ const HomePostListInner = function HomePostListInner(
       keyboardDismissMode="on-drag"
       viewabilityConfig={viewabilityConfig}
       onViewableItemsChanged={onViewableItemsChanged}
-      removeClippedSubviews={true}
-      maxToRenderPerBatch={3}
-      windowSize={5}
-      initialNumToRender={4}
-      updateCellsBatchingPeriod={100}
-      getItemLayout={undefined}
-      maintainVisibleContentPosition={Platform.OS === "android" ? undefined : { minIndexForVisible: 0 }}
+      onMomentumScrollEnd={handleMomentumScrollEnd}
     />
   );
 };

@@ -1,17 +1,21 @@
-import { memo, useCallback } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { PostCard } from "./post-card";
 import type { Post } from "./post-card-types";
+import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { logPress } from "@/src/utils/press-logger";
 
 type PostCardItemProps = {
   post: Post;
  isVisible?: boolean;
+ isFocused?: boolean;
+ screenActive?: boolean;
  isOwnPost?: boolean;
  isTopicFollowed?: boolean;
  contentRevealed?: boolean;
  shareUrl?: string;
   showFollowButton?: boolean;
   showUrlCard?: boolean;
+  allowAutoplay?: boolean;
  onPostPress?: (postId: string) => void;
   onAuthorPress?: (authorId: string) => void;
   onMorePress?: (postId: string) => void;
@@ -39,6 +43,7 @@ type PostCardItemProps = {
   onBlockPost?: (postId: string) => void;
   onBlockTopic?: (postId: string, topic: string) => void;
   onReport?: (postId: string) => void;
+  onTopicPress?: (topic: string) => void;
 };
 
 function arePostCardItemPropsEqual(
@@ -55,18 +60,24 @@ function arePostCardItemPropsEqual(
   if (prev.awards?.length !== next.awards?.length) return false;
   if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
   if (prevProps.isVisible !== nextProps.isVisible) return false;
+  if (prevProps.isFocused !== nextProps.isFocused) return false;
+  if (prevProps.screenActive !== nextProps.screenActive) return false;
+  if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
   return true;
 }
 
 export const PostCardItem = memo(function PostCardItem({
 post,
 isVisible = false,
+isFocused,
+screenActive = true,
 isOwnPost = false,
 isTopicFollowed = false,
 contentRevealed = false,
 shareUrl,
   showFollowButton = true,
   showUrlCard,
+  allowAutoplay,
 onPostPress,
   onAuthorPress,
   onMorePress,
@@ -80,7 +91,22 @@ onPostPress,
   onBlockPost,
   onBlockTopic,
   onReport,
+  onTopicPress,
 }: PostCardItemProps) {
+  const editOverride = usePostEditStore((s) => s.overrides[post.id]);
+  const displayPost = useMemo(() => {
+    if (!editOverride) return post;
+    return {
+      ...post,
+      title: editOverride.title,
+      body: editOverride.content || undefined,
+      topic: editOverride.topic ?? post.topic,
+      media: editOverride.media
+        ? editOverride.media.map((url) => ({ uri: url, type: "image" as const }))
+        : post.media,
+    };
+  }, [post, editOverride]);
+
   const handlePostPress = useCallback(() => {
     logPress({ name: "post_card_item", postId: post.id });
     onPostPress?.(post.id);
@@ -156,13 +182,22 @@ onPostPress,
     onReport?.(post.id);
   }, [onReport, post.id]);
 
+  const handleTopicPress = useCallback(() => {
+    if (!post.topic) return;
+    logPress({ name: "post_topic_press", postId: post.id });
+    onTopicPress?.(post.topic);
+  }, [onTopicPress, post.topic, post.id]);
+
  return (
    <PostCard
-     post={post}
+     post={displayPost}
      isOwnPost={isOwnPost}
      isVisible={isVisible}
+     isFocused={isFocused ?? isVisible}
      isTopicFollowed={isTopicFollowed}
       showFollowButton={showFollowButton}
+     screenActive={screenActive}
+     allowAutoplay={allowAutoplay}
     onPress={handlePostPress}
     onAuthorPress={handleAuthorPress}
      onMorePress={handleMorePress}
@@ -176,6 +211,7 @@ onPostPress,
     onBlockPost={handleBlockPost}
     onBlockTopic={handleBlockTopic}
     onReport={handleReport}
+    onTopicPress={handleTopicPress}
      onMediaPress={handlePostPress}
     contentRevealed={contentRevealed}
      shareUrl={shareUrl}

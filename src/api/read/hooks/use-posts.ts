@@ -36,7 +36,7 @@ export function usePosts(params?: Omit<GetPostsParams, "address">) {
  */
 export function useInfinitePosts(
   params?: Omit<GetPostsParams, "page" | "address">,
-  options?: { enabled?: boolean }
+  options?: { enabled?: boolean; pageLimit?: number }
 ) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
   const isInitializing = useAuthStore((s) => s.isInitializing);
@@ -46,13 +46,15 @@ export function useInfinitePosts(
     address: walletAddress ?? undefined,
   };
 
+  const pageLimit = options?.pageLimit;
+
   return useInfiniteQuery({
     queryKey: queryKeys.posts({ ...baseParams, page: undefined }),
     queryFn: ({ pageParam = 1 }) =>
-      getPosts({ ...baseParams, page: pageParam }),
+      getPosts({ ...baseParams, page: pageParam, limit: pageParam === 1 ? baseParams.limit : (pageLimit ?? baseParams.limit) }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
-      if (!lastPage.has_more) return undefined;
+      if (!lastPage?.has_more) return undefined;
       return lastPage.page + 1;
     },
     enabled: !isInitializing && (options?.enabled ?? true),
@@ -60,6 +62,7 @@ export function useInfinitePosts(
     gcTime: 1000 * 60 * 60 * 4,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
+    refetchOnReconnect: false,
   });
 }
 
@@ -109,7 +112,7 @@ export function useInfiniteUserPosts(
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
-      if (!lastPage.has_more) return undefined;
+      if (!lastPage?.has_more) return undefined;
       return lastPage.page + 1;
     },
     enabled: !!owner,

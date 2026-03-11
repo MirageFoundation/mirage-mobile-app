@@ -1,7 +1,18 @@
 import { Entypo, EvilIcons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
-import { ResizeMode, Video } from "expo-av";
+import { useFocusEffect } from "@react-navigation/native";
+import { LinkPreviewCard } from "@/src/components/molecules/link-preview-card";
+import { markEditJustCompleted } from "@/src/utils/edit-post";
+import { usePostEditStore } from "@/src/stores/post-edit-store";
+import { fetchLinkMeta } from "@/src/utils/fetch-link-meta";
+import { mergeAudioVideo } from "@/src/utils/merge-audio-video";
+import { trimToMaxDuration } from "@/src/utils/video-processing";
+import { useQueryClient } from "@tanstack/react-query";
+import * as Sentry from "@sentry/react-native";
+import { Audio, ResizeMode, Video } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
+import { Paths, File as ExpoFile } from "expo-file-system";
 import { router, useLocalSearchParams } from "expo-router";
+import { useShareIntentContext } from "expo-share-intent";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -16,6 +27,7 @@ import {
   View,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { BlurView } from "expo-blur";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -24,8 +36,8 @@ import {
   uploadImageAndGetUrl,
   uploadVideoAndGetUrl,
 } from "@/src/api/read/hooks/use-upload-media";
-import { usePost, type CreatePostMutationInput } from "@/src/api/write";
-import type { ContentTag } from "@/src/api/write/endpoints/posts";
+import { usePost, useEdit, type CreatePostMutationInput } from "@/src/api/write";
+import type { ContentTag, EditPostInput } from "@/src/api/write/endpoints/posts";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useToast } from "@/src/providers/toast-provider";
@@ -35,7 +47,7 @@ import { getTxStatus } from "@/src/api/read/endpoints/tx";
 import { useDraftStore, type Community } from "@/src/stores/draft-store";
 import { useHomePostCardStore } from "./home/home-post-card-store";
 import { useUserLevel } from "@/src/stores/auth-store";
-import { getTierPostLimits } from "@/src/utils/tiers";
+import { getTierPostLimits, canEditContent } from "@/src/utils/tiers";
 
 import { CommunitySelectionModal } from "./create/community-selection-modal";
 import { StickerPicker } from "@/src/components/molecules/sticker-picker";
@@ -68,12 +80,13 @@ const VIDEO_META = new Map<string, VideoMeta>();
 let _handledVideoParam: string | null = null;
 
 export function CreateScreen() {
-  const { theme } = useUnistyles();
+  const { theme, rt } = useUnistyles();
+  const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
   const userLevel = useUserLevel();
   const tierLimits = useMemo(() => getTierPostLimits(userLevel), [userLevel]);
 
-  // Get params from video editor
+  // Get params from video editor or edit mode
   const params = useLocalSearchParams<{
     videoUri?: string;
     originalVideoUri?: string;
@@ -83,7 +96,22 @@ export function CreateScreen() {
     trimStart?: string;
     trimEnd?: string;
     isMuted?: string;
+    editPostId?: string;
+    editTopic?: string;
+    editTitle?: string;
+    editBody?: string;
+    editTag?: string;
+    editMedia?: string;
+    editCreatedAt?: string;
   }>();
+
+  const isEditMode = !!params.editPostId;
+  const editPostId = params.editPostId ?? "";
+
+  const editability = useMemo(() => {
+    if (!isEditMode || !params.editCreatedAt) return null;
+    return canEditContent(userLevel, parseInt(params.editCreatedAt, 10));
+  }, [isEditMode, params.editCreatedAt, userLevel]);
 
   const { draft, updateDraft, clearDraft, setAttachment, removeAttachment } =
     useDraftStore();
@@ -131,6 +159,18 @@ export function CreateScreen() {
   videoUploadStateRef.current = setVideoUploadState;
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [isProcessingShareLink, setIsProcessingShareLink] = useState(false);
+  const [isPreparingVideo, setIsPreparingVideo] = useState(false);
+  const navigatedToEditorRef = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (navigatedToEditorRef.current) {
+        navigatedToEditorRef.current = false;
+        setIsPreparingVideo(false);
+      }
+    }, [])
+  );
 
   const toast = useToast();
 
@@ -156,7 +196,6 @@ export function CreateScreen() {
       }));
     })
       .then((url) => {
-        console.log("[CreatePost] Video uploaded:", url);
         VIDEO_UPLOADS.set(uri, { url, uploading: false, progress: 100, error: null });
         videoUploadStateRef.current((prev) => ({
           ...prev,
@@ -165,7 +204,7 @@ export function CreateScreen() {
         triggerHaptic("success");
       })
       .catch((err) => {
-        console.error("[CreatePost] Video upload failed:", err);
+        Sentry.addBreadcrumb({ category: "video-upload", message: "Video upload failed", data: { error: String(err) }, level: "error" });
         const msg = err instanceof Error ? err.message : "Upload failed";
         VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg });
         videoUploadStateRef.current((prev) => ({
@@ -177,8 +216,10 @@ export function CreateScreen() {
       });
   }, [toast]);
 
+  const queryClient = useQueryClient();
   const txProgress = useTransactionProgress();
   const postMutation = usePost({ onPoWProgress: txProgress.updatePoWProgress });
+  const editMutation = useEdit({ onPoWProgress: txProgress.updatePoWProgress });
   const triggerScrollToTop = useHomePostCardStore((s) => s.triggerScrollToTop);
 
   const screenWidth = Dimensions.get("window").width;
@@ -189,8 +230,11 @@ export function CreateScreen() {
     const hasCommunity = draft.community !== null;
     const videoStillUploading =
       draft.attachmentType === "video" && isUploadingVideo;
-    return hasTitleContent && hasCommunity && !videoStillUploading;
-  }, [draft.title, draft.community, draft.attachmentType, isUploadingVideo]);
+    const editBlocked = isEditMode && editability && !editability.allowed;
+    return hasTitleContent && hasCommunity && !videoStillUploading && !editBlocked;
+  }, [draft.title, draft.community, draft.attachmentType, isUploadingVideo, isEditMode, editability]);
+
+  const editExpired = isEditMode && editability !== null && !editability.allowed;
 
   const hasAttachment = useMemo(() => {
     return showLinkInput || draft.attachmentType !== null;
@@ -212,8 +256,11 @@ export function CreateScreen() {
 
   // Clean up stale attachment state on mount
   useEffect(() => {
-    // If attachmentType is set but there's no actual content, clear it
-    if (draft.attachmentType === "link" && !draft.linkUrl) {
+    if (isEditMode) return;
+    if (draft.attachmentType === "link" && draft.linkUrl) {
+      setShowLinkInput(true);
+      setLinkUrl(draft.linkUrl);
+    } else if (draft.attachmentType === "link" && !draft.linkUrl) {
       removeAttachment();
     } else if (
       (draft.attachmentType === "image" || draft.attachmentType === "video") &&
@@ -223,14 +270,292 @@ export function CreateScreen() {
     }
   }, []);
 
+  const editInitializedRef = useRef(false);
+  useEffect(() => {
+    if (!isEditMode || editInitializedRef.current) return;
+    editInitializedRef.current = true;
+
+    const topic = params.editTopic ?? "general";
+    const community: Community = {
+      id: topic,
+      name: topic,
+      memberCount: 0,
+      isSubscribed: true,
+    };
+    updateDraft({
+      community,
+      title: params.editTitle ?? "",
+      body: params.editBody ?? "",
+    });
+
+    if (params.editTag) {
+      setSelectedContentWarning(params.editTag as ContentTag);
+    }
+
+    if (params.editMedia) {
+      try {
+        const mediaUrls = JSON.parse(params.editMedia) as string[];
+        if (mediaUrls.length > 0) {
+          setSelectedStickers(mediaUrls);
+        }
+      } catch {}
+    }
+  }, [isEditMode]);
+
+  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
+  const lastProcessedIntentRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!hasShareIntent || !shareIntent || isEditMode) return;
+
+    const intentKey = shareIntent.webUrl ?? shareIntent.text ?? shareIntent.files?.[0]?.path ?? null;
+    if (!intentKey || intentKey === lastProcessedIntentRef.current) return;
+    lastProcessedIntentRef.current = intentKey;
+
+    console.log("[CreateScreen] Share intent received:", {
+      type: shareIntent.type,
+      webUrl: shareIntent.webUrl,
+      text: shareIntent.text,
+      files: shareIntent.files,
+    });
+
+    Sentry.addBreadcrumb({
+      category: "share-intent",
+      message: "Processing share intent",
+      data: { type: shareIntent.type, webUrl: shareIntent.webUrl, hasText: !!shareIntent.text, fileCount: shareIntent.files?.length ?? 0 },
+      level: "info",
+    });
+
+    clearDraft();
+    setShowLinkInput(false);
+    setLinkUrl("");
+    setLinkError(null);
+    removeAttachment();
+    setImageDimensions(null);
+    setSelectedContentWarning("");
+    setSelectedStickers([]);
+    VIDEO_UPLOADS.clear();
+    setVideoUploadState({});
+    VIDEO_META.clear();
+    _handledVideoParam = null;
+    setIsVideoMuted(false);
+    setIsVideoPlaying(false);
+
+    const redditMatch = (shareIntent.webUrl ?? shareIntent.text ?? "").match(/reddit\.com\/r\/([^/]+)/i);
+    if (redditMatch) {
+      const topicName = redditMatch[1].toLowerCase();
+      updateDraft({
+        community: {
+          id: topicName,
+          name: topicName,
+          memberCount: 0,
+          isSubscribed: false,
+          isNewTopic: true,
+        },
+      });
+    }
+
+    setTimeout(() => {
+      if (shareIntent.text && !shareIntent.webUrl) {
+        updateDraft({ body: shareIntent.text });
+      }
+      if (shareIntent.webUrl) {
+        setIsProcessingShareLink(true);
+        fetchLinkMeta(shareIntent.webUrl).then(async (meta) => {
+          console.log("[CreateScreen] Link meta extracted:", {
+            url: shareIntent.webUrl,
+            title: meta.title,
+            description: meta.description,
+            domain: meta.domain,
+            image: meta.image,
+            images: meta.images,
+            video: meta.video,
+            audioUrl: meta.audioUrl,
+            audioUrls: meta.audioUrls,
+          });
+          Sentry.addBreadcrumb({
+            category: "share-intent",
+            message: "Link meta fetched",
+            data: { domain: meta.domain, hasTitle: !!meta.title, hasVideo: !!meta.video, imageCount: meta.images?.length ?? 0 },
+            level: "info",
+          });
+          if (meta.title) {
+            updateDraft({ title: meta.title.slice(0, tierLimits.maxTitleLength) });
+          }
+          const bodyParts: string[] = [];
+          if (meta.description) {
+            bodyParts.push(meta.description.slice(0, tierLimits.maxContentLength));
+          }
+          updateDraft({ body: bodyParts.join("\n\n") });
+          console.log("[CreateScreen] Draft auto-filled:", {
+            title: meta.title?.slice(0, tierLimits.maxTitleLength),
+            body: bodyParts.join("\n\n").slice(0, 200),
+            community: redditMatch ? redditMatch[1].toLowerCase() : null,
+          });
+
+          if (meta.externalUrl) {
+            console.log("[CreateScreen] External link detected:", meta.externalUrl);
+            setShowLinkInput(true);
+            setLinkUrl(meta.externalUrl);
+            updateDraft({ linkUrl: meta.externalUrl });
+          }
+
+          let videoDownloaded = false;
+
+          if (meta.video) {
+            try {
+              const response = await fetch(meta.video);
+              const contentType = response.headers.get("content-type") ?? "";
+              const videoUrl = response.url;
+
+              const isVideoContent = contentType.startsWith("video/") || contentType.startsWith("application/octet-stream");
+              const hasVideoExtension = /\.(mp4|mov|webm|m3u8|ts)(\?|#|$)/i.test(videoUrl || meta.video);
+
+              if (response.ok && (isVideoContent || hasVideoExtension)) {
+                const ext = contentType.includes("mp4") ? "mp4"
+                  : contentType.includes("webm") ? "webm"
+                  : contentType.includes("quicktime") ? "mov"
+                  : (videoUrl || meta.video).match(/\.(mp4|mov|webm|m3u8)/i)?.[1] ?? "mp4";
+                const destFile = new ExpoFile(Paths.cache, `shared_link_video_${Date.now()}.${ext}`);
+                const arrayBuffer = await response.arrayBuffer();
+                if (arrayBuffer.byteLength > 1000) {
+                  const audioUrlsToTry = meta.audioUrls?.length > 0
+                    ? meta.audioUrls
+                    : meta.audioUrl
+                      ? [meta.audioUrl]
+                      : [];
+                  if (audioUrlsToTry.length > 0) {
+                    for (const tryAudioUrl of audioUrlsToTry) {
+                      if (videoDownloaded) break;
+                      try {
+                        const audioRes = await fetch(tryAudioUrl, {
+                          headers: {
+                            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+                            "Referer": "https://www.reddit.com/",
+                            "Accept": "*/*",
+                          },
+                        });
+                        if (!audioRes.ok) continue;
+                        const audioBuffer = await audioRes.arrayBuffer();
+                        if (audioBuffer.byteLength < 500) continue;
+                        const audioContentType = audioRes.headers.get("content-type") ?? "";
+                        if (audioContentType.includes("text/html") || audioContentType.includes("text/xml")) continue;
+                        const mergedBuffer = await mergeAudioVideo(arrayBuffer, audioBuffer);
+                        const mergedFile = new ExpoFile(Paths.cache, `shared_link_merged_${Date.now()}.mp4`);
+                        mergedFile.write(new Uint8Array(mergedBuffer));
+                        let finalUri = mergedFile.uri;
+                        try {
+                          const { sound } = await Audio.Sound.createAsync({ uri: mergedFile.uri });
+                          const status = await sound.getStatusAsync();
+                          await sound.unloadAsync();
+                          if (status.isLoaded && status.durationMillis && status.durationMillis > 59000) {
+                            finalUri = await trimToMaxDuration(mergedFile.uri, status.durationMillis);
+                          }
+                        } catch {}
+                        setAttachment("video", finalUri);
+                        startVideoUpload(finalUri);
+                        videoDownloaded = true;
+                        Sentry.addBreadcrumb({ category: "share-intent", message: "Audio+video merged", level: "info" });
+                        break;
+                      } catch (mergeErr) {
+                        Sentry.addBreadcrumb({ category: "share-intent", message: "Audio merge attempt failed", data: { error: String(mergeErr) }, level: "warning" });
+                      }
+                    }
+                  }
+                  if (!videoDownloaded) {
+                    destFile.write(new Uint8Array(arrayBuffer));
+                    let finalUri = destFile.uri;
+                    try {
+                      const { sound } = await Audio.Sound.createAsync({ uri: destFile.uri });
+                      const status = await sound.getStatusAsync();
+                      await sound.unloadAsync();
+                      if (status.isLoaded && status.durationMillis && status.durationMillis > 59000) {
+                        finalUri = await trimToMaxDuration(destFile.uri, status.durationMillis);
+                      }
+                    } catch {}
+                    setAttachment("video", finalUri);
+                    startVideoUpload(finalUri);
+                    videoDownloaded = true;
+                  }
+                }
+              }
+            } catch (vidErr) {
+              Sentry.addBreadcrumb({
+                category: "share-intent",
+                message: "Failed to download OG video",
+                data: { video: meta.video, error: String(vidErr) },
+                level: "warning",
+              });
+            }
+          }
+
+          if (!videoDownloaded) {
+            const imagesToDownload = meta.images?.length > 0
+              ? meta.images.slice(0, 10)
+              : meta.image
+                ? [meta.image]
+                : [];
+            if (imagesToDownload.length > 0) {
+              for (let i = 0; i < imagesToDownload.length; i++) {
+                try {
+                  const imgUrl = imagesToDownload[i];
+                  const ext = imgUrl.match(/\.(jpg|jpeg|png|gif|webp)/i)?.[1] ?? "jpg";
+                  const destFile = new ExpoFile(Paths.cache, `shared_link_image_${Date.now()}_${i}.${ext}`);
+                  const response = await fetch(imgUrl);
+                  if (response.ok) {
+                    const arrayBuffer = await response.arrayBuffer();
+                    if (arrayBuffer.byteLength > 500) {
+                      destFile.write(new Uint8Array(arrayBuffer));
+                      setAttachment("image", destFile.uri);
+                    }
+                  }
+                } catch (imgErr) {
+                  Sentry.addBreadcrumb({
+                    category: "share-intent",
+                    message: "Failed to download OG image",
+                    data: { image: imagesToDownload[i], error: String(imgErr) },
+                    level: "warning",
+                  });
+                }
+              }
+            }
+          }
+
+          if (!videoDownloaded && meta.video) {
+            const currentBody = useDraftStore.getState().draft.body;
+            const link = shareIntent.webUrl!;
+            const newBody = currentBody ? `${currentBody}\n\n${link}` : link;
+            updateDraft({ body: newBody });
+          }
+
+          if (meta.externalUrl) {
+            updateDraft({ linkUrl: meta.externalUrl });
+          }
+        }).catch((err: any) => {
+          updateDraft({ body: shareIntent.webUrl! });
+          Sentry.captureException(err, { tags: { feature: "share-intent-meta" } });
+        }).finally(() => {
+          setIsProcessingShareLink(false);
+        });
+      }
+      if (shareIntent.files?.length) {
+        const file = shareIntent.files[0];
+        if (file.mimeType?.startsWith("image/")) {
+          setAttachment("image", file.path);
+        } else if (file.mimeType?.startsWith("video/")) {
+          setAttachment("video", file.path);
+          startVideoUpload(file.path);
+        }
+      }
+      resetShareIntent();
+    }, 50);
+  }, [hasShareIntent, shareIntent]);
+
   // Handle video returned from editor
   useEffect(() => {
     if (!params.videoUri) return;
     if (_handledVideoParam === params.videoUri) return;
 
     _handledVideoParam = params.videoUri;
-    console.log("[CreatePost] Received video from editor:", params.videoUri);
-
     const oldUri = params.replacingUri || null;
     const origUri = params.originalVideoUri ?? params.videoUri;
     const w = params.videoWidth ? parseInt(params.videoWidth) : 1920;
@@ -249,6 +574,7 @@ export function CreateScreen() {
       setAttachment("video", params.videoUri);
     }
     setIsVideoMuted(params.isMuted === "1");
+    setIsPreparingVideo(false);
     startVideoUpload(params.videoUri);
   }, [params.videoUri, params.originalVideoUri, params.replacingUri, params.videoWidth, params.videoHeight, params.trimStart, params.trimEnd, params.isMuted]);
 
@@ -267,7 +593,8 @@ export function CreateScreen() {
   }, [isSubmitting, clearDraft]);
 
   const handlePost = useCallback(async () => {
-    if (!canPost || isSubmitting || txProgress.isVisible) return;
+    if (!canPost || isSubmitting) return;
+    if (txProgress.isVisible && txProgress.progress.phase !== "error") return;
 
     Keyboard.dismiss();
     setIsSubmitting(true);
@@ -283,14 +610,12 @@ export function CreateScreen() {
 
       if (draft.attachmentType === "image" && draft.mediaUris.length > 0) {
         try {
-          console.log("[CreatePost] Uploading images...", draft.mediaUris.length);
           const uploads = await Promise.all(
             draft.mediaUris.map((uri) => uploadImageAndGetUrl(uri))
           );
           mediaUrls.push(...uploads);
-          console.log("[CreatePost] Images uploaded successfully:", mediaUrls);
         } catch (error) {
-          console.error("[CreatePost] Image upload failed:", error);
+          Sentry.addBreadcrumb({ category: "image-upload", message: "Image upload failed", data: { error: String(error) }, level: "error" });
           toast.error(
             "Image upload failed",
             error instanceof Error ? error.message : "Please try again",
@@ -302,9 +627,7 @@ export function CreateScreen() {
       }
 
       if (draft.attachmentType === "video") {
-        console.log("[CreatePost] VIDEO_UPLOADS entries:", VIDEO_UPLOADS.size);
         for (const [uri, entry] of VIDEO_UPLOADS) {
-          console.log("[CreatePost] Video entry:", uri, "url:", entry.url, "uploading:", entry.uploading);
           if (entry.url) {
             mediaUrls.push(entry.url);
           }
@@ -317,77 +640,186 @@ export function CreateScreen() {
         content = content ? `${draft.linkUrl}\n\n${content}` : draft.linkUrl;
       }
 
+      console.log("[CreateScreen] Submitting post:", {
+        title: draft.title.trim().slice(0, 50),
+        linkUrl: draft.linkUrl,
+        contentPreview: content?.slice(0, 200),
+        attachmentType: draft.attachmentType,
+        mediaCount: mediaUrls.length,
+      });
+
       const isUserProfile =
         draft.community?.description === "Post to your profile";
       const topic = isUserProfile
         ? "general"
         : (draft.community?.id ?? "general");
 
-      const postInput: CreatePostMutationInput = {
-        topic,
-        title: draft.title.trim(),
-        content: content,
-        tag: selectedContentWarning,
-        media: mediaUrls.length > 0 ? mediaUrls : undefined,
-        optimisticMediaUrl: mediaUrls[0] ?? undefined,
-        optimisticMediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
-      };
-
-      console.log("[CreatePost] Submitting post:", postInput);
-
       txProgress.setPhase("signing");
-      const result = await postMutation.mutateAsync(postInput);
 
-      txProgress.setPhase("confirming");
-      let confirmed = false;
-      if (result?.tx_hash) {
-        for (let i = 0; i < 30; i++) {
-          await new Promise((r) => setTimeout(r, 2000));
-          try {
-            const status = await getTxStatus({ hash: result.tx_hash });
-            if (status.found && status.indexed) {
-              confirmed = true;
-              break;
-            }
-          } catch {}
-        }
+      let result;
+      if (isEditMode) {
+        const editInput: EditPostInput = {
+          postId: editPostId,
+          topic,
+          title: draft.title.trim(),
+          content: content,
+          tag: selectedContentWarning,
+          media: mediaUrls.length > 0 ? mediaUrls : undefined,
+        };
+        result = await editMutation.mutateAsync(editInput);
+      } else {
+        const postInput: CreatePostMutationInput = {
+          topic,
+          title: draft.title.trim(),
+          content: content,
+          tag: selectedContentWarning,
+          media: mediaUrls.length > 0 ? mediaUrls : undefined,
+          optimisticMediaUrl: mediaUrls[0] ?? undefined,
+          optimisticMediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+        };
+        result = await postMutation.mutateAsync(postInput);
       }
 
-      txProgress.setSuccess(result?.tx_hash);
+      if (isEditMode) {
+        txProgress.setSuccess(result?.tx_hash);
 
-      console.log("[CreatePost] Post created successfully:", result);
+        usePostEditStore.getState().setOverride(editPostId, {
+          title: draft.title.trim(),
+          content: content || "",
+          topic,
+          tag: selectedContentWarning || undefined,
+          media: mediaUrls.length > 0 ? mediaUrls : undefined,
+          editedAt: Math.floor(Date.now() / 1000),
+        });
 
-      setSelectedContentWarning("");
-      setSelectedStickers([]);
-      setShowLinkInput(false);
-      setLinkUrl("");
-      setLinkError(null);
-      setImageDimensions(null);
-      VIDEO_UPLOADS.clear();
-      setVideoUploadState({});
-      VIDEO_META.clear();
-      _handledVideoParam = null;
-      setIsVideoMuted(false);
+        setTimeout(() => {
+          usePostEditStore.getState().clearOverride(editPostId);
+        }, 120000);
 
-      clearDraft();
+        const nowSeconds = Math.floor(Date.now() / 1000);
+        const updatePostInCache = (post: any) => {
+          if (post?.post_id !== editPostId) return post;
+          return {
+            ...post,
+            title: draft.title.trim(),
+            content,
+            tag: selectedContentWarning || post.tag,
+            topic: topic || post.topic,
+            media: mediaUrls.length > 0 ? mediaUrls : post.media,
+            edited_at: nowSeconds,
+          };
+        };
+        const applyToData = (data: any) => {
+          if (!data) return data;
+          if (data.pages && Array.isArray(data.pages)) {
+            return {
+              ...data,
+              pages: data.pages.map((page: any) => ({
+                ...page,
+                posts: page.posts.map(updatePostInCache),
+              })),
+            };
+          }
+          if (data.posts && Array.isArray(data.posts)) {
+            return { ...data, posts: data.posts.map(updatePostInCache) };
+          }
+          return data;
+        };
+        queryClient.getQueriesData({ queryKey: ["posts"] }).forEach(([key]) => {
+          queryClient.setQueryData(key, (old: any) => applyToData(old));
+        });
+        queryClient.getQueriesData({ queryKey: ["user", "posts"] }).forEach(([key]) => {
+          queryClient.setQueryData(key, (old: any) => applyToData(old));
+        });
+        queryClient.getQueriesData<any>({ queryKey: ["comments"] }).forEach(([key, data]) => {
+          if (data?.root?.post_id === editPostId) {
+            queryClient.setQueryData(key, {
+              ...data,
+              root: {
+                ...data.root,
+                title: draft.title.trim(),
+                content,
+                tag: selectedContentWarning || data.root.tag,
+                topic: topic || data.root.topic,
+                media: mediaUrls.length > 0 ? mediaUrls : data.root.media,
+                edited_at: nowSeconds,
+              },
+            });
+          }
+        });
 
-      setIsSubmitting(false);
+        setSelectedContentWarning("");
+        setSelectedStickers([]);
+        setShowLinkInput(false);
+        setLinkUrl("");
+        setLinkError(null);
+        setImageDimensions(null);
+        VIDEO_UPLOADS.clear();
+        setVideoUploadState({});
+        VIDEO_META.clear();
+        _handledVideoParam = null;
+        setIsVideoMuted(false);
+        clearDraft();
+        setIsSubmitting(false);
 
-      triggerScrollToTop();
+        markEditJustCompleted();
+        setTimeout(() => {
+          txProgress.hideModal();
+          router.back();
+        }, 500);
+      } else {
+        txProgress.setPhase("confirming");
+        let confirmed = false;
+        if (result?.tx_hash) {
+          for (let i = 0; i < 30; i++) {
+            await new Promise((r) => setTimeout(r, 2000));
+            try {
+              const status = await getTxStatus({ hash: result.tx_hash });
+              if (status.found && status.indexed) {
+                confirmed = true;
+                break;
+              }
+            } catch {}
+          }
+        }
 
-      setTimeout(() => {
-        txProgress.hideModal();
-       useHomePostCardStore.getState().setSkipNextRefresh(true);
-        router.replace("/(tabs)/");
-      }, 1000);
+        txProgress.setSuccess(result?.tx_hash);
+
+        setSelectedContentWarning("");
+        setSelectedStickers([]);
+        setShowLinkInput(false);
+        setLinkUrl("");
+        setLinkError(null);
+        setImageDimensions(null);
+        VIDEO_UPLOADS.clear();
+        setVideoUploadState({});
+        VIDEO_META.clear();
+        _handledVideoParam = null;
+        setIsVideoMuted(false);
+        clearDraft();
+        setIsSubmitting(false);
+        triggerScrollToTop();
+
+        setTimeout(() => {
+          txProgress.hideModal();
+          useHomePostCardStore.getState().setSkipNextRefresh(true);
+          router.replace("/(tabs)/");
+        }, 1000);
+      }
     } catch (error) {
-      console.error("[CreatePost] Error creating post:", error);
-
       setIsSubmitting(false);
 
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to create post";
-      txProgress.setError(errorMessage);
+      const isNetworkError =
+        (error as any)?.code === "ERR_NETWORK" ||
+        (error as any)?.message === "Network Error";
+      if (isNetworkError) {
+        txProgress.setError("No internet connection. Please check your network and try again.");
+      } else {
+        const serverError = (error as any)?.response?.data?.error;
+        const fallback = isEditMode ? "Failed to edit post" : "Failed to create post";
+        const errorMessage = serverError || (error instanceof Error ? error.message : fallback);
+        txProgress.setError(errorMessage);
+      }
     }
   }, [
     canPost,
@@ -395,11 +827,15 @@ export function CreateScreen() {
     draft,
     clearDraft,
     postMutation,
+    editMutation,
+    isEditMode,
+    editPostId,
     toast,
     selectedContentWarning,
     isVideoMuted,
     router,
     txProgress,
+    queryClient,
   ]);
 
   const handleCommunitySelect = useCallback(
@@ -500,25 +936,48 @@ export function CreateScreen() {
     if (draft.mediaUris.length >= 10) return;
     triggerHaptic("selection");
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["videos"],
-      allowsEditing: false,
-      quality: 0.8,
-      videoMaxDuration: 300,
-    });
+    try {
+      const permResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permResult.granted) {
+        toast.error("Permission required", "Please allow access to your photo library");
+        return;
+      }
 
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      router.push({
-        pathname: "/video-editor",
-        params: {
-          uri: asset.uri,
-          width: asset.width?.toString() ?? "1920",
-          height: asset.height?.toString() ?? "1080",
-        },
+      setIsPreparingVideo(true);
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["videos"],
+        allowsEditing: false,
+        quality: 1,
+        videoExportPreset: ImagePicker.VideoExportPreset.HighestQuality,
+        preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Automatic,
       });
+
+      if (result.canceled) {
+        setIsPreparingVideo(false);
+        return;
+      }
+
+      if (result.assets[0]) {
+        navigatedToEditorRef.current = true;
+        const asset = result.assets[0];
+        setTimeout(() => {
+          router.push({
+            pathname: "/video-editor",
+            params: {
+              uri: asset.uri,
+              width: asset.width?.toString() ?? "1920",
+              height: asset.height?.toString() ?? "1080",
+            },
+          });
+        }, 100);
+      }
+    } catch (err) {
+      setIsPreparingVideo(false);
+      console.warn("[CreateScreen] Video picker failed:", err);
+      toast.error("Couldn't load video", "Try a different video or re-download it from iCloud");
     }
-  }, [hasAttachment, draft.attachmentType, draft.mediaUris.length]);
+  }, [hasAttachment, draft.attachmentType, draft.mediaUris.length, toast]);
 
   const handlePollPress = useCallback(() => {
     if (hasAttachment) return;
@@ -600,7 +1059,7 @@ export function CreateScreen() {
     setIsVideoMuted((prev) => !prev);
   }, []);
 
-  const TAB_BAR_HEIGHT = 60;
+  const TAB_BAR_HEIGHT = isEditMode ? 0 : 60;
 
   const renderVideoPreview = () => {
     if (draft.attachmentType !== "video" || draft.mediaUris.length === 0) {
@@ -677,15 +1136,17 @@ export function CreateScreen() {
                   </View>
                 )}
 
-                <Pressable
-                  onPress={() => handleRemoveVideo(uri)}
-                  style={styles.videoRemoveButton}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <View style={styles.removeButtonInner}>
-                    <Feather name="x" size={18} color="#fff" />
-                  </View>
-                </Pressable>
+                {!editExpired && (
+                  <Pressable
+                    onPress={() => handleRemoveVideo(uri)}
+                    style={styles.videoRemoveButton}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <View style={styles.removeButtonInner}>
+                      <Feather name="x" size={18} color="#fff" />
+                    </View>
+                  </Pressable>
+                )}
               </Pressable>
             );
           })}
@@ -719,6 +1180,34 @@ export function CreateScreen() {
 
   return (
     <Box flex background="base" style={{ paddingTop: insets.top }}>
+      {isProcessingShareLink && (
+        <View style={styles.shareLinkOverlay}>
+          <BlurView
+            intensity={50}
+            tint={isDark ? "dark" : "light"}
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+          />
+          <View
+            style={[
+              styles.shareLinkOverlayContent,
+              {
+                backgroundColor: isDark
+                  ? "rgba(25, 25, 25, 0.98)"
+                  : "rgba(255, 255, 255, 0.98)",
+              },
+            ]}
+          >
+            <ActivityIndicator size="large" color={isDark ? "#fff" : theme.colors.brand[500]} />
+            <Text size="lg" weight="bold" style={styles.shareLinkOverlayTitle}>Extracting Content</Text>
+            <Text size="sm" style={styles.shareLinkOverlayText}>Fetching media from shared link...</Text>
+          </View>
+        </View>
+      )}
+      {isPreparingVideo && (
+        <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 100, backgroundColor: "rgba(0, 0, 0, 0.5)", justifyContent: "center", alignItems: "center" }}>
+          <ActivityIndicator size="large" color="#fff" />
+        </View>
+      )}
       <View style={styles.header}>
         <Button
           variant="ghost"
@@ -765,10 +1254,26 @@ export function CreateScreen() {
               },
             ]}
           >
-            Post
+            {isEditMode ? "Save" : "Post"}
           </Button.Text>
         </Button>
       </View>
+
+      {isEditMode && editability && !editability.allowed && (
+        <View style={{ marginHorizontal: 16, marginVertical: 8, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: theme.colors.error[500] + "20", borderRadius: 10 }}>
+          <Text size="sm" style={{ color: theme.colors.error[500] }}>
+            Editing time has expired. Your tier allows editing up to {editability.limitMinutes} minutes after publishing.
+          </Text>
+        </View>
+      )}
+
+      {isEditMode && editability && editability.allowed && editability.remainingMinutes !== Infinity && (
+        <View style={{ marginHorizontal: 16, marginVertical: 8, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: theme.colors.warning[500] + "15", borderRadius: 10 }}>
+          <Text size="sm" style={{ color: theme.colors.warning[500] }}>
+            {editability.remainingMinutes} min remaining to edit this post
+          </Text>
+        </View>
+      )}
 
       <KeyboardAvoidingView
         behavior="padding"
@@ -844,20 +1349,17 @@ export function CreateScreen() {
 
           <TextInput
             ref={titleInputRef}
-            style={[styles.titleInput, { color: theme.colors.text.default }]}
+            style={[styles.titleInput, { color: theme.colors.text.default }, editExpired && { opacity: 0.5 }]}
             placeholder="Title"
             placeholderTextColor={theme.colors.text.subtle}
             value={draft.title}
-            onChangeText={(text) => {
-              if (text.length <= tierLimits.maxTitleLength) {
-                updateDraft({ title: text });
-              }
-            }}
+            onChangeText={(text) => updateDraft({ title: text })}
             multiline
             maxLength={tierLimits.maxTitleLength}
             returnKeyType="next"
             onSubmitEditing={() => bodyInputRef.current?.focus()}
             blurOnSubmit={false}
+            editable={!editExpired}
           />
           <Text
             size="xs"
@@ -939,12 +1441,15 @@ export function CreateScreen() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardType="url"
+                  multiline
                 />
                 <Pressable
                   onPress={handleRemoveLink}
+                  disabled={editExpired}
                   style={[
                     styles.linkClearButton,
                     { backgroundColor: theme.colors.background.subtle },
+                    editExpired && { opacity: 0 },
                   ]}
                 >
                   <Feather
@@ -977,6 +1482,10 @@ export function CreateScreen() {
             </Animated.View>
           )}
 
+          {showLinkInput && linkUrl && !linkError && (
+            <LinkPreviewCard url={linkUrl} />
+          )}
+
           {draft.attachmentType === "image" && draft.mediaUris.length > 0 && (
             <Animated.View
               entering={FadeIn.duration(200)}
@@ -997,18 +1506,20 @@ export function CreateScreen() {
                     <View style={styles.mediaTypeBadge}>
                       <Feather name="image" size={12} color="#fff" />
                     </View>
-                    <Pressable
-                      onPress={() => {
-                        const { removeMediaUri } = useDraftStore.getState();
-                        removeMediaUri(uri);
-                      }}
-                      style={styles.videoRemoveButton}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <View style={styles.removeButtonInner}>
-                        <Feather name="x" size={18} color="#fff" />
-                      </View>
-                    </Pressable>
+                    {!editExpired && (
+                      <Pressable
+                        onPress={() => {
+                          const { removeMediaUri } = useDraftStore.getState();
+                          removeMediaUri(uri);
+                        }}
+                        style={styles.videoRemoveButton}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <View style={styles.removeButtonInner}>
+                          <Feather name="x" size={18} color="#fff" />
+                        </View>
+                      </Pressable>
+                    )}
                   </View>
                 ))}
               </ScrollView>
@@ -1034,15 +1545,17 @@ export function CreateScreen() {
                       source={{ uri: url }}
                       style={[styles.videoPlayer, { resizeMode: "contain" }]}
                     />
-                    <Pressable
-                      onPress={() => setSelectedStickers((prev) => prev.filter((s) => s !== url))}
-                      style={[styles.videoRemoveButton, { top: 4, right: 4 }]}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <View style={styles.removeButtonInner}>
-                        <Feather name="x" size={18} color="#fff" />
-                      </View>
-                    </Pressable>
+                    {!editExpired && (
+                      <Pressable
+                        onPress={() => setSelectedStickers((prev) => prev.filter((s) => s !== url))}
+                        style={[styles.videoRemoveButton, { top: 4, right: 4 }]}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <View style={styles.removeButtonInner}>
+                          <Feather name="x" size={18} color="#fff" />
+                        </View>
+                      </Pressable>
+                    )}
                   </View>
                 ))}
               </ScrollView>
@@ -1051,15 +1564,11 @@ export function CreateScreen() {
 
           <TextInput
             ref={bodyInputRef}
-            style={[styles.bodyInput, { color: theme.colors.text.default }]}
+            style={[styles.bodyInput, { color: theme.colors.text.default }, editExpired && { opacity: 0.5 }]}
             placeholder="body text (optional)"
             placeholderTextColor={theme.colors.text.subtle}
             value={draft.body}
-            onChangeText={(text) => {
-              if (text.length <= tierLimits.maxContentLength) {
-                updateDraft({ body: text });
-              }
-            }}
+            onChangeText={(text) => updateDraft({ body: text })}
             multiline
             maxLength={tierLimits.maxContentLength}
             textAlignVertical="top"
@@ -1067,6 +1576,7 @@ export function CreateScreen() {
             onSelectionChange={(e) => {
               bodySelectionRef.current = e.nativeEvent.selection;
             }}
+            editable={!editExpired}
           />
           {draft.body.length > 0 && (
             <Text
@@ -1097,10 +1607,10 @@ export function CreateScreen() {
             },
           ]}
         >
-          <View style={styles.mediaBarContent}>
+          <View style={[styles.mediaBarContent, editExpired && { opacity: 0.4 }]} pointerEvents={editExpired ? "none" : "auto"}>
             <Pressable
               onPress={handleLinkPress}
-              disabled={hasAttachment && !showLinkInput}
+              disabled={editExpired || (hasAttachment && !showLinkInput)}
               style={[
                 styles.mediaButton,
                 hasAttachment && !showLinkInput && styles.mediaButtonDisabled,
@@ -1289,13 +1799,16 @@ export function CreateScreen() {
       <TransactionProgressModal
         visible={txProgress.isVisible}
         progress={txProgress.progress}
-        title="Creating Post"
-        description="Your post is being published to the blockchain"
+        title={isEditMode ? "Editing Post" : "Creating Post"}
+        description={isEditMode ? "Your edit is being published to the blockchain" : "Your post is being published to the blockchain"}
         onDismiss={() => {
           txProgress.hideModal();
           setIsSubmitting(false);
         }}
-        onRetry={handlePost}
+        onRetry={() => {
+          setIsSubmitting(false);
+          handlePost();
+        }}
       />
     </Box>
   );
@@ -1368,7 +1881,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   linkInputWrapper: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
   },
   linkInput: {
     flex: 1,
@@ -1650,5 +2163,34 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  shareLinkOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: theme.spacing.lg,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  shareLinkOverlayContent: {
+    width: "100%",
+    maxWidth: 340,
+    borderRadius: theme.radius.xl,
+    padding: theme.spacing.xl,
+    paddingTop: theme.spacing.xxl,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.3,
+    shadowRadius: 32,
+    elevation: 16,
+  },
+  shareLinkOverlayTitle: {
+    textAlign: "center" as const,
+    marginBottom: theme.spacing.xs,
+  },
+  shareLinkOverlayText: {
+    textAlign: "center" as const,
+    paddingHorizontal: theme.spacing.md,
   },
 }));

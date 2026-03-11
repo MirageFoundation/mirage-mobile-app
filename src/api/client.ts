@@ -1,21 +1,31 @@
 import axios, { type AxiosError, type AxiosInstance } from "axios";
 import * as Sentry from "@sentry/react-native";
+import * as Network from "expo-network";
 import { walletService } from "@/src/services/wallet-service";
 import { useInboxStore } from "@/src/stores/inbox-store";
+import { useCloudflareErrorStore } from "@/src/stores/cloudflare-error-store";
 
 const DEFAULT_NODES = [
   "https://mirage.talk",
   "https://mirage.talk", // fallback
 ];
 
+const MAX_CONCURRENT_REQUESTS = 6;
+const RATE_LIMIT_RETRY_DELAY = 1000;
+const MAX_RATE_LIMIT_RETRIES = 3;
+
 class ApiClient {
   private client: AxiosInstance;
   private nodeList: string[];
   private currentNodeIndex: number;
+  private activeRequests: number;
+  private requestQueue: Array<() => void>;
 
   constructor() {
     this.nodeList = DEFAULT_NODES;
     this.currentNodeIndex = 0;
+    this.activeRequests = 0;
+    this.requestQueue = [];
 
     this.client = axios.create({
       baseURL: this.getBaseUrl(),
@@ -155,6 +165,36 @@ class ApiClient {
    * GET request
    */
   async get<T, P = unknown>(path: string, params?: P): Promise<T> {
+    return this.withConcurrencyLimit(() => this.executeGet<T, P>(path, params));
+  }
+
+  private async withConcurrencyLimit<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.activeRequests >= MAX_CONCURRENT_REQUESTS) {
+      await new Promise<void>((resolve) => {
+        this.requestQueue.push(resolve);
+      });
+    }
+    this.activeRequests++;
+    try {
+      return await fn();
+    } finally {
+      this.activeRequests--;
+      if (this.requestQueue.length > 0) {
+        const next = this.requestQueue.shift();
+        next?.();
+      }
+    }
+  }
+
+  private async executeGet<T, P = unknown>(
+    path: string,
+    params?: P,
+    retryCount = 0,
+  ): Promise<T> {
+    const networkState = await Network.getNetworkStateAsync();
+    if (!networkState.isConnected) {
+      throw new axios.AxiosError("Network Error", "ERR_NETWORK");
+    }
     console.log(
       `[ApiClient] GET ${path}`,
       params ? `with params: ${JSON.stringify(params)}` : "no params"
@@ -166,11 +206,27 @@ class ApiClient {
         ),
       });
       console.log(`[ApiClient] GET ${path} success`);
+      useCloudflareErrorStore.getState().setHasError(false);
       return response.data;
     } catch (error: any) {
       const errorData = error?.response?.data;
       const errorMessage = error?.message;
       const status = error?.response?.status;
+
+      if (error?.code === "ERR_NETWORK" || errorMessage === "Network Error") {
+        console.log(`[ApiClient] GET ${path} skipped: offline`);
+        throw error;
+      }
+
+      if (status === 429 && retryCount < MAX_RATE_LIMIT_RETRIES) {
+        const delay = RATE_LIMIT_RETRY_DELAY * Math.pow(2, retryCount);
+        console.log(
+          `[ApiClient] Rate limited on ${path}, retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RATE_LIMIT_RETRIES})`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        return this.executeGet<T, P>(path, params, retryCount + 1);
+      }
+
       Sentry.addBreadcrumb({
         category: "api",
         message: `GET ${path} failed`,
@@ -178,6 +234,7 @@ class ApiClient {
         data: { status, errorMessage, errorData },
       });
       if (status && status >= 500) {
+        useCloudflareErrorStore.getState().setHasError(true);
         Sentry.captureException(error, {
           tags: { api_method: "GET", api_path: path },
           extra: { status, errorData },
@@ -199,14 +256,23 @@ class ApiClient {
    * POST request
    */
   async post<T, D = unknown>(path: string, data?: D): Promise<T> {
+    const networkState = await Network.getNetworkStateAsync();
+    if (!networkState.isConnected) {
+      throw new axios.AxiosError("Network Error", "ERR_NETWORK");
+    }
     console.log(`[ApiClient] POST ${path}`, data ? "with data" : "no data");
     try {
       const response = await this.client.post<T>(`/api${path}`, data);
       console.log(`[ApiClient] POST ${path} success:`, response.data);
+      useCloudflareErrorStore.getState().setHasError(false);
       return response.data;
     } catch (error: any) {
       const status = error?.response?.status;
       const errorData = error?.response?.data;
+      if (error?.code === "ERR_NETWORK" || error?.message === "Network Error") {
+        console.log(`[ApiClient] POST ${path} skipped: offline`);
+        throw error;
+      }
       Sentry.addBreadcrumb({
         category: "api",
         message: `POST ${path} failed`,
@@ -214,6 +280,7 @@ class ApiClient {
         data: { status, errorData: errorData || error?.message },
       });
       if (status && status >= 500) {
+        useCloudflareErrorStore.getState().setHasError(true);
         Sentry.captureException(error, {
           tags: { api_method: "POST", api_path: path },
           extra: { status, errorData },

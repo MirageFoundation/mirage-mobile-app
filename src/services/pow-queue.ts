@@ -52,8 +52,8 @@ export interface PowQueueState {
   totalCount: number;
   currentProgress: number;
   lastError: Error | null;
- lastCompletedAction: { type: PowActionType; success: boolean } | null;
-  successOverlay: { type: PowActionType; success: boolean } | null;
+ lastCompletedAction: { type: PowActionType; success: boolean; errorMessage?: string } | null;
+  successOverlay: { type: PowActionType; success: boolean; errorMessage?: string } | null;
 }
 
 export interface PowQueueActions {
@@ -296,6 +296,13 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
         wasCancelled = true;
       } else {
         const err = error instanceof Error ? error : new Error(String(error));
+        const isNetworkError =
+          (error as any)?.code === "ERR_NETWORK" ||
+          (error as any)?.message === "Network Error";
+        const serverMsg = (error as any)?.response?.data?.error;
+        const displayMsg = isNetworkError
+          ? "No internet connection"
+          : serverMsg || err.message || "Something went wrong";
         Sentry.captureException(err, {
           tags: { action: "pow_action", pow_type: nextAction.type },
           extra: { actionId: nextAction.id, label: nextAction.label },
@@ -306,8 +313,8 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
        set((s) => ({
          completedCount: s.completedCount + 1,
          lastError: err,
-         lastCompletedAction: { type: nextAction.type, success: false },
-         successOverlay: { type: nextAction.type, success: false },
+         lastCompletedAction: { type: nextAction.type, success: false, errorMessage: displayMsg },
+         successOverlay: { type: nextAction.type, success: false, errorMessage: displayMsg },
        }));
 
        if (successOverlayTimeout) clearTimeout(successOverlayTimeout);

@@ -7,10 +7,8 @@ import {
   ActivityIndicator,
   Dimensions,
   FlatList,
-  LayoutAnimation,
   Platform,
   Pressable,
-  UIManager,
   View,
 } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
@@ -18,9 +16,6 @@ import type { ResolvedMedia } from "./post-card-utils";
 import { Text } from "@/src/components/ui/primitives";
 import { useVideoMuteStore } from "@/src/stores";
 
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEDIA_HORIZONTAL_PADDING = 32;
@@ -28,6 +23,16 @@ const GALLERY_WIDTH = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
 const MEDIA_MAX_HEIGHT = 450;
 
 const ASPECT_RATIO_CACHE = new Map<string, number>();
+const GALLERY_LOADED_CACHE = new Set<string>();
+
+function getVideoThumbnailUri(uri?: string): string {
+  if (!uri) return "";
+  if (uri.includes("cloudflarestream.com") || uri.includes("videodelivery.net")) {
+    const match = uri.match(/(?:cloudflarestream\.com|videodelivery\.net)\/([a-zA-Z0-9]+)/);
+    if (match?.[1]) return `https://videodelivery.net/${match[1]}/thumbnails/thumbnail.jpg?time=1s&width=480`;
+  }
+  return "";
+}
 
 function getItemAspectRatio(item: ResolvedMedia): number {
   const cached = ASPECT_RATIO_CACHE.get(item.uri);
@@ -47,6 +52,7 @@ type MediaGalleryProps = {
   screenActive?: boolean;
   allowAutoplay?: boolean;
   isVisible?: boolean;
+  isFocused?: boolean;
   isPostDetail?: boolean;
   shouldBlurContent?: boolean;
   onRevealContent?: () => void;
@@ -62,6 +68,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   onAspectRatioDetected,
   allowAutoplay,
   isVisible,
+  isFocused = true,
   isPostDetail,
 }: {
   item: ResolvedMedia;
@@ -73,27 +80,58 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   onAspectRatioDetected?: (uri: string, ratio: number) => void;
   allowAutoplay?: boolean;
   isVisible?: boolean;
+  isFocused?: boolean;
   isPostDetail?: boolean;
 }) {
   const videoRef = useRef<Video>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const isMuted = useVideoMuteStore((s) => s.isMuted);
+  const globalMuted = useVideoMuteStore((s) => s.isMuted);
   const toggleMute = useVideoMuteStore((s) => s.toggleMute);
-  const [isLoading, setIsLoading] = useState(true);
+  const effectiveMuted = isPostDetail ? globalMuted : (globalMuted || !isFocused);
+  const [isLoading, setIsLoading] = useState(() => !GALLERY_LOADED_CACHE.has(item.uri));
   const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pauseDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (GALLERY_LOADED_CACHE.has(item.uri)) return;
+    loadingTimeoutRef.current = setTimeout(() => {
+      setIsLoading(false);
+      GALLERY_LOADED_CACHE.add(item.uri);
+    }, 8000);
     return () => {
       videoRef.current?.pauseAsync().catch(() => {});
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+      if (pauseDelayRef.current) {
+        clearTimeout(pauseDelayRef.current);
+      }
     };
   }, []);
 
   useEffect(() => {
-    if (!isActive || !screenActive || !isVisible) {
+    if (isActive && screenActive && isVisible && (allowAutoplay || feedTappedToPlay)) {
+      if (pauseDelayRef.current) {
+        clearTimeout(pauseDelayRef.current);
+        pauseDelayRef.current = null;
+      }
+      setIsPlaying(true);
+    } else if (!screenActive) {
+      if (pauseDelayRef.current) {
+        clearTimeout(pauseDelayRef.current);
+        pauseDelayRef.current = null;
+      }
       setIsPlaying(false);
       videoRef.current?.pauseAsync().catch(() => {});
-    } else if (isActive && screenActive && isVisible && (allowAutoplay || feedTappedToPlay)) {
-      setIsPlaying(true);
+    } else if (!isVisible) {
+      if (!pauseDelayRef.current) {
+        pauseDelayRef.current = setTimeout(() => {
+          pauseDelayRef.current = null;
+          setIsPlaying(false);
+          videoRef.current?.pauseAsync().catch(() => {});
+        }, 400);
+      }
     }
   }, [isActive, screenActive, allowAutoplay, isVisible, feedTappedToPlay]);
 
@@ -112,11 +150,12 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   }, [isPostDetail, allowAutoplay, isPlaying, feedTappedToPlay, onPress]);
 
   const handleMuteToggle = useCallback(async () => {
-    const newMuted = !isMuted;
+    const newGlobalMuted = !globalMuted;
     toggleMute();
     try {
       if (videoRef.current) {
-        if (!newMuted) {
+        const newEffective = isPostDetail ? newGlobalMuted : (newGlobalMuted || !isFocused);
+        if (!newEffective) {
           await videoRef.current.pauseAsync();
           await videoRef.current.setStatusAsync({ isMuted: false });
           await videoRef.current.playAsync();
@@ -125,26 +164,47 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
         }
       }
     } catch {}
-  }, [isMuted, toggleMute]);
+  }, [globalMuted, toggleMute, isFocused, isPostDetail]);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.setStatusAsync({ isMuted: effectiveMuted }).catch(() => {});
+    }
+  }, [effectiveMuted]);
+
+  const thumbnailUri = getVideoThumbnailUri(item.uri);
+  const showThumbnail = thumbnailUri && !GALLERY_LOADED_CACHE.has(item.uri);
 
   return (
     <View style={{ width, height, overflow: "hidden" }}>
+      {showThumbnail ? (
+        <Image
+          source={{ uri: thumbnailUri }}
+          style={{ width, height, position: "absolute", zIndex: 0 }}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+        />
+      ) : null}
       <Video
         ref={videoRef}
         source={{ uri: item.uri }}
         style={{ width, height }}
         resizeMode={ResizeMode.COVER}
-        shouldPlay={isPlaying && isActive && screenActive && (isVisible ?? true)}
-        isMuted={isMuted}
+        shouldPlay={isPlaying && isActive && screenActive}
+        isMuted={effectiveMuted}
         isLooping
         useNativeControls={false}
         onLoad={() => {
           setIsLoading(false);
-          videoRef.current?.setStatusAsync({ isMuted }).catch(() => {});
+          GALLERY_LOADED_CACHE.add(item.uri);
+          if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+          videoRef.current?.setStatusAsync({ isMuted: effectiveMuted }).catch(() => {});
         }}
         onPlaybackStatusUpdate={(status) => {
-          if (status.isLoaded && status.isPlaying) {
+          if (status.isLoaded && (status.isPlaying || status.durationMillis)) {
             setIsLoading(false);
+            GALLERY_LOADED_CACHE.add(item.uri);
+            if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
           }
         }}
         onReadyForDisplay={(event) => {
@@ -163,7 +223,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
         {isPostDetail ? (
           <>
             <Pressable onPress={handlePlayPause} style={galleryStyles.videoTapArea} />
-            {isLoading ? (
+            {isLoading && !GALLERY_LOADED_CACHE.has(item.uri) ? (
               <View style={galleryStyles.controlButton} pointerEvents="none">
                 <ActivityIndicator size="small" color="#fff" />
               </View>
@@ -176,7 +236,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
         ) : (
           <>
             <Pressable onPress={handleFeedVideoTap} style={galleryStyles.videoTapArea} />
-            {isLoading ? (
+            {isLoading && !GALLERY_LOADED_CACHE.has(item.uri) ? (
               <View style={galleryStyles.controlButton}>
                 <ActivityIndicator size="small" color="#fff" />
               </View>
@@ -209,7 +269,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
         <View style={galleryStyles.muteButtonInner}>
-          <Ionicons name={isMuted ? "volume-mute" : "volume-high"} size={16} color="#fff" />
+          <Ionicons name={globalMuted ? "volume-mute" : "volume-high"} size={16} color="#fff" />
         </View>
       </Pressable>
 
@@ -236,6 +296,19 @@ const GalleryImageItem = memo(function GalleryImageItem({
   onAspectRatioDetected?: (uri: string, ratio: number) => void;
 }) {
   const [loaded, setLoaded] = useState(false);
+  const imageLoadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    imageLoadTimeoutRef.current = setTimeout(() => {
+      setLoaded(true);
+    }, 5000);
+    return () => {
+      if (imageLoadTimeoutRef.current) {
+        clearTimeout(imageLoadTimeoutRef.current);
+      }
+    };
+  }, [item.uri]);
+
   return (
     <Pressable onPress={onPress} style={{ width, height, overflow: "hidden" }}>
       <Image
@@ -245,6 +318,7 @@ const GalleryImageItem = memo(function GalleryImageItem({
         cachePolicy="memory-disk"
         onLoad={({ source }) => {
           setLoaded(true);
+          if (imageLoadTimeoutRef.current) clearTimeout(imageLoadTimeoutRef.current);
           const w = source?.width;
           const h = source?.height;
           if (w && h) {
@@ -278,6 +352,7 @@ export const MediaGallery = memo(function MediaGallery({
   screenActive = true,
   allowAutoplay = true,
   isVisible = true,
+  isFocused = true,
   isPostDetail = false,
   shouldBlurContent = false,
   onRevealContent,
@@ -306,7 +381,6 @@ export const MediaGallery = memo(function MediaGallery({
         const newHeight = computeGalleryHeight(ratio);
         setContainerHeight((prev) => {
           if (Math.abs(prev - newHeight) < 1) return prev;
-          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
           return newHeight;
         });
       }
@@ -327,7 +401,6 @@ export const MediaGallery = memo(function MediaGallery({
           const newHeight = computeGalleryHeight(ratio);
           setContainerHeight((prev) => {
             if (Math.abs(prev - newHeight) < 1) return prev;
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             return newHeight;
           });
         }
@@ -357,6 +430,7 @@ export const MediaGallery = memo(function MediaGallery({
               onAspectRatioDetected={handleAspectRatioDetected}
               allowAutoplay={allowAutoplay && !shouldBlurContent}
               isVisible={isVisible}
+              isFocused={isFocused}
               isPostDetail={isPostDetail}
             />
           ) : (
@@ -371,7 +445,7 @@ export const MediaGallery = memo(function MediaGallery({
         </View>
       );
     },
-    [onMediaPress, maxHeight, getHeightForIndex, screenActive, handleAspectRatioDetected, allowAutoplay, isVisible, isPostDetail, shouldBlurContent],
+    [onMediaPress, maxHeight, getHeightForIndex, screenActive, handleAspectRatioDetected, allowAutoplay, isVisible, isFocused, isPostDetail, shouldBlurContent],
   );
 
   const keyExtractor = useCallback(

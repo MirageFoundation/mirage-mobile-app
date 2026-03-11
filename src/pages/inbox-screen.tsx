@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, RefreshControl, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Image } from "expo-image";
@@ -10,6 +10,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useInfiniteInbox } from "@/src/api/read/hooks/use-inbox";
 import type { InboxReply } from "@/src/api/types";
 import { InboxItem } from "@/src/components/molecules/inbox-item";
+import { InboxOptionsSheet, type InboxOptionsSheetRef } from "@/src/components/molecules/inbox-options-sheet";
 import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useAuthStore } from "@/src/stores";
@@ -31,17 +32,19 @@ export function InboxScreen() {
   }>();
   const isLoggedIn = !!useAuthStore((s) => s.user);
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
-  const { markAsViewed, highlightBaselineAt, readReplyIds, markReplyAsRead } =
+  const { markAsViewed, highlightBaselineAt, readReplyIds, markReplyAsRead, advanceHighlightBaseline } =
     useInboxStore(
       useShallow((s) => ({
         markAsViewed: s.markAsViewed,
         highlightBaselineAt: s.highlightBaselineAt,
         readReplyIds: s.readReplyIds,
         markReplyAsRead: s.markReplyAsRead,
+        advanceHighlightBaseline: s.advanceHighlightBaseline,
       })),
     );
   const readReplyIdsSet = useMemo(() => new Set(readReplyIds), [readReplyIds]);
   const listRef = useRef<FlatList<InboxReply>>(null);
+  const inboxOptionsRef = useRef<InboxOptionsSheetRef>(null);
   const applyViewedTimestamp = useCallback(
     (timestamp?: number) => {
       const resolved =
@@ -117,6 +120,14 @@ export function InboxScreen() {
       setIsRefreshing(false);
     }
   }, [refetch]);
+
+  const handleOpenOptions = useCallback(() => {
+    inboxOptionsRef.current?.present();
+  }, []);
+
+  const handleMarkAllAsSeen = useCallback(() => {
+    advanceHighlightBaseline();
+  }, [advanceHighlightBaseline]);
 
   const handleItemPress = useCallback(
     (rootPostId: string, replyId: string) => {
@@ -218,14 +229,23 @@ export function InboxScreen() {
   return (
     <Box flex background="base" style={{ paddingTop: insets.top }}>
       <View style={styles.header}>
-        <Ionicons
-          name="mail-outline"
-          size={22}
-          color={theme.colors.text.default}
-        />
-        <Text size="xl" weight="bold">
-          Inbox
-        </Text>
+        <View style={styles.headerLeft}>
+          <Ionicons
+            name="mail-outline"
+            size={22}
+            color={theme.colors.text.default}
+          />
+          <Text size="xl" weight="bold">
+            Inbox
+          </Text>
+        </View>
+        <Pressable onPress={handleOpenOptions} hitSlop={8}>
+          <Ionicons
+            name="ellipsis-horizontal"
+            size={22}
+            color={theme.colors.text.default}
+          />
+        </Pressable>
       </View>
 
       <FlatList
@@ -249,10 +269,14 @@ export function InboxScreen() {
             tintColor={theme.colors.primary[500]}
           />
         }
-        removeClippedSubviews={true}
+        removeClippedSubviews={false}
         maxToRenderPerBatch={10}
         windowSize={10}
         initialNumToRender={10}
+      />
+      <InboxOptionsSheet
+        ref={inboxOptionsRef}
+        onMarkAllAsSeen={handleMarkAllAsSeen}
       />
     </Box>
   );
@@ -262,11 +286,16 @@ const styles = StyleSheet.create((theme) => ({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    justifyContent: "space-between",
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border.subtle,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   emptyContainer: {
     flex: 1,

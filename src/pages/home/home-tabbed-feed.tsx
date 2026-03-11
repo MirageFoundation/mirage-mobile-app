@@ -7,9 +7,14 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import type { FlatList } from "react-native";
+import type { FlashListRef } from "@shopify/flash-list";
 import type { ReactNode } from "react";
-import { ActivityIndicator, Platform, RefreshControl } from "react-native";
+import {
+  ActivityIndicator,
+  InteractionManager,
+  Platform,
+  RefreshControl,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUnistyles } from "react-native-unistyles";
 
@@ -19,6 +24,7 @@ import {
   transformApiPosts,
   useInfinitePosts,
 } from "@/src/api";
+import { usePostEditStore } from "@/src/stores/post-edit-store";
 import {
   PostCardSkeleton,
   PostCardSkeletonList,
@@ -43,12 +49,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNewPostsChecker, type NewPostAvatar } from "@/src/hooks/use-new-posts-checker";
 
 export type HomeTabbedFeedRef = {
-  scrollToTop: (tabIndex?: number) => void;
-  refresh: () => Promise<void>;
+  scrollToTop: (tabIndex?: number, options?: { animated?: boolean }) => void;
+  refresh: (options?: { fetchAllNew?: boolean }) => Promise<void>;
   isRefreshing: () => boolean;
   hasNewPosts: () => boolean;
   handleNewPostsPress: () => Promise<void>;
   dismissNewPosts: () => void;
+  checkNewPosts: () => void;
 };
 
 type HomeTabbedFeedProps = {
@@ -72,9 +79,12 @@ export const HomeTabbedFeed = forwardRef<
   const isRefreshingRef = useRef(false);
   const prevTabIndexRef = useRef(activeTabIndex);
   const [latestTabActivated, setLatestTabActivated] = useState(activeTabIndex === 1);
+  const latestTabRefreshedRef = useRef(false);
 
-  const magicListRef = useRef<FlatList<Post>>(null);
-  const latestListRef = useRef<FlatList<Post>>(null);
+  const magicListRef = useRef<FlashListRef<Post>>(null);
+  const latestListRef = useRef<FlashListRef<Post>>(null);
+  const dismissNewPostsRef = useRef<(() => void) | null>(null);
+  const handleRefreshRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     if (prevTabIndexRef.current !== activeTabIndex) {
@@ -87,6 +97,10 @@ export const HomeTabbedFeed = forwardRef<
       requestAnimationFrame(() => {
         listRef.current?.scrollToOffset({ offset: 0, animated: false });
       });
+      if (activeTabIndex === 1 && !latestTabRefreshedRef.current) {
+        latestTabRefreshedRef.current = true;
+        setTimeout(() => handleRefreshRef.current?.(), 100);
+      }
     }
   }, [activeTabIndex, showBars]);
 
@@ -107,49 +121,101 @@ export const HomeTabbedFeed = forwardRef<
     [selectedContentTypes],
   );
 
+  const INITIAL_PAGE_SIZE = 10;
+  const NEXT_PAGE_SIZE = 12;
+
+  const currentUserId = currentUser?.id;
+  const currentUsername = currentUser?.username ?? null;
+
   const magicQuery = useInfinitePosts({
-    limit: 20,
+    limit: INITIAL_PAGE_SIZE,
     feed: baseFeed,
     by: "magic",
     allowed_tags: allowedTags || undefined,
-  });
+  }, { pageLimit: NEXT_PAGE_SIZE });
 
   const latestQuery = useInfinitePosts({
-    limit: 20,
+    limit: INITIAL_PAGE_SIZE,
     feed: baseFeed,
     by: "newest",
     allowed_tags: allowedTags || undefined,
-  }, { enabled: latestTabActivated });
+  }, { enabled: latestTabActivated, pageLimit: NEXT_PAGE_SIZE });
+
+  const postEditOverrides = usePostEditStore((s) => s.overrides);
+  const transformedPageCacheRef = useRef(new WeakMap<object, Post[]>());
+
+  const applyPostEditOverrides = useCallback(
+    (posts: any[]) => {
+      if (Object.keys(postEditOverrides).length === 0) return posts;
+      return posts.map((post: any) => {
+        const ov = postEditOverrides[post.post_id];
+        if (!ov) return post;
+        return { ...post, title: ov.title, content: ov.content, topic: ov.topic ?? post.topic, media: ov.media ?? post.media };
+      });
+    },
+    [postEditOverrides],
+  );
+
+  useEffect(() => {
+    transformedPageCacheRef.current = new WeakMap();
+  }, [
+    applyPostEditOverrides,
+    blockedTopicNames,
+    blockedUserIds,
+    currentUserId,
+    currentUsername,
+    hiddenPostIds,
+    hideDownvotedPosts,
+  ]);
 
   const transformPosts = useCallback(
-    (data: typeof magicQuery.data) => {
+    (data: { pages?: { posts: any[] }[] } | undefined) => {
       if (!data?.pages) return [];
-      const allPosts = data.pages.flatMap((page) => page.posts);
+      const uniquePostIds = new Set<string>();
+      const transformedPosts: Post[] = [];
 
-      const uniquePostsMap = new Map<string, (typeof allPosts)[0]>();
-      for (const post of allPosts) {
-        if (!uniquePostsMap.has(post.post_id)) {
-          uniquePostsMap.set(post.post_id, post);
+      for (const page of data.pages) {
+        let cachedPagePosts = transformedPageCacheRef.current.get(page);
+
+        if (!cachedPagePosts) {
+          const pagePosts = hideDownvotedPosts
+            ? page.posts.filter((post) => post.user_vote !== -1)
+            : page.posts;
+
+          const patchedPosts = applyPostEditOverrides(pagePosts);
+
+          cachedPagePosts = transformApiPosts(patchedPosts, {
+            currentUser: currentUserId
+              ? { id: currentUserId, username: currentUsername }
+              : undefined,
+          }).filter(
+            (post) =>
+              !hiddenPostIds.has(post.id) &&
+              !blockedUserIds.has(post.author.id) &&
+              !(post.topic && blockedTopicNames.has(post.topic.toLowerCase())),
+          );
+
+          transformedPageCacheRef.current.set(page, cachedPagePosts);
+        }
+
+        for (const post of cachedPagePosts) {
+          if (uniquePostIds.has(post.id)) continue;
+          uniquePostIds.add(post.id);
+          transformedPosts.push(post);
         }
       }
-      const uniquePosts = Array.from(uniquePostsMap.values());
 
-      const filteredPosts = hideDownvotedPosts
-        ? uniquePosts.filter((post) => post.user_vote !== -1)
-        : uniquePosts;
-
-      const transformedPosts = transformApiPosts(filteredPosts, {
-        currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined,
-      });
-
-      return transformedPosts.filter(
-        (post) =>
-          !hiddenPostIds.has(post.id) &&
-          !blockedUserIds.has(post.author.id) &&
-          !(post.topic && blockedTopicNames.has(post.topic.toLowerCase())),
-      );
+      return transformedPosts;
     },
-    [hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, baseFeed, followedUsers, followedTopics, currentUser],
+    [
+      applyPostEditOverrides,
+      blockedTopicNames,
+      blockedUserIds,
+      currentUserId,
+      currentUsername,
+      hiddenPostIds,
+      hideDownvotedPosts,
+    ],
   );
 
   const magicPosts = useMemo(
@@ -178,25 +244,19 @@ export const HomeTabbedFeed = forwardRef<
     [latestQuery.data, transformPosts, baseFeed, followedUsers, followedTopics],
   );
 
-  const handleRefresh = useCallback(async () => {
+  const handleRefresh = useCallback(async (options?: { fetchAllNew?: boolean; silent?: boolean }) => {
     if (isRefreshingRef.current) return;
     isRefreshingRef.current = true;
-    setIsRefreshing(true);
-    onRefreshingChange?.(true);
+    if (!options?.silent) {
+      dismissNewPostsRef.current?.();
+      setIsRefreshing(true);
+      onRefreshingChange?.(true);
+    }
     try {
       const sortBy = activeTabIndex === 0 ? "magic" : "newest";
 
-      const newFirstPage = await getPosts({
-        limit: 20,
-        feed: baseFeed,
-        by: sortBy as any,
-        allowed_tags: allowedTags || undefined,
-        address: currentUser?.walletAddress,
-        page: 1,
-      });
-
       const postsQueryKey = queryKeys.posts({
-        limit: 20,
+        limit: INITIAL_PAGE_SIZE,
         feed: baseFeed,
         by: sortBy as any,
         allowed_tags: allowedTags || undefined,
@@ -204,19 +264,63 @@ export const HomeTabbedFeed = forwardRef<
         page: undefined,
       });
 
-      queryClient.setQueryData(postsQueryKey, (oldData: any) => {
-        if (!oldData) {
-          return {
-            pages: [newFirstPage],
-            pageParams: [1],
-          };
+      const fetchPage = (page: number) =>
+        getPosts({
+          limit: page === 1 ? INITIAL_PAGE_SIZE : NEXT_PAGE_SIZE,
+          feed: baseFeed,
+          by: sortBy as any,
+          allowed_tags: allowedTags || undefined,
+          address: currentUser?.walletAddress,
+          page,
+        });
+
+      const newFirstPage = await fetchPage(1);
+
+      if (options?.fetchAllNew) {
+        const existingData: any = queryClient.getQueryData(postsQueryKey);
+        const existingIds = new Set<string>();
+        if (existingData?.pages) {
+          for (const page of existingData.pages) {
+            for (const post of page.posts) {
+              existingIds.add(post.post_id);
+            }
+          }
         }
-        return {
-          ...oldData,
-          pages: [newFirstPage, ...oldData.pages.slice(1)],
-          pageParams: [1, ...oldData.pageParams.slice(1)],
-        };
-      });
+
+        const newPages = [newFirstPage];
+        const newPageParams = [1];
+        let hasOverlap = newFirstPage.posts.some((p: any) => existingIds.has(p.post_id));
+        let nextPage = 2;
+        const MAX_PAGES = 10;
+
+        while (!hasOverlap && newFirstPage.has_more && nextPage <= MAX_PAGES) {
+          const page = await fetchPage(nextPage);
+          newPages.push(page);
+          newPageParams.push(nextPage);
+          hasOverlap = page.posts.some((p: any) => existingIds.has(p.post_id));
+          if (!page.has_more) break;
+          nextPage++;
+        }
+
+        queryClient.setQueryData(postsQueryKey, {
+          pages: newPages,
+          pageParams: newPageParams,
+        });
+      } else {
+        queryClient.setQueryData(postsQueryKey, (oldData: any) => {
+          if (!oldData) {
+            return {
+              pages: [newFirstPage],
+              pageParams: [1],
+            };
+          }
+          return {
+            ...oldData,
+            pages: [newFirstPage, ...oldData.pages.slice(1)],
+            pageParams: [1, ...oldData.pageParams.slice(1)],
+          };
+        });
+      }
 
       if (currentUser?.walletAddress) {
         queryClient.invalidateQueries({
@@ -227,23 +331,28 @@ export const HomeTabbedFeed = forwardRef<
       console.error("Failed to refresh feed:", error);
     } finally {
       isRefreshingRef.current = false;
-      setIsRefreshing(false);
-      onRefreshingChange?.(false);
+      if (!options?.silent) {
+        setIsRefreshing(false);
+        onRefreshingChange?.(false);
+      }
     }
   }, [
     activeTabIndex,
     baseFeed,
     allowedTags,
     currentUser?.walletAddress,
+    INITIAL_PAGE_SIZE,
+    NEXT_PAGE_SIZE,
     queryClient,
     onRefreshingChange,
   ]);
+  handleRefreshRef.current = handleRefresh;
 
-  const scrollToTop = useCallback((tabIndex?: number) => {
+  const scrollToTop = useCallback((tabIndex?: number, options?: { animated?: boolean }) => {
     const targetIndex = tabIndex ?? activeTabIndex;
     const listRef = targetIndex === 0 ? magicListRef : latestListRef;
     try {
-      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      listRef.current?.scrollToOffset({ offset: 0, animated: options?.animated ?? true });
     } catch {}
     if (Platform.OS === "android") {
       requestAnimationFrame(() => {
@@ -259,6 +368,7 @@ export const HomeTabbedFeed = forwardRef<
     try {
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
     } catch {}
+    dismissNewPostsRef.current?.();
     await handleRefresh();
     requestAnimationFrame(() => {
       try {
@@ -273,26 +383,28 @@ export const HomeTabbedFeed = forwardRef<
   }, [baseFeed, registerHomeRefresh, registerFollowingRefresh, scrollToTopAndRefresh]);
 
   const activeSortBy = activeTabIndex === 0 ? "magic" : "newest";
-  const activePosts = activeTabIndex === 0 ? magicPosts : latestPosts;
-  const currentFirstPostId = activePosts[0]?.id ?? null;
-  const latestTimestamp = useMemo(() => {
-    if (activePosts.length === 0) return null;
-    let max = 0;
-    for (const p of activePosts) {
-      const ts = typeof p.createdAt === "number" ? p.createdAt : new Date(p.createdAt).getTime();
-      if (ts > max) max = ts;
-    }
-    return max > 0 ? Math.floor(max / 1000) : null;
-  }, [activePosts]);
+  const activeQuery = activeTabIndex === 0 ? magicQuery : latestQuery;
 
-  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, getPrefetchedData, clearPrefetch } = useNewPostsChecker({
+  const latestPostTimestamp = useMemo(() => {
+    const pages = activeQuery.data?.pages;
+    if (!pages || pages.length === 0) return null;
+    const firstPage = pages[0];
+    if (!firstPage.posts || firstPage.posts.length === 0) return null;
+    let maxTs = 0;
+    for (const post of firstPage.posts) {
+      if (post.timestamp > maxTs) maxTs = post.timestamp;
+    }
+    return maxTs > 0 ? maxTs : null;
+  }, [activeQuery.data?.pages]);
+
+  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, resetBaseline, checkNow } = useNewPostsChecker({
     feed: baseFeed,
     by: activeSortBy as "magic" | "newest",
     allowed_tags: allowedTags || undefined,
     enabled: true,
-    currentFirstPostId,
-    latestTimestamp,
+    latestPostTimestamp,
   });
+  dismissNewPostsRef.current = dismissNewPosts;
 
   useEffect(() => {
     onNewPostsChange?.(hasNewPosts, newPostAvatars, newPostCount);
@@ -300,36 +412,15 @@ export const HomeTabbedFeed = forwardRef<
 
   const handleNewPostsPress = useCallback(async () => {
     const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
+
     try {
       listRef.current?.scrollToOffset({ offset: 0, animated: false });
     } catch {}
 
-    const sortBy = activeTabIndex === 0 ? "magic" : "newest";
-    const postsQueryKey = queryKeys.posts({
-      limit: 20,
-      feed: baseFeed,
-      by: sortBy as any,
-      allowed_tags: allowedTags || undefined,
-      address: currentUser?.walletAddress,
-      page: undefined,
-    });
+    showBars();
 
-    const prefetched = getPrefetchedData();
-    if (prefetched) {
-      queryClient.setQueryData(postsQueryKey, (oldData: any) => {
-        if (!oldData) {
-          return { pages: [prefetched], pageParams: [1] };
-        }
-        return {
-          ...oldData,
-          pages: [prefetched, ...oldData.pages.slice(1)],
-          pageParams: [1, ...oldData.pageParams.slice(1)],
-        };
-      });
-      clearPrefetch();
-    } else {
-      await handleRefresh();
-    }
+    const minDelay = new Promise<void>((r) => setTimeout(r, 600));
+    await Promise.all([handleRefresh({ silent: true, fetchAllNew: true }), minDelay]);
 
     requestAnimationFrame(() => {
       try {
@@ -337,8 +428,8 @@ export const HomeTabbedFeed = forwardRef<
       } catch {}
       showBars();
     });
-    dismissNewPosts();
-  }, [showBars, activeTabIndex, baseFeed, allowedTags, currentUser?.walletAddress, queryClient, handleRefresh, dismissNewPosts, getPrefetchedData, clearPrefetch]);
+    resetBaseline(null);
+  }, [showBars, activeTabIndex, handleRefresh, resetBaseline]);
 
   useImperativeHandle(
     ref,
@@ -349,18 +440,25 @@ export const HomeTabbedFeed = forwardRef<
       hasNewPosts: () => hasNewPosts,
       handleNewPostsPress,
       dismissNewPosts,
+      checkNewPosts: checkNow,
     }),
-    [scrollToTop, handleRefresh, hasNewPosts, handleNewPostsPress, dismissNewPosts],
+    [scrollToTop, handleRefresh, hasNewPosts, handleNewPostsPress, dismissNewPosts, checkNow],
   );
 
   const lastMagicFetchTime = useRef(0);
   const isMagicFetching = useRef(false);
+  const magicFetchTaskRef = useRef<ReturnType<
+    typeof InteractionManager.runAfterInteractions
+  > | null>(null);
 
   const lastLatestFetchTime = useRef(0);
   const isLatestFetching = useRef(false);
+  const latestFetchTaskRef = useRef<ReturnType<
+    typeof InteractionManager.runAfterInteractions
+  > | null>(null);
 
-  const PREFETCH_THRESHOLD = 14;
-  const PAGE_SIZE = 20;
+  const PREFETCH_THRESHOLD = 6;
+  const PAGE_SIZE = NEXT_PAGE_SIZE;
 
   const magicQueryRef = useRef(magicQuery);
   magicQueryRef.current = magicQuery;
@@ -371,6 +469,13 @@ export const HomeTabbedFeed = forwardRef<
   latestQueryRef.current = latestQuery;
   const latestPostsLengthRef = useRef(latestPosts.length);
   latestPostsLengthRef.current = latestPosts.length;
+
+  useEffect(() => {
+    return () => {
+      magicFetchTaskRef.current?.cancel();
+      latestFetchTaskRef.current?.cancel();
+    };
+  }, []);
 
   const handleMagicItemVisible = useCallback((index: number) => {
     const totalLoaded = magicPostsLengthRef.current;
@@ -387,11 +492,22 @@ export const HomeTabbedFeed = forwardRef<
     ) {
       lastMagicFetchTime.current = now;
       isMagicFetching.current = true;
-      q.fetchNextPage().finally(() => {
-        isMagicFetching.current = false;
-      });
+      const runFetch = () => {
+        magicFetchTaskRef.current = null;
+        const latestQuery = magicQueryRef.current;
+        if (!latestQuery.hasNextPage || latestQuery.isFetchingNextPage) {
+          isMagicFetching.current = false;
+          return;
+        }
+        latestQuery.fetchNextPage().finally(() => {
+          isMagicFetching.current = false;
+        });
+      };
+
+      magicFetchTaskRef.current?.cancel();
+      runFetch();
     }
-  }, []);
+  }, [PAGE_SIZE, PREFETCH_THRESHOLD]);
 
   const handleLatestItemVisible = useCallback((index: number) => {
     const totalLoaded = latestPostsLengthRef.current;
@@ -408,11 +524,22 @@ export const HomeTabbedFeed = forwardRef<
     ) {
       lastLatestFetchTime.current = now;
       isLatestFetching.current = true;
-      q.fetchNextPage().finally(() => {
-        isLatestFetching.current = false;
-      });
+      const runFetch = () => {
+        latestFetchTaskRef.current = null;
+        const latestQuery = latestQueryRef.current;
+        if (!latestQuery.hasNextPage || latestQuery.isFetchingNextPage) {
+          isLatestFetching.current = false;
+          return;
+        }
+        latestQuery.fetchNextPage().finally(() => {
+          isLatestFetching.current = false;
+        });
+      };
+
+      latestFetchTaskRef.current?.cancel();
+      runFetch();
     }
-  }, []);
+  }, [PAGE_SIZE, PREFETCH_THRESHOLD]);
 
   const createListEmptyComponent = useCallback(
     (isLoading: boolean, isError: boolean, errorMessage?: string) => {
@@ -466,40 +593,53 @@ export const HomeTabbedFeed = forwardRef<
     [baseFeed],
   );
 
-  const ListHeader = useCallback(() => {
-    return (
-      <>
-        {ListHeaderExtra}
-        {isRefreshing && (
-          <Box center p="md">
-            <ActivityIndicator
-              size="small"
-              color={theme.colors.text.subtle}
-            />
-          </Box>
-        )}
-        {baseFeed === "home" && activeTabIndex === 0 && <QuestsSummaryCard />}
-      </>
-    );
-  }, [
-    baseFeed,
-    activeTabIndex,
+  const activeQueryLoading = activeTabIndex === 0 ? magicQuery.isLoading : latestQuery.isLoading;
+  const initialLoadDone = useRef(false);
+
+  useEffect(() => {
+    if (!initialLoadDone.current && !activeQueryLoading) {
+      initialLoadDone.current = true;
+      requestAnimationFrame(() => {
+        const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
+        try {
+          listRef.current?.scrollToOffset({ offset: 0, animated: false });
+        } catch {}
+        showBars();
+      });
+    }
+  }, [activeQueryLoading, activeTabIndex, showBars]);
+
+  const showHeaderSpinner = isRefreshing && !activeQueryLoading;
+  const showQuests = baseFeed === "home" && activeTabIndex === 0;
+
+  const ListHeader = useMemo(() => (
+    <>
+      {ListHeaderExtra}
+      {showHeaderSpinner && (
+        <Box center p="md">
+          <ActivityIndicator
+            size="small"
+            color={theme.colors.text.subtle}
+          />
+        </Box>
+      )}
+      {showQuests && <QuestsSummaryCard />}
+    </>
+  ), [
     ListHeaderExtra,
-    isRefreshing,
+    showHeaderSpinner,
+    showQuests,
     theme.colors.text.subtle,
   ]);
 
-  const ListFooter = useCallback(() => {
-    const query = activeTabIndex === 0 ? magicQuery : latestQuery;
-    if (query.isFetchingNextPage) {
+  const isFetchingNext = activeTabIndex === 0 ? magicQuery.isFetchingNextPage : latestQuery.isFetchingNextPage;
+
+  const ListFooter = useMemo(() => {
+    if (isFetchingNext) {
       return <PostCardSkeleton showMedia={false} showBody={true} />;
     }
     return <Box p="sm" />;
-  }, [
-    activeTabIndex,
-    magicQuery.isFetchingNextPage,
-    latestQuery.isFetchingNextPage,
-  ]);
+  }, [isFetchingNext]);
 
   const listContentStyle = useMemo(
     () => ({
@@ -510,6 +650,8 @@ export const HomeTabbedFeed = forwardRef<
     [insets.bottom, insets.top],
   );
 
+  const progressViewOffset = insets.top + HEADER_HEIGHT;
+
   const refreshControl = useMemo(
     () => (
       <RefreshControl
@@ -517,10 +659,10 @@ export const HomeTabbedFeed = forwardRef<
         onRefresh={handleRefresh}
         tintColor="transparent"
         colors={["transparent"]}
-        progressViewOffset={insets.top + HEADER_HEIGHT}
+        progressViewOffset={progressViewOffset}
       />
     ),
-    [handleRefresh, insets.top, isRefreshing],
+    [handleRefresh, progressViewOffset, isRefreshing],
   );
 
   const posts = activeTabIndex === 0 ? magicPosts : latestPosts;
@@ -529,7 +671,7 @@ export const HomeTabbedFeed = forwardRef<
   const onItemVisible =
     activeTabIndex === 0 ? handleMagicItemVisible : handleLatestItemVisible;
 
-  const ListEmpty = useCallback(
+  const ListEmpty = useMemo(
     () =>
       createListEmptyComponent(
         query.isLoading,

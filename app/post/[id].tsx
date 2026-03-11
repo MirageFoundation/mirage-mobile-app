@@ -1200,18 +1200,15 @@ export default function PostDetailScreen() {
   }, [wasDismissed, setWasDismissed]);
 
   useEffect(() => {
-    if (pendingComment) {
-      handleSubmitComment(
-        pendingComment.text,
-        pendingComment.imageUri,
-        pendingComment.gifUrl,
-      );
-      clearPendingComment();
-    }
-  }, [pendingComment, handleSubmitComment, clearPendingComment]);
+    if (!pendingComment || pendingComment.postId !== id) return;
+    const current = useCommentComposeStore.getState().pendingComment;
+    if (!current || current.postId !== id) return;
+    useCommentComposeStore.getState().clearPendingComment();
+    handleSubmitComment(current.text, current.imageUri, current.gifUrl);
+  }, [pendingComment, id]);
 
   useEffect(() => {
-    if (pendingEdit) {
+    if (pendingEdit && pendingEdit.postId === id && pendingEdit.source === "post") {
       const { commentId, parentId, text, imageUri, gifUrl } = pendingEdit;
       clearPendingEdit();
 
@@ -1284,6 +1281,9 @@ export default function PostDetailScreen() {
   const handleEditComment = useCallback(() => {
     if (!selectedComment || !id || selectedComment.id.startsWith("optimistic-"))
       return;
+    const commentCreatedAt = selectedComment.createdAt instanceof Date
+      ? Math.floor(selectedComment.createdAt.getTime() / 1000)
+      : Math.floor(Number(selectedComment.createdAt) / (Number(selectedComment.createdAt) > 1e12 ? 1000 : 1));
     const params: Record<string, string> = {
       postId: id,
       postTitle: displayPost?.title ?? "",
@@ -1291,12 +1291,38 @@ export default function PostDetailScreen() {
       editCommentId: selectedComment.id,
       editParentId: selectedComment.parentId ?? id,
       editContent: selectedComment.content,
+      editCreatedAt: String(commentCreatedAt),
+      editSource: "post",
     };
     if (displayPost?.media?.[0]?.uri) {
       params.postThumbnail = displayPost.media[0].uri;
     }
     router.push({ pathname: "/comment-compose", params });
   }, [selectedComment, id, displayPost, router]);
+
+  const handleEditPost = useCallback(() => {
+    if (!displayPost) return;
+    const postData = commentsData?.root;
+    const createdAtSeconds = postData?.timestamp ?? (
+      displayPost.createdAt instanceof Date
+        ? Math.floor(displayPost.createdAt.getTime() / 1000)
+        : Math.floor(Number(displayPost.createdAt) / (Number(displayPost.createdAt) > 1e12 ? 1000 : 1))
+    );
+    const editParams: Record<string, string> = {
+      editPostId: displayPost.id,
+      editTopic: displayPost.topic ?? "general",
+      editTitle: displayPost.title,
+      editBody: displayPost.body ?? postData?.content ?? "",
+      editTag: postData?.tag ?? "",
+      editCreatedAt: String(createdAtSeconds),
+    };
+    if (postData?.media && postData.media.length > 0) {
+      editParams.editMedia = JSON.stringify(postData.media);
+    } else if (displayPost.media && displayPost.media.length > 0) {
+      editParams.editMedia = JSON.stringify(displayPost.media.map((m) => m.uri));
+    }
+    router.push({ pathname: "/edit-post", params: editParams });
+  }, [displayPost, commentsData, router]);
 
   // Handler for deleting the post
   const handleDeletePost = useCallback(() => {
@@ -1718,17 +1744,26 @@ export default function PostDetailScreen() {
           >
             Failed to load comments
           </Text>
+          <Text
+            size="sm"
+            mode="subtle"
+            style={{ marginTop: 4, textAlign: "center" }}
+          >
+            Something went wrong. Please check your connection and try again.
+          </Text>
           <Pressable
             onPress={() => refetchComments()}
             style={{
-              marginTop: 12,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-              backgroundColor: theme.colors.primary[500],
+              marginTop: 16,
+              paddingHorizontal: 20,
+              paddingVertical: 10,
+              borderWidth: 1,
+              borderColor: theme.colors.border.default,
               borderRadius: 8,
+              backgroundColor: theme.colors.background.subtle,
             }}
           >
-            <Text size="sm" weight="medium" style={{ color: "#FFFFFF" }}>
+            <Text size="sm" weight="medium">
               Try again
             </Text>
           </Pressable>
@@ -1943,6 +1978,7 @@ export default function PostDetailScreen() {
             );
           }}
           onDelete={handleDeletePost}
+          onEdit={handleEditPost}
           onBlockPost={handleBlockPost}
           onBlockUser={handleBlockPostAuthor}
           onReport={handleReportPost}

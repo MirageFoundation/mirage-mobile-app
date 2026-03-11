@@ -6,7 +6,7 @@ const bundleIdentifier = env
   : `talk.mirage.mobile`;
 const scheme = env ? `mirage${env}` : `mirage`;
 
-const name = env ? `mirage (${env.toUpperCase()})` : "mirage";
+const name = env ? `Mirage (${env.toUpperCase()})` : "Mirage";
 
 export default ({ config }: ConfigContext): ExpoConfig => {
   const slug = "mirage";
@@ -15,24 +15,20 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name,
     slug,
-    version: "1.0.0",
-    orientation: "portrait",
+    version: "1.0.6",
+    orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: scheme,
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
     ios: {
       supportsTablet: false,
+      requireFullScreen: true,
       bundleIdentifier: bundleIdentifier,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         UIBackgroundModes: ["fetch", "remote-notification"],
-        LSApplicationQueriesSchemes: [
-          "whatsapp",
-          "tg",
-          "instagram",
-          "sms",
-        ],
+        LSApplicationQueriesSchemes: ["whatsapp", "tg", "instagram", "sms"],
       },
     },
     android: {
@@ -53,12 +49,23 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     plugins: [
       [
+        "expo-share-intent",
+        {
+          iosActivationRules: {
+            NSExtensionActivationSupportsText: true,
+            NSExtensionActivationSupportsWebURLWithMaxCount: 1,
+            NSExtensionActivationSupportsImageWithMaxCount: 1,
+          },
+          androidIntentFilters: ["text/*", "image/*", "video/*"],
+        },
+      ],
+      [
         "@sentry/react-native/expo",
         {
-          "url": "https://sentry.io/",
-          "project": "react-native",
-          "organization": "mirage-q4"
-        }
+          url: "https://sentry.io/",
+          project: "react-native",
+          organization: "mirage-q4",
+        },
       ],
       "expo-router",
       [
@@ -108,7 +115,19 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           photosPermission: "$(PRODUCT_NAME) needs access to your Photos.",
         },
       ],
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          icon: "./assets/images/android-icon-monochrome.png",
+          color: "#000000",
+        },
+      ],
+      [
+        "expo-screen-orientation",
+        {
+          initialOrientation: "PORTRAIT",
+        },
+      ],
     ],
     experiments: {
       typedRoutes: true,

@@ -1,5 +1,6 @@
 import * as Network from "expo-network";
-import { useEffect, useState } from "react";
+import { AppState, type AppStateStatus } from "react-native";
+import { startTransition, useEffect, useRef, useState } from "react";
 
 export type NetworkType = "wifi" | "cellular" | "unknown" | "none";
 
@@ -21,6 +22,7 @@ export function useNetworkState(): NetworkState {
     isWifi: false,
     isCellular: false,
   });
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   useEffect(() => {
     let mounted = true;
@@ -42,11 +44,21 @@ export function useNetworkState(): NetworkState {
           networkType = "cellular";
         }
 
-        setState({
+        const next = {
           isConnected,
           networkType,
           isWifi: networkType === "wifi",
           isCellular: networkType === "cellular",
+        };
+        startTransition(() => {
+          setState((prev) => {
+            if (
+              prev.isConnected === next.isConnected &&
+              prev.networkType === next.networkType
+            )
+              return prev;
+            return next;
+          });
         });
       } catch (error) {
         console.warn("[useNetworkState] Failed to get network state:", error);
@@ -56,11 +68,21 @@ export function useNetworkState(): NetworkState {
     // Initial check
     checkNetwork();
 
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      const prevState = appStateRef.current;
+      appStateRef.current = nextState;
+
+      if (prevState !== nextState) {
+        checkNetwork();
+      }
+    });
+
     // Poll network state periodically (every 10 seconds)
     const interval = setInterval(checkNetwork, 10000);
 
     return () => {
       mounted = false;
+      subscription.remove();
       clearInterval(interval);
     };
   }, []);

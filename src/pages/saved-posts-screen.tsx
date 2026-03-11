@@ -1,8 +1,10 @@
+import { navigateToEditPost } from "@/src/utils/edit-post";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Dimensions, FlatList, Pressable, View } from "react-native";
+import { ActivityIndicator, Dimensions, FlatList, Platform, Pressable, View } from "react-native";
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
 import Animated, {
   interpolate,
@@ -30,7 +32,9 @@ import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { TimeAgo } from "@/src/components/atoms";
 import {
   useAuthGuard,
+  useNetworkState,
   useVoteHandler,
+  shouldAutoplayVideo,
   type VoteResult,
 } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
@@ -346,6 +350,7 @@ export function SavedPostsScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const isFocused = useIsFocused();
   const toast = useToast();
   const { requireAuth } = useAuthGuard();
 
@@ -365,6 +370,15 @@ export function SavedPostsScreen() {
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedTopicNames = useContentModerationStore((s) => s.blockedTopicNames);
   const shareServer = usePreferencesStore((s) => s.shareServer);
+  const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
+  const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
+
+  const { networkType } = useNetworkState();
+
+  const allowAutoplay = useMemo(
+    () => shouldAutoplayVideo(autoPlayVideos, videoAutoplayNetwork, networkType),
+    [autoPlayVideos, videoAutoplayNetwork, networkType],
+  );
 
   const { handleUpvote, handleDownvote } = useVoteHandler({
     onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
@@ -423,6 +437,13 @@ export function SavedPostsScreen() {
     [router],
   );
 
+  const handleTopicPress = useCallback(
+    (topic: string) => {
+      router.push(`/topic/${encodeURIComponent(topic)}`);
+    },
+    [router],
+  );
+
   const handleMorePress = useCallback(
     (postId: string) => {
       const post = postsWithOverrides.find((p) => p.id === postId);
@@ -468,6 +489,11 @@ export function SavedPostsScreen() {
     },
     [router],
   );
+
+  const handleEditPost = useCallback(() => {
+    if (!selectedPost) return;
+    navigateToEditPost(router, selectedPost);
+  }, [selectedPost, router]);
 
   const handleSavePost = useCallback(() => {
     if (!selectedPost) return;
@@ -515,11 +541,15 @@ export function SavedPostsScreen() {
     ({ item }: { item: Post }) => (
       <PostCardItem
         post={item}
+        isVisible={true}
+        screenActive={isFocused}
         isOwnPost={currentUser?.id === item.author.id}
         shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
         showUrlCard={false}
+        allowAutoplay={allowAutoplay}
         onPostPress={handlePostPress}
         onAuthorPress={handleAuthorPress}
+        onTopicPress={handleTopicPress}
         onMorePress={handleMorePress}
         onLikePress={handleLikePress}
         onDislikePress={handleDislikePress}
@@ -529,12 +559,15 @@ export function SavedPostsScreen() {
     [
       currentUser?.id,
       shareServer,
+      allowAutoplay,
       handlePostPress,
       handleAuthorPress,
+      handleTopicPress,
       handleMorePress,
       handleLikePress,
       handleDislikePress,
       handleCommentPress,
+      isFocused,
     ],
   );
 
@@ -714,6 +747,9 @@ export function SavedPostsScreen() {
                 renderItem={renderPostItem}
                 contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
                 showsVerticalScrollIndicator={false}
+                windowSize={Platform.OS === "android" ? 7 : 9}
+                maxToRenderPerBatch={Platform.OS === "android" ? 5 : 7}
+                initialNumToRender={5}
               />
             )
           ) : savedComments.length === 0 ? (
@@ -736,6 +772,7 @@ export function SavedPostsScreen() {
         isOwnPost={currentUser?.id === selectedPost?.author.id}
         isSaved={selectedPost ? savedPosts.some((p) => p.id === selectedPost.id) : false}
         onSave={handleSavePost}
+        onEdit={handleEditPost}
         onCopyText={handleCopyText}
         onDismiss={() => setSelectedPost(null)}
       />

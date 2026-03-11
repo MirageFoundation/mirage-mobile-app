@@ -1,7 +1,8 @@
-import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { navigateToEditPost } from "@/src/utils/edit-post";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View } from "react-native";
+import { AppState, View, type AppStateStatus } from "react-native";
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -24,6 +25,7 @@ import {
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
+import { storage } from "@/src/stores";
 
 import { useAuthGuard, useBlockHandler, useDeleteHandler, useFollowHandler, useReportHandler, useVoteHandler, type VoteResult } from "@/src/hooks";
 import {
@@ -63,12 +65,55 @@ export function FollowingScreen() {
     setNewPostCount(count);
   }, []);
 
+  const [isBannerLoading, setIsBannerLoading] = useState(false);
+
   const handleNewPostsPress = useCallback(async () => {
+    setIsBannerLoading(true);
     await tabbedFeedRef.current?.handleNewPostsPress();
+    setIsBannerLoading(false);
     setHasNewPosts(false);
   }, []);
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
+  const backgroundTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      if (nextState === "background" || nextState === "inactive") {
+        if (!backgroundTimeRef.current) {
+          backgroundTimeRef.current = Date.now();
+          storage.set("app_was_backgrounded", "true");
+          storage.set("app_last_foreground_time", Date.now().toString());
+        }
+        return;
+      }
+      if (nextState === "active" && backgroundTimeRef.current) {
+        const duration = Date.now() - backgroundTimeRef.current;
+        backgroundTimeRef.current = null;
+        storage.remove("app_was_backgrounded");
+        if (duration >= 2 * 60 * 60 * 1000) {
+          setTimeout(async () => {
+            showBars();
+            tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
+            await tabbedFeedRef.current?.refresh({ fetchAllNew: true });
+            tabbedFeedRef.current?.dismissNewPosts();
+            setHasNewPosts(false);
+            requestAnimationFrame(() => {
+              tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
+              showBars();
+            });
+          }, 300);
+        } else {
+          setTimeout(() => {
+            tabbedFeedRef.current?.checkNewPosts();
+          }, 500);
+        }
+      }
+    };
+    const sub = AppState.addEventListener("change", handleAppStateChange);
+    return () => sub.remove();
+  }, []);
+
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
@@ -258,6 +303,11 @@ export function FollowingScreen() {
     [reportHandler]
   );
 
+  const handleEditPost = useCallback(() => {
+    if (!selectedPost) return;
+    navigateToEditPost(router, selectedPost);
+  }, [selectedPost, router]);
+
   const handleDeletePost = useCallback(() => {
     if (selectedPost) {
       deleteHandler.requestDelete(selectedPost.id, "post");
@@ -341,14 +391,18 @@ export function FollowingScreen() {
     setShareServer(shareServer);
   }, [shareServer, setShareServer]);
 
-  const isFocused = useIsFocused();
-
-  useEffect(() => {
-    setActiveFeedScreen(isFocused ? 'following' : null);
-    if (isFocused) {
+  useFocusEffect(
+    useCallback(() => {
+      setActiveFeedScreen('following');
       setDisabledTopicName(undefined);
-    }
-  }, [isFocused, setActiveFeedScreen, setDisabledTopicName]);
+      return () => {
+        const current = useHomePostCardStore.getState().activeFeedScreen;
+        if (current === 'following') {
+          setActiveFeedScreen(null);
+        }
+      };
+    }, [setActiveFeedScreen, setDisabledTopicName]),
+  );
 
   const handlersRef = useRef({
     handlePostPress,
@@ -440,6 +494,7 @@ export function FollowingScreen() {
         topOffset={insets.top + 44}
         avatars={newPostAvatars}
         newPostCount={newPostCount}
+        loading={isBannerLoading}
       />
 
       <PostOptionsSheet
@@ -465,6 +520,7 @@ export function FollowingScreen() {
         onReport={handleReport}
         onBlockUser={handleBlockUser}
         onHidePost={handleHidePost}
+        onEdit={handleEditPost}
         onDelete={handleDeletePost}
         onGiveAward={() => {
           if (!selectedPost) return;

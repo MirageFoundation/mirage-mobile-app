@@ -7,6 +7,8 @@ import { usePreferencesStore } from "@/src/stores";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   Linking,
+  PixelRatio,
+  Platform,
   Pressable,
   View,
   type StyleProp,
@@ -29,6 +31,8 @@ type PostCardProps = {
   post: Post;
   isOwnPost?: boolean;
   isVisible?: boolean;
+  /** Whether this is the focused video post (for sound) */
+  isFocused?: boolean;
   /** Whether to show the follow button (default: true) */
   showFollowButton?: boolean;
   /** Whether the topic is followed */
@@ -73,6 +77,8 @@ function arePostCardPropsEqual(
   const nextPost = nextProps.post;
 
   if (prevPost.id !== nextPost.id) return false;
+  if (prevPost.title !== nextPost.title) return false;
+  if (prevPost.body !== nextPost.body) return false;
   if (prevPost.likes !== nextPost.likes) return false;
   if (prevPost.dislikes !== nextPost.dislikes) return false;
   if (prevPost.comments !== nextPost.comments) return false;
@@ -83,6 +89,7 @@ function arePostCardPropsEqual(
 
   if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
   if (prevProps.isVisible !== nextProps.isVisible) return false;
+  if (prevProps.isFocused !== nextProps.isFocused) return false;
   if (prevProps.showFollowButton !== nextProps.showFollowButton) return false;
   if (prevProps.isTopicFollowed !== nextProps.isTopicFollowed) return false;
   if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
@@ -102,6 +109,7 @@ export const PostCard = memo(function PostCard({
   post,
   isOwnPost = false,
   isVisible = false,
+  isFocused,
   showFollowButton = true,
   isTopicFollowed = false,
   allowAutoplay = true,
@@ -222,6 +230,8 @@ export const PostCard = memo(function PostCard({
       ref={containerRef}
       onPress={handlePress}
       style={[styles.container, style]}
+      shouldRasterizeIOS={true}
+      renderToHardwareTextureAndroid={true}
     >
       <PostCardHeader
         author={author}
@@ -263,6 +273,7 @@ export const PostCard = memo(function PostCard({
         media={resolvedContent.resolvedMedia}
         mediaList={resolvedContent.resolvedMediaList}
         isVisible={isVisible}
+        isFocused={isFocused ?? isVisible}
         shouldBlurContent={shouldBlurContent}
         hasMultipleMedia={resolvedContent.hasMultipleMedia}
         extraMediaCount={resolvedContent.extraMediaCount}

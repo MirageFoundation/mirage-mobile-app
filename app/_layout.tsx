@@ -1,10 +1,12 @@
 import { RootProvider } from "@/src/providers/root-provider";
 import { Stack, useNavigationContainerRef } from "expo-router";
+import { ShareIntentProvider } from "expo-share-intent";
 import { AuthSheet } from "@/src/components/molecules";
 import { ThemedStatusBar } from "@/src/components/ui/themed-status-bar";
 import { Platform } from "react-native";
 import * as Sentry from '@sentry/react-native';
 import { useEffect } from "react";
+import { getShareScheme } from "@/src/utils/share-scheme";
 
 const navigationIntegration = Sentry.reactNavigationIntegration({
   enableTimeToInitialDisplay: true,
@@ -12,6 +14,8 @@ const navigationIntegration = Sentry.reactNavigationIntegration({
 
 Sentry.init({
   dsn: 'https://34f3ac8d124f7b5edbbb02ff36ac1a2b@o4510907183595520.ingest.us.sentry.io/4510907185496064',
+
+  enabled: !__DEV__,
 
   sendDefaultPii: true,
 
@@ -37,6 +41,7 @@ export default Sentry.wrap(function RootLayout() {
   }, [ref]);
 
   return (
+    <ShareIntentProvider options={{ scheme: getShareScheme() || undefined, resetOnBackground: false }}>
     <RootProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
@@ -116,5 +121,6 @@ export default Sentry.wrap(function RootLayout() {
       <ThemedStatusBar />
       <AuthSheet />
     </RootProvider>
+    </ShareIntentProvider>
   );
 });

@@ -4,13 +4,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Animated as RNAnimated, View } from "react-native";
 import Animated, {
-  Easing,
+  Extrapolation,
   interpolate,
   SharedValue,
   useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
 } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -19,8 +16,6 @@ import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
 import { SCROLL_THRESHOLD } from "./profile-header";
-
-const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
 
 const formatAccountAge = (days: number): string => {
   const totalMinutes = days * 24 * 60;
@@ -98,28 +93,6 @@ export const UserProfileContentAnimated = memo(
    const walletScale = useRef(new RNAnimated.Value(1)).current;
     const followingScale = useRef(new RNAnimated.Value(1)).current;
 
-   const gradientAnimation = useSharedValue(0);
-
-    useEffect(() => {
-      gradientAnimation.value = withRepeat(
-        withTiming(1, { duration: 4000, easing: Easing.inOut(Easing.ease) }),
-        -1,
-        true,
-      );
-    }, [gradientAnimation]);
-
-    const gradientAnimatedStyle = useAnimatedStyle(() => {
-      const translateY = interpolate(gradientAnimation.value, [0, 1], [0, -20]);
-      const scale = interpolate(
-        gradientAnimation.value,
-        [0, 0.5, 1],
-        [1, 1.05, 1],
-      );
-      return {
-        transform: [{ translateY }, { scale }],
-      };
-    });
-
     const truncatedAddress = useMemo(() => {
       if (!walletAddress) return "";
       return walletAddress;
@@ -185,7 +158,7 @@ export const UserProfileContentAnimated = memo(
         scrollY.value,
         [0, SCROLL_THRESHOLD * 0.6, SCROLL_THRESHOLD],
         [1, 0.3, 0],
-        "clamp",
+        Extrapolation.CLAMP,
       );
 
       return { opacity };
@@ -200,11 +173,11 @@ export const UserProfileContentAnimated = memo(
       <View style={[styles.container, headerHeight > 0 && { marginTop: -headerHeight, paddingTop: headerHeight }]}>
         <View style={[styles.overscrollFill, { backgroundColor: gradientColorsArray[0] }]} />
         <View style={styles.gradientWrapper}>
-          <AnimatedLinearGradient
+          <LinearGradient
             colors={gradientColorsArray}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
-            style={[styles.gradientContent, gradientAnimatedStyle]}
+            style={styles.gradientContent}
           />
         </View>
         <Animated.View style={[styles.profileContentInner, contentFadeStyle]}>

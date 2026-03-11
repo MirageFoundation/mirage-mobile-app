@@ -1,8 +1,10 @@
+import { navigateToEditPost } from "@/src/utils/edit-post";
+import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { useFocusEffect } from "@react-navigation/native";
+import type { FlashListRef } from "@shopify/flash-list";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FlatList } from "react-native";
 import {
   ActivityIndicator,
   Pressable,
@@ -20,7 +22,6 @@ import {
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
 import {
-  queryKeys,
   transformApiPosts,
   useInfinitePosts,
   useUserFollowed,
@@ -39,7 +40,6 @@ import {
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import {
-  useAuthGuard,
   useBlockHandler,
   useDeleteHandler,
   useFollowHandler,
@@ -59,7 +59,6 @@ import {
   usePreferencesStore,
   useSavedPostsStore,
 } from "@/src/stores";
-import { useQueryClient } from "@tanstack/react-query";
 import { useNewPostsChecker } from "@/src/hooks/use-new-posts-checker";
 
 export function TopicFeedScreen() {
@@ -67,10 +66,9 @@ export function TopicFeedScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { requireAuth } = useAuthGuard();
   const toast = useToast();
 
-  const flatListRef = useRef<FlatList<Post>>(null);
+  const flatListRef = useRef<FlashListRef<Post>>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
@@ -78,6 +76,7 @@ export function TopicFeedScreen() {
   const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const [isBannerLoading, setIsBannerLoading] = useState(false);
   const [sortBy, setSortBy] = useState<"magic" | "newest">("magic");
 
   const SORT_OPTIONS = useMemo(
@@ -170,11 +169,13 @@ export function TopicFeedScreen() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfinitePosts({
-    limit: 20,
+    limit: 10,
     topic: topicName,
     allowed_tags: allowedTags || undefined,
     by: sortBy,
-  });
+  }, { pageLimit: 20 });
+
+  const postEditOverrides = usePostEditStore((s) => s.overrides);
 
   const posts = useMemo(() => {
     if (!data?.pages) return [];
@@ -192,7 +193,13 @@ export function TopicFeedScreen() {
       ? uniquePosts.filter((post) => post.user_vote !== -1)
       : uniquePosts;
 
-    const transformedPosts = transformApiPosts(filteredPosts, {
+    const patchedPosts = filteredPosts.map((post) => {
+      const ov = postEditOverrides[post.post_id];
+      if (!ov) return post;
+      return { ...post, title: ov.title, content: ov.content, topic: ov.topic ?? post.topic, media: ov.media ?? post.media };
+    });
+
+    const transformedPosts = transformApiPosts(patchedPosts, {
       currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined,
     });
 
@@ -202,28 +209,29 @@ export function TopicFeedScreen() {
         !blockedUserIds.has(post.author.id) &&
         !(post.topic && blockedTopicNames.has(post.topic.toLowerCase())),
     );
-  }, [data, hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, currentUser]);
+  }, [data, hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, currentUser, postEditOverrides]);
 
-  const currentFirstPostId = posts[0]?.id ?? null;
-  const latestTimestamp = useMemo(() => {
-    if (posts.length === 0) return null;
-    let max = 0;
-    for (const p of posts) {
-      const ts = typeof p.createdAt === "number" ? p.createdAt : new Date(p.createdAt).getTime();
-      if (ts > max) max = ts;
+  const latestPostTimestamp = useMemo(() => {
+    const pages = data?.pages;
+    if (!pages || pages.length === 0) return null;
+    const firstPage = pages[0];
+    if (!firstPage.posts || firstPage.posts.length === 0) return null;
+    let maxTs = 0;
+    for (const post of firstPage.posts) {
+      if (post.timestamp > maxTs) maxTs = post.timestamp;
     }
-    return max > 0 ? Math.floor(max / 1000) : null;
-  }, [posts]);
-  const queryClient = useQueryClient();
+    return maxTs > 0 ? maxTs : null;
+  }, [data?.pages]);
 
-  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, getPrefetchedData, clearPrefetch } = useNewPostsChecker({
+  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, resetBaseline } = useNewPostsChecker({
     topic: topicName,
     by: sortBy === "magic" ? "magic" : "newest",
     allowed_tags: allowedTags || undefined,
     enabled: true,
-    currentFirstPostId,
-    latestTimestamp,
+    latestPostTimestamp,
   });
+  const dismissNewPostsRef = useRef<(() => void) | null>(null);
+  dismissNewPostsRef.current = dismissNewPosts;
 
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
@@ -388,6 +396,11 @@ export function TopicFeedScreen() {
     [reportHandler],
   );
 
+  const handleEditPost = useCallback(() => {
+    if (!selectedPost) return;
+    navigateToEditPost(router, selectedPost);
+  }, [selectedPost, router]);
+
   const handleDeletePost = useCallback(() => {
     if (selectedPost) {
       deleteHandler.requestDelete(selectedPost.id, "post");
@@ -456,47 +469,26 @@ export function TopicFeedScreen() {
       console.error("Failed to refresh topic feed:", error);
     } finally {
       setIsManualRefreshing(false);
+      dismissNewPostsRef.current?.();
     }
   }, [refetch]);
 
   const handleNewPostsPress = useCallback(async () => {
+    setIsBannerLoading(true);
     try {
       flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
     } catch {}
 
-    const postsQueryKey = queryKeys.posts({
-      limit: 20,
-      topic: topicName,
-      by: sortBy,
-      allowed_tags: allowedTags || undefined,
-      address: currentUser?.walletAddress,
-      page: undefined,
-    });
-
-    const prefetched = getPrefetchedData();
-    if (prefetched) {
-      queryClient.setQueryData(postsQueryKey, (oldData: any) => {
-        if (!oldData) {
-          return { pages: [prefetched], pageParams: [1] };
-        }
-        return {
-          ...oldData,
-          pages: [prefetched, ...oldData.pages.slice(1)],
-          pageParams: [1, ...oldData.pageParams.slice(1)],
-        };
-      });
-      clearPrefetch();
-    } else {
-      await handleRefresh();
-    }
+    await handleRefresh();
 
     requestAnimationFrame(() => {
       try {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
       } catch {}
     });
-    dismissNewPosts();
-  }, [topicName, sortBy, allowedTags, currentUser?.walletAddress, queryClient, handleRefresh, dismissNewPosts, getPrefetchedData, clearPrefetch]);
+    resetBaseline(null);
+    setIsBannerLoading(false);
+  }, [handleRefresh, resetBaseline]);
 
   const handleItemVisible = useCallback((index: number) => {
     const totalLoaded = postsLengthRef.current;
@@ -604,9 +596,6 @@ export function TopicFeedScreen() {
   const setFollowedTopicsStore = useHomePostCardStore(
     (state) => state.setFollowedTopics,
   );
-  const setFollowLoadingUsersStore = useHomePostCardStore(
-    (state) => state.setFollowLoadingUsers,
-  );
   const setRevealedPostsStore = useHomePostCardStore(
     (state) => state.setRevealedPosts,
   );
@@ -663,16 +652,18 @@ export function TopicFeedScreen() {
     setAllowAutoplay(allowAutoplay);
   }, [allowAutoplay, setAllowAutoplay]);
 
-  const isFocused = useIsFocused();
-
-  useEffect(() => {
-    setActiveFeedScreen(isFocused ? "topic" : null);
-    if (isFocused) {
+  useFocusEffect(
+    useCallback(() => {
+      setActiveFeedScreen("topic");
       setDisabledTopicName(topicName);
-    } else {
-      setDisabledTopicName(undefined);
-    }
-  }, [isFocused, setActiveFeedScreen, setDisabledTopicName, topicName]);
+      return () => {
+        const current = useHomePostCardStore.getState().activeFeedScreen;
+        if (current === "topic") {
+          setActiveFeedScreen(null);
+        }
+      };
+    }, [setActiveFeedScreen, setDisabledTopicName, topicName]),
+  );
 
   const handlersRef = useRef({
     handlePostPress,
@@ -919,6 +910,7 @@ export function TopicFeedScreen() {
         topOffset={insets.top + 52}
         avatars={newPostAvatars}
         newPostCount={newPostCount}
+        loading={isBannerLoading}
       />
 
       <PostOptionsSheet
@@ -944,6 +936,7 @@ export function TopicFeedScreen() {
         onReport={handleReport}
         onBlockUser={handleBlockUser}
         onHidePost={handleHidePost}
+        onEdit={handleEditPost}
         onDelete={handleDeletePost}
         onGiveAward={() => {
           if (!selectedPost) return;

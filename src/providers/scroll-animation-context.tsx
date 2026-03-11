@@ -19,6 +19,8 @@ const HEADER_HEIGHT = 44;
 const FEED_TAB_BAR_HEIGHT = 44;
 const TAB_BAR_HEIGHT = 56;
 const SCROLL_THRESHOLD = 50;
+const HIDE_THRESHOLD = 10;
+const SHOW_THRESHOLD = 15;
 
 type ScrollableRef = FlatList<any> | ScrollView | null;
 
@@ -54,6 +56,8 @@ export const ScrollAnimationProvider = ({
   const isHidden = useSharedValue(false);
   const isProgrammaticScroll = useSharedValue(false);
   const isFirstScroll = useSharedValue(true);
+  const accumulatedDist = useSharedValue(0);
+  const lastDir = useSharedValue(0);
 
   const homeRefreshRef = useRef<(() => void) | null>(null);
   const followingRefreshRef = useRef<(() => void) | null>(null);
@@ -73,26 +77,37 @@ export const ScrollAnimationProvider = ({
       }
 
       const diff = currentY - lastScrollY.value;
-
-      if (diff > 0 && currentY > SCROLL_THRESHOLD && !isHidden.value) {
-        if (isProgrammaticScroll.value) {
-          lastScrollY.value = currentY;
-          return;
-        }
-        headerTranslateY.value = withTiming(-fullHeaderHeight, {
-          duration: 200,
-        });
-        tabBarTranslateY.value = withTiming(fullTabBarHeight, {
-          duration: 200,
-        });
-        isHidden.value = true;
-      } else if (diff < -5 && isHidden.value) {
-        headerTranslateY.value = withTiming(0, { duration: 200 });
-        tabBarTranslateY.value = withTiming(0, { duration: 200 });
-        isHidden.value = false;
-      }
-
       lastScrollY.value = currentY;
+
+      if (diff === 0) return;
+
+      const dir = diff > 0 ? 1 : -1;
+      if (dir !== lastDir.value) {
+        accumulatedDist.value = 0;
+        lastDir.value = dir;
+      }
+      accumulatedDist.value = accumulatedDist.value + Math.abs(diff);
+
+      if (dir === 1 && currentY > SCROLL_THRESHOLD && !isHidden.value) {
+        if (isProgrammaticScroll.value) return;
+        if (accumulatedDist.value > HIDE_THRESHOLD) {
+          headerTranslateY.value = withTiming(-fullHeaderHeight, {
+            duration: 200,
+          });
+          tabBarTranslateY.value = withTiming(fullTabBarHeight, {
+            duration: 200,
+          });
+          isHidden.value = true;
+          accumulatedDist.value = 0;
+        }
+      } else if (dir === -1 && isHidden.value) {
+        if (accumulatedDist.value > SHOW_THRESHOLD) {
+          headerTranslateY.value = withTiming(0, { duration: 200 });
+          tabBarTranslateY.value = withTiming(0, { duration: 200 });
+          isHidden.value = false;
+          accumulatedDist.value = 0;
+        }
+      }
     },
   });
 
@@ -108,10 +123,12 @@ export const ScrollAnimationProvider = ({
     headerTranslateY.value = withTiming(0, { duration: 200 });
     tabBarTranslateY.value = withTiming(0, { duration: 200 });
     isHidden.value = false;
+    isFirstScroll.value = true;
+    lastScrollY.value = 0;
     isProgrammaticScroll.value = true;
     setTimeout(() => {
       isProgrammaticScroll.value = false;
-    }, 500);
+    }, 2000);
   }, [headerTranslateY, tabBarTranslateY]);
 
   const registerHomeRefresh = useCallback((callback: () => void) => {

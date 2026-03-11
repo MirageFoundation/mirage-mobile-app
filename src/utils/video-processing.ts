@@ -4,6 +4,7 @@
  * Uses react-native-video-trim for video trimming and processing.
  */
 
+import * as Sentry from '@sentry/react-native';
 import { trim, isValidFile } from 'react-native-video-trim';
 
 export interface ProcessVideoOptions {
@@ -58,6 +59,7 @@ export async function processVideo(
 ): Promise<ProcessVideoResult> {
   const shouldTrim = needsTrimming(options);
   const shouldRemoveAudio = options.removeAudio === true;
+  const fileName = inputUri.split('/').pop() || 'unknown';
   
   // If no processing needed, return original
   if (!shouldRemoveAudio && !shouldTrim) {
@@ -70,6 +72,19 @@ export async function processVideo(
   console.log("[VideoProcessing] Options:", options);
   console.log("[VideoProcessing] Will trim:", shouldTrim);
   console.log("[VideoProcessing] Will remove audio:", shouldRemoveAudio);
+  Sentry.addBreadcrumb({
+    category: 'video-processing',
+    message: 'Starting video processing',
+    level: 'info',
+    data: {
+      fileName,
+      shouldTrim,
+      shouldRemoveAudio,
+      trimStartMs: options.trimStartMs,
+      trimEndMs: options.trimEndMs,
+      totalDurationMs: options.totalDurationMs,
+    },
+  });
 
   // Validate the file first
   try {
@@ -77,10 +92,25 @@ export async function processVideo(
     const isValid = typeof validationResult === 'boolean' ? validationResult : Boolean(validationResult);
     if (!isValid) {
       console.error("[VideoProcessing] Invalid video file");
+      Sentry.addBreadcrumb({
+        category: 'video-processing',
+        message: 'Invalid video file detected',
+        level: 'warning',
+        data: { fileName },
+      });
       return { uri: inputUri, wasProcessed: false };
     }
   } catch (e) {
     console.warn("[VideoProcessing] Could not validate file:", e);
+    Sentry.addBreadcrumb({
+      category: 'video-processing',
+      message: 'Video validation failed',
+      level: 'warning',
+      data: {
+        fileName,
+        error: String(e),
+      },
+    });
   }
 
   try {
@@ -111,6 +141,19 @@ export async function processVideo(
     };
   } catch (error) {
     console.warn("[VideoProcessing] Trim failed, using original file:", error);
+    Sentry.captureException(error, {
+      tags: {
+        feature: 'video-processing',
+        stage: 'trim',
+      },
+      extra: {
+        fileName,
+        trimStartMs: options.trimStartMs,
+        trimEndMs: options.trimEndMs,
+        totalDurationMs: options.totalDurationMs,
+        removeAudio: shouldRemoveAudio,
+      },
+    });
     return { uri: inputUri, wasProcessed: false };
   }
 }
@@ -151,4 +194,20 @@ export async function validateVideoFile(uri: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export const MAX_VIDEO_DURATION_MS = 59000;
+
+export async function trimToMaxDuration(
+  uri: string,
+  durationMs: number,
+): Promise<string> {
+  if (durationMs <= MAX_VIDEO_DURATION_MS) return uri;
+  console.log("[VideoProcessing] Auto-trimming to 59s, original duration:", durationMs);
+  const result = await processVideo(uri, {
+    trimStartMs: 0,
+    trimEndMs: MAX_VIDEO_DURATION_MS,
+    totalDurationMs: durationMs,
+  });
+  return result.uri;
 }

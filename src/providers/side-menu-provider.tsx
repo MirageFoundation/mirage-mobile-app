@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useRef } from "react";
-import { Linking } from "react-native";
+import { Alert, Linking } from "react-native";
 import { useRouter } from "expo-router";
 import {
   SideMenu,
@@ -47,8 +47,8 @@ export function SideMenuProvider({ children }: { children: React.ReactNode }) {
   const handleTopics = useCallback(() => router.push("/topics"), [router]);
   const handleInviteAndEarn = useCallback(() => router.push("/invite-and-earn"), [router]);
   const handleQuests = useCallback(() => router.push("/quests"), [router]);
-  const handleHelp = useCallback(() => Linking.openURL("https://mirage.foundation/faq"), []);
-  const handleAbout = useCallback(() => Linking.openURL("https://mirage.foundation"), []);
+  const handleHelp = useCallback(() => Linking.openURL("https://mirage.foundation/faq").catch((e: Error) => Alert.alert("Couldn't open link", e.message)), []);
+  const handleAbout = useCallback(() => Linking.openURL("https://mirage.foundation").catch((e: Error) => Alert.alert("Couldn't open link", e.message)), []);
   const handleLogout = useCallback(async () => await logout(), [logout]);
 
   return (

@@ -99,6 +99,8 @@ const ReplyImage = ({
         style={styles.image}
         contentFit="cover"
         transition={200}
+        recyclingKey={url}
+        cachePolicy="memory-disk"
         onLoad={({ source }) => {
           if (source?.width && source?.height) {
             setAspectRatio(source.width / source.height);
@@ -203,7 +205,7 @@ export const InboxItem = memo(function InboxItem({
           {replyText.length > 0 && <MarkdownContent content={replyText} />}
           {imageUrls.map((url, index) => (
             <ReplyImage
-              key={`img-${index}`}
+              key={url}
               url={url}
               onPress={() => handleImagePress(url)}
             />

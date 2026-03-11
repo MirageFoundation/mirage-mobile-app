@@ -12,6 +12,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Text } from "@/src/components/ui/primitives";
 import type { EasUpdateStatus } from "@/src/hooks/use-eas-update";
+import { useTopToastStack } from "@/src/stores/toast-layout-store";
+
+const TOAST_STACK_ID = "update-banner";
 
 type UpdateBannerProps = {
   status: EasUpdateStatus;
@@ -31,6 +34,7 @@ export const UpdateBanner = ({
   const scale = useRef(new Animated.Value(0.95)).current;
 
   const visible = status !== "idle";
+  const { offset, onLayout } = useTopToastStack(TOAST_STACK_ID, visible);
   const isInstalling = status === "installing";
   const isError = status === "error";
   const isDark = rt.themeName === "dark";
@@ -91,15 +95,15 @@ export const UpdateBanner = ({
       ? {
           intensity: 80,
           tint: isDark ? ("dark" as const) : ("light" as const),
-          style: [styles.blurContainer, { borderColor }],
+          style: [styles.blurInner],
         }
       : {
           style: [
             styles.blurContainer,
             {
               backgroundColor: isDark
-                ? "rgba(45, 48, 55, 0.95)"
-                : "rgba(255, 255, 255, 0.95)",
+                ? "rgba(45, 48, 55, 0.92)"
+                : "rgba(255, 255, 255, 0.92)",
               borderColor,
               elevation: 8,
               shadowColor: "#000",
@@ -110,44 +114,57 @@ export const UpdateBanner = ({
           ],
         };
 
+  const toastContent = (
+    <View style={styles.content}>
+      <View style={styles.iconContainer}>
+        {isInstalling ? (
+          <ActivityIndicator size="small" color={accentColor} />
+        ) : (
+          <Ionicons
+            name={isError ? "alert-circle" : "cloud-download-outline"}
+            size={20}
+            color={accentColor}
+          />
+        )}
+      </View>
+
+      <Text size="xs" weight="semibold" numberOfLines={1}>
+        {isInstalling
+          ? "Installing update…"
+          : isError
+            ? "Update failed"
+            : "Update available"}
+      </Text>
+    </View>
+  );
+
   return (
     <Animated.View
       pointerEvents="box-none"
       style={[
         styles.container,
         {
-          top: insets.top + 4,
+          top: insets.top + 4 + offset,
           transform: [{ translateY }, { scale }],
           opacity,
         },
       ]}
     >
-      <Pressable onPress={isInstalling ? undefined : onInstall}>
-        <ToastWrapper {...wrapperProps}>
-          <View style={styles.content}>
-            <View style={styles.iconContainer}>
-              {isInstalling ? (
-                <ActivityIndicator size="small" color={accentColor} />
-              ) : (
-                <Ionicons
-                  name={isError ? "alert-circle" : "cloud-download-outline"}
-                  size={20}
-                  color={accentColor}
-                />
-              )}
-            </View>
-
-            <View style={styles.textContainer}>
-              <Text size="sm" weight="semibold" numberOfLines={1}>
-                {isInstalling
-                  ? "Installing update…"
-                  : isError
-                    ? "Update failed"
-                    : "Update available"}
-              </Text>
-            </View>
+      <Pressable
+        onLayout={onLayout}
+        onPress={isInstalling ? undefined : onInstall}
+      >
+        {Platform.OS === "ios" ? (
+          <View style={[styles.borderWrap, { borderColor }]}>
+            <ToastWrapper {...wrapperProps}>
+              {toastContent}
+            </ToastWrapper>
           </View>
-        </ToastWrapper>
+        ) : (
+          <ToastWrapper {...wrapperProps}>
+            {toastContent}
+          </ToastWrapper>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -156,29 +173,37 @@ export const UpdateBanner = ({
 const styles = StyleSheet.create((theme) => ({
   container: {
     position: "absolute",
-    left: 48,
-    right: 48,
+    left: 0,
+    right: 0,
+    alignItems: "center",
     zIndex: 9999,
   },
   blurContainer: {
     overflow: "hidden",
-    borderRadius: 9999,
+    borderRadius: 12,
     borderWidth: 1,
+  },
+  blurInner: {
+    overflow: "hidden",
+    borderRadius: 11,
+  },
+  borderWrap: {
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: "hidden",
   },
   content: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 8,
-    paddingHorizontal: 14,
-    gap: 8,
+    paddingHorizontal: 10,
+    gap: 6,
   },
   iconContainer: {
-    width: 22,
-    height: 22,
+    width: 20,
+    height: 20,
     alignItems: "center",
     justifyContent: "center",
-  },
-  textContainer: {
-    flex: 1,
+    marginRight: 2,
   },
 }));

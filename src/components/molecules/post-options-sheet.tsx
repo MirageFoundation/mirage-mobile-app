@@ -50,6 +50,8 @@ type PostOptionsSheetProps = {
   onHidePost?: () => void;
   /** Callback when delete is pressed */
   onDelete?: () => void;
+  /** Callback when edit is pressed */
+  onEdit?: () => void;
   /** Callback when report is pressed */
   onReport?: () => void;
   /** Callback when give award is pressed */
@@ -214,6 +216,7 @@ export const PostOptionsSheet = forwardRef<
       onBlockUser,
       onHidePost,
       onDelete,
+      onEdit,
       onReport,
       onGiveAward,
       onDismiss,
@@ -401,6 +404,12 @@ export const PostOptionsSheet = forwardRef<
       onBlockUser?.();
     }, [dismiss, onBlockUser]);
 
+    const handleEdit = useCallback(() => {
+      triggerHaptic("selection");
+      dismiss();
+      onEdit?.();
+    }, [dismiss, onEdit]);
+
     const handleDelete = useCallback(() => {
       triggerHaptic("warning");
       dismiss();
@@ -514,6 +523,15 @@ export const PostOptionsSheet = forwardRef<
                 iconName="gift-outline"
                 title="Give Award"
                 onPress={handleGiveAward}
+              />
+            )}
+
+            {isOwnPost && (
+              <MenuItem
+                iconComponent={Feather}
+                iconName="edit-2"
+                title="Edit Post"
+                onPress={handleEdit}
               />
             )}
 

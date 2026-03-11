@@ -1,4 +1,7 @@
+import { navigateToEditPost } from "@/src/utils/edit-post";
+import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Clipboard from "expo-clipboard";
+import { useIsFocused } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -6,11 +9,15 @@ import {
   Dimensions,
   FlatList,
   ListRenderItem,
+  Platform,
   Share,
+  useWindowDimensions,
   View,
+  type ViewToken,
 } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  useAnimatedReaction,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
@@ -28,6 +35,8 @@ import {
   useUserBlocked,
   useInfiniteUserPosts,
 } from "@/src/api/read";
+import { getUserPosts } from "@/src/api/read/endpoints/posts";
+import { queryKeys } from "@/src/api/read/query-keys";
 import { transformApiPost } from "@/src/api/read/utils";
 import type { Post as ApiPost } from "@/src/api/types";
 import {
@@ -52,9 +61,11 @@ import {
 } from "@/src/components/molecules";
 import { PostCardItem } from "@/src/components/molecules/post-card-item";
 import { PostCardSkeletonList } from "@/src/components/molecules/post-card-skeleton";
+import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { ProfileCommentItem } from "@/src/components/molecules/profile-comment-item";
 import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { UserProfileContentAnimated } from "@/src/components/molecules/user-profile-content-animated";
+import { PROFILE_TAB_BAR_HEIGHT } from "@/src/components/molecules/profile-tabs";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import {
@@ -99,12 +110,18 @@ const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
  const p = prev.post;
  const n = next.post;
  if (p.id !== n.id) return false;
+ if (p.title !== n.title) return false;
+ if (p.body !== n.body) return false;
  if (p.likes !== n.likes) return false;
  if (p.dislikes !== n.dislikes) return false;
  if (p.comments !== n.comments) return false;
  if (p.hasLiked !== n.hasLiked) return false;
  if (p.hasDisliked !== n.hasDisliked) return false;
  if (p.awards?.length !== n.awards?.length) return false;
+ if (prev.isVisible !== next.isVisible) return false;
+ if (prev.isFocused !== next.isFocused) return false;
+ if (prev.screenActive !== next.screenActive) return false;
+ if (prev.contentRevealed !== next.contentRevealed) return false;
  return true;
 });
 const MemoizedProfileCommentItem = memo(ProfileCommentItem, (prev, next) => {
@@ -113,10 +130,13 @@ const MemoizedProfileCommentItem = memo(ProfileCommentItem, (prev, next) => {
   && prev.comment.points === next.comment.points;
 });
 
-const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
+const PostWrapper = memo(function PostWrapper({
  post,
- contentAnimatedStyle,
  isOwnProfile,
+ isVisible,
+ isFocused,
+ screenActive,
+ contentRevealed,
  shareUrl,
  onPostPress,
  onAuthorPress,
@@ -127,10 +147,15 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  onBlockUser,
  onBlockPost,
  onReport,
+ onRevealContent,
+  onTopicPress,
 }: {
  post: Post;
- contentAnimatedStyle: any;
  isOwnProfile: boolean;
+ isVisible?: boolean;
+ isFocused?: boolean;
+ screenActive?: boolean;
+ contentRevealed?: boolean;
  shareUrl: string;
  onPostPress: (postId: string) => void;
  onAuthorPress: (authorId: string) => void;
@@ -141,12 +166,27 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  onBlockUser: (postId: string, authorId: string, authorUsername: string) => void;
  onBlockPost: (postId: string) => void;
  onReport: (postId: string) => void;
+ onRevealContent?: (postId: string) => void;
+  onTopicPress: (topic: string) => void;
 }) {
+ const editOverride = usePostEditStore((s) => s.overrides[post.id]);
+ const displayPost = editOverride ? {
+   ...post,
+   title: editOverride.title,
+   body: editOverride.content || undefined,
+   topic: editOverride.topic ?? post.topic,
+   media: editOverride.media
+     ? editOverride.media.map((url: string) => ({ uri: url, type: "image" as const }))
+     : post.media,
+ } : post;
  return (
-  <Animated.View style={contentAnimatedStyle}>
    <MemoizedPostCardItem
-    post={post}
+    post={displayPost}
     isOwnPost={isOwnProfile}
+    isVisible={isVisible}
+    isFocused={isFocused}
+    screenActive={screenActive}
+    contentRevealed={contentRevealed}
     showUrlCard={false}
     showFollowButton={false}
     shareUrl={shareUrl}
@@ -159,36 +199,34 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
     onBlockUser={onBlockUser}
     onBlockPost={onBlockPost}
     onReport={onReport}
+    onRevealContent={onRevealContent}
+   onTopicPress={onTopicPress}
    />
-  </Animated.View>
  );
 });
 
-const AnimatedCommentWrapper = memo(function AnimatedCommentWrapper({
+const MemoizedCommentWrapper = memo(function MemoizedCommentWrapper({
  comment,
- contentAnimatedStyle,
  onPress,
 }: {
  comment: ApiPost;
- contentAnimatedStyle: any;
  onPress: (commentId: string, rootPostId: string) => void;
 }) {
  return (
-  <Animated.View style={contentAnimatedStyle}>
    <MemoizedProfileCommentItem
     comment={comment}
     onPress={onPress}
    />
-  </Animated.View>
  );
 });
 
 export function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  console.log('[UserProfileScreen] RENDER - v3 with refetchOnMount:false');
 
   const router = useRouter();
+  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { theme } = useUnistyles();
   const queryClient = useQueryClient();
   const shareServer = usePreferencesStore((s) => s.shareServer);
@@ -225,6 +263,7 @@ export function UserProfileScreen() {
   const animatedTabIndex = useSharedValue(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [isTabsSticky, setIsTabsSticky] = useState(false);
 
   const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
@@ -309,6 +348,10 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
 
   const headerHeight = insets.top + HEADER_BAR_HEIGHT;
   const stickyThreshold = PROFILE_CONTENT_HEIGHT;
+  const minimumContentHeight = useMemo(
+    () => windowHeight + stickyThreshold + 1,
+    [windowHeight, stickyThreshold],
+  );
 
   const getTabType = useCallback((): "submissions" | "comments" => {
     return activeTab === 0 ? "submissions" : "comments";
@@ -328,13 +371,42 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
 
   const fetchNextPage = _fetchNextPage;
 
+  useEffect(() => {
+    if (!userAddress) return;
+
+    queryClient.prefetchInfiniteQuery({
+      queryKey: queryKeys.userPosts(userAddress, "comments"),
+      queryFn: ({ pageParam = 1 }) =>
+        getUserPosts({
+          owner: userAddress,
+          address: currentUser?.walletAddress ?? undefined,
+          page: pageParam,
+          type: "comments",
+          limit: 20,
+        }),
+      initialPageParam: 1,
+      getNextPageParam: (lastPage) => {
+        if (!lastPage?.has_more) return undefined;
+        return lastPage.page + 1;
+      },
+    });
+  }, [currentUser?.walletAddress, queryClient, userAddress]);
+
+  const postEditOverrides = usePostEditStore((s) => s.overrides);
+
   const apiPosts = useMemo(() => {
     const allPosts = postsData?.pages.flatMap((page) => page.posts) ?? [];
     if (getTabType() === "submissions") {
-      return allPosts.filter((post) => !hiddenPostIds.has(post.post_id));
+      return allPosts
+        .filter((post) => !hiddenPostIds.has(post.post_id))
+        .map((post) => {
+          const ov = postEditOverrides[post.post_id];
+          if (!ov) return post;
+          return { ...post, title: ov.title, content: ov.content, topic: ov.topic ?? post.topic, media: ov.media ?? post.media };
+        });
     }
     return allPosts.filter((post) => !hiddenCommentIds.has(post.post_id));
-  }, [postsData, getTabType, hiddenPostIds, hiddenCommentIds]);
+  }, [postsData, getTabType, hiddenPostIds, hiddenCommentIds, postEditOverrides]);
 
   const uiPosts = useMemo(
     () => apiPosts.map((post) => transformApiPost(post, {
@@ -542,6 +614,13 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     [router, userAddress, id, displayUsername, toast]
  );
 
+  const handleTopicPress = useCallback(
+    (topic: string) => {
+      router.push(`/topic/${encodeURIComponent(topic)}`);
+    },
+    [router],
+  );
+
   const postsById = useMemo(() => {
     const map = new Map<string, Post>();
     for (const post of uiPosts) {
@@ -560,6 +639,11 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     },
     [postsById]
   );
+
+  const handleEditPost = useCallback(() => {
+    if (!selectedPost) return;
+    navigateToEditPost(router, selectedPost);
+  }, [selectedPost, router]);
 
   const handleDeletePost = useCallback(() => {
     if (!selectedPost) return;
@@ -706,6 +790,100 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, activeTab, isBlocked]);
 
+  const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
+  const [visibleVideoPostIds, setVisibleVideoPostIds] = useState<Set<string>>(new Set());
+  const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
+
+  const handleRevealContent = useCallback((postId: string) => {
+    setRevealedPosts((prev) => {
+      const next = new Set(prev);
+      next.add(postId);
+      return next;
+    });
+    const post = postsWithVotes.find((p) => p.id === postId);
+    if (postHasPlayableVideo(post)) {
+      setActiveVideoPostId(postId);
+      setVisibleVideoPostIds((prev) => {
+        const next = new Set(prev);
+        next.add(postId);
+        return next;
+      });
+    }
+  }, [postsWithVotes]);
+
+  useEffect(() => {
+    if (activeTab !== 0) return;
+    const posts = postsWithVotes;
+    const firstVideo = posts.find((p) => postHasPlayableVideo(p));
+    if (firstVideo) {
+      setActiveVideoPostId(firstVideo.id);
+      setVisibleVideoPostIds(new Set([firstVideo.id]));
+    }
+  }, [postsWithVotes, activeTab]);
+
+  const profileViewabilityConfig = useRef({
+    viewAreaCoveragePercentThreshold: 30,
+    minimumViewTime: 300,
+  }).current;
+
+  const pendingProfileViewableRef = useRef<ViewToken[] | null>(null);
+  const profileDeferHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushProfileViewability = () => {
+    const items = pendingProfileViewableRef.current;
+    if (!items) return;
+    const visibleItems = items.filter(
+      (item) => item.isViewable && item.item && typeof item.item === "object" && "id" in item.item
+    );
+    if (visibleItems.length === 0) return;
+    const videoItems = visibleItems.filter(
+      (item) => postHasPlayableVideo(item.item)
+    );
+    const newVisibleIds = new Set(videoItems.map((item) => item.item.id));
+    setVisibleVideoPostIds(newVisibleIds);
+    if (videoItems.length > 0) {
+      const midIdx = Math.floor((visibleItems.length - 1) / 2);
+      const midListIndex = visibleItems[midIdx]?.index ?? 0;
+      let best = videoItems[0];
+      let bestDist = Math.abs((best.index ?? 0) - midListIndex);
+      for (let i = 1; i < videoItems.length; i++) {
+        const d = Math.abs((videoItems[i].index ?? 0) - midListIndex);
+        if (d < bestDist) { best = videoItems[i]; bestDist = d; }
+      }
+      setActiveVideoPostId(best.item.id);
+    } else {
+      setActiveVideoPostId(null);
+    }
+  };
+
+  const onProfileViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      pendingProfileViewableRef.current = viewableItems;
+      if (Platform.OS === "android") {
+        if (profileDeferHandleRef.current !== null) {
+          clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+        }
+        profileDeferHandleRef.current = setTimeout(flushProfileViewability, 150);
+      }
+    }
+  ).current;
+
+  const handleProfileMomentumScrollEnd = useCallback(() => {
+    if (profileDeferHandleRef.current !== null) {
+      clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+      profileDeferHandleRef.current = null;
+    }
+    if (Platform.OS === "ios") {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(flushProfileViewability);
+      });
+    } else {
+      setTimeout(() => {
+        requestAnimationFrame(flushProfileViewability);
+      }, 50);
+    }
+  }, []);
+
   const keyExtractor = useCallback(
     (item: Post | ApiPost | "header" | "tabs", index: number) => {
       if (item === "header") return "header";
@@ -738,6 +916,10 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         }
 
         if (item === "tabs") {
+          if (isTabsSticky) {
+            return <View style={styles.inlineTabPlaceholder} />;
+          }
+
           return (
             <View style={{ backgroundColor: theme.colors.background.default }}>
               <ProfileTabBar
@@ -753,31 +935,39 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
 
        if (activeTab === 0 && "id" in item) {
         return (
-          <AnimatedPostWrapper
-           post={item}
-           contentAnimatedStyle={contentAnimatedStyle}
-           isOwnProfile={isOwnProfile}
-           shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
-           onPostPress={handlePostPress}
-           onAuthorPress={handleAuthorPress}
-           onCommentPress={handlePostPress}
-           onMorePress={handlePostMorePress}
-           onLikePress={handleUpvote}
-           onDislikePress={handleDownvote}
-           onBlockUser={handleBlockUserFromCard}
-           onBlockPost={handleBlockPostFromCard}
-           onReport={handleReportFromCard}
-          />
+          <Animated.View style={contentAnimatedStyle}>
+            <PostWrapper
+             post={item}
+             isOwnProfile={isOwnProfile}
+             isVisible={visibleVideoPostIds.has(item.id)}
+             isFocused={activeVideoPostId === item.id}
+             screenActive={isFocused}
+             contentRevealed={revealedPosts.has(item.id)}
+             shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
+             onPostPress={handlePostPress}
+             onAuthorPress={handleAuthorPress}
+             onCommentPress={handlePostPress}
+             onMorePress={handlePostMorePress}
+             onLikePress={handleUpvote}
+             onDislikePress={handleDownvote}
+             onBlockUser={handleBlockUserFromCard}
+             onBlockPost={handleBlockPostFromCard}
+             onReport={handleReportFromCard}
+             onRevealContent={handleRevealContent}
+             onTopicPress={handleTopicPress}
+            />
+          </Animated.View>
          );
        }
 
         if (activeTab === 1 && "post_id" in item) {
           return (
-            <AnimatedCommentWrapper
-             comment={item}
-             contentAnimatedStyle={contentAnimatedStyle}
-             onPress={handleCommentPress}
-            />
+            <Animated.View style={contentAnimatedStyle}>
+              <MemoizedCommentWrapper
+               comment={item}
+               onPress={handleCommentPress}
+              />
+            </Animated.View>
           );
         }
 
@@ -793,6 +983,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
       handleFollowersPress,
        isLoading,
       headerHeight,
+       isTabsSticky,
        theme.colors.background.default,
        activeTab,
        handleTabChange,
@@ -808,8 +999,12 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
        handleBlockUserFromCard,
        handleBlockPostFromCard,
        handleReportFromCard,
-      animatedTabIndex,
       contentAnimatedStyle,
+      animatedTabIndex,
+      activeVideoPostId,
+      isFocused,
+      revealedPosts,
+      handleRevealContent,
     ]
   );
 
@@ -817,66 +1012,70 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     if (isBlocked) {
       const tabType = activeTab === 0 ? "posts" : activeTab === 1 ? "comments" : "about";
       return (
-        <Animated.View style={contentAnimatedStyle}>
-          <ProfileEmptyState
-            tabType={tabType}
-            isOwnProfile={false}
-            isBlocked={true}
-            onUnblock={handleUnblockUser}
-          />
-        </Animated.View>
+          <Animated.View style={contentAnimatedStyle}>
+            <ProfileEmptyState
+              tabType={tabType}
+              isOwnProfile={false}
+              isBlocked={true}
+              onUnblock={handleUnblockUser}
+            />
+          </Animated.View>
       );
    }
 
     if (activeTab === 2) {
       return (
-        <Animated.View style={contentAnimatedStyle}>
-          <ProfileAboutTab
-            userAddress={userAddress}
-            isOwnProfile={isOwnProfile}
-          />
-        </Animated.View>
+          <Animated.View style={contentAnimatedStyle}>
+            <ProfileAboutTab
+              userAddress={userAddress}
+              isOwnProfile={isOwnProfile}
+            />
+          </Animated.View>
       );
     }
 
     if (isLoadingPosts) {
-      return (
-        <Animated.View style={contentAnimatedStyle}>
-          {activeTab === 0 ? (
-            <PostCardSkeletonList count={3} />
+      return activeTab === 0 ? (
+            <Animated.View style={contentAnimatedStyle}>
+              <PostCardSkeletonList count={3} />
+            </Animated.View>
           ) : (
-            <ProfilePostsSkeleton count={5} type="comments" />
-          )}
-        </Animated.View>
-      );
+            <Animated.View style={contentAnimatedStyle}>
+              <ProfilePostsSkeleton count={5} type="comments" />
+            </Animated.View>
+          );
     }
 
     if (listData.length <= 2) {
       const tabType = activeTab === 0 ? "posts" : "comments";
       return (
-        <Animated.View style={contentAnimatedStyle}>
-          <ProfileEmptyState
-            tabType={tabType}
-            onSettingsPress={handleSettingsPress}
-            isOwnProfile={isOwnProfile}
-          />
-        </Animated.View>
+          <Animated.View style={contentAnimatedStyle}>
+            <ProfileEmptyState
+              tabType={tabType}
+              onSettingsPress={handleSettingsPress}
+              isOwnProfile={isOwnProfile}
+            />
+          </Animated.View>
       );
     }
 
     if (isFetchingNextPage) {
-      return (
-        <Animated.View style={contentAnimatedStyle}>
-          {activeTab === 0 ? (
-            <PostCardSkeletonList count={1} />
+      return activeTab === 0 ? (
+            <Animated.View style={contentAnimatedStyle}>
+              <PostCardSkeletonList count={1} />
+            </Animated.View>
           ) : (
-            <ProfilePostsSkeleton count={2} type="comments" />
-          )}
-        </Animated.View>
-      );
+            <Animated.View style={contentAnimatedStyle}>
+              <ProfilePostsSkeleton count={2} type="comments" />
+            </Animated.View>
+          );
     }
 
-    return <View style={styles.bottomSpacer} />;
+    return (
+      <Animated.View style={contentAnimatedStyle}>
+        <View style={styles.bottomSpacer} />
+      </Animated.View>
+    );
   }, [
     activeTab,
     isLoadingPosts,
@@ -898,13 +1097,24 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     } as any;
   });
 
+  useAnimatedReaction(
+    () => scrollY.value >= stickyThreshold,
+    (nextIsSticky, previousIsSticky) => {
+      if (nextIsSticky !== previousIsSticky) {
+        runOnJS(setIsTabsSticky)(nextIsSticky);
+      }
+    },
+    [stickyThreshold],
+  );
+
   const contentContainerStyle = useMemo(
     () => ({
       paddingTop: headerHeight,
       paddingBottom: insets.bottom + 20,
       flexGrow: 1,
+      minHeight: minimumContentHeight,
     }),
-    [headerHeight, insets.bottom]
+    [headerHeight, insets.bottom, minimumContentHeight]
   );
 
   return (
@@ -945,24 +1155,27 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
 
       <GestureDetector gesture={swipeGesture}>
         <AnimatedFlatList
+          style={styles.list}
           ref={flatListRef as any}
           data={listData}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           onScroll={scrollHandler}
-          scrollEventThrottle={16}
+          scrollEventThrottle={Platform.OS === "ios" ? 64 : 16}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={contentContainerStyle}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.3}
           ListFooterComponent={ListFooterComponent}
           removeClippedSubviews={true}
-          maxToRenderPerBatch={5}
-          windowSize={5}
-          initialNumToRender={7}
-          updateCellsBatchingPeriod={100}
+          maxToRenderPerBatch={Platform.OS === "android" ? 5 : 7}
+          windowSize={Platform.OS === "android" ? 7 : 9}
+          initialNumToRender={5}
+          updateCellsBatchingPeriod={Platform.OS === "android" ? 100 : 50}
           bounces={true}
-          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          viewabilityConfig={profileViewabilityConfig}
+          onViewableItemsChanged={onProfileViewableItemsChanged}
+          onMomentumScrollEnd={handleProfileMomentumScrollEnd}
         />
       </GestureDetector>
 
@@ -994,6 +1207,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
             saved ? "You can find it in your saved items." : "Removed from saved items.",
           );
         }}
+        onEdit={handleEditPost}
         onDelete={handleDeletePost}
         onBlockPost={handleBlockPost}
         onReport={handleReportPost}
@@ -1060,6 +1274,13 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
 }
 
 const styles = StyleSheet.create((theme) => ({
+  list: {
+    flex: 1,
+  },
+  inlineTabPlaceholder: {
+    height: PROFILE_TAB_BAR_HEIGHT,
+    backgroundColor: theme.colors.background.default,
+  },
   stickyTabBar: {
     position: "absolute",
     left: 0,

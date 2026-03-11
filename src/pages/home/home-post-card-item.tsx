@@ -1,8 +1,10 @@
 import { memo, useCallback, useMemo, useRef, useEffect } from "react";
 import type { Post } from "@/src/components/molecules";
 import { PostCard } from "@/src/components/molecules";
+import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { logPress } from "@/src/utils/press-logger";
 import { getShareBaseUrl } from "@/src/stores";
+import { usePostEditStore } from "@/src/stores/post-edit-store";
 import {
   useHomePostCardStore,
   useAllowAutoplay,
@@ -11,7 +13,7 @@ import {
   useIsTopicFollowed,
   useIsOwnPost,
   useIsPostRevealed,
-  useIsPostVisible,
+  useVideoVisibility,
   useShareServer,
   useVoteOverride,
   useCommentCountOverride,
@@ -48,7 +50,9 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  post,
   feedScreen,
 }: HomePostCardItemProps) {
- const isVisible = useIsPostVisible(post.id);
+ const visibility = useVideoVisibility(post.id, feedScreen);
+ const isVisible = (visibility & 2) !== 0;
+ const isFocused = (visibility & 1) !== 0;
  const isFollowing = useIsFollowing(post.author.id);
  const isTopicFollowed = useIsTopicFollowed(post.topic);
  const contentRevealed = useIsPostRevealed(post.id);
@@ -148,7 +152,10 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     const p = postRef.current;
     logPress({ name: "post_reveal", postId: p.id });
     getHandlers().onRevealContent?.(p.id);
-  }, []);
+    if (postHasPlayableVideo(p)) {
+      useHomePostCardStore.getState().setActiveVideoPostId(feedScreen, p.id);
+    }
+  }, [feedScreen]);
 
   const handleBlockUser = useCallback(() => {
     const p = postRef.current;
@@ -175,30 +182,47 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     getHandlers().onReport?.(p.id);
   }, []);
 
+  const editOverride = usePostEditStore((s) => s.overrides[post.id]);
+
   const displayPost = useMemo(() => {
+    let result = post;
     const needsFollowingUpdate = (post.isFollowing ?? false) !== isFollowing;
     const needsVoteUpdate = !!voteOverride;
     const needsCommentCountUpdate = !!commentCountOverride;
-    if (!needsFollowingUpdate && !needsVoteUpdate && !needsCommentCountUpdate) return post;
-    return {
-      ...post,
-      isFollowing,
-      ...(voteOverride && {
-        likes: voteOverride.likes ?? post.likes,
-        hasLiked: voteOverride.hasLiked ?? post.hasLiked,
-        hasDisliked: voteOverride.hasDisliked ?? post.hasDisliked,
-      }),
-      ...(commentCountOverride && {
-        comments: post.comments + (commentCountOverride.commentDelta ?? 0),
-      }),
-    };
-  }, [post, isFollowing, voteOverride, commentCountOverride]);
+    if (needsFollowingUpdate || needsVoteUpdate || needsCommentCountUpdate) {
+      result = {
+        ...result,
+        isFollowing,
+        ...(voteOverride && {
+          likes: voteOverride.likes ?? post.likes,
+          hasLiked: voteOverride.hasLiked ?? post.hasLiked,
+          hasDisliked: voteOverride.hasDisliked ?? post.hasDisliked,
+        }),
+        ...(commentCountOverride && {
+          comments: post.comments + (commentCountOverride.commentDelta ?? 0),
+        }),
+      };
+    }
+    if (editOverride) {
+      result = {
+        ...result,
+        title: editOverride.title,
+        body: editOverride.content || undefined,
+        topic: editOverride.topic ?? result.topic,
+        media: editOverride.media
+          ? editOverride.media.map((url) => ({ uri: url, type: "image" as const }))
+          : result.media,
+      };
+    }
+    return result;
+  }, [post, isFollowing, voteOverride, commentCountOverride, editOverride]);
 
   return (
    <PostCard
      post={displayPost}
      isOwnPost={isOwnPost}
      isVisible={isVisible}
+     isFocused={isFocused}
      isTopicFollowed={isTopicFollowed}
       showFollowButton={true}
      showUrlCard={false}

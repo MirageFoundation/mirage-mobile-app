@@ -238,7 +238,7 @@ export default function UsernameScreen() {
         return;
       }
 
-      setHasUsername(true, username);
+      setHasUsername(true, `anon-${username}`);
 
       triggerHaptic("success");
 
@@ -246,7 +246,7 @@ export default function UsernameScreen() {
         txProgress.hideModal();
         router.replace({
           pathname: "/(auth)/recovery-phrase",
-          params: { username },
+          params: { username: `anon-${username}` },
         });
       }, 1500);
     } catch (error) {
@@ -435,7 +435,7 @@ export default function UsernameScreen() {
                 txProgress.hideModal();
                 router.push({
                   pathname: "/(auth)/recovery-phrase",
-                  params: { username },
+                params: { username: `anon-${username}` },
                 });
               }
             : handleDismissError

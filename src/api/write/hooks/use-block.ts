@@ -45,9 +45,8 @@ export function useBlockUser(options: UseBlockOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      // Blocking affects what content is shown
       queryClient.invalidateQueries({ queryKey: ["posts"] });
-      queryClient.invalidateQueries({ queryKey: ["comments"] });
+      queryClient.invalidateQueries({ queryKey: ["comments"], refetchType: "inactive" });
     },
   });
 }
@@ -121,7 +120,7 @@ export function useUnblockUser(options: UseBlockOptions = {}) {
         });
       }
       queryClient.invalidateQueries({ queryKey: ["posts"] });
-      queryClient.invalidateQueries({ queryKey: ["comments"] });
+      queryClient.invalidateQueries({ queryKey: ["comments"], refetchType: "inactive" });
     },
   });
 }
@@ -150,7 +149,7 @@ export function useBlockPost(options: UseBlockOptions = {}) {
       }
       // Blocked post should be hidden
       queryClient.invalidateQueries({ queryKey: ["posts"] });
-      queryClient.invalidateQueries({ queryKey: ["comments"] });
+      queryClient.invalidateQueries({ queryKey: ["comments"], refetchType: "inactive" });
     },
   });
 }
@@ -174,7 +173,7 @@ export function useUnblockPost(options: UseBlockOptions = {}) {
         });
       }
       queryClient.invalidateQueries({ queryKey: ["posts"] });
-      queryClient.invalidateQueries({ queryKey: ["comments"] });
+      queryClient.invalidateQueries({ queryKey: ["comments"], refetchType: "inactive" });
     },
   });
 }

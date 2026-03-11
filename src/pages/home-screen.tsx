@@ -1,4 +1,5 @@
-import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { navigateToEditPost } from "@/src/utils/edit-post";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, View, type AppStateStatus } from "react-native";
@@ -26,6 +27,7 @@ UpdateBanner,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
+import { storage } from "@/src/stores";
 import {
   useAuthGuard,
   useBlockHandler,
@@ -67,6 +69,7 @@ export function HomeScreen() {
 
 
   const backgroundTimeRef = useRef<number | null>(null);
+  const isAutoRefreshingRef = useRef(false);
   const [isFeedRefreshing, setIsFeedRefreshing] = useState(false);
   const [hasNewPosts, setHasNewPosts] = useState(false);
   const [newPostAvatars, setNewPostAvatars] = useState<{ userId: string; username: string }[]>([]);
@@ -77,13 +80,18 @@ export function HomeScreen() {
   }, []);
 
   const handleNewPostsChange = useCallback((hasNew: boolean, avatars: { userId: string; username: string }[], count: number) => {
+    if (isAutoRefreshingRef.current) return;
     setHasNewPosts(hasNew);
     setNewPostAvatars(avatars);
     setNewPostCount(count);
   }, []);
 
+  const [isBannerLoading, setIsBannerLoading] = useState(false);
+
   const handleNewPostsPress = useCallback(async () => {
+    setIsBannerLoading(true);
     await tabbedFeedRef.current?.handleNewPostsPress();
+    setIsBannerLoading(false);
     setHasNewPosts(false);
   }, []);
 
@@ -92,15 +100,34 @@ export function HomeScreen() {
       if (nextState === "background" || nextState === "inactive") {
         if (!backgroundTimeRef.current) {
           backgroundTimeRef.current = Date.now();
+          storage.set("app_was_backgrounded", "true");
+          storage.set("app_last_foreground_time", Date.now().toString());
         }
         return;
       }
       if (nextState === "active" && backgroundTimeRef.current) {
         const duration = Date.now() - backgroundTimeRef.current;
         backgroundTimeRef.current = null;
-        if (duration >= 15 * 60 * 1000) {
-          tabbedFeedRef.current?.scrollToTop();
-          tabbedFeedRef.current?.refresh();
+        storage.remove("app_was_backgrounded");
+        if (duration >= 2 * 60 * 60 * 1000) {
+          setTimeout(async () => {
+            isAutoRefreshingRef.current = true;
+            setHasNewPosts(false);
+            showBars();
+            tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
+            await tabbedFeedRef.current?.refresh({ fetchAllNew: true });
+            tabbedFeedRef.current?.dismissNewPosts();
+            setHasNewPosts(false);
+            isAutoRefreshingRef.current = false;
+            requestAnimationFrame(() => {
+              tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
+              showBars();
+            });
+          }, 300);
+        } else {
+          setTimeout(() => {
+            tabbedFeedRef.current?.checkNewPosts();
+          }, 500);
         }
       }
     };
@@ -116,11 +143,32 @@ export function HomeScreen() {
       useHomePostCardStore.getState().setSkipNextRefresh(false);
       setFeedTabIndex(1);
     }
-    const timer = setTimeout(() => {
-      showBars();
-      tabbedFeedRef.current?.scrollToTop();
-    }, 300);
-    return () => clearTimeout(timer);
+    showBars();
+    const wasBackgrounded = storage.getString("app_was_backgrounded");
+    storage.remove("app_was_backgrounded");
+    if (wasBackgrounded) {
+      const lastForeground = Number(storage.getString("app_last_foreground_time") ?? "0");
+      const elapsed = Date.now() - lastForeground;
+      const timer = elapsed >= 2 * 60 * 60 * 1000
+        ? setTimeout(async () => {
+            isAutoRefreshingRef.current = true;
+            setHasNewPosts(false);
+            showBars();
+            tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
+            await tabbedFeedRef.current?.refresh({ fetchAllNew: true });
+            tabbedFeedRef.current?.dismissNewPosts();
+            setHasNewPosts(false);
+            isAutoRefreshingRef.current = false;
+            requestAnimationFrame(() => {
+              tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
+              showBars();
+            });
+          }, 300)
+        : setTimeout(() => {
+            tabbedFeedRef.current?.checkNewPosts();
+          }, 300);
+      return () => clearTimeout(timer);
+    }
   }, []);
 
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
@@ -217,9 +265,13 @@ export function HomeScreen() {
   }, [setAdultContent, setHasSeenAdultPrompt]);
 
   const revealedPostsRef = useRef<Set<string>>(new Set());
+  const isNavigatingRef = useRef(false);
 
   const handlePostPress = useCallback(
     (postId: string) => {
+      if (isNavigatingRef.current) return;
+      isNavigatingRef.current = true;
+      setTimeout(() => { isNavigatingRef.current = false; }, 500);
       const isRevealed = revealedPostsRef.current.has(postId);
       router.push(`/post/${postId}${isRevealed ? '?reveal=true' : ''}`);
     },
@@ -340,6 +392,11 @@ export function HomeScreen() {
     [reportHandler]
   );
 
+  const handleEditPost = useCallback(() => {
+    if (!selectedPost) return;
+    navigateToEditPost(router, selectedPost);
+  }, [selectedPost, router]);
+
   const handleDeletePost = useCallback(() => {
     if (selectedPost) {
       deleteHandler.requestDelete(selectedPost.id, "post");
@@ -457,14 +514,18 @@ export function HomeScreen() {
     setAllowAutoplay(allowAutoplay);
   }, [allowAutoplay, setAllowAutoplay]);
 
-  const isFocused = useIsFocused();
-
-  useEffect(() => {
-    setActiveFeedScreen(isFocused ? 'home' : null);
-    if (isFocused) {
+  useFocusEffect(
+    useCallback(() => {
+      setActiveFeedScreen('home');
       setDisabledTopicName(undefined);
-    }
-  }, [isFocused, setActiveFeedScreen, setDisabledTopicName]);
+      return () => {
+        const current = useHomePostCardStore.getState().activeFeedScreen;
+        if (current === 'home') {
+          setActiveFeedScreen(null);
+        }
+      };
+    }, [setActiveFeedScreen, setDisabledTopicName]),
+  );
 
   const handlersRef = useRef({
     handlePostPress,
@@ -559,6 +620,7 @@ export function HomeScreen() {
         topOffset={insets.top + 44}
         avatars={newPostAvatars}
         newPostCount={newPostCount}
+        loading={isBannerLoading}
       />
 
       <UpdateBanner
@@ -596,6 +658,7 @@ export function HomeScreen() {
         onReport={handleReport}
         onBlockUser={handleBlockUser}
         onHidePost={handleHidePost}
+        onEdit={handleEditPost}
         onDelete={handleDeletePost}
         onGiveAward={() => {
           if (!selectedPost) return;

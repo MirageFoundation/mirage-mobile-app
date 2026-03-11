@@ -25,6 +25,7 @@ import { ProfilePostsList } from "./profile-posts-list";
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 export type TabType = "posts" | "comments" | "about";
+export const PROFILE_TAB_BAR_HEIGHT = 50;
 
 type ProfileTabsProps = {
   onSettingsPress?: () => void;
@@ -394,9 +395,11 @@ const styles = StyleSheet.create((theme) => ({
   },
   tabBarContainer: {
     position: "relative",
+    minHeight: PROFILE_TAB_BAR_HEIGHT,
   },
   tabBar: {
     flexDirection: "row",
+    minHeight: PROFILE_TAB_BAR_HEIGHT,
   },
   tab: {
     flex: 1,

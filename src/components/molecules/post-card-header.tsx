@@ -4,7 +4,7 @@ import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { memo, useCallback } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { Pressable, View } from "react-native";
 import {
   Menu,
@@ -95,6 +95,29 @@ export const PostCardHeader = memo(function PostCardHeader({
     onFollowTopic?.();
   }, [onFollowTopic]);
 
+  const subtleTextStyle = useMemo(
+    () => ({ color: theme.colors.text.subtle }),
+    [theme.colors.text.subtle],
+  );
+  const followingBgStyle = useMemo(
+    () => ({
+      backgroundColor: isFollowing ? "transparent" : theme.colors.primary[500],
+      borderColor: isFollowing ? theme.colors.border.default : theme.colors.primary[500],
+      height: isFollowing ? 22 : 20,
+    }),
+    [isFollowing, theme.colors.primary, theme.colors.border.default],
+  );
+  const followTextStyle = useMemo(
+    () => ({
+      color: isFollowing ? theme.colors.text.default : theme.colors.background.default,
+    }),
+    [isFollowing, theme.colors.text.default, theme.colors.background.default],
+  );
+  const defaultBgStyle = useMemo(
+    () => ({ color: theme.colors.background.default }),
+    [theme.colors.background.default],
+  );
+
   return (
     <View style={styles.header}>
       <View style={styles.authorSection}>
@@ -115,13 +138,13 @@ export const PostCardHeader = memo(function PostCardHeader({
               size="lg"
               weight="bold"
               numberOfLines={1}
-              style={{ color: theme.colors.text.subtle }}
+              style={subtleTextStyle}
             >
               #{topic}
             </Text>
           )}
           {topic && !topicDisabled && (
-            <Text size="sm" style={{ color: theme.colors.text.subtle }}>
+            <Text size="sm" style={subtleTextStyle}>
               •
             </Text>
           )}
@@ -129,9 +152,9 @@ export const PostCardHeader = memo(function PostCardHeader({
             timestamp={createdAt}
             showSuffix={false}
             size="md"
-            style={{ color: theme.colors.text.subtle }}
+            style={subtleTextStyle}
           />
-          <Text size="sm" style={{ color: theme.colors.text.subtle }}>
+          <Text size="sm" style={subtleTextStyle}>
             •
           </Text>
           <Pressable
@@ -146,9 +169,9 @@ export const PostCardHeader = memo(function PostCardHeader({
               size="md"
               weight="medium"
               numberOfLines={1}
-              style={{ color: theme.colors.text.subtle }}
+              style={subtleTextStyle}
             >
-              @{author.username.toLowerCase()}
+              @{author.username}
             </Text>
           </Pressable>
         </View>
@@ -159,31 +182,10 @@ export const PostCardHeader = memo(function PostCardHeader({
           <Pressable
             onPress={handleFollowUser}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            style={{ padding: 4 }}
+            style={styles.followPressable}
           >
-            <View
-              style={[
-                styles.followButton,
-                {
-                  backgroundColor: isFollowing
-                    ? "transparent"
-                    : theme.colors.primary[500],
-                  borderColor: isFollowing
-                    ? theme.colors.border.default
-                    : theme.colors.primary[500],
-                  height: isFollowing ? 22 : 20,
-                },
-              ]}
-            >
-              <Text
-                size="sm"
-                weight="bold"
-                style={{
-                  color: isFollowing
-                    ? theme.colors.text.default
-                    : theme.colors.background.default,
-                }}
-              >
+            <View style={[styles.followButton, followingBgStyle]}>
+              <Text size="sm" weight="bold" style={followTextStyle}>
                 {isFollowing ? "Following" : "Follow"}
               </Text>
             </View>
@@ -205,46 +207,15 @@ export const PostCardHeader = memo(function PostCardHeader({
                   locations={[0.5, 0.5]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={[
-                    styles.followButton,
-                    {
-                      borderColor: theme.colors.border.default,
-                      height: 20,
-                    },
-                  ]}
+                  style={[styles.followButton, styles.followButtonPartial]}
                 >
-                  <Text
-                    size="sm"
-                    weight="bold"
-                    style={{ color: theme.colors.background.default }}
-                  >
+                  <Text size="sm" weight="bold" style={defaultBgStyle}>
                     Follow
                   </Text>
                 </LinearGradient>
               ) : (
-                <View
-                  style={[
-                    styles.followButton,
-                    {
-                      backgroundColor: isFollowingAll
-                        ? "transparent"
-                        : theme.colors.primary[500],
-                      borderColor: isFollowingAll
-                        ? theme.colors.border.default
-                        : theme.colors.primary[500],
-                      height: isFollowingAll ? 22 : 20,
-                    },
-                  ]}
-                >
-                  <Text
-                    size="sm"
-                    weight="bold"
-                    style={{
-                      color: isFollowingAll
-                        ? theme.colors.text.default
-                        : theme.colors.background.default,
-                    }}
-                  >
+                <View style={[styles.followButton, followingBgStyle]}>
+                  <Text size="sm" weight="bold" style={followTextStyle}>
                     {isFollowingAll ? "Unfollow" : "Follow"}
                   </Text>
                 </View>
@@ -371,6 +342,9 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     gap: theme.spacing.xs,
   },
+  followPressable: {
+    padding: 4,
+  },
   followButton: {
     alignItems: "center",
     justifyContent: "center",
@@ -379,6 +353,10 @@ const styles = StyleSheet.create((theme) => ({
     height: 20,
     paddingHorizontal: 6,
     borderWidth: 1,
+  },
+  followButtonPartial: {
+    borderColor: theme.colors.border.default,
+    height: 20,
   },
   menuOption: {
     flexDirection: "row",

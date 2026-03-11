@@ -168,7 +168,7 @@ const SectionHeader = ({
             size="sm"
             weight="semibold"
           >
-            Show All
+            Show More
           </Text>
         </Pressable>
       )}
@@ -347,11 +347,22 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       ? Math.floor(userStatus.balance / 1_000_000)
       : 0;
 
+    const { topicsBeforeShowMore, peopleBeforeShowMore } =
+      usePreferencesStore();
+
     const { data: followedData, isLoading: isLoadingFollowed } =
       useUserFollowed();
 
-    const followedUsers = followedData?.followed_users?.slice(0, 5) ?? [];
-    const followedTopics = followedData?.followed_topics?.slice(0, 5) ?? [];
+    const allFollowedUsers = followedData?.followed_users ?? [];
+    const allFollowedTopics = followedData?.followed_topics ?? [];
+    const followedUsers =
+      peopleBeforeShowMore === -1
+        ? allFollowedUsers
+        : allFollowedUsers.slice(0, peopleBeforeShowMore);
+    const followedTopics =
+      topicsBeforeShowMore === -1
+        ? allFollowedTopics
+        : allFollowedTopics.slice(0, topicsBeforeShowMore);
 
     const translateX = useSharedValue(-MENU_WIDTH);
     const backdropOpacity = useSharedValue(0);
@@ -552,6 +563,14 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   <SectionFooter />
 
                   <SectionHeader title="Rewards & Plans" />
+                  {Platform.OS !== "ios" && (
+                    <MenuItem
+                      iconName="diamond-outline"
+                      title="Perks"
+                      subtitle="Update subscription"
+                      onPress={createHandler(onSubscription)}
+                    />
+                  )}
                   <MenuItem
                     iconName="gift-outline"
                     title="Invite a Friend"
@@ -563,12 +582,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     title="Daily Quests"
                     subtitle="Complete tasks for rewards"
                     onPress={createHandler(onQuests)}
-                  />
-                  <MenuItem
-                    iconName="card-outline"
-                    title="Subscription"
-                    subtitle="Manage your plan"
-                    onPress={createHandler(onSubscription)}
                   />
                   <SectionFooter />
 
@@ -608,7 +621,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   <SectionHeader
                     title="Followed Users"
                     onShowMore={
-                      followedUsers.length > 0
+                      allFollowedUsers.length > followedUsers.length
                         ? handleShowMoreFollowing
                         : undefined
                     }
@@ -645,7 +658,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                   <SectionHeader
                     title="Followed Topics"
                     onShowMore={
-                      followedTopics.length > 0
+                      allFollowedTopics.length > followedTopics.length
                         ? handleShowMoreFollowing
                         : undefined
                     }
@@ -723,7 +736,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 33
+                          update 69
                         </Text>
                         <Text
                           style={{
@@ -733,7 +746,15 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          bug fixes
+                          link extraction from shared reddit post, comment lenth
+                          check added,recovery phrase UI fix, error handling for
+                          network error while posting, try again in create post
+                          not working fixed, some toast text changes,toasts
+                          overlapping fix, several errors from sentry log fixed,
+                          some minor UI changes in search topic in create
+                          post,network error handling while pow,error handling
+                          for mirage link not openeing, added perks and
+                          subscription page to be platform specifuc
                         </Text>
                       </>
                     )}
@@ -774,7 +795,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 33
+                          update 69
                         </Text>
                         <Text
                           style={{
@@ -784,7 +805,15 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          bug fixes
+                          link extraction from shared reddit post, comment lenth
+                          check added,recovery phrase UI fix, error handling for
+                          network error while posting, try again in create post
+                          not working fixed, some toast text changes,toasts
+                          overlapping fix, several errors from sentry log fixed,
+                          some minor UI changes in search topic in create
+                          post,network error handling while pow,error handling
+                          for mirage link not openeing, added perks and
+                          subscription page to be platform specifuc
                         </Text>
                       </>
                     )}

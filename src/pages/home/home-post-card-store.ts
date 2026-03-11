@@ -50,7 +50,8 @@ type HomePostCardState = {
  followLoadingUsers: Set<string>;
  revealedPosts: Set<string>;
  visiblePostIds: Set<string>;
- activeVideoPostId: string | null;
+ activeVideoPostIds: Record<string, string | null>;
+ visibleVideoPostIds: Record<string, Set<string>>;
  voteOverrides: Record<string, VoteOverride>;
  commentCountOverrides: Record<string, CommentCountOverride>;
  handlers: HomePostCardHandlers;
@@ -66,7 +67,9 @@ type HomePostCardState = {
  setFollowLoadingUsers: (users: Set<string>) => void;
  setRevealedPosts: (posts: Set<string>) => void;
  setVisiblePostIds: (posts: Set<string>) => void;
- setActiveVideoPostId: (postId: string | null) => void;
+ setActiveVideoPostId: (feedScreen: string, postId: string | null) => void;
+ setVisibleVideoPostIds: (feedScreen: string, postIds: Set<string>) => void;
+ setVideoViewability: (feedScreen: string, visibleIds: Set<string>, activeId: string | null) => void;
  setVoteOverride: (postId: string, override: VoteOverride) => void;
  clearVoteOverride: (postId: string) => void;
  incrementCommentCount: (postId: string) => void;
@@ -92,7 +95,8 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
  followLoadingUsers: emptySet,
  revealedPosts: emptySet,
  visiblePostIds: emptySet,
- activeVideoPostId: null,
+ activeVideoPostIds: {},
+ visibleVideoPostIds: {},
  voteOverrides: {},
  commentCountOverrides: {},
  handlers: {},
@@ -121,10 +125,39 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
       }
       return { visiblePostIds: posts };
     }),
- setActiveVideoPostId: (postId) =>
+ setActiveVideoPostId: (feedScreen, postId) =>
    set((state) => {
-     if (state.activeVideoPostId === postId) return state;
-     return { activeVideoPostId: postId };
+     if (state.activeVideoPostIds[feedScreen] === postId) return state;
+     return { activeVideoPostIds: { ...state.activeVideoPostIds, [feedScreen]: postId } };
+   }),
+ setVisibleVideoPostIds: (feedScreen, postIds) =>
+   set((state) => {
+     const current = state.visibleVideoPostIds[feedScreen];
+     if (current && current.size === postIds.size) {
+       let allMatch = true;
+       for (const id of current) {
+         if (!postIds.has(id)) { allMatch = false; break; }
+       }
+       if (allMatch) return state;
+     }
+     return { visibleVideoPostIds: { ...state.visibleVideoPostIds, [feedScreen]: postIds } };
+   }),
+ setVideoViewability: (feedScreen, visibleIds, activeId) =>
+   set((state) => {
+     const currentVisible = state.visibleVideoPostIds[feedScreen];
+     const currentActive = state.activeVideoPostIds[feedScreen];
+     let visibleChanged = !currentVisible || currentVisible.size !== visibleIds.size;
+     if (!visibleChanged && currentVisible) {
+       for (const id of currentVisible) {
+         if (!visibleIds.has(id)) { visibleChanged = true; break; }
+       }
+     }
+     const activeChanged = currentActive !== activeId;
+     if (!visibleChanged && !activeChanged) return state;
+     const updates: Partial<HomePostCardState> = {};
+     if (visibleChanged) updates.visibleVideoPostIds = { ...state.visibleVideoPostIds, [feedScreen]: visibleIds };
+     if (activeChanged) updates.activeVideoPostIds = { ...state.activeVideoPostIds, [feedScreen]: activeId };
+     return updates;
    }),
 setVoteOverride: (postId, override) =>
   set((state) => {
@@ -186,7 +219,8 @@ setVoteOverride: (postId, override) =>
    followLoadingUsers: emptySet,
    revealedPosts: emptySet,
    visiblePostIds: emptySet,
-   activeVideoPostId: null,
+   activeVideoPostIds: {},
+   visibleVideoPostIds: {},
    voteOverrides: {},
    commentCountOverrides: {},
    shouldScrollToTop: false,
@@ -196,11 +230,18 @@ setVoteOverride: (postId, override) =>
  }),
 }));
 
-// Primitive selectors that return stable values
-// These only trigger re-render when the specific value changes
+export const useIsPostVisible = (postId: string, feedScreen: string) =>
+  useHomePostCardStore((state) => state.visibleVideoPostIds[feedScreen]?.has(postId) ?? false);
 
-export const useIsPostVisible = (postId: string) =>
-  useHomePostCardStore((state) => state.activeVideoPostId === postId);
+export const useIsPostFocused = (postId: string, feedScreen: string) =>
+  useHomePostCardStore((state) => state.activeVideoPostIds[feedScreen] === postId);
+
+export const useVideoVisibility = (postId: string, feedScreen: string) =>
+  useHomePostCardStore(
+    (state) =>
+      ((state.visibleVideoPostIds[feedScreen]?.has(postId) ?? false) ? 2 : 0) |
+      (state.activeVideoPostIds[feedScreen] === postId ? 1 : 0),
+  );
 
 export const useIsPostRevealed = (postId: string) =>
   useHomePostCardStore((state) => state.revealedPosts.has(postId));
@@ -232,7 +273,6 @@ export const useAllowAutoplay = () =>
 export const useFeedActive = (screen: 'home' | 'following' | 'topic') =>
   useHomePostCardStore((state) => state.activeFeedScreen === screen);
 
-// Handler selectors - these return stable function references
 export const useHandlers = () =>
   useHomePostCardStore((state) => state.handlers);
 

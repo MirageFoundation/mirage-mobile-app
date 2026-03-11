@@ -6,6 +6,8 @@ import { router } from "expo-router";
 import type { InfiniteData } from "@tanstack/react-query";
 
 import * as Sentry from "@sentry/react-native";
+import * as Network from "expo-network";
+import axios from "axios";
 import { api } from "@/src/api/client";
 import { queryKeys } from "@/src/api/read/query-keys";
 import type { InboxResponse } from "@/src/api/types";
@@ -109,6 +111,12 @@ function getNotificationTitle(reply: InboxResponse["replies"][number]): string {
 
 async function seedExistingReplies(walletAddress: string): Promise<void> {
   try {
+    const networkState = await Network.getNetworkStateAsync();
+    if (!networkState.isConnected) {
+      console.log("[InboxNotifications] Offline, skipping seed");
+      return;
+    }
+
     const inbox = await api.get<InboxResponse>("/get_inbox", {
       address: walletAddress,
       limit: 500,
@@ -123,6 +131,10 @@ async function seedExistingReplies(walletAddress: string): Promise<void> {
     storage.set(SEED_TIMESTAMP_KEY, Math.floor(Date.now() / 1000).toString());
     console.log("[InboxNotifications] Seeded existing replies, won't spam on first run");
   } catch (error) {
+    if (axios.isAxiosError(error) && error.message === "Network Error") {
+      console.log("[InboxNotifications] Seed skipped: device is offline");
+      return;
+    }
     console.error("[InboxNotifications] Seed failed:", error);
     Sentry.addBreadcrumb({
       category: "notifications",
@@ -151,6 +163,12 @@ async function performInboxCheck(): Promise<BackgroundFetch.BackgroundFetchResul
     const { status } = await Notifications.getPermissionsAsync();
     console.log("[InboxNotifications] Permission status:", status);
     if (status !== "granted") {
+      return BackgroundFetch.BackgroundFetchResult.NoData;
+    }
+
+    const networkState = await Network.getNetworkStateAsync();
+    if (!networkState.isConnected) {
+      console.log("[InboxNotifications] Offline, skipping inbox check");
       return BackgroundFetch.BackgroundFetchResult.NoData;
     }
 
@@ -219,6 +237,10 @@ async function performInboxCheck(): Promise<BackgroundFetch.BackgroundFetchResul
 
     return BackgroundFetch.BackgroundFetchResult.NewData;
   } catch (error) {
+    if (axios.isAxiosError(error) && error.message === "Network Error") {
+      console.log("[InboxNotifications] Check skipped: device is offline");
+      return BackgroundFetch.BackgroundFetchResult.NoData;
+    }
     console.error("[InboxNotifications] Check failed:", error);
     Sentry.captureException(error, {
       tags: { action: "inbox_check" },
@@ -286,7 +308,7 @@ function subscribeAppState(): void {
   }
 }
 
-const STALE_NOTIFICATION_MS = 5_000;
+const STALE_NOTIFICATION_MS = 5 * 60_000;
 const HANDLED_NOTIFICATION_IDS_KEY = "inbox-handled-notification-ids";
 
 function getHandledNotificationIds(): Set<string> {
@@ -330,10 +352,22 @@ function handleNotificationResponse(
     }
     handledNotificationIds.add(notificationId);
     saveHandledNotificationIds(handledNotificationIds);
-    router.push({
-      pathname: "/inbox",
-      params: { fromNotification: notificationId },
-    });
+    const navigateToInbox = () => {
+      router.navigate({
+        pathname: "/(tabs)/inbox",
+        params: { fromNotification: notificationId },
+      });
+    };
+    if (AppState.currentState !== "active") {
+      const sub = AppState.addEventListener("change", (state) => {
+        if (state === "active") {
+          sub.remove();
+          setTimeout(navigateToInbox, 500);
+        }
+      });
+    } else {
+      setTimeout(navigateToInbox, 300);
+    }
   } catch (error) {
     console.error("[InboxNotifications] Failed to navigate from notification:", error);
     Sentry.captureException(error, {
@@ -349,18 +383,16 @@ function subscribeNotificationResponses(): void {
       handleNotificationResponse(response);
     });
 
-  if (Platform.OS !== "android") {
-    Notifications.getLastNotificationResponseAsync()
-      .then((response) => {
-        handleNotificationResponse(response);
-      })
-      .catch((error) => {
-        console.error(
-          "[InboxNotifications] Failed to read last notification response:",
-          error,
-        );
-      });
-  }
+  Notifications.getLastNotificationResponseAsync()
+    .then((response) => {
+      handleNotificationResponse(response);
+    })
+    .catch((error) => {
+      console.error(
+        "[InboxNotifications] Failed to read last notification response:",
+        error,
+      );
+    });
 }
 
 function subscribeInboxSignals(): void {

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
+import * as Sentry from "@sentry/react-native";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -54,7 +55,7 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (previousServerRef.current !== apiServer) {
       previousServerRef.current = apiServer;
     }
-  }, [apiServer]);
+  }, [apiServer, queryClient]);
 
   const switchServer = useCallback(async (server: ApiServer) => {
     if (server === previousServerRef.current) {
@@ -62,6 +63,17 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     setIsRefreshing(true);
+    const previousServer = previousServerRef.current;
+
+    Sentry.addBreadcrumb({
+      category: "api-server",
+      message: "Switching API server",
+      level: "info",
+      data: {
+        from: previousServer,
+        to: server,
+      },
+    });
 
     try {
       const baseUrl = getApiBaseUrl(server);
@@ -84,6 +96,16 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       await new Promise((resolve) => setTimeout(resolve, 300));
     } catch (error) {
+      Sentry.captureException(error, {
+        tags: {
+          feature: "api-server",
+          action: "switch",
+        },
+        extra: {
+          from: previousServer,
+          to: server,
+        },
+      });
       throw error;
     } finally {
       setIsRefreshing(false);

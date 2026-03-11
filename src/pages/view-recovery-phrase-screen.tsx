@@ -147,7 +147,7 @@ const styles = StyleSheet.create((theme) => ({
     flexGrow: 1,
     justifyContent: "center",
     marginTop: -20,
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
     paddingTop: theme.spacing.sm,
     paddingBottom: theme.spacing.xl,
   },

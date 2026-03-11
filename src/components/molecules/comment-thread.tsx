@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { usePreferencesStore } from "@/src/stores";
 import { View } from "react-native";
 import Animated, {
   Easing,
@@ -44,8 +45,15 @@ export const CommentThread = ({
   onFollowPress,
   showDivider = true,
 }: CommentThreadProps) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const autoCollapseThreshold = usePreferencesStore((s) => s.autoCollapseThreshold);
+  const score = comment.likes - comment.dislikes;
+  const shouldAutoCollapse = autoCollapseThreshold !== null && score <= autoCollapseThreshold;
+  const [isCollapsed, setIsCollapsed] = useState(shouldAutoCollapse);
   const [showReplies, setShowReplies] = useState(true);
+
+  useEffect(() => {
+    setIsCollapsed(shouldAutoCollapse);
+  }, [autoCollapseThreshold]);
 
   const replies = comment.replies ?? [];
   const hasReplies = replies.length > 0;

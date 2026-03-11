@@ -11,7 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Pressable, Switch, View } from "react-native";
+import { Platform, Pressable, Switch, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -227,11 +227,13 @@ export const ProfileMenuSheet = forwardRef<
               onPress={handleSettings}
             />
 
-            <MenuItem
-              iconName="card-outline"
-              title="Subscription"
-              onPress={handleSubscription}
-            />
+            {Platform.OS !== "ios" && (
+              <MenuItem
+                iconName="diamond-outline"
+                title="Perks"
+                onPress={handleSubscription}
+              />
+            )}
 
             <MenuItem
               iconName="globe-outline"

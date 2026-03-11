@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { InteractionManager } from "react-native";
 import * as Updates from "expo-updates";
 
 export type EasUpdateStatus = "idle" | "available" | "installing" | "error";
@@ -25,6 +26,11 @@ export function useEasUpdate() {
     setStatus("installing");
     try {
       await Updates.fetchUpdateAsync();
+      await new Promise<void>((resolve) => {
+        InteractionManager.runAfterInteractions(() => {
+          setTimeout(resolve, 300);
+        });
+      });
       await Updates.reloadAsync();
     } catch {
       setStatus("error");

@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import {
   Image,
   ActivityIndicator,
+  Alert,
   Linking,
   Modal,
   Pressable,
@@ -145,7 +146,8 @@ export function LoggedOutHome() {
           </Text>
 
           <Pressable
-            onPress={() => Linking.openURL("https://mirage.foundation")}
+            onPress={() => Linking.openURL("https://mirage.foundation")
+              .catch((e: Error) => Alert.alert("Couldn't open link", e.message))}
           >
             <Text
               style={[styles.learnMore, { color: theme.colors.text.default }]}
