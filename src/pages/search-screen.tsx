@@ -634,7 +634,7 @@ export function SearchScreen() {
                 <Text
                   size="md"
                   weight="medium"
-                  style={item.level ? { color: getUsernameColor(item.level) } : undefined}
+                  style={item.level ? { color: getUsernameColor(item.level) } : item.user_is_new ? { color: "rgb(94,194,106)" } : undefined}
                 >
                   @{item.username}
                 </Text>

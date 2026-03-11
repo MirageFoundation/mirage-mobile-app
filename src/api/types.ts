@@ -190,6 +190,7 @@ export interface UserInfo {
   address: string;
   username: string;
   level?: number;
+  user_is_new?: boolean;
 }
 
 export interface UsersResponse {
@@ -208,6 +209,11 @@ export interface Post {
   post_id: string; // txhash lowercase
   user_id: string; // owner address
   username: string;
+  user_level?: number;
+  level?: number;
+  author_level?: number;
+  new_user?: boolean;
+  author_is_new?: boolean;
   timestamp: number;
   topic: string;
   root_topic: string;
@@ -225,7 +231,7 @@ export interface Post {
   awards?: AwardBadge[];
   agent_edited?: boolean;
   agent_edits_meta?: Record<string, string>;
-  appendices?: { agent: string; text: string }[];
+  appendices?: { agent: string; agent_username?: string; text: string }[];
 }
 
 export interface PostsResponse {

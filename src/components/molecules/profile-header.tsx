@@ -28,7 +28,7 @@ import { ShareIcon } from "@/assets/figma-icons";
 import { Avatar, IconButton } from "@/src/components/atoms";
 import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { getTierName } from "@/src/utils/tiers";
+import { getTierName, getTierColor } from "@/src/utils/tiers";
 
 export const PROFILE_CONTENT_HEIGHT = 280;
 export const SCROLL_THRESHOLD = PROFILE_CONTENT_HEIGHT;
@@ -203,9 +203,9 @@ export const ProfileHeaderBar = ({
                 icon={Ionicons}
                 name="shield-checkmark"
                 size={16}
-                color="#FFFFFF"
+                color={getTierColor(userLevel)}
               />
-              <Text size="md" weight="semibold" style={styles.whiteText}>
+              <Text size="md" weight="semibold" style={{ color: getTierColor(userLevel) }}>
                 {getTierName(userLevel)}
               </Text>
             </Pressable>
@@ -367,9 +367,9 @@ export const ProfileContent = ({
                   icon={Ionicons}
                   name="shield-checkmark"
                   size={12}
-                  color="#FFFFFF"
+                  color={getTierColor(userLevel)}
                 />
-                <Text size="xs" weight="medium" style={styles.whiteText}>
+                <Text size="xs" weight="medium" style={{ color: getTierColor(userLevel) }}>
                   {getTierName(userLevel)} Tier
                 </Text>
               </Box>

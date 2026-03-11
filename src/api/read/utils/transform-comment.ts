@@ -32,6 +32,8 @@ export function transformApiComment(
       id: apiComment.user_id,
       username: apiComment.username,
       avatarSeed: apiComment.username, // Use username as seed for DiceBear
+      level: apiComment.author_level ?? apiComment.user_level ?? apiComment.level,
+      isNewUser: apiComment.author_is_new ?? apiComment.new_user ?? false,
     },
     content: apiComment.content || apiComment.title || "",
     likes: Math.max(0, displayPoints),
@@ -56,4 +58,3 @@ export function transformApiComments(
 ): Comment[] {
   return apiComments.map((comment) => transformApiComment(comment, null, 0));
 }
-

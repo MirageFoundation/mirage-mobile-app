@@ -29,16 +29,20 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { getUsernameColor } from "@/src/utils/tiers";
 
 // Vote colors (same as post-actions)
 const UPVOTE_COLOR = "#22C55E"; // Green for upvote
 const DOWNVOTE_COLOR = "#EF4444"; // Red for downvote
+const NEW_USER_COLOR = "rgb(94,194,106)";
 
 export type CommentAuthor = {
   id: string;
   username: string;
   avatarSeed?: string;
   avatarUrl?: string;
+  level?: number;
+  isNewUser?: boolean;
 };
 
 export type Comment = {
@@ -322,6 +326,13 @@ export const CommentItem = ({
 
   const { author, content, likes, hasLiked, hasDisliked, createdAt } = comment;
 
+  const usernameColorStyle = useMemo(() => {
+    const tierColor = author.level != null ? getUsernameColor(author.level) : undefined;
+    if (tierColor) return { color: tierColor };
+    if (author.isNewUser && (!author.level || author.level === 0)) return { color: NEW_USER_COLOR };
+    return undefined;
+  }, [author.level, author.isNewUser]);
+
   // Highlight style for navigated-to comment
   const highlightStyle = isHighlighted
     ? { backgroundColor: theme.colors.primary[500] + "20" } // 20% opacity
@@ -472,7 +483,8 @@ export const CommentItem = ({
                     size="md"
                     weight="medium"
                     numberOfLines={1}
-                    mode="subtle"
+                    mode={usernameColorStyle ? undefined : "subtle"}
+                    style={usernameColorStyle}
                   >
                     @{author.username}
                   </Text>

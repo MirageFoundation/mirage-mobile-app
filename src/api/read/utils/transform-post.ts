@@ -134,6 +134,8 @@ export function transformApiPost(
         ? currentUser.username
         : apiPost.username,
       avatarSeed: apiPost.username,
+      level: apiPost.author_level ?? apiPost.user_level ?? apiPost.level,
+      isNewUser: apiPost.author_is_new ?? apiPost.new_user ?? false,
     },
     title,
     body: content || undefined,
@@ -162,7 +164,11 @@ export function transformApiPost(
     awards: apiPost.awards ?? [],
     agentEdited: apiPost.agent_edited ?? false,
     agentEditsMeta: apiPost.agent_edits_meta,
-    appendices: apiPost.appendices,
+    appendices: apiPost.appendices?.map((a) => ({
+      agent: a.agent,
+      agentUsername: a.agent_username,
+      text: a.text,
+    })),
   };
 }
 
