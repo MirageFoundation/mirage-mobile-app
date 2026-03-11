@@ -736,7 +736,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 70
+                          update 71
                         </Text>
                         <Text
                           style={{
@@ -747,7 +747,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           weight="light"
                         >
                           sentry errors,react native 6 error fix,react native T,
-                          1d and 1c error fix
+                          1d and 1c error fix (better error handling on video
+                          upload fails in midle for any reason such as no
+                          internet connection etc)
                         </Text>
                       </>
                     )}
@@ -788,7 +790,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 70
+                          update 71
                         </Text>
                         <Text
                           style={{
@@ -799,7 +801,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           weight="light"
                         >
                           sentry errors,react native 6 error fix,react native T,
-                          1d and 1c error fix
+                          1d and 1c error fix (better error handling on video
+                          upload fails in midle for any reason such as no
+                          internet connection etc)
                         </Text>
                       </>
                     )}
