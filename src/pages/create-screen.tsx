@@ -14,6 +14,7 @@ import { Paths, File as ExpoFile } from "expo-file-system";
 import { router, useLocalSearchParams } from "expo-router";
 import { useShareIntentContext } from "expo-share-intent";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as Network from "expo-network";
 import {
   ActivityIndicator,
   Dimensions,
@@ -161,7 +162,18 @@ export function CreateScreen() {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isProcessingShareLink, setIsProcessingShareLink] = useState(false);
   const [isPreparingVideo, setIsPreparingVideo] = useState(false);
+  const [isNetworkOnline, setIsNetworkOnline] = useState(true);
   const navigatedToEditorRef = useRef(false);
+
+  useEffect(() => {
+    Network.getNetworkStateAsync().then((state) => {
+      setIsNetworkOnline(state.isConnected === true && state.isInternetReachable !== false);
+    });
+    const sub = Network.addNetworkStateListener((event) => {
+      setIsNetworkOnline(event.isConnected === true && event.isInternetReachable !== false);
+    });
+    return () => sub.remove();
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -178,7 +190,17 @@ export function CreateScreen() {
     return Object.values(videoUploadState).some((v) => v.uploading);
   }, [videoUploadState]);
 
-  const startVideoUpload = useCallback((uri: string) => {
+  const failedVideoUploads = useMemo(() => {
+    return Object.entries(videoUploadState)
+      .filter(([, v]) => v.error)
+      .map(([uri, v]) => ({ uri, error: v.error! }));
+  }, [videoUploadState]);
+
+  const hasFailedUploads = failedVideoUploads.length > 0;
+
+  const videoUploadToastShownRef = useRef(false);
+
+  const startVideoUpload = useCallback((uri: string, silent = false) => {
     VIDEO_UPLOADS.set(uri, { url: null, uploading: true, progress: 0, error: null });
     videoUploadStateRef.current((prev) => ({
       ...prev,
@@ -201,6 +223,7 @@ export function CreateScreen() {
           ...prev,
           [uri]: { progress: 100, uploading: false, done: true, error: null },
         }));
+        videoUploadToastShownRef.current = false;
         triggerHaptic("success");
       })
       .catch((err) => {
@@ -211,10 +234,43 @@ export function CreateScreen() {
           ...prev,
           [uri]: { progress: 0, uploading: false, done: false, error: msg },
         }));
-        toast.error("Video upload failed", msg);
+        if (!silent && !videoUploadToastShownRef.current) {
+          videoUploadToastShownRef.current = true;
+          toast.error("Video upload failed", msg);
+        }
         triggerHaptic("error");
       });
   }, [toast]);
+
+  useEffect(() => {
+    if (!hasFailedUploads) return;
+    let retryScheduled = false;
+    const sub = Network.addNetworkStateListener((event) => {
+      if (retryScheduled) return;
+      if (event.isConnected && event.isInternetReachable !== false) {
+        retryScheduled = true;
+        setTimeout(() => {
+          const toRetry = [...VIDEO_UPLOADS.entries()]
+            .filter(([, e]) => !!e.error)
+            .map(([uri]) => uri);
+          toRetry.forEach((uri) => startVideoUpload(uri, true));
+        }, 1500);
+      }
+    });
+    Network.getNetworkStateAsync().then((state) => {
+      if (retryScheduled) return;
+      if (state.isConnected && state.isInternetReachable !== false) {
+        retryScheduled = true;
+        setTimeout(() => {
+          const toRetry = [...VIDEO_UPLOADS.entries()]
+            .filter(([, e]) => !!e.error)
+            .map(([uri]) => uri);
+          toRetry.forEach((uri) => startVideoUpload(uri, true));
+        }, 3000);
+      }
+    });
+    return () => sub.remove();
+  }, [hasFailedUploads, startVideoUpload]);
 
   const queryClient = useQueryClient();
   const txProgress = useTransactionProgress();
@@ -1102,10 +1158,10 @@ export function CreateScreen() {
                 </View>
 
                 {upload?.uploading && (
-                  <View style={styles.uploadedBadge}>
+                  <View style={[styles.uploadedBadge, !isNetworkOnline && { backgroundColor: "rgba(234,179,8,0.85)" }]}>
                     <ActivityIndicator size="small" color="#fff" />
                     <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
-                      Uploading…
+                      {isNetworkOnline ? "Uploading…" : "Low connectivity…"}
                     </Text>
                   </View>
                 )}
@@ -1124,16 +1180,19 @@ export function CreateScreen() {
                 )}
 
                 {upload?.error && (
-                  <View style={[styles.uploadedBadge, { backgroundColor: "rgba(220,50,50,0.8)" }]}>
-                    <Feather name="alert-circle" size={12} color="#fff" />
+                  <Pressable
+                    onPress={() => startVideoUpload(uri)}
+                    style={[styles.uploadedBadge, { backgroundColor: "rgba(220,50,50,0.8)" }]}
+                  >
+                    <Feather name="refresh-cw" size={12} color="#fff" />
                     <Text
                       size="xs"
                       weight="medium"
                       style={{ color: "#fff", marginLeft: 4 }}
                     >
-                      Failed
+                      Retry
                     </Text>
-                  </View>
+                  </Pressable>
                 )}
 
                 {!editExpired && (
@@ -1527,6 +1586,29 @@ export function CreateScreen() {
           )}
 
           {renderVideoPreview()}
+
+          {isUploadingVideo && (
+            <Animated.View
+              entering={FadeIn.duration(200)}
+              exiting={FadeOut.duration(200)}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginTop: 8,
+                marginHorizontal: 4,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                borderRadius: 10,
+                backgroundColor: theme.colors.warning[500] + "15",
+                gap: 8,
+              }}
+            >
+              <Feather name="alert-triangle" size={14} color={theme.colors.warning[500]} />
+              <Text size="xs" style={{ color: theme.colors.warning[500], flex: 1 }}>
+                Please don't leave the app while the video is uploading
+              </Text>
+            </Animated.View>
+          )}
 
           {selectedStickers.length > 0 && (
             <Animated.View

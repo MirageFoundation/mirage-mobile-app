@@ -6,6 +6,19 @@
 
 import { api } from "@/src/api/client";
 import * as Sentry from "@sentry/react-native";
+import {
+  createUploadTask,
+  uploadAsync,
+  FileSystemUploadType,
+  FileSystemSessionType,
+} from "expo-file-system/legacy";
+import type {
+  FileSystemUploadResult,
+  UploadProgressData,
+  FileSystemNetworkTaskProgressCallback,
+} from "expo-file-system/legacy";
+import * as Network from "expo-network";
+import { AppState } from "react-native";
 import type { ImageUploadResponse, VideoUploadResponse } from "@/src/api/types";
 
 // ============================================
@@ -17,6 +30,19 @@ export type MediaType = "image" | "video";
 export interface GetUploadUrlParams {
   type: MediaType;
 }
+
+// ============================================
+// Constants
+// ============================================
+
+const MAX_UPLOAD_RETRIES = 3;
+const RETRY_BASE_DELAY_MS = 2000;
+const IMAGE_UPLOAD_TIMEOUT_MS = 60_000;
+const VIDEO_UPLOAD_TIMEOUT_MS = 300_000;
+
+// ============================================
+// Helpers
+// ============================================
 
 function getFileNameFromUri(localUri: string): string {
   return localUri.split("/").pop() || "unknown";
@@ -44,16 +70,85 @@ function captureMediaUploadException(
   });
 }
 
+function normalizeFileUri(uri: string): string {
+  if (!uri.startsWith("file://") && !uri.startsWith("content://") && !uri.startsWith("http")) {
+    return `file://${uri}`;
+  }
+  return uri;
+}
+
+function waitForForeground(): Promise<void> {
+  if (AppState.currentState === "active") return Promise.resolve();
+  return new Promise((resolve) => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        sub.remove();
+        resolve();
+      }
+    });
+  });
+}
+
+async function waitForNetwork(): Promise<void> {
+  const state = await Network.getNetworkStateAsync();
+  if (state.isConnected && state.isInternetReachable !== false) return;
+  console.log("[MediaUpload] Network unavailable, waiting for reconnection...");
+  return new Promise((resolve) => {
+    const sub = Network.addNetworkStateListener((event) => {
+      if (event.isConnected && event.isInternetReachable !== false) {
+        sub.remove();
+        console.log("[MediaUpload] Network restored, resuming upload");
+        resolve();
+      }
+    });
+  });
+}
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  {
+    maxRetries = MAX_UPLOAD_RETRIES,
+    baseDelay = RETRY_BASE_DELAY_MS,
+    label = "upload",
+    signal,
+  }: {
+    maxRetries?: number;
+    baseDelay?: number;
+    label?: string;
+    signal?: AbortSignal;
+  } = {}
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (signal?.aborted) throw new Error("Upload aborted");
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg === "Upload aborted") throw error;
+
+      if (attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        console.log(`[MediaUpload] ${label} retry ${attempt + 1}/${maxRetries} in ${delay}ms`);
+        Sentry.addBreadcrumb({
+          category: "media-upload",
+          message: `${label} retry ${attempt + 1}/${maxRetries}`,
+          level: "warning",
+          data: { delay, error: msg },
+        });
+        await waitForForeground();
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastError;
+}
+
 // ============================================
 // Endpoints
 // ============================================
 
-/**
- * Get a signed upload URL for media
- *
- * @param type - "image" or "video"
- * @returns Upload URL and metadata for the upload
- */
 export async function getUploadUrl(
   params: GetUploadUrlParams
 ): Promise<ImageUploadResponse | VideoUploadResponse> {
@@ -63,98 +158,81 @@ export async function getUploadUrl(
   );
 }
 
-/**
- * Get upload URL specifically for images
- */
 export async function getImageUploadUrl(): Promise<ImageUploadResponse> {
   return api.post<ImageUploadResponse>("/get_upload_url", { type: "image" });
 }
 
-/**
- * Get upload URL specifically for videos
- */
 export async function getVideoUploadUrl(): Promise<VideoUploadResponse> {
   return api.post<VideoUploadResponse>("/get_upload_url", { type: "video" });
 }
 
 // ============================================
-// Upload Functions
+// Image Upload (expo-file-system with retry)
 // ============================================
 
-/**
- * Upload a file to the Cloudflare Images signed URL
- *
- * Cloudflare Images direct upload expects FormData with a "file" field.
- *
- * @param uploadUrl - The signed URL from getUploadUrl
- * @param localUri - Local file URI (e.g., from expo-image-picker)
- * @param contentType - MIME type of the file
- * @returns The response from Cloudflare
- */
 export async function uploadToSignedUrl(
   uploadUrl: string,
   localUri: string,
-  contentType: string
-): Promise<Response> {
+  contentType: string,
+  signal?: AbortSignal
+): Promise<FileSystemUploadResult> {
   console.log("[MediaUpload] Starting upload to signed URL");
-  console.log("[MediaUpload] Upload URL:", uploadUrl);
-  console.log("[MediaUpload] Local URI:", localUri);
-  console.log("[MediaUpload] Content Type:", contentType);
 
-  // Create FormData with the file
-  // React Native's fetch handles file:// URIs specially when wrapped in FormData
-  const formData = new FormData();
-  
-  // Extract filename from URI
+  const normalizedUri = normalizeFileUri(localUri);
   const filename = getFileNameFromUri(localUri) || "image.jpg";
-  
-  // Append the file - React Native handles file:// URIs
-  // @ts-expect-error - React Native FormData accepts this format
-  formData.append("file", {
-    uri: localUri,
-    type: contentType,
-    name: filename,
-  });
 
-  console.log("[MediaUpload] FormData created with filename:", filename);
-
-  // Upload to the signed URL
-  // Note: Don't set Content-Type header - fetch will set it with boundary for FormData
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    body: formData,
-  });
-
-  console.log("[MediaUpload] Response status:", response.status);
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "Unknown error");
-    console.error("[MediaUpload] Upload failed:", response.status, errorText);
-    throw Object.assign(
-      new Error(`Upload failed: ${response.status} ${response.statusText}`),
+  const uploadFn = async (): Promise<FileSystemUploadResult> => {
+    const task = createUploadTask(
+      uploadUrl,
+      normalizedUri,
       {
-        status: response.status,
-        responseText: errorText,
+        uploadType: FileSystemUploadType.MULTIPART,
+        fieldName: "file",
+        mimeType: contentType,
+        parameters: {},
+        headers: {},
+        sessionType: FileSystemSessionType.FOREGROUND,
+        httpMethod: "POST",
       }
     );
-  }
 
-  const result = await response.json().catch(() => ({}));
-  console.log("[MediaUpload] Upload result:", result);
+    if (signal) {
+      const onAbort = () => {
+        task.cancelAsync();
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
 
-  return response;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        task.cancelAsync();
+        reject(new Error(`Image upload timed out after ${IMAGE_UPLOAD_TIMEOUT_MS / 1000}s`));
+      }, IMAGE_UPLOAD_TIMEOUT_MS);
+    });
+
+    try {
+      const result = await Promise.race([
+        task.uploadAsync(),
+        timeoutPromise,
+      ]);
+      if (!result) throw new Error("Upload returned no result");
+      if (result.status < 200 || result.status >= 300) {
+        throw Object.assign(
+          new Error(`Upload failed: ${result.status}`),
+          { status: result.status, responseText: result.body }
+        );
+      }
+      console.log("[MediaUpload] Upload complete, status:", result.status);
+      return result;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  };
+
+  return withRetry(uploadFn, { label: "image-upload", signal });
 }
 
-/**
- * Construct the final image URL from upload response
- *
- * Cloudflare Images URL format:
- * https://imagedelivery.net/{accountHash}/{id}/{variant}
- *
- * @param uploadResponse - The response from getImageUploadUrl
- * @param variant - The image variant (default: "public")
- * @returns The final accessible image URL
- */
 export function getImageUrl(
   uploadResponse: ImageUploadResponse,
   variant: string = "public"
@@ -163,28 +241,15 @@ export function getImageUrl(
 }
 
 // ============================================
-// High-level Upload Function
+// High-level Image Upload
 // ============================================
 
 export interface UploadImageResult {
-  /** The final accessible URL for the uploaded image */
   url: string;
-  /** The image ID from Cloudflare */
   id: string;
-  /** The account hash */
   accountHash: string;
 }
 
-/**
- * Upload an image and get the final URL
- *
- * This is the main function to use for uploading images.
- * It handles getting the upload URL, uploading the file, and returning the final URL.
- *
- * @param localUri - Local file URI (e.g., from expo-image-picker)
- * @param contentType - MIME type (defaults to "image/jpeg")
- * @returns The final image URL and metadata
- */
 export async function uploadImage(
   localUri: string,
   contentType: string = "image/jpeg"
@@ -200,8 +265,6 @@ export async function uploadImage(
     },
   });
 
-  // 1. Get the signed upload URL
-  console.log("[MediaUpload] Getting upload URL from API...");
   let uploadResponse: ImageUploadResponse;
   try {
     uploadResponse = await getImageUploadUrl();
@@ -212,8 +275,6 @@ export async function uploadImage(
     throw error;
   }
 
-  // 2. Upload the file
-  console.log("[MediaUpload] Uploading file to Cloudflare...");
   try {
     await uploadToSignedUrl(uploadResponse.uploadURL, localUri, contentType);
     console.log("[MediaUpload] File uploaded successfully");
@@ -226,10 +287,9 @@ export async function uploadImage(
     throw error;
   }
 
-  // 3. Return the final URL
   const finalUrl = getImageUrl(uploadResponse);
   console.log("[MediaUpload] Final URL:", finalUrl);
-  
+
   return {
     url: finalUrl,
     id: uploadResponse.id,
@@ -237,9 +297,10 @@ export async function uploadImage(
   };
 }
 
-/**
- * Determine content type from file URI
- */
+// ============================================
+// Content Type Detection
+// ============================================
+
 export function getContentTypeFromUri(uri: string): string {
   const extension = uri.split(".").pop()?.toLowerCase();
 
@@ -279,7 +340,6 @@ export interface UploadVideoResult {
 }
 
 export function getVideoUrl(uploadResponse: VideoUploadResponse): string {
-  // Use videodelivery.net as fallback when streamCustomer is empty
   if (!uploadResponse.streamCustomer) {
     return `https://videodelivery.net/${uploadResponse.uid}/manifest/video.m3u8`;
   }
@@ -297,75 +357,77 @@ export async function uploadVideoToSignedUrl(
   uploadUrl: string,
   localUri: string,
   contentType: string,
-  onProgress?: UploadProgressCallback
+  onProgress?: UploadProgressCallback,
+  signal?: AbortSignal
 ): Promise<void> {
   console.log("[VideoUpload] Starting upload to signed URL");
-  console.log("[VideoUpload] Upload URL:", uploadUrl);
-  console.log("[VideoUpload] Local URI:", localUri);
 
-  // Ensure the URI has the file:// prefix for Android
-  let normalizedUri = localUri;
-  if (!localUri.startsWith("file://") && !localUri.startsWith("content://") && !localUri.startsWith("http")) {
-    normalizedUri = `file://${localUri}`;
-    console.log("[VideoUpload] Normalized URI:", normalizedUri);
-  }
+  const normalizedUri = normalizeFileUri(localUri);
 
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-
-    xhr.upload.addEventListener("progress", (event) => {
-      if (event.lengthComputable && onProgress) {
-        const progress = Math.min(100, Math.round((event.loaded / event.total) * 100));
-        console.log(`[VideoUpload] Progress: ${progress}%`);
-        onProgress(progress);
+  const uploadFn = async (): Promise<void> => {
+    const task = createUploadTask(
+      uploadUrl,
+      normalizedUri,
+      {
+        uploadType: FileSystemUploadType.MULTIPART,
+        fieldName: "file",
+        mimeType: contentType,
+        parameters: {},
+        headers: {},
+        sessionType: FileSystemSessionType.FOREGROUND,
+        httpMethod: "POST",
+      },
+      (data) => {
+        if (data.totalBytesExpectedToSend > 0 && onProgress) {
+          const pct = Math.min(100, Math.round(
+            (data.totalBytesSent / data.totalBytesExpectedToSend) * 100
+          ));
+          onProgress(pct);
+        }
       }
+    );
+
+    if (signal) {
+      const onAbort = () => {
+        task.cancelAsync();
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        task.cancelAsync();
+        reject(new Error(`Video upload timed out after ${VIDEO_UPLOAD_TIMEOUT_MS / 1000}s`));
+      }, VIDEO_UPLOAD_TIMEOUT_MS);
     });
 
-    xhr.addEventListener("load", () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        console.log("[VideoUpload] Upload complete, status:", xhr.status);
-        resolve();
-      } else {
-        console.error("[VideoUpload] Upload failed:", xhr.status, xhr.responseText);
-        reject(
-          Object.assign(new Error(`Upload failed: ${xhr.status}`), {
-            status: xhr.status,
-            responseText: xhr.responseText,
-          })
+    try {
+      const result = await Promise.race([
+        task.uploadAsync(),
+        timeoutPromise,
+      ]);
+      if (!result) throw new Error("Upload returned no result");
+      if (result.status < 200 || result.status >= 300) {
+        throw Object.assign(
+          new Error(`Upload failed: ${result.status}`),
+          { status: result.status, responseText: result.body }
         );
       }
-    });
+      console.log("[VideoUpload] Upload complete, status:", result.status);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  };
 
-    xhr.addEventListener("error", () => {
-      console.error("[VideoUpload] Network error");
-      reject(new Error("Network error during upload"));
-    });
-
-    xhr.addEventListener("abort", () => {
-      console.log("[VideoUpload] Upload aborted");
-      reject(new Error("Upload aborted"));
-    });
-
-    xhr.open("POST", uploadUrl);
-
-    const formData = new FormData();
-    const filename = normalizedUri.split("/").pop() || "video.mp4";
-
-    // @ts-expect-error - React Native FormData accepts this format
-    formData.append("file", {
-      uri: normalizedUri,
-      type: contentType,
-      name: filename,
-    });
-
-    xhr.send(formData);
-  });
+  return withRetry(uploadFn, { label: "video-upload", signal });
 }
 
 export async function uploadVideo(
   localUri: string,
   contentType: string = "video/mp4",
-  onProgress?: UploadProgressCallback
+  onProgress?: UploadProgressCallback,
+  signal?: AbortSignal
 ): Promise<UploadVideoResult> {
   console.log("[VideoUpload] uploadVideo called with:", { localUri, contentType });
   Sentry.addBreadcrumb({
@@ -378,18 +440,15 @@ export async function uploadVideo(
     },
   });
 
-  console.log("[VideoUpload] Getting upload URL from API...");
   let uploadResponse: VideoUploadResponse;
   try {
     uploadResponse = await getVideoUploadUrl();
     console.log("[VideoUpload] Got upload response:", JSON.stringify(uploadResponse, null, 2));
-    
-    // Handle snake_case field name from API (stream_customer -> streamCustomer)
+
     if (!uploadResponse.streamCustomer && uploadResponse.stream_customer) {
       uploadResponse.streamCustomer = uploadResponse.stream_customer;
     }
-    
-    // Validate required fields
+
     if (!uploadResponse.streamCustomer) {
       console.warn("[VideoUpload] Missing streamCustomer, using videodelivery.net fallback");
     }
@@ -399,13 +458,13 @@ export async function uploadVideo(
     throw error;
   }
 
-  console.log("[VideoUpload] Uploading file to Cloudflare Stream...");
   try {
     await uploadVideoToSignedUrl(
       uploadResponse.uploadURL,
       localUri,
       contentType,
-      onProgress
+      onProgress,
+      signal
     );
     console.log("[VideoUpload] File uploaded successfully");
   } catch (error) {

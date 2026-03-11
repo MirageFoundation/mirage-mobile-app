@@ -736,7 +736,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 69
+                          update 70
                         </Text>
                         <Text
                           style={{
@@ -746,15 +746,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          link extraction from shared reddit post, comment lenth
-                          check added,recovery phrase UI fix, error handling for
-                          network error while posting, try again in create post
-                          not working fixed, some toast text changes,toasts
-                          overlapping fix, several errors from sentry log fixed,
-                          some minor UI changes in search topic in create
-                          post,network error handling while pow,error handling
-                          for mirage link not openeing, added perks and
-                          subscription page to be platform specifuc
+                          sentry errors,react native 6 error fix,react native T,
+                          1d and 1c error fix
                         </Text>
                       </>
                     )}
@@ -795,7 +788,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 69
+                          update 70
                         </Text>
                         <Text
                           style={{
@@ -805,15 +798,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          link extraction from shared reddit post, comment lenth
-                          check added,recovery phrase UI fix, error handling for
-                          network error while posting, try again in create post
-                          not working fixed, some toast text changes,toasts
-                          overlapping fix, several errors from sentry log fixed,
-                          some minor UI changes in search topic in create
-                          post,network error handling while pow,error handling
-                          for mirage link not openeing, added perks and
-                          subscription page to be platform specifuc
+                          sentry errors,react native 6 error fix,react native T,
+                          1d and 1c error fix
                         </Text>
                       </>
                     )}

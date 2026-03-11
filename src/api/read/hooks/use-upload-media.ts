@@ -125,7 +125,12 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
         const contentType =
           input.contentType ?? getContentTypeFromUri(input.uri);
 
-        const result = await uploadVideo(input.uri, contentType, handleProgress);
+        const result = await uploadVideo(
+          input.uri,
+          contentType,
+          handleProgress,
+          abortControllerRef.current.signal
+        );
 
         setState((prev) => ({
           ...prev,
@@ -209,10 +214,11 @@ export async function uploadImageAndGetUrl(uri: string): Promise<string> {
  */
 export async function uploadVideoAndGetUrl(
   uri: string,
-  onProgress?: UploadProgressCallback
+  onProgress?: UploadProgressCallback,
+  signal?: AbortSignal
 ): Promise<string> {
   const contentType = getContentTypeFromUri(uri);
-  const result = await uploadVideo(uri, contentType, onProgress);
+  const result = await uploadVideo(uri, contentType, onProgress, signal);
   return result.url;
 }
 
