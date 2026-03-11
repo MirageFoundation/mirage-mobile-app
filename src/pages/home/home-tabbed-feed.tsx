@@ -78,13 +78,16 @@ export const HomeTabbedFeed = forwardRef<
   const [isRefreshing, setIsRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
   const prevTabIndexRef = useRef(activeTabIndex);
+  const activeTabIndexRef = useRef(activeTabIndex);
+  activeTabIndexRef.current = activeTabIndex;
   const [latestTabActivated, setLatestTabActivated] = useState(activeTabIndex === 1);
   const latestTabRefreshedRef = useRef(false);
 
   const magicListRef = useRef<FlashListRef<Post>>(null);
   const latestListRef = useRef<FlashListRef<Post>>(null);
+  const activeListRef = useRef<FlashListRef<Post>>(null);
   const dismissNewPostsRef = useRef<(() => void) | null>(null);
-  const handleRefreshRef = useRef<(() => Promise<void>) | null>(null);
+  const handleRefreshRef = useRef<((options?: { fetchAllNew?: boolean; silent?: boolean }) => Promise<void>) | null>(null);
 
   useEffect(() => {
     if (prevTabIndexRef.current !== activeTabIndex) {
@@ -93,9 +96,8 @@ export const HomeTabbedFeed = forwardRef<
         setLatestTabActivated(true);
       }
       showBars();
-      const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
       requestAnimationFrame(() => {
-        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+        activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
       });
       if (activeTabIndex === 1 && !latestTabRefreshedRef.current) {
         latestTabRefreshedRef.current = true;
@@ -253,7 +255,7 @@ export const HomeTabbedFeed = forwardRef<
       onRefreshingChange?.(true);
     }
     try {
-      const sortBy = activeTabIndex === 0 ? "magic" : "newest";
+      const sortBy = activeTabIndexRef.current === 0 ? "magic" : "newest";
 
       const postsQueryKey = queryKeys.posts({
         limit: INITIAL_PAGE_SIZE,
@@ -337,7 +339,6 @@ export const HomeTabbedFeed = forwardRef<
       }
     }
   }, [
-    activeTabIndex,
     baseFeed,
     allowedTags,
     currentUser?.walletAddress,
@@ -349,33 +350,35 @@ export const HomeTabbedFeed = forwardRef<
   handleRefreshRef.current = handleRefresh;
 
   const scrollToTop = useCallback((tabIndex?: number, options?: { animated?: boolean }) => {
-    const targetIndex = tabIndex ?? activeTabIndex;
-    const listRef = targetIndex === 0 ? magicListRef : latestListRef;
     try {
-      listRef.current?.scrollToOffset({ offset: 0, animated: options?.animated ?? true });
+      activeListRef.current?.scrollToOffset({ offset: 0, animated: options?.animated ?? true });
     } catch {}
     if (Platform.OS === "android") {
       requestAnimationFrame(() => {
         try {
-          listRef.current?.scrollToOffset({ offset: 0, animated: false });
+          activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
         } catch {}
       });
     }
-  }, [activeTabIndex]);
+  }, []);
 
   const scrollToTopAndRefresh = useCallback(async () => {
-    const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
     try {
-      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
     } catch {}
     dismissNewPostsRef.current?.();
-    await handleRefresh();
+    await handleRefreshRef.current?.();
     requestAnimationFrame(() => {
       try {
-        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+        activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
       } catch {}
+      setTimeout(() => {
+        try {
+          activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
+        } catch {}
+      }, 100);
     });
-  }, [activeTabIndex, handleRefresh]);
+  }, []);
 
   useEffect(() => {
     const register = baseFeed === "home" ? registerHomeRefresh : registerFollowingRefresh;
@@ -411,25 +414,23 @@ export const HomeTabbedFeed = forwardRef<
   }, [hasNewPosts, newPostAvatars, newPostCount, onNewPostsChange]);
 
   const handleNewPostsPress = useCallback(async () => {
-    const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
-
     try {
-      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
     } catch {}
 
     showBars();
 
     const minDelay = new Promise<void>((r) => setTimeout(r, 600));
-    await Promise.all([handleRefresh({ silent: true, fetchAllNew: true }), minDelay]);
+    await Promise.all([handleRefreshRef.current?.({ silent: true, fetchAllNew: true }), minDelay]);
 
     requestAnimationFrame(() => {
       try {
-        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+        activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
       } catch {}
       showBars();
     });
     resetBaseline(null);
-  }, [showBars, activeTabIndex, handleRefresh, resetBaseline]);
+  }, [showBars, resetBaseline]);
 
   useImperativeHandle(
     ref,
@@ -600,9 +601,8 @@ export const HomeTabbedFeed = forwardRef<
     if (!initialLoadDone.current && !activeQueryLoading) {
       initialLoadDone.current = true;
       requestAnimationFrame(() => {
-        const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
         try {
-          listRef.current?.scrollToOffset({ offset: 0, animated: false });
+          activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
         } catch {}
         showBars();
       });
@@ -667,7 +667,11 @@ export const HomeTabbedFeed = forwardRef<
 
   const posts = activeTabIndex === 0 ? magicPosts : latestPosts;
   const query = activeTabIndex === 0 ? magicQuery : latestQuery;
-  const listRef = activeTabIndex === 0 ? magicListRef : latestListRef;
+  const tabListRef = activeTabIndex === 0 ? magicListRef : latestListRef;
+  const combinedRefCallback = useCallback((instance: FlashListRef<Post> | null) => {
+    tabListRef.current = instance;
+    activeListRef.current = instance;
+  }, [tabListRef]);
   const onItemVisible =
     activeTabIndex === 0 ? handleMagicItemVisible : handleLatestItemVisible;
 
@@ -683,7 +687,7 @@ export const HomeTabbedFeed = forwardRef<
 
   return (
     <HomePostList
-      ref={listRef}
+      ref={combinedRefCallback}
       data={posts}
       contentContainerStyle={listContentStyle}
       onScroll={scrollHandler}
