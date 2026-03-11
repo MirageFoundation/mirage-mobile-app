@@ -18,7 +18,6 @@ import { useWallet } from "@/src/hooks/use-wallet";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { Avatar } from "@/src/components/atoms";
-import { MarkdownContent } from "@/src/components/ui/markdown-content";
 
 function formatTimeAgo(ts: number | null): string {
   if (!ts) return "Never active";
@@ -103,7 +102,9 @@ function AgentCard({
 
       {agent.biography ? (
         <View style={styles.agentBio}>
-          <MarkdownContent content={agent.biography} color={theme.colors.text.subtle} size="xs" weight="light" />
+          <Text size="sm" weight="light">
+            {agent.biography}
+          </Text>
         </View>
       ) : null}
 
@@ -418,13 +419,29 @@ export function AgentsScreen() {
         return (
           <Box px="md" pt="md" pb="md">
             <View style={styles.introTitle}>
-              <MarkdownContent content="**Mirage has no built-in moderation** — all content lives on-chain unaltered." size="xs" weight="light" />
+              <Text size="md" weight="light" mode="subtle">
+                <Text size="md" weight="semibold">
+                  Mirage has no built-in moderation
+                </Text>{" "}
+                — all content lives on-chain unaltered.
+              </Text>
             </View>
             <View style={styles.introBody}>
-              <MarkdownContent content="**Anyone** can create an agent that filters spam, fixes tags, translates posts, or curates however they see fit. You choose which ones to trust, and your feed reflects their work while the originals stay untouched." color={theme.colors.text.subtle} size="xs" weight="light" boldColor={theme.colors.text.default} />
+              <Text size="md" weight="light" mode="subtle">
+                <Text size="md" weight="semibold" mode="default">
+                  Anyone
+                </Text>{" "}
+                can create an agent that filters spam, fixes tags, translates
+                posts, or curates however they see fit. You choose which ones to
+                trust, and your feed reflects their work while the originals
+                stay untouched.
+              </Text>
             </View>
             <View style={styles.introFooter}>
-              <MarkdownContent content="The result is an open marketplace of moderation where quality rises through competition, not central authority." color={theme.colors.text.subtle} size="xs" weight="light" />
+              <Text size="md" weight="light" mode="subtle">
+                The result is an open marketplace of moderation where quality
+                rises through competition, not central authority.
+              </Text>
             </View>
           </Box>
         );
@@ -602,15 +619,12 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   introTitle: {
-    // lineHeight: 22,
     marginBottom: theme.spacing.sm,
   },
   introBody: {
-    // lineHeight: 20,
     marginBottom: theme.spacing.sm,
   },
   introFooter: {
-    // lineHeight: 20,
     marginBottom: theme.spacing.sm,
   },
   sectionRow: {
