@@ -538,14 +538,6 @@ export const PostOptionsSheet = forwardRef<
               />
             )}
 
-            {!isOwnPost && isAgent && onAnnotate && (
-              <MenuItem
-                iconName="shield-checkmark-outline"
-                title="Annotate"
-                onPress={handleAnnotate}
-              />
-            )}
-
             {isOwnPost && (
               <MenuItem
                 iconComponent={Feather}
