@@ -24,6 +24,8 @@ export interface SignedEnvelope {
   pow_difficulty: number;
   /** PoW nonce (0 for paid tier) */
   pow: number;
+  /** Replay-protection nonce as a decimal string */
+  envelope_nonce: string;
 }
 
 /**
@@ -71,6 +73,7 @@ export interface EnvelopeParams {
   lastBlockHashBytes: Uint8Array;
   difficulty: number;
   timestampMs: number;
+  envelopeNonce: bigint;
 }
 
 /**
