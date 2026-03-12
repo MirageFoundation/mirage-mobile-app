@@ -1213,6 +1213,7 @@ export function QuestsScreen() {
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [isClaiming, setIsClaiming] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [claimedRewardAmount, setClaimedRewardAmount] = useState(0);
 
   const claimMutation = useClaimReward({
     onSuccess: (response) => {
@@ -1280,8 +1281,9 @@ export function QuestsScreen() {
   const handleClaimAll = useCallback(() => {
     if ((data?.pending_rewards?.length ?? 0) === 0) return;
     setIsClaiming(true);
+    setClaimedRewardAmount(totalReward);
     claimMutation.mutate({ questId: "all" });
-  }, [data?.pending_rewards, claimMutation]);
+  }, [data?.pending_rewards, claimMutation, totalReward]);
 
   const handleCloseSuccessModal = useCallback(() => {
     setShowSuccessModal(false);
@@ -1509,7 +1511,7 @@ export function QuestsScreen() {
 
       <ClaimSuccessModal
         visible={showSuccessModal}
-        rewardAmount={totalReward || 1250}
+        rewardAmount={claimedRewardAmount}
         onClose={handleCloseSuccessModal}
       />
     </Box>
