@@ -298,6 +298,8 @@ class WalletService {
     }
 
     const timestamp = Date.now();
+    const envelopeNonce = (BigInt(timestamp) * 1000000n + BigInt(Math.floor(Math.random() * 0x100000000)))
+      .toString();
     const privateKey = derivePrivateKey(mnemonic);
     const publicKey = getCompressedPublicKey(privateKey);
 
@@ -336,6 +338,7 @@ class WalletService {
       last_block_hash: lastBlockHash,
       pow_difficulty: powDifficulty,
       pow: powNonce,
+      envelope_nonce: envelopeNonce,
     };
   }
 

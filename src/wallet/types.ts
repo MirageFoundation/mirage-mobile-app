@@ -50,6 +50,8 @@ export interface SignedEnvelope {
   pow_difficulty: number;
   /** PoW nonce (0 for paid tier) */
   pow: number;
+  /** Replay-protection nonce as a decimal string */
+  envelope_nonce: string;
 }
 
 // ============================================
