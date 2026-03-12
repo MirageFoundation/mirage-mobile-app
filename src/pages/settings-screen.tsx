@@ -126,6 +126,7 @@ const handleApiServerChange = useCallback(
         toast.success(`Switched to ${server}`);
         router.replace("/(tabs)");
       } catch (err) {
+        Sentry.captureException(err, { tags: { feature: "settings", operation: "switch-server" } });
         toast.error("Failed to switch server");
       }
     },

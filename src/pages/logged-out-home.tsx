@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import * as Sentry from "@sentry/react-native";
 import { useCallback, useState } from "react";
 import {
   Image,
@@ -423,6 +424,7 @@ export function LoggedOutHome() {
                         setApiServer(server);
                         toast.success(`Switched to ${server}`);
                       } catch (e) {
+                        Sentry.captureException(e, { tags: { feature: "logged-out-home", operation: "switch-server" } });
                         apiClient.setBaseUrl(`https://${apiServer}`);
                         toast.error(`Failed to connect to ${server}`);
                       } finally {

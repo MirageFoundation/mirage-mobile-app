@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import * as Sentry from "@sentry/react-native";
 import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -219,8 +220,7 @@ export function VideoEditorScreen() {
         });
         processedUri = result.uri;
       } catch (error) {
-        console.error("[VideoEditor] Failed to process video:", error);
-        // Continue with original video if processing fails
+        Sentry.captureException(error, { tags: { feature: "video-editor", operation: "process" } });
       }
       setIsProcessing(false);
     }

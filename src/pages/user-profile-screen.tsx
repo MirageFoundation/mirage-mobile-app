@@ -1,5 +1,6 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
+import * as Sentry from "@sentry/react-native";
 import * as Clipboard from "expo-clipboard";
 import { useIsFocused } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
@@ -479,7 +480,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         url: `${getShareBaseUrl(shareServer)}/u/${username}`,
       });
     } catch (error) {
-      console.error("Share error:", error);
+      Sentry.addBreadcrumb({ category: "user-profile", message: "Share failed", data: { error: String(error) }, level: "warning" });
     }
   }, [username, shareServer]);
 

@@ -11,6 +11,7 @@ import {
   type GifItem,
 } from "@/src/api/giphy";
 import { useCallback, useEffect, useRef, useState } from "react";
+import * as Sentry from "@sentry/react-native";
 
 export interface UseGiphyOptions {
   /** Debounce delay in ms (default: 300) */
@@ -87,7 +88,7 @@ export function useGiphy(options: UseGiphyOptions = {}): UseGiphyReturn {
         setHasMore(results.length === limit);
         setOffset(newOffset + results.length);
       } catch (err) {
-        console.error("[Giphy] Fetch error:", err);
+        Sentry.addBreadcrumb({ category: "giphy", message: "GIF fetch failed", data: { error: String(err) }, level: "warning" });
         setError(err instanceof Error ? err.message : "Failed to load GIFs");
         if (!append) {
           setGifs([]);

@@ -1,4 +1,5 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import * as Sentry from "@sentry/react-native";
 import { EvilIcons } from "@expo/vector-icons";
 import {
   BottomSheetBackdrop,
@@ -186,6 +187,7 @@ export const AwardPickerSheet = forwardRef<
         onSuccess?.();
       } catch (err) {
         triggerHaptic("error");
+        Sentry.captureException(err, { tags: { feature: "award", operation: "give-award" } });
         let errorMessage = err instanceof Error ? err.message : "Unknown error";
         if (axios.isAxiosError(err)) {
           const data = err.response?.data;

@@ -521,7 +521,7 @@ export async function sendTestNotification(): Promise<void> {
     });
     console.log("[InboxNotifications] Test notification scheduled, id:", id);
   } catch (error) {
-    console.error("[InboxNotifications] Test notification failed:", error);
+    Sentry.captureException(error, { tags: { feature: "inbox-notifications", operation: "test-notification" } });
   }
 }
 

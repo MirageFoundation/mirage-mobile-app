@@ -1,4 +1,5 @@
 import { api, apiClient } from "../../client";
+import * as Sentry from "@sentry/react-native";
 import type {
   UserStatusResponse,
   ProfileResponse,
@@ -220,7 +221,7 @@ export async function validateInviteCode(
     return response.data;
   } catch (error: any) {
     const status = error?.response?.status;
-    console.log("[validateInviteCode] error status:", status, "message:", error?.message);
+    Sentry.addBreadcrumb({ category: "invite-code", message: "validateInviteCode failed", data: { status, error: error?.message }, level: "warning" });
     if (status === 404 || status === 405) {
       return { valid: true, code: trimmed };
     }

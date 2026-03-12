@@ -6,6 +6,8 @@
  * and submitting the signed envelope.
  */
 
+import * as Sentry from "@sentry/react-native";
+
 const MAX_POW_RETRIES = 3;
 
 /**
@@ -27,9 +29,12 @@ export async function withPowRetry<T>(
         errorMsg.includes("invalid last_block_hash") ||
         errorMsg.includes("stale");
       if (isRetryable && attempt < MAX_POW_RETRIES) {
-        console.log(
-          `[${operationName}] PoW rejected (attempt ${attempt + 1}/${MAX_POW_RETRIES + 1}), retrying with fresh params...`
-        );
+        Sentry.addBreadcrumb({
+          category: "pow-retry",
+          message: `${operationName} PoW rejected, retrying`,
+          data: { attempt: attempt + 1, maxAttempts: MAX_POW_RETRIES + 1, errorMsg },
+          level: "warning",
+        });
         lastError = error;
         continue;
       }

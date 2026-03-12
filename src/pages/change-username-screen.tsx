@@ -1,4 +1,5 @@
 import { useFocusEffect } from "@react-navigation/native";
+import * as Sentry from "@sentry/react-native";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -192,7 +193,7 @@ export function ChangeUsernameScreen() {
         router.back();
       }, 1500);
     } catch (err) {
-      console.error("[ChangeUsername] Failed:", err);
+      Sentry.captureException(err, { tags: { feature: "change-username" } });
       triggerHaptic("error");
       setIsSubmitting(false);
 

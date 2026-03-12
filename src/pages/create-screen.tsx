@@ -901,6 +901,7 @@ export function CreateScreen() {
       }
     } catch (error) {
       setIsSubmitting(false);
+      Sentry.captureException(error, { tags: { feature: "create-post", operation: "submit" } });
 
       const isNetworkError =
         (error as any)?.code === "ERR_NETWORK" ||
@@ -1067,7 +1068,7 @@ export function CreateScreen() {
       }
     } catch (err) {
       setIsPreparingVideo(false);
-      console.warn("[CreateScreen] Video picker failed:", err);
+      Sentry.captureException(err, { tags: { feature: "create-post", operation: "video-picker" } });
       toast.error("Couldn't load video", "Try a different video or re-download it from iCloud");
     }
   }, [hasAttachment, draft.attachmentType, draft.mediaUris.length, toast]);

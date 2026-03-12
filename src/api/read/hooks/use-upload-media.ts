@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useRef, useState } from "react";
+import * as Sentry from "@sentry/react-native";
 import { useMutation } from "@tanstack/react-query";
 import {
   uploadImage,
@@ -143,6 +144,7 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
         return result;
       } catch (error) {
         const err = error instanceof Error ? error : new Error("Upload failed");
+        Sentry.captureException(err, { tags: { feature: "media-upload", hook: "useUploadMedia" } });
         setState((prev) => ({
           ...prev,
           isUploading: false,

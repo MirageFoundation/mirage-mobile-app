@@ -1,5 +1,6 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
+import * as Sentry from "@sentry/react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import type { FlashListRef } from "@shopify/flash-list";
@@ -466,7 +467,7 @@ export function TopicFeedScreen() {
     try {
       await refetch();
     } catch (error) {
-      console.error("Failed to refresh topic feed:", error);
+      Sentry.addBreadcrumb({ category: "topic-feed", message: "Refresh failed", data: { error: String(error) }, level: "error" });
     } finally {
       setIsManualRefreshing(false);
       dismissNewPostsRef.current?.();

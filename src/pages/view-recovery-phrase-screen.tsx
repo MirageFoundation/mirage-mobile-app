@@ -1,6 +1,7 @@
 import { RecoveryPhraseGrid } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { walletService } from "@/src/services/wallet-service";
+import * as Sentry from "@sentry/react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -22,7 +23,7 @@ export function ViewRecoveryPhraseScreen() {
         const phrase = await walletService.exportMnemonic();
         setMnemonic(phrase);
       } catch (error) {
-        console.error("[ViewRecoveryPhrase] Failed to load mnemonic:", error);
+        Sentry.captureException(error, { tags: { feature: "recovery-phrase", operation: "load" } });
       } finally {
         setLoading(false);
       }

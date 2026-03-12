@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import * as Sentry from "@sentry/react-native";
 import * as Updates from "expo-updates";
 import { ActivityIndicator, View } from "react-native";
 import { Box, Button } from "@/primitives";
@@ -30,6 +31,7 @@ export const UpdateDialog = ({ visible, onClose }: UpdateDialogProps) => {
       const update = await Updates.checkForUpdateAsync();
       setUpdateAvailable(update.isAvailable);
     } catch (err: any) {
+      Sentry.captureException(err, { tags: { feature: "ota-update", operation: "check" } });
       setError(`Error checking for updates: ${err.message}`);
     } finally {
       setChecking(false);
@@ -43,6 +45,7 @@ export const UpdateDialog = ({ visible, onClose }: UpdateDialogProps) => {
       await Updates.fetchUpdateAsync();
       await Updates.reloadAsync();
     } catch (err: any) {
+      Sentry.captureException(err, { tags: { feature: "ota-update", operation: "install" } });
       setError(`Error installing update: ${err.message}`);
       setUpdating(false);
     }

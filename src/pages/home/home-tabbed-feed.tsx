@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUnistyles } from "react-native-unistyles";
+import * as Sentry from "@sentry/react-native";
 
 import {
   getPosts,
@@ -330,7 +331,7 @@ export const HomeTabbedFeed = forwardRef<
         });
       }
     } catch (error) {
-      console.error("Failed to refresh feed:", error);
+      Sentry.addBreadcrumb({ category: "home-feed", message: "Feed refresh failed", data: { error: String(error) }, level: "error" });
     } finally {
       isRefreshingRef.current = false;
       if (!options?.silent) {

@@ -1,5 +1,6 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { formatCompactNumber } from "@/src/utils/format-number";
+import * as Sentry from "@sentry/react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
   forwardRef,
@@ -446,7 +447,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
         close();
         await onLogout?.();
       } catch (error) {
-        console.error("[SideMenu] Logout failed:", error);
+        Sentry.captureException(error, { tags: { feature: "side-menu", operation: "logout" } });
       } finally {
         setIsLoggingOut(false);
         setShowLogoutPopup(false);
@@ -760,7 +761,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           claimed rewards,inactive agent when last active is
                           null,text stripped from inastagram shared link meta
                           data to strip excessive dots, hashtags and texts
-                          inside brackets,light theme follow button ui fix
+                          inside brackets,light theme follow button ui fix,nonce
+                          added
                         </Text>
                       </>
                     )}
@@ -817,7 +819,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           claimed rewards,inactive agent when last active is
                           null,text stripped from inastagram shared link meta
                           data to strip excessive dots, hashtags and texts
-                          inside brackets,light theme follow button ui fix
+                          inside brackets,light theme follow button ui fix,nonce
+                          added
                         </Text>
                       </>
                     )}

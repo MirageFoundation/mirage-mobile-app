@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { InteractionManager } from "react-native";
 import * as Updates from "expo-updates";
+import * as Sentry from "@sentry/react-native";
 
 export type EasUpdateStatus = "idle" | "available" | "installing" | "error";
 
@@ -19,6 +20,7 @@ export function useEasUpdate() {
           setStatus("available");
         }
       } catch {}
+      // Sentry breadcrumb for check failure handled silently
     })();
   }, []);
 
@@ -33,6 +35,7 @@ export function useEasUpdate() {
       });
       await Updates.reloadAsync();
     } catch {
+      Sentry.addBreadcrumb({ category: "eas-update", message: "OTA update install failed", level: "error" });
       setStatus("error");
     }
   }, []);

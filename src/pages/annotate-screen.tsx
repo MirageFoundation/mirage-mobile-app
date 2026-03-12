@@ -30,6 +30,7 @@ import {
   uploadImageAndGetUrl,
   uploadVideoAndGetUrl,
 } from "@/src/api/read/hooks/use-upload-media";
+import * as Sentry from "@sentry/react-native";
 import { useAnnotate } from "@/src/api/write";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { StickerPicker } from "@/src/components/molecules/sticker-picker";
@@ -193,6 +194,7 @@ export function AnnotateScreen() {
       })
       .catch((err) => {
         const msg = err instanceof Error ? err.message : "Upload failed";
+        Sentry.captureException(err, { tags: { feature: "annotate", operation: "video-upload" } });
         VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg });
         videoUploadStateRef.current((prev) => ({
           ...prev,
@@ -443,7 +445,7 @@ export function AnnotateScreen() {
       }
     } catch (err) {
       setIsPreparingVideo(false);
-      console.warn("[AnnotateScreen] Video picker failed:", err);
+      Sentry.captureException(err, { tags: { feature: "annotate", operation: "video-picker" } });
       toast.error("Couldn't load video", "Try a different video or re-download it from iCloud");
     }
   }, [mediaType, toast, startVideoUpload]);

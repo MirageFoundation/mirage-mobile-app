@@ -1,5 +1,6 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
+import * as Sentry from "@sentry/react-native";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
@@ -433,7 +434,7 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
         url: `${getShareBaseUrl(shareServer)}/u/${user?.username}`,
       });
     } catch (error) {
-      console.error("Share error:", error);
+      Sentry.addBreadcrumb({ category: "profile", message: "Share failed", data: { error: String(error) }, level: "warning" });
     }
   }, [user?.username, shareServer]);
 
