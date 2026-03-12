@@ -791,6 +791,9 @@ export const PostCardMedia = memo(
                   contentFit="cover"
                   cachePolicy="memory-disk"
                   recyclingKey={videoThumbnailUri}
+                  onLoad={({ source }) => {
+                    updateMediaAspectRatioFromSize(source?.width, source?.height);
+                  }}
                 />
               ) : null}
               <Video

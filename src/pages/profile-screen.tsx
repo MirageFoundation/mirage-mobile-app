@@ -1094,8 +1094,8 @@ useEffect(() => {
           ListFooterComponent={ListFooterComponent}
           extraData={focusVersion}
           removeClippedSubviews={true}
-          maxToRenderPerBatch={Platform.OS === "android" ? 5 : 7}
-          windowSize={Platform.OS === "android" ? 7 : 9}
+          maxToRenderPerBatch={Platform.OS === "android" ? 7 : 9}
+          windowSize={Platform.OS === "android" ? 11 : 13}
           initialNumToRender={5}
           updateCellsBatchingPeriod={Platform.OS === "android" ? 100 : 50}
           bounces={true}

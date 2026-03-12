@@ -744,7 +744,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 74
+                          update 75
                         </Text>
                         <Text
                           style={{
@@ -754,19 +754,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          sentry errors,react native 6 error fix,react native T,
-                          1d and 1c error fix (better error handling on video
-                          upload fails in midle for any reason such as no
-                          internet connection etc),Sentry log react native 1A
-                          error fix(sentry background scanning), agents
-                          implementation, agents option in side menu, agents
-                          screen created,can enable or disable agents, can
-                          reorder the agent priority,agent modified addition in
-                          posts,notification sent so many times fix,scroll to
-                          top on latest feed type not working fixed,username
-                          color on posts and comments and search results
-                          according to there level,app icon size increase in
-                          status bar android
+                          preload videos,pre calculate media aspect ration,play
+                          audio for focused video on screen and other multiple
+                          video on screen keeps on playing
                         </Text>
                       </>
                     )}
@@ -807,7 +797,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 74
+                          update 75
                         </Text>
                         <Text
                           style={{
@@ -817,19 +807,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          sentry errors,react native 6 error fix,react native T,
-                          1d and 1c error fix (better error handling on video
-                          upload fails in midle for any reason such as no
-                          internet connection etc),Sentry log react native 1A
-                          error fix(sentry background scanning), agents
-                          implementation, agents option in side menu, agents
-                          screen created,can enable or disable agents, can
-                          reorder the agent priority,agent modified addition in
-                          posts,notification sent so many times fix,scroll to
-                          top on latest feed type not working fixed,username
-                          color on posts and comments and search results
-                          according to there level,app icon size increase in
-                          status bar android
+                          preload videos,pre calculate media aspect ration,play
+                          audio for focused video on screen and other multiple
+                          video on screen keeps on playing
                         </Text>
                       </>
                     )}
