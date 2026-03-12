@@ -56,7 +56,17 @@ import { StickerPicker } from "@/src/components/molecules/sticker-picker";
 // Strict URL validation - requires protocol (http:// or https://)
 const URL_REGEX = /^https?:\/\/[^\s<>"{}|\\^`\[\]]+$/i;
 
-// Helper to check if input looks like a URL attempt (has dot but no protocol)
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&apos;/g, "'");
+}
+
 function looksLikeUrlWithoutProtocol(text: string): boolean {
   return (
     /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z]{2,})+/i.test(text) &&
@@ -435,11 +445,36 @@ export function CreateScreen() {
             level: "info",
           });
           if (meta.title) {
-            updateDraft({ title: meta.title.slice(0, tierLimits.maxTitleLength) });
+            let finalTitle = meta.title;
+            if (meta.domain === "instagram.com") {
+              const igMatch = meta.title.match(/^(.+?)\s+on\s+Instagram/i);
+              if (igMatch) {
+                finalTitle = `${igMatch[1]} on Instagram`;
+              }
+            }
+            finalTitle = decodeHtmlEntities(finalTitle);
+            updateDraft({ title: finalTitle.slice(0, tierLimits.maxTitleLength) });
           }
           const bodyParts: string[] = [];
           if (meta.description) {
-            bodyParts.push(meta.description.slice(0, tierLimits.maxContentLength));
+            let desc = meta.description;
+            if (meta.domain === "instagram.com" && meta.title) {
+              const igCaptionMatch = meta.title.match(/on\s+Instagram:\s*"(.+)"/s);
+              if (igCaptionMatch) {
+                desc = igCaptionMatch[1];
+              }
+            }
+            desc = decodeHtmlEntities(desc);
+            if (meta.domain === "instagram.com") {
+              desc = desc
+                .replace(/\([^)]*\)/g, "")
+                .replace(/\[[^\]]*\]/g, "")
+                .replace(/#\w+/g, "")
+                .replace(/[.…][\s.…]*[.…]/g, "")
+                .replace(/\s{2,}/g, " ")
+                .trim();
+            }
+            bodyParts.push(desc.slice(0, tierLimits.maxContentLength));
           }
           updateDraft({ body: bodyParts.join("\n\n") });
           console.log("[CreateScreen] Draft auto-filled:", {
