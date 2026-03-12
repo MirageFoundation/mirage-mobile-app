@@ -758,7 +758,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           audio for focused video on screen and other multiple
                           video on screen keeps on playing, wrong calculation on
                           claimed rewards,inactive agent when last active is
-                          null
+                          null,text stripped from inastagram shared link meta
+                          data to strip excessive dots, hashtags and texts
+                          inside brackets
                         </Text>
                       </>
                     )}
@@ -813,7 +815,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           audio for focused video on screen and other multiple
                           video on screen keeps on playing, wrong calculation on
                           claimed rewards,inactive agent when last active is
-                          null
+                          null,text stripped from inastagram shared link meta
+                          data to strip excessive dots, hashtags and texts
+                          inside brackets
                         </Text>
                       </>
                     )}

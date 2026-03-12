@@ -444,8 +444,9 @@ export function CreateScreen() {
             data: { domain: meta.domain, hasTitle: !!meta.title, hasVideo: !!meta.video, imageCount: meta.images?.length ?? 0 },
             level: "info",
           });
+          let finalTitle: string | undefined;
           if (meta.title) {
-            let finalTitle = meta.title;
+            finalTitle = meta.title;
             if (meta.domain === "instagram.com") {
               const igMatch = meta.title.match(/^(.+?)\s+on\s+Instagram/i);
               if (igMatch) {
@@ -470,6 +471,7 @@ export function CreateScreen() {
                 .replace(/\([^)]*\)/g, "")
                 .replace(/\[[^\]]*\]/g, "")
                 .replace(/#\w+/g, "")
+                .replace(/\b[A-Z][a-z]+(?:[A-Z][a-z]*)+\b/g, "")
                 .replace(/[.…][\s.…]*[.…]/g, "")
                 .replace(/\s{2,}/g, " ")
                 .trim();
@@ -478,7 +480,7 @@ export function CreateScreen() {
           }
           updateDraft({ body: bodyParts.join("\n\n") });
           console.log("[CreateScreen] Draft auto-filled:", {
-            title: meta.title?.slice(0, tierLimits.maxTitleLength),
+            title: (finalTitle ?? meta.title)?.slice(0, tierLimits.maxTitleLength),
             body: bodyParts.join("\n\n").slice(0, 200),
             community: redditMatch ? redditMatch[1].toLowerCase() : null,
           });
