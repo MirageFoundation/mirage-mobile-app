@@ -38,6 +38,8 @@ export function useSearchTopics(
       }),
     enabled: !!query && query.length >= 2,
     staleTime: 1000 * 60, // 1 minute
+  gcTime: 1000 * 60 * 5,
+  retry: false,
   });
 }
 

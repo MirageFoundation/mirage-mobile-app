@@ -754,13 +754,13 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          preload videos,pre calculate media aspect ration,play
+                          preload videos,pre calculate media aspect ratio,play
                           audio for focused video on screen and other multiple
                           video on screen keeps on playing, wrong calculation on
                           claimed rewards,inactive agent when last active is
                           null,text stripped from inastagram shared link meta
                           data to strip excessive dots, hashtags and texts
-                          inside brackets
+                          inside brackets,light theme follow button ui fix
                         </Text>
                       </>
                     )}
@@ -811,13 +811,13 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          preload videos,pre calculate media aspect ration,play
+                          preload videos,pre calculate media aspect ratio,play
                           audio for focused video on screen and other multiple
                           video on screen keeps on playing, wrong calculation on
                           claimed rewards,inactive agent when last active is
                           null,text stripped from inastagram shared link meta
                           data to strip excessive dots, hashtags and texts
-                          inside brackets
+                          inside brackets,light theme follow button ui fix
                         </Text>
                       </>
                     )}
