@@ -8,7 +8,7 @@ import { mergeAudioVideo } from "@/src/utils/merge-audio-video";
 import { trimToMaxDuration } from "@/src/utils/video-processing";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
-import { Audio, ResizeMode, Video } from "expo-av";
+import { Audio, ResizeMode, Video } from "@/src/lib/expo-av-compat";
 import * as ImagePicker from "expo-image-picker";
 import { Paths, File as ExpoFile } from "expo-file-system";
 import { router, useLocalSearchParams } from "expo-router";

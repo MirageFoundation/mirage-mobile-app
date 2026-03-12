@@ -2,7 +2,7 @@ import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
+import { type CompatVideoRef, AVPlaybackStatus, ResizeMode, Video } from "@/src/lib/expo-av-compat";
 import { Image } from "expo-image";
 import {
   memo,
@@ -116,7 +116,7 @@ export const PostCardMedia = memo(
     const [mediaLoaded, setMediaLoaded] = useState(() => media?.uri ? MEDIA_LOADED_CACHE.has(media.uri) : false);
     const [mediaRetryKey, setMediaRetryKey] = useState(0);
     const { isConnected } = useNetworkState();
-    const videoRef = useRef<Video | null>(null);
+    const videoRef = useRef<CompatVideoRef | null>(null);
     const youtubeEmbedRef = useRef<YouTubeAutoplayEmbedRef | null>(null);
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const playRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -614,7 +614,7 @@ export const PostCardMedia = memo(
                 >
                   No internet connection
                 </Text>
-                <Text>
+                <Text
                   size="xs"
                   style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}
                 >

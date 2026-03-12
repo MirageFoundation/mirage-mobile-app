@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { ResizeMode, Video } from "expo-av";
+import { type CompatVideoRef, ResizeMode, Video } from "@/src/lib/expo-av-compat";
 import { Image } from "expo-image";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -83,7 +83,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   isFocused?: boolean;
   isPostDetail?: boolean;
 }) {
-  const videoRef = useRef<Video>(null);
+  const videoRef = useRef<CompatVideoRef | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const globalMuted = useVideoMuteStore((s) => s.isMuted);
   const toggleMute = useVideoMuteStore((s) => s.toggleMute);

@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
+import { type CompatVideoRef, AVPlaybackStatus, ResizeMode, Video } from "@/src/lib/expo-av-compat";
 import { Image } from "expo-image";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
@@ -48,7 +48,7 @@ const PreviewVideoItem = memo(function PreviewVideoItem({
   height: number;
   isActive: boolean;
 }) {
-  const ref = useRef<Video>(null);
+  const ref = useRef<CompatVideoRef | null>(null);
   const [playing, setPlaying] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const muted = useVideoMuteStore((s) => s.isMuted);
@@ -448,7 +448,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
     };
   }, [visible]);
-  const videoRef = useRef<Video | null>(null);
+  const videoRef = useRef<CompatVideoRef | null>(null);
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const isMuted = useVideoMuteStore((s) => s.isMuted);
   const toggleMute = useVideoMuteStore((s) => s.toggleMute);

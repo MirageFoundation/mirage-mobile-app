@@ -38,7 +38,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         monochromeImage: "./assets/images/android-icon-monochrome.png",
       },
       package: bundleIdentifier,
-      edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
       softwareKeyboardLayoutMode: "resize",
     },
@@ -82,6 +81,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       "expo-secure-store",
       "expo-web-browser",
       "expo-image",
+      "expo-video",
+      "expo-audio",
       "expo-sharing",
       [
         "expo-build-properties",

@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
+import { type CompatVideoRef, AVPlaybackStatus, ResizeMode, Video } from "@/src/lib/expo-av-compat";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -55,7 +55,7 @@ export function VideoEditorScreen() {
   const videoWidth = params.width ? parseInt(params.width) : 1920;
   const videoHeight = params.height ? parseInt(params.height) : 1080;
   
-  const videoRef = useRef<Video>(null);
+  const videoRef = useRef<CompatVideoRef | null>(null);
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
