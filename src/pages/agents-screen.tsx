@@ -20,7 +20,7 @@ import { queryKeys } from "@/src/api/read/query-keys";
 import { Avatar } from "@/src/components/atoms";
 
 function formatTimeAgo(ts: number | null): string {
-  if (!ts) return "Never active";
+  if (!ts) return "Inactive";
   const now = Math.floor(Date.now() / 1000);
   const diff = now - ts;
   if (diff < 60) return "Just now";
@@ -95,7 +95,7 @@ function AgentCard({
             </View>
           </View>
           <Text size="xs" mode="subtle">
-            Active {formatTimeAgo(agent.last_active)}
+            {agent.last_active ? `Active ${formatTimeAgo(agent.last_active)}` : formatTimeAgo(agent.last_active)}
           </Text>
         </View>
       </View>

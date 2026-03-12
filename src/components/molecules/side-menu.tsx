@@ -756,7 +756,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                         >
                           preload videos,pre calculate media aspect ration,play
                           audio for focused video on screen and other multiple
-                          video on screen keeps on playing
+                          video on screen keeps on playing, wrong calculation on
+                          claimed rewards
                         </Text>
                       </>
                     )}
@@ -809,7 +810,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                         >
                           preload videos,pre calculate media aspect ration,play
                           audio for focused video on screen and other multiple
-                          video on screen keeps on playing
+                          video on screen keeps on playing, wrong calculation on
+                          claimed rewards
                         </Text>
                       </>
                     )}
