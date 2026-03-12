@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import * as Sentry from "@sentry/react-native";
 import * as Updates from "expo-updates";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, InteractionManager, View } from "react-native";
 import { Box, Button } from "@/primitives";
 import { Feather } from "@expo/vector-icons";
 import { BodyLarge, Body } from "./typography";
@@ -43,6 +43,12 @@ export const UpdateDialog = ({ visible, onClose }: UpdateDialogProps) => {
     setError(null);
     try {
       await Updates.fetchUpdateAsync();
+      onClose();
+      await new Promise<void>((resolve) => {
+        InteractionManager.runAfterInteractions(() => {
+          setTimeout(resolve, 800);
+        });
+      });
       await Updates.reloadAsync();
     } catch (err: any) {
       Sentry.captureException(err, { tags: { feature: "ota-update", operation: "install" } });

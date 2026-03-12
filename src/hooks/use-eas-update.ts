@@ -28,9 +28,10 @@ export function useEasUpdate() {
     setStatus("installing");
     try {
       await Updates.fetchUpdateAsync();
+      setStatus("idle");
       await new Promise<void>((resolve) => {
         InteractionManager.runAfterInteractions(() => {
-          setTimeout(resolve, 300);
+          setTimeout(resolve, 800);
         });
       });
       await Updates.reloadAsync();
