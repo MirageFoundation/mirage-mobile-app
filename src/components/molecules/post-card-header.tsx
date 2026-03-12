@@ -123,8 +123,8 @@ export const PostCardHeader = memo(function PostCardHeader({
     [isFollowing, theme.colors.text.default, theme.colors.background.default],
   );
   const defaultBgStyle = useMemo(
-    () => ({ color: theme.colors.background.default }),
-    [theme.colors.background.default],
+    () => ({ color: "#000000" }),
+    [],
   );
 
   return (
