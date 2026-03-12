@@ -447,7 +447,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
         close();
         await onLogout?.();
       } catch (error) {
-        Sentry.captureException(error, { tags: { feature: "side-menu", operation: "logout" } });
+        Sentry.captureException(error, {
+          tags: { feature: "side-menu", operation: "logout" },
+        });
       } finally {
         setIsLoggingOut(false);
         setShowLogoutPopup(false);
@@ -745,7 +747,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 76
+                          update 77
                         </Text>
                         <Text
                           style={{
@@ -762,7 +764,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           null,text stripped from inastagram shared link meta
                           data to strip excessive dots, hashtags and texts
                           inside brackets,light theme follow button ui fix,nonce
-                          added
+                          added,sentry logs added to required places, eas
+                          updates crashing app fix
                         </Text>
                       </>
                     )}
@@ -803,7 +806,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 76
+                          update 77
                         </Text>
                         <Text
                           style={{
@@ -820,7 +823,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           null,text stripped from inastagram shared link meta
                           data to strip excessive dots, hashtags and texts
                           inside brackets,light theme follow button ui fix,nonce
-                          added
+                          added,sentry logs added to required places, eas
+                          updates crashing app fix
                         </Text>
                       </>
                     )}
