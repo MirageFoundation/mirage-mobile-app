@@ -15,7 +15,7 @@ import * as Updates from "expo-updates";
 
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { REQUIRED_VERSION, type ForceUpdateReason } from "@/src/hooks/use-force-update";
+import { type ForceUpdateReason } from "@/src/hooks/use-force-update";
 
 const APP_STORE_URL =
   "https://apps.apple.com/in/app/mirage-talk/id6757619038";
@@ -24,12 +24,15 @@ const PLAY_STORE_URL =
 
 type ForceUpdatePopupProps = {
   reason: ForceUpdateReason;
+  remoteVersion: string | null;
+  isRequired: boolean;
 };
 
-export function ForceUpdatePopup({ reason }: ForceUpdatePopupProps) {
+export function ForceUpdatePopup({ reason, remoteVersion, isRequired }: ForceUpdatePopupProps) {
   const { theme, rt } = useUnistyles();
   const isDark = rt.themeName === "dark";
   const [installing, setInstalling] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
 
   const isNative = reason === "native";
 
@@ -54,7 +57,7 @@ export function ForceUpdatePopup({ reason }: ForceUpdatePopupProps) {
     }
   }, [isNative]);
 
-  if (!reason) return null;
+  if (!reason || dismissed) return null;
 
   return (
     <Modal visible transparent animationType="fade">
@@ -89,12 +92,12 @@ export function ForceUpdatePopup({ reason }: ForceUpdatePopupProps) {
           </Box>
 
           <Text size="lg" weight="bold" style={styles.title}>
-            Update Required
+            {isRequired ? "Update Required" : "Update Available"}
           </Text>
 
           <Text size="md" mode="subtle" weight="semibold" style={styles.message}>
             {isNative
-              ? `Please update the app to v(${REQUIRED_VERSION}) to keep Mirage running smoothly and avoid any issues.`
+              ? `Please update the app to v(${remoteVersion ?? "latest"}) to keep Mirage running smoothly and avoid any issues.`
               : "A new update is available. Please install it to keep things running smoothly and prevent any issues."}
           </Text>
 
@@ -116,6 +119,18 @@ export function ForceUpdatePopup({ reason }: ForceUpdatePopupProps) {
                 </Button.Text>
               )}
             </Button>
+
+            {!isRequired && (
+              <Button
+                size="lg"
+                variant="ghost"
+                rounded="full"
+                onPress={() => setDismissed(true)}
+                style={styles.button}
+              >
+                <Button.Text>Maybe Later</Button.Text>
+              </Button>
+            )}
           </Box>
 
           <Text size="xs" mode="subtle" style={styles.versionText}>

@@ -35,7 +35,7 @@ Sentry.init({
 
 export default Sentry.wrap(function RootLayout() {
   const ref = useNavigationContainerRef();
-  const { reason: forceUpdateReason } = useForceUpdate();
+  const { reason: forceUpdateReason, remoteVersion, isRequired } = useForceUpdate();
 
   useEffect(() => {
     if (ref?.current) {
@@ -129,7 +129,7 @@ export default Sentry.wrap(function RootLayout() {
      </Stack>
       <ThemedStatusBar />
       <AuthSheet />
-     <ForceUpdatePopup reason={forceUpdateReason} />
+     <ForceUpdatePopup reason={forceUpdateReason} remoteVersion={remoteVersion} isRequired={isRequired} />
     </RootProvider>
     </ShareIntentProvider>
   );

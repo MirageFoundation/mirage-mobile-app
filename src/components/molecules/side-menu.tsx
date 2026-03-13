@@ -747,7 +747,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 79
+                          update 82
                         </Text>
                         <Text
                           style={{
@@ -762,7 +762,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           optimization on fetching all the pages uptp
                           10,required update popup, invite code reawrd in quests
                           handled and all type of quest cases handled, and claim
-                          reawrd showing wrong rewards fixed
+                          reawrd showing wrong rewards fixed,platform specific
+                          version check with backend
                         </Text>
                       </>
                     )}
@@ -803,7 +804,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 79
+                          update 82
                         </Text>
                         <Text
                           style={{
@@ -818,7 +819,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           optimization on fetching all the pages uptp
                           10,required update popup, invite code reawrd in quests
                           handled and all type of quest cases handled, and claim
-                          reawrd showing wrong rewards fixed
+                          reawrd showing wrong rewards fixed,platform specific
+                          version check with backend
                         </Text>
                       </>
                     )}
