@@ -1,4 +1,10 @@
 {
-  "version": "1.0.8",
-  "required": true
+  "ios": {
+    "version": "1.0.8",
+    "required": true
+  },
+  "android": {
+    "version": "1.0.8",
+    "required": true
+  }
 }
