@@ -79,6 +79,7 @@ import {
 } from "@/src/hooks";
 import { useTabSwipeGesture } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
+import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 import {
   useAuthStore,
   useContentModerationStore,
@@ -371,6 +372,20 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   });
 
   const fetchNextPage = _fetchNextPage;
+
+  const userPostsRefreshParams = useMemo(() => {
+    if (!userAddress) return undefined;
+    return {
+      owner: userAddress,
+      address: currentUser?.walletAddress ?? undefined,
+      type: getTabType(),
+      limit: 20,
+    };
+  }, [userAddress, currentUser?.walletAddress, getTabType]);
+
+  usePostDataRefresher({
+    userPostsParams: userPostsRefreshParams,
+  });
 
   useEffect(() => {
     if (!userAddress) return;

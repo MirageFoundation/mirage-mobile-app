@@ -48,6 +48,7 @@ import {
 } from "@/src/stores";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNewPostsChecker, type NewPostAvatar } from "@/src/hooks/use-new-posts-checker";
+import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 
 export type HomeTabbedFeedRef = {
   scrollToTop: (tabIndex?: number, options?: { animated?: boolean }) => void;
@@ -146,6 +147,32 @@ export const HomeTabbedFeed = forwardRef<
 
   const postEditOverrides = usePostEditStore((s) => s.overrides);
   const transformedPageCacheRef = useRef(new WeakMap<object, Post[]>());
+
+  const feedRefreshParamsList = useMemo(() => [
+    {
+      feed: baseFeed,
+      by: "magic" as const,
+      allowed_tags: allowedTags || undefined,
+      limit: INITIAL_PAGE_SIZE,
+      address: currentUser?.walletAddress,
+    },
+    ...(latestTabActivated ? [{
+      feed: baseFeed as "home" | "following",
+      by: "newest" as const,
+      allowed_tags: allowedTags || undefined,
+      limit: INITIAL_PAGE_SIZE,
+      address: currentUser?.walletAddress,
+    }] : []),
+  ], [baseFeed, allowedTags, currentUser?.walletAddress, latestTabActivated]);
+
+  const handleRefreshComplete = useCallback(() => {
+    transformedPageCacheRef.current = new WeakMap();
+  }, []);
+
+  usePostDataRefresher({
+    feedParamsList: feedRefreshParamsList,
+    onRefreshComplete: handleRefreshComplete,
+  });
 
   const applyPostEditOverrides = useCallback(
     (posts: any[]) => {

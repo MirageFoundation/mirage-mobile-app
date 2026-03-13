@@ -61,6 +61,7 @@ import {
   useSavedPostsStore,
 } from "@/src/stores";
 import { useNewPostsChecker } from "@/src/hooks/use-new-posts-checker";
+import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 
 export function TopicFeedScreen() {
   const { id: topicName } = useLocalSearchParams<{ id: string }>();
@@ -175,6 +176,18 @@ export function TopicFeedScreen() {
     allowed_tags: allowedTags || undefined,
     by: sortBy,
   }, { pageLimit: 20 });
+
+  const feedRefreshParamsList = useMemo(() => [{
+    topic: topicName,
+    by: sortBy,
+    allowed_tags: allowedTags || undefined,
+    limit: 10,
+    address: currentUser?.walletAddress,
+  }], [topicName, sortBy, allowedTags, currentUser?.walletAddress]);
+
+  usePostDataRefresher({
+    feedParamsList: feedRefreshParamsList,
+  });
 
   const postEditOverrides = usePostEditStore((s) => s.overrides);
 

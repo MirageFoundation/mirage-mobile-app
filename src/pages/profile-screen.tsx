@@ -76,6 +76,7 @@ import {
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import { useEdit } from "@/src/api/write";
 import { useToast } from "@/src/providers/toast-provider";
+import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 import {
   usePowQueueStore,
   generateActionId,
@@ -285,6 +286,20 @@ export function ProfileScreen() {
   } = useInfiniteUserPosts(user?.walletAddress ?? null, {
     type: getTabType(),
     limit: 20,
+  });
+
+  const userPostsRefreshParams = useMemo(() => {
+    if (!user?.walletAddress) return undefined;
+    return {
+      owner: user.walletAddress,
+      address: user.walletAddress,
+      type: getTabType(),
+      limit: 20,
+    };
+  }, [user?.walletAddress, getTabType]);
+
+  usePostDataRefresher({
+    userPostsParams: userPostsRefreshParams,
   });
 
   const [focusVersion, setFocusVersion] = useState(0);
