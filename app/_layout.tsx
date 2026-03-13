@@ -2,11 +2,13 @@ import { RootProvider } from "@/src/providers/root-provider";
 import { Stack, useNavigationContainerRef } from "expo-router";
 import { ShareIntentProvider } from "expo-share-intent";
 import { AuthSheet } from "@/src/components/molecules";
+import { ForceUpdatePopup } from "@/src/components/molecules/force-update-popup";
 import { ThemedStatusBar } from "@/src/components/ui/themed-status-bar";
 import { Platform } from "react-native";
 import * as Sentry from '@sentry/react-native';
 import { useEffect } from "react";
 import { getShareScheme } from "@/src/utils/share-scheme";
+import { useForceUpdate } from "@/src/hooks/use-force-update";
 
 const navigationIntegration = Sentry.reactNavigationIntegration({
   enableTimeToInitialDisplay: true,
@@ -33,6 +35,7 @@ Sentry.init({
 
 export default Sentry.wrap(function RootLayout() {
   const ref = useNavigationContainerRef();
+  const { reason: forceUpdateReason } = useForceUpdate();
 
   useEffect(() => {
     if (ref?.current) {
@@ -126,6 +129,7 @@ export default Sentry.wrap(function RootLayout() {
      </Stack>
       <ThemedStatusBar />
       <AuthSheet />
+     <ForceUpdatePopup reason={forceUpdateReason} />
     </RootProvider>
     </ShareIntentProvider>
   );

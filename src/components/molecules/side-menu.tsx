@@ -747,7 +747,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 77
+                          update 78
                         </Text>
                         <Text
                           style={{
@@ -757,15 +757,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          preload videos,pre calculate media aspect ratio,play
-                          audio for focused video on screen and other multiple
-                          video on screen keeps on playing, wrong calculation on
-                          claimed rewards,inactive agent when last active is
-                          null,text stripped from inastagram shared link meta
-                          data to strip excessive dots, hashtags and texts
-                          inside brackets,light theme follow button ui fix,nonce
-                          added,sentry logs added to required places, eas
-                          updates crashing app fix
+                          Huge fix on matching the votes, comments and counts on
+                          posts all over the screen when app state changes,app
+                          optimization on fetching all the pages uptp
+                          10,required update popup
                         </Text>
                       </>
                     )}
@@ -806,7 +801,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 77
+                          update 78
                         </Text>
                         <Text
                           style={{
@@ -816,15 +811,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          preload videos,pre calculate media aspect ratio,play
-                          audio for focused video on screen and other multiple
-                          video on screen keeps on playing, wrong calculation on
-                          claimed rewards,inactive agent when last active is
-                          null,text stripped from inastagram shared link meta
-                          data to strip excessive dots, hashtags and texts
-                          inside brackets,light theme follow button ui fix,nonce
-                          added,sentry logs added to required places, eas
-                          updates crashing app fix
+                          Huge fix on matching the votes, comments and counts on
+                          posts all over the screen when app state changes,app
+                          optimization on fetching all the pages uptp
+                          10,required update popup,
                         </Text>
                       </>
                     )}

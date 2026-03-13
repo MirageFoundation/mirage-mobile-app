@@ -63,6 +63,7 @@ export {
   type AppStateInfo,
 } from "./use-app-state";
 export { useEasUpdate } from "./use-eas-update";
+export { useForceUpdate, type ForceUpdateReason } from "./use-force-update";
 export { useTabSwipeGesture } from "./use-tab-swipe-gesture";
 export { useServerList } from "./use-server-list";
 export { useNewPostsChecker } from "./use-new-posts-checker";
