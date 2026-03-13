@@ -1219,6 +1219,8 @@ export function QuestsScreen() {
     onSuccess: (response) => {
       setIsClaiming(false);
       triggerHaptic("success");
+      const claimed = response.rewards?.reduce((s, r) => s + r.amount, 0) ?? 0;
+      setClaimedRewardAmount(Math.floor(claimed / 1_000_000));
       setShowSuccessModal(true);
       refetch();
     },
@@ -1281,9 +1283,8 @@ export function QuestsScreen() {
   const handleClaimAll = useCallback(() => {
     if ((data?.pending_rewards?.length ?? 0) === 0) return;
     setIsClaiming(true);
-    setClaimedRewardAmount(totalReward);
     claimMutation.mutate({ questId: "all" });
-  }, [data?.pending_rewards, claimMutation, totalReward]);
+  }, [data?.pending_rewards, claimMutation]);
 
   const handleCloseSuccessModal = useCallback(() => {
     setShowSuccessModal(false);
