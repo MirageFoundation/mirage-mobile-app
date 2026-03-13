@@ -747,7 +747,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 78
+                          update 79
                         </Text>
                         <Text
                           style={{
@@ -760,7 +760,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           Huge fix on matching the votes, comments and counts on
                           posts all over the screen when app state changes,app
                           optimization on fetching all the pages uptp
-                          10,required update popup
+                          10,required update popup, invite code reawrd in quests
+                          handled and all type of quest cases handled, and claim
+                          reawrd showing wrong rewards fixed
                         </Text>
                       </>
                     )}
@@ -801,7 +803,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 78
+                          update 79
                         </Text>
                         <Text
                           style={{
@@ -814,7 +816,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           Huge fix on matching the votes, comments and counts on
                           posts all over the screen when app state changes,app
                           optimization on fetching all the pages uptp
-                          10,required update popup,
+                          10,required update popup, invite code reawrd in quests
+                          handled and all type of quest cases handled, and claim
+                          reawrd showing wrong rewards fixed
                         </Text>
                       </>
                     )}
