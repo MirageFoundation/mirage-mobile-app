@@ -290,6 +290,12 @@ export const HomeTabbedFeed = forwardRef<
           }
         }
 
+        if (existingIds.size === 0) {
+          queryClient.setQueryData(postsQueryKey, {
+            pages: [newFirstPage],
+            pageParams: [1],
+          });
+        } else {
         const newPages = [newFirstPage];
         const newPageParams = [1];
         let hasOverlap = newFirstPage.posts.some((p: any) => existingIds.has(p.post_id));
@@ -309,6 +315,7 @@ export const HomeTabbedFeed = forwardRef<
           pages: newPages,
           pageParams: newPageParams,
         });
+        }
       } else {
         queryClient.setQueryData(postsQueryKey, (oldData: any) => {
           if (!oldData) {
