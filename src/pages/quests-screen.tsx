@@ -42,6 +42,10 @@ const ACTION_ICONS: Record<string, string> = {
   post: "create-outline",
   follow: "person-add-outline",
   share: "share-outline",
+  upvotes_received: "trending-up-outline",
+  comment_upvotes_received: "chatbubbles-outline",
+  invite_recruit: "people-outline",
+  claim_only: "gift-outline",
 };
 
 const ACTION_COLORS: Record<string, string> = {
@@ -51,6 +55,10 @@ const ACTION_COLORS: Record<string, string> = {
   post: "#8B5CF6",
   follow: "#F59E0B",
   share: "#EC4899",
+  upvotes_received: "#F97316",
+  comment_upvotes_received: "#6366F1",
+  invite_recruit: "#14B8A6",
+  claim_only: "#A855F7",
 };
 
 const BUTTON_GRADIENT_COLORS: readonly [string, string] = [
@@ -181,10 +189,12 @@ function ConfettiAnimation({ isVisible }: { isVisible: boolean }) {
 function ClaimSuccessModal({
   visible,
   rewardAmount,
+  inviteCodes,
   onClose,
 }: {
   visible: boolean;
   rewardAmount: number;
+  inviteCodes: number;
   onClose: () => void;
 }) {
   const { theme } = useUnistyles();
@@ -280,25 +290,49 @@ function ClaimSuccessModal({
             Rewards Claimed!
           </Text>
 
-          <Box
-            direction="row"
-            alignItems="center"
-            gap="xs"
-            style={{ marginBottom: 24 }}
-          >
-            <Ionicons
-              name="sparkles"
-              size={20}
-              color={theme.colors.warning[500]}
-            />
-            <Text
-              size="lg"
-              weight="bold"
-              style={{ color: theme.colors.warning[500] }}
+          {rewardAmount > 0 && (
+            <Box
+              direction="row"
+              alignItems="center"
+              gap="xs"
+              style={{ marginBottom: inviteCodes > 0 ? 8 : 24 }}
             >
-              +{rewardAmount.toLocaleString()} MIRAGE
-            </Text>
-          </Box>
+              <Ionicons
+                name="sparkles"
+                size={20}
+                color={theme.colors.warning[500]}
+              />
+              <Text
+                size="lg"
+                weight="bold"
+                style={{ color: theme.colors.warning[500] }}
+              >
+                +{rewardAmount.toLocaleString()} MIRAGE
+              </Text>
+            </Box>
+          )}
+
+          {inviteCodes > 0 && (
+            <Box
+              direction="row"
+              alignItems="center"
+              gap="xs"
+              style={{ marginBottom: 24 }}
+            >
+              <Ionicons
+                name="mail-outline"
+                size={20}
+                color={theme.colors.primary[500]}
+              />
+              <Text
+                size="lg"
+                weight="bold"
+                style={{ color: theme.colors.primary[500] }}
+              >
+                +{inviteCodes} Invite {inviteCodes === 1 ? "Code" : "Codes"}
+              </Text>
+            </Box>
+          )}
 
           <Text
             size="sm"
@@ -671,8 +705,13 @@ function QuestCard({
   const accentColor =
     ACTION_COLORS[quest.action_type] || theme.colors.primary[500];
   const progress = quest.target > 0 ? quest.progress / quest.target : 0;
-  const baseReward = quest.rewards[0]?.amount ?? 0;
-  const rewardAmount = Math.floor(baseReward * rewardMultiplier);
+  const primaryReward = quest.rewards[0];
+  const baseReward = primaryReward?.amount ?? 0;
+  const isInviteCode = primaryReward?.type === "invite_code";
+  const shouldApplyMultiplier = primaryReward?.apply_multiplier !== false;
+  const rewardAmount = shouldApplyMultiplier
+    ? Math.floor(baseReward * rewardMultiplier)
+    : baseReward;
 
   useEffect(() => {
     progressAnim.value = withSpring(progress, { damping: 15, stiffness: 100 });
@@ -764,7 +803,7 @@ function QuestCard({
                 weight="bold"
                 style={{ color: theme.colors.warning[500] }}
               >
-                +{rewardAmount}
+                {isInviteCode ? `+${baseReward} Invite` : `+${rewardAmount}`}
               </Text>
             </Box>
           </Box>
@@ -1214,13 +1253,18 @@ export function QuestsScreen() {
   const [isClaiming, setIsClaiming] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [claimedRewardAmount, setClaimedRewardAmount] = useState(0);
+  const [claimedInviteCodes, setClaimedInviteCodes] = useState(0);
 
   const claimMutation = useClaimReward({
     onSuccess: (response) => {
       setIsClaiming(false);
       triggerHaptic("success");
-      const claimed = response.rewards?.reduce((s, r) => s + r.amount, 0) ?? 0;
+      const mirageRewards = response.rewards?.filter((r) => r.type === "mirage") ?? [];
+      const inviteRewards = response.rewards?.filter((r) => r.type === "invite_code") ?? [];
+      const claimed = mirageRewards.reduce((s, r) => s + r.amount, 0);
+      const invites = inviteRewards.reduce((s, r) => s + r.amount, 0);
       setClaimedRewardAmount(Math.floor(claimed / 1_000_000));
+      setClaimedInviteCodes(invites);
       setShowSuccessModal(true);
       refetch();
     },
@@ -1266,7 +1310,12 @@ export function QuestsScreen() {
   const totalReward = useMemo(() => {
     const multiplier = data?.reward_multiplier ?? 1;
     return completedQuests.reduce((sum, quest) => {
-      return Math.floor(sum + (quest.rewards[0]?.amount ?? 0) * multiplier);
+      const reward = quest.rewards[0];
+      if (!reward || reward.type !== "mirage") return sum;
+      const amount = reward.apply_multiplier !== false
+        ? reward.amount * multiplier
+        : reward.amount;
+      return Math.floor(sum + amount);
     }, 0);
   }, [completedQuests, data?.reward_multiplier]);
 
@@ -1513,6 +1562,7 @@ export function QuestsScreen() {
       <ClaimSuccessModal
         visible={showSuccessModal}
         rewardAmount={claimedRewardAmount}
+        inviteCodes={claimedInviteCodes}
         onClose={handleCloseSuccessModal}
       />
     </Box>
