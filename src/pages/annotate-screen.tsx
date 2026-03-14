@@ -55,7 +55,7 @@ const CONTENT_WARNING_OPTIONS: { value: string; label: string }[] = [
 
 type MediaType = "image" | "sticker" | "video" | null;
 
-type VideoUploadEntry = { url: string | null; uploading: boolean; progress: number; error: string | null };
+type VideoUploadEntry = { url: string | null; uploading: boolean; progress: number; error: string | null; isServerError?: boolean };
 const VIDEO_UPLOADS = new Map<string, VideoUploadEntry>();
 
 const formatCount = (num: number): string => {
@@ -193,16 +193,20 @@ export function AnnotateScreen() {
         triggerHaptic("success");
       })
       .catch((err) => {
-        const msg = err instanceof Error ? err.message : "Upload failed";
+        const msg = err?.response?.data?.error || (err instanceof Error ? err.message : "Upload failed");
         Sentry.captureException(err, { tags: { feature: "annotate", operation: "video-upload" } });
-        VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg });
+        const isServerError = !!err?.response?.status && err.response.status >= 400;
+        VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg, isServerError });
         videoUploadStateRef.current((prev) => ({
           ...prev,
           [uri]: { progress: 0, uploading: false, done: false, error: msg },
         }));
         if (!silent && !videoUploadToastShownRef.current) {
           videoUploadToastShownRef.current = true;
-          toast.error("Video upload failed", msg);
+          const serverError = err?.response?.data?.error;
+          const status = err?.response?.status;
+          const title = serverError ? `${serverError} (${status})` : "Video upload failed";
+          toast.error(title, serverError ? "Please try again" : msg);
         }
         triggerHaptic("error");
       });
@@ -217,7 +221,7 @@ export function AnnotateScreen() {
         retryScheduled = true;
         setTimeout(() => {
           const toRetry = [...VIDEO_UPLOADS.entries()]
-            .filter(([, e]) => !!e.error)
+            .filter(([, e]) => !!e.error && !e.isServerError)
             .map(([uri]) => uri);
           toRetry.forEach((uri) => startVideoUpload(uri, true));
         }, 1500);
@@ -229,7 +233,7 @@ export function AnnotateScreen() {
         retryScheduled = true;
         setTimeout(() => {
           const toRetry = [...VIDEO_UPLOADS.entries()]
-            .filter(([, e]) => !!e.error)
+            .filter(([, e]) => !!e.error && !e.isServerError)
             .map(([uri]) => uri);
           toRetry.forEach((uri) => startVideoUpload(uri, true));
         }, 3000);

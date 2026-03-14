@@ -234,7 +234,9 @@ class ApiClient {
         data: { status, errorMessage, errorData },
       });
       if (status && status >= 500) {
-        useCloudflareErrorStore.getState().setHasError(true);
+        if (status === 521) {
+          useCloudflareErrorStore.getState().setHasError(true);
+        }
         Sentry.captureException(error, {
           tags: { api_method: "GET", api_path: path },
           extra: { status, errorData },
@@ -280,7 +282,9 @@ class ApiClient {
         data: { status, errorData: errorData || error?.message },
       });
       if (status && status >= 500) {
-        useCloudflareErrorStore.getState().setHasError(true);
+        if (status === 521) {
+          useCloudflareErrorStore.getState().setHasError(true);
+        }
         Sentry.captureException(error, {
           tags: { api_method: "POST", api_path: path },
           extra: { status, errorData },
