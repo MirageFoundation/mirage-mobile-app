@@ -747,7 +747,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 83
+                          update 84
                         </Text>
                         <Text
                           style={{
@@ -763,7 +763,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           10,required update popup, invite code reawrd in quests
                           handled and all type of quest cases handled, and claim
                           reawrd showing wrong rewards fixed,platform specific
-                          version check with backend
+                          version check with backend,better error handling for
+                          server error,removed ability to change server from
+                          cloudflare error toast
                         </Text>
                       </>
                     )}
@@ -804,7 +806,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 83
+                          update 84
                         </Text>
                         <Text
                           style={{
@@ -820,7 +822,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           10,required update popup, invite code reawrd in quests
                           handled and all type of quest cases handled, and claim
                           reawrd showing wrong rewards fixed,platform specific
-                          version check with backend
+                          version check with backend,better error handling for
+                          server error,removed ability to change server from
+                          cloudflare error toast
                         </Text>
                       </>
                     )}
