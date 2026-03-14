@@ -206,7 +206,7 @@ class ApiClient {
         ),
       });
       console.log(`[ApiClient] GET ${path} success`);
-      useCloudflareErrorStore.getState().setHasError(false);
+      useCloudflareErrorStore.getState().clearError();
       return response.data;
     } catch (error: any) {
       const errorData = error?.response?.data;
@@ -235,7 +235,7 @@ class ApiClient {
       });
       if (status && status >= 500) {
         if (status === 521) {
-          useCloudflareErrorStore.getState().setHasError(true);
+          useCloudflareErrorStore.getState().setError(status);
         }
         Sentry.captureException(error, {
           tags: { api_method: "GET", api_path: path },
@@ -266,7 +266,7 @@ class ApiClient {
     try {
       const response = await this.client.post<T>(`/api${path}`, data);
       console.log(`[ApiClient] POST ${path} success:`, response.data);
-      useCloudflareErrorStore.getState().setHasError(false);
+      useCloudflareErrorStore.getState().clearError();
       return response.data;
     } catch (error: any) {
       const status = error?.response?.status;
@@ -283,7 +283,7 @@ class ApiClient {
       });
       if (status && status >= 500) {
         if (status === 521) {
-          useCloudflareErrorStore.getState().setHasError(true);
+          useCloudflareErrorStore.getState().setError(status);
         }
         Sentry.captureException(error, {
           tags: { api_method: "POST", api_path: path },

@@ -465,7 +465,7 @@ const handleApiServerChange = useCallback(
               title="Test Cloudflare Error Toast"
               subtitle="Simulate a Cloudflare 5xx error"
               onPress={() => {
-                useCloudflareErrorStore.getState().setHasError(true);
+                useCloudflareErrorStore.getState().setError(521);
                 toast.success("Cloudflare error simulated!");
               }}
             />
