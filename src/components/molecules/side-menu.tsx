@@ -757,15 +757,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          Huge fix on matching the votes, comments and counts on
-                          posts all over the screen when app state changes,app
-                          optimization on fetching all the pages uptp
-                          10,required update popup, invite code reawrd in quests
-                          handled and all type of quest cases handled, and claim
-                          reawrd showing wrong rewards fixed,platform specific
-                          version check with backend,better error handling for
-                          server error,removed ability to change server from
-                          cloudflare error toast
+                          better error handling for server error,removed ability
+                          to change server from cloudflare error toast,increase
+                          app icon size in android notification status for
+                          better visibility
                         </Text>
                       </>
                     )}
@@ -816,15 +811,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          Huge fix on matching the votes, comments and counts on
-                          posts all over the screen when app state changes,app
-                          optimization on fetching all the pages uptp
-                          10,required update popup, invite code reawrd in quests
-                          handled and all type of quest cases handled, and claim
-                          reawrd showing wrong rewards fixed,platform specific
-                          version check with backend,better error handling for
-                          server error,removed ability to change server from
-                          cloudflare error toast
+                          better error handling for server error,removed ability
+                          to change server from cloudflare error toast,increase
+                          app icon size in android notification status for
+                          better visibility
                         </Text>
                       </>
                     )}
