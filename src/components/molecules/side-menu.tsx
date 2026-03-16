@@ -751,7 +751,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 85
+                          update 86
                         </Text>
                         <Text
                           style={{
@@ -779,9 +779,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           blockchain confirmation in background, bottom nav bar
                           not visble when opening the inbox from notification
                           fix,unmute video in focus on screen fix,stop playing
-                          video on screen when side is opened,stop playing video
-                          on post details screen when scrolled down to
-                          comments,all messages highlighted after log in fix
+                          video on screen when side menu is opened,stop playing
+                          video on post details screen when scrolled down to
+                          comments,all messages highlighted after logged in
+                          fix,opening mirage link in post comments inside the
+                          app only if server matches
                         </Text>
                       </>
                     )}
@@ -822,7 +824,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 85
+                          update 86
                         </Text>
                         <Text
                           style={{
@@ -850,9 +852,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           blockchain confirmation in background, bottom nav bar
                           not visble when opening the inbox from notification
                           fix,unmute video in focus on screen fix,stop playing
-                          video on screen when side is opened,stop playing video
-                          on post details screen when scrolled down to
-                          comments,all messages highlighted after log in fix
+                          video on screen when side menu is opened,stop playing
+                          video on post details screen when scrolled down to
+                          comments,all messages highlighted after logged in
+                          fix,opening mirage link in post comments inside the
+                          app only if server matches
                         </Text>
                       </>
                     )}
