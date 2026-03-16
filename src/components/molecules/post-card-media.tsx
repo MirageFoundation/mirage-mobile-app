@@ -1174,7 +1174,6 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  processingOverlay: {
   watchOnYouTubeButton: {
     position: "absolute",
     bottom: theme.spacing.sm,
