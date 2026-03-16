@@ -18,6 +18,7 @@ import { type ImageLoadEventData } from "expo-image";
 import {
   ActivityIndicator,
   Dimensions,
+  Linking,
   Platform,
   Pressable,
   View,
@@ -964,6 +965,24 @@ export const PostCardMedia = memo(
               </Pressable>
             )}
 
+          {media.type === "youtube" && Platform.OS === "android" && !shouldBlurContent && (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation?.();
+                if (media.uri) Linking.openURL(media.uri);
+              }}
+              style={styles.watchOnYouTubeButton}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <View style={styles.watchOnYouTubeInner}>
+                <Ionicons name="logo-youtube" size={14} color="#FF0000" />
+                <Text size="xs" weight="semibold" style={{ color: "#fff", marginLeft: 4 }}>
+                  Watch on YouTube
+                </Text>
+              </View>
+            </Pressable>
+          )}
+
           {/* Video processing overlay for Cloudflare Stream */}
           {isVideoProcessing && isCloudflareVideo && isConnected && (
             <View style={styles.processingOverlay}>
@@ -1154,6 +1173,21 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "rgba(0, 0, 0, 0.65)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  processingOverlay: {
+  watchOnYouTubeButton: {
+    position: "absolute",
+    bottom: theme.spacing.sm,
+    left: theme.spacing.sm,
+    zIndex: 30,
+  },
+  watchOnYouTubeInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
   },
   processingOverlay: {
     ...StyleSheet.absoluteFillObject,
