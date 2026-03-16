@@ -883,6 +883,7 @@ export default function PostDetailScreen() {
   const [postHeaderHeight, setPostHeaderHeight] = useState(0);
   const stickyHeaderVisible = useSharedValue(0);
   const [isStickyInteractive, setIsStickyInteractive] = useState(false);
+  const [isVideoVisible, setIsVideoVisible] = useState(true);
 
   const handlePostHeaderLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = event.nativeEvent.layout.height;
@@ -908,6 +909,9 @@ export default function PostDetailScreen() {
           easing: Easing.in(Easing.cubic),
         });
       }
+
+      const videoVisible = postHeaderHeight > 0 ? scrollY < postHeaderHeight : true;
+      setIsVideoVisible((prev) => prev === videoVisible ? prev : videoVisible);
     },
     [postHeaderHeight, stickyHeaderVisible],
   );
@@ -1627,7 +1631,7 @@ export default function PostDetailScreen() {
         <PostCard
           post={displayPost}
           isOwnPost={currentUser?.id === displayPost.author.id}
-          isVisible={true}
+          isVisible={isVideoVisible}
           isTopicFollowed={
             localTopicFollowed ??
             (displayPost?.topic
@@ -1670,6 +1674,7 @@ export default function PostDetailScreen() {
     revealedContent,
     id,
     screenActive,
+    isVideoVisible,
     theme.colors.background.subtle,
     handlePostHeaderLayout,
     postEnteringStyle,
