@@ -751,7 +751,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 86
+                          update 87
                         </Text>
                         <Text
                           style={{
@@ -783,7 +783,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           video on post details screen when scrolled down to
                           comments,all messages highlighted after logged in
                           fix,opening mirage link in post comments inside the
-                          app only if server matches
+                          app only if server matches,top left and right gap in
+                          gradient header fix
                         </Text>
                       </>
                     )}
@@ -824,7 +825,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 86
+                          update 87
                         </Text>
                         <Text
                           style={{
@@ -856,7 +857,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           video on post details screen when scrolled down to
                           comments,all messages highlighted after logged in
                           fix,opening mirage link in post comments inside the
-                          app only if server matches
+                          app only if server matches,top left and right gap in
+                          gradient header fix
                         </Text>
                       </>
                     )}
