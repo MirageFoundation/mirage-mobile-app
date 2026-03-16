@@ -760,7 +760,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           better error handling for server error,removed ability
                           to change server from cloudflare error toast,increase
                           app icon size in android notification status for
-                          better visibility
+                          better visibility, auto fill changes for link shared
+                          from x to auto fill title with 1st line of x text and
+                          not show username in title and remaining text in body,
                         </Text>
                       </>
                     )}
