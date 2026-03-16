@@ -768,7 +768,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           check while extracting video from shared link,59
                           se4conds time check for multiple videos in shared
                           link,adult content popup not showing after new account
-                          created
+                          created,claim rewards showing incorrect toatl rewards
+                          after claim fix, enable agent taking very long time
+                          for confirming on blockchain: now immediately updating
+                          the agents after pow is solved and doing the
+                          blockchain confirmation in background
                         </Text>
                       </>
                     )}
@@ -830,7 +834,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           check while extracting video from shared link,59
                           se4conds time check for multiple videos in shared
                           link,adult content popup not showing after new account
-                          created
+                          created,claim rewards showing incorrect toatl rewards
+                          after claim fix, enable agent taking very long time
+                          for confirming on blockchain: now immediately updating
+                          the agents after pow is solved and doing the
+                          blockchain confirmation in background
                         </Text>
                       </>
                     )}

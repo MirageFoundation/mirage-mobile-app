@@ -22,7 +22,6 @@ import { useConfig } from "@/src/api/read/hooks/use-parameters";
 import { useUsernameAvailability } from "@/src/api/read/hooks/use-username-resolution";
 import { useUserStatus } from "@/src/api/read";
 import { queryKeys } from "@/src/api/read/query-keys";
-import { getTxStatus } from "@/src/api/read/endpoints/tx";
 import { setUsername as setUsernameOnChain } from "@/src/api/write";
 import { TransactionProgressModal } from "@/src/components/molecules";
 import {
@@ -60,7 +59,6 @@ export function ChangeUsernameScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-
   const txProgress = useTransactionProgress();
 
   useFocusEffect(
@@ -144,26 +142,7 @@ export function ChangeUsernameScreen() {
       const txResult = await executeWithProgress(
         txProgress,
         async (onPoWProgress) => {
-          txProgress.setPhase("signing");
-          const response = await setUsernameOnChain(
-            wallet,
-            { username },
-            onPoWProgress,
-          );
-          txProgress.setPhase("submitting");
-          return response;
-        },
-        {
-          pollTxStatus: true,
-          getTxStatus: async (hash) => {
-            const s = await getTxStatus({ hash });
-            return {
-              found: s.found,
-              indexed: s.indexed ?? false,
-              success: s.success,
-              error_details: s.error_details,
-            };
-          },
+          return setUsernameOnChain(wallet, { username }, onPoWProgress);
         },
       );
 
@@ -177,42 +156,37 @@ export function ChangeUsernameScreen() {
       }
 
       if (user?.walletAddress) {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.userStatus(user.walletAddress),
-        });
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.profile(user.walletAddress),
-        });
+        const walletAddr = user.walletAddress;
+        setTimeout(() => {
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.userStatus(walletAddr),
+          });
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.profile(walletAddr),
+          });
+        }, 15000);
       }
 
       triggerHaptic("success");
       toast.success(`Username changed to @${username}`);
 
       setTimeout(() => {
-        txProgress.hideModal();
+        setIsSubmitting(false);
         router.back();
-      }, 1500);
+      }, 1200);
     } catch (err) {
       Sentry.captureException(err, { tags: { feature: "change-username" } });
       triggerHaptic("error");
       setIsSubmitting(false);
-
-      if (!txProgress.isVisible) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to change username. Please try again.",
-        );
-      }
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to change username. Please try again.",
+      );
     }
   }, [status, canChangeName, username, txProgress, router, user, setUser, queryClient, toast]);
 
-  const handleRetry = useCallback(() => {
-    txProgress.reset();
-    setTimeout(() => handleContinue(), 100);
-  }, [txProgress, handleContinue]);
-
-  const handleDismissError = useCallback(() => {
+  const handleDismissProgress = useCallback(() => {
     txProgress.hideModal();
     setIsSubmitting(false);
   }, [txProgress]);
@@ -292,19 +266,9 @@ export function ChangeUsernameScreen() {
         progress={txProgress.progress}
         title="Changing Username"
         description={`Updating username to @${username}`}
-        onDismiss={
-          txProgress.progress.phase === "success"
-            ? () => {
-                txProgress.hideModal();
-                router.back();
-              }
-            : handleDismissError
-        }
-        onRetry={handleRetry}
-        dismissible={
-          txProgress.progress.phase === "success" ||
-          txProgress.progress.phase === "error"
-        }
+        onDismiss={handleDismissProgress}
+        showTxHash={false}
+        autoDismissDelay={1200}
       />
 
       <View
