@@ -1261,7 +1261,7 @@ export function QuestsScreen() {
       triggerHaptic("success");
       const mirageRewards = response.rewards?.filter((r) => r.type === "mirage") ?? [];
       const inviteRewards = response.rewards?.filter((r) => r.type === "invite_code") ?? [];
-      const claimed = mirageRewards.reduce((s, r) => s + r.amount, 0);
+      const claimed = mirageRewards.reduce((s, r) => s + r.amount * (r.multiplier || 1), 0);
       const invites = inviteRewards.reduce((s, r) => s + r.amount, 0);
       setClaimedRewardAmount(Math.floor(claimed / 1_000_000));
       setClaimedInviteCodes(invites);
