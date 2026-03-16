@@ -1259,11 +1259,8 @@ export function QuestsScreen() {
     onSuccess: (response) => {
       setIsClaiming(false);
       triggerHaptic("success");
-      const mirageRewards = response.rewards?.filter((r) => r.type === "mirage") ?? [];
       const inviteRewards = response.rewards?.filter((r) => r.type === "invite_code") ?? [];
-      const claimed = mirageRewards.reduce((s, r) => s + r.amount * (r.multiplier || 1), 0);
       const invites = inviteRewards.reduce((s, r) => s + r.amount, 0);
-      setClaimedRewardAmount(Math.floor(claimed / 1_000_000));
       setClaimedInviteCodes(invites);
       setShowSuccessModal(true);
       refetch();
@@ -1308,16 +1305,8 @@ export function QuestsScreen() {
   }, [data?.daily_quests]);
 
   const totalReward = useMemo(() => {
-    const multiplier = data?.reward_multiplier ?? 1;
-    return completedQuests.reduce((sum, quest) => {
-      const reward = quest.rewards[0];
-      if (!reward || reward.type !== "mirage") return sum;
-      const amount = reward.apply_multiplier !== false
-        ? reward.amount * multiplier
-        : reward.amount;
-      return Math.floor(sum + amount);
-    }, 0);
-  }, [completedQuests, data?.reward_multiplier]);
+    return Math.floor((data?.total_mirage_after_multiplier ?? 0) / 1_000_000);
+  }, [data?.total_mirage_after_multiplier]);
 
   const allQuestsCompleted = useMemo(() => {
     if (!data?.daily_quests?.length) return false;
@@ -1332,8 +1321,9 @@ export function QuestsScreen() {
   const handleClaimAll = useCallback(() => {
     if ((data?.pending_rewards?.length ?? 0) === 0) return;
     setIsClaiming(true);
+    setClaimedRewardAmount(totalReward);
     claimMutation.mutate({ questId: "all" });
-  }, [data?.pending_rewards, claimMutation]);
+  }, [data?.pending_rewards, claimMutation, totalReward]);
 
   const handleCloseSuccessModal = useCallback(() => {
     setShowSuccessModal(false);
