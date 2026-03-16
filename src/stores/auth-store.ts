@@ -368,6 +368,7 @@ export const useAuthStore = create<AuthState>()(
         useHomePostCardStore.getState().reset();
         useContentModerationStore.getState().clearAll();
         useInboxStore.getState().resetForLogout();
+        usePreferencesStore.setState({ hasSeenAdultPrompt: false });
       },
 
       // ============================================

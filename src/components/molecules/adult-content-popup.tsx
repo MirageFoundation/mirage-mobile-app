@@ -6,7 +6,7 @@ import {
   BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -26,14 +26,22 @@ export const AdultContentPopup = ({
 }: AdultContentPopupProps) => {
   const { theme } = useUnistyles();
   const bottomSheetRef = useRef<BottomSheetModal>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     if (visible) {
-      bottomSheetRef.current?.present();
+      const timer = setTimeout(() => {
+        bottomSheetRef.current?.present();
+      }, isMounted ? 0 : 500);
+      return () => clearTimeout(timer);
     } else {
       bottomSheetRef.current?.dismiss();
     }
-  }, [visible]);
+  }, [visible, isMounted]);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const renderBackdrop = useCallback(
     (props: any) => (
