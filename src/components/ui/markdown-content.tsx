@@ -4,11 +4,11 @@ import {
   type StyleMap,
 } from "@docren/react-native-markdown";
 import { Image } from "expo-image";
-import * as Linking from "expo-linking";
 import { memo, useCallback, useMemo } from "react";
 import { Text } from "react-native";
 import { useUnistyles } from "react-native-unistyles";
 import { hasSpoilers, parseSpoilers } from "@/src/utils/spoiler-parser";
+import { openUrlOrInternal } from "@/src/utils/internal-link-handler";
 
 // Regex to match plain URLs (excluding trailing punctuation that might be markdown syntax)
 const PLAIN_URL_REGEX = /https?:\/\/[^\s<>"]+/g;
@@ -63,11 +63,7 @@ export const MarkdownContent = memo(function MarkdownContent({
         onLinkPress(url);
         return true;
       }
-      const fullUrl =
-        url.startsWith("http://") || url.startsWith("https://")
-          ? url
-          : `https://${url}`;
-      Linking.openURL(fullUrl).catch(() => {});
+      openUrlOrInternal(url);
       return true;
     },
     [onLinkPress],

@@ -780,7 +780,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           not visble when opening the inbox from notification
                           fix,unmute video in focus on screen fix,stop playing
                           video on screen when side is opened,stop playing video
-                          on post details screen when scrolled down to comments
+                          on post details screen when scrolled down to
+                          comments,all messages highlighted after log in fix
                         </Text>
                       </>
                     )}
@@ -850,7 +851,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           not visble when opening the inbox from notification
                           fix,unmute video in focus on screen fix,stop playing
                           video on screen when side is opened,stop playing video
-                          on post details screen when scrolled down to comments
+                          on post details screen when scrolled down to
+                          comments,all messages highlighted after log in fix
                         </Text>
                       </>
                     )}
