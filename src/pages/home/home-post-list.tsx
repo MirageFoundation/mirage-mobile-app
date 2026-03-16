@@ -10,7 +10,6 @@ import {
   type ComponentType,
 } from "react";
 import {
-  Dimensions,
   Platform,
   type ListRenderItem,
   type ViewToken,
@@ -21,13 +20,11 @@ import type { Post } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { HomePostCardItem } from "./home-post-card-item";
 import { useHomePostCardStore } from "./home-post-card-store";
-import { useScrollY } from "@/src/providers/scroll-animation-context";
 
 const AnimatedFlashList = Animated.createAnimatedComponent(
   FlashList as ComponentType<any>,
 );
 
-const SCREEN_HEIGHT = Dimensions.get("window").height;
 const ESTIMATED_ITEM_SIZE = 420;
 
 type HomePostListProps = {
@@ -63,8 +60,6 @@ const HomePostListInner = function HomePostListInner(
   const setVideoViewability = useHomePostCardStore(
     (state) => state.setVideoViewability
   );
-  const scrollY = useScrollY();
-
   const onItemVisibleRef = useRef(onItemVisible);
   onItemVisibleRef.current = onItemVisible;
 
@@ -72,7 +67,7 @@ const HomePostListInner = function HomePostListInner(
   feedScreenRef.current = feedScreen;
 
   const viewabilityConfig = useRef({
-    viewAreaCoveragePercentThreshold: 1,
+    viewAreaCoveragePercentThreshold: 20,
     minimumViewTime: 150,
   }).current;
 
@@ -84,9 +79,6 @@ const HomePostListInner = function HomePostListInner(
     clearTimeout(deferHandleRef.current as ReturnType<typeof setTimeout>);
     deferHandleRef.current = null;
   }, []);
-
-  const scrollYRef = useRef(scrollY);
-  scrollYRef.current = scrollY;
 
   const flushViewability = useCallback(() => {
     const items = pendingViewableRef.current;
@@ -102,16 +94,13 @@ const HomePostListInner = function HomePostListInner(
     let activeId: string | null = null;
 
     if (videoItems.length > 0) {
-      let centerIndex: number;
-      const sv = scrollYRef.current;
-      if (sv) {
-        const viewportCenterY = sv.value + SCREEN_HEIGHT / 2;
-        centerIndex = viewportCenterY / ESTIMATED_ITEM_SIZE;
-      } else {
-        const firstIdx = visibleItems[0]?.index ?? 0;
-        const lastIdx = visibleItems[visibleItems.length - 1]?.index ?? 0;
-        centerIndex = (firstIdx + lastIdx) / 2;
-      }
+      const sortedIndices = visibleItems
+        .map((v) => v.index ?? 0)
+        .sort((a, b) => a - b);
+      const mid = Math.floor((sortedIndices.length - 1) / 2);
+      const centerIndex = sortedIndices[mid] ?? 0;
+      const visibleSpan = (sortedIndices[sortedIndices.length - 1] ?? 0) - (sortedIndices[0] ?? 0);
+      const maxDist = Math.max(1, visibleSpan * 0.35);
 
       let best = videoItems[0];
       let bestDist = Math.abs((best.index ?? 0) - centerIndex);
@@ -119,7 +108,7 @@ const HomePostListInner = function HomePostListInner(
         const d = Math.abs((videoItems[i].index ?? 0) - centerIndex);
         if (d < bestDist) { best = videoItems[i]; bestDist = d; }
       }
-      activeId = best.item.id;
+      activeId = bestDist <= maxDist ? best.item.id : null;
     }
 
     setVideoViewability(feedScreenRef.current, visibleVideoIds, activeId);
@@ -136,6 +125,16 @@ const HomePostListInner = function HomePostListInner(
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       pendingViewableRef.current = viewableItems;
+
+      const currentActive = useHomePostCardStore.getState().activeVideoPostIds[feedScreenRef.current];
+      if (currentActive) {
+        const stillVisible = viewableItems.some(
+          (v) => v.isViewable && v.item?.id === currentActive
+        );
+        if (!stillVisible) {
+          useHomePostCardStore.getState().setActiveVideoPostId(feedScreenRef.current, null);
+        }
+      }
 
       const maxIndex = viewableItems.reduce((max, item) => {
         if (item.isViewable && item.index != null && item.index > max) return item.index;

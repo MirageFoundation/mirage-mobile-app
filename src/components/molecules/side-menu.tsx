@@ -774,7 +774,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           the agents after pow is solved and doing the
                           blockchain confirmation in background, bottom nav bar
                           not visble when opening the inbox from notification
-                          fix
+                          fix,unmute video in focus on screen fix,
                         </Text>
                       </>
                     )}
@@ -842,7 +842,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           the agents after pow is solved and doing the
                           blockchain confirmation in background, bottom nav bar
                           not visble when opening the inbox from notification
-                          fix
+                          fix,unmute video in focus on screen fix,
                         </Text>
                       </>
                     )}

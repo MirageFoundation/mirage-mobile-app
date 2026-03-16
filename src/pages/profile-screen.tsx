@@ -788,29 +788,46 @@ useEffect(() => {
     const newVisibleIds = new Set(videoItems.map((item) => item.item.id));
     setVisibleVideoPostIds(newVisibleIds);
     if (videoItems.length > 0) {
-      const midIdx = Math.floor((visibleItems.length - 1) / 2);
-      const midListIndex = visibleItems[midIdx]?.index ?? 0;
+      const sortedIndices = visibleItems
+        .map((v) => v.index ?? 0)
+        .sort((a, b) => a - b);
+      const mid = Math.floor((sortedIndices.length - 1) / 2);
+      const centerIndex = sortedIndices[mid] ?? 0;
+      const visibleSpan = (sortedIndices[sortedIndices.length - 1] ?? 0) - (sortedIndices[0] ?? 0);
+      const maxDist = Math.max(1, visibleSpan * 0.35);
       let best = videoItems[0];
-      let bestDist = Math.abs((best.index ?? 0) - midListIndex);
+      let bestDist = Math.abs((best.index ?? 0) - centerIndex);
       for (let i = 1; i < videoItems.length; i++) {
-        const d = Math.abs((videoItems[i].index ?? 0) - midListIndex);
+        const d = Math.abs((videoItems[i].index ?? 0) - centerIndex);
         if (d < bestDist) { best = videoItems[i]; bestDist = d; }
       }
-      setActiveVideoPostId(best.item.id);
+      setActiveVideoPostId(bestDist <= maxDist ? best.item.id : null);
     } else {
       setActiveVideoPostId(null);
     }
   };
 
+  const activeVideoPostIdRef = useRef(activeVideoPostId);
+  activeVideoPostIdRef.current = activeVideoPostId;
+
   const onProfileViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       pendingProfileViewableRef.current = viewableItems;
-      if (Platform.OS === "android") {
-        if (profileDeferHandleRef.current !== null) {
-          clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+
+      const currentActive = activeVideoPostIdRef.current;
+      if (currentActive) {
+        const stillVisible = viewableItems.some(
+          (v) => v.isViewable && v.item && typeof v.item === "object" && "id" in v.item && v.item.id === currentActive
+        );
+        if (!stillVisible) {
+          setActiveVideoPostId(null);
         }
-        profileDeferHandleRef.current = setTimeout(flushProfileViewability, 150);
       }
+
+      if (profileDeferHandleRef.current !== null) {
+        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+      }
+      profileDeferHandleRef.current = setTimeout(flushProfileViewability, Platform.OS === "ios" ? 200 : 150);
     }
   ).current;
 
