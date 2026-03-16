@@ -70,7 +70,7 @@ export const useInboxStore = create<InboxState>()(
           unreadCount: 0,
           hasUnread: false,
           latestInboxTimestamp: 0,
-          highlightBaselineAt: 0,
+          highlightBaselineAt: Math.floor(Date.now() / 1000),
           _suppressUntil: 0,
           readReplyIds: [],
         }),
