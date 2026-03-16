@@ -13,6 +13,7 @@ import type { WalletMetadata } from "@/src/wallet";
 import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 import { useContentModerationStore } from "./content-moderation-store";
 import { useInboxStore } from "./inbox-store";
+import { useDraftStore } from "./draft-store";
 import { getTierName } from "@/src/utils/tiers";
 
 // ============================================
@@ -369,6 +370,7 @@ export const useAuthStore = create<AuthState>()(
         useContentModerationStore.getState().clearAll();
         useInboxStore.getState().resetForLogout();
         usePreferencesStore.setState({ hasSeenAdultPrompt: false });
+        useDraftStore.getState().clearDraft();
       },
 
       // ============================================
