@@ -7,6 +7,7 @@ import YoutubePlayer, { type YoutubeIframeRef } from "react-native-youtube-ifram
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -357,6 +358,22 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
           </View>
         </Pressable>
       )}
+      {isAndroid && (
+        <Pressable
+          onPress={() => {
+            if (item.uri) Linking.openURL(item.uri);
+          }}
+          style={[previewVideoStyles.watchOnYouTubeButton, { bottom: insets.bottom + 10, left: 16 }]}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <View style={previewVideoStyles.watchOnYouTubeInner}>
+            <Ionicons name="logo-youtube" size={14} color="#FF0000" />
+            <Text size="xs" weight="semibold" style={{ color: "#fff", marginLeft: 4 }}>
+              Watch on YouTube
+            </Text>
+          </View>
+        </Pressable>
+      )}
     </View>
   );
 });
@@ -414,6 +431,20 @@ const previewVideoStyles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  watchOnYouTubeButton: {
+    position: "absolute",
+    bottom: 80,
+    left: 20,
+  },
+  watchOnYouTubeInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
   },
 });
 

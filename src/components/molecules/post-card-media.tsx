@@ -971,7 +971,7 @@ export const PostCardMedia = memo(
                 e.stopPropagation?.();
                 if (media.uri) Linking.openURL(media.uri);
               }}
-              style={styles.watchOnYouTubeButton}
+              style={isPostDetail ? styles.watchOnYouTubeButtonTop : styles.watchOnYouTubeButton}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
             >
               <View style={styles.watchOnYouTubeInner}>
@@ -1177,6 +1177,12 @@ const styles = StyleSheet.create((theme) => ({
   watchOnYouTubeButton: {
     position: "absolute",
     bottom: theme.spacing.sm,
+    left: theme.spacing.sm,
+    zIndex: 30,
+  },
+  watchOnYouTubeButtonTop: {
+    position: "absolute",
+    top: theme.spacing.sm,
     left: theme.spacing.sm,
     zIndex: 30,
   },
