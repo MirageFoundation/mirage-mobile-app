@@ -33,6 +33,22 @@ let appStateSubscription: { remove(): void } | null = null;
 let unsubscribeInboxSignals: (() => void) | null = null;
 let notificationResponseSubscription: Notifications.Subscription | null = null;
 
+let _tabsReadyResolve: (() => void) | null = null;
+let _tabsReadyPromise: Promise<void> = new Promise<void>((resolve) => {
+  _tabsReadyResolve = resolve;
+});
+
+export function signalTabsReady(): void {
+  _tabsReadyResolve?.();
+}
+
+function waitForTabsReady(timeoutMs = 5000): Promise<void> {
+  return Promise.race([
+    _tabsReadyPromise,
+    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+}
+
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     console.log("[InboxNotifications] handleNotification called for:", notification.request.identifier);
@@ -374,7 +390,8 @@ function handleNotificationResponse(
     }
     handledNotificationIds.add(notificationId);
     saveHandledNotificationIds(handledNotificationIds);
-    const navigateToInbox = () => {
+    const navigateToInbox = async () => {
+      await waitForTabsReady();
       router.navigate({
         pathname: "/(tabs)/inbox",
         params: { fromNotification: notificationId },
@@ -384,11 +401,11 @@ function handleNotificationResponse(
       const sub = AppState.addEventListener("change", (state) => {
         if (state === "active") {
           sub.remove();
-          setTimeout(navigateToInbox, 500);
+          navigateToInbox();
         }
       });
     } else {
-      setTimeout(navigateToInbox, 300);
+      navigateToInbox();
     }
   } catch (error) {
     console.error("[InboxNotifications] Failed to navigate from notification:", error);

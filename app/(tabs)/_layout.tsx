@@ -33,6 +33,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { SideMenuProvider } from "@/src/providers/side-menu-provider";
+import { signalTabsReady } from "@/src/services/inbox-notifications";
 
 // Tabs that require authentication
 const PROTECTED_TABS = ["following", "create", "inbox", "profile"];
@@ -292,6 +293,10 @@ function TabsContent() {
 export default function TabLayout() {
   const { hasShareIntent } = useShareIntentContext();
   const hasNavigatedRef = useRef(false);
+
+  useEffect(() => {
+    signalTabsReady();
+  }, []);
 
   useEffect(() => {
     if (hasShareIntent && !hasNavigatedRef.current) {

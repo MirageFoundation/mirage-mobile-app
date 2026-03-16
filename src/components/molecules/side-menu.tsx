@@ -747,7 +747,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 84
+                          update 85
                         </Text>
                         <Text
                           style={{
@@ -772,7 +772,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           after claim fix, enable agent taking very long time
                           for confirming on blockchain: now immediately updating
                           the agents after pow is solved and doing the
-                          blockchain confirmation in background
+                          blockchain confirmation in background, bottom nav bar
+                          not visble when opening the inbox from notification
+                          fix
                         </Text>
                       </>
                     )}
@@ -813,7 +815,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 84
+                          update 85
                         </Text>
                         <Text
                           style={{
@@ -838,7 +840,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           after claim fix, enable agent taking very long time
                           for confirming on blockchain: now immediately updating
                           the agents after pow is solved and doing the
-                          blockchain confirmation in background
+                          blockchain confirmation in background, bottom nav bar
+                          not visble when opening the inbox from notification
+                          fix
                         </Text>
                       </>
                     )}
