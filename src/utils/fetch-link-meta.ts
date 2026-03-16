@@ -738,8 +738,10 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
             const apiData = await apiRes.json();
             const tweet = apiData?.tweet;
             if (tweet) {
-              if (!title) title = tweet.author?.name ? `${tweet.author.name} (@${tweet.author.screen_name})` : null;
-              if (!description) description = tweet.text ?? null;
+              const tweetText = tweet.text ?? "";
+              const tweetLines = tweetText.split("\n").filter((l: string) => l.trim().length > 0);
+              if (!title) title = tweetLines[0]?.trim() ?? null;
+              if (!description) description = tweetLines.length > 1 ? tweetLines.slice(1).join("\n").trim() : null;
               if (!siteName) siteName = "X";
               const media = tweet.media?.all ?? tweet.media?.photos ?? [];
               for (const m of media) {

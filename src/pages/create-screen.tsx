@@ -426,7 +426,7 @@ export function CreateScreen() {
 
     setTimeout(() => {
       if (shareIntent.text && !shareIntent.webUrl) {
-        updateDraft({ body: shareIntent.text });
+        updateDraft({ body: shareIntent.text.slice(0, tierLimits.maxContentLength) });
       }
       if (shareIntent.webUrl) {
         setIsProcessingShareLink(true);
@@ -482,7 +482,7 @@ export function CreateScreen() {
             }
             bodyParts.push(desc.slice(0, tierLimits.maxContentLength));
           }
-          updateDraft({ body: bodyParts.join("\n\n") });
+          updateDraft({ body: bodyParts.join("\n\n").slice(0, tierLimits.maxContentLength) });
           console.log("[CreateScreen] Draft auto-filled:", {
             title: (finalTitle ?? meta.title)?.slice(0, tierLimits.maxTitleLength),
             body: bodyParts.join("\n\n").slice(0, 200),
@@ -620,7 +620,7 @@ export function CreateScreen() {
           if (!videoDownloaded && meta.video) {
             const currentBody = useDraftStore.getState().draft.body;
             const link = shareIntent.webUrl!;
-            const newBody = currentBody ? `${currentBody}\n\n${link}` : link;
+            const newBody = (currentBody ? `${currentBody}\n\n${link}` : link).slice(0, tierLimits.maxContentLength);
             updateDraft({ body: newBody });
           }
 
@@ -628,7 +628,7 @@ export function CreateScreen() {
             updateDraft({ linkUrl: meta.externalUrl });
           }
         }).catch((err: any) => {
-          updateDraft({ body: shareIntent.webUrl! });
+          updateDraft({ body: shareIntent.webUrl!.slice(0, tierLimits.maxContentLength) });
           Sentry.captureException(err, { tags: { feature: "share-intent-meta" } });
         }).finally(() => {
           setIsProcessingShareLink(false);
