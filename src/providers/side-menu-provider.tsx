@@ -7,6 +7,7 @@ import {
 } from "@/src/components/molecules";
 import { useAuthStore } from "@/src/stores";
 import { useUserStatus } from "@/src/api/read/hooks";
+import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 
 type SideMenuContextType = {
   openSideMenu: () => void;
@@ -52,6 +53,14 @@ export function SideMenuProvider({ children }: { children: React.ReactNode }) {
   const handleAbout = useCallback(() => Linking.openURL("https://mirage.foundation").catch((e: Error) => Alert.alert("Couldn't open link", e.message)), []);
   const handleLogout = useCallback(async () => await logout(), [logout]);
 
+  const handleSideMenuOpen = useCallback(() => {
+    useHomePostCardStore.getState().setSideMenuOpen(true);
+  }, []);
+
+  const handleSideMenuDismiss = useCallback(() => {
+    useHomePostCardStore.getState().setSideMenuOpen(false);
+  }, []);
+
   return (
     <SideMenuContext.Provider value={{ openSideMenu, closeSideMenu }}>
       {children}
@@ -69,6 +78,8 @@ export function SideMenuProvider({ children }: { children: React.ReactNode }) {
         onHelp={handleHelp}
         onAbout={handleAbout}
         onLogout={handleLogout}
+        onOpen={handleSideMenuOpen}
+        onDismiss={handleSideMenuDismiss}
       />
     </SideMenuContext.Provider>
   );

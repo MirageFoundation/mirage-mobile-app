@@ -71,6 +71,7 @@ type SideMenuProps = {
   onAbout?: () => void;
   onLogout?: () => Promise<void>;
   onDismiss?: () => void;
+  onOpen?: () => void;
 };
 
 export type SideMenuRef = {
@@ -314,6 +315,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       onAbout,
       onLogout,
       onDismiss,
+      onOpen,
     },
     ref,
   ) => {
@@ -379,7 +381,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       setVisible(true);
       translateX.value = withTiming(0, animationConfig);
       backdropOpacity.value = withTiming(0.5, animationConfig);
-    }, []);
+      onOpen?.();
+    }, [onOpen]);
 
     const close = useCallback(() => {
       translateX.value = withTiming(-MENU_WIDTH, animationConfig);
@@ -398,6 +401,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
         translateX.value = -MENU_WIDTH;
         backdropOpacity.value = 0;
         setVisible(false);
+        onDismiss?.();
       },
     }));
 
@@ -774,7 +778,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           the agents after pow is solved and doing the
                           blockchain confirmation in background, bottom nav bar
                           not visble when opening the inbox from notification
-                          fix,unmute video in focus on screen fix,
+                          fix,unmute video in focus on screen fix,stop playing
+                          video on screen when side is opened
                         </Text>
                       </>
                     )}
@@ -842,7 +847,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           the agents after pow is solved and doing the
                           blockchain confirmation in background, bottom nav bar
                           not visble when opening the inbox from notification
-                          fix,unmute video in focus on screen fix,
+                          fix,unmute video in focus on screen fix,stop playing
+                          video on screen when side is opened
                         </Text>
                       </>
                     )}
