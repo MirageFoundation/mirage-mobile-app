@@ -23,6 +23,7 @@ import {
   useUserFollowedByAddress,
   useUsernameFromAddress,
 } from "@/src/api/read";
+import { useAgents } from "@/src/api/read/hooks/use-agents";
 import type { Post as ApiPostType } from "@/src/api/types";
 import { Avatar } from "@/src/components/atoms";
 import { TimeAgo } from "@/src/components/atoms/time-ago";
@@ -33,21 +34,21 @@ const emptyInfoImage = require("@/assets/images/empty-info.png");
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-type FollowingTab = "users" | "topics" | "moderators";
+type FollowingTab = "users" | "topics" | "agents";
 
 const TABS: { key: FollowingTab; label: string }[] = [
   { key: "users", label: "Users" },
   { key: "topics", label: "Topics" },
-  { key: "moderators", label: "Moderators" },
+  { key: "agents", label: "Agents" },
 ];
 
 const TAB_INDEX_MAP: Record<FollowingTab, number> = {
   users: 0,
   topics: 1,
-  moderators: 2,
+  agents: 2,
 };
 
-const INDEX_TAB_MAP: FollowingTab[] = ["users", "topics", "moderators"];
+const INDEX_TAB_MAP: FollowingTab[] = ["users", "topics", "agents"];
 
 const formatCount = (
   count: number,
@@ -194,7 +195,7 @@ function FollowingListSkeleton({ tab }: { tab: FollowingTab }) {
             return <UserRowSkeleton key={i} />;
           case "topics":
             return <TopicRowSkeleton key={i} />;
-          case "moderators":
+          case "agents":
             return <ModeratorRowSkeleton key={i} />;
         }
       })}
@@ -226,9 +227,9 @@ function FollowingEmptyState({ tab }: { tab: FollowingTab }) {
       title: "Not following any topics",
       subtitle: "When you follow topics, they'll appear here.",
     },
-    moderators: {
-      title: "Not following any moderators",
-      subtitle: "When you follow moderators, they'll appear here.",
+    agents: {
+      title: "No enabled agents",
+      subtitle: "When you enable agents, they'll appear here.",
     },
   };
 
@@ -465,30 +466,46 @@ export function UserFollowingScreen() {
     return topicPostsData.posts;
   }, [topicPostsData]);
 
-  const usersCount = followedData?.followed_users?.length ?? 0;
+  const { data: allAgentsData } = useAgents();
+  const agentAddressSet = useMemo(
+    () => new Set(allAgentsData?.agents?.map((a) => a.address) ?? []),
+    [allAgentsData?.agents],
+  );
+
+  const followedAgents = useMemo(
+    () => (followedData?.followed_users ?? []).filter((addr) => agentAddressSet.has(addr)),
+    [followedData?.followed_users, agentAddressSet],
+  );
+
+  const nonAgentUsers = useMemo(
+    () => (followedData?.followed_users ?? []).filter((addr) => !agentAddressSet.has(addr)),
+    [followedData?.followed_users, agentAddressSet],
+  );
+
+  const usersCount = nonAgentUsers.length;
   const topicsCount = followedData?.followed_topics?.length ?? 0;
-  const moderatorsCount = followedData?.followed_moderators?.length ?? 0;
+  const agentsCount = followedAgents.length;
 
   const tabCounts: Record<FollowingTab, number> = useMemo(
     () => ({
       users: usersCount,
       topics: topicsCount,
-      moderators: moderatorsCount,
+      agents: agentsCount,
     }),
-    [usersCount, topicsCount, moderatorsCount],
+    [usersCount, topicsCount, agentsCount],
   );
 
   const usersData = useMemo(
-    () => followedData?.followed_users ?? [],
-    [followedData?.followed_users],
+    () => nonAgentUsers,
+    [nonAgentUsers],
   );
   const topicsData = useMemo(
     () => followedData?.followed_topics ?? [],
     [followedData?.followed_topics],
   );
-  const moderatorsData = useMemo(
-    () => followedData?.followed_moderators ?? [],
-    [followedData?.followed_moderators],
+  const agentsData = useMemo(
+    () => followedAgents,
+    [followedAgents],
   );
 
   const handleUserPress = useCallback(
@@ -615,9 +632,9 @@ export function UserFollowingScreen() {
     return <FollowingEmptyState tab="topics" />;
   }, [isLoading]);
 
-  const moderatorsListEmpty = useCallback(() => {
-    if (isLoading) return <FollowingListSkeleton tab="moderators" />;
-    return <FollowingEmptyState tab="moderators" />;
+  const agentsListEmpty = useCallback(() => {
+    if (isLoading) return <FollowingListSkeleton tab="agents" />;
+    return <FollowingEmptyState tab="agents" />;
   }, [isLoading]);
 
   const topicPostsEmpty = useCallback(() => {
@@ -742,16 +759,16 @@ export function UserFollowingScreen() {
           )}
         </View>
 
-        <View key="moderators" style={{ flex: 1 }}>
+        <View key="agents" style={{ flex: 1 }}>
           <FlatList
-            data={moderatorsData}
+            data={agentsData}
             renderItem={renderModeratorItem}
             keyExtractor={keyExtractor}
             contentContainerStyle={{
               paddingBottom: insets.bottom + 20,
-              flexGrow: moderatorsData.length === 0 ? 1 : undefined,
+              flexGrow: agentsData.length === 0 ? 1 : undefined,
             }}
-            ListEmptyComponent={moderatorsListEmpty}
+            ListEmptyComponent={agentsListEmpty}
           />
         </View>
       </PagerView>

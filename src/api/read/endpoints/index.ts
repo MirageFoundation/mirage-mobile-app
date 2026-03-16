@@ -107,3 +107,7 @@ export type {
   AchievementsResponse,
   GetRewardSummaryParams,
 } from "./rewards";
+
+// Agents
+export { getAgents } from "./agents";
+export type { AgentInfo, AgentsResponse } from "./agents";

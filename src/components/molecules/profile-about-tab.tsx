@@ -454,11 +454,10 @@ function ProfileDetailsSection({
   const subscriptionExpiry =
     profile?.subscription_expiry ?? userStatus?.subscription_expiry ?? 0;
   const autoRenew = profile?.auto_renew ?? userStatus?.auto_renew ?? false;
-  const isModerator = profile?.is_moderator ?? false;
   const biography = profile?.biography ?? "";
   const followedUsers = profile?.followed_users?.length ?? 0;
   const followedTopics = profile?.followed_topics?.length ?? 0;
-  const qualityPosts = profile?.quality_posts?.length ?? 0;
+  const enabledAgents = profile?.enabled_agents?.length ?? 0;
 
   const details: {
     label: string;
@@ -510,19 +509,16 @@ function ProfileDetailsSection({
       icon: "card-outline",
     });
   }
-  if (isModerator) {
-    details.push({ label: "Role", value: "Moderator", icon: "star-outline" });
-  }
   details.push({
     label: "Following",
     value: `${followedUsers} users, ${followedTopics} topics`,
     icon: "people-outline",
   });
-  if (qualityPosts > 0) {
+  if (enabledAgents > 0) {
     details.push({
-      label: "Quality Posts",
-      value: qualityPosts.toString(),
-      icon: "ribbon-outline",
+      label: "Agents",
+      value: enabledAgents.toString(),
+      icon: "shield-checkmark-outline",
     });
   }
 

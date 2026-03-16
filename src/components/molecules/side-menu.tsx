@@ -1,5 +1,6 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { formatCompactNumber } from "@/src/utils/format-number";
+import * as Sentry from "@sentry/react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
   forwardRef,
@@ -63,6 +64,7 @@ type SideMenuProps = {
   onHistory?: () => void;
   onFollowing?: () => void;
   onTopics?: () => void;
+  onAgents?: () => void;
   onInviteAndEarn?: () => void;
   onQuests?: () => void;
   onHelp?: () => void;
@@ -305,6 +307,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       onHistory,
       onFollowing,
       onTopics,
+      onAgents,
       onInviteAndEarn,
       onQuests,
       onHelp,
@@ -444,7 +447,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
         close();
         await onLogout?.();
       } catch (error) {
-        console.error("[SideMenu] Logout failed:", error);
+        Sentry.captureException(error, {
+          tags: { feature: "side-menu", operation: "logout" },
+        });
       } finally {
         setIsLoggingOut(false);
         setShowLogoutPopup(false);
@@ -615,6 +620,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     subtitle="Explore all topics"
                     onPress={createHandler(onTopics)}
                   />
+                  <MenuItem
+                    iconName="shield-checkmark-outline"
+                    title="Agents"
+                    subtitle="Browse and enable agents"
+                    onPress={createHandler(onAgents)}
+                  />
                   <SectionFooter />
 
                   {/* Followed Users */}
@@ -736,7 +747,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 69
+                          update 84
                         </Text>
                         <Text
                           style={{
@@ -746,15 +757,15 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          link extraction from shared reddit post, comment lenth
-                          check added,recovery phrase UI fix, error handling for
-                          network error while posting, try again in create post
-                          not working fixed, some toast text changes,toasts
-                          overlapping fix, several errors from sentry log fixed,
-                          some minor UI changes in search topic in create
-                          post,network error handling while pow,error handling
-                          for mirage link not openeing, added perks and
-                          subscription page to be platform specifuc
+                          Huge fix on matching the votes, comments and counts on
+                          posts all over the screen when app state changes,app
+                          optimization on fetching all the pages uptp
+                          10,required update popup, invite code reawrd in quests
+                          handled and all type of quest cases handled, and claim
+                          reawrd showing wrong rewards fixed,platform specific
+                          version check with backend,better error handling for
+                          server error,removed ability to change server from
+                          cloudflare error toast
                         </Text>
                       </>
                     )}
@@ -795,7 +806,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 69
+                          update 84
                         </Text>
                         <Text
                           style={{
@@ -805,15 +816,15 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          link extraction from shared reddit post, comment lenth
-                          check added,recovery phrase UI fix, error handling for
-                          network error while posting, try again in create post
-                          not working fixed, some toast text changes,toasts
-                          overlapping fix, several errors from sentry log fixed,
-                          some minor UI changes in search topic in create
-                          post,network error handling while pow,error handling
-                          for mirage link not openeing, added perks and
-                          subscription page to be platform specifuc
+                          Huge fix on matching the votes, comments and counts on
+                          posts all over the screen when app state changes,app
+                          optimization on fetching all the pages uptp
+                          10,required update popup, invite code reawrd in quests
+                          handled and all type of quest cases handled, and claim
+                          reawrd showing wrong rewards fixed,platform specific
+                          version check with backend,better error handling for
+                          server error,removed ability to change server from
+                          cloudflare error toast
                         </Text>
                       </>
                     )}

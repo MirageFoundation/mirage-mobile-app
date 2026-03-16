@@ -1,7 +1,7 @@
 import { api } from "../../client";
 
 export interface QuestReward {
-  type: "mirage";
+  type: "mirage" | "invite_code";
   amount: number;
   apply_multiplier: boolean;
 }
@@ -10,14 +10,24 @@ export interface DailyQuest {
   id: string;
   title: string;
   description: string;
-  action_type: "comment" | "vote" | "post" | "follow" | "share" | "balanced_vote";
+  action_type:
+    | "comment"
+    | "vote"
+    | "post"
+    | "follow"
+    | "share"
+    | "balanced_vote"
+    | "upvotes_received"
+    | "comment_upvotes_received"
+    | "invite_recruit"
+    | "claim_only";
   progress: number;
   target: number;
   completed: boolean;
   rewards: QuestReward[];
   min_content_length: number | null;
   time_spacing_minutes: number | null;
-  unique_target: boolean;
+  unique_target: boolean | null;
   unique_topics_min: number | null;
   quality_threshold: number | null;
   count_vote_changes: boolean;
@@ -49,7 +59,7 @@ export interface FlashQuest {
 
 export interface PendingRewardRow {
   id: number;
-  type: "mirage";
+  type: "mirage" | "invite_code";
   data: { amount: number; apply_multiplier: boolean };
   reason: string;
   created_at: number;

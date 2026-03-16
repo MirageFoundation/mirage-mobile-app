@@ -45,6 +45,7 @@ export function SideMenuProvider({ children }: { children: React.ReactNode }) {
     if (id) router.push(`/user-following/${id}`);
   }, [router, currentUser?.walletAddress, currentUser?.username]);
   const handleTopics = useCallback(() => router.push("/topics"), [router]);
+  const handleAgents = useCallback(() => router.push("/agents"), [router]);
   const handleInviteAndEarn = useCallback(() => router.push("/invite-and-earn"), [router]);
   const handleQuests = useCallback(() => router.push("/quests"), [router]);
   const handleHelp = useCallback(() => Linking.openURL("https://mirage.foundation/faq").catch((e: Error) => Alert.alert("Couldn't open link", e.message)), []);
@@ -62,6 +63,7 @@ export function SideMenuProvider({ children }: { children: React.ReactNode }) {
         onHistory={handleHistory}
         onFollowing={handleFollowing}
         onTopics={handleTopics}
+        onAgents={handleAgents}
         onInviteAndEarn={handleInviteAndEarn}
         onQuests={handleQuests}
         onHelp={handleHelp}

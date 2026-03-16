@@ -19,6 +19,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Text } from "@/src/components/ui/primitives";
 import { usePreferencesStore, getShareBaseUrl } from "@/src/stores";
+import { useAuthStore } from "@/src/stores/auth-store";
 import type { Post } from "./post-card";
 
 type PostOptionsSheetProps = {
@@ -56,6 +57,8 @@ type PostOptionsSheetProps = {
   onReport?: () => void;
   /** Callback when give award is pressed */
   onGiveAward?: () => void;
+  /** Callback when annotate is pressed (agent only) */
+  onAnnotate?: () => void;
   /** Callback when sheet is dismissed */
   onDismiss?: () => void;
 };
@@ -219,6 +222,7 @@ export const PostOptionsSheet = forwardRef<
       onEdit,
       onReport,
       onGiveAward,
+      onAnnotate,
       onDismiss,
     },
     ref,
@@ -227,6 +231,8 @@ export const PostOptionsSheet = forwardRef<
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
     const shareServer = usePreferencesStore((s) => s.shareServer);
+    const userLevel = useAuthStore((s) => s.userLevel);
+    const isAgent = userLevel >= 10;
 
     const present = useCallback(() => {
       bottomSheetRef.current?.present(0);
@@ -427,6 +433,12 @@ export const PostOptionsSheet = forwardRef<
       dismiss();
       onGiveAward?.();
     }, [dismiss, onGiveAward]);
+
+    const handleAnnotate = useCallback(() => {
+      triggerHaptic("medium");
+      dismiss();
+      onAnnotate?.();
+    }, [dismiss, onAnnotate]);
 
     const handleShare = useCallback(async () => {
       triggerHaptic("light");

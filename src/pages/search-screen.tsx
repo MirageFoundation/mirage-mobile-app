@@ -28,6 +28,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { useDebouncedSearch, usePosts, useTopics } from "@/src/api/read";
 import type { Post, TopicInfo, UserInfo } from "@/src/api/types";
+import { getUsernameColor } from "@/src/utils/tiers";
 import { TimeAgo } from "@/src/components/atoms/time-ago";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
@@ -539,7 +540,12 @@ export function SearchScreen() {
             <View style={styles.postResultContent}>
               {/* Avatar + Username + dot + time ago - all in one row */}
               <View style={styles.postResultHeader}>
-                <Text size="sm" mode="subtle" weight="medium" numberOfLines={1}>
+                <Text
+                  size="sm"
+                  weight="medium"
+                  numberOfLines={1}
+                  style={(item.level ?? item.author_level ?? item.user_level) ? { color: getUsernameColor(item.level ?? item.author_level ?? item.user_level ?? 0) } : (item.new_user ?? item.author_is_new) ? { color: "rgb(94,194,106)" } : { color: theme.colors.text.subtle }}
+                >
                   @{item.username || "anonymous"}
                 </Text>
                 <Text size="sm" mode="subtle">
@@ -629,9 +635,20 @@ export function SearchScreen() {
             ]}
           >
             <View style={styles.userResultContent}>
-              <Text size="md" weight="medium">
-                @{item.username}
-              </Text>
+              <View style={styles.userResultNameRow}>
+                <Text
+                  size="md"
+                  weight="medium"
+                  style={item.level ? { color: getUsernameColor(item.level) } : item.user_is_new ? { color: "rgb(94,194,106)" } : undefined}
+                >
+                  @{item.username}
+                </Text>
+                {item.level === 10 && (
+                  <View style={[styles.agentTag, { backgroundColor: "#EF4444" }]}>
+                    <Text size="xs" weight="semibold" style={{ color: "#fff" }}>Agent</Text>
+                  </View>
+                )}
+              </View>
               <Text size="sm" mode="subtle" numberOfLines={1}>
                 {item.address.slice(0, 8)}...{item.address.slice(-6)}
               </Text>
@@ -1397,6 +1414,16 @@ const styles = StyleSheet.create((theme) => ({
   userResultContent: {
     flex: 1,
     gap: 2,
+  },
+  userResultNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  agentTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
   },
   // Post result item - new design
   postResultItem: {

@@ -5,6 +5,7 @@
  */
 
 import { useCallback, useRef, useState } from "react";
+import * as Sentry from "@sentry/react-native";
 import { useMutation } from "@tanstack/react-query";
 import {
   uploadImage,
@@ -125,7 +126,12 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
         const contentType =
           input.contentType ?? getContentTypeFromUri(input.uri);
 
-        const result = await uploadVideo(input.uri, contentType, handleProgress);
+        const result = await uploadVideo(
+          input.uri,
+          contentType,
+          handleProgress,
+          abortControllerRef.current.signal
+        );
 
         setState((prev) => ({
           ...prev,
@@ -138,6 +144,7 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
         return result;
       } catch (error) {
         const err = error instanceof Error ? error : new Error("Upload failed");
+        Sentry.captureException(err, { tags: { feature: "media-upload", hook: "useUploadMedia" } });
         setState((prev) => ({
           ...prev,
           isUploading: false,
@@ -209,10 +216,11 @@ export async function uploadImageAndGetUrl(uri: string): Promise<string> {
  */
 export async function uploadVideoAndGetUrl(
   uri: string,
-  onProgress?: UploadProgressCallback
+  onProgress?: UploadProgressCallback,
+  signal?: AbortSignal
 ): Promise<string> {
   const contentType = getContentTypeFromUri(uri);
-  const result = await uploadVideo(uri, contentType, onProgress);
+  const result = await uploadVideo(uri, contentType, onProgress, signal);
   return result.url;
 }
 

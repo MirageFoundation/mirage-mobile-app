@@ -79,9 +79,8 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const baseUrl = getApiBaseUrl(server);
       apiClient.setBaseUrl(baseUrl);
 
-      queryClient.clear();
-      await queryClient.invalidateQueries();
       queryClient.removeQueries();
+      queryClient.clear();
 
       setApiServer(server);
       previousServerRef.current = server;

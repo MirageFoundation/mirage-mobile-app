@@ -1,4 +1,5 @@
 import { EvilIcons, Ionicons, Feather } from "@expo/vector-icons";
+import * as Sentry from "@sentry/react-native";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -306,7 +307,7 @@ const [copiedCode, setCopiedCode] = useState(false);
       });
       sheetRef.current?.dismiss();
     } catch (error) {
-      console.error("Share failed:", error);
+      Sentry.addBreadcrumb({ category: "invite", message: "Native share failed", data: { error: String(error) }, level: "warning" });
     }
   }, [shareUrl, sheetRef]);
 

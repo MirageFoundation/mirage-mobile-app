@@ -1,5 +1,6 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
+import * as Sentry from "@sentry/react-native";
 import * as Clipboard from "expo-clipboard";
 import { useIsFocused } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
@@ -78,6 +79,7 @@ import {
 } from "@/src/hooks";
 import { useTabSwipeGesture } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
+import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 import {
   useAuthStore,
   useContentModerationStore,
@@ -371,6 +373,20 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
 
   const fetchNextPage = _fetchNextPage;
 
+  const userPostsRefreshParams = useMemo(() => {
+    if (!userAddress) return undefined;
+    return {
+      owner: userAddress,
+      address: currentUser?.walletAddress ?? undefined,
+      type: getTabType(),
+      limit: 20,
+    };
+  }, [userAddress, currentUser?.walletAddress, getTabType]);
+
+  usePostDataRefresher({
+    userPostsParams: userPostsRefreshParams,
+  });
+
   useEffect(() => {
     if (!userAddress) return;
 
@@ -479,7 +495,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         url: `${getShareBaseUrl(shareServer)}/u/${username}`,
       });
     } catch (error) {
-      console.error("Share error:", error);
+      Sentry.addBreadcrumb({ category: "user-profile", message: "Share failed", data: { error: String(error) }, level: "warning" });
     }
   }, [username, shareServer]);
 
@@ -1168,8 +1184,8 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           onEndReachedThreshold={0.3}
           ListFooterComponent={ListFooterComponent}
           removeClippedSubviews={true}
-          maxToRenderPerBatch={Platform.OS === "android" ? 5 : 7}
-          windowSize={Platform.OS === "android" ? 7 : 9}
+          maxToRenderPerBatch={Platform.OS === "android" ? 7 : 9}
+          windowSize={Platform.OS === "android" ? 11 : 13}
           initialNumToRender={5}
           updateCellsBatchingPeriod={Platform.OS === "android" ? 100 : 50}
           bounces={true}

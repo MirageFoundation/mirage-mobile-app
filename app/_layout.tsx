@@ -2,11 +2,13 @@ import { RootProvider } from "@/src/providers/root-provider";
 import { Stack, useNavigationContainerRef } from "expo-router";
 import { ShareIntentProvider } from "expo-share-intent";
 import { AuthSheet } from "@/src/components/molecules";
+import { ForceUpdatePopup } from "@/src/components/molecules/force-update-popup";
 import { ThemedStatusBar } from "@/src/components/ui/themed-status-bar";
 import { Platform } from "react-native";
 import * as Sentry from '@sentry/react-native';
 import { useEffect } from "react";
 import { getShareScheme } from "@/src/utils/share-scheme";
+import { useForceUpdate } from "@/src/hooks/use-force-update";
 
 const navigationIntegration = Sentry.reactNavigationIntegration({
   enableTimeToInitialDisplay: true,
@@ -21,7 +23,7 @@ Sentry.init({
 
   tracesSampleRate: 0.2,
 
-  replaysSessionSampleRate: 0.1,
+  replaysSessionSampleRate: 0,
   replaysOnErrorSampleRate: 1,
   integrations: [
     Sentry.mobileReplayIntegration(),
@@ -33,6 +35,7 @@ Sentry.init({
 
 export default Sentry.wrap(function RootLayout() {
   const ref = useNavigationContainerRef();
+  const { reason: forceUpdateReason, remoteVersion, isRequired } = useForceUpdate();
 
   useEffect(() => {
     if (ref?.current) {
@@ -117,9 +120,16 @@ export default Sentry.wrap(function RootLayout() {
          animation: "slide_from_right",
        }}
      />
+     <Stack.Screen
+       name="agents"
+       options={{
+         animation: "slide_from_right",
+       }}
+     />
      </Stack>
       <ThemedStatusBar />
       <AuthSheet />
+     <ForceUpdatePopup reason={forceUpdateReason} remoteVersion={remoteVersion} isRequired={isRequired} />
     </RootProvider>
     </ShareIntentProvider>
   );

@@ -42,6 +42,7 @@ export {
 
 // Authentication & Onboarding
 export { AdultContentPopup } from "./adult-content-popup";
+export { ForceUpdatePopup } from "./force-update-popup";
 export { LogoutConfirmationPopup } from "./logout-confirmation-popup";
 export { OnboardingProgress } from "./onboarding-progress";
 export { RecoveryPhraseGrid } from "./recovery-phrase-grid";

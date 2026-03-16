@@ -14,6 +14,7 @@ import { Paths, File as ExpoFile } from "expo-file-system";
 import { router, useLocalSearchParams } from "expo-router";
 import { useShareIntentContext } from "expo-share-intent";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as Network from "expo-network";
 import {
   ActivityIndicator,
   Dimensions,
@@ -55,7 +56,17 @@ import { StickerPicker } from "@/src/components/molecules/sticker-picker";
 // Strict URL validation - requires protocol (http:// or https://)
 const URL_REGEX = /^https?:\/\/[^\s<>"{}|\\^`\[\]]+$/i;
 
-// Helper to check if input looks like a URL attempt (has dot but no protocol)
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec, 10)))
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&apos;/g, "'");
+}
+
 function looksLikeUrlWithoutProtocol(text: string): boolean {
   return (
     /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z]{2,})+/i.test(text) &&
@@ -71,7 +82,7 @@ const CONTENT_WARNING_OPTIONS: { value: ContentTag; label: string }[] = [
   { value: "death", label: "Death" },
 ];
 
-type VideoUploadEntry = { url: string | null; uploading: boolean; progress: number; error: string | null };
+type VideoUploadEntry = { url: string | null; uploading: boolean; progress: number; error: string | null; isServerError?: boolean };
 const VIDEO_UPLOADS = new Map<string, VideoUploadEntry>();
 
 type VideoMeta = { originalUri: string; width: number; height: number; trimStart: number; trimEnd: number };
@@ -161,7 +172,18 @@ export function CreateScreen() {
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isProcessingShareLink, setIsProcessingShareLink] = useState(false);
   const [isPreparingVideo, setIsPreparingVideo] = useState(false);
+  const [isNetworkOnline, setIsNetworkOnline] = useState(true);
   const navigatedToEditorRef = useRef(false);
+
+  useEffect(() => {
+    Network.getNetworkStateAsync().then((state) => {
+      setIsNetworkOnline(state.isConnected === true && state.isInternetReachable !== false);
+    });
+    const sub = Network.addNetworkStateListener((event) => {
+      setIsNetworkOnline(event.isConnected === true && event.isInternetReachable !== false);
+    });
+    return () => sub.remove();
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -178,7 +200,17 @@ export function CreateScreen() {
     return Object.values(videoUploadState).some((v) => v.uploading);
   }, [videoUploadState]);
 
-  const startVideoUpload = useCallback((uri: string) => {
+  const failedVideoUploads = useMemo(() => {
+    return Object.entries(videoUploadState)
+      .filter(([, v]) => v.error)
+      .map(([uri, v]) => ({ uri, error: v.error! }));
+  }, [videoUploadState]);
+
+  const hasFailedUploads = failedVideoUploads.length > 0;
+
+  const videoUploadToastShownRef = useRef(false);
+
+  const startVideoUpload = useCallback((uri: string, silent = false) => {
     VIDEO_UPLOADS.set(uri, { url: null, uploading: true, progress: 0, error: null });
     videoUploadStateRef.current((prev) => ({
       ...prev,
@@ -201,20 +233,58 @@ export function CreateScreen() {
           ...prev,
           [uri]: { progress: 100, uploading: false, done: true, error: null },
         }));
+        videoUploadToastShownRef.current = false;
         triggerHaptic("success");
       })
       .catch((err) => {
         Sentry.addBreadcrumb({ category: "video-upload", message: "Video upload failed", data: { error: String(err) }, level: "error" });
-        const msg = err instanceof Error ? err.message : "Upload failed";
-        VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg });
+        const msg = err?.response?.data?.error || (err instanceof Error ? err.message : "Upload failed");
+        const isServerError = !!err?.response?.status && err.response.status >= 400;
+        VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg, isServerError });
         videoUploadStateRef.current((prev) => ({
           ...prev,
           [uri]: { progress: 0, uploading: false, done: false, error: msg },
         }));
-        toast.error("Video upload failed", msg);
+        if (!silent && !videoUploadToastShownRef.current) {
+          videoUploadToastShownRef.current = true;
+          const serverError = err?.response?.data?.error;
+          const status = err?.response?.status;
+          const title = serverError ? `${serverError} (${status})` : "Video upload failed";
+          toast.error(title, serverError ? "Please try again" : msg);
+        }
         triggerHaptic("error");
       });
   }, [toast]);
+
+  useEffect(() => {
+    if (!hasFailedUploads) return;
+    let retryScheduled = false;
+    const sub = Network.addNetworkStateListener((event) => {
+      if (retryScheduled) return;
+      if (event.isConnected && event.isInternetReachable !== false) {
+        retryScheduled = true;
+        setTimeout(() => {
+          const toRetry = [...VIDEO_UPLOADS.entries()]
+            .filter(([, e]) => !!e.error && !e.isServerError)
+            .map(([uri]) => uri);
+          toRetry.forEach((uri) => startVideoUpload(uri, true));
+        }, 1500);
+      }
+    });
+    Network.getNetworkStateAsync().then((state) => {
+      if (retryScheduled) return;
+      if (state.isConnected && state.isInternetReachable !== false) {
+        retryScheduled = true;
+        setTimeout(() => {
+          const toRetry = [...VIDEO_UPLOADS.entries()]
+            .filter(([, e]) => !!e.error && !e.isServerError)
+            .map(([uri]) => uri);
+          toRetry.forEach((uri) => startVideoUpload(uri, true));
+        }, 3000);
+      }
+    });
+    return () => sub.remove();
+  }, [hasFailedUploads, startVideoUpload]);
 
   const queryClient = useQueryClient();
   const txProgress = useTransactionProgress();
@@ -378,16 +448,43 @@ export function CreateScreen() {
             data: { domain: meta.domain, hasTitle: !!meta.title, hasVideo: !!meta.video, imageCount: meta.images?.length ?? 0 },
             level: "info",
           });
+          let finalTitle: string | undefined;
           if (meta.title) {
-            updateDraft({ title: meta.title.slice(0, tierLimits.maxTitleLength) });
+            finalTitle = meta.title;
+            if (meta.domain === "instagram.com") {
+              const igMatch = meta.title.match(/^(.+?)\s+on\s+Instagram/i);
+              if (igMatch) {
+                finalTitle = `${igMatch[1]} on Instagram`;
+              }
+            }
+            finalTitle = decodeHtmlEntities(finalTitle);
+            updateDraft({ title: finalTitle.slice(0, tierLimits.maxTitleLength) });
           }
           const bodyParts: string[] = [];
           if (meta.description) {
-            bodyParts.push(meta.description.slice(0, tierLimits.maxContentLength));
+            let desc = meta.description;
+            if (meta.domain === "instagram.com" && meta.title) {
+              const igCaptionMatch = meta.title.match(/on\s+Instagram:\s*"(.+)"/s);
+              if (igCaptionMatch) {
+                desc = igCaptionMatch[1];
+              }
+            }
+            desc = decodeHtmlEntities(desc);
+            if (meta.domain === "instagram.com") {
+              desc = desc
+                .replace(/\([^)]*\)/g, "")
+                .replace(/\[[^\]]*\]/g, "")
+                .replace(/#\w+/g, "")
+                .replace(/\b[A-Z][a-z]+(?:[A-Z][a-z]*)+\b/g, "")
+                .replace(/[.…][\s.…]*[.…]/g, "")
+                .replace(/\s{2,}/g, " ")
+                .trim();
+            }
+            bodyParts.push(desc.slice(0, tierLimits.maxContentLength));
           }
           updateDraft({ body: bodyParts.join("\n\n") });
           console.log("[CreateScreen] Draft auto-filled:", {
-            title: meta.title?.slice(0, tierLimits.maxTitleLength),
+            title: (finalTitle ?? meta.title)?.slice(0, tierLimits.maxTitleLength),
             body: bodyParts.join("\n\n").slice(0, 200),
             community: redditMatch ? redditMatch[1].toLowerCase() : null,
           });
@@ -808,6 +905,7 @@ export function CreateScreen() {
       }
     } catch (error) {
       setIsSubmitting(false);
+      Sentry.captureException(error, { tags: { feature: "create-post", operation: "submit" } });
 
       const isNetworkError =
         (error as any)?.code === "ERR_NETWORK" ||
@@ -974,7 +1072,7 @@ export function CreateScreen() {
       }
     } catch (err) {
       setIsPreparingVideo(false);
-      console.warn("[CreateScreen] Video picker failed:", err);
+      Sentry.captureException(err, { tags: { feature: "create-post", operation: "video-picker" } });
       toast.error("Couldn't load video", "Try a different video or re-download it from iCloud");
     }
   }, [hasAttachment, draft.attachmentType, draft.mediaUris.length, toast]);
@@ -1102,10 +1200,10 @@ export function CreateScreen() {
                 </View>
 
                 {upload?.uploading && (
-                  <View style={styles.uploadedBadge}>
+                  <View style={[styles.uploadedBadge, !isNetworkOnline && { backgroundColor: "rgba(234,179,8,0.85)" }]}>
                     <ActivityIndicator size="small" color="#fff" />
                     <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
-                      Uploading…
+                      {isNetworkOnline ? "Uploading…" : "Low connectivity…"}
                     </Text>
                   </View>
                 )}
@@ -1124,16 +1222,19 @@ export function CreateScreen() {
                 )}
 
                 {upload?.error && (
-                  <View style={[styles.uploadedBadge, { backgroundColor: "rgba(220,50,50,0.8)" }]}>
-                    <Feather name="alert-circle" size={12} color="#fff" />
+                  <Pressable
+                    onPress={() => startVideoUpload(uri)}
+                    style={[styles.uploadedBadge, { backgroundColor: "rgba(220,50,50,0.8)" }]}
+                  >
+                    <Feather name="refresh-cw" size={12} color="#fff" />
                     <Text
                       size="xs"
                       weight="medium"
                       style={{ color: "#fff", marginLeft: 4 }}
                     >
-                      Failed
+                      Retry
                     </Text>
-                  </View>
+                  </Pressable>
                 )}
 
                 {!editExpired && (
@@ -1237,9 +1338,8 @@ export function CreateScreen() {
             {
               backgroundColor:
                 canPost && !isSubmitting
-                  ? "rgb(29,68,150)"
+                  ? theme.colors.brand[500]
                   : theme.colors.background.subtle,
-              paddingHorizontal: 10,
             },
           ]}
         >
@@ -1249,8 +1349,8 @@ export function CreateScreen() {
               {
                 color:
                   canPost && !isSubmitting
-                    ? "#fff"
-                    : theme.colors.text.emphasis,
+                    ? "#FFFFFF"
+                    : theme.colors.text.subtle,
               },
             ]}
           >
@@ -1527,6 +1627,29 @@ export function CreateScreen() {
           )}
 
           {renderVideoPreview()}
+
+          {isUploadingVideo && (
+            <Animated.View
+              entering={FadeIn.duration(200)}
+              exiting={FadeOut.duration(200)}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginTop: 8,
+                marginHorizontal: 4,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                borderRadius: 10,
+                backgroundColor: theme.colors.warning[500] + "15",
+                gap: 8,
+              }}
+            >
+              <Feather name="alert-triangle" size={14} color={theme.colors.warning[500]} />
+              <Text size="xs" style={{ color: theme.colors.warning[500], flex: 1 }}>
+                Please don't leave the app while the video is uploading
+              </Text>
+            </Animated.View>
+          )}
 
           {selectedStickers.length > 0 && (
             <Animated.View
@@ -1826,8 +1949,8 @@ const styles = StyleSheet.create((theme) => ({
     height: 40,
   },
   postButton: {
-    paddingHorizontal: theme.spacing.md,
-    height: 36,
+    paddingHorizontal: theme.spacing.md + 4,
+    paddingVertical: theme.spacing.xs + 2,
     borderRadius: theme.radius.full,
   },
   postButtonDisabled: {
@@ -1835,7 +1958,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   postButtonText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
   },
   scrollContent: {
     paddingHorizontal: theme.spacing.md,

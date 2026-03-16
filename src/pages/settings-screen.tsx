@@ -126,6 +126,7 @@ const handleApiServerChange = useCallback(
         toast.success(`Switched to ${server}`);
         router.replace("/(tabs)");
       } catch (err) {
+        Sentry.captureException(err, { tags: { feature: "settings", operation: "switch-server" } });
         toast.error("Failed to switch server");
       }
     },
@@ -464,7 +465,7 @@ const handleApiServerChange = useCallback(
               title="Test Cloudflare Error Toast"
               subtitle="Simulate a Cloudflare 5xx error"
               onPress={() => {
-                useCloudflareErrorStore.getState().setHasError(true);
+                useCloudflareErrorStore.getState().setError(521);
                 toast.success("Cloudflare error simulated!");
               }}
             />

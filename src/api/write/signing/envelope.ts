@@ -36,6 +36,27 @@ export interface BuildEnvelopeOptions<
 // Envelope Builder
 // ============================================
 
+function randomUint32(): number {
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const values = new Uint32Array(1);
+    crypto.getRandomValues(values);
+    return values[0] ?? 0;
+  }
+
+  return Math.floor(Math.random() * 0x100000000) >>> 0;
+}
+
+function generateEnvelopeNonce(): bigint {
+  const timestampNs = BigInt(Date.now()) * 1000000n;
+  const nonce = timestampNs + BigInt(randomUint32());
+
+  if (nonce > 0n) {
+    return nonce;
+  }
+
+  return BigInt(Date.now()) * 1000n + BigInt((Math.floor(Math.random() * 999) + 1) >>> 0);
+}
+
 export async function buildSignedEnvelope<
   TPayload extends Record<string, unknown>
 >(options: BuildEnvelopeOptions<TPayload>): Promise<SignedPayload<TPayload>> {
@@ -59,8 +80,9 @@ export async function buildSignedEnvelope<
     difficulty = 0;
   }
 
+  const envelopeNonce = generateEnvelopeNonce();
   let timestampMs = Math.max(0, Date.now() - 15000);
-  const effectiveBlockHash = needsPoW ? params.last_block_hash : "";
+  let effectiveBlockHash = needsPoW ? params.last_block_hash : "";
   const lastBlockHashBytes = hexToBytes(effectiveBlockHash);
 
   const envelopeParams: EnvelopeParams = {
@@ -68,6 +90,7 @@ export async function buildSignedEnvelope<
     lastBlockHashBytes,
     difficulty,
     timestampMs,
+    envelopeNonce,
   };
 
   let base = baseBuilder({ ...envelopeParams, ...payloadFields });
@@ -158,6 +181,7 @@ export async function buildSignedEnvelope<
           lastBlockHashBytes: lastBlockHashBytes2,
           difficulty,
           timestampMs,
+          envelopeNonce,
         };
         const base2 = baseBuilder({ ...envelopeParams2, ...payloadFields });
 
@@ -175,6 +199,7 @@ export async function buildSignedEnvelope<
 
         pow = powResult2.pow;
         base = base2;
+        effectiveBlockHash = refreshed.last_block_hash;
         (params as any).last_block_hash = refreshed.last_block_hash;
         console.log(
           `[PoW] Complete (retry)! Found nonce=${pow} after ${powResult2.attempts} attempts in ${powResult2.computeTimeMs}ms`
@@ -204,6 +229,7 @@ export async function buildSignedEnvelope<
     last_block_hash: effectiveBlockHash,
     pow_difficulty: difficulty,
     pow,
+    envelope_nonce: envelopeNonce.toString(),
     ...payloadFields,
   } as SignedPayload<TPayload>;
 
@@ -241,6 +267,7 @@ export async function buildEnvelopeWithParams<
     difficulty = 0;
   }
 
+  const envelopeNonce = generateEnvelopeNonce();
   const timestampMs = Math.max(0, Date.now() - 15000);
   const effectiveBlockHash = needsPoW ? lastBlockHash : "";
   const lastBlockHashBytes = hexToBytes(effectiveBlockHash);
@@ -250,6 +277,7 @@ export async function buildEnvelopeWithParams<
     lastBlockHashBytes,
     difficulty,
     timestampMs,
+    envelopeNonce,
   };
 
   const base = baseBuilder({ ...envelopeParams, ...payloadFields });
@@ -310,6 +338,7 @@ export async function buildEnvelopeWithParams<
     last_block_hash: effectiveBlockHash,
     pow_difficulty: difficulty,
     pow,
+    envelope_nonce: envelopeNonce.toString(),
     ...payloadFields,
   } as SignedPayload<TPayload>;
 }

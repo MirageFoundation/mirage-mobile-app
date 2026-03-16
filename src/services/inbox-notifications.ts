@@ -144,7 +144,10 @@ async function seedExistingReplies(walletAddress: string): Promise<void> {
   }
 }
 
-async function performInboxCheck(): Promise<BackgroundFetch.BackgroundFetchResult> {
+async function performInboxCheck(
+  trigger: "background" | "foreground" | "manual" | "signal"
+): Promise<BackgroundFetch.BackgroundFetchResult> {
+
   try {
     const walletAddress = useAuthStore.getState().walletAddress;
     console.log("[InboxNotifications] walletAddress:", walletAddress);
@@ -170,6 +173,14 @@ async function performInboxCheck(): Promise<BackgroundFetch.BackgroundFetchResul
     if (!networkState.isConnected) {
       console.log("[InboxNotifications] Offline, skipping inbox check");
       return BackgroundFetch.BackgroundFetchResult.NoData;
+    }
+
+    if (trigger === "foreground") {
+      await Notifications.dismissAllNotificationsAsync();
+    }
+
+    if (trigger !== "background") {
+      useInboxStore.setState({ _suppressUntil: Date.now() + 30_000 });
     }
 
     const inbox = await api.get<InboxResponse>("/get_inbox", {
@@ -212,7 +223,18 @@ async function performInboxCheck(): Promise<BackgroundFetch.BackgroundFetchResul
       return BackgroundFetch.BackgroundFetchResult.NoData;
     }
 
+    if (trigger !== "background") {
+      useInboxStore.setState({
+        unreadCount: unreadReplies.length,
+        hasUnread: true,
+        _suppressUntil: Date.now() + 30_000,
+      });
+    }
+
     for (const reply of unreadReplies) {
+      notifiedIds.add(reply.reply_id);
+      saveNotifiedIds(notifiedIds);
+
       console.log("[InboxNotifications] Scheduling notification for:", reply.reply_id);
       const id = await Notifications.scheduleNotificationAsync({
         content: {
@@ -229,13 +251,13 @@ async function performInboxCheck(): Promise<BackgroundFetch.BackgroundFetchResul
         trigger: null,
       });
       console.log("[InboxNotifications] Scheduled notification id:", id);
-      notifiedIds.add(reply.reply_id);
     }
 
-    saveNotifiedIds(notifiedIds);
     storage.set(LAST_CHECK_KEY, Date.now().toString());
 
-    return BackgroundFetch.BackgroundFetchResult.NewData;
+    return unreadReplies.length > 0
+        ? BackgroundFetch.BackgroundFetchResult.NewData
+        : BackgroundFetch.BackgroundFetchResult.NoData;
   } catch (error) {
     if (axios.isAxiosError(error) && error.message === "Network Error") {
       console.log("[InboxNotifications] Check skipped: device is offline");
@@ -266,7 +288,7 @@ async function runInboxCheck(
 
   isCheckInFlight = true;
   try {
-    return await performInboxCheck();
+    return await performInboxCheck(trigger);
   } finally {
     isCheckInFlight = false;
   }
@@ -499,7 +521,7 @@ export async function sendTestNotification(): Promise<void> {
     });
     console.log("[InboxNotifications] Test notification scheduled, id:", id);
   } catch (error) {
-    console.error("[InboxNotifications] Test notification failed:", error);
+    Sentry.captureException(error, { tags: { feature: "inbox-notifications", operation: "test-notification" } });
   }
 }
 

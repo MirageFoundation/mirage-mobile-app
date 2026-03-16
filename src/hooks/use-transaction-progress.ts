@@ -27,6 +27,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import axios from "axios";
+import * as Sentry from "@sentry/react-native";
 import type {
   TransactionPhase,
   TransactionProgress,
@@ -293,6 +294,7 @@ export async function executeWithProgress<TResult extends string | { tx_hash: st
     setSuccess(txHash);
     return { success: true, txHash };
   } catch (err) {
+    Sentry.captureException(err, { tags: { feature: "transaction-progress" } });
     let errorMessage = err instanceof Error ? err.message : "Transaction failed";
     if (axios.isAxiosError(err)) {
       const data = err.response?.data as unknown;
@@ -313,4 +315,3 @@ export async function executeWithProgress<TResult extends string | { tx_hash: st
     return { success: false, error: errorMessage };
   }
 }
-

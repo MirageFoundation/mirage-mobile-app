@@ -67,6 +67,10 @@ export interface TransactionProgressModalProps {
   onRetry?: () => void;
   /** Whether the modal can be dismissed (only in success/error states) */
   dismissible?: boolean;
+  /** Hide transaction hash on success (default: false) */
+  showTxHash?: boolean;
+  /** Auto-dismiss modal after success (ms delay, 0 to disable) */
+  autoDismissDelay?: number;
 }
 
 // ============================================
@@ -119,6 +123,8 @@ export function TransactionProgressModal({
   onDismiss,
   onRetry,
   dismissible = true,
+  showTxHash = true,
+  autoDismissDelay = 0,
 }: TransactionProgressModalProps) {
   const { theme, rt } = useUnistyles();
   const isDark = rt.themeName === "dark";
@@ -196,6 +202,16 @@ export function TransactionProgressModal({
       triggerHaptic("error");
     }
   }, [progress.phase]);
+
+  // Auto-dismiss on success
+  useEffect(() => {
+    if (progress.phase === "success" && autoDismissDelay > 0 && onDismiss) {
+      const timer = setTimeout(() => {
+        onDismiss();
+      }, autoDismissDelay);
+      return () => clearTimeout(timer);
+    }
+  }, [progress.phase, autoDismissDelay, onDismiss]);
 
   const spinRotation = spinAnim.interpolate({
     inputRange: [0, 1],
@@ -386,7 +402,7 @@ export function TransactionProgressModal({
           )}
 
           {/* TX Hash (for success) */}
-          {progress.phase === "success" && progress.txHash && (
+          {showTxHash && progress.phase === "success" && progress.txHash && (
             <View style={styles.txHashContainer}>
               <Text size="xs" mode="subtle">
                 Transaction:{" "}

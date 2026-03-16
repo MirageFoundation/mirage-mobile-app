@@ -13,6 +13,8 @@ import { HDKey } from "@scure/bip32";
 // @ts-expect-error - bundler resolves this correctly at runtime
 import { secp256k1 } from "@noble/curves/secp256k1";
 
+import * as Sentry from "@sentry/react-native";
+
 // Types
 import { DERIVATION_PATH, WalletError, WalletErrorCode } from "./types";
 
@@ -76,6 +78,7 @@ export function derivePrivateKey(mnemonic: string): Uint8Array {
     return derivedKey.privateKey;
   } catch (error) {
     if (error instanceof WalletError) throw error;
+    Sentry.captureException(error, { tags: { feature: "wallet", operation: "key-derivation" } });
     throw new WalletError(`Key derivation failed: ${error}`, WalletErrorCode.KEY_DERIVATION_FAILED);
   }
 }
@@ -145,6 +148,7 @@ export function signCanonical(privateKey: Uint8Array, data: Uint8Array): Uint8Ar
     
     return compact;
   } catch (error) {
+    Sentry.captureException(error, { tags: { feature: "wallet", operation: "signing" } });
     throw new WalletError(`Signing failed: ${error}`, WalletErrorCode.SIGNING_FAILED);
   }
 }

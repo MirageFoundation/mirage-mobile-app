@@ -14,6 +14,9 @@ import {
 } from "react-native-popup-menu";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import type { PostAuthor } from "./post-card-types";
+import { getUsernameColor } from "@/src/utils/tiers";
+
+const NEW_USER_COLOR = "rgb(94,194,106)";
 
 type PostCardHeaderProps = {
   author: PostAuthor;
@@ -99,6 +102,12 @@ export const PostCardHeader = memo(function PostCardHeader({
     () => ({ color: theme.colors.text.subtle }),
     [theme.colors.text.subtle],
   );
+  const usernameColorStyle = useMemo(() => {
+    const tierColor = author.level != null ? getUsernameColor(author.level) : undefined;
+    if (tierColor) return { color: tierColor };
+    if (author.isNewUser && (!author.level || author.level === 0)) return { color: NEW_USER_COLOR };
+    return { color: theme.colors.text.subtle };
+  }, [author.level, author.isNewUser, theme.colors.text.subtle]);
   const followingBgStyle = useMemo(
     () => ({
       backgroundColor: isFollowing ? "transparent" : theme.colors.primary[500],
@@ -114,8 +123,8 @@ export const PostCardHeader = memo(function PostCardHeader({
     [isFollowing, theme.colors.text.default, theme.colors.background.default],
   );
   const defaultBgStyle = useMemo(
-    () => ({ color: theme.colors.background.default }),
-    [theme.colors.background.default],
+    () => ({ color: "#000000" }),
+    [],
   );
 
   return (
@@ -169,7 +178,7 @@ export const PostCardHeader = memo(function PostCardHeader({
               size="md"
               weight="medium"
               numberOfLines={1}
-              style={subtleTextStyle}
+              style={usernameColorStyle}
             >
               @{author.username}
             </Text>

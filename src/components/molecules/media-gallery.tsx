@@ -87,7 +87,11 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   const [isPlaying, setIsPlaying] = useState(false);
   const globalMuted = useVideoMuteStore((s) => s.isMuted);
   const toggleMute = useVideoMuteStore((s) => s.toggleMute);
-  const effectiveMuted = isPostDetail ? globalMuted : (globalMuted || !isFocused);
+  const effectiveMuted = isPostDetail
+    ? globalMuted
+    : allowAutoplay
+      ? (globalMuted || !isFocused)
+      : globalMuted;
   const [isLoading, setIsLoading] = useState(() => !GALLERY_LOADED_CACHE.has(item.uri));
   const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -154,7 +158,11 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
     toggleMute();
     try {
       if (videoRef.current) {
-        const newEffective = isPostDetail ? newGlobalMuted : (newGlobalMuted || !isFocused);
+        const newEffective = isPostDetail
+          ? newGlobalMuted
+          : allowAutoplay
+            ? (newGlobalMuted || !isFocused)
+            : newGlobalMuted;
         if (!newEffective) {
           await videoRef.current.pauseAsync();
           await videoRef.current.setStatusAsync({ isMuted: false });
@@ -164,7 +172,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
         }
       }
     } catch {}
-  }, [globalMuted, toggleMute, isFocused, isPostDetail]);
+  }, [globalMuted, toggleMute, isFocused, isPostDetail, allowAutoplay]);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -183,6 +191,17 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
           style={{ width, height, position: "absolute", zIndex: 0 }}
           contentFit="cover"
           cachePolicy="memory-disk"
+          onLoad={({ source }) => {
+            const w = source?.width;
+            const h = source?.height;
+            if (w && h) {
+              const ratio = w / h;
+              if (Number.isFinite(ratio) && ratio > 0) {
+                ASPECT_RATIO_CACHE.set(item.uri, ratio);
+                onAspectRatioDetected?.(item.uri, ratio);
+              }
+            }
+          }}
         />
       ) : null}
       <Video

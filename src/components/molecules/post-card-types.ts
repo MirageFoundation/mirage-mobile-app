@@ -6,6 +6,8 @@ export type PostAuthor = {
   username: string;
   avatarSeed?: string;
   avatarUrl?: string;
+  level?: number;
+  isNewUser?: boolean;
 };
 
 export type PostMedia = {
@@ -32,4 +34,7 @@ export type Post = {
   isFollowing?: boolean;
   createdAt: Date | string | number;
   awards?: AwardBadge[];
+  agentEdited?: boolean;
+  agentEditsMeta?: Record<string, string>;
+  appendices?: { agent: string; agentUsername?: string; text: string }[];
 };

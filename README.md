@@ -48,3 +48,45 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+## Force Update (Remote Version Config)
+
+The app checks a remote JSON file on launch to determine if a force update is needed. This lets us trigger update prompts without deploying a new app build.
+
+### Config location
+
+**Repo:** [mesonalirajput/mirage-remote-config](https://github.com/mesonalirajput/mirage-remote-config)
+**File:** `app-version.json`
+**Raw URL:** `https://raw.githubusercontent.com/mesonalirajput/mirage-remote-config/main/app-version.json`
+
+### Config format
+
+```json
+{
+  "ios": {
+    "version": "1.0.8",
+    "required": true
+  },
+  "android": {
+    "version": "1.0.8",
+    "required": true
+  }
+}
+```
+
+- `version` — the minimum required app version for that platform
+- `required` — if `true`, users on an older version see a blocking popup directing them to the app store
+
+### How to trigger a force update
+
+1. Go to [app-version.json](https://github.com/mesonalirajput/mirage-remote-config/edit/main/app-version.json)
+2. Bump the `version` for `ios`, `android`, or both
+3. Set `required: true` to make it blocking
+4. Commit — the app will pick up the change on next launch (may take ~5 min due to GitHub CDN cache)
+
+### How it works
+
+- `src/hooks/use-force-update.ts` fetches the config and compares against the app's current version (`Constants.expoConfig.version`)
+- If the app version is older than the remote version and `required` is `true`, a full-screen popup is shown directing the user to the App Store / Play Store
+- The check only runs in production builds (`__DEV__` is skipped)
+- OTA (expo-updates) checks run separately after the version check

@@ -428,55 +428,6 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
     }
   }
 
-  if (shortcode) {
-    try {
-      const graphqlUrl = `https://www.instagram.com/graphql/query/?query_hash=b3055c01b4b222b8a47dc12b090e4e64&variables=${encodeURIComponent(JSON.stringify({ shortcode }))}`;
-      const res = await fetch(graphqlUrl, {
-        signal,
-        headers: {
-          "User-Agent": BROWSER_UA,
-          Accept: "*/*",
-          "X-IG-App-ID": "936619743392459",
-        },
-        redirect: "follow",
-      });
-      if (res.ok) {
-        const text = await res.text();
-        const data = JSON.parse(text);
-        const media = data?.data?.shortcode_media;
-        if (media) {
-          const videoUrl = media.video_url ?? null;
-          const imageUrl = media.display_url ?? null;
-          const caption = media.edge_media_to_caption?.edges?.[0]?.node?.text ?? null;
-
-          if (media.edge_sidecar_to_children?.edges) {
-            for (const edge of media.edge_sidecar_to_children.edges) {
-              const node = edge.node;
-              if (node?.display_url) allImages.push(node.display_url);
-            }
-          }
-
-          if (videoUrl || imageUrl) {
-            Sentry.addBreadcrumb({
-              category: "link-meta",
-              message: "Instagram meta from GraphQL",
-              data: { shortcode, hasVideo: !!videoUrl, carouselCount: allImages.length },
-              level: "info",
-            });
-            return {
-              title: caption?.slice(0, 200) ?? embedCaption ?? null,
-              description: null,
-              image: imageUrl ?? embedImage ?? null,
-              video: videoUrl,
-              images: allImages,
-              siteName: "Instagram",
-            };
-          }
-        }
-      }
-    } catch {}
-  }
-
   try {
     const res = await fetch(url, {
       signal,

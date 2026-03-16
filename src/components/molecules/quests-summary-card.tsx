@@ -252,7 +252,12 @@ export function QuestsSummaryCard() {
   const totalReward = useMemo(() => {
     const multiplier = data?.reward_multiplier ?? 1;
     return completedQuests.reduce((sum, quest) => {
-      return Math.floor(sum + (quest.rewards[0]?.amount ?? 0) * multiplier);
+      const reward = quest.rewards[0];
+      if (!reward || reward.type !== "mirage") return sum;
+      const amount = reward.apply_multiplier !== false
+        ? reward.amount * multiplier
+        : reward.amount;
+      return Math.floor(sum + amount);
     }, 0);
   }, [completedQuests, data?.reward_multiplier]);
 

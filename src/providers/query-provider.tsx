@@ -1,8 +1,25 @@
 import * as Sentry from "@sentry/react-native";
-import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient, focusManager, onlineManager } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { storage } from "@/src/stores/mmkv-storage";
+import { AppState, Platform } from "react-native";
+import NetInfo from "@react-native-community/netinfo";
+
+onlineManager.setEventListener((setOnline) => {
+  return NetInfo.addEventListener((state) => {
+    setOnline(!!state.isConnected);
+  });
+});
+
+focusManager.setEventListener((setFocused) => {
+  const sub = AppState.addEventListener("change", (status) => {
+    if (Platform.OS !== "web") {
+      setFocused(status === "active");
+    }
+  });
+  return () => sub.remove();
+});
 
 // MMKV adapter for TanStack Query (sync because MMKV is synchronous)
 const mmkvQueryStorage = {
@@ -47,6 +64,8 @@ function getErrorStatus(error: unknown): number | undefined {
 }
 
 function shouldCaptureReactQueryError(error: unknown): boolean {
+  const code = (error as any)?.code;
+  if (code === "ERR_NETWORK") return false;
   return getErrorStatus(error) === undefined;
 }
 

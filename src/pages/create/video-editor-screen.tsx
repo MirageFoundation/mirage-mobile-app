@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import * as Sentry from "@sentry/react-native";
 import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -28,10 +29,28 @@ const TIMELINE_WIDTH = SCREEN_WIDTH - TIMELINE_PADDING * 2;
 const MIN_TRIM_DURATION = 1000; // 1 second minimum
 const MAX_TRIM_DURATION = 59000; // 59 seconds maximum
 
+export type PendingVideoResult = {
+  videoUri: string;
+  originalVideoUri: string;
+  videoWidth: number;
+  videoHeight: number;
+  trimStart: number;
+  trimEnd: number;
+  replacingUri: string;
+} | null;
+
+export let _pendingVideoResult: PendingVideoResult = null;
+
+export function consumePendingVideoResult(): PendingVideoResult {
+  const result = _pendingVideoResult;
+  _pendingVideoResult = null;
+  return result;
+}
+
 export function VideoEditorScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ uri: string; width?: string; height?: string; initialTrimStart?: string; initialTrimEnd?: string; replacingUri?: string }>();
+  const params = useLocalSearchParams<{ uri: string; width?: string; height?: string; initialTrimStart?: string; initialTrimEnd?: string; replacingUri?: string; returnTo?: string }>();
   
   const videoUri = params.uri;
   const videoWidth = params.width ? parseInt(params.width) : 1920;
@@ -201,26 +220,37 @@ export function VideoEditorScreen() {
         });
         processedUri = result.uri;
       } catch (error) {
-        console.error("[VideoEditor] Failed to process video:", error);
-        // Continue with original video if processing fails
+        Sentry.captureException(error, { tags: { feature: "video-editor", operation: "process" } });
       }
       setIsProcessing(false);
     }
     
-    // Navigate back to create screen with video data
-    router.replace({
-      pathname: "/(tabs)/create",
-      params: {
+    if (params.returnTo) {
+      _pendingVideoResult = {
         videoUri: processedUri,
         originalVideoUri: videoUri,
-        videoWidth: videoWidth.toString(),
-        videoHeight: videoHeight.toString(),
-        trimStart: trimStart.toString(),
-        trimEnd: trimEnd.toString(),
+        videoWidth: videoWidth,
+        videoHeight: videoHeight,
+        trimStart,
+        trimEnd,
         replacingUri: params.replacingUri ?? "",
-      },
-    });
-  }, [videoUri, videoWidth, videoHeight, trimStart, trimEnd]);
+      };
+      router.back();
+    } else {
+      router.replace({
+        pathname: "/(tabs)/create",
+        params: {
+          videoUri: processedUri,
+          originalVideoUri: videoUri,
+          videoWidth: videoWidth.toString(),
+          videoHeight: videoHeight.toString(),
+          trimStart: trimStart.toString(),
+          trimEnd: trimEnd.toString(),
+          replacingUri: params.replacingUri ?? "",
+        },
+      });
+    }
+  }, [videoUri, videoWidth, videoHeight, trimStart, trimEnd, params.returnTo, params.replacingUri]);
 
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);

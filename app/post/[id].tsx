@@ -5,6 +5,8 @@ import {
   useUserFollowed,
   uploadImageAndGetUrl,
 } from "@/src/api/read";
+import { getComments } from "@/src/api/read/endpoints/posts";
+import { queryKeys } from "@/src/api/read/query-keys";
 import { LinearGradient } from "expo-linear-gradient";
 import { getGradientColor } from "@/src/components/molecules/profile-header";
 import {
@@ -43,6 +45,7 @@ import {
   useVoteHandler,
   type VoteResult,
 } from "@/src/hooks";
+import { useAppState } from "@/src/hooks";
 import { useFollowHandler } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
 import {
@@ -89,6 +92,8 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { getLastPressedPostY } from "@/src/utils/post-transition";
+import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import type { PostsResponse, Post as ApiPost } from "@/src/api/types";
 
 export default function PostDetailScreen() {
   const { id, highlight, reveal } = useLocalSearchParams<{
@@ -98,6 +103,7 @@ export default function PostDetailScreen() {
   }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
 
   const pressedY = useMemo(() => getLastPressedPostY(), []);
   const headerHeight = insets.top + 40;
@@ -148,8 +154,15 @@ export default function PostDetailScreen() {
     string | null
   >(highlight || null);
 
-  // Track if screen is focused (for pausing videos when navigating away)
   const [screenActive, setScreenActive] = useState(true);
+  const refetchCommentsRef = useRef<((silent?: boolean) => void) | null>(null);
+
+  useAppState({
+    onForeground: () => {
+      refetchCommentsRef.current?.(true);
+    },
+    staleThreshold: 0,
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -177,6 +190,73 @@ export default function PostDetailScreen() {
     refetch: refetchComments,
     isRefetching: isRefetchingComments,
   } = useComments(id);
+
+  useEffect(() => {
+    refetchCommentsRef.current = (silent?: boolean) => {
+      if (silent) {
+        const address = currentUser?.walletAddress ?? undefined;
+        getComments({ post_id: id!, address }).then((data) => {
+          queryClient.setQueryData(
+            queryKeys.comments(id!, address),
+            data,
+          );
+        }).catch(() => {});
+      } else {
+        refetchComments();
+      }
+    };
+  }, [refetchComments, id, currentUser?.walletAddress, queryClient]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refetchCommentsRef.current?.(true);
+    }, []),
+  );
+
+  useEffect(() => {
+    const root = commentsData?.root;
+    if (!root) return;
+
+    const METADATA_KEYS: (keyof ApiPost)[] = [
+      "points", "comments", "user_vote", "user_weight",
+      "edited_at", "awards", "agent_edited", "appendices",
+    ];
+
+    queryClient.setQueriesData<InfiniteData<PostsResponse>>(
+      { queryKey: ["posts"] },
+      (old) => {
+        if (!old?.pages) return old;
+
+        let anyChanged = false;
+        const newPages = old.pages.map((page) => {
+          const idx = page.posts.findIndex((p) => p.post_id === root.post_id);
+          if (idx === -1) return page;
+
+          const existing = page.posts[idx];
+          let changed = false;
+          for (const key of METADATA_KEYS) {
+            if (existing[key] !== root[key]) {
+              changed = true;
+              break;
+            }
+          }
+          if (!changed) return page;
+
+          anyChanged = true;
+          const updated = { ...existing };
+          for (const key of METADATA_KEYS) {
+            (updated as any)[key] = root[key];
+          }
+          const newPosts = [...page.posts];
+          newPosts[idx] = updated;
+          return { ...page, posts: newPosts };
+        });
+
+        if (!anyChanged) return old;
+        return { ...old, pages: newPages };
+      },
+    );
+  }, [commentsData?.root, queryClient]);
 
   // Fetch user's followed list
   const { data: followedData } = useUserFollowed();
@@ -220,6 +300,12 @@ export default function PostDetailScreen() {
   const clearVoteOverride = useHomePostCardStore(
     (state) => state.clearVoteOverride,
   );
+  const incrementCommentCount = useHomePostCardStore(
+    (state) => state.incrementCommentCount,
+  );
+  const decrementCommentCount = useHomePostCardStore(
+    (state) => state.decrementCommentCount,
+  );
 
   // Track follow loading state
   const [followLoadingUsers, setFollowLoadingUsers] = useState<Set<string>>(
@@ -258,6 +344,7 @@ export default function PostDetailScreen() {
           ...prev,
           comments: (prev.comments ?? 0) + 1,
         }));
+        if (id) incrementCommentCount(id);
       }
     },
   });
@@ -286,8 +373,9 @@ export default function PostDetailScreen() {
           (prev.comments ?? commentsData?.root?.comments ?? 0) - 1,
         ),
       }));
+      if (id) decrementCommentCount(id);
     },
-    [commentsData?.root?.comments],
+    [commentsData?.root?.comments, id, decrementCommentCount],
   );
 
   // Optimistic confirm handlers - hide content/navigate immediately before API call
@@ -1090,6 +1178,7 @@ export default function PostDetailScreen() {
             ...prev,
             comments: (prev.comments ?? displayPost?.comments ?? 0) + 1,
           }));
+          if (id) incrementCommentCount(id);
         },
         onSuccess: (result) => {
           const confirmedCommentId =
@@ -1169,6 +1258,7 @@ export default function PostDetailScreen() {
               (prev.comments ?? displayPost?.comments ?? 0) - 1,
             ),
           }));
+          if (id) decrementCommentCount(id);
         },
       });
     },
@@ -1322,6 +1412,24 @@ export default function PostDetailScreen() {
       editParams.editMedia = JSON.stringify(displayPost.media.map((m) => m.uri));
     }
     router.push({ pathname: "/edit-post", params: editParams });
+  }, [displayPost, commentsData, router]);
+
+  const handleAnnotatePost = useCallback(() => {
+    if (!displayPost) return;
+    const postData = commentsData?.root;
+    const annotateParams: Record<string, string> = {
+      postId: displayPost.id,
+      postTitle: displayPost.title,
+      postTopic: displayPost.topic ?? "",
+      postContent: displayPost.body ?? postData?.content ?? "",
+      postTag: postData?.tag ?? "",
+      postLikes: String(displayPost.likes ?? 0),
+      postComments: String(displayPost.comments ?? 0),
+    };
+    if (displayPost.media?.[0]?.uri) {
+      annotateParams.postThumbnail = displayPost.media[0].uri;
+    }
+    router.push({ pathname: "/annotate", params: annotateParams });
   }, [displayPost, commentsData, router]);
 
   // Handler for deleting the post
@@ -1989,6 +2097,7 @@ export default function PostDetailScreen() {
             setAwardTargetIsOwn(currentUser?.id === displayPost.author.id);
             setTimeout(() => awardPickerSheetRef.current?.present(), 300);
           }}
+          onAnnotate={handleAnnotatePost}
           onDismiss={() => {}}
         />
 
