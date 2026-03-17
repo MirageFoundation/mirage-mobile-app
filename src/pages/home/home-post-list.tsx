@@ -18,6 +18,7 @@ import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import Animated from "react-native-reanimated";
 import type { Post } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
+import { useAppState } from "@/src/hooks";
 import { HomePostCardItem } from "./home-post-card-item";
 import { useHomePostCardStore } from "./home-post-card-store";
 
@@ -85,10 +86,13 @@ const HomePostListInner = function HomePostListInner(
     if (!items) return;
 
     const visibleItems = items.filter((item) => item.isViewable && item.item?.id);
+    if (visibleItems.length === 0) {
+      setVideoViewability(feedScreenRef.current, new Set(), null);
+      return;
+    }
     const videoItems = visibleItems.filter(
       (item) => postHasPlayableVideo(item.item)
     );
-    if (visibleItems.length === 0) return;
 
     const visibleVideoIds = new Set(videoItems.map((item) => item.item.id));
     let activeId: string | null = null;
@@ -162,29 +166,29 @@ const HomePostListInner = function HomePostListInner(
   useEffect(() => {
     return () => {
       cancelDeferredFlush();
+      if (itemVisibleTimerRef.current) {
+        clearTimeout(itemVisibleTimerRef.current);
+      }
     };
   }, [cancelDeferredFlush]);
 
   useEffect(() => {
-    if (!data || data.length === 0) return;
-    const currentActive = useHomePostCardStore.getState().activeVideoPostIds[feedScreen];
-    if (
-      currentActive &&
-      data.some(
-        (p) =>
-          p.id === currentActive &&
-          postHasPlayableVideo(p)
-      )
-    ) {
-      return;
-    }
-    const firstVideo = data.find(
-      (p) => postHasPlayableVideo(p)
-    );
-    if (firstVideo) {
-      setVideoViewability(feedScreen, new Set([firstVideo.id]), firstVideo.id);
-    }
+    if (data.length !== 0) return;
+    setVideoViewability(feedScreen, new Set(), null);
   }, [data, feedScreen, setVideoViewability]);
+
+  useAppState({
+    onBackground: () => {
+      cancelDeferredFlush();
+      setVideoViewability(feedScreenRef.current, new Set(), null);
+    },
+    onForeground: () => {
+      cancelDeferredFlush();
+      requestAnimationFrame(() => {
+        flushViewability();
+      });
+    },
+  });
 
  const renderItem = useCallback<ListRenderItem<Post>>(
     ({ item }) => <HomePostCardItem post={item} feedScreen={feedScreen} />,
