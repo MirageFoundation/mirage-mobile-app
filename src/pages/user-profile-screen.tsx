@@ -70,6 +70,7 @@ import { PROFILE_TAB_BAR_HEIGHT } from "@/src/components/molecules/profile-tabs"
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import {
+  useAppState,
   useBlockHandler,
   useDeleteHandler,
   useFollowHandler,
@@ -827,16 +828,6 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     }
   }, [postsWithVotes]);
 
-  useEffect(() => {
-    if (activeTab !== 0) return;
-    const posts = postsWithVotes;
-    const firstVideo = posts.find((p) => postHasPlayableVideo(p));
-    if (firstVideo) {
-      setActiveVideoPostId(firstVideo.id);
-      setVisibleVideoPostIds(new Set([firstVideo.id]));
-    }
-  }, [postsWithVotes, activeTab]);
-
   const profileViewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 30,
     minimumViewTime: 300,
@@ -851,7 +842,11 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     const visibleItems = items.filter(
       (item) => item.isViewable && item.item && typeof item.item === "object" && "id" in item.item
     );
-    if (visibleItems.length === 0) return;
+    if (visibleItems.length === 0) {
+      setVisibleVideoPostIds(new Set());
+      setActiveVideoPostId(null);
+      return;
+    }
     const videoItems = visibleItems.filter(
       (item) => postHasPlayableVideo(item.item)
     );
@@ -916,6 +911,35 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
       }, 50);
     }
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (profileDeferHandleRef.current !== null) {
+        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+      }
+    };
+  }, []);
+
+  useAppState({
+    onBackground: () => {
+      if (profileDeferHandleRef.current !== null) {
+        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+        profileDeferHandleRef.current = null;
+      }
+      setVisibleVideoPostIds(new Set());
+      setActiveVideoPostId(null);
+    },
+    onForeground: () => {
+      if (activeTab !== 0) return;
+      if (profileDeferHandleRef.current !== null) {
+        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+        profileDeferHandleRef.current = null;
+      }
+      requestAnimationFrame(() => {
+        flushProfileViewability();
+      });
+    },
+  });
 
   const keyExtractor = useCallback(
     (item: Post | ApiPost | "header" | "tabs", index: number) => {

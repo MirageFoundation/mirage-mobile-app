@@ -60,6 +60,7 @@ import { ProfileContentAnimated } from "@/src/components/molecules/profile-conte
 import { PROFILE_TAB_BAR_HEIGHT } from "@/src/components/molecules/profile-tabs";
 import { Box } from "@/src/components/ui/primitives";
 import {
+  useAppState,
   useBlockHandler,
   useDeleteHandler,
   useReportHandler,
@@ -752,17 +753,6 @@ useEffect(() => {
 
   const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
   const [visibleVideoPostIds, setVisibleVideoPostIds] = useState<Set<string>>(new Set());
-  const videoInitializedRef = useRef(false);
-
-  useEffect(() => {
-    if (activeTab !== 0) {
-      videoInitializedRef.current = false;
-      return;
-    }
-    if (videoInitializedRef.current) return;
-    if (uiPosts.length === 0) return;
-    videoInitializedRef.current = true;
-  }, [uiPosts, activeTab]);
 
   const profileViewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 30,
@@ -847,6 +837,35 @@ useEffect(() => {
       }, 50);
     }
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (profileDeferHandleRef.current !== null) {
+        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+      }
+    };
+  }, []);
+
+  useAppState({
+    onBackground: () => {
+      if (profileDeferHandleRef.current !== null) {
+        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+        profileDeferHandleRef.current = null;
+      }
+      setVisibleVideoPostIds(new Set());
+      setActiveVideoPostId(null);
+    },
+    onForeground: () => {
+      if (activeTab !== 0) return;
+      if (profileDeferHandleRef.current !== null) {
+        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+        profileDeferHandleRef.current = null;
+      }
+      requestAnimationFrame(() => {
+        flushProfileViewability();
+      });
+    },
+  });
 
   const lastFetchTime = useRef(0);
   const isFetchingRef = useRef(false);

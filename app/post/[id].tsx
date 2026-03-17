@@ -156,9 +156,14 @@ export default function PostDetailScreen() {
 
   const [screenActive, setScreenActive] = useState(true);
   const refetchCommentsRef = useRef<((silent?: boolean) => void) | null>(null);
+  const isScreenFocusedRef = useRef(true);
 
   useAppState({
+    onBackground: () => {
+      setScreenActive(false);
+    },
     onForeground: () => {
+      setScreenActive(isScreenFocusedRef.current);
       refetchCommentsRef.current?.(true);
     },
     staleThreshold: 0,
@@ -166,8 +171,10 @@ export default function PostDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      isScreenFocusedRef.current = true;
       setScreenActive(true);
       return () => {
+        isScreenFocusedRef.current = false;
         setScreenActive(false);
       };
     }, []),

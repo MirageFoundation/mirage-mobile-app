@@ -180,10 +180,18 @@ const HomePostListInner = function HomePostListInner(
   useAppState({
     onBackground: () => {
       cancelDeferredFlush();
+      if (itemVisibleTimerRef.current) {
+        clearTimeout(itemVisibleTimerRef.current);
+        itemVisibleTimerRef.current = null;
+      }
       setVideoViewability(feedScreenRef.current, new Set(), null);
     },
     onForeground: () => {
       cancelDeferredFlush();
+      if (itemVisibleTimerRef.current) {
+        clearTimeout(itemVisibleTimerRef.current);
+        itemVisibleTimerRef.current = null;
+      }
       requestAnimationFrame(() => {
         flushViewability();
       });
