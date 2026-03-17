@@ -751,7 +751,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 88
+                          update 89
                         </Text>
                         <Text
                           style={{
@@ -765,7 +765,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           backend for posts if provided otherwise use old size
                           calculation on frontend as fallback,audio leak
                           fix,push notifications from backend for mirage.vote
-                          server only, border fix for media in post card
+                          server only, border fix for media in post card, all
+                          mirage link in post or comment will be opened inside
+                          the app irrespective of the node in link, new posts
+                          banner to show avatar always from 1-3
                         </Text>
                       </>
                     )}
@@ -806,7 +809,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 88
+                          update 89
                         </Text>
                         <Text
                           style={{
@@ -820,7 +823,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           backend for posts if provided otherwise use old size
                           calculation on frontend as fallback,audio leak
                           fix,push notifications from backend for mirage.vote
-                          server only, border fix for media in post card
+                          server only, border fix for media in post card, all
+                          mirage link in post or comment will be opened inside
+                          the app irrespective of the node in link, new posts
+                          banner to show avatar always from 1-3
                         </Text>
                       </>
                     )}
