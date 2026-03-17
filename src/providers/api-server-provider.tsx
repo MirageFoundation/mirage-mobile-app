@@ -8,6 +8,8 @@ import { usePreferencesStore, getApiBaseUrl, type ApiServer } from "@/src/stores
 import { useAuthStore } from "@/src/stores";
 import { Text } from "@/src/components/ui/primitives";
 import { queryKeys } from "@/src/api/read/query-keys";
+import { unregisterPush, registerPush } from "@/src/services/push-notifications";
+import { walletService } from "@/src/services/wallet-service";
 
 type ApiServerContextType = {
   isRefreshing: boolean;
@@ -76,6 +78,9 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
 
     try {
+      const wallet = await walletService.getWallet();
+      await unregisterPush(wallet);
+
       const baseUrl = getApiBaseUrl(server);
       apiClient.setBaseUrl(baseUrl);
 
@@ -94,6 +99,11 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
 
       await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const walletAfterSwitch = await walletService.getWallet();
+      if (walletAfterSwitch) {
+        await registerPush(walletAfterSwitch);
+      }
     } catch (error) {
       Sentry.captureException(error, {
         tags: {

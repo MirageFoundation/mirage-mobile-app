@@ -23,6 +23,8 @@ import { usePreferencesStore, type ThemeMode, type ApiServer, type VideoAutoplay
 import { useServerList } from "@/src/hooks/use-server-list";
 import { runInboxCheckNow, sendTestNotification, resetAndTestInboxNotification, getNotificationDebugInfo } from "@/src/services/inbox-notifications";
 import { useCloudflareErrorStore } from "@/src/stores/cloudflare-error-store";
+import * as Clipboard from "expo-clipboard";
+import { storage } from "@/src/stores/mmkv-storage";
 
 // Auto-collapse threshold options
 const collapseThresholdOptions: ValueOption<number | null>[] = [
@@ -365,6 +367,31 @@ const handleApiServerChange = useCallback(
         },
       ],
     },
+    ...(process.env.EXPO_PUBLIC_ENV === "preview" ? [{
+      title: "Push Notifications",
+      data: [
+        {
+          id: "copy-push-token",
+          component: (
+            <SettingRow
+              type="navigate"
+              icon="copy-outline"
+              title="Copy Push Token"
+              subtitle={storage.getString("push-token") ?? "No token registered"}
+              onPress={async () => {
+                const token = storage.getString("push-token");
+                if (token) {
+                  await Clipboard.setStringAsync(token);
+                  toast.success("Push token copied!");
+                } else {
+                  toast.error("No push token registered");
+                }
+              }}
+            />
+          ),
+        },
+      ],
+    }] : []),
     ...(__DEV__ ? [{
       title: "Notifications",
       data: [
@@ -427,6 +454,26 @@ const handleApiServerChange = useCallback(
               onPress={() => {
                 resetAndTestInboxNotification();
                 toast.success("Reset done, checking inbox...");
+              }}
+            />
+          ),
+        },
+        {
+          id: "copy-push-token",
+          component: (
+            <SettingRow
+              type="navigate"
+              icon="copy-outline"
+              title="Copy Push Token"
+              subtitle={storage.getString("push-token") ?? "No token registered"}
+              onPress={async () => {
+                const token = storage.getString("push-token");
+                if (token) {
+                  await Clipboard.setStringAsync(token);
+                  toast.success("Push token copied!");
+                } else {
+                  toast.error("No push token registered");
+                }
               }}
             />
           ),

@@ -112,6 +112,7 @@ export interface NodeConfigResponse {
   validator_consensus_address: string;
   validator_moniker: string;
   validator_operator_address: string;
+  push_notifications_enabled?: boolean;
 }
 
 // ============================================

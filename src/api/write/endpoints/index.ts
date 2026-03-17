@@ -67,6 +67,10 @@ export type { ClaimRewardInput, ClaimRewardResponse } from "./rewards";
 export { markInboxViewed } from "./inbox";
 export type { MarkInboxViewedResponse } from "./inbox";
 
+// Push Token
+export { registerPushToken, unregisterPushToken } from "./push-token";
+export type { PushTokenResponse } from "./push-token";
+
 // Delete User
 export { deleteUser } from "./delete-user";
 export type { DeleteUserInput } from "./delete-user";

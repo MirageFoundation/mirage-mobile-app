@@ -15,6 +15,9 @@ import { NetworkMonitor } from "@/src/components/network-monitor";
 import { CloudflareErrorToast } from "@/src/components/cloudflare-error-toast";
 import { WalletProvider } from "./wallet-provider";
 import { initInboxNotifications } from "@/src/services/inbox-notifications";
+import { initPushNotifications, registerPush } from "@/src/services/push-notifications";
+import { useAuthStore } from "@/src/stores";
+import { walletService } from "@/src/services/wallet-service";
 
 const CoreProviders = memo(({ children }: { children: React.ReactNode }) => (
   <ThemeContextProvider>
@@ -36,9 +39,25 @@ AuthProviders.displayName = "AuthProviders";
 
 export const RootProvider = memo(
   ({ children }: { children: React.ReactNode }) => {
+    const walletAddress = useAuthStore((s) => s.walletAddress);
+
     useEffect(() => {
       initInboxNotifications();
+      initPushNotifications();
     }, []);
+
+    useEffect(() => {
+      if (!walletAddress) return;
+
+      walletService.getWallet()
+        .then((wallet) => {
+          if (!wallet) return;
+          return registerPush(wallet);
+        })
+        .catch((error) => {
+          console.error("[RootProvider] Failed to register push after login:", error);
+        });
+    }, [walletAddress]);
 
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>

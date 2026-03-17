@@ -16,8 +16,9 @@ import { Box, Text } from "@/src/components/ui/primitives";
 import { useAuthStore } from "@/src/stores";
 import { useInboxStore } from "@/src/stores/inbox-store";
 import { useShallow } from "zustand/react/shallow";
-import { markRepliesAsNotified } from "@/src/services/inbox-notifications";
+import { markRepliesAsNotified } from "@/src/services/inbox-notified-ids";
 import { markInboxViewed } from "@/src/api/write/endpoints/inbox";
+import { walletService } from "@/src/services/wallet-service";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
@@ -32,7 +33,7 @@ export function InboxScreen() {
   }>();
   const isLoggedIn = !!useAuthStore((s) => s.user);
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
-  const { markAsViewed, highlightBaselineAt, readReplyIds, markReplyAsRead, advanceHighlightBaseline } =
+  const { markAsViewed, highlightBaselineAt, readReplyIds, markReplyAsRead, advanceHighlightBaseline, setInboxActive } =
     useInboxStore(
       useShallow((s) => ({
         markAsViewed: s.markAsViewed,
@@ -40,6 +41,7 @@ export function InboxScreen() {
         readReplyIds: s.readReplyIds,
         markReplyAsRead: s.markReplyAsRead,
         advanceHighlightBaseline: s.advanceHighlightBaseline,
+        setInboxActive: s.setInboxActive,
       })),
     );
   const readReplyIdsSet = useMemo(() => new Set(readReplyIds), [readReplyIds]);
@@ -81,19 +83,25 @@ export function InboxScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      setInboxActive(true);
       markAsViewed();
       refetch();
       if (walletAddress) {
-        markInboxViewed(walletAddress)
-          .then((res) => {
-            applyViewedTimestamp(res.inbox_last_viewed_at);
-          })
-          .catch(() => {
-            applyViewedTimestamp();
-          });
+        walletService.getWallet().then((wallet) => {
+          if (!wallet) return;
+          markInboxViewed(wallet)
+            .then((res) => {
+              applyViewedTimestamp(res.inbox_last_viewed_at);
+            })
+            .catch(() => {
+              applyViewedTimestamp();
+            });
+        });
       }
-      return () => {};
-    }, [applyViewedTimestamp, refetch, walletAddress, markAsViewed]),
+      return () => {
+        setInboxActive(false);
+      };
+    }, [applyViewedTimestamp, refetch, walletAddress, markAsViewed, setInboxActive]),
   );
 
   useEffect(() => {

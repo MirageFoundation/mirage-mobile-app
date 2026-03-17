@@ -751,7 +751,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 87
+                          update 88
                         </Text>
                         <Text
                           style={{
@@ -763,7 +763,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                         >
                           apply multiplier to flash quest, use media size from
                           backend for posts if provided otherwise use old size
-                          calculation on frontend as fallback,audio leak fix
+                          calculation on frontend as fallback,audio leak
+                          fix,push notifications
                         </Text>
                       </>
                     )}
@@ -804,7 +805,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 87
+                          update 88
                         </Text>
                         <Text
                           style={{
@@ -816,7 +817,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                         >
                           apply multiplier to flash quest, use media size from
                           backend for posts if provided otherwise use old size
-                          calculation on frontend as fallback,audio leak fix
+                          calculation on frontend as fallback,audio leak
+                          fix,push notifications
                         </Text>
                       </>
                     )}
