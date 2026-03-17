@@ -901,13 +901,18 @@ function FlashQuestCountdown({
   );
 }
 
-function FlashQuestCard({ quest }: { quest: FlashQuest }) {
+function FlashQuestCard({ quest, rewardMultiplier }: { quest: FlashQuest; rewardMultiplier: number }) {
   const { theme } = useUnistyles();
   const progressAnim = useSharedValue(0);
   const shimmer = useSharedValue(0);
 
   const progress = quest.target > 0 ? quest.progress / quest.target : 0;
-  const rewardAmount = quest.rewards[0]?.amount ?? 0;
+  const primaryReward = quest.rewards[0];
+  const baseReward = primaryReward?.amount ?? 0;
+  const shouldApplyMultiplier = primaryReward?.apply_multiplier !== false;
+  const rewardAmount = shouldApplyMultiplier
+    ? Math.floor(baseReward * rewardMultiplier)
+    : baseReward;
   const accentColor = "#F59E0B";
 
   useEffect(() => {
@@ -1499,7 +1504,7 @@ export function QuestsScreen() {
                 >
                   FLASH QUEST
                 </Text>
-                <FlashQuestCard quest={data.flash_quest} />
+                <FlashQuestCard quest={data.flash_quest} rewardMultiplier={data.reward_multiplier} />
               </>
             )}
 
