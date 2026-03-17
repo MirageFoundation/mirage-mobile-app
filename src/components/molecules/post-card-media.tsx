@@ -223,30 +223,22 @@ export const PostCardMedia = memo(
     const cachedAspectRatio = resolvedMediaUri
       ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
       : undefined;
-    const initialAspectRatio = cachedAspectRatio ?? getMediaAspectRatio(media);
-    const [mediaAspectRatio, setMediaAspectRatio] = useState(initialAspectRatio);
+    const targetAspectRatio = cachedAspectRatio ?? getMediaAspectRatio(media);
+    const [mediaAspectRatio, setMediaAspectRatio] = useState(targetAspectRatio);
 
-    if (cachedAspectRatio && !aspectRatioLockedRef.current) {
+    const prevMediaUriRef = useRef(resolvedMediaUri);
+    const uriChanged = prevMediaUriRef.current !== resolvedMediaUri;
+    if (uriChanged) {
+      prevMediaUriRef.current = resolvedMediaUri;
+      aspectRatioLockedRef.current = !!cachedAspectRatio;
+      if (Math.abs(mediaAspectRatio - targetAspectRatio) >= 0.01) {
+        setMediaAspectRatio(targetAspectRatio);
+      }
+    } else if (cachedAspectRatio && !aspectRatioLockedRef.current) {
       aspectRatioLockedRef.current = true;
     }
 
-    const prevMediaUriRef = useRef(resolvedMediaUri);
-    if (prevMediaUriRef.current !== resolvedMediaUri) {
-      prevMediaUriRef.current = resolvedMediaUri;
-      const newCached = resolvedMediaUri ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri) : undefined;
-      if (newCached) {
-        if (Math.abs(mediaAspectRatio - newCached) >= 0.01) {
-          setMediaAspectRatio(newCached);
-        }
-        aspectRatioLockedRef.current = true;
-      } else {
-        const computed = getMediaAspectRatio(media);
-        if (Math.abs(mediaAspectRatio - computed) >= 0.01) {
-          setMediaAspectRatio(computed);
-        }
-        aspectRatioLockedRef.current = false;
-      }
-    }
+    const effectiveAspectRatio = uriChanged ? targetAspectRatio : mediaAspectRatio;
 
     useEffect(() => {
       const isPlayable = media?.type === "video" || media?.type === "youtube";
@@ -356,7 +348,6 @@ export const PostCardMedia = memo(
     const updateMediaAspectRatioFromSize = useCallback(
       (width?: number, height?: number) => {
         if (!width || !height) return;
-        if (aspectRatioLockedRef.current) return;
         const ratio = width / height;
         if (!Number.isFinite(ratio) || ratio <= 0) return;
         setMediaAspectRatio((current) => {
@@ -592,12 +583,12 @@ export const PostCardMedia = memo(
     }, [isConnected]);
 
     const containerWidth = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
-    const calculatedHeight = containerWidth / mediaAspectRatio;
+    const calculatedHeight = containerWidth / effectiveAspectRatio;
     const exceedsMaxHeight = calculatedHeight > MEDIA_MAX_HEIGHT;
 
     const mediaWrapperStyle = exceedsMaxHeight
       ? { height: MEDIA_MAX_HEIGHT }
-      : { aspectRatio: mediaAspectRatio };
+      : { aspectRatio: effectiveAspectRatio };
 
     if (!media || shouldHideOnError) return null;
 

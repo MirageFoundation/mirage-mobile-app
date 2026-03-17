@@ -126,6 +126,10 @@ export function transformApiPost(
   const topic = editOverride?.topic ?? apiPost.topic;
   const mediaList = editOverride?.media ?? apiPost.media;
 
+  if (__DEV__ && apiPost.media_meta) {
+    console.log(`[media_meta] post=${apiPost.post_id}`, JSON.stringify(apiPost.media_meta));
+  }
+
   return {
     id: apiPost.post_id,
     author: {
