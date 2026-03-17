@@ -224,6 +224,7 @@ export interface Post {
   edited_at: number; // 0 if never edited
   thumbnail: string;
   media?: string[];
+  media_meta?: Array<{ w?: number; h?: number }>;
   points: number;
   comments: number;
   user_vote: number; // -1, 0, 1

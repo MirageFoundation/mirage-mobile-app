@@ -141,10 +141,18 @@ export function transformApiPost(
     body: content || undefined,
     topic: topic || undefined,
     media: mediaList && mediaList.length > 0
-      ? mediaList.map((url) => ({
+      ? mediaList.map((url, i) => {
+          const meta = editOverride?.media ? undefined : apiPost.media_meta?.[i];
+          const w = meta?.w;
+          const h = meta?.h;
+          return {
           uri: url,
           type: getMediaTypeFromUrl(url),
-        }))
+            width: w,
+            height: h,
+            aspectRatio: w && h ? w / h : undefined,
+          };
+        })
       : apiPost.thumbnail
         ? [
             {
