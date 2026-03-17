@@ -84,9 +84,9 @@ export function InboxScreen() {
   useFocusEffect(
     useCallback(() => {
       setInboxActive(true);
+      markAsViewed();
+      refetch();
       const task = InteractionManager.runAfterInteractions(() => {
-        markAsViewed();
-        refetch();
         if (walletAddress) {
           walletService.getWallet().then((wallet) => {
             if (!wallet) return;
