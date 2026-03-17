@@ -58,16 +58,14 @@ export async function handleMirageLink(url: string): Promise<boolean> {
   }
 
   if (parsed.type === "post") {
-    try {
-      const response = await getRootPostId({ comment_id: parsed.id });
-      if (response.root_post_id && response.root_post_id !== parsed.id) {
-        router.push(`/post/${response.root_post_id}?highlight=${parsed.id}`);
-      } else {
-        router.push(`/post/${parsed.id}`);
-      }
-    } catch {
-      router.push(`/post/${parsed.id}`);
-    }
+    router.push(`/post/${parsed.id}`);
+    getRootPostId({ comment_id: parsed.id })
+      .then((response) => {
+        if (response.root_post_id && response.root_post_id !== parsed.id) {
+          router.replace(`/post/${response.root_post_id}?highlight=${parsed.id}`);
+        }
+      })
+      .catch(() => {});
     return true;
   }
 
