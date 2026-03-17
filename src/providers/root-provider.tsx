@@ -15,6 +15,7 @@ import { NetworkMonitor } from "@/src/components/network-monitor";
 import { CloudflareErrorToast } from "@/src/components/cloudflare-error-toast";
 import { WalletProvider } from "./wallet-provider";
 import { initInboxNotifications } from "@/src/services/inbox-notifications";
+import { initPushNotifications } from "@/src/services/push-notifications";
 
 const CoreProviders = memo(({ children }: { children: React.ReactNode }) => (
   <ThemeContextProvider>
@@ -38,6 +39,7 @@ export const RootProvider = memo(
   ({ children }: { children: React.ReactNode }) => {
     useEffect(() => {
       initInboxNotifications();
+      initPushNotifications();
     }, []);
 
     return (

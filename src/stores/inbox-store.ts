@@ -5,6 +5,7 @@ import { mmkvStorage } from "./mmkv-storage";
 interface InboxState {
   unreadCount: number;
   hasUnread: boolean;
+  isInboxActive: boolean;
   lastViewedAt: number;
   highlightBaselineAt: number;
   latestInboxTimestamp: number;
@@ -15,6 +16,7 @@ interface InboxState {
   markAsViewed: (serverTimestamp?: number) => void;
   markReplyAsRead: (replyId: string) => void;
   advanceHighlightBaseline: () => void;
+  setInboxActive: (active: boolean) => void;
   resetForLogout: () => void;
 }
 
@@ -23,6 +25,7 @@ export const useInboxStore = create<InboxState>()(
     (set, get) => ({
       unreadCount: 0,
       hasUnread: false,
+      isInboxActive: false,
       lastViewedAt: 0,
       highlightBaselineAt: 0,
       latestInboxTimestamp: 0,
@@ -65,10 +68,13 @@ export const useInboxStore = create<InboxState>()(
           readReplyIds: [],
         }),
 
+      setInboxActive: (active: boolean) => set({ isInboxActive: active }),
+
       resetForLogout: () =>
         set({
           unreadCount: 0,
           hasUnread: false,
+          isInboxActive: false,
           latestInboxTimestamp: 0,
           highlightBaselineAt: Math.floor(Date.now() / 1000),
           _suppressUntil: 0,

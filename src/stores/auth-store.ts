@@ -15,6 +15,7 @@ import { useContentModerationStore } from "./content-moderation-store";
 import { useInboxStore } from "./inbox-store";
 import { useDraftStore } from "./draft-store";
 import { getTierName } from "@/src/utils/tiers";
+import { unregisterPush } from "@/src/services/push-notifications";
 
 // ============================================
 // Types
@@ -341,6 +342,8 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         try {
+          const wallet = await walletService.getWallet();
+          await unregisterPush(wallet);
           await walletService.clearWallet();
         } catch (error) {
           console.error("[AuthStore] Failed to clear wallet:", error);

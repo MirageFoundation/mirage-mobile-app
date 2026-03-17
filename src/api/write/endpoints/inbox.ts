@@ -1,4 +1,6 @@
 import { api } from "@/src/api/client";
+import type { MirageWallet } from "@/src/wallet";
+import { buildSimpleSignedPayload } from "../signing/simple-sign";
 
 export interface MarkInboxViewedResponse {
   ok: boolean;
@@ -6,7 +8,15 @@ export interface MarkInboxViewedResponse {
 }
 
 export async function markInboxViewed(
-  address: string
+  wallet: MirageWallet,
 ): Promise<MarkInboxViewedResponse> {
-  return api.post<MarkInboxViewedResponse>("/mark_inbox_viewed", { address });
+  const signed = buildSimpleSignedPayload(
+    wallet,
+    `mark_inbox_viewed:${wallet.address}:{timestamp}:{nonce}`,
+  );
+
+  return api.post<MarkInboxViewedResponse>("/mark_inbox_viewed", {
+    ...signed,
+    address: wallet.address,
+  });
 }

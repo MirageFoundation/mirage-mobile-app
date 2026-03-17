@@ -15,6 +15,7 @@ import { queryClient } from "@/src/providers/query-provider";
 import { storage } from "@/src/stores/mmkv-storage";
 import { useAuthStore } from "@/src/stores/auth-store";
 import { useInboxStore } from "@/src/stores/inbox-store";
+import { isPushEnabled } from "@/src/services/push-notifications";
 
 const TASK_NAME = "INBOX_NOTIFICATION_CHECK";
 const NOTIFIED_IDS_KEY = "inbox-notified-ids";
@@ -52,10 +53,11 @@ function waitForTabsReady(timeoutMs = 5000): Promise<void> {
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     console.log("[InboxNotifications] handleNotification called for:", notification.request.identifier);
+    const isInboxActive = useInboxStore.getState().isInboxActive;
     return {
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
+      shouldShowBanner: !isInboxActive,
+      shouldShowList: !isInboxActive,
+      shouldPlaySound: !isInboxActive,
       shouldSetBadge: false,
     };
   },
@@ -251,22 +253,24 @@ async function performInboxCheck(
       notifiedIds.add(reply.reply_id);
       saveNotifiedIds(notifiedIds);
 
-      console.log("[InboxNotifications] Scheduling notification for:", reply.reply_id);
-      const id = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: getNotificationTitle(reply),
-          body: truncate(reply.reply_content, 150),
-          data: {
-            rootPostId: reply.root_post_id,
-            replyId: reply.reply_id,
+      if (!isPushEnabled()) {
+        console.log("[InboxNotifications] Scheduling notification for:", reply.reply_id);
+        const id = await Notifications.scheduleNotificationAsync({
+          content: {
+            title: getNotificationTitle(reply),
+            body: truncate(reply.reply_content, 150),
+            data: {
+              rootPostId: reply.root_post_id,
+              replyId: reply.reply_id,
+            },
+            ...(Platform.OS === "android" && {
+              categoryIdentifier: "inbox",
+            }),
           },
-          ...(Platform.OS === "android" && {
-            categoryIdentifier: "inbox",
-          }),
-        },
-        trigger: null,
-      });
-      console.log("[InboxNotifications] Scheduled notification id:", id);
+          trigger: null,
+        });
+        console.log("[InboxNotifications] Scheduled notification id:", id);
+      }
     }
 
     storage.set(LAST_CHECK_KEY, Date.now().toString());
