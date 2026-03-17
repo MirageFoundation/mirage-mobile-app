@@ -764,7 +764,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           apply multiplier to flash quest, use media size from
                           backend for posts if provided otherwise use old size
                           calculation on frontend as fallback,audio leak
-                          fix,push notifications
+                          fix,push notifications from backend for mirage.vote
+                          server only, border fix for media in post card
                         </Text>
                       </>
                     )}
@@ -818,7 +819,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           apply multiplier to flash quest, use media size from
                           backend for posts if provided otherwise use old size
                           calculation on frontend as fallback,audio leak
-                          fix,push notifications
+                          fix,push notifications from backend for mirage.vote
+                          server only, border fix for media in post card
                         </Text>
                       </>
                     )}

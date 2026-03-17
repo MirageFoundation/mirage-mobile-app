@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Pressable, RefreshControl, View } from "react-native";
+import { FlatList, InteractionManager, Pressable, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Image } from "expo-image";
@@ -84,21 +84,24 @@ export function InboxScreen() {
   useFocusEffect(
     useCallback(() => {
       setInboxActive(true);
-      markAsViewed();
-      refetch();
-      if (walletAddress) {
-        walletService.getWallet().then((wallet) => {
-          if (!wallet) return;
-          markInboxViewed(wallet)
-            .then((res) => {
-              applyViewedTimestamp(res.inbox_last_viewed_at);
-            })
-            .catch(() => {
-              applyViewedTimestamp();
-            });
-        });
-      }
+      const task = InteractionManager.runAfterInteractions(() => {
+        markAsViewed();
+        refetch();
+        if (walletAddress) {
+          walletService.getWallet().then((wallet) => {
+            if (!wallet) return;
+            markInboxViewed(wallet)
+              .then((res) => {
+                applyViewedTimestamp(res.inbox_last_viewed_at);
+              })
+              .catch(() => {
+                applyViewedTimestamp();
+              });
+          });
+        }
+      });
       return () => {
+        task.cancel();
         setInboxActive(false);
       };
     }, [applyViewedTimestamp, refetch, walletAddress, markAsViewed, setInboxActive]),

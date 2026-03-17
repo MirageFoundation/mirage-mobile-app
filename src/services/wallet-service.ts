@@ -41,6 +41,7 @@ const SECURE_STORE_OPTIONS: SecureStore.SecureStoreOptions = {
 
 class WalletService {
   private cachedMnemonic: string | null = null;
+  private cachedWallet: MirageWallet | null = null;
 
   // ============================================
   // Wallet Creation & Import
@@ -205,7 +206,13 @@ class WalletService {
       const mnemonic = await this.getMnemonic();
       if (!mnemonic) return null;
 
-      return createWalletFromMnemonic(mnemonic);
+      if (this.cachedWallet && this.cachedWallet.mnemonic === mnemonic) {
+        return this.cachedWallet;
+      }
+
+      const wallet = createWalletFromMnemonic(mnemonic);
+      this.cachedWallet = wallet;
+      return wallet;
     } catch {
       return null;
     }
@@ -363,6 +370,7 @@ class WalletService {
 
       // Clear cached mnemonic
       this.cachedMnemonic = null;
+      this.cachedWallet = null;
     } catch (error) {
       Sentry.captureException(error, {
         tags: { action: "wallet_clear" },

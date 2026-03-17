@@ -278,6 +278,7 @@ function TabsContent() {
         name="inbox"
         options={{
           title: "Inbox",
+          lazy: false,
         }}
       />
       <Tabs.Screen
