@@ -48,7 +48,7 @@ function isInternalLink(parsedLink: ParsedMirageLink): boolean {
 export async function handleMirageLink(url: string): Promise<boolean> {
   const parsed = parseMirageUrl(url);
 
-  if (!parsed || !isInternalLink(parsed)) {
+  if (!parsed) {
     return false;
   }
 
