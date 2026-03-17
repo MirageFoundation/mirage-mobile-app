@@ -752,20 +752,17 @@ useEffect(() => {
 
   const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
   const [visibleVideoPostIds, setVisibleVideoPostIds] = useState<Set<string>>(new Set());
+  const videoInitializedRef = useRef(false);
 
   useEffect(() => {
-    if (activeTab !== 0) return;
-    const hasCurrentActive =
-      !!activeVideoPostId &&
-      uiPosts.some((p) => p.id === activeVideoPostId && postHasPlayableVideo(p));
-    if (hasCurrentActive) return;
-
-    const firstVideo = uiPosts.find((p) => postHasPlayableVideo(p));
-    if (firstVideo) {
-      setActiveVideoPostId(firstVideo.id);
-      setVisibleVideoPostIds(new Set([firstVideo.id]));
+    if (activeTab !== 0) {
+      videoInitializedRef.current = false;
+      return;
     }
-  }, [uiPosts, activeTab, activeVideoPostId]);
+    if (videoInitializedRef.current) return;
+    if (uiPosts.length === 0) return;
+    videoInitializedRef.current = true;
+  }, [uiPosts, activeTab]);
 
   const profileViewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 30,
@@ -781,7 +778,11 @@ useEffect(() => {
     const visibleItems = items.filter(
       (item) => item.isViewable && item.item && typeof item.item === "object" && "id" in item.item
     );
-    if (visibleItems.length === 0) return;
+    if (visibleItems.length === 0) {
+      setVisibleVideoPostIds(new Set());
+      setActiveVideoPostId(null);
+      return;
+    }
     const videoItems = visibleItems.filter(
       (item) => postHasPlayableVideo(item.item)
     );
