@@ -763,8 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                         >
                           apply multiplier to flash quest, use media size from
                           backend for posts if provided otherwise use old size
-                          calculation on frontend as fallback,possible random
-                          video sound playing fix
+                          calculation on frontend as fallback,audio leak fix
                         </Text>
                       </>
                     )}
@@ -817,8 +816,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                         >
                           apply multiplier to flash quest, use media size from
                           backend for posts if provided otherwise use old size
-                          calculation on frontend as fallback,possible random
-                          video sound playing fix
+                          calculation on frontend as fallback,audio leak fix
                         </Text>
                       </>
                     )}

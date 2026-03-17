@@ -625,6 +625,7 @@ export const PostCardMedia = memo(
                 </Text>
               </View>
             )}
+            <View style={styles.borderOverlay} pointerEvents="none" />
           </View>
         </View>
       );
@@ -1074,6 +1075,7 @@ export const PostCardMedia = memo(
               </Text>
             </View>
           )}
+          <View style={styles.borderOverlay} pointerEvents="none" />
         </View>
       </View>
     );
@@ -1091,8 +1093,13 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.background.subtle,
     borderRadius: theme.radius.md,
     overflow: "hidden",
+  },
+  borderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.md,
     borderWidth: 0.3,
     borderColor: theme.colors.border.subtle,
+    zIndex: 50,
   },
   skeletonOverlay: {
     ...StyleSheet.absoluteFillObject,

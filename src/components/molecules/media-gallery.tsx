@@ -184,11 +184,11 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   const showThumbnail = thumbnailUri && !GALLERY_LOADED_CACHE.has(item.uri);
 
   return (
-    <View style={{ width, height, overflow: "hidden" }}>
+    <View style={[galleryStyles.itemContainer, { width, height }]}>
       {showThumbnail ? (
         <Image
           source={{ uri: thumbnailUri }}
-          style={{ width, height, position: "absolute", zIndex: 0 }}
+          style={[galleryStyles.itemMedia, { width, height, position: "absolute", zIndex: 0 }]}
           contentFit="cover"
           cachePolicy="memory-disk"
           onLoad={({ source }) => {
@@ -207,7 +207,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
       <Video
         ref={videoRef}
         source={{ uri: item.uri }}
-        style={{ width, height }}
+        style={[galleryStyles.itemMedia, { width, height }]}
         resizeMode={ResizeMode.COVER}
         shouldPlay={isPlaying && isActive && screenActive}
         isMuted={effectiveMuted}
@@ -329,10 +329,10 @@ const GalleryImageItem = memo(function GalleryImageItem({
   }, [item.uri]);
 
   return (
-    <Pressable onPress={onPress} style={{ width, height, overflow: "hidden" }}>
+    <Pressable onPress={onPress} style={[galleryStyles.itemContainer, { width, height }]}>
       <Image
         source={{ uri: item.uri }}
-        style={{ width, height }}
+        style={[galleryStyles.itemMedia, { width, height }]}
         contentFit="cover"
         cachePolicy="memory-disk"
         onLoad={({ source }) => {
@@ -437,7 +437,7 @@ export const MediaGallery = memo(function MediaGallery({
       const itemHeight = getHeightForIndex(index);
       const isVideo = item.type === "video";
       return (
-        <View style={{ width: GALLERY_WIDTH, height: maxHeight }}>
+        <View style={[galleryStyles.itemWrapper, { width: GALLERY_WIDTH, height: maxHeight }]}>
           {isVideo ? (
             <GalleryVideoItem
               item={item}
@@ -473,7 +473,7 @@ export const MediaGallery = memo(function MediaGallery({
   );
 
   return (
-    <View style={{ height: containerHeight, overflow: "hidden" }}>
+    <View style={[galleryStyles.galleryRoot, { height: containerHeight }]}>
       <FlatList
         ref={flatListRef}
         data={media}
@@ -536,7 +536,22 @@ export const MediaGallery = memo(function MediaGallery({
   );
 });
 
-const galleryStyles = StyleSheet.create({
+const galleryStyles = StyleSheet.create((theme) => ({
+  galleryRoot: {
+    overflow: "hidden",
+    borderRadius: theme.radius.md,
+  },
+  itemWrapper: {
+    borderRadius: theme.radius.md,
+    overflow: "hidden",
+  },
+  itemContainer: {
+    overflow: "hidden",
+    borderRadius: theme.radius.md,
+  },
+  itemMedia: {
+    borderRadius: theme.radius.md,
+  },
   indicators: {
     position: "absolute",
     bottom: 10,
@@ -650,4 +665,4 @@ const galleryStyles = StyleSheet.create({
     backgroundColor: "rgba(5, 5, 5, 0.97)",
     gap: 8,
   },
-});
+}));
