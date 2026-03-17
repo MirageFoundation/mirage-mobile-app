@@ -761,30 +761,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          better error handling for server error,removed ability
-                          to change server from cloudflare error toast,increase
-                          app icon size in android notification status for
-                          better visibility, auto fill changes for link shared
-                          from x to auto fill title with 1st line of x text and
-                          not show username in title and remaining text in body,
-                          x shared link containing multiple videos should
-                          extract all the videos and upload,max media attachment
-                          check while extracting video from shared link,59
-                          se4conds time check for multiple videos in shared
-                          link,adult content popup not showing after new account
-                          created,claim rewards showing incorrect toatl rewards
-                          after claim fix, enable agent taking very long time
-                          for confirming on blockchain: now immediately updating
-                          the agents after pow is solved and doing the
-                          blockchain confirmation in background, bottom nav bar
-                          not visble when opening the inbox from notification
-                          fix,unmute video in focus on screen fix,stop playing
-                          video on screen when side menu is opened,stop playing
-                          video on post details screen when scrolled down to
-                          comments,all messages highlighted after logged in
-                          fix,opening mirage link in post comments inside the
-                          app only if server matches,top left and right gap in
-                          gradient header fix
+                          apply multiplier to flash quest
                         </Text>
                       </>
                     )}
@@ -835,30 +812,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          better error handling for server error,removed ability
-                          to change server from cloudflare error toast,increase
-                          app icon size in android notification status for
-                          better visibility, auto fill changes for link shared
-                          from x to auto fill title with 1st line of x text and
-                          not show username in title and remaining text in body,
-                          x shared link containing multiple videos should
-                          extract all the videos and upload,max media attachment
-                          check while extracting video from shared link,59
-                          se4conds time check for multiple videos in shared
-                          link,adult content popup not showing after new account
-                          created,claim rewards showing incorrect toatl rewards
-                          after claim fix, enable agent taking very long time
-                          for confirming on blockchain: now immediately updating
-                          the agents after pow is solved and doing the
-                          blockchain confirmation in background, bottom nav bar
-                          not visble when opening the inbox from notification
-                          fix,unmute video in focus on screen fix,stop playing
-                          video on screen when side menu is opened,stop playing
-                          video on post details screen when scrolled down to
-                          comments,all messages highlighted after logged in
-                          fix,opening mirage link in post comments inside the
-                          app only if server matches,top left and right gap in
-                          gradient header fix
+                          apply multiplier to flash quest
                         </Text>
                       </>
                     )}
