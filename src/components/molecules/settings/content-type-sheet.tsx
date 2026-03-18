@@ -4,7 +4,7 @@ import BottomSheet, {
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from "react";
-import { Pressable, View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -136,7 +136,7 @@ export const ContentTypeSheet = forwardRef<
     (type: ContentType) => {
       triggerHaptic("light");
 
-      if (isContentFilterType(type) && !selectedTypes.includes(type)) {
+      if (Platform.OS !== "ios" && isContentFilterType(type) && !selectedTypes.includes(type)) {
         if (type === "all" || type === "sensitive" || !currentlyHasAdultContent) {
           if (!ageVerified) {
             setPendingAdultType(type);
@@ -336,7 +336,7 @@ export const ContentTypeSheet = forwardRef<
       </BottomSheet>
 
       <ConfirmationPopup
-        visible={!!pendingAdultType && !showAgeVerification}
+        visible={Platform.OS !== "ios" && !!pendingAdultType && !showAgeVerification}
         title={ADULT_CONTENT_DESCRIPTIONS[pendingAdultType ?? "all"]?.title ?? "Enable Adult Content"}
         message={ADULT_CONTENT_DESCRIPTIONS[pendingAdultType ?? "all"]?.message ?? "Are you sure?"}
         description={ADULT_CONTENT_DESCRIPTIONS[pendingAdultType ?? "all"]?.description ?? ""}
@@ -349,7 +349,7 @@ export const ContentTypeSheet = forwardRef<
       />
 
       <AgeVerificationModal
-        visible={showAgeVerification}
+        visible={Platform.OS !== "ios" && showAgeVerification}
         onVerified={handleAgeVerified}
         onCancel={handleAgeVerificationCancel}
       />
