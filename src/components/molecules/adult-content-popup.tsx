@@ -7,26 +7,26 @@ import {
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 type AdultContentPopupProps = {
-  /** Whether the popup is visible */
   visible: boolean;
-  /** Callback when user enables adult content */
   onEnable: () => void;
-  /** Callback when user declines adult content */
   onDecline: () => void;
+  onGoToSettings?: () => void;
 };
 
 export const AdultContentPopup = ({
   visible,
   onEnable,
   onDecline,
+  onGoToSettings,
 }: AdultContentPopupProps) => {
   const { theme } = useUnistyles();
   const bottomSheetRef = useRef<BottomSheetModal>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const isAndroid = Platform.OS === "android";
 
   useEffect(() => {
     if (visible) {
@@ -50,10 +50,10 @@ export const AdultContentPopup = ({
         disappearsOnIndex={-1}
         appearsOnIndex={0}
         opacity={0.6}
-        pressBehavior="none"
+        pressBehavior={isAndroid ? "close" : "none"}
       />
     ),
-    []
+    [isAndroid]
   );
 
   const handleEnable = useCallback(() => {
@@ -65,6 +65,79 @@ export const AdultContentPopup = ({
     triggerHaptic("selection");
     onDecline();
   }, [onDecline]);
+
+  const handleGoToSettings = useCallback(() => {
+    triggerHaptic("selection");
+    onDecline();
+    onGoToSettings?.();
+  }, [onDecline, onGoToSettings]);
+
+  const handleDismiss = useCallback(() => {
+    triggerHaptic("selection");
+    onDecline();
+  }, [onDecline]);
+
+  if (isAndroid) {
+    return (
+      <BottomSheetModal
+        ref={bottomSheetRef}
+        enablePanDownToClose
+        enableDynamicSizing
+        backdropComponent={renderBackdrop}
+        backgroundStyle={{
+          backgroundColor: theme.colors.background.default,
+        }}
+        handleIndicatorStyle={{
+          backgroundColor: theme.colors.border.default,
+          width: 40,
+        }}
+        onDismiss={handleDismiss}
+      >
+        <BottomSheetView style={styles.container}>
+          <View style={styles.iconContainer}>
+            <Ionicons
+              name="eye-off"
+              size={40}
+              color={theme.colors.warning[500]}
+            />
+          </View>
+
+          <Text size="xl" weight="bold" style={{ textAlign: "center" }}>
+            Mature content
+          </Text>
+
+          <Text
+            size="sm"
+            mode="subtle"
+            style={{ textAlign: "center", marginTop: 12, lineHeight: 20 }}
+          >
+            Mature content is hidden by default. You can change this in the
+            Settings.
+          </Text>
+
+          <Box gap="sm" style={{ marginTop: 24, width: "100%", paddingBottom: 24 }}>
+            <Button size="lg" rounded="lg" onPress={handleGoToSettings}>
+              <Button.Text weight="semibold">Go to settings</Button.Text>
+            </Button>
+
+            <Button
+              size="lg"
+              variant="outline"
+              rounded="lg"
+              onPress={handleDismiss}
+              style={{
+                backgroundColor: theme.colors.background.subtle,
+                borderWidth: 0.5,
+                borderColor: theme.colors.border.default,
+              }}
+            >
+              <Button.Text weight="semibold">Dismiss</Button.Text>
+            </Button>
+          </Box>
+        </BottomSheetView>
+      </BottomSheetModal>
+    );
+  }
 
   return (
     <BottomSheetModal
@@ -81,7 +154,6 @@ export const AdultContentPopup = ({
       }}
     >
       <BottomSheetView style={styles.container}>
-        {/* Icon */}
         <View style={styles.iconContainer}>
           <Ionicons
             name="eye-off"
@@ -90,12 +162,10 @@ export const AdultContentPopup = ({
           />
         </View>
 
-        {/* Title */}
         <Text size="xl" weight="bold" style={{ textAlign: "center" }}>
           Adult Content
         </Text>
 
-        {/* Description */}
         <Text
           size="sm"
           mode="subtle"
@@ -106,7 +176,6 @@ export const AdultContentPopup = ({
           in your feed?
         </Text>
 
-        {/* Buttons */}
         <Box gap="sm" style={{ marginTop: 24, width: "100%" }}>
           <Button size="lg" rounded="lg" onPress={handleEnable}>
             <Button.Text weight="semibold">Yes, show everything</Button.Text>
@@ -127,7 +196,6 @@ export const AdultContentPopup = ({
           </Button>
         </Box>
 
-        {/* Settings note */}
         <Text
           size="xs"
           mode="subtle"

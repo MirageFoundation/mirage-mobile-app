@@ -225,7 +225,7 @@ export function HomeScreen() {
 
   const { handleFollowUser: handleFollowPress, handleFollowTopic: handleFollowTopicFromCard } = useFollowHandler({});
 
-  const showAdultPopup = Platform.OS === "ios" && !!currentUser && !hasSeenAdultPrompt;
+  const showAdultPopup = !!currentUser && !hasSeenAdultPrompt;
 
   const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
   const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
@@ -640,13 +640,12 @@ export function HomeScreen() {
         onDismiss={easUpdate.dismiss}
       />
 
-      {Platform.OS === "ios" && (
-        <AdultContentPopup
-          visible={showAdultPopup}
-          onEnable={handleEnableAdultContent}
-          onDecline={handleDeclineAdultContent}
-        />
-      )}
+      <AdultContentPopup
+        visible={showAdultPopup}
+        onEnable={handleEnableAdultContent}
+        onDecline={handleDeclineAdultContent}
+        onGoToSettings={() => router.push("/settings")}
+      />
 
       <PostOptionsSheet
         ref={postOptionsSheetRef}

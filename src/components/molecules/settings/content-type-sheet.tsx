@@ -63,7 +63,6 @@ type ContentTypeOption = {
 
 const individualOptions: ContentTypeOption[] = [
   { value: "sensitive", label: "Sensitive", icon: "warning-outline" },
-  { value: "porn", label: "Porn", icon: "eye-off-outline" },
   { value: "violence", label: "Violence", icon: "flash-outline" },
   { value: "gore", label: "Gore", icon: "skull-outline" },
   { value: "death", label: "Death", icon: "alert-circle-outline" },
@@ -131,27 +130,23 @@ export const ContentTypeSheet = forwardRef<
   const isContentFilterType = (type: ContentType) =>
     ADULT_CONTENT_TAGS.includes(type as any) || type === "all" || type === "sensitive";
 
-  const currentlyHasAdultContent = isAdultContentEnabled(selectedTypes);
-
   const handleSelect = useCallback(
     (type: ContentType) => {
       triggerHaptic("light");
 
       if (Platform.OS !== "ios" && isContentFilterType(type) && !selectedTypes.includes(type)) {
-        if (type === "all" || type === "sensitive" || !currentlyHasAdultContent) {
-          if (!ageVerified) {
-            setPendingAdultType(type);
-            setShowAgeVerification(true);
-            return;
-          }
+        if (!ageVerified) {
           setPendingAdultType(type);
+          setShowAgeVerification(true);
           return;
         }
+        setPendingAdultType(type);
+        return;
       }
 
       onToggle(type);
     },
-    [onToggle, currentlyHasAdultContent, selectedTypes, ageVerified],
+    [onToggle, selectedTypes, ageVerified],
   );
 
   const handleAgeVerified = useCallback(() => {
@@ -178,7 +173,9 @@ export const ContentTypeSheet = forwardRef<
   const handleConfirmAdultContent = useCallback(() => {
     if (pendingAdultType) {
       triggerHaptic("medium");
-      setBlurSensitiveMedia(true);
+      if (selectedTypes.length === 0) {
+        setBlurSensitiveMedia(true);
+      }
       onToggle(pendingAdultType);
       Sentry.addBreadcrumb({
         category: "content_filter",
@@ -187,7 +184,7 @@ export const ContentTypeSheet = forwardRef<
       });
       setPendingAdultType(null);
     }
-  }, [pendingAdultType, onToggle, setBlurSensitiveMedia]);
+  }, [pendingAdultType, onToggle, setBlurSensitiveMedia, selectedTypes]);
 
   const handleCancelAdultContent = useCallback(() => {
     triggerHaptic("light");

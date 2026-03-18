@@ -134,7 +134,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       adultContentEnabled: false,
       hasSeenAdultPrompt: true,
       selectedContentTypes: [],
-      blurSensitiveMedia: true,
+      blurSensitiveMedia: false,
       ageVerified: false,
       hideDownvotedPosts: false,
 
@@ -300,7 +300,7 @@ export const usePreferencesStore = create<PreferencesState>()(
         if (version < 3) {
           state.selectedContentTypes = [];
           state.adultContentEnabled = false;
-          state.blurSensitiveMedia = true;
+          state.blurSensitiveMedia = false;
           state.hasSeenAdultPrompt = true;
         }
         

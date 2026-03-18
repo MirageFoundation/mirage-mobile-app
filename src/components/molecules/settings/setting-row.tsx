@@ -20,6 +20,7 @@ type SettingRowToggleProps = SettingRowBaseProps & {
   onValueChange: (value: boolean) => void;
   onPress?: never;
   rightText?: never;
+  disabled?: boolean;
 };
 
 type SettingRowNavigateProps = SettingRowBaseProps & {
@@ -47,7 +48,10 @@ export function SettingRow(props: SettingRowProps) {
   const { theme } = useUnistyles();
   const { icon, title, subtitle, type } = props;
 
+  const isDisabled = type === "toggle" && props.disabled;
+
   const handlePress = () => {
+    if (isDisabled) return;
     if (type === "toggle") {
       triggerHaptic("light");
       props.onValueChange(!props.value);
@@ -62,7 +66,7 @@ export function SettingRow(props: SettingRowProps) {
   return (
     <Pressable
       onPress={handlePress}
-      style={({ pressed }) => [styles.container, pressed && { opacity: 0.7 }]}
+      style={({ pressed }) => [styles.container, pressed && !isDisabled && { opacity: 0.7 }, isDisabled && { opacity: 0.4 }]}
     >
       <Box direction="row" alignItems="flex-start" gap="md" flex>
         {icon && (
@@ -102,9 +106,11 @@ export function SettingRow(props: SettingRowProps) {
         <Switch
           value={props.value}
           onValueChange={(value) => {
+            if (isDisabled) return;
             triggerHaptic("light");
             props.onValueChange(value);
           }}
+          disabled={!!isDisabled}
           trackColor={{
             false: theme.colors.background.emphasis,
             true: activeColor,
