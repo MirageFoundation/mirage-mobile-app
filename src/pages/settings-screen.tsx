@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/react-native";
 import { EvilIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useRef } from "react";
-import { Pressable, SectionList, View } from "react-native";
+import { Platform, Pressable, SectionList, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -96,7 +96,7 @@ export function SettingsScreen() {
   const adultContentActive = isAdultContentEnabled(selectedContentTypes);
 
   const handleBlurToggle = useCallback((value: boolean) => {
-    if (!value && adultContentActive) {
+    if (Platform.OS !== "ios" && !value && adultContentActive) {
       toast.error("Blur must stay on while adult content is enabled");
       return;
     }
@@ -212,7 +212,7 @@ const handleApiServerChange = useCallback(
               type="toggle"
               icon="eye-off-outline"
               title="Blur Sensitive Media"
-              subtitle={adultContentActive ? "Required while adult content is enabled" : "Blur thumbnails of sensitive content"}
+              subtitle={Platform.OS !== "ios" && adultContentActive ? "Required while adult content is enabled" : "Blur thumbnails of sensitive content"}
               value={blurSensitiveMedia}
               onValueChange={handleBlurToggle}
             />
