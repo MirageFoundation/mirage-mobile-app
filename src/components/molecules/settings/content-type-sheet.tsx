@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Sentry from "@sentry/react-native";
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
@@ -157,11 +158,21 @@ export const ContentTypeSheet = forwardRef<
     setAgeVerified(true);
     setShowAgeVerification(false);
     toast.success("Age verified successfully");
+    Sentry.addBreadcrumb({
+      category: "content_filter",
+      message: "Age verification passed",
+      level: "info",
+    });
   }, [setAgeVerified, toast]);
 
   const handleAgeVerificationCancel = useCallback(() => {
     setShowAgeVerification(false);
     setPendingAdultType(null);
+    Sentry.addBreadcrumb({
+      category: "content_filter",
+      message: "Age verification cancelled",
+      level: "info",
+    });
   }, []);
 
   const handleConfirmAdultContent = useCallback(() => {
@@ -169,6 +180,11 @@ export const ContentTypeSheet = forwardRef<
       triggerHaptic("medium");
       setBlurSensitiveMedia(true);
       onToggle(pendingAdultType);
+      Sentry.addBreadcrumb({
+        category: "content_filter",
+        message: `Adult content enabled: ${pendingAdultType}`,
+        level: "info",
+      });
       setPendingAdultType(null);
     }
   }, [pendingAdultType, onToggle, setBlurSensitiveMedia]);
@@ -176,6 +192,11 @@ export const ContentTypeSheet = forwardRef<
   const handleCancelAdultContent = useCallback(() => {
     triggerHaptic("light");
     setPendingAdultType(null);
+    Sentry.addBreadcrumb({
+      category: "content_filter",
+      message: "Adult content confirmation declined",
+      level: "info",
+    });
   }, []);
 
   const isAllSelected = selectedTypes.includes("all");

@@ -1,4 +1,5 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
+import * as Sentry from "@sentry/react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -257,11 +258,21 @@ export function HomeScreen() {
   const handleEnableAdultContent = useCallback(() => {
     setAdultContent(true);
     setHasSeenAdultPrompt();
+    Sentry.addBreadcrumb({
+      category: "content_filter",
+      message: "iOS: Adult content enabled via popup",
+      level: "info",
+    });
   }, [setAdultContent, setHasSeenAdultPrompt]);
 
   const handleDeclineAdultContent = useCallback(() => {
     setAdultContent(false);
     setHasSeenAdultPrompt();
+    Sentry.addBreadcrumb({
+      category: "content_filter",
+      message: "iOS: Adult content declined via popup",
+      level: "info",
+    });
   }, [setAdultContent, setHasSeenAdultPrompt]);
 
   const revealedPostsRef = useRef<Set<string>>(new Set());

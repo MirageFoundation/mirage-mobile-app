@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Sentry from "@sentry/react-native";
 import { BlurView } from "expo-blur";
 import { useCallback, useRef, useState } from "react";
 import {
@@ -84,6 +85,11 @@ export function AgeVerificationModal({
 
     if (age < 18) {
       setError("You are not eligible to view this content");
+      Sentry.addBreadcrumb({
+        category: "content_filter",
+        message: "Age verification failed: underage",
+        level: "warning",
+      });
       return;
     }
 
