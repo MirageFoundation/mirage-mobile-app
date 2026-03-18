@@ -244,6 +244,7 @@ export function QuestsSummaryCard() {
 
   const hasClaimed = useMemo(() => {
     if (!data) return false;
+    if (data.flash_quest && !data.flash_quest.completed) return false;
     return allComplete && data.pending_rewards.length === 0;
   }, [allComplete, data]);
 

@@ -768,7 +768,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           server only, border fix for media in post card, all
                           mirage link in post or comment will be opened inside
                           the app irrespective of the node in link, new posts
-                          banner to show avatar always from 1-3
+                          banner to show avatar always from 1-3, double comment
+                          showing up fix
                         </Text>
                       </>
                     )}
@@ -826,7 +827,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           server only, border fix for media in post card, all
                           mirage link in post or comment will be opened inside
                           the app irrespective of the node in link, new posts
-                          banner to show avatar always from 1-3
+                          banner to show avatar always from 1-3, double comment
+                          showing up fix
                         </Text>
                       </>
                     )}

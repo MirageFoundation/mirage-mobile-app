@@ -576,26 +576,20 @@ export default function PostDetailScreen() {
       return false;
     };
 
-    // Clean up localComments - remove optimistic comments that now exist on server
     setLocalComments((prev) => {
       const filtered = prev.filter(
-        (c) =>
-          !c.id.startsWith("optimistic-") ||
-          !findMatchingServerComment(c, comments),
+        (c) => !findMatchingServerComment(c, comments),
       );
       return filtered.length === prev.length ? prev : filtered;
     });
 
-    // Clean up optimisticReplies - remove replies that now exist on server
     setOptimisticReplies((prev) => {
       const updated: Record<string, Comment[]> = {};
       let hasChanges = false;
 
       for (const [parentId, replies] of Object.entries(prev)) {
         const filtered = replies.filter(
-          (c) =>
-            !c.id.startsWith("optimistic-") ||
-            !findMatchingServerComment(c, comments),
+          (c) => !findMatchingServerComment(c, comments),
         );
         if (filtered.length > 0) {
           updated[parentId] = filtered;
@@ -1241,6 +1235,10 @@ export default function PostDetailScreen() {
               id: confirmedCommentId,
             };
           });
+
+          setTimeout(() => {
+            refetchCommentsRef.current?.(true);
+          }, 2000);
         },
         onError: () => {},
         onRollback: () => {
