@@ -751,7 +751,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 89
+                          update 90
                         </Text>
                         <Text
                           style={{
@@ -769,7 +769,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           mirage link in post or comment will be opened inside
                           the app irrespective of the node in link, new posts
                           banner to show avatar always from 1-3, double comment
-                          showing up fix
+                          showing up fix, button on quest summary card disabled
+                          when flash quest in progress and other are claimed
+                          fix,android push notification
                         </Text>
                       </>
                     )}
@@ -810,7 +812,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 89
+                          update 90
                         </Text>
                         <Text
                           style={{
@@ -828,7 +830,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           mirage link in post or comment will be opened inside
                           the app irrespective of the node in link, new posts
                           banner to show avatar always from 1-3, double comment
-                          showing up fix
+                          showing up fix, button on quest summary card disabled
+                          when flash quest in progress and other are claimed
+                          fix,android push notification
                         </Text>
                       </>
                     )}
