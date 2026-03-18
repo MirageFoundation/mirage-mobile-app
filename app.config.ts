@@ -39,7 +39,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         monochromeImage: "./assets/images/android-icon-monochrome.png",
       },
       package: bundleIdentifier,
-      googleServicesFile: "./google-services.json",
+      googleServicesFile: process.env.GOOGLE_SERVICES_JSON,
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
       softwareKeyboardLayoutMode: "resize",
