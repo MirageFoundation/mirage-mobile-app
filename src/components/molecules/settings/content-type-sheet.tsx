@@ -11,12 +11,9 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { useToast } from "@/src/providers/toast-provider";
 import { ConfirmationPopup } from "@/src/components/molecules/confirmation-popup";
-import { AgeVerificationModal } from "@/src/components/molecules/age-verification-modal";
 import {
   ContentType,
-  isAdultContentEnabled,
   usePreferencesStore,
 } from "@/src/stores/preferences-store";
 
@@ -88,10 +85,6 @@ export const ContentTypeSheet = forwardRef<
   const insets = useSafeAreaInsets();
   const [pendingAdultType, setPendingAdultType] = useState<ContentType | null>(null);
   const setBlurSensitiveMedia = usePreferencesStore((s) => s.setBlurSensitiveMedia);
-  const ageVerified = usePreferencesStore((s) => s.ageVerified);
-  const setAgeVerified = usePreferencesStore((s) => s.setAgeVerified);
-  const [showAgeVerification, setShowAgeVerification] = useState(false);
-  const toast = useToast();
 
   const present = useCallback(() => {
     bottomSheetRef.current?.expand();
@@ -135,40 +128,14 @@ export const ContentTypeSheet = forwardRef<
       triggerHaptic("light");
 
       if (Platform.OS !== "ios" && isContentFilterType(type) && !selectedTypes.includes(type)) {
-        if (!ageVerified) {
-          setPendingAdultType(type);
-          setShowAgeVerification(true);
-          return;
-        }
         setPendingAdultType(type);
         return;
       }
 
       onToggle(type);
     },
-    [onToggle, selectedTypes, ageVerified],
+    [onToggle, selectedTypes],
   );
-
-  const handleAgeVerified = useCallback(() => {
-    setAgeVerified(true);
-    setShowAgeVerification(false);
-    toast.success("Age verified successfully");
-    Sentry.addBreadcrumb({
-      category: "content_filter",
-      message: "Age verification passed",
-      level: "info",
-    });
-  }, [setAgeVerified, toast]);
-
-  const handleAgeVerificationCancel = useCallback(() => {
-    setShowAgeVerification(false);
-    setPendingAdultType(null);
-    Sentry.addBreadcrumb({
-      category: "content_filter",
-      message: "Age verification cancelled",
-      level: "info",
-    });
-  }, []);
 
   const handleConfirmAdultContent = useCallback(() => {
     if (pendingAdultType) {
@@ -354,7 +321,7 @@ export const ContentTypeSheet = forwardRef<
       </BottomSheet>
 
       <ConfirmationPopup
-        visible={Platform.OS !== "ios" && !!pendingAdultType && !showAgeVerification}
+        visible={Platform.OS !== "ios" && !!pendingAdultType}
         title={ADULT_CONTENT_DESCRIPTIONS[pendingAdultType ?? "all"]?.title ?? "Enable Adult Content"}
         message={ADULT_CONTENT_DESCRIPTIONS[pendingAdultType ?? "all"]?.message ?? "Are you sure?"}
         description={ADULT_CONTENT_DESCRIPTIONS[pendingAdultType ?? "all"]?.description ?? ""}
@@ -364,12 +331,6 @@ export const ContentTypeSheet = forwardRef<
         isDestructive={false}
         onConfirm={handleConfirmAdultContent}
         onCancel={handleCancelAdultContent}
-      />
-
-      <AgeVerificationModal
-        visible={Platform.OS !== "ios" && showAgeVerification}
-        onVerified={handleAgeVerified}
-        onCancel={handleAgeVerificationCancel}
       />
     </>
   );
