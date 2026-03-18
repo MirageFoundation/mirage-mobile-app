@@ -20,6 +20,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useApiServer } from "@/src/providers/api-server-provider";
 import { useToast } from "@/src/providers/toast-provider";
 import { usePreferencesStore, type ThemeMode, type ApiServer, type VideoAutoplayNetwork } from "@/src/stores";
+import { isAdultContentEnabled } from "@/src/stores/preferences-store";
 import { useServerList } from "@/src/hooks/use-server-list";
 import { runInboxCheckNow, sendTestNotification, resetAndTestInboxNotification, getNotificationDebugInfo } from "@/src/services/inbox-notifications";
 import { useCloudflareErrorStore } from "@/src/stores/cloudflare-error-store";
@@ -91,6 +92,16 @@ export function SettingsScreen() {
     apiServer,
     setShareServer,
   } = usePreferencesStore();
+
+  const adultContentActive = isAdultContentEnabled(selectedContentTypes);
+
+  const handleBlurToggle = useCallback((value: boolean) => {
+    if (!value && adultContentActive) {
+      toast.error("Blur must stay on while adult content is enabled");
+      return;
+    }
+    setBlurSensitiveMedia(value);
+  }, [adultContentActive, setBlurSensitiveMedia, toast]);
 
   const { servers } = useServerList();
   const apiServerOptions = servers.map((s) => ({ value: s, label: s }));
@@ -187,8 +198,8 @@ const handleApiServerChange = useCallback(
             <SettingRow
               type="value"
               icon="filter-outline"
-              title="Content Type"
-              subtitle="Content you see in your feed"
+              title="Safe Search Filter"
+              subtitle="Adult content is hidden by default"
               rightText={getContentTypeLabel()}
               onPress={() => contentTypeSheetRef.current?.present()}
             />
@@ -201,9 +212,9 @@ const handleApiServerChange = useCallback(
               type="toggle"
               icon="eye-off-outline"
               title="Blur Sensitive Media"
-              subtitle="Blur thumbnails of sensitive content"
+              subtitle={adultContentActive ? "Required while adult content is enabled" : "Blur thumbnails of sensitive content"}
               value={blurSensitiveMedia}
-              onValueChange={setBlurSensitiveMedia}
+              onValueChange={handleBlurToggle}
             />
           ),
         },

@@ -3,17 +3,56 @@ import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useToast } from "@/src/providers/toast-provider";
+import { ConfirmationPopup } from "@/src/components/molecules/confirmation-popup";
+import { AgeVerificationModal } from "@/src/components/molecules/age-verification-modal";
 import {
   ContentType,
   isAdultContentEnabled,
+  usePreferencesStore,
 } from "@/src/stores/preferences-store";
+
+const ADULT_CONTENT_TAGS = ["porn", "violence", "gore", "death"] as const;
+
+const ADULT_CONTENT_DESCRIPTIONS: Record<string, { title: string; message: string; description: string }> = {
+  sensitive: {
+    title: "Enable Sensitive Content",
+    message: "Are you sure you want to see sensitive content?",
+    description: "This will show content flagged as sensitive in your feed. Content will be blurred by default and requires a tap to reveal.",
+  },
+  porn: {
+    title: "Enable Pornographic Content",
+    message: "Are you sure you want to see pornographic content?",
+    description: "This will show sexually explicit material in your feed. Content will be blurred by default and requires a tap to reveal.",
+  },
+  violence: {
+    title: "Enable Violent Content",
+    message: "Are you sure you want to see violent content?",
+    description: "This will show violent material in your feed. Content will be blurred by default and requires a tap to reveal.",
+  },
+  gore: {
+    title: "Enable Gore Content",
+    message: "Are you sure you want to see gore content?",
+    description: "This will show graphic gore material in your feed. Content will be blurred by default and requires a tap to reveal.",
+  },
+  death: {
+    title: "Enable Death Content",
+    message: "Are you sure you want to see death-related content?",
+    description: "This will show death-related material in your feed. Content will be blurred by default and requires a tap to reveal.",
+  },
+  all: {
+    title: "Enable All Adult Content",
+    message: "Are you sure you want to see all adult content?",
+    description: "This will show all adult material including pornography, violence, gore, and death in your feed. Content will be blurred by default and requires a tap to reveal.",
+  },
+};
 
 type ContentTypeOption = {
   value: ContentType;
@@ -47,6 +86,12 @@ export const ContentTypeSheet = forwardRef<
   const bottomSheetRef = useRef<BottomSheet>(null);
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
+  const [pendingAdultType, setPendingAdultType] = useState<ContentType | null>(null);
+  const setBlurSensitiveMedia = usePreferencesStore((s) => s.setBlurSensitiveMedia);
+  const ageVerified = usePreferencesStore((s) => s.ageVerified);
+  const setAgeVerified = usePreferencesStore((s) => s.setAgeVerified);
+  const [showAgeVerification, setShowAgeVerification] = useState(false);
+  const toast = useToast();
 
   const present = useCallback(() => {
     bottomSheetRef.current?.expand();
@@ -82,13 +127,56 @@ export const ContentTypeSheet = forwardRef<
     [],
   );
 
+  const isContentFilterType = (type: ContentType) =>
+    ADULT_CONTENT_TAGS.includes(type as any) || type === "all" || type === "sensitive";
+
+  const currentlyHasAdultContent = isAdultContentEnabled(selectedTypes);
+
   const handleSelect = useCallback(
     (type: ContentType) => {
       triggerHaptic("light");
+
+      if (isContentFilterType(type) && !selectedTypes.includes(type)) {
+        if (type === "all" || type === "sensitive" || !currentlyHasAdultContent) {
+          if (!ageVerified) {
+            setPendingAdultType(type);
+            setShowAgeVerification(true);
+            return;
+          }
+          setPendingAdultType(type);
+          return;
+        }
+      }
+
       onToggle(type);
     },
-    [onToggle],
+    [onToggle, currentlyHasAdultContent, selectedTypes, ageVerified],
   );
+
+  const handleAgeVerified = useCallback(() => {
+    setAgeVerified(true);
+    setShowAgeVerification(false);
+    toast.success("Age verified successfully");
+  }, [setAgeVerified, toast]);
+
+  const handleAgeVerificationCancel = useCallback(() => {
+    setShowAgeVerification(false);
+    setPendingAdultType(null);
+  }, []);
+
+  const handleConfirmAdultContent = useCallback(() => {
+    if (pendingAdultType) {
+      triggerHaptic("medium");
+      setBlurSensitiveMedia(true);
+      onToggle(pendingAdultType);
+      setPendingAdultType(null);
+    }
+  }, [pendingAdultType, onToggle, setBlurSensitiveMedia]);
+
+  const handleCancelAdultContent = useCallback(() => {
+    triggerHaptic("light");
+    setPendingAdultType(null);
+  }, []);
 
   const isAllSelected = selectedTypes.includes("all");
   const isNoneSelected = selectedTypes.length === 0;
@@ -99,151 +187,173 @@ export const ContentTypeSheet = forwardRef<
   };
 
   return (
-    <BottomSheet
-      ref={bottomSheetRef}
-      index={-1}
-      enableDynamicSizing
-      enablePanDownToClose
-      onChange={handleSheetChanges}
-      backdropComponent={renderBackdrop}
-      backgroundStyle={{ backgroundColor: theme.colors.background.default }}
-      handleIndicatorStyle={{ backgroundColor: theme.colors.border.default }}
-    >
-      <BottomSheetView
-        style={[styles.content, { paddingBottom: insets.bottom + 16 }]}
+    <>
+      <BottomSheet
+        ref={bottomSheetRef}
+        index={-1}
+        enableDynamicSizing
+        enablePanDownToClose
+        onChange={handleSheetChanges}
+        backdropComponent={renderBackdrop}
+        backgroundStyle={{ backgroundColor: theme.colors.background.default }}
+        handleIndicatorStyle={{ backgroundColor: theme.colors.border.default }}
       >
-        <View style={styles.header}>
-          <Box flex>
-            <Text size="lg" weight="bold">
-              Content Type
-            </Text>
-            <Text size="sm" mode="subtle">
-              Select which content you want to see
-            </Text>
-          </Box>
-          <Pressable
-            onPress={dismiss}
-            style={[
-              styles.closeButton,
-              { backgroundColor: theme.colors.background.subtle },
-            ]}
-          >
-            <Ionicons
-              name="close"
-              size={20}
-              color={theme.colors.text.default}
-            />
-          </Pressable>
-        </View>
-
-        <View style={styles.quickRow}>
-          <Pressable
-            onPress={() => handleSelect("all")}
-            style={[
-              styles.quickButton,
-              {
-                backgroundColor: isAllSelected
-                  ? "rgb(30,67,150)"
-                  : theme.colors.background.subtle,
-                borderColor: isAllSelected
-                  ? "rgb(30,67,150)"
-                  : theme.colors.border.default,
-              },
-            ]}
-          >
-            <Ionicons
-              name="globe-outline"
-              size={16}
-              color={isAllSelected ? "#FFFFFF" : theme.colors.text.default}
-            />
-            <Text
-              size="sm"
-              weight="medium"
-              style={{
-                color: isAllSelected ? "#FFFFFF" : theme.colors.text.default,
-              }}
+        <BottomSheetView
+          style={[styles.content, { paddingBottom: insets.bottom + 16 }]}
+        >
+          <View style={styles.header}>
+            <Box flex>
+              <Text size="lg" weight="bold">
+                Content Filter
+              </Text>
+              <Text size="sm" mode="subtle">
+                Adult content is hidden by default. You must explicitly enable
+                each category below.
+              </Text>
+            </Box>
+            <Pressable
+              onPress={dismiss}
+              style={[
+                styles.closeButton,
+                { backgroundColor: theme.colors.background.subtle },
+              ]}
             >
-              All
-            </Text>
-          </Pressable>
+              <Ionicons
+                name="close"
+                size={20}
+                color={theme.colors.text.default}
+              />
+            </Pressable>
+          </View>
 
-          <Pressable
-            onPress={() => handleSelect("none")}
-            style={[
-              styles.quickButton,
-              {
-                backgroundColor: isNoneSelected
-                  ? "rgb(30,67,150)"
-                  : theme.colors.background.subtle,
-                borderColor: isNoneSelected
-                  ? "rgb(30,67,150)"
-                  : theme.colors.border.default,
-              },
-            ]}
-          >
-            <Ionicons
-              name="shield-checkmark-outline"
-              size={16}
-              color={isNoneSelected ? "#FFFFFF" : theme.colors.text.default}
-            />
-            <Text
-              size="sm"
-              weight="medium"
-              style={{
-                color: isNoneSelected ? "#FFFFFF" : theme.colors.text.default,
-              }}
+          <View style={styles.quickRow}>
+            <Pressable
+              onPress={() => handleSelect("all")}
+              style={[
+                styles.quickButton,
+                {
+                  backgroundColor: isAllSelected
+                    ? "rgb(30,67,150)"
+                    : theme.colors.background.subtle,
+                  borderColor: isAllSelected
+                    ? "rgb(30,67,150)"
+                    : theme.colors.border.default,
+                },
+              ]}
             >
-              None
-            </Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.optionsList}>
-          {individualOptions.map((option) => {
-            const selected = isIndividualSelected(option.value);
-
-            return (
-              <Pressable
-                key={option.value}
-                onPress={() => handleSelect(option.value)}
-                style={({ pressed }) => [
-                  styles.optionItem,
-                  pressed && { opacity: 0.7 },
-                ]}
+              <Ionicons
+                name="globe-outline"
+                size={16}
+                color={isAllSelected ? "#FFFFFF" : theme.colors.text.default}
+              />
+              <Text
+                size="sm"
+                weight="medium"
+                style={{
+                  color: isAllSelected ? "#FFFFFF" : theme.colors.text.default,
+                }}
               >
-                <Box direction="row" alignItems="center" gap="md" flex>
-                  <Ionicons
-                    name={option.icon as any}
-                    size={20}
-                    color={theme.colors.text.default}
-                  />
-                  <Text size="md" weight="regular">
-                    {option.label}
-                  </Text>
-                </Box>
-                <View
-                  style={[
-                    styles.checkbox,
-                    {
-                      backgroundColor: selected
-                        ? "rgb(30,67,150)"
-                        : "transparent",
-                      borderColor: selected
-                        ? "rgb(30,67,150)"
-                        : theme.colors.border.default,
-                    },
+                All
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => handleSelect("none")}
+              style={[
+                styles.quickButton,
+                {
+                  backgroundColor: isNoneSelected
+                    ? "rgb(30,67,150)"
+                    : theme.colors.background.subtle,
+                  borderColor: isNoneSelected
+                    ? "rgb(30,67,150)"
+                    : theme.colors.border.default,
+                },
+              ]}
+            >
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={16}
+                color={isNoneSelected ? "#FFFFFF" : theme.colors.text.default}
+              />
+              <Text
+                size="sm"
+                weight="medium"
+                style={{
+                  color: isNoneSelected ? "#FFFFFF" : theme.colors.text.default,
+                }}
+              >
+                None
+              </Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.optionsList}>
+            {individualOptions.map((option) => {
+              const selected = isIndividualSelected(option.value);
+
+              return (
+                <Pressable
+                  key={option.value}
+                  onPress={() => handleSelect(option.value)}
+                  style={({ pressed }) => [
+                    styles.optionItem,
+                    pressed && { opacity: 0.7 },
                   ]}
                 >
-                  {selected && (
-                    <Ionicons name="checkmark" size={14} color="#FFFFFF" />
-                  )}
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      </BottomSheetView>
-    </BottomSheet>
+                  <Box direction="row" alignItems="center" gap="md" flex>
+                    <Ionicons
+                      name={option.icon as any}
+                      size={20}
+                      color={theme.colors.text.default}
+                    />
+                    <Text size="md" weight="regular">
+                      {option.label}
+                    </Text>
+                  </Box>
+                  <View
+                    style={[
+                      styles.checkbox,
+                      {
+                        backgroundColor: selected
+                          ? "rgb(30,67,150)"
+                          : "transparent",
+                        borderColor: selected
+                          ? "rgb(30,67,150)"
+                          : theme.colors.border.default,
+                      },
+                    ]}
+                  >
+                    {selected && (
+                      <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                    )}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </BottomSheetView>
+      </BottomSheet>
+
+      <ConfirmationPopup
+        visible={!!pendingAdultType && !showAgeVerification}
+        title={ADULT_CONTENT_DESCRIPTIONS[pendingAdultType ?? "all"]?.title ?? "Enable Adult Content"}
+        message={ADULT_CONTENT_DESCRIPTIONS[pendingAdultType ?? "all"]?.message ?? "Are you sure?"}
+        description={ADULT_CONTENT_DESCRIPTIONS[pendingAdultType ?? "all"]?.description ?? ""}
+        icon="eye-off"
+        confirmText={ADULT_CONTENT_DESCRIPTIONS[pendingAdultType ?? "all"]?.title ?? "Enable"}
+        cancelText="Keep Hidden"
+        isDestructive={false}
+        onConfirm={handleConfirmAdultContent}
+        onCancel={handleCancelAdultContent}
+      />
+
+      <AgeVerificationModal
+        visible={showAgeVerification}
+        onVerified={handleAgeVerified}
+        onCancel={handleAgeVerificationCancel}
+      />
+    </>
   );
 });
 
@@ -283,7 +393,6 @@ const styles = StyleSheet.create((theme) => ({
     borderWidth: 1,
   },
   optionsList: {
-    // paddingTop: theme.spacing.xs,
   },
   optionItem: {
     flexDirection: "row",

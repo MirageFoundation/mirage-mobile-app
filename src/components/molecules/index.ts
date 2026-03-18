@@ -1,4 +1,5 @@
 export { AuthSheet } from "./auth-sheet";
+export { AgeVerificationModal } from "./age-verification-modal";
 export { FeedHeader } from "./feed-header";
 export { FeedTypeTabBar, FEED_TAB_BAR_HEIGHT } from "./feed-type-tab-bar";
 export { NewPostsButton } from "./new-posts-button";

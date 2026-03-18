@@ -12,7 +12,6 @@ import {
 } from "@/src/api";
 
 import {
-AdultContentPopup,
 ConfirmationPopup,
 FeedHeader,
 NewPostsButton,
@@ -197,11 +196,6 @@ export function HomeScreen() {
   const blockUser = useContentModerationStore((s) => s.blockUser);
   const blockTopicOptimistic = useContentModerationStore((s) => s.blockTopic);
 
-  const hasSeenAdultPrompt = usePreferencesStore((s) => s.hasSeenAdultPrompt);
-  const setHasSeenAdultPrompt = usePreferencesStore(
-    (s) => s.setHasSeenAdultPrompt
-  );
-  const setAdultContent = usePreferencesStore((s) => s.setAdultContent);
   const shareServer = usePreferencesStore((s) => s.shareServer);
   const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
   const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
@@ -223,8 +217,6 @@ export function HomeScreen() {
   );
 
   const { handleFollowUser: handleFollowPress, handleFollowTopic: handleFollowTopicFromCard } = useFollowHandler({});
-
-  const showAdultPopup = !!currentUser && !hasSeenAdultPrompt;
 
   const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
   const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
@@ -253,16 +245,6 @@ export function HomeScreen() {
       [clearVoteOverride]
     ),
   });
-
-  const handleEnableAdultContent = useCallback(() => {
-    setAdultContent(true);
-    setHasSeenAdultPrompt();
-  }, [setAdultContent, setHasSeenAdultPrompt]);
-
-  const handleDeclineAdultContent = useCallback(() => {
-    setAdultContent(false);
-    setHasSeenAdultPrompt();
-  }, [setAdultContent, setHasSeenAdultPrompt]);
 
   const revealedPostsRef = useRef<Set<string>>(new Set());
   const isNavigatingRef = useRef(false);
@@ -627,12 +609,6 @@ export function HomeScreen() {
         status={easUpdate.status}
         onInstall={easUpdate.install}
         onDismiss={easUpdate.dismiss}
-      />
-
-      <AdultContentPopup
-        visible={showAdultPopup}
-        onEnable={handleEnableAdultContent}
-        onDecline={handleDeclineAdultContent}
       />
 
       <PostOptionsSheet
