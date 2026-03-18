@@ -1,5 +1,6 @@
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import * as Sentry from "@sentry/react-native";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -345,7 +346,10 @@ export function AgentsScreen() {
           }
           queryClient.invalidateQueries({ queryKey: ["posts"] });
         }, 15000);
-       } catch {
+       } catch (error) {
+        Sentry.captureException(error, {
+          tags: { feature: "agents", operation: "set-agents" },
+        });
         if (address) {
           queryClient.setQueryData(
             queryKeys.userFollowed(address),

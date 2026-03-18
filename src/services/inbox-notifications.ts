@@ -300,6 +300,9 @@ async function runInboxCheck(
 function triggerForegroundCheck(): void {
   runInboxCheck("foreground").catch((error) => {
     console.error("[InboxNotifications] Foreground check failed:", error);
+    Sentry.captureException(error, {
+      tags: { feature: "inbox-notifications", operation: "foreground-check" },
+    });
   });
 }
 
@@ -418,6 +421,9 @@ function subscribeNotificationResponses(): void {
         "[InboxNotifications] Failed to read last notification response:",
         error,
       );
+      Sentry.captureException(error, {
+        tags: { feature: "inbox-notifications", operation: "last-notification-response" },
+      });
     });
 }
 
@@ -435,6 +441,9 @@ function subscribeInboxSignals(): void {
     if (hasNewTimestamp || hasUnreadIncrease) {
       runInboxCheck("signal").catch((error) => {
         console.error("[InboxNotifications] Signal check failed:", error);
+        Sentry.captureException(error, {
+          tags: { feature: "inbox-notifications", operation: "signal-check" },
+        });
       });
     }
   });

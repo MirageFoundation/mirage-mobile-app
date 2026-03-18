@@ -539,6 +539,11 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         error: "Failed to block user",
       })
       .catch(() => {
+        Sentry.addBreadcrumb({
+          category: "user-profile",
+          message: "Block user failed",
+          level: "warning",
+        });
         setOptimisticBlocked(null);
       })
       .finally(() => {
@@ -560,6 +565,11 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         error: "Failed to unblock user",
       })
       .catch(() => {
+        Sentry.addBreadcrumb({
+          category: "user-profile",
+          message: "Unblock user failed",
+          level: "warning",
+        });
         setOptimisticBlocked(null);
       });
   }, [userAddress, displayUsername, unblockUserMutation, toast]);

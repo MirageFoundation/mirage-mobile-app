@@ -18,6 +18,7 @@ import { initInboxNotifications } from "@/src/services/inbox-notifications";
 import { initPushNotifications, registerPush } from "@/src/services/push-notifications";
 import { useAuthStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
+import * as Sentry from "@sentry/react-native";
 
 const CoreProviders = memo(({ children }: { children: React.ReactNode }) => (
   <ThemeContextProvider>
@@ -56,6 +57,9 @@ export const RootProvider = memo(
         })
         .catch((error) => {
           console.error("[RootProvider] Failed to register push after login:", error);
+          Sentry.captureException(error, {
+            tags: { feature: "push-notifications", operation: "root-provider-register" },
+          });
         });
     }, [walletAddress]);
 

@@ -43,7 +43,14 @@ function setPushEnabled(enabled: boolean): void {
 async function getExpoPushToken(): Promise<string | null> {
   try {
     const { status } = await Notifications.requestPermissionsAsync();
-    if (status !== "granted") return null;
+    if (status !== "granted") {
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: `Permission not granted: ${status}`,
+        level: "warning",
+      });
+      return null;
+    }
 
     const tokenData = await Notifications.getExpoPushTokenAsync({
       projectId: "25839d12-3bbc-4a6a-b1ee-67c4a6de816f",
@@ -67,6 +74,11 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
     const nodeConfig = queryClient.getQueryData<NodeConfigResponse>(queryKeys.nodeConfig());
     if (!nodeConfig?.push_notifications_enabled) {
       console.log("[PushNotifications] Push not enabled on this node, skipping");
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: "Push not enabled on node config, skipping registration",
+        level: "info",
+      });
       setPushEnabled(false);
       return;
     }
@@ -74,6 +86,11 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
     const token = await getExpoPushToken();
     if (!token) {
       console.log("[PushNotifications] No push token available, falling back to polling");
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: "No push token available, falling back to polling",
+        level: "warning",
+      });
       setPushEnabled(false);
       return;
     }
@@ -85,6 +102,12 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
 
     setPushEnabled(true);
     console.log("[PushNotifications] Push token registered successfully:", token);
+    Sentry.addBreadcrumb({
+      category: "push-notifications",
+      message: "Push token registered successfully",
+      data: { platform },
+      level: "info",
+    });
   } catch (error) {
     console.error("[PushNotifications] Registration failed, falling back to polling:", error);
     Sentry.captureException(error, {
@@ -102,9 +125,19 @@ export async function unregisterPush(wallet?: MirageWallet | null): Promise<void
     let token = getStoredToken();
     if (!token) {
       console.log("[PushNotifications] No stored push token found for unregister, fetching from Expo");
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: "No stored token for unregister, fetching from Expo",
+        level: "info",
+      });
       token = await getExpoPushToken();
       if (!token) {
         console.log("[PushNotifications] Could not recover push token for unregister");
+        Sentry.addBreadcrumb({
+          category: "push-notifications",
+          message: "Could not recover push token for unregister",
+          level: "warning",
+        });
         return;
       }
       storePushToken(token);
@@ -115,12 +148,22 @@ export async function unregisterPush(wallet?: MirageWallet | null): Promise<void
     const w = wallet ?? (await walletService.getWallet());
     if (!w) {
       console.log("[PushNotifications] No wallet available for unregister");
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: "No wallet available for unregister",
+        level: "warning",
+      });
       return;
     }
     console.log("[PushNotifications] Unregistering token for address:", w.address);
 
     await unregisterPushToken(w, token);
     console.log("[PushNotifications] Push token unregistered:", token);
+    Sentry.addBreadcrumb({
+      category: "push-notifications",
+      message: "Push token unregistered successfully",
+      level: "info",
+    });
   } catch (error) {
     console.error("[PushNotifications] Unregister failed:", error);
     Sentry.captureException(error, {
@@ -157,11 +200,19 @@ function subscribeAppStateForegroundReRegister(): void {
       await registerPush(wallet);
     } catch (error) {
       console.error("[PushNotifications] Foreground re-register failed:", error);
+      Sentry.captureException(error, {
+        tags: { feature: "push-notifications", operation: "foreground-re-register" },
+      });
     }
   });
 }
 
 export async function initPushNotifications(): Promise<void> {
+  Sentry.addBreadcrumb({
+    category: "push-notifications",
+    message: "Initializing push notifications service",
+    level: "info",
+  });
   subscribePushReceived();
   subscribeAppStateForegroundReRegister();
 }

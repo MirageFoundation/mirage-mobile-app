@@ -1,4 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
+import * as Sentry from "@sentry/react-native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, InteractionManager, Pressable, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -95,6 +96,11 @@ export function InboxScreen() {
                 applyViewedTimestamp(res.inbox_last_viewed_at);
               })
               .catch(() => {
+                Sentry.addBreadcrumb({
+                  category: "inbox",
+                  message: "Failed to mark inbox as viewed",
+                  level: "warning",
+                });
                 applyViewedTimestamp();
               });
           });

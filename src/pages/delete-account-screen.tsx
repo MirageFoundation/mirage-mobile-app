@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { EvilIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import * as Sentry from "@sentry/react-native";
 import { useCallback, useEffect, useState } from "react";
 import { Keyboard } from "react-native";
 import { Pressable, View } from "react-native";
@@ -65,6 +66,9 @@ export function DeleteAccountScreen() {
         }, 1200);
       }
     } catch (err) {
+      Sentry.captureException(err, {
+        tags: { feature: "delete-account", operation: "delete-account" },
+      });
       triggerHaptic("error");
       toast.error("Failed to delete account");
     }
