@@ -751,7 +751,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 90
+                          update 91
                         </Text>
                         <Text
                           style={{
@@ -771,7 +771,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           banner to show avatar always from 1-3, double comment
                           showing up fix, button on quest summary card disabled
                           when flash quest in progress and other are claimed
-                          fix,android push notification
+                          fix,android push notification, age gate and
+                          confirmation popup added to update the content on
+                          android, disabled the ability to turn off the blur
+                          when content tag is active,remove the 1st popup of
+                          adult content permission after login or signup in
+                          android
                         </Text>
                       </>
                     )}
@@ -812,7 +817,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 90
+                          update 91
                         </Text>
                         <Text
                           style={{
@@ -832,7 +837,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           banner to show avatar always from 1-3, double comment
                           showing up fix, button on quest summary card disabled
                           when flash quest in progress and other are claimed
-                          fix,android push notification
+                          fix,android push notification, age gate and
+                          confirmation popup added to update the content on
+                          android, disabled the ability to turn off the blur
+                          when content tag is active,remove the 1st popup of
+                          adult content permission after login or signup in
+                          android
                         </Text>
                       </>
                     )}
