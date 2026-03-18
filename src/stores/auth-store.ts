@@ -373,6 +373,7 @@ export const useAuthStore = create<AuthState>()(
         useContentModerationStore.getState().clearAll();
         useInboxStore.getState().resetForLogout();
         usePreferencesStore.setState({ hasSeenAdultPrompt: false });
+        usePreferencesStore.setState({ ageVerified: false });
         useDraftStore.getState().clearDraft();
       },
 
