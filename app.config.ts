@@ -95,6 +95,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         },
       ],
       "expo-sqlite",
+      "@react-native-community/datetimepicker",
       "react-native-cloud-storage",
       "react-native-edge-to-edge",
       [

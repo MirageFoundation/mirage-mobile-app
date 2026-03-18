@@ -1,17 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Sentry from "@sentry/react-native";
 import { BlurView } from "expo-blur";
-import { useCallback, useRef, useState } from "react";
-import {
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  TextInput,
-  View,
-  type TextInput as TextInputType,
-} from "react-native";
+import { useCallback, useState } from "react";
+import { Modal, Platform, Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Button, Text } from "@/src/components/ui/primitives";
@@ -23,6 +15,10 @@ type AgeVerificationModalProps = {
   onCancel: () => void;
 };
 
+const DEFAULT_DATE = new Date(2000, 0, 1);
+const MIN_DATE = new Date(1900, 0, 1);
+const MAX_DATE = new Date();
+
 export function AgeVerificationModal({
   visible,
   onVerified,
@@ -31,91 +27,72 @@ export function AgeVerificationModal({
   const { theme, rt } = useUnistyles();
   const isDark = rt.themeName === "dark";
 
-  const [month, setMonth] = useState("");
-  const [day, setDay] = useState("");
-  const [year, setYear] = useState("");
+  const [selectedDate, setSelectedDate] = useState(DEFAULT_DATE);
   const [error, setError] = useState("");
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [showAndroidPicker, setShowAndroidPicker] = useState(false);
 
-  const dayRef = useRef<TextInputType>(null);
-  const yearRef = useRef<TextInputType>(null);
+  const formatDate = (date: Date) => {
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    const yyyy = date.getFullYear();
+    return `${mm}/${dd}/${yyyy}`;
+  };
 
-  const handleVerify = useCallback((yearOverride?: string) => {
-    setError("");
-    Keyboard.dismiss();
+  const verifyAge = useCallback(
+    (date: Date) => {
+      setError("");
 
-    const m = parseInt(month, 10);
-    const d = parseInt(day, 10);
-    const y = parseInt(yearOverride ?? year, 10);
+      const today = new Date();
+      let age = today.getFullYear() - date.getFullYear();
+      const monthDiff = today.getMonth() - date.getMonth();
+      if (
+        monthDiff < 0 ||
+        (monthDiff === 0 && today.getDate() < date.getDate())
+      ) {
+        age--;
+      }
 
-    if (
-      !m ||
-      !d ||
-      !y ||
-      m < 1 ||
-      m > 12 ||
-      d < 1 ||
-      d > 31 ||
-      y < 1900 ||
-      y > new Date().getFullYear()
-    ) {
-      setError("Please enter a valid date of birth");
-      return;
-    }
+      if (age < 18) {
+        setError("You are not eligible to view this content");
+        Sentry.addBreadcrumb({
+          category: "content_filter",
+          message: "Age verification failed: underage",
+          level: "warning",
+        });
+        return;
+      }
 
-    const birthDate = new Date(y, m - 1, d);
-    if (
-      birthDate.getMonth() !== m - 1 ||
-      birthDate.getDate() !== d ||
-      birthDate.getFullYear() !== y
-    ) {
-      setError("Please enter a valid date of birth");
-      return;
-    }
+      triggerHaptic("success");
+      setSelectedDate(DEFAULT_DATE);
+      onVerified();
+    },
+    [onVerified],
+  );
 
-    const today = new Date();
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (
-      monthDiff < 0 ||
-      (monthDiff === 0 && today.getDate() < birthDate.getDate())
-    ) {
-      age--;
-    }
+  const handleDateChange = useCallback(
+    (_event: any, date?: Date) => {
+      if (Platform.OS === "android") {
+        setShowAndroidPicker(false);
+        if (_event.type === "dismissed") return;
+      }
+      if (date) {
+        setSelectedDate(date);
+        setError("");
+      }
+    },
+    [],
+  );
 
-    if (age < 18) {
-      setError("You are not eligible to view this content");
-      Sentry.addBreadcrumb({
-        category: "content_filter",
-        message: "Age verification failed: underage",
-        level: "warning",
-      });
-      return;
-    }
-
-    triggerHaptic("success");
-    setMonth("");
-    setDay("");
-    setYear("");
-    onVerified();
-  }, [month, day, year, onVerified]);
+  const handleVerify = useCallback(() => {
+    verifyAge(selectedDate);
+  }, [selectedDate, verifyAge]);
 
   const handleCancel = useCallback(() => {
     triggerHaptic("light");
     setError("");
-    setMonth("");
-    setDay("");
-    setYear("");
+    setSelectedDate(DEFAULT_DATE);
     onCancel();
   }, [onCancel]);
-
-  const handleBackdropPress = useCallback(() => {
-    if (keyboardOpen) {
-      Keyboard.dismiss();
-    } else {
-      handleCancel();
-    }
-  }, [keyboardOpen, handleCancel]);
 
   return (
     <Modal
@@ -124,16 +101,13 @@ export function AgeVerificationModal({
       animationType="fade"
       onRequestClose={handleCancel}
     >
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
+      <View style={styles.overlay}>
         <BlurView
           intensity={40}
           tint={isDark ? "dark" : "light"}
           style={StyleSheet.absoluteFill}
         />
-        <Pressable style={styles.backdrop} onPress={handleBackdropPress} />
+        <Pressable style={styles.backdrop} onPress={handleCancel} />
 
         <View
           style={[
@@ -172,115 +146,54 @@ export function AgeVerificationModal({
           </Text>
 
           <Text size="sm" mode="subtle" style={styles.description}>
-            Please enter your date of birth. This is required by app store
+            Please select your date of birth. This is required by app store
             guidelines to restrict access to adult content for minors.
           </Text>
 
-          <View style={styles.dobRow}>
-            <View style={styles.dobField}>
-              <Text
-                size="xs"
-                mode="subtle"
-                weight="medium"
-                style={styles.dobLabel}
-              >
-                Month
-              </Text>
-              <TextInput
+          {Platform.OS === "android" ? (
+            <>
+              <Pressable
+                onPress={() => setShowAndroidPicker(true)}
                 style={[
-                  styles.dobInput,
+                  styles.dateButton,
                   {
-                    color: theme.colors.text.default,
                     backgroundColor: theme.colors.background.subtle,
                     borderColor: theme.colors.border.default,
                   },
                 ]}
-                value={month}
-                onChangeText={(text) => {
-                  setMonth(text);
-                  if (text.length === 2) dayRef.current?.focus();
-                }}
-                onFocus={() => setKeyboardOpen(true)}
-                onBlur={() => setKeyboardOpen(false)}
-                placeholder="MM"
-                placeholderTextColor={theme.colors.text.subtle}
-                keyboardType="numeric"
-                maxLength={2}
-                returnKeyType="next"
-                blurOnSubmit={false}
-                onSubmitEditing={() => dayRef.current?.focus()}
-              />
-            </View>
-            <View style={styles.dobField}>
-              <Text
-                size="xs"
-                mode="subtle"
-                weight="medium"
-                style={styles.dobLabel}
               >
-                Day
-              </Text>
-              <TextInput
-                ref={dayRef}
-                style={[
-                  styles.dobInput,
-                  {
-                    color: theme.colors.text.default,
-                    backgroundColor: theme.colors.background.subtle,
-                    borderColor: theme.colors.border.default,
-                  },
-                ]}
-                value={day}
-                onChangeText={(text) => {
-                  setDay(text);
-                  if (text.length === 2) yearRef.current?.focus();
-                }}
-                onFocus={() => setKeyboardOpen(true)}
-                onBlur={() => setKeyboardOpen(false)}
-                placeholder="DD"
-                placeholderTextColor={theme.colors.text.subtle}
-                keyboardType="numeric"
-                maxLength={2}
-                returnKeyType="next"
-                blurOnSubmit={false}
-                onSubmitEditing={() => yearRef.current?.focus()}
-              />
-            </View>
-            <View style={[styles.dobField, { flex: 1.5 }]}>
-              <Text
-                size="xs"
-                mode="subtle"
-                weight="medium"
-                style={styles.dobLabel}
-              >
-                Year
-              </Text>
-              <TextInput
-                ref={yearRef}
-                style={[
-                  styles.dobInput,
-                  {
-                    color: theme.colors.text.default,
-                    backgroundColor: theme.colors.background.subtle,
-                    borderColor: theme.colors.border.default,
-                  },
-                ]}
-                value={year}
-                onChangeText={(text) => {
-                  setYear(text);
-                  if (text.length === 4) handleVerify(text);
-                }}
-                onFocus={() => setKeyboardOpen(true)}
-                onBlur={() => setKeyboardOpen(false)}
-                placeholder="YYYY"
-                placeholderTextColor={theme.colors.text.subtle}
-                keyboardType="numeric"
-                maxLength={4}
-                returnKeyType="done"
-                onSubmitEditing={handleVerify}
-              />
-            </View>
-          </View>
+                <Ionicons
+                  name="calendar-outline"
+                  size={20}
+                  color={theme.colors.text.default}
+                />
+                <Text size="md" weight="semibold" style={{ marginLeft: 8 }}>
+                  {formatDate(selectedDate)}
+                </Text>
+              </Pressable>
+              {showAndroidPicker && (
+                <DateTimePicker
+                  value={selectedDate}
+                  mode="date"
+                  display="spinner"
+                  onChange={handleDateChange}
+                  maximumDate={MAX_DATE}
+                  minimumDate={MIN_DATE}
+                />
+              )}
+            </>
+          ) : (
+            <DateTimePicker
+              value={selectedDate}
+              mode="date"
+              display="spinner"
+              onChange={handleDateChange}
+              maximumDate={MAX_DATE}
+              minimumDate={MIN_DATE}
+              style={styles.picker}
+              themeVariant={isDark ? "dark" : "light"}
+            />
+          )}
 
           {!!error && (
             <Text
@@ -313,7 +226,7 @@ export function AgeVerificationModal({
             </Button>
           </Box>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
@@ -363,26 +276,20 @@ const styles = StyleSheet.create((theme) => ({
     textAlign: "center",
     marginBottom: theme.spacing.md,
   },
-  dobRow: {
+  dateButton: {
     flexDirection: "row",
-    gap: theme.spacing.sm,
+    alignItems: "center",
+    justifyContent: "center",
     width: "100%",
-    marginBottom: theme.spacing.sm,
-  },
-  dobField: {
-    flex: 1,
-  },
-  dobLabel: {
-    marginBottom: 4,
-    textAlign: "center",
-  },
-  dobInput: {
     height: 48,
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    textAlign: "center",
-    fontSize: 18,
-    fontWeight: "600",
+    marginBottom: theme.spacing.sm,
+  },
+  picker: {
+    width: "100%",
+    height: 150,
+    marginBottom: theme.spacing.sm,
   },
   error: {
     textAlign: "center",
