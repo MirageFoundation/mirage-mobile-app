@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../query-keys";
 import { search, type SearchParams } from "../endpoints/search";
 import { useAuthStore } from "@/src/stores";
+import { usePreferencesStore, getAllowedTagsFromContentTypes } from "@/src/stores/preferences-store";
 
 /**
  * Search across topics, users, and posts
@@ -15,13 +16,16 @@ export function useSearch(
   params?: Omit<SearchParams, "q" | "address">
 ) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
+  const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes);
 
   return useQuery({
-    queryKey: queryKeys.search(query!, params?.type, params?.limit),
+    queryKey: queryKeys.search(query!, params?.type, params?.limit, allowedTags),
     queryFn: () =>
       search({
         q: query!,
         address: walletAddress ?? undefined,
+        allowed_tags: allowedTags || undefined,
         ...params,
       }),
     enabled: !!query && query.length >= 1,

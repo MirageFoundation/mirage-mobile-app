@@ -7,6 +7,7 @@ import {
   type GetUserPostsParams,
 } from "../endpoints/posts";
 import { useAuthStore } from "@/src/stores";
+import { usePreferencesStore, getAllowedTagsFromContentTypes } from "@/src/stores/preferences-store";
 
 /**
  * Get posts with pagination
@@ -77,14 +78,17 @@ export function useUserPosts(
   type?: "submissions" | "comments"
 ) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
+  const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes);
 
   return useQuery({
-    queryKey: queryKeys.userPosts(owner!, type),
+    queryKey: queryKeys.userPosts(owner!, type, allowedTags),
     queryFn: () =>
       getUserPosts({
         owner: owner!,
         address: walletAddress ?? undefined,
         type,
+        allowed_tags: allowedTags || undefined,
       }),
     enabled: !!owner,
     staleTime: 1000 * 60, // 1 minute
@@ -99,14 +103,17 @@ export function useInfiniteUserPosts(
   params?: Omit<GetUserPostsParams, "owner" | "page" | "address">
 ) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
+  const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes);
 
   return useInfiniteQuery({
-    queryKey: queryKeys.userPosts(owner!, params?.type),
+    queryKey: queryKeys.userPosts(owner!, params?.type, allowedTags),
     queryFn: ({ pageParam = 1 }) => {
       return getUserPosts({
         owner: owner!,
         address: walletAddress ?? undefined,
         page: pageParam,
+        allowed_tags: allowedTags || undefined,
         ...params,
       });
     },

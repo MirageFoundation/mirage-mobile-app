@@ -9,8 +9,8 @@ export const queryKeys = {
   // User
   userStatus: (address: string) => ["user", "status", address] as const,
   profile: (address: string) => ["user", "profile", address] as const,
-  userPosts: (owner: string, type?: string) =>
-    ["user", "posts", owner, type] as const,
+  userPosts: (owner: string, type?: string, allowedTags?: string) =>
+    ["user", "posts", owner, type, allowedTags] as const,
   userFollowed: (address: string) => ["user", "followed", address] as const,
   userBlocked: (address: string) => ["user", "blocked", address] as const,
   preferences: (address: string) => ["user", "preferences", address] as const,
@@ -31,13 +31,13 @@ export const queryKeys = {
     ["inbox", "infinite", address] as const,
 
   // Topics
-  topics: (limit?: number) => ["topics", limit] as const,
-  searchTopics: (query: string, limit?: number) =>
-    ["topics", "search", query, limit] as const,
+  topics: (limit?: number, allowedTags?: string) => ["topics", limit, allowedTags] as const,
+  searchTopics: (query: string, limit?: number, allowedTags?: string) =>
+    ["topics", "search", query, limit, allowedTags] as const,
 
   // Search
-  search: (query: string, type?: string, limit?: number) =>
-    ["search", query, type, limit] as const,
+  search: (query: string, type?: string, limit?: number, allowedTags?: string) =>
+    ["search", query, type, limit, allowedTags] as const,
 
   // Username/Address Resolution
   addressFromUsername: (username: string) =>

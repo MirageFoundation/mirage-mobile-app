@@ -41,6 +41,7 @@ export interface GetUserPostsParams {
   type?: "submissions" | "comments";
   page?: number;
   limit?: number; // max 50
+  allowed_tags?: string;
 }
 
 /**

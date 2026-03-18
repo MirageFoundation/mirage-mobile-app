@@ -7,6 +7,7 @@ export interface SearchParams {
   limit?: number; // max 50
   offset?: number;
   address?: string; // Viewer for blocked filtering
+  allowed_tags?: string;
 }
 
 /**
