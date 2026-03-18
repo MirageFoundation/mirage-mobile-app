@@ -751,7 +751,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 91
+                          update 92
                         </Text>
                         <Text
                           style={{
@@ -761,22 +761,15 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          apply multiplier to flash quest, use media size from
-                          backend for posts if provided otherwise use old size
-                          calculation on frontend as fallback,audio leak
-                          fix,push notifications from backend for mirage.vote
-                          server only, border fix for media in post card, all
-                          mirage link in post or comment will be opened inside
-                          the app irrespective of the node in link, new posts
-                          banner to show avatar always from 1-3, double comment
-                          showing up fix, button on quest summary card disabled
-                          when flash quest in progress and other are claimed
-                          fix,android push notification, age gate and
-                          confirmation popup added to update the content on
-                          android, disabled the ability to turn off the blur
-                          when content tag is active,remove the 1st popup of
-                          adult content permission after login or signup in
-                          android
+                          mature content popup changes for android,added an
+                          extra option to enable mature content in settings,
+                          blur content option text changes,blur mature media
+                          option disbaled when no content is enabled, enabling a
+                          content auto enables the blur mature media, enabling
+                          the mature content shows confirmation popup for 18+
+                          confirmation, confirmation popup in enabling content
+                          from content filter option, Added allowed_tags param
+                          to search, posts, and topics endpoints
                         </Text>
                       </>
                     )}
@@ -817,7 +810,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 91
+                          update 92
                         </Text>
                         <Text
                           style={{
@@ -827,22 +820,15 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          apply multiplier to flash quest, use media size from
-                          backend for posts if provided otherwise use old size
-                          calculation on frontend as fallback,audio leak
-                          fix,push notifications from backend for mirage.vote
-                          server only, border fix for media in post card, all
-                          mirage link in post or comment will be opened inside
-                          the app irrespective of the node in link, new posts
-                          banner to show avatar always from 1-3, double comment
-                          showing up fix, button on quest summary card disabled
-                          when flash quest in progress and other are claimed
-                          fix,android push notification, age gate and
-                          confirmation popup added to update the content on
-                          android, disabled the ability to turn off the blur
-                          when content tag is active,remove the 1st popup of
-                          adult content permission after login or signup in
-                          android
+                          mature content popup changes for android,added an
+                          extra option to enable mature content in settings,
+                          blur content option text changes,blur mature media
+                          option disbaled when no content is enabled, enabling a
+                          content auto enables the blur mature media, enabling
+                          the mature content shows confirmation popup for 18+
+                          confirmation, confirmation popup in enabling content
+                          from content filter option, Added allowed_tags param
+                          to search, posts, and topics endpoints
                         </Text>
                       </>
                     )}
