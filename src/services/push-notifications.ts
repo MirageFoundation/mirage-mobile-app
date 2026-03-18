@@ -16,6 +16,9 @@ const PUSH_ENABLED_KEY = "push-enabled";
 
 let pushReceivedSubscription: Notifications.Subscription | null = null;
 let appStateSubscription: { remove(): void } | null = null;
+let isRegisteringPush = false;
+let lastRegisterPushAt = 0;
+const REGISTER_PUSH_MIN_INTERVAL_MS = 30_000;
 
 function getStoredToken(): string | null {
   return storage.getString(PUSH_TOKEN_KEY) ?? null;
@@ -56,6 +59,10 @@ async function getExpoPushToken(): Promise<string | null> {
 }
 
 export async function registerPush(wallet: MirageWallet): Promise<void> {
+  if (isRegisteringPush) return;
+  const now = Date.now();
+  if (now - lastRegisterPushAt < REGISTER_PUSH_MIN_INTERVAL_MS) return;
+  isRegisteringPush = true;
   try {
     const nodeConfig = queryClient.getQueryData<NodeConfigResponse>(queryKeys.nodeConfig());
     if (!nodeConfig?.push_notifications_enabled) {
@@ -84,6 +91,9 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
       tags: { feature: "push-notifications", operation: "register" },
     });
     setPushEnabled(false);
+  } finally {
+    isRegisteringPush = false;
+    lastRegisterPushAt = Date.now();
   }
 }
 
