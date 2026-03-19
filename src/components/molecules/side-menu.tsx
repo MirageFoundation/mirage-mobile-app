@@ -772,7 +772,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           opens the inbox and show activity indicator on top
                           while fetching new msg,redgif videos not appearing
                           sometimes fixed, all videos stuck on loading when app
-                          state changes fixed
+                          state changes fixed,tap to reveal not responding in
+                          profile posts
                         </Text>
                       </>
                     )}

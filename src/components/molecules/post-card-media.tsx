@@ -414,6 +414,10 @@ export const PostCardMedia = memo(
       (event: GestureResponderEvent) => {
         event.stopPropagation?.();
         if (isPostDetail) return;
+        if (shouldBlurContent) {
+          onRevealContent?.();
+          return;
+        }
         if (!allowAutoplay && !isVideoPlaying && !feedTappedToPlay) {
           setFeedTappedToPlay(true);
           handleVideoToggle();
@@ -422,13 +426,17 @@ export const PostCardMedia = memo(
         triggerHaptic("selection");
         onMediaPress?.();
       },
-      [isPostDetail, allowAutoplay, isVideoPlaying, feedTappedToPlay, handleVideoToggle, onMediaPress],
+      [isPostDetail, shouldBlurContent, onRevealContent, allowAutoplay, isVideoPlaying, feedTappedToPlay, handleVideoToggle, onMediaPress],
     );
 
     const handleFeedYouTubeTap = useCallback(
       (event: GestureResponderEvent) => {
         event.stopPropagation?.();
         if (isPostDetail) return;
+        if (shouldBlurContent) {
+          onRevealContent?.();
+          return;
+        }
         if (Platform.OS === "android" && !shouldAutoPlayYouTube && !isVideoPlaying && !feedTappedToPlay) {
           setFeedTappedToPlay(true);
           return;
@@ -436,7 +444,7 @@ export const PostCardMedia = memo(
         triggerHaptic("selection");
         onMediaPress?.();
       },
-      [isPostDetail, shouldAutoPlayYouTube, isVideoPlaying, feedTappedToPlay, onMediaPress],
+      [isPostDetail, shouldBlurContent, onRevealContent, shouldAutoPlayYouTube, isVideoPlaying, feedTappedToPlay, onMediaPress],
     );
 
     const resolvedMediaUriForCacheRef = useRef(media?.uri);

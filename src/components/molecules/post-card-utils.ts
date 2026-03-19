@@ -281,9 +281,11 @@ export function resolvePostContent(
     ? { ...resolvedMedia, uri: redgifsVideoUrl, type: "video" as const }
     : resolvedMedia;
 
+  const isBodyUrlRenderedAsMedia = bodyVideoUrl || (extractedUrl && getMediaTypeFromUrl(extractedUrl) === "gif");
+
   return {
     extractedUrl,
-    bodyWithoutUrl: (isOgThumbnail || !bodyVideoUrl) ? body : bodyWithoutUrl,
+    bodyWithoutUrl: (isOgThumbnail || !isBodyUrlRenderedAsMedia) ? body : bodyWithoutUrl,
     displayDomain,
     bodyVideoUrl,
     resolvedMedia: finalMedia,

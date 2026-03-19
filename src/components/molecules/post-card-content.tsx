@@ -39,7 +39,6 @@ export const PostCardContent = memo(function PostCardContent({
         <View style={styles.warningBadge}>
           <ContentWarningBadge
             types={contentWarnings}
-            onPress={onRevealContent}
             compact
           />
         </View>

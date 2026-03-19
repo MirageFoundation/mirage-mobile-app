@@ -1243,6 +1243,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           viewabilityConfig={profileViewabilityConfig}
           onViewableItemsChanged={onProfileViewableItemsChanged}
           onMomentumScrollEnd={handleProfileMomentumScrollEnd}
+          extraData={revealedPosts}
         />
       </GestureDetector>
 
