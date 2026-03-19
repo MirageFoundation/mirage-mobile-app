@@ -736,15 +736,8 @@ export function CreateScreen() {
     if (isSubmitting) return;
 
     triggerHaptic("selection");
-    clearDraft();
-    VIDEO_UPLOADS.clear();
-    setVideoUploadState({});
-    VIDEO_META.clear();
-    _handledVideoParam = null;
-    setIsVideoMuted(false);
-    setIsVideoPlaying(false);
     router.back();
-  }, [isSubmitting, clearDraft]);
+  }, [isSubmitting]);
 
   const handlePost = useCallback(async () => {
     if (!canPost || isSubmitting) return;

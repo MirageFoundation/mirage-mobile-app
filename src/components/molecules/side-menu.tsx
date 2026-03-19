@@ -765,7 +765,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           fix,added some new conditions to auto fill create post
                           from meta data,remove username of x in title when auto
                           filled, race condition in refresh and check new posts
-                          fix
+                          fix,added mark as seen button in header of inbox,
+                          cross in create post should not clear the post draft
                         </Text>
                       </>
                     )}
@@ -820,7 +821,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           fix,added some new conditions to auto fill create post
                           from meta data,remove username of x in title when auto
                           filled, race condition in refresh and check new posts
-                          fix
+                          fix,added mark as seen button in header of inbox
                         </Text>
                       </>
                     )}
