@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { ResizeMode, Video } from "expo-av";
+import { Audio, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -163,6 +163,12 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
     const newGlobalMuted = !globalMuted;
     toggleMute();
     try {
+      if (!newGlobalMuted) {
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+        });
+      }
       if (videoRef.current) {
         const newEffective = isPostDetail
           ? newGlobalMuted

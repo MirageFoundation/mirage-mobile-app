@@ -2,7 +2,7 @@ import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
+import { Audio, AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
 import {
   memo,
@@ -484,6 +484,13 @@ export const PostCardMedia = memo(
         triggerHaptic("light");
         const newGlobalMuted = !globalMuted;
         toggleMute();
+
+        if (!newGlobalMuted) {
+          await Audio.setAudioModeAsync({
+            playsInSilentModeIOS: true,
+            staysActiveInBackground: false,
+          }).catch(() => {});
+        }
 
         if (media?.type === "youtube") {
           if (shouldUseAndroidYouTubeEmbed) {
