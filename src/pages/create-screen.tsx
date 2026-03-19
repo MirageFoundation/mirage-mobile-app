@@ -450,6 +450,7 @@ export function CreateScreen() {
             level: "info",
           });
           let finalTitle: string | undefined;
+          let titleOverflow = "";
           if (meta.title) {
             finalTitle = meta.title;
             if (meta.domain === "instagram.com") {
@@ -458,11 +459,45 @@ export function CreateScreen() {
                 finalTitle = `${igMatch[1]} on Instagram`;
               }
             }
-            finalTitle = decodeHtmlEntities(finalTitle);
-            updateDraft({ title: finalTitle.slice(0, tierLimits.maxTitleLength) });
+            if ((meta.domain === "x.com" || meta.domain === "twitter.com") && /^.+\s+\(@\w+\)$/.test(finalTitle)) {
+              finalTitle = undefined;
+            }
+            if (finalTitle) {
+              finalTitle = decodeHtmlEntities(finalTitle);
+              if (finalTitle.length > tierLimits.maxTitleLength) {
+                const lines = finalTitle.split("\n");
+                let titlePart = "";
+                let overflowLines: string[] = [];
+                for (let i = 0; i < lines.length; i++) {
+                  const candidate = titlePart ? `${titlePart}\n${lines[i]}` : lines[i];
+                  if (candidate.length <= tierLimits.maxTitleLength) {
+                    titlePart = candidate;
+                  } else {
+                    overflowLines = lines.slice(i);
+                    break;
+                  }
+                }
+                if (!titlePart && lines[0]) {
+                  titlePart = lines[0].slice(0, tierLimits.maxTitleLength);
+                  overflowLines = lines;
+                }
+                finalTitle = titlePart;
+                titleOverflow = overflowLines.join("\n").trim();
+              }
+              updateDraft({ title: finalTitle.slice(0, tierLimits.maxTitleLength) });
+            }
           }
           const bodyParts: string[] = [];
-          if (meta.description) {
+          if (!finalTitle && meta.description) {
+            let desc = decodeHtmlEntities(meta.description);
+            const lines = desc.split("\n");
+            finalTitle = lines[0].slice(0, tierLimits.maxTitleLength);
+            updateDraft({ title: finalTitle });
+            const remaining = lines.slice(1).join("\n").trim();
+            if (remaining) {
+              bodyParts.push(remaining.slice(0, tierLimits.maxContentLength));
+            }
+          } else if (meta.description && meta.description !== meta.title) {
             let desc = meta.description;
             if (meta.domain === "instagram.com" && meta.title) {
               const igCaptionMatch = meta.title.match(/on\s+Instagram:\s*"(.+)"/s);
@@ -482,6 +517,9 @@ export function CreateScreen() {
                 .trim();
             }
             bodyParts.push(desc.slice(0, tierLimits.maxContentLength));
+          }
+          if (titleOverflow) {
+            bodyParts.unshift(titleOverflow);
           }
           updateDraft({ body: bodyParts.join("\n\n").slice(0, tierLimits.maxContentLength) });
           console.log("[CreateScreen] Draft auto-filled:", {
