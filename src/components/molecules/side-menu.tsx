@@ -769,7 +769,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           cross in create post should not clear the post
                           draft,clciking vote icon continously for long time
                           mess fix,clciking on notification sent from backend
-                          opens the inbox now
+                          opens the inbox and show activity indicator on top
+                          while fetching new msg,redgif videos not appearing
+                          sometimes fixed, all videos stuck on loading when app
+                          state changes fixed
                         </Text>
                       </>
                     )}

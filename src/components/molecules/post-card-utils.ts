@@ -146,15 +146,25 @@ export function normalizeVideoUrl(url: string): string {
 export function resolveRedgifsVideoUrl(posterUrl: string): string | null {
   try {
     const parsedUrl = new URL(posterUrl);
-    if (parsedUrl.hostname.includes("redgifs.com") && /\.(jpg|jpeg|png|webp|gif)$/i.test(parsedUrl.pathname)) {
-      return posterUrl.replace(/-poster(\.\w+)$/, "-mobile.mp4").replace(/\.(jpg|jpeg|png|webp|gif)$/i, ".mp4");
+    if (!parsedUrl.hostname.includes("redgifs.com")) return null;
+    if (/\.(mp4|m4v|webm)$/i.test(parsedUrl.pathname)) {
+      return posterUrl;
     }
+    if (/\.(jpg|jpeg|png|webp|gif)$/i.test(parsedUrl.pathname)) {
+      const mobile = posterUrl.replace(/-poster(\.\w+)$/, "-mobile.mp4").replace(/\.(jpg|jpeg|png|webp|gif)$/i, ".mp4");
+      return mobile;
+    }
+    return posterUrl;
   } catch {
-    if (posterUrl.includes("redgifs.com") && /\.(jpg|jpeg|png|webp|gif)/i.test(posterUrl)) {
+    if (!posterUrl.includes("redgifs.com")) return null;
+    if (/\.(mp4|m4v|webm)/i.test(posterUrl)) {
+      return posterUrl;
+    }
+    if (/\.(jpg|jpeg|png|webp|gif)/i.test(posterUrl)) {
       return posterUrl.replace(/-poster(\.\w+)$/, "-mobile.mp4").replace(/\.(jpg|jpeg|png|webp|gif)$/i, ".mp4");
     }
+    return posterUrl;
   }
-  return null;
 }
 
 export function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" | "youtube" {

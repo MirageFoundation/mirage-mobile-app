@@ -19,6 +19,7 @@ import { initPushNotifications, registerPush } from "@/src/services/push-notific
 import { useAuthStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
 import * as Sentry from "@sentry/react-native";
+import { Audio } from "expo-av";
 
 const CoreProviders = memo(({ children }: { children: React.ReactNode }) => (
   <ThemeContextProvider>
@@ -45,6 +46,11 @@ export const RootProvider = memo(
     useEffect(() => {
       initInboxNotifications();
       initPushNotifications();
+      Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      }).catch(() => {});
     }, []);
 
     useEffect(() => {

@@ -17,6 +17,7 @@ import {
 import { type ImageLoadEventData } from "expo-image";
 import {
   ActivityIndicator,
+  AppState,
   Dimensions,
   Linking,
   Platform,
@@ -126,6 +127,8 @@ export const PostCardMedia = memo(
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const playRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pauseDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const videoErrorRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const videoErrorRetryCountRef = useRef(0);
 
     const aspectRatioLockedRef = useRef(false);
     const userInitiatedPlayRef = useRef(false);
@@ -194,6 +197,9 @@ export const PostCardMedia = memo(
         }
         if (pauseDelayRef.current) {
           clearTimeout(pauseDelayRef.current);
+        }
+        if (videoErrorRetryRef.current) {
+          clearTimeout(videoErrorRetryRef.current);
         }
       };
     }, []);
@@ -554,14 +560,36 @@ export const PostCardMedia = memo(
       [shouldBlurContent, onRevealContent, onMediaPress],
     );
 
-    // Don't hide cloudflarestream videos on error - they might be processing
     const isCloudflareVideo =
       media?.uri?.includes("cloudflarestream.com") ||
       media?.uri?.includes("videodelivery.net");
+    const isRedgifsVideo = media?.uri?.includes("redgifs.com");
+    const isRetryableVideo = isCloudflareVideo || isRedgifsVideo;
     const shouldHideOnError =
-      imageError && !isCloudflareVideo && !isVideoProcessing;
+      imageError && !isRetryableVideo && !isVideoProcessing;
 
     const wasOfflineRef = useRef(false);
+    const wasBackgroundedRef = useRef(false);
+
+    useEffect(() => {
+      const sub = AppState.addEventListener("change", (nextState) => {
+        if (nextState === "background") {
+          wasBackgroundedRef.current = true;
+        } else if (nextState === "active" && wasBackgroundedRef.current) {
+          wasBackgroundedRef.current = false;
+          if (isVideoProcessing || (imageError && isRetryableVideo)) {
+            setTimeout(() => {
+              setIsVideoProcessing(false);
+              setImageError(false);
+              setIsVideoLoading(false);
+              setMediaRetryKey((k) => k + 1);
+            }, 500);
+          }
+        }
+      });
+      return () => sub.remove();
+    }, [isVideoProcessing, imageError, isRetryableVideo]);
+
     useEffect(() => {
       if (!isConnected) {
         wasOfflineRef.current = true;
@@ -617,7 +645,7 @@ export const PostCardMedia = memo(
                 >
                   No internet connection
                 </Text>
-                <Text>
+                <Text
                   size="xs"
                   style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}
                 >
@@ -814,9 +842,13 @@ export const PostCardMedia = memo(
                     setIsVideoLoading(false);
                     userInitiatedPlayRef.current = false;
                   }
-                  // Video loaded successfully - clear processing state
                   if (isVideoProcessing) {
                     setIsVideoProcessing(false);
+                  }
+                  videoErrorRetryCountRef.current = 0;
+                  if (videoErrorRetryRef.current) {
+                    clearTimeout(videoErrorRetryRef.current);
+                    videoErrorRetryRef.current = null;
                   }
                   videoRef.current?.setStatusAsync({ isMuted: effectiveMuted }).catch(() => {});
                 }}
@@ -830,12 +862,27 @@ export const PostCardMedia = memo(
                       mediaSource.uri,
                     );
                   }
-                  // For cloudflare stream videos, show processing state instead of hiding
                   const isCloudflare =
                     mediaSource.uri?.includes("cloudflarestream.com") ||
                     mediaSource.uri?.includes("videodelivery.net");
-                  if (isCloudflare) {
+                  const isRedgifs = mediaSource.uri?.includes("redgifs.com");
+                  if (isCloudflare || isRedgifs) {
                     setIsVideoProcessing(true);
+                    if (videoErrorRetryCountRef.current < 3) {
+                      videoErrorRetryCountRef.current += 1;
+                      if (videoErrorRetryRef.current) clearTimeout(videoErrorRetryRef.current);
+                      videoErrorRetryRef.current = setTimeout(() => {
+                        setIsVideoProcessing(false);
+                        setImageError(false);
+                        setIsVideoLoading(false);
+                        setMediaRetryKey((k) => k + 1);
+                      }, 2000 * videoErrorRetryCountRef.current);
+                    } else {
+                      if (videoErrorRetryRef.current) clearTimeout(videoErrorRetryRef.current);
+                      videoErrorRetryRef.current = setTimeout(() => {
+                        setIsVideoProcessing(false);
+                      }, 5000);
+                    }
                   } else {
                     setImageError(true);
                   }
@@ -975,8 +1022,7 @@ export const PostCardMedia = memo(
             </Pressable>
           )}
 
-          {/* Video processing overlay for Cloudflare Stream */}
-          {isVideoProcessing && isCloudflareVideo && isConnected && (
+          {isVideoProcessing && isRetryableVideo && isConnected && (
             <View style={styles.processingOverlay}>
               <ActivityIndicator size="large" color="#fff" />
               <Text
@@ -984,13 +1030,13 @@ export const PostCardMedia = memo(
                 weight="semibold"
                 style={{ color: "#fff", marginTop: 8 }}
               >
-                Video processing...
+                {isRedgifsVideo ? "Loading video..." : "Video processing..."}
               </Text>
               <Text
                 size="xs"
                 style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}
               >
-                This may take a few moments
+                {isRedgifsVideo ? "Retrying..." : "This may take a few moments"}
               </Text>
             </View>
           )}

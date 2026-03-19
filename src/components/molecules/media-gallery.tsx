@@ -96,6 +96,9 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pauseDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
+  const errorRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errorRetryCountRef = useRef(0);
 
   useEffect(() => {
     if (GALLERY_LOADED_CACHE.has(item.uri)) return;
@@ -110,6 +113,9 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
       }
       if (pauseDelayRef.current) {
         clearTimeout(pauseDelayRef.current);
+      }
+      if (errorRetryRef.current) {
+        clearTimeout(errorRetryRef.current);
       }
     };
   }, []);
@@ -205,6 +211,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
         />
       ) : null}
       <Video
+        key={retryKey}
         ref={videoRef}
         source={{ uri: item.uri }}
         style={[galleryStyles.itemMedia, { width, height }]}
@@ -217,6 +224,11 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
           setIsLoading(false);
           GALLERY_LOADED_CACHE.add(item.uri);
           if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+          errorRetryCountRef.current = 0;
+          if (errorRetryRef.current) {
+            clearTimeout(errorRetryRef.current);
+            errorRetryRef.current = null;
+          }
           videoRef.current?.setStatusAsync({ isMuted: effectiveMuted }).catch(() => {});
         }}
         onPlaybackStatusUpdate={(status) => {
@@ -234,6 +246,16 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
               ASPECT_RATIO_CACHE.set(item.uri, ratio);
               onAspectRatioDetected?.(item.uri, ratio);
             }
+          }
+        }}
+        onError={() => {
+          if (errorRetryCountRef.current < 3) {
+            errorRetryCountRef.current += 1;
+            if (errorRetryRef.current) clearTimeout(errorRetryRef.current);
+            errorRetryRef.current = setTimeout(() => {
+              setIsLoading(true);
+              setRetryKey((k) => k + 1);
+            }, 2000 * errorRetryCountRef.current);
           }
         }}
       />
