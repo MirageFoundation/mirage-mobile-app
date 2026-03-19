@@ -1283,10 +1283,8 @@ export function QuestsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!data || dataUpdatedAt < Date.now() - 30_000) {
-        refetch();
-      }
-    }, [refetch, data, dataUpdatedAt]),
+      refetch();
+    }, [refetch]),
   );
 
   useEffect(() => {
