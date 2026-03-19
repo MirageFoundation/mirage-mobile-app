@@ -234,10 +234,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     action.onOptimisticUpdate?.();
 
     const state = get();
-    const wasIdle =
-      !state.isProcessing &&
-      !state.currentAction &&
-      state.queue.length === 0;
+    const needsKick = !isProcessingLock && !state.currentAction;
 
     set({
       queue: [...state.queue, action as PowAction],
@@ -245,7 +242,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       isProcessing: true,
     });
 
-    if (wasIdle) {
+    if (needsKick) {
       InteractionManager.runAfterInteractions(() => {
         setTimeout(() => get().processNext(), 16);
       });
@@ -280,6 +277,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       set({
         queue: newQueue,
         totalCount: Math.max(0, state.totalCount - 1),
+        isProcessing: newQueue.length > 0 || state.currentAction !== null,
       });
       return true;
     }
@@ -411,9 +409,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
 
         Promise.race([nativeCleanup, maxWait]).then(() => {
           isProcessingLock = false;
-          if (get().queue.length > 0) {
-            get().processNext();
-          }
+          get().processNext();
         });
     } else {
        isProcessingLock = false;
