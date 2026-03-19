@@ -3,7 +3,7 @@ import { Box, Text } from "@/src/components/ui/primitives";
 import { walletService } from "@/src/services/wallet-service";
 import * as Sentry from "@sentry/react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, View } from "react-native";
 import PagerView from "react-native-pager-view";

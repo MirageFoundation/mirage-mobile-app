@@ -6,7 +6,7 @@ import {
   BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useRef } from "react";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 

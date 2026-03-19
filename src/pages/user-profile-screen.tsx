@@ -4,7 +4,8 @@ import * as Sentry from "@sentry/react-native";
 import * as Clipboard from "expo-clipboard";
 import { useIsFocused } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,

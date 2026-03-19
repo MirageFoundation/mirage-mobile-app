@@ -2,7 +2,7 @@ import { EvilIcons, Ionicons, Feather } from "@expo/vector-icons";
 import * as Sentry from "@sentry/react-native";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState, useRef, useEffect } from "react";
 import {

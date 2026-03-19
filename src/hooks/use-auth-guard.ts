@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useAuthStore, useUIStore } from "@/src/stores";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 
 export const useAuthGuard = () => {
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);

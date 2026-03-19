@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, useWindowDimensions, View } from "react-native";
 import Animated, {

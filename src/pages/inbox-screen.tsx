@@ -1,4 +1,5 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import * as Sentry from "@sentry/react-native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, InteractionManager, Pressable, RefreshControl, View } from "react-native";

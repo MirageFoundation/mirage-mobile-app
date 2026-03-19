@@ -2,7 +2,7 @@ import { navigateToEditPost } from "@/src/utils/edit-post";
 import * as Sentry from "@sentry/react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect } from "@react-navigation/native";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Platform, View, type AppStateStatus } from "react-native";
 

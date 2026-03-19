@@ -1,5 +1,5 @@
 import * as Linking from "expo-linking";
-import { router } from "expo-router";
+import { router } from "@/src/utils/guarded-router";
 import { usePreferencesStore } from "@/src/stores";
 import { getRootPostId } from "@/src/api/read/endpoints/posts";
 

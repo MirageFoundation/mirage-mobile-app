@@ -3,7 +3,7 @@ import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Sentry from "@sentry/react-native";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,

@@ -1,7 +1,7 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { useIsFocused } from "@react-navigation/native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Dimensions, FlatList, Platform, Pressable, View, type ViewToken } from "react-native";

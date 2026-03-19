@@ -37,7 +37,7 @@ import {
   usePreferencesStore,
   type ApiServer,
 } from "@/src/stores";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { LogoutConfirmationPopup } from "./logout-confirmation-popup";
 import {
   ValuePickerSheet,
@@ -773,7 +773,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           while fetching new msg,redgif videos not appearing
                           sometimes fixed, all videos stuck on loading when app
                           state changes fixed,tap to reveal not responding in
-                          profile posts
+                          profile posts,refresh quests everytime we open quests
+                          screen, refresh quest on home on refresh or tab
+                          switch, clicking on any button twice quickly opens
+                          double same screen one upon another fixed
                         </Text>
                       </>
                     )}

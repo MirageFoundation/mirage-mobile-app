@@ -17,7 +17,8 @@ import { useAuthStore, useUIStore } from "@/src/stores";
 import { useInboxStore } from "@/src/stores/inbox-store";
 import { useShareIntentContext } from "expo-share-intent";
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs, router } from "expo-router";
+import { Tabs } from "expo-router";
+import { router } from "@/src/utils/guarded-router";
 import {
   Pressable,
   StyleSheet as RNStyleSheet,
