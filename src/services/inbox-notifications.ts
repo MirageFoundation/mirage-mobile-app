@@ -336,7 +336,7 @@ function subscribeAppState(): void {
   }
 }
 
-const STALE_NOTIFICATION_MS = 5 * 60_000;
+const STALE_NOTIFICATION_MS = 24 * 60 * 60_000;
 const HANDLED_NOTIFICATION_IDS_KEY = "inbox-handled-notification-ids";
 
 function getHandledNotificationIds(): Set<string> {
@@ -368,19 +368,28 @@ function handleNotificationResponse(
       return;
     }
     const responseDate = response.notification?.date;
-    if (!responseDate) {
-      console.log("[InboxNotifications] No date on notification, ignoring:", notificationId);
-      return;
-    }
-    const dateMs = responseDate < 1e12 ? responseDate * 1000 : responseDate;
-    const ageMs = Date.now() - dateMs;
-    if (ageMs > STALE_NOTIFICATION_MS) {
-      console.log("[InboxNotifications] Ignoring stale notification response, age:", ageMs);
-      return;
+    if (responseDate) {
+      const dateMs = responseDate < 1e12 ? responseDate * 1000 : responseDate;
+      const ageMs = Date.now() - dateMs;
+      if (ageMs > STALE_NOTIFICATION_MS) {
+        console.log("[InboxNotifications] Ignoring stale notification response, age:", ageMs);
+        return;
+      }
     }
     handledNotificationIds.add(notificationId);
     saveHandledNotificationIds(handledNotificationIds);
+    const prefetchInbox = () => {
+      const address = useAuthStore.getState().walletAddress;
+      if (!address) return;
+      queryClient.prefetchInfiniteQuery({
+        queryKey: queryKeys.inboxInfinite(address),
+        queryFn: () => api.get<InboxResponse>("/get_inbox", { address, limit: 25 }),
+        initialPageParam: 1,
+        staleTime: 0,
+      });
+    };
     const navigateToInbox = async () => {
+      prefetchInbox();
       await waitForTabsReady();
       router.navigate({
         pathname: "/(tabs)/inbox",

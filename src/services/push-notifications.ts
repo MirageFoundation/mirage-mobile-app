@@ -10,6 +10,8 @@ import { queryClient } from "@/src/providers/query-provider";
 import { queryKeys } from "@/src/api/read/query-keys";
 import type { NodeConfigResponse } from "@/src/api/types";
 import type { MirageWallet } from "@/src/wallet";
+import { useAuthStore } from "@/src/stores/auth-store";
+import { getInbox } from "@/src/api/read/endpoints/inbox";
 
 const PUSH_TOKEN_KEY = "push-token";
 const PUSH_ENABLED_KEY = "push-enabled";
@@ -183,6 +185,14 @@ function subscribePushReceived(): void {
     const data = notification.request.content.data;
     if (data?.replyId) {
       markRepliesAsNotified([data.replyId as string]);
+    }
+    const address = useAuthStore.getState().walletAddress;
+    if (address) {
+      queryClient.prefetchInfiniteQuery({
+        queryKey: queryKeys.inboxInfinite(address),
+        queryFn: ({ pageParam = 1 }) => getInbox({ address, page: pageParam, limit: 25 }),
+        initialPageParam: 1,
+      });
     }
   });
 }

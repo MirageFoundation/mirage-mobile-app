@@ -766,7 +766,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           from meta data,remove username of x in title when auto
                           filled, race condition in refresh and check new posts
                           fix,added mark as seen button in header of inbox,
-                          cross in create post should not clear the post draft
+                          cross in create post should not clear the post
+                          draft,clciking vote icon continously for long time
+                          mess fix,clciking on notification sent from backend
+                          opens the inbox now
                         </Text>
                       </>
                     )}

@@ -1,12 +1,13 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Sentry from "@sentry/react-native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, InteractionManager, Pressable, RefreshControl, View } from "react-native";
+import { ActivityIndicator, FlatList, InteractionManager, Pressable, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import * as Notifications from "expo-notifications";
 
 import { useInfiniteInbox } from "@/src/api/read/hooks/use-inbox";
 import { triggerHaptic } from "@/src/components/utils/haptics";
@@ -86,6 +87,8 @@ export function InboxScreen() {
       setInboxActive(true);
       markAsViewed();
       refetch();
+      Notifications.dismissAllNotificationsAsync();
+      Notifications.setBadgeCountAsync(0);
       const task = InteractionManager.runAfterInteractions(() => {
         if (walletAddress) {
           walletService.getWallet().then((wallet) => {
@@ -271,6 +274,7 @@ export function InboxScreen() {
         data={replies}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
+        ListHeaderComponent={fromNotification && isRefetching && !isRefreshing ? <ActivityIndicator style={{ paddingVertical: 12 }} color={theme.colors.primary[500]} /> : null}
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}
         onEndReached={handleEndReached}
