@@ -9,9 +9,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 
 import { useInfiniteInbox } from "@/src/api/read/hooks/use-inbox";
+import { triggerHaptic } from "@/src/components/utils/haptics";
 import type { InboxReply } from "@/src/api/types";
 import { InboxItem } from "@/src/components/molecules/inbox-item";
-import { InboxOptionsSheet, type InboxOptionsSheetRef } from "@/src/components/molecules/inbox-options-sheet";
 import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useAuthStore } from "@/src/stores";
@@ -47,7 +47,6 @@ export function InboxScreen() {
     );
   const readReplyIdsSet = useMemo(() => new Set(readReplyIds), [readReplyIds]);
   const listRef = useRef<FlatList<InboxReply>>(null);
-  const inboxOptionsRef = useRef<InboxOptionsSheetRef>(null);
   const applyViewedTimestamp = useCallback(
     (timestamp?: number) => {
       const resolved =
@@ -138,11 +137,8 @@ export function InboxScreen() {
     }
   }, [refetch]);
 
-  const handleOpenOptions = useCallback(() => {
-    inboxOptionsRef.current?.present();
-  }, []);
-
   const handleMarkAllAsSeen = useCallback(() => {
+    triggerHaptic("light");
     advanceHighlightBaseline();
   }, [advanceHighlightBaseline]);
 
@@ -256,12 +252,17 @@ export function InboxScreen() {
             Inbox
           </Text>
         </View>
-        <Pressable onPress={handleOpenOptions} hitSlop={8}>
-          <Ionicons
-            name="ellipsis-horizontal"
-            size={22}
-            color={theme.colors.text.default}
-          />
+        <Pressable
+          onPress={handleMarkAllAsSeen}
+          hitSlop={8}
+          style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+        >
+          <View style={styles.markSeenButton}>
+            <Ionicons name="checkmark-done-outline" size={18} color={theme.colors.text.subtle} />
+            <Text size="md" weight="semibold" mode="subtle">
+              Mark as seen
+            </Text>
+          </View>
         </Pressable>
       </View>
 
@@ -291,10 +292,6 @@ export function InboxScreen() {
         windowSize={10}
         initialNumToRender={10}
       />
-      <InboxOptionsSheet
-        ref={inboxOptionsRef}
-        onMarkAllAsSeen={handleMarkAllAsSeen}
-      />
     </Box>
   );
 }
@@ -313,6 +310,11 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  markSeenButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   emptyContainer: {
     flex: 1,

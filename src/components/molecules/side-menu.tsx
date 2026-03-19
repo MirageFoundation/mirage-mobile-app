@@ -764,7 +764,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           extracting gif from link shared from external app
                           fix,added some new conditions to auto fill create post
                           from meta data,remove username of x in title when auto
-                          filled
+                          filled, race condition in refresh and check new posts
+                          fix
                         </Text>
                       </>
                     )}
@@ -818,7 +819,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           extracting gif from link shared from external app
                           fix,added some new conditions to auto fill create post
                           from meta data,remove username of x in title when auto
-                          filled
+                          filled, race condition in refresh and check new posts
+                          fix
                         </Text>
                       </>
                     )}
