@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Sentry from "@sentry/react-native";
-import BottomSheet, {
+import {
   BottomSheetBackdrop,
+  BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from "react";
@@ -80,18 +81,18 @@ export const ContentTypeSheet = forwardRef<
   ContentTypeSheetRef,
   ContentTypeSheetProps
 >(({ selectedTypes, onToggle, onDismiss }, ref) => {
-  const bottomSheetRef = useRef<BottomSheet>(null);
+  const bottomSheetRef = useRef<BottomSheetModal>(null);
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const [pendingAdultType, setPendingAdultType] = useState<ContentType | null>(null);
   const setBlurSensitiveMedia = usePreferencesStore((s) => s.setBlurSensitiveMedia);
 
   const present = useCallback(() => {
-    bottomSheetRef.current?.expand();
+    bottomSheetRef.current?.present();
   }, []);
 
   const dismiss = useCallback(() => {
-    bottomSheetRef.current?.close();
+    bottomSheetRef.current?.dismiss();
   }, []);
 
   useImperativeHandle(ref, () => ({
@@ -173,9 +174,8 @@ export const ContentTypeSheet = forwardRef<
 
   return (
     <>
-      <BottomSheet
+      <BottomSheetModal
         ref={bottomSheetRef}
-        index={-1}
         enableDynamicSizing
         enablePanDownToClose
         onChange={handleSheetChanges}
@@ -318,7 +318,7 @@ export const ContentTypeSheet = forwardRef<
             })}
           </View>
         </BottomSheetView>
-      </BottomSheet>
+      </BottomSheetModal>
 
       <ConfirmationPopup
         visible={Platform.OS !== "ios" && !!pendingAdultType}

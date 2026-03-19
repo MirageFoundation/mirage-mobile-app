@@ -43,8 +43,6 @@ import {
   PostOptionsSheetRef,
   PROFILE_CONTENT_HEIGHT,
   ProfileHeaderBar,
-  ProfileMenuSheet,
-  ProfileMenuSheetRef,
   ProfileTabBar,
   ProfileEmptyState,
   ReportSheet,
@@ -225,7 +223,6 @@ export function ProfileScreen() {
   const [activeTab, setActiveTab] = useState(0);
   const [isTabsSticky, setIsTabsSticky] = useState(false);
 
-  const menuSheetRef = useRef<ProfileMenuSheetRef>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -453,38 +450,6 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
       Sentry.addBreadcrumb({ category: "profile", message: "Share failed", data: { error: String(error) }, level: "warning" });
     }
   }, [user?.username, shareServer]);
-
-  const handleMenuPress = useCallback(() => {
-    menuSheetRef.current?.present();
-  }, []);
-
-  const handleMenuSettings = useCallback(() => {
-    router.push("/settings");
-  }, [router]);
-
-  const handleMenuSubscription = useCallback(() => {
-    router.push("/subscription");
-  }, [router]);
-
-  const handleMenuNetwork = useCallback(() => {
-    console.log("Network pressed");
-  }, []);
-
-  const handleMenuInviteAndEarn = useCallback(() => {
-    router.push("/invite-and-earn");
-  }, [router]);
-
-  const handleMenuHistory = useCallback(() => {
-    router.push("/history");
-  }, [router]);
-
-  const handleMenuSaved = useCallback(() => {
-    router.push("/saved-posts");
-  }, [router]);
-
-  const handleOnlineStatusChange = useCallback((isOnline: boolean) => {
-    console.log("Online status changed:", isOnline);
-  }, []);
 
   const handleEditUsernamePress = useCallback(() => {
     router.push("/change-username");
@@ -1108,8 +1073,6 @@ useEffect(() => {
        isLoading={isLoading}
         isOwnProfile={true}
        onBackPress={handleBackPress}
-       onMenuPress={handleMenuPress}
-       onSubscriptionPress={handleMenuSubscription}
      />
 
       <Animated.View
@@ -1157,18 +1120,6 @@ useEffect(() => {
           onMomentumScrollEnd={handleProfileMomentumScrollEnd}
         />
       </GestureDetector>
-
-      <ProfileMenuSheet
-        ref={menuSheetRef}
-        isOnline={true}
-        onSettings={handleMenuSettings}
-        onSubscription={handleMenuSubscription}
-        onNetwork={handleMenuNetwork}
-        onInviteAndEarn={handleMenuInviteAndEarn}
-        onHistory={handleMenuHistory}
-        onSaved={handleMenuSaved}
-        onOnlineStatusChange={handleOnlineStatusChange}
-      />
 
       <PostOptionsSheet
         ref={postOptionsSheetRef}

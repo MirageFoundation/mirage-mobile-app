@@ -751,7 +751,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 92
+                          update 93
                         </Text>
                         <Text
                           style={{
@@ -769,7 +769,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           the mature content shows confirmation popup for 18+
                           confirmation, confirmation popup in enabling content
                           from content filter option, Added allowed_tags param
-                          to search, posts, and topics endpoints
+                          to search, posts, and topics endpoints,crash fix on
+                          settings, possible settings and my profile screen
+                          unresponsive fix
                         </Text>
                       </>
                     )}
@@ -810,7 +812,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 92
+                          update 93
                         </Text>
                         <Text
                           style={{
@@ -828,7 +830,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           the mature content shows confirmation popup for 18+
                           confirmation, confirmation popup in enabling content
                           from content filter option, Added allowed_tags param
-                          to search, posts, and topics endpoints
+                          to search, posts, and topics endpoints,crash fix on
+                          settings, possible settings and my profile screen
+                          unresponsive fix
                         </Text>
                       </>
                     )}
