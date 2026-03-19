@@ -52,12 +52,13 @@ import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 
 export type HomeTabbedFeedRef = {
   scrollToTop: (tabIndex?: number, options?: { animated?: boolean }) => void;
-  refresh: (options?: { fetchAllNew?: boolean }) => Promise<void>;
+  refresh: (options?: { fetchAllNew?: boolean; silent?: boolean }) => Promise<void>;
   isRefreshing: () => boolean;
   hasNewPosts: () => boolean;
   handleNewPostsPress: () => Promise<void>;
   dismissNewPosts: () => void;
   checkNewPosts: () => void;
+  resetBaseline: (newTimestamp: number | null) => void;
 };
 
 type HomeTabbedFeedProps = {
@@ -477,8 +478,9 @@ export const HomeTabbedFeed = forwardRef<
       handleNewPostsPress,
       dismissNewPosts,
       checkNewPosts: checkNow,
+      resetBaseline,
     }),
-    [scrollToTop, handleRefresh, hasNewPosts, handleNewPostsPress, dismissNewPosts, checkNow],
+    [scrollToTop, handleRefresh, hasNewPosts, handleNewPostsPress, dismissNewPosts, checkNow, resetBaseline],
   );
 
   const lastMagicFetchTime = useRef(0);
