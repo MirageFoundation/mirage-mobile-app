@@ -761,7 +761,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          extracting gif from link shared from external app fix
+                          extracting gif from link shared from external app
+                          fix,added some new conditions to auto fill create post
+                          from meta data,remove username of x in title when auto
+                          filled
                         </Text>
                       </>
                     )}
@@ -812,7 +815,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          extracting gif from link shared from external app fix
+                          extracting gif from link shared from external app
+                          fix,added some new conditions to auto fill create post
+                          from meta data,remove username of x in title when auto
+                          filled
                         </Text>
                       </>
                     )}
