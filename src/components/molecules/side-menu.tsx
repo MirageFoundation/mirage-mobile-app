@@ -751,7 +751,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 93
+                          update 94
                         </Text>
                         <Text
                           style={{
@@ -761,17 +761,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          mature content popup changes for android,added an
-                          extra option to enable mature content in settings,
-                          blur content option text changes,blur mature media
-                          option disbaled when no content is enabled, enabling a
-                          content auto enables the blur mature media, enabling
-                          the mature content shows confirmation popup for 18+
-                          confirmation, confirmation popup in enabling content
-                          from content filter option, Added allowed_tags param
-                          to search, posts, and topics endpoints,crash fix on
-                          settings, possible settings and my profile screen
-                          unresponsive fix
+                          extracting gif from link shared from external app fix
                         </Text>
                       </>
                     )}
@@ -812,7 +802,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 93
+                          update 94
                         </Text>
                         <Text
                           style={{
@@ -822,17 +812,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          mature content popup changes for android,added an
-                          extra option to enable mature content in settings,
-                          blur content option text changes,blur mature media
-                          option disbaled when no content is enabled, enabling a
-                          content auto enables the blur mature media, enabling
-                          the mature content shows confirmation popup for 18+
-                          confirmation, confirmation popup in enabling content
-                          from content filter option, Added allowed_tags param
-                          to search, posts, and topics endpoints,crash fix on
-                          settings, possible settings and my profile screen
-                          unresponsive fix
+                          extracting gif from link shared from external app fix
                         </Text>
                       </>
                     )}

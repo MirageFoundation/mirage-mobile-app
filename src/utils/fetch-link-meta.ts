@@ -185,6 +185,14 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       videoUrl = post.preview.reddit_video_preview.fallback_url ?? null;
     }
 
+    if (!videoUrl && post.preview?.images?.[0]?.variants?.mp4?.source?.url) {
+      videoUrl = post.preview.images[0].variants.mp4.source.url.replace(/&amp;/g, "&");
+    }
+
+    if (!videoUrl && post.url && /\.gif(\?|$)/i.test(post.url)) {
+      videoUrl = post.url;
+    }
+
     if (post.preview?.images?.[0]?.source?.url) {
       imageUrl = post.preview.images[0].source.url.replace(/&amp;/g, "&");
     } else if (post.thumbnail && post.thumbnail !== "default" && post.thumbnail !== "self" && post.thumbnail !== "nsfw") {
@@ -816,6 +824,19 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
     }
 
     clearTimeout(timeout);
+
+    if (!video) {
+      const gifInImages = images.find((u) => /\.gif(\?|$)/i.test(u));
+      if (gifInImages) {
+        video = gifInImages;
+        videos.unshift(gifInImages);
+        images = images.filter((u) => u !== gifInImages);
+      } else if (image && /\.gif(\?|$)/i.test(image)) {
+        video = image;
+        videos.unshift(image);
+        image = null;
+      }
+    }
 
     const decodeHtml = (s: string | null) =>
       s?.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'") ?? null;

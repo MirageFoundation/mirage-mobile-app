@@ -514,14 +514,15 @@ export function CreateScreen() {
               const contentType = response.headers.get("content-type") ?? "";
               const resolvedUrl = response.url;
 
-              const isVideoContent = contentType.startsWith("video/") || contentType.startsWith("application/octet-stream");
-              const hasVideoExtension = /\.(mp4|mov|webm|m3u8|ts)(\?|#|$)/i.test(resolvedUrl || vidUrl);
+              const isVideoContent = contentType.startsWith("video/") || contentType.startsWith("application/octet-stream") || contentType === "image/gif";
+              const hasVideoExtension = /\.(mp4|mov|webm|m3u8|ts|gif)(\?|#|$)/i.test(resolvedUrl || vidUrl);
 
               if (response.ok && (isVideoContent || hasVideoExtension)) {
                 const ext = contentType.includes("mp4") ? "mp4"
                   : contentType.includes("webm") ? "webm"
                   : contentType.includes("quicktime") ? "mov"
-                  : (resolvedUrl || vidUrl).match(/\.(mp4|mov|webm|m3u8)/i)?.[1] ?? "mp4";
+                  : contentType === "image/gif" ? "gif"
+                  : (resolvedUrl || vidUrl).match(/\.(mp4|mov|webm|m3u8|gif)/i)?.[1] ?? "mp4";
                 const destFile = new ExpoFile(Paths.cache, `shared_link_video_${Date.now()}_${vi}.${ext}`);
                 const arrayBuffer = await response.arrayBuffer();
                 if (arrayBuffer.byteLength > 1000) {
