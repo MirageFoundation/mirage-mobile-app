@@ -1,4 +1,5 @@
 import * as Notifications from "expo-notifications";
+import * as Network from "expo-network";
 import { AppState, Platform } from "react-native";
 import * as Sentry from "@sentry/react-native";
 
@@ -15,9 +16,13 @@ import { getInbox } from "@/src/api/read/endpoints/inbox";
 
 const PUSH_TOKEN_KEY = "push-token";
 const PUSH_ENABLED_KEY = "push-enabled";
+const TOKEN_FETCH_MAX_RETRIES = 3;
+const TOKEN_FETCH_BASE_DELAY_MS = 1_000;
 
 let pushReceivedSubscription: Notifications.Subscription | null = null;
 let appStateSubscription: { remove(): void } | null = null;
+let networkSubscription: { remove(): void } | null = null;
+let needsNetworkRetry = false;
 let isRegisteringPush = false;
 let lastRegisterPushAt = 0;
 const REGISTER_PUSH_MIN_INTERVAL_MS = 30_000;
@@ -32,6 +37,23 @@ function isKeychainAccessError(error: unknown): boolean {
     );
   }
   return false;
+}
+
+function isTransientNetworkError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return (
+      msg.includes("network request failed") ||
+      msg.includes("err_notifications_server_error") ||
+      msg.includes("timeout") ||
+      msg.includes("fetch failed")
+    );
+  }
+  return false;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isAppInForeground(): boolean {
@@ -59,47 +81,76 @@ function setPushEnabled(enabled: boolean): void {
 }
 
 async function getExpoPushToken(): Promise<string | null> {
-  try {
-    if (!isAppInForeground()) {
-      console.log("[PushNotifications] Skipping token fetch — app is not in foreground");
-      Sentry.addBreadcrumb({
-        category: "push-notifications",
-        message: "Skipped token fetch: app not in foreground",
-        level: "info",
-      });
-      return null;
-    }
-
-    const { status } = await Notifications.requestPermissionsAsync();
-    if (status !== "granted") {
-      Sentry.addBreadcrumb({
-        category: "push-notifications",
-        message: `Permission not granted: ${status}`,
-        level: "warning",
-      });
-      return null;
-    }
-
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: "25839d12-3bbc-4a6a-b1ee-67c4a6de816f",
+  if (!isAppInForeground()) {
+    console.log("[PushNotifications] Skipping token fetch — app is not in foreground");
+    Sentry.addBreadcrumb({
+      category: "push-notifications",
+      message: "Skipped token fetch: app not in foreground",
+      level: "info",
     });
-    return tokenData.data;
-  } catch (error) {
-    if (isKeychainAccessError(error)) {
-      console.warn("[PushNotifications] Keychain access denied (device likely locked/background), will retry on foreground");
-      Sentry.addBreadcrumb({
-        category: "push-notifications",
-        message: "Keychain access denied — suppressed, will retry on foreground",
-        level: "warning",
-      });
-    } else {
-      console.error("[PushNotifications] Failed to get Expo push token:", error);
-      Sentry.captureException(error, {
-        tags: { feature: "push-notifications", operation: "get-token" },
-      });
-    }
     return null;
   }
+
+  const { status } = await Notifications.requestPermissionsAsync();
+  if (status !== "granted") {
+    Sentry.addBreadcrumb({
+      category: "push-notifications",
+      message: `Permission not granted: ${status}`,
+      level: "warning",
+    });
+    return null;
+  }
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt < TOKEN_FETCH_MAX_RETRIES; attempt++) {
+    try {
+      if (attempt > 0 && !isAppInForeground()) {
+        console.log("[PushNotifications] App left foreground during retry, aborting");
+        return null;
+      }
+
+      const tokenData = await Notifications.getExpoPushTokenAsync({
+        projectId: "25839d12-3bbc-4a6a-b1ee-67c4a6de816f",
+      });
+      return tokenData.data;
+    } catch (error) {
+      lastError = error;
+
+      if (isKeychainAccessError(error)) {
+        console.warn("[PushNotifications] Keychain access denied (device likely locked/background), will retry on foreground");
+        Sentry.addBreadcrumb({
+          category: "push-notifications",
+          message: "Keychain access denied — suppressed, will retry on foreground",
+          level: "warning",
+        });
+        return null;
+      }
+
+      if (isTransientNetworkError(error) && attempt < TOKEN_FETCH_MAX_RETRIES - 1) {
+        const backoff = TOKEN_FETCH_BASE_DELAY_MS * Math.pow(2, attempt);
+        console.warn(`[PushNotifications] Token fetch failed (attempt ${attempt + 1}/${TOKEN_FETCH_MAX_RETRIES}), retrying in ${backoff}ms`);
+        Sentry.addBreadcrumb({
+          category: "push-notifications",
+          message: `Token fetch retry ${attempt + 1}/${TOKEN_FETCH_MAX_RETRIES} after ${backoff}ms`,
+          level: "warning",
+        });
+        await delay(backoff);
+        continue;
+      }
+
+      break;
+    }
+  }
+
+  console.error("[PushNotifications] Failed to get Expo push token after retries:", lastError);
+  if (isTransientNetworkError(lastError)) {
+    needsNetworkRetry = true;
+  }
+  Sentry.captureException(lastError, {
+    tags: { feature: "push-notifications", operation: "get-token" },
+    extra: { retries: TOKEN_FETCH_MAX_RETRIES },
+  });
+  return null;
 }
 
 export async function registerPush(wallet: MirageWallet): Promise<void> {
@@ -138,6 +189,7 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
     await registerPushToken(wallet, token, platform);
 
     setPushEnabled(true);
+    needsNetworkRetry = false;
     console.log("[PushNotifications] Push token registered successfully:", token);
     Sentry.addBreadcrumb({
       category: "push-notifications",
@@ -237,7 +289,7 @@ function subscribeAppStateForegroundReRegister(): void {
 
   appStateSubscription = AppState.addEventListener("change", async (nextState) => {
     if (nextState !== "active") return;
-    if (!isPushEnabled()) return;
+    if (!isPushEnabled() && !needsNetworkRetry) return;
 
     try {
       const wallet = await walletService.getWallet();
@@ -252,6 +304,34 @@ function subscribeAppStateForegroundReRegister(): void {
   });
 }
 
+function subscribeNetworkRecovery(): void {
+  if (networkSubscription) return;
+
+  let wasConnected = true;
+  networkSubscription = Network.addNetworkStateListener(async (state) => {
+    const isConnected = state.isConnected === true && state.isInternetReachable !== false;
+    if (isConnected && !wasConnected && needsNetworkRetry && isAppInForeground()) {
+      console.log("[PushNotifications] Network restored, retrying push registration");
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: "Network restored — retrying push registration",
+        level: "info",
+      });
+      try {
+        const wallet = await walletService.getWallet();
+        if (!wallet) return;
+        await registerPush(wallet);
+      } catch (error) {
+        console.error("[PushNotifications] Network recovery re-register failed:", error);
+        Sentry.captureException(error, {
+          tags: { feature: "push-notifications", operation: "network-recovery-register" },
+        });
+      }
+    }
+    wasConnected = isConnected;
+  });
+}
+
 export async function initPushNotifications(): Promise<void> {
   Sentry.addBreadcrumb({
     category: "push-notifications",
@@ -260,6 +340,7 @@ export async function initPushNotifications(): Promise<void> {
   });
   subscribePushReceived();
   subscribeAppStateForegroundReRegister();
+  subscribeNetworkRecovery();
 }
 
 export function cleanupPushNotifications(): void {
@@ -267,6 +348,9 @@ export function cleanupPushNotifications(): void {
   pushReceivedSubscription = null;
   appStateSubscription?.remove();
   appStateSubscription = null;
+  networkSubscription?.remove();
+  networkSubscription = null;
+  needsNetworkRetry = false;
 }
 
 export { isPushEnabled };
