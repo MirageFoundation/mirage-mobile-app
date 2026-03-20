@@ -121,6 +121,8 @@ export const useAuthStore = create<AuthState>()(
         try {
           set({ isInitializing: true });
 
+          await walletService.migrateKeychainAccessibility();
+
           const cleanedUp = await walletService.cleanupPendingWallet();
           if (cleanedUp) {
             console.log(
@@ -128,9 +130,14 @@ export const useAuthStore = create<AuthState>()(
             );
           }
 
-          const hasWallet = await walletService.hasWallet();
+          let hasWalletResult = await walletService.hasWallet();
 
-          if (!hasWallet) {
+          if (!hasWalletResult && get().isLoggedIn) {
+            await new Promise((r) => setTimeout(r, 500));
+            hasWalletResult = await walletService.hasWallet();
+          }
+
+          if (!hasWalletResult) {
             const contentTypes =
               usePreferencesStore.getState().selectedContentTypes;
             const allowedTags =
@@ -441,6 +448,9 @@ export const useAuthStore = create<AuthState>()(
         hasOnboarded: state.hasOnboarded,
         userLevel: state.userLevel,
         hasUsername: state.hasUsername,
+        isLoggedIn: state.isLoggedIn,
+        walletAddress: state.walletAddress,
+        publicKeyBase64: state.publicKeyBase64,
       }),
       merge: (persistedState, currentState) => {
         if (USE_MOCK_USER) {
