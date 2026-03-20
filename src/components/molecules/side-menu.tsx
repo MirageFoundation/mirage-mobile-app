@@ -774,7 +774,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           400 error better error handling,react native 7 error
                           noise reduction,react native 422 error handling, long
                           username overlapping in post card fix,username cut in
-                          thread fix,reduced size of image/gif in inbox
+                          thread fix,reduced size of image/gif in inbox, post
+                          creation, editing post,Updating Agents,Changing
+                          Username,Deleting Account fails when there is pending
+                          pow in queue fixed
                         </Text>
                       </>
                     )}
@@ -825,7 +828,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          showing logged out state after the app is opened from
+                          howing logged out state after the app is opened from
                           background fixed, sentry error react native K, 21, 23
                           error handled,react native F (N+1) error
                           handled,sentry log pow cancelled react native 9 error
@@ -834,7 +837,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           400 error better error handling,react native 7 error
                           noise reduction,react native 422 error handling, long
                           username overlapping in post card fix,username cut in
-                          thread fix,reduced size of image/gif in inbox
+                          thread fix,reduced size of image/gif in inbox, post
+                          creation, editing post,Updating Agents,Changing
+                          Username,Deleting Account fails when there is pending
+                          pow in queue fixed
                         </Text>
                       </>
                     )}

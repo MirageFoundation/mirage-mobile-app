@@ -83,11 +83,11 @@ const PHASE_CONFIG: Record<
   {
     label: string;
     icon: keyof typeof Ionicons.glyphMap;
-    color: "brand" | "success" | "error";
+    color: "brand" | "success" | "error" | "warning";
   }
 > = {
   idle: { label: "Ready", icon: "ellipse-outline", color: "brand" },
-  waiting: { label: "Finishing up other actions first...", icon: "time-outline", color: "brand" },
+  waiting: { label: "Finishing up other actions first...", icon: "time-outline", color: "warning" },
   preparing: { label: "Preparing request...", icon: "sync", color: "brand" },
   computing: {
     label: "Securing your request...",
@@ -275,6 +275,8 @@ export function TransactionProgressModal({
       ? theme.colors.success[500]
       : config.color === "error"
       ? theme.colors.error[500]
+      : config.color === "warning"
+      ? theme.colors.warning[500]
       : theme.colors.brand[500];
 
   const iconBgColor =
@@ -282,6 +284,8 @@ export function TransactionProgressModal({
       ? `${theme.colors.success[500]}20`
       : config.color === "error"
       ? `${theme.colors.error[500]}20`
+      : config.color === "warning"
+      ? `${theme.colors.warning[500]}20`
       : `${theme.colors.brand[500]}20`;
 
   return (
