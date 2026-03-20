@@ -22,6 +22,22 @@ let isRegisteringPush = false;
 let lastRegisterPushAt = 0;
 const REGISTER_PUSH_MIN_INTERVAL_MS = 30_000;
 
+function isKeychainAccessError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return (
+      msg.includes("getregistrationinfoasync") ||
+      msg.includes("keychain access failed") ||
+      msg.includes("user interaction is not allowed")
+    );
+  }
+  return false;
+}
+
+function isAppInForeground(): boolean {
+  return AppState.currentState === "active";
+}
+
 function getStoredToken(): string | null {
   return storage.getString(PUSH_TOKEN_KEY) ?? null;
 }
@@ -44,6 +60,16 @@ function setPushEnabled(enabled: boolean): void {
 
 async function getExpoPushToken(): Promise<string | null> {
   try {
+    if (!isAppInForeground()) {
+      console.log("[PushNotifications] Skipping token fetch — app is not in foreground");
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: "Skipped token fetch: app not in foreground",
+        level: "info",
+      });
+      return null;
+    }
+
     const { status } = await Notifications.requestPermissionsAsync();
     if (status !== "granted") {
       Sentry.addBreadcrumb({
@@ -59,10 +85,19 @@ async function getExpoPushToken(): Promise<string | null> {
     });
     return tokenData.data;
   } catch (error) {
-    console.error("[PushNotifications] Failed to get Expo push token:", error);
-    Sentry.captureException(error, {
-      tags: { feature: "push-notifications", operation: "get-token" },
-    });
+    if (isKeychainAccessError(error)) {
+      console.warn("[PushNotifications] Keychain access denied (device likely locked/background), will retry on foreground");
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: "Keychain access denied — suppressed, will retry on foreground",
+        level: "warning",
+      });
+    } else {
+      console.error("[PushNotifications] Failed to get Expo push token:", error);
+      Sentry.captureException(error, {
+        tags: { feature: "push-notifications", operation: "get-token" },
+      });
+    }
     return null;
   }
 }
