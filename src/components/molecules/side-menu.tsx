@@ -765,7 +765,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          showing logged out state after the app is opened from
+                          howing logged out state after the app is opened from
                           background fixed, sentry error react native K, 21, 23
                           error handled,react native F (N+1) error
                           handled,sentry log pow cancelled react native 9 error
@@ -777,7 +777,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           thread fix,reduced size of image/gif in inbox, post
                           creation, editing post,Updating Agents,Changing
                           Username,Deleting Account fails when there is pending
-                          pow in queue fixed
+                          pow in queue fixed,enabling mature content enables all
+                          the content, disabling mature content disables all the
+                          content, removed enable confirmation popup in content
+                          filter sheet
                         </Text>
                       </>
                     )}
@@ -840,7 +843,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           thread fix,reduced size of image/gif in inbox, post
                           creation, editing post,Updating Agents,Changing
                           Username,Deleting Account fails when there is pending
-                          pow in queue fixed
+                          pow in queue fixed,enabling mature content enables all
+                          the content, disabling mature content disables all the
+                          content, removed enable confirmation popup in content
+                          filter sheet
                         </Text>
                       </>
                     )}
