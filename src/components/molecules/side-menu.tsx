@@ -751,7 +751,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 94
+                          update 95
                         </Text>
                         <Text
                           style={{
@@ -761,22 +761,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          extracting gif from link shared from external app
-                          fix,added some new conditions to auto fill create post
-                          from meta data,remove username of x in title when auto
-                          filled, race condition in refresh and check new posts
-                          fix,added mark as seen button in header of inbox,
-                          cross in create post should not clear the post
-                          draft,clciking vote icon continously for long time
-                          mess fix,clciking on notification sent from backend
-                          opens the inbox and show activity indicator on top
-                          while fetching new msg,redgif videos not appearing
-                          sometimes fixed, all videos stuck on loading when app
-                          state changes fixed,tap to reveal not responding in
-                          profile posts,refresh quests everytime we open quests
-                          screen, refresh quest on home on refresh or tab
-                          switch, clicking on any button twice quickly opens
-                          double same screen one upon another fixed
+                          showing logged out state after the app is opened from
+                          background fixed
                         </Text>
                       </>
                     )}
@@ -817,7 +803,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 94
+                          update 95
                         </Text>
                         <Text
                           style={{
@@ -827,22 +813,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          extracting gif from link shared from external app
-                          fix,added some new conditions to auto fill create post
-                          from meta data,remove username of x in title when auto
-                          filled, race condition in refresh and check new posts
-                          fix,added mark as seen button in header of inbox,
-                          cross in create post should not clear the post
-                          draft,clciking vote icon continously for long time
-                          mess fix,clciking on notification sent from backend
-                          opens the inbox and show activity indicator on top
-                          while fetching new msg,redgif videos not appearing
-                          sometimes fixed, all videos stuck on loading when app
-                          state changes fixed,tap to reveal not responding in
-                          profile posts,refresh quests everytime we open quests
-                          screen, refresh quest on home on refresh or tab
-                          switch, clicking on any button twice quickly opens
-                          double same screen one upon another fixed
+                          showing logged out state after the app is opened from
+                          background fixed
                         </Text>
                       </>
                     )}
