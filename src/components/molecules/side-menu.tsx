@@ -49,7 +49,7 @@ import { useToast } from "@/src/providers/toast-provider";
 import { useServerList } from "@/src/hooks/use-server-list";
 import {
   useUserFollowed,
-  useUsernameFromAddress,
+  useBatchUsernamesFromAddresses,
   useUserStatus,
 } from "@/src/api/read/hooks";
 import Constants from "expo-constants";
@@ -192,14 +192,15 @@ const SectionFooter = ({ style = {} }: { style?: StyleProp<ViewStyle> }) => {
 
 const FollowedUserItem = ({
   address,
+  username,
   onPress,
 }: {
   address: string;
+  username?: string;
   onPress?: () => void;
 }) => {
   const { theme } = useUnistyles();
-  const { data } = useUsernameFromAddress(address);
-  const displayName = data?.username ?? address.slice(0, 10) + "...";
+  const displayName = username || address.slice(0, 10) + "...";
 
   return (
     <Pressable
@@ -364,6 +365,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       peopleBeforeShowMore === -1
         ? allFollowedUsers
         : allFollowedUsers.slice(0, peopleBeforeShowMore);
+    const { data: usernameMap } =
+      useBatchUsernamesFromAddresses(allFollowedUsers);
     const followedTopics =
       topicsBeforeShowMore === -1
         ? allFollowedTopics
@@ -653,6 +656,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       <FollowedUserItem
                         key={address}
                         address={address}
+                        username={usernameMap?.[address.toLowerCase()]}
                         onPress={() => handleUserPress(address)}
                       />
                     ))
@@ -763,7 +767,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                         >
                           showing logged out state after the app is opened from
                           background fixed, sentry error react native K, 21, 23
-                          error handled,react native F (N+1) error handled
+                          error handled,react native F (N+1) error
+                          handled,sentry log pow cancelled react native 9 error
+                          handled,sentry log REACT-NATIVE-22(N+1) error on
+                          getting username from wallet address fix
                         </Text>
                       </>
                     )}
@@ -815,7 +822,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           weight="light"
                         >
                           showing logged out state after the app is opened from
-                          background fixed
+                          background fixed, sentry error react native K, 21, 23
+                          error handled,react native F (N+1) error
+                          handled,sentry log pow cancelled react native 9 error
+                          handled,sentry log REACT-NATIVE-22(N+1) error on
+                          getting username from wallet address fix
                         </Text>
                       </>
                     )}

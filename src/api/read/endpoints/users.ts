@@ -156,13 +156,18 @@ export async function bulkGetAddressFromUsername(
   );
 }
 
+export interface BulkUsernameMapResponse {
+  map: Record<string, string>;
+}
+
 /**
  * Bulk resolve addresses to usernames
+ * Returns { map: { address: username } }
  */
 export async function bulkGetUsernameFromAddress(
   addresses: string[]
-): Promise<UsernameFromAddressResponse[]> {
-  return api.post<UsernameFromAddressResponse[]>(
+): Promise<BulkUsernameMapResponse> {
+  return api.post<BulkUsernameMapResponse>(
     "/get_username_from_address",
     { addresses }
   );
