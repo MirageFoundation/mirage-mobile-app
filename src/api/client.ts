@@ -281,6 +281,17 @@ class ApiClient {
         level: "error",
         data: { status, errorData: errorData || error?.message },
       });
+      if (status === 400) {
+        Sentry.addBreadcrumb({
+          category: "api.validation",
+          message: `POST ${path} 400: ${JSON.stringify(errorData)}`,
+          level: "error",
+        });
+        Sentry.captureException(error, {
+          tags: { api_method: "POST", api_path: path, status_code: "400" },
+          extra: { status, errorData, requestPath: path },
+        });
+      }
       if (status && status >= 500) {
         if (status === 521) {
           useCloudflareErrorStore.getState().setError(status);

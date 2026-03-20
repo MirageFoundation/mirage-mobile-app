@@ -807,14 +807,28 @@ export function CreateScreen() {
 
       let result;
       if (isEditMode) {
+        if (!editPostId) {
+          throw new Error("Missing editPostId for edit operation");
+        }
+        if (!draft.title.trim() && !content) {
+          throw new Error("Title or content is required");
+        }
         const editInput: EditPostInput = {
           postId: editPostId,
           topic,
           title: draft.title.trim(),
-          content: content,
+          content: content || "",
           tag: selectedContentWarning,
-          media: mediaUrls.length > 0 ? mediaUrls : undefined,
+          media: mediaUrls.length > 0 ? mediaUrls : [],
         };
+        console.log("[CreateScreen] Edit input:", {
+          postId: editInput.postId,
+          topic: editInput.topic,
+          titleLength: editInput.title.length,
+          contentLength: editInput.content.length,
+          tag: editInput.tag,
+          mediaCount: editInput.media?.length ?? 0,
+        });
         result = await editMutation.mutateAsync(editInput);
       } else {
         const postInput: CreatePostMutationInput = {
@@ -965,7 +979,16 @@ export function CreateScreen() {
           "The app was closed while processing. Your draft has been saved — tap post to retry.",
         );
       } else {
-        Sentry.captureException(error, { tags: { feature: "create-post", operation: "submit" } });
+        Sentry.captureException(error, {
+          tags: { feature: "create-post", operation: "submit", is_edit: String(isEditMode) },
+          extra: {
+            responseStatus: (error as any)?.response?.status,
+            responseData: (error as any)?.response?.data,
+            editPostId: isEditMode ? editPostId : undefined,
+            topic: isEditMode ? (draft.community?.id ?? "general") : undefined,
+            hasMedia: undefined,
+          },
+        });
 
         const isNetworkError =
           (error as any)?.code === "ERR_NETWORK" ||
