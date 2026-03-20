@@ -774,7 +774,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           400 error better error handling,react native 7 error
                           noise reduction,react native 422 error handling, long
                           username overlapping in post card fix,username cut in
-                          thread fix
+                          thread fix,reduced size of image/gif in inbox
                         </Text>
                       </>
                     )}
@@ -834,7 +834,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           400 error better error handling,react native 7 error
                           noise reduction,react native 422 error handling, long
                           username overlapping in post card fix,username cut in
-                          thread fix
+                          thread fix,reduced size of image/gif in inbox
                         </Text>
                       </>
                     )}

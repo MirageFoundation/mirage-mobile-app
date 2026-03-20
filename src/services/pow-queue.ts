@@ -454,6 +454,21 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   },
 }));
 
+export function waitForQueueDrain(): Promise<void> {
+ const state = usePowQueueStore.getState();
+ if (!state.isProcessing && state.queue.length === 0 && !state.currentAction) {
+  return Promise.resolve();
+ }
+ return new Promise<void>((resolve) => {
+  const unsub = usePowQueueStore.subscribe((s) => {
+   if (!s.isProcessing && s.queue.length === 0 && !s.currentAction) {
+    unsub();
+    resolve();
+   }
+  });
+ });
+}
+
 export const usePowQueue = () => {
   const store = usePowQueueStore();
 

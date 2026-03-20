@@ -9,6 +9,7 @@ import { trimToMaxDuration } from "@/src/utils/video-processing";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
 import { isPowCancelled } from "@/src/wallet";
+import { waitForQueueDrain, usePowQueueStore } from "@/src/services/pow-queue";
 import { Audio, ResizeMode, Video } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import { Paths, File as ExpoFile } from "expo-file-system";
@@ -751,6 +752,12 @@ export function CreateScreen() {
     triggerHaptic("medium");
 
     try {
+      const powState = usePowQueueStore.getState();
+      if (powState.isProcessing || powState.queue.length > 0 || powState.currentAction) {
+        txProgress.setPhase("waiting");
+        await waitForQueueDrain();
+      }
+
       const mediaUrls: string[] = [];
 
       if (selectedStickers.length > 0) {
