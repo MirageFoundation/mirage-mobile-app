@@ -49,7 +49,7 @@ import { useToast } from "@/src/providers/toast-provider";
 import { useServerList } from "@/src/hooks/use-server-list";
 import {
   useUserFollowed,
-  useUsernameFromAddress,
+  useBatchUsernamesFromAddresses,
   useUserStatus,
 } from "@/src/api/read/hooks";
 import Constants from "expo-constants";
@@ -192,14 +192,15 @@ const SectionFooter = ({ style = {} }: { style?: StyleProp<ViewStyle> }) => {
 
 const FollowedUserItem = ({
   address,
+  username,
   onPress,
 }: {
   address: string;
+  username?: string;
   onPress?: () => void;
 }) => {
   const { theme } = useUnistyles();
-  const { data } = useUsernameFromAddress(address);
-  const displayName = data?.username ?? address.slice(0, 10) + "...";
+  const displayName = username || address.slice(0, 10) + "...";
 
   return (
     <Pressable
@@ -364,6 +365,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       peopleBeforeShowMore === -1
         ? allFollowedUsers
         : allFollowedUsers.slice(0, peopleBeforeShowMore);
+    const { data: usernameMap } =
+      useBatchUsernamesFromAddresses(allFollowedUsers);
     const followedTopics =
       topicsBeforeShowMore === -1
         ? allFollowedTopics
@@ -653,6 +656,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                       <FollowedUserItem
                         key={address}
                         address={address}
+                        username={usernameMap?.[address.toLowerCase()]}
                         onPress={() => handleUserPress(address)}
                       />
                     ))
@@ -751,7 +755,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 94
+                          update 95
                         </Text>
                         <Text
                           style={{
@@ -761,22 +765,22 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          extracting gif from link shared from external app
-                          fix,added some new conditions to auto fill create post
-                          from meta data,remove username of x in title when auto
-                          filled, race condition in refresh and check new posts
-                          fix,added mark as seen button in header of inbox,
-                          cross in create post should not clear the post
-                          draft,clciking vote icon continously for long time
-                          mess fix,clciking on notification sent from backend
-                          opens the inbox and show activity indicator on top
-                          while fetching new msg,redgif videos not appearing
-                          sometimes fixed, all videos stuck on loading when app
-                          state changes fixed,tap to reveal not responding in
-                          profile posts,refresh quests everytime we open quests
-                          screen, refresh quest on home on refresh or tab
-                          switch, clicking on any button twice quickly opens
-                          double same screen one upon another fixed
+                          howing logged out state after the app is opened from
+                          background fixed, sentry error react native K, 21, 23
+                          error handled,react native F (N+1) error
+                          handled,sentry log pow cancelled react native 9 error
+                          handled,sentry log REACT-NATIVE-22(N+1) error on
+                          getting username from wallet address fix,react native
+                          400 error better error handling,react native 7 error
+                          noise reduction,react native 422 error handling, long
+                          username overlapping in post card fix,username cut in
+                          thread fix,reduced size of image/gif in inbox, post
+                          creation, editing post,Updating Agents,Changing
+                          Username,Deleting Account fails when there is pending
+                          pow in queue fixed,enabling mature content enables all
+                          the content, disabling mature content disables all the
+                          content, removed enable confirmation popup in content
+                          filter sheet
                         </Text>
                       </>
                     )}
@@ -817,7 +821,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 94
+                          update 95
                         </Text>
                         <Text
                           style={{
@@ -827,22 +831,22 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          extracting gif from link shared from external app
-                          fix,added some new conditions to auto fill create post
-                          from meta data,remove username of x in title when auto
-                          filled, race condition in refresh and check new posts
-                          fix,added mark as seen button in header of inbox,
-                          cross in create post should not clear the post
-                          draft,clciking vote icon continously for long time
-                          mess fix,clciking on notification sent from backend
-                          opens the inbox and show activity indicator on top
-                          while fetching new msg,redgif videos not appearing
-                          sometimes fixed, all videos stuck on loading when app
-                          state changes fixed,tap to reveal not responding in
-                          profile posts,refresh quests everytime we open quests
-                          screen, refresh quest on home on refresh or tab
-                          switch, clicking on any button twice quickly opens
-                          double same screen one upon another fixed
+                          howing logged out state after the app is opened from
+                          background fixed, sentry error react native K, 21, 23
+                          error handled,react native F (N+1) error
+                          handled,sentry log pow cancelled react native 9 error
+                          handled,sentry log REACT-NATIVE-22(N+1) error on
+                          getting username from wallet address fix,react native
+                          400 error better error handling,react native 7 error
+                          noise reduction,react native 422 error handling, long
+                          username overlapping in post card fix,username cut in
+                          thread fix,reduced size of image/gif in inbox, post
+                          creation, editing post,Updating Agents,Changing
+                          Username,Deleting Account fails when there is pending
+                          pow in queue fixed,enabling mature content enables all
+                          the content, disabling mature content disables all the
+                          content, removed enable confirmation popup in content
+                          filter sheet
                         </Text>
                       </>
                     )}

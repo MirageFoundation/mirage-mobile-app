@@ -18,7 +18,7 @@ import { create } from "zustand";
 import { AppState, InteractionManager } from "react-native";
 import * as Sentry from "@sentry/react-native";
 import * as Network from "expo-network";
-import { cancelPow } from "@/src/wallet";
+import { cancelPow, isPowCancelled } from "@/src/wallet";
 
 export type PowActionType =
   | "upvote"
@@ -202,7 +202,7 @@ const executeWithNetworkRetry = async <T>(
       return result;
     } catch (error) {
       const msg = String((error as Error)?.message || "");
-      if (msg === "pow_cancelled") throw error;
+      if (msg === "pow_cancelled" || isPowCancelled(error)) throw error;
       if (!isNetworkError(error)) throw error;
       lastError = error;
       if (attempt < MAX_NETWORK_RETRIES) {
@@ -368,7 +368,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       currentCancelReject = null;
 
       const msg = String((error as Error)?.message || "");
-      if (msg === "pow_cancelled") {
+      if (msg === "pow_cancelled" || isPowCancelled(error)) {
         wasCancelled = true;
       } else {
         const err = error instanceof Error ? error : new Error(String(error));
@@ -376,7 +376,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
         const displayMsg = isNetworkError(error)
           ? "No internet connection"
           : serverMsg || err.message || "Something went wrong";
-        if (!isNetworkError(error)) {
+        if (!isNetworkError(error) && !isPowCancelled(error)) {
           Sentry.captureException(err, {
             tags: { action: "pow_action", pow_type: nextAction.type },
             extra: { actionId: nextAction.id, label: nextAction.label },
@@ -453,6 +453,21 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
    });
   },
 }));
+
+export function waitForQueueDrain(): Promise<void> {
+ const state = usePowQueueStore.getState();
+ if (!state.isProcessing && state.queue.length === 0 && !state.currentAction) {
+  return Promise.resolve();
+ }
+ return new Promise<void>((resolve) => {
+  const unsub = usePowQueueStore.subscribe((s) => {
+   if (!s.isProcessing && s.queue.length === 0 && !s.currentAction) {
+    unsub();
+    resolve();
+   }
+  });
+ });
+}
 
 export const usePowQueue = () => {
   const store = usePowQueueStore();

@@ -61,7 +61,7 @@ const ReplyImage = ({
   const [hasError, setHasError] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(16 / 9);
 
-  const MEDIA_MAX_HEIGHT = 300;
+  const MEDIA_MAX_HEIGHT = 210;
   const containerWidth = 350;
   const calculatedHeight = containerWidth / aspectRatio;
   const exceedsMaxHeight = calculatedHeight > MEDIA_MAX_HEIGHT;
@@ -259,6 +259,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   replyContent: {},
   imageContainer: {
+    width: "70%",
     marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.xs,
     borderRadius: theme.radius.md,
@@ -271,7 +272,7 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.radius.md,
   },
   imageError: {
-    width: "100%",
+    width: "70%",
     height: 100,
     borderRadius: theme.radius.md,
     alignItems: "center",

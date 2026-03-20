@@ -223,12 +223,27 @@ export const usePreferencesStore = create<PreferencesState>()(
      toggleContentType: (type) =>
        set((state) => {
          if (type === "all") {
+           const hasPorn = state.selectedContentTypes.includes("porn");
+           const nonPornTags: ContentType[] = [...CONTENT_TAGS].filter((t) => t !== "porn");
+           if (hasPorn) {
+             return {
+               selectedContentTypes: [...nonPornTags, "porn"],
+               adultContentEnabled: true,
+             };
+           }
            return {
-             selectedContentTypes: ["all"],
-             adultContentEnabled: true,
+             selectedContentTypes: nonPornTags,
+             adultContentEnabled: false,
            };
          }
         if (type === "none") {
+          const hadPorn = state.selectedContentTypes.includes("porn");
+          if (hadPorn) {
+            return {
+              selectedContentTypes: ["porn"],
+              adultContentEnabled: true,
+            };
+          }
           return {
              selectedContentTypes: [],
             adultContentEnabled: false,
@@ -236,17 +251,13 @@ export const usePreferencesStore = create<PreferencesState>()(
         }
 
           let newTypes: ContentType[];
-          if (state.selectedContentTypes.includes("all")) {
-            newTypes = [...CONTENT_TAGS].filter((t) => t !== type);
+          newTypes = state.selectedContentTypes.filter(
+            (t) => t !== "all" && t !== "none"
+          );
+          if (newTypes.includes(type)) {
+            newTypes = newTypes.filter((t) => t !== type);
           } else {
-            newTypes = state.selectedContentTypes.filter(
-              (t) => t !== "all" && t !== "none"
-            );
-            if (newTypes.includes(type)) {
-              newTypes = newTypes.filter((t) => t !== type);
-            } else {
-              newTypes = [...newTypes, type];
-            }
+            newTypes = [...newTypes, type];
           }
 
         if (newTypes.length === 0) {

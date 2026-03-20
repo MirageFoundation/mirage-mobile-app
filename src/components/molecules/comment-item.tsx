@@ -671,14 +671,15 @@ const styles = StyleSheet.create((theme) => ({
   authorSection: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
+    flexShrink: 0,
   },
   authorInfo: {
-    flex: 1,
+    flexShrink: 0,
   },
   usernameButton: {
     paddingVertical: 2,
     paddingHorizontal: 2,
+    flexShrink: 0,
   },
   usernameButtonPressed: {
     opacity: 0.6,
@@ -694,7 +695,7 @@ const styles = StyleSheet.create((theme) => ({
   authorRow: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
+    flexShrink: 0,
     gap: theme.spacing.xs,
   },
   content: {

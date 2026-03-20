@@ -2,6 +2,7 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   getAddressFromUsername,
   getUsernameFromAddress,
+  bulkGetUsernameFromAddress,
   getUsers,
   type GetUsersParams,
 } from "../endpoints/users";
@@ -104,6 +105,21 @@ export function useUsernameFromAddress(address: string | undefined | null) {
     enabled: !!address,
     staleTime: 1000 * 60 * 5, // 5 minutes
     gcTime: 1000 * 60 * 60, // 1 hour
+  });
+}
+
+export function useBatchUsernamesFromAddresses(addresses: string[]) {
+  const stableKey = addresses.slice().sort().join(",");
+  return useQuery({
+    queryKey: ["batchUsernames", stableKey],
+    queryFn: async () => {
+      if (addresses.length === 0) return {};
+      const resp = await bulkGetUsernameFromAddress(addresses);
+      return resp.map ?? {};
+    },
+    enabled: addresses.length > 0,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 60,
   });
 }
 

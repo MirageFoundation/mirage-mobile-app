@@ -28,6 +28,7 @@
 import { useState, useCallback, useRef } from "react";
 import axios from "axios";
 import * as Sentry from "@sentry/react-native";
+import { waitForQueueDrain, usePowQueueStore } from "@/src/services/pow-queue";
 import type {
   TransactionPhase,
   TransactionProgress,
@@ -254,6 +255,12 @@ export async function executeWithProgress<TResult extends string | { tx_hash: st
   try {
     // Start transaction
     startTransaction();
+
+    const powState = usePowQueueStore.getState();
+    if (powState.isProcessing || powState.queue.length > 0 || powState.currentAction) {
+      setPhase("waiting");
+      await waitForQueueDrain();
+    }
 
     // Execute with PoW progress tracking
     const result = await executor(updatePoWProgress);

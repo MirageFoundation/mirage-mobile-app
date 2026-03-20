@@ -254,9 +254,6 @@ class ApiClient {
     }
   }
 
-  /**
-   * POST request
-   */
   async post<T, D = unknown>(path: string, data?: D): Promise<T> {
     const networkState = await Network.getNetworkStateAsync();
     if (!networkState.isConnected) {
@@ -275,12 +272,29 @@ class ApiClient {
         console.log(`[ApiClient] POST ${path} skipped: offline`);
         throw error;
       }
+
+      if (status === 429) {
+        console.log(`[ApiClient] POST ${path} rate limited, skipping`);
+        throw error;
+      }
+
       Sentry.addBreadcrumb({
         category: "api",
         message: `POST ${path} failed`,
         level: "error",
         data: { status, errorData: errorData || error?.message },
       });
+      if (status === 400) {
+        Sentry.addBreadcrumb({
+          category: "api.validation",
+          message: `POST ${path} 400: ${JSON.stringify(errorData)}`,
+          level: "error",
+        });
+        Sentry.captureException(error, {
+          tags: { api_method: "POST", api_path: path, status_code: "400" },
+          extra: { status, errorData, requestPath: path },
+        });
+      }
       if (status && status >= 500) {
         if (status === 521) {
           useCloudflareErrorStore.getState().setError(status);

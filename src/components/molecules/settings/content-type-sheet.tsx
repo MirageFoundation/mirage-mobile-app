@@ -1,57 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as Sentry from "@sentry/react-native";
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import { forwardRef, useCallback, useImperativeHandle, useRef, useState } from "react";
-import { Platform, Pressable, View } from "react-native";
+import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
+import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { ConfirmationPopup } from "@/src/components/molecules/confirmation-popup";
 import {
   ContentType,
   usePreferencesStore,
 } from "@/src/stores/preferences-store";
-
-const ADULT_CONTENT_TAGS = ["porn", "violence", "gore", "death"] as const;
-
-const ADULT_CONTENT_DESCRIPTIONS: Record<string, { title: string; message: string; description: string }> = {
-  sensitive: {
-    title: "Enable Sensitive Content",
-    message: "Are you sure you want to see sensitive content?",
-    description: "This will show content flagged as sensitive in your feed. Content will be blurred by default and requires a tap to reveal.",
-  },
-  porn: {
-    title: "Enable Pornographic Content",
-    message: "Are you sure you want to see pornographic content?",
-    description: "This will show sexually explicit material in your feed. Content will be blurred by default and requires a tap to reveal.",
-  },
-  violence: {
-    title: "Enable Violent Content",
-    message: "Are you sure you want to see violent content?",
-    description: "This will show violent material in your feed. Content will be blurred by default and requires a tap to reveal.",
-  },
-  gore: {
-    title: "Enable Gore Content",
-    message: "Are you sure you want to see gore content?",
-    description: "This will show graphic gore material in your feed. Content will be blurred by default and requires a tap to reveal.",
-  },
-  death: {
-    title: "Enable Death Content",
-    message: "Are you sure you want to see death-related content?",
-    description: "This will show death-related material in your feed. Content will be blurred by default and requires a tap to reveal.",
-  },
-  all: {
-    title: "Enable All Adult Content",
-    message: "Are you sure you want to see all adult content?",
-    description: "This will show all adult material including pornography, violence, gore, and death in your feed. Content will be blurred by default and requires a tap to reveal.",
-  },
-};
 
 type ContentTypeOption = {
   value: ContentType;
@@ -84,7 +47,6 @@ export const ContentTypeSheet = forwardRef<
   const bottomSheetRef = useRef<BottomSheetModal>(null);
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
-  const [pendingAdultType, setPendingAdultType] = useState<ContentType | null>(null);
   const setBlurSensitiveMedia = usePreferencesStore((s) => s.setBlurSensitiveMedia);
 
   const present = useCallback(() => {
@@ -121,54 +83,22 @@ export const ContentTypeSheet = forwardRef<
     [],
   );
 
-  const isContentFilterType = (type: ContentType) =>
-    ADULT_CONTENT_TAGS.includes(type as any) || type === "all" || type === "sensitive";
-
   const handleSelect = useCallback(
     (type: ContentType) => {
       triggerHaptic("light");
-
-      if (Platform.OS !== "ios" && isContentFilterType(type) && !selectedTypes.includes(type)) {
-        setPendingAdultType(type);
-        return;
-      }
-
-      onToggle(type);
-    },
-    [onToggle, selectedTypes],
-  );
-
-  const handleConfirmAdultContent = useCallback(() => {
-    if (pendingAdultType) {
-      triggerHaptic("medium");
-      if (selectedTypes.length === 0) {
+      if (selectedTypes.length === 0 && type !== "none") {
         setBlurSensitiveMedia(true);
       }
-      onToggle(pendingAdultType);
-      Sentry.addBreadcrumb({
-        category: "content_filter",
-        message: `Adult content enabled: ${pendingAdultType}`,
-        level: "info",
-      });
-      setPendingAdultType(null);
-    }
-  }, [pendingAdultType, onToggle, setBlurSensitiveMedia, selectedTypes]);
+      onToggle(type);
+    },
+    [onToggle, selectedTypes, setBlurSensitiveMedia],
+  );
 
-  const handleCancelAdultContent = useCallback(() => {
-    triggerHaptic("light");
-    setPendingAdultType(null);
-    Sentry.addBreadcrumb({
-      category: "content_filter",
-      message: "Adult content confirmation declined",
-      level: "info",
-    });
-  }, []);
-
-  const isAllSelected = selectedTypes.includes("all");
-  const isNoneSelected = selectedTypes.length === 0;
+  const NON_PORN_TAGS = ["sensitive", "violence", "gore", "death"] as const;
+  const isAllSelected = NON_PORN_TAGS.every((t) => selectedTypes.includes(t));
+  const isNoneSelected = selectedTypes.length === 0 || (selectedTypes.length === 1 && selectedTypes.includes("porn"));
 
   const isIndividualSelected = (type: ContentType) => {
-    if (isAllSelected) return true;
     return selectedTypes.includes(type);
   };
 
@@ -319,19 +249,6 @@ export const ContentTypeSheet = forwardRef<
           </View>
         </BottomSheetView>
       </BottomSheetModal>
-
-      <ConfirmationPopup
-        visible={Platform.OS !== "ios" && !!pendingAdultType}
-        title={ADULT_CONTENT_DESCRIPTIONS[pendingAdultType ?? "all"]?.title ?? "Enable Adult Content"}
-        message={ADULT_CONTENT_DESCRIPTIONS[pendingAdultType ?? "all"]?.message ?? "Are you sure?"}
-        description={ADULT_CONTENT_DESCRIPTIONS[pendingAdultType ?? "all"]?.description ?? ""}
-        icon="eye-off"
-        confirmText="Enable"
-        cancelText="Keep Hidden"
-        isDestructive={false}
-        onConfirm={handleConfirmAdultContent}
-        onCancel={handleCancelAdultContent}
-      />
     </>
   );
 });

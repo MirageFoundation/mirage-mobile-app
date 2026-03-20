@@ -26,6 +26,7 @@ export {
   useAddressFromUsername,
   useUsernameAvailability,
   useUsernameFromAddress,
+  useBatchUsernamesFromAddresses,
   useUsers,
 } from "./use-username-resolution";
 

@@ -64,7 +64,7 @@ import {
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/hooks/use-router";
@@ -190,6 +190,8 @@ export default function PostDetailScreen() {
     };
   }, []);
 
+  const isFocused = useIsFocused();
+
   // Fetch comments from API
   const {
     data: commentsData,
@@ -197,7 +199,7 @@ export default function PostDetailScreen() {
     isError: isCommentsError,
     refetch: refetchComments,
     isRefetching: isRefetchingComments,
-  } = useComments(id);
+  } = useComments(id, { enabled: isFocused });
 
   useEffect(() => {
     refetchCommentsRef.current = (silent?: boolean) => {

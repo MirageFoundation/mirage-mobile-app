@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/react-native";
 import { EvilIcons } from "@expo/vector-icons";
 import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useRef, useState } from "react";
-import { Platform, Pressable, SectionList, View } from "react-native";
+import { Pressable, SectionList, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -76,6 +76,7 @@ export function SettingsScreen() {
     setTheme,
     selectedContentTypes,
     toggleContentType,
+    setSelectedContentTypes,
     blurSensitiveMedia,
     setBlurSensitiveMedia,
     hideDownvotedPosts,
@@ -109,22 +110,15 @@ export function SettingsScreen() {
     if (value) {
       setShowMatureConfirm(true);
     } else {
-      if (selectedContentTypes.includes("all")) {
-        toggleContentType("all");
-        toggleContentType("porn");
-      } else if (selectedContentTypes.includes("porn")) {
-        toggleContentType("porn");
-      }
+      setSelectedContentTypes([]);
     }
-  }, [selectedContentTypes, toggleContentType]);
+  }, [setSelectedContentTypes]);
 
   const handleConfirmMature = useCallback(() => {
-    if (!selectedContentTypes.includes("porn") && !selectedContentTypes.includes("all")) {
-      toggleContentType("porn");
-    }
+    setSelectedContentTypes(["sensitive", "porn", "violence", "gore", "death"]);
     setBlurSensitiveMedia(true);
     setShowMatureConfirm(false);
-  }, [selectedContentTypes, toggleContentType, setBlurSensitiveMedia]);
+  }, [setSelectedContentTypes, setBlurSensitiveMedia]);
 
   const handleCancelMature = useCallback(() => {
     setShowMatureConfirm(false);
@@ -176,8 +170,9 @@ const handleApiServerChange = useCallback(
   // Get display labels
  const getContentTypeLabel = () => {
    const filtered = selectedContentTypes.filter((t) => t !== "porn");
-   const hasAll = selectedContentTypes.includes("all");
-   if (hasAll) return "All";
+   const NON_PORN_TAGS: string[] = ["sensitive", "violence", "gore", "death"];
+   const allNonPornSelected = NON_PORN_TAGS.every((t) => filtered.includes(t as any));
+   if (allNonPornSelected) return "All";
     if (filtered.length === 0) return "None";
    if (filtered.length === 1) {
      return (
@@ -257,7 +252,7 @@ const handleApiServerChange = useCallback(
               subtitle="Blur mature (18+) images and media"
               value={blurSensitiveMedia}
               onValueChange={handleBlurToggle}
-              disabled={!hasAnyContentEnabled}
+              disabled={!matureContentEnabled}
             />
           ),
         },
@@ -687,7 +682,7 @@ const handleApiServerChange = useCallback(
         title="Video Autoplay Network"
         options={videoAutoplayNetworkOptions}
         value={videoAutoplayNetwork}
-        onChange={setVideoAutoplayNetwork}
+      onChange={setVideoAutoplayNetwork}
       />
 
       <ConfirmationPopup

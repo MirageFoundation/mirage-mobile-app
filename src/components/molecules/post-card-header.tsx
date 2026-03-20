@@ -6,6 +6,22 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { memo, useCallback, useMemo } from "react";
 import { Pressable, View } from "react-native";
+
+const MAX_HEADER_LENGTH = 30;
+
+function getTopicUsernameDisplay(topic?: string, username?: string) {
+  if (!topic) return { displayTopic: undefined, showUsername: true };
+  const topicLen = topic.length;
+  const usernameLen = username?.length ?? 0;
+  if (topicLen + usernameLen <= MAX_HEADER_LENGTH) {
+    return { displayTopic: topic, showUsername: true };
+  }
+  if (topicLen > MAX_HEADER_LENGTH) {
+    return { displayTopic: topic.slice(0, MAX_HEADER_LENGTH) + "...", showUsername: false };
+  }
+  return { displayTopic: topic, showUsername: false };
+}
+
 import {
   Menu,
   MenuOption,
@@ -98,6 +114,11 @@ export const PostCardHeader = memo(function PostCardHeader({
     onFollowTopic?.();
   }, [onFollowTopic]);
 
+  const { displayTopic, showUsername } = useMemo(
+    () => getTopicUsernameDisplay(topic, author.username),
+    [topic, author.username],
+  );
+
   const subtleTextStyle = useMemo(
     () => ({ color: theme.colors.text.subtle }),
     [theme.colors.text.subtle],
@@ -138,7 +159,7 @@ export const PostCardHeader = memo(function PostCardHeader({
               style={({ pressed }) => [pressed && styles.usernameButtonPressed]}
             >
               <Text size="lg" weight="bold" numberOfLines={1}>
-                #{topic}
+                #{displayTopic}
               </Text>
             </Pressable>
           )}
@@ -149,7 +170,7 @@ export const PostCardHeader = memo(function PostCardHeader({
               numberOfLines={1}
               style={subtleTextStyle}
             >
-              #{topic}
+              #{displayTopic}
             </Text>
           )}
           {topic && !topicDisabled && (
@@ -163,26 +184,30 @@ export const PostCardHeader = memo(function PostCardHeader({
             size="md"
             style={subtleTextStyle}
           />
-          <Text size="sm" style={subtleTextStyle}>
-            •
-          </Text>
-          <Pressable
-            onPress={handleAuthorPress}
-            hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
-            style={({ pressed }) => [
-              styles.usernameButton,
-              pressed && styles.usernameButtonPressed,
-            ]}
-          >
-            <Text
-              size="md"
-              weight="medium"
-              numberOfLines={1}
-              style={usernameColorStyle}
-            >
-              @{author.username}
+          {showUsername && (
+            <Text size="sm" style={subtleTextStyle}>
+              •
             </Text>
-          </Pressable>
+          )}
+          {showUsername && (
+            <Pressable
+              onPress={handleAuthorPress}
+              hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+              style={({ pressed }) => [
+                styles.usernameButton,
+                pressed && styles.usernameButtonPressed,
+              ]}
+            >
+              <Text
+                size="md"
+                weight="medium"
+                numberOfLines={1}
+                style={usernameColorStyle}
+              >
+                @{author.username}
+              </Text>
+            </Pressable>
+          )}
         </View>
       </View>
 

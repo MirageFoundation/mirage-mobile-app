@@ -14,7 +14,7 @@ import { useAuthStore } from "@/src/stores";
  *
  * staleTime: 30 seconds
  */
-export function useComments(postId: string | undefined | null) {
+export function useComments(postId: string | undefined | null, options?: { enabled?: boolean }) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
 
   return useQuery({
@@ -24,7 +24,7 @@ export function useComments(postId: string | undefined | null) {
         post_id: postId!,
         address: walletAddress ?? undefined,
       }),
-    enabled: !!postId,
+    enabled: !!postId && (options?.enabled ?? true),
     staleTime: 1000 * 30, // 30 seconds
     gcTime: 1000 * 60 * 60, // 1 hour
   });

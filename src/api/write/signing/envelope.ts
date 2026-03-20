@@ -3,6 +3,7 @@ import {
   computePoW,
   estimatePoWTime,
   hexToBytes,
+  isPowCancelled,
   type MirageWallet,
   signCanonical,
 } from "@/src/wallet";
@@ -205,6 +206,9 @@ export async function buildSignedEnvelope<
           `[PoW] Complete (retry)! Found nonce=${pow} after ${powResult2.attempts} attempts in ${powResult2.computeTimeMs}ms`
         );
       } else {
+        if (isPowCancelled(err)) {
+          throw err;
+        }
         Sentry.captureException(err, {
           tags: { action: "pow_computation" },
           extra: { difficulty, powBaseBits: params.pow_base_bits, powFactor: params.pow_factor },

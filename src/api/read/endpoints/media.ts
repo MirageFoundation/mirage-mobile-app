@@ -137,6 +137,8 @@ async function withRetry<T>(
       lastError = error;
       const msg = error instanceof Error ? error.message : String(error);
       if (msg === "Upload aborted") throw error;
+      const status = (error as { status?: number }).status;
+      if (status === 422) throw error;
 
       if (attempt < maxRetries) {
         const delay = baseDelay * Math.pow(2, attempt);

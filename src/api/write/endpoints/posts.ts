@@ -143,6 +143,10 @@ export async function editPost(
 ): Promise<WriteResponse> {
   const { postId, topic = "", title, content, tag = "", parentId = "", media } = input;
 
+  if (!postId) {
+    throw new Error("editPost: postId is required");
+  }
+
   return withPowRetry(async () => {
     const payload = await buildSignedEnvelope({
       wallet,
@@ -150,8 +154,8 @@ export async function editPost(
       payloadFields: {
         target: parentId,
         topic,
-        title,
-        content,
+        title: title || "",
+        content: content || "",
         tag,
         override: postId,
         media: media ?? [],

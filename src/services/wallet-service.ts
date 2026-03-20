@@ -31,17 +31,39 @@ import {
 // ============================================
 
 const SECURE_STORE_OPTIONS: SecureStore.SecureStoreOptions = {
-  // Only accessible when device is unlocked
-  keychainAccessible: SecureStore.WHEN_UNLOCKED,
+  // Accessible after first unlock — survives background kills
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
 };
 
 // ============================================
 // Wallet Service Class
 // ============================================
 
+const OLD_SECURE_STORE_OPTIONS: SecureStore.SecureStoreOptions = {
+  keychainAccessible: SecureStore.WHEN_UNLOCKED,
+};
+
 class WalletService {
   private cachedMnemonic: string | null = null;
   private cachedWallet: MirageWallet | null = null;
+
+  async migrateKeychainAccessibility(): Promise<void> {
+    if (storage.getBoolean("wallet_keychain_migrated_v1")) return;
+    try {
+      const mnemonic = await SecureStore.getItemAsync(
+        STORAGE_KEYS.MNEMONIC,
+        OLD_SECURE_STORE_OPTIONS,
+      );
+      if (!mnemonic) {
+        storage.set("wallet_keychain_migrated_v1", true);
+        return;
+      }
+      await SecureStore.deleteItemAsync(STORAGE_KEYS.MNEMONIC, OLD_SECURE_STORE_OPTIONS);
+      await SecureStore.setItemAsync(STORAGE_KEYS.MNEMONIC, mnemonic, SECURE_STORE_OPTIONS);
+      this.cachedMnemonic = mnemonic;
+      storage.set("wallet_keychain_migrated_v1", true);
+    } catch {}
+  }
 
   // ============================================
   // Wallet Creation & Import
