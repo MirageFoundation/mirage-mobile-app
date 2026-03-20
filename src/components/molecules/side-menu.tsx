@@ -772,7 +772,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           handled,sentry log REACT-NATIVE-22(N+1) error on
                           getting username from wallet address fix,react native
                           400 error better error handling,react native 7 error
-                          noise reduction
+                          noise reduction,react native 422 error handling, long
+                          username overlapping in post card fix,username cut in
+                          thread fix
                         </Text>
                       </>
                     )}
@@ -830,7 +832,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           handled,sentry log REACT-NATIVE-22(N+1) error on
                           getting username from wallet address fix,react native
                           400 error better error handling,react native 7 error
-                          noise reduction
+                          noise reduction,react native 422 error handling, long
+                          username overlapping in post card fix,username cut in
+                          thread fix
                         </Text>
                       </>
                     )}
