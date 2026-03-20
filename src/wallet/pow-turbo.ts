@@ -136,6 +136,11 @@ export async function computePoW(
 
 export { cancelPow, getPowProgress };
 
+export function isPowCancelled(error: unknown): boolean {
+  const msg = String((error as Error)?.message || error || "");
+  return msg === "pow_cancelled" || msg.includes("PoW computation was cancelled");
+}
+
 export function estimatePoWTime(
   powDifficulty: number,
   powBaseBits: number,

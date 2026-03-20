@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                         >
                           showing logged out state after the app is opened from
                           background fixed, sentry error react native K, 21, 23
-                          error handled
+                          error handled,react native F (N+1) error handled
                         </Text>
                       </>
                     )}

@@ -8,6 +8,7 @@ import { mergeAudioVideo } from "@/src/utils/merge-audio-video";
 import { trimToMaxDuration } from "@/src/utils/video-processing";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
+import { isPowCancelled } from "@/src/wallet";
 import { Audio, ResizeMode, Video } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import { Paths, File as ExpoFile } from "expo-file-system";
@@ -956,18 +957,27 @@ export function CreateScreen() {
       }
     } catch (error) {
       setIsSubmitting(false);
-      Sentry.captureException(error, { tags: { feature: "create-post", operation: "submit" } });
 
-      const isNetworkError =
-        (error as any)?.code === "ERR_NETWORK" ||
-        (error as any)?.message === "Network Error";
-      if (isNetworkError) {
-        txProgress.setError("No internet connection. Please check your network and try again.");
+      if (isPowCancelled(error)) {
+        txProgress.hideModal();
+        toast.error(
+          "Post wasn't created",
+          "The app was closed while processing. Your draft has been saved — tap post to retry.",
+        );
       } else {
-        const serverError = (error as any)?.response?.data?.error;
-        const fallback = isEditMode ? "Failed to edit post" : "Failed to create post";
-        const errorMessage = serverError || (error instanceof Error ? error.message : fallback);
-        txProgress.setError(errorMessage);
+        Sentry.captureException(error, { tags: { feature: "create-post", operation: "submit" } });
+
+        const isNetworkError =
+          (error as any)?.code === "ERR_NETWORK" ||
+          (error as any)?.message === "Network Error";
+        if (isNetworkError) {
+          txProgress.setError("No internet connection. Please check your network and try again.");
+        } else {
+          const serverError = (error as any)?.response?.data?.error;
+          const fallback = isEditMode ? "Failed to edit post" : "Failed to create post";
+          const errorMessage = serverError || (error instanceof Error ? error.message : fallback);
+          txProgress.setError(errorMessage);
+        }
       }
     }
   }, [
