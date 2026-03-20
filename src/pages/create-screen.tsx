@@ -765,9 +765,14 @@ export function CreateScreen() {
           mediaUrls.push(...uploads);
         } catch (error) {
           Sentry.addBreadcrumb({ category: "image-upload", message: "Image upload failed", data: { error: String(error) }, level: "error" });
+          const status = (error as { status?: number }).status;
+          const responseText = (error as { responseText?: string }).responseText ?? "";
+          const isUnsupportedFormat = status === 422 && responseText.includes("decoding");
           toast.error(
             "Image upload failed",
-            error instanceof Error ? error.message : "Please try again",
+            isUnsupportedFormat
+              ? "This image format isn't supported. Try a different photo."
+              : error instanceof Error ? error.message : "Please try again",
           );
           setIsSubmitting(false);
           txProgress.reset();
