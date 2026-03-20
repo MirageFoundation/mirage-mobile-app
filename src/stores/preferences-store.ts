@@ -72,6 +72,7 @@ type PreferencesState = {
   hasSeenAdultPrompt: boolean;
   selectedContentTypes: ContentType[];
   blurSensitiveMedia: boolean;
+  ageVerified: boolean;
   hideDownvotedPosts: boolean;
 
   // Comments
@@ -105,6 +106,7 @@ type PreferencesState = {
   setSelectedContentTypes: (types: ContentType[]) => void;
   toggleContentType: (type: ContentType) => void;
   setBlurSensitiveMedia: (blur: boolean) => void;
+  setAgeVerified: (verified: boolean) => void;
   setHideDownvotedPosts: (hide: boolean) => void;
   setAutoCollapseThreshold: (threshold: number | null) => void;
   setTopicsBeforeShowMore: (count: number) => void;
@@ -130,9 +132,10 @@ export const usePreferencesStore = create<PreferencesState>()(
 
       // Content
       adultContentEnabled: false,
-      hasSeenAdultPrompt: false,
+      hasSeenAdultPrompt: true,
       selectedContentTypes: ["sensitive"],
-      blurSensitiveMedia: true,
+      blurSensitiveMedia: false,
+      ageVerified: false,
       hideDownvotedPosts: false,
 
       // Comments
@@ -259,6 +262,7 @@ export const usePreferencesStore = create<PreferencesState>()(
           };
         }),
       setBlurSensitiveMedia: (blur) => set({ blurSensitiveMedia: blur }),
+      setAgeVerified: (verified) => set({ ageVerified: verified }),
       setHideDownvotedPosts: (hide) => set({ hideDownvotedPosts: hide }),
       setAutoCollapseThreshold: (threshold) =>
         set({ autoCollapseThreshold: threshold }),
@@ -276,6 +280,7 @@ export const usePreferencesStore = create<PreferencesState>()(
      name: "preferences-storage",
       storage: createJSONStorage(() => mmkvStorage),
       version: 2,
+      version: 3,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<PreferencesState>;
         
@@ -292,12 +297,11 @@ export const usePreferencesStore = create<PreferencesState>()(
           }
         }
 
-        if (Array.isArray(state.selectedContentTypes)) {
-          const normalized = normalizeContentTypes(
-            state.selectedContentTypes as ContentType[]
-          );
-          state.selectedContentTypes = normalized;
-          state.adultContentEnabled = isAdultContentEnabled(normalized);
+        if (version < 3) {
+          state.selectedContentTypes = ["sensitive"];
+          state.adultContentEnabled = false;
+          state.blurSensitiveMedia = false;
+          state.hasSeenAdultPrompt = true;
         }
         
         return state as PreferencesState;

@@ -1,23 +1,27 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
+import * as Sentry from "@sentry/react-native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Pressable, RefreshControl, View } from "react-native";
+import { ActivityIndicator, FlatList, InteractionManager, Pressable, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import * as Notifications from "expo-notifications";
 
 import { useInfiniteInbox } from "@/src/api/read/hooks/use-inbox";
+import { triggerHaptic } from "@/src/components/utils/haptics";
 import type { InboxReply } from "@/src/api/types";
 import { InboxItem } from "@/src/components/molecules/inbox-item";
-import { InboxOptionsSheet, type InboxOptionsSheetRef } from "@/src/components/molecules/inbox-options-sheet";
 import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useAuthStore } from "@/src/stores";
 import { useInboxStore } from "@/src/stores/inbox-store";
 import { useShallow } from "zustand/react/shallow";
-import { markRepliesAsNotified } from "@/src/services/inbox-notifications";
+import { markRepliesAsNotified } from "@/src/services/inbox-notified-ids";
 import { markInboxViewed } from "@/src/api/write/endpoints/inbox";
+import { walletService } from "@/src/services/wallet-service";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
@@ -32,7 +36,7 @@ export function InboxScreen() {
   }>();
   const isLoggedIn = !!useAuthStore((s) => s.user);
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
-  const { markAsViewed, highlightBaselineAt, readReplyIds, markReplyAsRead, advanceHighlightBaseline } =
+  const { markAsViewed, highlightBaselineAt, readReplyIds, markReplyAsRead, advanceHighlightBaseline, setInboxActive } =
     useInboxStore(
       useShallow((s) => ({
         markAsViewed: s.markAsViewed,
@@ -40,11 +44,11 @@ export function InboxScreen() {
         readReplyIds: s.readReplyIds,
         markReplyAsRead: s.markReplyAsRead,
         advanceHighlightBaseline: s.advanceHighlightBaseline,
+        setInboxActive: s.setInboxActive,
       })),
     );
   const readReplyIdsSet = useMemo(() => new Set(readReplyIds), [readReplyIds]);
   const listRef = useRef<FlatList<InboxReply>>(null);
-  const inboxOptionsRef = useRef<InboxOptionsSheetRef>(null);
   const applyViewedTimestamp = useCallback(
     (timestamp?: number) => {
       const resolved =
@@ -81,19 +85,35 @@ export function InboxScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      setInboxActive(true);
       markAsViewed();
       refetch();
-      if (walletAddress) {
-        markInboxViewed(walletAddress)
-          .then((res) => {
-            applyViewedTimestamp(res.inbox_last_viewed_at);
-          })
-          .catch(() => {
-            applyViewedTimestamp();
+      Notifications.dismissAllNotificationsAsync();
+      Notifications.setBadgeCountAsync(0);
+      const task = InteractionManager.runAfterInteractions(() => {
+        if (walletAddress) {
+          walletService.getWallet().then((wallet) => {
+            if (!wallet) return;
+            markInboxViewed(wallet)
+              .then((res) => {
+                applyViewedTimestamp(res.inbox_last_viewed_at);
+              })
+              .catch(() => {
+                Sentry.addBreadcrumb({
+                  category: "inbox",
+                  message: "Failed to mark inbox as viewed",
+                  level: "warning",
+                });
+                applyViewedTimestamp();
+              });
           });
-      }
-      return () => {};
-    }, [applyViewedTimestamp, refetch, walletAddress, markAsViewed]),
+        }
+      });
+      return () => {
+        task.cancel();
+        setInboxActive(false);
+      };
+    }, [applyViewedTimestamp, refetch, walletAddress, markAsViewed, setInboxActive]),
   );
 
   useEffect(() => {
@@ -121,11 +141,8 @@ export function InboxScreen() {
     }
   }, [refetch]);
 
-  const handleOpenOptions = useCallback(() => {
-    inboxOptionsRef.current?.present();
-  }, []);
-
   const handleMarkAllAsSeen = useCallback(() => {
+    triggerHaptic("light");
     advanceHighlightBaseline();
   }, [advanceHighlightBaseline]);
 
@@ -239,12 +256,17 @@ export function InboxScreen() {
             Inbox
           </Text>
         </View>
-        <Pressable onPress={handleOpenOptions} hitSlop={8}>
-          <Ionicons
-            name="ellipsis-horizontal"
-            size={22}
-            color={theme.colors.text.default}
-          />
+        <Pressable
+          onPress={handleMarkAllAsSeen}
+          hitSlop={8}
+          style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+        >
+          <View style={styles.markSeenButton}>
+            <Ionicons name="checkmark-done-outline" size={18} color={theme.colors.text.subtle} />
+            <Text size="md" weight="semibold" mode="subtle">
+              Mark as seen
+            </Text>
+          </View>
         </Pressable>
       </View>
 
@@ -253,6 +275,7 @@ export function InboxScreen() {
         data={replies}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
+        ListHeaderComponent={fromNotification && isRefetching && !isRefreshing ? <ActivityIndicator style={{ paddingVertical: 12 }} color={theme.colors.primary[500]} /> : null}
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}
         onEndReached={handleEndReached}
@@ -274,10 +297,6 @@ export function InboxScreen() {
         windowSize={10}
         initialNumToRender={10}
       />
-      <InboxOptionsSheet
-        ref={inboxOptionsRef}
-        onMarkAllAsSeen={handleMarkAllAsSeen}
-      />
     </Box>
   );
 }
@@ -296,6 +315,11 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  markSeenButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   emptyContainer: {
     flex: 1,

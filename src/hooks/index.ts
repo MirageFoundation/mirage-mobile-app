@@ -70,3 +70,4 @@ export { useNewPostsChecker } from "./use-new-posts-checker";
 export {
   usePostDataRefresher,
 } from "./use-post-data-refresher";
+export { useRouter } from "./use-router";

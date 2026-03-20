@@ -13,7 +13,9 @@ import type { WalletMetadata } from "@/src/wallet";
 import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 import { useContentModerationStore } from "./content-moderation-store";
 import { useInboxStore } from "./inbox-store";
+import { useDraftStore } from "./draft-store";
 import { getTierName } from "@/src/utils/tiers";
+import { unregisterPush } from "@/src/services/push-notifications";
 
 // ============================================
 // Types
@@ -121,14 +123,18 @@ export const useAuthStore = create<AuthState>()(
 
           const cleanedUp = await walletService.cleanupPendingWallet();
           if (cleanedUp) {
-            console.log("[AuthStore] Cleaned up pending wallet from incomplete signup");
+            console.log(
+              "[AuthStore] Cleaned up pending wallet from incomplete signup",
+            );
           }
 
           const hasWallet = await walletService.hasWallet();
 
           if (!hasWallet) {
-            const contentTypes = usePreferencesStore.getState().selectedContentTypes;
-            const allowedTags = getAllowedTagsFromContentTypes(contentTypes) || undefined;
+            const contentTypes =
+              usePreferencesStore.getState().selectedContentTypes;
+            const allowedTags =
+              getAllowedTagsFromContentTypes(contentTypes) || undefined;
             const prefetchParams = {
               limit: 10,
               feed: "home" as const,
@@ -137,7 +143,8 @@ export const useAuthStore = create<AuthState>()(
             };
             queryClient.prefetchInfiniteQuery({
               queryKey: queryKeys.posts({ ...prefetchParams, page: undefined }),
-              queryFn: ({ pageParam = 1 }) => getPosts({ ...prefetchParams, page: pageParam }),
+              queryFn: ({ pageParam = 1 }) =>
+                getPosts({ ...prefetchParams, page: pageParam }),
               initialPageParam: 1,
             });
             set({
@@ -172,8 +179,10 @@ export const useAuthStore = create<AuthState>()(
               isInitializing: false,
             });
 
-            const contentTypes = usePreferencesStore.getState().selectedContentTypes;
-            const allowedTags = getAllowedTagsFromContentTypes(contentTypes) || undefined;
+            const contentTypes =
+              usePreferencesStore.getState().selectedContentTypes;
+            const allowedTags =
+              getAllowedTagsFromContentTypes(contentTypes) || undefined;
             const prefetchParams = {
               limit: 10,
               feed: "home" as const,
@@ -183,7 +192,8 @@ export const useAuthStore = create<AuthState>()(
             };
             queryClient.prefetchInfiniteQuery({
               queryKey: queryKeys.posts({ ...prefetchParams, page: undefined }),
-              queryFn: ({ pageParam = 1 }) => getPosts({ ...prefetchParams, page: pageParam }),
+              queryFn: ({ pageParam = 1 }) =>
+                getPosts({ ...prefetchParams, page: pageParam }),
               initialPageParam: 1,
             });
 
@@ -214,7 +224,10 @@ export const useAuthStore = create<AuthState>()(
                 });
               })
               .catch((apiError) => {
-                console.warn("[AuthStore] Failed to fetch user status from API:", apiError);
+                console.warn(
+                  "[AuthStore] Failed to fetch user status from API:",
+                  apiError,
+                );
                 Sentry.addBreadcrumb({
                   category: "auth",
                   message: "Failed to fetch user status",
@@ -253,7 +266,9 @@ export const useAuthStore = create<AuthState>()(
           const mnemonic = await walletService.exportMnemonic();
 
           if (!mnemonic) {
-            throw new Error("Failed to retrieve mnemonic after wallet creation");
+            throw new Error(
+              "Failed to retrieve mnemonic after wallet creation",
+            );
           }
 
           set({
@@ -340,6 +355,8 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         try {
+          const wallet = await walletService.getWallet();
+          await unregisterPush(wallet);
           await walletService.clearWallet();
         } catch (error) {
           console.error("[AuthStore] Failed to clear wallet:", error);
@@ -368,6 +385,9 @@ export const useAuthStore = create<AuthState>()(
         useHomePostCardStore.getState().reset();
         useContentModerationStore.getState().clearAll();
         useInboxStore.getState().resetForLogout();
+        usePreferencesStore.setState({ hasSeenAdultPrompt: false });
+        usePreferencesStore.setState({ ageVerified: false });
+        useDraftStore.getState().clearDraft();
       },
 
       // ============================================
@@ -438,8 +458,8 @@ export const useAuthStore = create<AuthState>()(
           ...(persistedState as Partial<AuthState>),
         };
       },
-    }
-  )
+    },
+  ),
 );
 
 // ============================================

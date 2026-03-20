@@ -3,7 +3,7 @@ import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Sentry from "@sentry/react-native";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
@@ -43,8 +43,6 @@ import {
   PostOptionsSheetRef,
   PROFILE_CONTENT_HEIGHT,
   ProfileHeaderBar,
-  ProfileMenuSheet,
-  ProfileMenuSheetRef,
   ProfileTabBar,
   ProfileEmptyState,
   ReportSheet,
@@ -60,6 +58,7 @@ import { ProfileContentAnimated } from "@/src/components/molecules/profile-conte
 import { PROFILE_TAB_BAR_HEIGHT } from "@/src/components/molecules/profile-tabs";
 import { Box } from "@/src/components/ui/primitives";
 import {
+  useAppState,
   useBlockHandler,
   useDeleteHandler,
   useReportHandler,
@@ -224,7 +223,6 @@ export function ProfileScreen() {
   const [activeTab, setActiveTab] = useState(0);
   const [isTabsSticky, setIsTabsSticky] = useState(false);
 
-  const menuSheetRef = useRef<ProfileMenuSheetRef>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -452,38 +450,6 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
       Sentry.addBreadcrumb({ category: "profile", message: "Share failed", data: { error: String(error) }, level: "warning" });
     }
   }, [user?.username, shareServer]);
-
-  const handleMenuPress = useCallback(() => {
-    menuSheetRef.current?.present();
-  }, []);
-
-  const handleMenuSettings = useCallback(() => {
-    router.push("/settings");
-  }, [router]);
-
-  const handleMenuSubscription = useCallback(() => {
-    router.push("/subscription");
-  }, [router]);
-
-  const handleMenuNetwork = useCallback(() => {
-    console.log("Network pressed");
-  }, []);
-
-  const handleMenuInviteAndEarn = useCallback(() => {
-    router.push("/invite-and-earn");
-  }, [router]);
-
-  const handleMenuHistory = useCallback(() => {
-    router.push("/history");
-  }, [router]);
-
-  const handleMenuSaved = useCallback(() => {
-    router.push("/saved-posts");
-  }, [router]);
-
-  const handleOnlineStatusChange = useCallback((isOnline: boolean) => {
-    console.log("Online status changed:", isOnline);
-  }, []);
 
   const handleEditUsernamePress = useCallback(() => {
     router.push("/change-username");
@@ -753,20 +719,6 @@ useEffect(() => {
   const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
   const [visibleVideoPostIds, setVisibleVideoPostIds] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    if (activeTab !== 0) return;
-    const hasCurrentActive =
-      !!activeVideoPostId &&
-      uiPosts.some((p) => p.id === activeVideoPostId && postHasPlayableVideo(p));
-    if (hasCurrentActive) return;
-
-    const firstVideo = uiPosts.find((p) => postHasPlayableVideo(p));
-    if (firstVideo) {
-      setActiveVideoPostId(firstVideo.id);
-      setVisibleVideoPostIds(new Set([firstVideo.id]));
-    }
-  }, [uiPosts, activeTab, activeVideoPostId]);
-
   const profileViewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 30,
     minimumViewTime: 300,
@@ -781,36 +733,57 @@ useEffect(() => {
     const visibleItems = items.filter(
       (item) => item.isViewable && item.item && typeof item.item === "object" && "id" in item.item
     );
-    if (visibleItems.length === 0) return;
+    if (visibleItems.length === 0) {
+      setVisibleVideoPostIds(new Set());
+      setActiveVideoPostId(null);
+      return;
+    }
     const videoItems = visibleItems.filter(
       (item) => postHasPlayableVideo(item.item)
     );
     const newVisibleIds = new Set(videoItems.map((item) => item.item.id));
     setVisibleVideoPostIds(newVisibleIds);
     if (videoItems.length > 0) {
-      const midIdx = Math.floor((visibleItems.length - 1) / 2);
-      const midListIndex = visibleItems[midIdx]?.index ?? 0;
+      const sortedIndices = visibleItems
+        .map((v) => v.index ?? 0)
+        .sort((a, b) => a - b);
+      const mid = Math.floor((sortedIndices.length - 1) / 2);
+      const centerIndex = sortedIndices[mid] ?? 0;
+      const visibleSpan = (sortedIndices[sortedIndices.length - 1] ?? 0) - (sortedIndices[0] ?? 0);
+      const maxDist = Math.max(1, visibleSpan * 0.35);
       let best = videoItems[0];
-      let bestDist = Math.abs((best.index ?? 0) - midListIndex);
+      let bestDist = Math.abs((best.index ?? 0) - centerIndex);
       for (let i = 1; i < videoItems.length; i++) {
-        const d = Math.abs((videoItems[i].index ?? 0) - midListIndex);
+        const d = Math.abs((videoItems[i].index ?? 0) - centerIndex);
         if (d < bestDist) { best = videoItems[i]; bestDist = d; }
       }
-      setActiveVideoPostId(best.item.id);
+      setActiveVideoPostId(bestDist <= maxDist ? best.item.id : null);
     } else {
       setActiveVideoPostId(null);
     }
   };
 
+  const activeVideoPostIdRef = useRef(activeVideoPostId);
+  activeVideoPostIdRef.current = activeVideoPostId;
+
   const onProfileViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       pendingProfileViewableRef.current = viewableItems;
-      if (Platform.OS === "android") {
-        if (profileDeferHandleRef.current !== null) {
-          clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+
+      const currentActive = activeVideoPostIdRef.current;
+      if (currentActive) {
+        const stillVisible = viewableItems.some(
+          (v) => v.isViewable && v.item && typeof v.item === "object" && "id" in v.item && v.item.id === currentActive
+        );
+        if (!stillVisible) {
+          setActiveVideoPostId(null);
         }
-        profileDeferHandleRef.current = setTimeout(flushProfileViewability, 150);
       }
+
+      if (profileDeferHandleRef.current !== null) {
+        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+      }
+      profileDeferHandleRef.current = setTimeout(flushProfileViewability, Platform.OS === "ios" ? 200 : 150);
     }
   ).current;
 
@@ -829,6 +802,35 @@ useEffect(() => {
       }, 50);
     }
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (profileDeferHandleRef.current !== null) {
+        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+      }
+    };
+  }, []);
+
+  useAppState({
+    onBackground: () => {
+      if (profileDeferHandleRef.current !== null) {
+        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+        profileDeferHandleRef.current = null;
+      }
+      setVisibleVideoPostIds(new Set());
+      setActiveVideoPostId(null);
+    },
+    onForeground: () => {
+      if (activeTab !== 0) return;
+      if (profileDeferHandleRef.current !== null) {
+        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+        profileDeferHandleRef.current = null;
+      }
+      requestAnimationFrame(() => {
+        flushProfileViewability();
+      });
+    },
+  });
 
   const lastFetchTime = useRef(0);
   const isFetchingRef = useRef(false);
@@ -1071,8 +1073,6 @@ useEffect(() => {
        isLoading={isLoading}
         isOwnProfile={true}
        onBackPress={handleBackPress}
-       onMenuPress={handleMenuPress}
-       onSubscriptionPress={handleMenuSubscription}
      />
 
       <Animated.View
@@ -1120,18 +1120,6 @@ useEffect(() => {
           onMomentumScrollEnd={handleProfileMomentumScrollEnd}
         />
       </GestureDetector>
-
-      <ProfileMenuSheet
-        ref={menuSheetRef}
-        isOnline={true}
-        onSettings={handleMenuSettings}
-        onSubscription={handleMenuSubscription}
-        onNetwork={handleMenuNetwork}
-        onInviteAndEarn={handleMenuInviteAndEarn}
-        onHistory={handleMenuHistory}
-        onSaved={handleMenuSaved}
-        onOnlineStatusChange={handleOnlineStatusChange}
-      />
 
       <PostOptionsSheet
         ref={postOptionsSheetRef}

@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import BottomSheet, {
+import {
   BottomSheetBackdrop,
+  BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import {
@@ -38,16 +39,16 @@ function ValuePickerSheetInner<T>(
   { title, options, value, onChange, onDismiss }: ValuePickerSheetProps<T>,
   ref: React.Ref<ValuePickerSheetRef>
 ) {
-  const bottomSheetRef = useRef<BottomSheet>(null);
+  const bottomSheetRef = useRef<BottomSheetModal>(null);
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
 
   const present = useCallback(() => {
-    bottomSheetRef.current?.expand();
+    bottomSheetRef.current?.present();
   }, []);
 
   const dismiss = useCallback(() => {
-    bottomSheetRef.current?.close();
+    bottomSheetRef.current?.dismiss();
   }, []);
 
   useImperativeHandle(ref, () => ({
@@ -98,9 +99,8 @@ const handleSelect = useCallback(
   );
 
   return (
-    <BottomSheet
+    <BottomSheetModal
       ref={bottomSheetRef}
-      index={-1}
       enableDynamicSizing
       enablePanDownToClose
       onChange={handleSheetChanges}
@@ -168,7 +168,7 @@ const handleSelect = useCallback(
           })}
         </View>
       </BottomSheetView>
-    </BottomSheet>
+    </BottomSheetModal>
   );
 }
 

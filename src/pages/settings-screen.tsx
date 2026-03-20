@@ -1,13 +1,14 @@
 import * as Sentry from "@sentry/react-native";
 import { EvilIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useCallback, useRef } from "react";
-import { Pressable, SectionList, View } from "react-native";
+import { useRouter } from "@/src/hooks/use-router";
+import { useCallback, useRef, useState } from "react";
+import { Platform, Pressable, SectionList, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import {
   ContentTypeSheet,
+  ConfirmationPopup,
   SettingRow,
   ThemeSelector,
   ValuePickerSheet,
@@ -20,9 +21,12 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useApiServer } from "@/src/providers/api-server-provider";
 import { useToast } from "@/src/providers/toast-provider";
 import { usePreferencesStore, type ThemeMode, type ApiServer, type VideoAutoplayNetwork } from "@/src/stores";
+import { isAdultContentEnabled } from "@/src/stores/preferences-store";
 import { useServerList } from "@/src/hooks/use-server-list";
 import { runInboxCheckNow, sendTestNotification, resetAndTestInboxNotification, getNotificationDebugInfo } from "@/src/services/inbox-notifications";
 import { useCloudflareErrorStore } from "@/src/stores/cloudflare-error-store";
+import * as Clipboard from "expo-clipboard";
+import { storage } from "@/src/stores/mmkv-storage";
 
 // Auto-collapse threshold options
 const collapseThresholdOptions: ValueOption<number | null>[] = [
@@ -90,6 +94,42 @@ export function SettingsScreen() {
     setShareServer,
   } = usePreferencesStore();
 
+  const adultContentActive = isAdultContentEnabled(selectedContentTypes);
+  const hasAnyContentEnabled = selectedContentTypes.length > 0;
+
+  const handleBlurToggle = useCallback((value: boolean) => {
+    setBlurSensitiveMedia(value);
+  }, [setBlurSensitiveMedia]);
+
+  const [showMatureConfirm, setShowMatureConfirm] = useState(false);
+
+  const matureContentEnabled = selectedContentTypes.includes("porn") || selectedContentTypes.includes("all");
+
+  const handleMatureToggle = useCallback((value: boolean) => {
+    if (value) {
+      setShowMatureConfirm(true);
+    } else {
+      if (selectedContentTypes.includes("all")) {
+        toggleContentType("all");
+        toggleContentType("porn");
+      } else if (selectedContentTypes.includes("porn")) {
+        toggleContentType("porn");
+      }
+    }
+  }, [selectedContentTypes, toggleContentType]);
+
+  const handleConfirmMature = useCallback(() => {
+    if (!selectedContentTypes.includes("porn") && !selectedContentTypes.includes("all")) {
+      toggleContentType("porn");
+    }
+    setBlurSensitiveMedia(true);
+    setShowMatureConfirm(false);
+  }, [selectedContentTypes, toggleContentType, setBlurSensitiveMedia]);
+
+  const handleCancelMature = useCallback(() => {
+    setShowMatureConfirm(false);
+  }, []);
+
   const { servers } = useServerList();
   const apiServerOptions = servers.map((s) => ({ value: s, label: s }));
 
@@ -135,15 +175,17 @@ const handleApiServerChange = useCallback(
 
   // Get display labels
  const getContentTypeLabel = () => {
-   if (selectedContentTypes.includes("all")) return "All";
-    if (selectedContentTypes.length === 0) return "None";
-   if (selectedContentTypes.length === 1) {
+   const filtered = selectedContentTypes.filter((t) => t !== "porn");
+   const hasAll = selectedContentTypes.includes("all");
+   if (hasAll) return "All";
+    if (filtered.length === 0) return "None";
+   if (filtered.length === 1) {
      return (
-        selectedContentTypes[0].charAt(0).toUpperCase() +
-        selectedContentTypes[0].slice(1)
+        filtered[0].charAt(0).toUpperCase() +
+        filtered[0].slice(1)
       );
     }
-    return `${selectedContentTypes.length} selected`;
+    return `${filtered.length} selected`;
   };
 
   const getCollapseThresholdLabel = () => {
@@ -185,10 +227,23 @@ const handleApiServerChange = useCallback(
             <SettingRow
               type="value"
               icon="filter-outline"
-              title="Content Type"
-              subtitle="Content you see in your feed"
+              title="Content Filter"
+              subtitle="Adult content is hidden by default"
               rightText={getContentTypeLabel()}
               onPress={() => contentTypeSheetRef.current?.present()}
+            />
+          ),
+        },
+        {
+          id: "show-mature-content",
+          component: (
+            <SettingRow
+              type="toggle"
+              icon="eye-off-outline"
+              title="Show Mature Content"
+              subtitle="I'm over 18"
+              value={matureContentEnabled}
+              onValueChange={handleMatureToggle}
             />
           ),
         },
@@ -198,10 +253,11 @@ const handleApiServerChange = useCallback(
             <SettingRow
               type="toggle"
               icon="eye-off-outline"
-              title="Blur Sensitive Media"
-              subtitle="Blur thumbnails of sensitive content"
+              title="Blur Mature Media"
+              subtitle="Blur mature (18+) images and media"
               value={blurSensitiveMedia}
-              onValueChange={setBlurSensitiveMedia}
+              onValueChange={handleBlurToggle}
+              disabled={!hasAnyContentEnabled}
             />
           ),
         },
@@ -365,6 +421,31 @@ const handleApiServerChange = useCallback(
         },
       ],
     },
+    ...(process.env.EXPO_PUBLIC_ENV === "preview" ? [{
+      title: "Push Notifications",
+      data: [
+        {
+          id: "copy-push-token",
+          component: (
+            <SettingRow
+              type="navigate"
+              icon="copy-outline"
+              title="Copy Push Token"
+              subtitle={storage.getString("push-token") ?? "No token registered"}
+              onPress={async () => {
+                const token = storage.getString("push-token");
+                if (token) {
+                  await Clipboard.setStringAsync(token);
+                  toast.success("Push token copied!");
+                } else {
+                  toast.error("No push token registered");
+                }
+              }}
+            />
+          ),
+        },
+      ],
+    }] : []),
     ...(__DEV__ ? [{
       title: "Notifications",
       data: [
@@ -427,6 +508,26 @@ const handleApiServerChange = useCallback(
               onPress={() => {
                 resetAndTestInboxNotification();
                 toast.success("Reset done, checking inbox...");
+              }}
+            />
+          ),
+        },
+        {
+          id: "copy-push-token",
+          component: (
+            <SettingRow
+              type="navigate"
+              icon="copy-outline"
+              title="Copy Push Token"
+              subtitle={storage.getString("push-token") ?? "No token registered"}
+              onPress={async () => {
+                const token = storage.getString("push-token");
+                if (token) {
+                  await Clipboard.setStringAsync(token);
+                  toast.success("Push token copied!");
+                } else {
+                  toast.error("No push token registered");
+                }
               }}
             />
           ),
@@ -587,6 +688,19 @@ const handleApiServerChange = useCallback(
         options={videoAutoplayNetworkOptions}
         value={videoAutoplayNetwork}
         onChange={setVideoAutoplayNetwork}
+      />
+
+      <ConfirmationPopup
+        visible={showMatureConfirm}
+        title="Enable mature content"
+        message="To update your settings to show mature content, confirm you're over 18."
+        description="After updating, you can visit your settings at any time to hide mature content again."
+        icon="eye-off"
+        confirmText="Yes, I'm over 18"
+        cancelText="Go back"
+        isDestructive={false}
+        onConfirm={handleConfirmMature}
+        onCancel={handleCancelMature}
       />
 
     </Box>

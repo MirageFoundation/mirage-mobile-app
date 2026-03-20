@@ -63,7 +63,7 @@ const getAnimationValues = (animationType: AnimationType) => {
 
 const useAnimations = (
   animations: AnimationType | AnimationType[] | undefined,
-  config: AnimationConfig = {}
+  config: AnimationConfig = {},
 ) => {
   const opacity = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -90,7 +90,7 @@ const useAnimations = (
     const runAnimations = () => {
       animationList.forEach((animation, index) => {
         const values = getAnimationValues(animation);
-        const animationDelay = delay + (index * 100);
+        const animationDelay = delay + index * 100;
 
         const runAnimation = () => {
           if (values.opacity) {
@@ -104,7 +104,7 @@ const useAnimations = (
                 withTiming(-10, { duration: 50 }),
                 withTiming(10, { duration: 50 }),
                 withTiming(-10, { duration: 50 }),
-                withTiming(0, { duration: 50 })
+                withTiming(0, { duration: 50 }),
               );
             } else {
               translateX.value = withTiming(values.translateX.to, { duration });
@@ -124,14 +124,22 @@ const useAnimations = (
             } else if (animation === "pulse") {
               scale.value = withSequence(
                 withTiming(1.05, { duration: duration / 2 }),
-                withTiming(1, { duration: duration / 2 })
+                withTiming(1, { duration: duration / 2 }),
               );
             } else {
-              scale.value = withTiming(values.scale.to, { duration }, (finished) => {
-                if (finished && onComplete && index === animationList.length - 1) {
-                  runOnJS(onComplete)();
-                }
-              });
+              scale.value = withTiming(
+                values.scale.to,
+                { duration },
+                (finished) => {
+                  if (
+                    finished &&
+                    onComplete &&
+                    index === animationList.length - 1
+                  ) {
+                    runOnJS(onComplete)();
+                  }
+                },
+              );
             }
           }
         };
@@ -150,14 +158,20 @@ const useAnimations = (
       runAnimations();
 
       if (repeat > 0) {
-        const repeatInterval = setInterval(() => {
-          initializeValues();
-          runAnimations();
-        }, duration + delay + 100);
+        const repeatInterval = setInterval(
+          () => {
+            initializeValues();
+            runAnimations();
+          },
+          duration + delay + 100,
+        );
 
-        setTimeout(() => {
-          clearInterval(repeatInterval);
-        }, (duration + delay + 100) * repeat);
+        setTimeout(
+          () => {
+            clearInterval(repeatInterval);
+          },
+          (duration + delay + 100) * repeat,
+        );
       }
     }, 16);
 
@@ -521,10 +535,6 @@ const styles = StyleSheet.create((theme, rt) => ({
       },
 
       border: {
-        default: {
-          borderWidth: .5,
-          borderColor: "transparent",
-        },
         none: {
           borderWidth: 0,
         },

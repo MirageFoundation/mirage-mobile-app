@@ -17,7 +17,8 @@ import { useAuthStore, useUIStore } from "@/src/stores";
 import { useInboxStore } from "@/src/stores/inbox-store";
 import { useShareIntentContext } from "expo-share-intent";
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs, router } from "expo-router";
+import { Tabs } from "expo-router";
+import { router } from "@/src/utils/guarded-router";
 import {
   Pressable,
   StyleSheet as RNStyleSheet,
@@ -33,6 +34,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { SideMenuProvider } from "@/src/providers/side-menu-provider";
+import { signalTabsReady } from "@/src/services/inbox-notifications";
 
 // Tabs that require authentication
 const PROTECTED_TABS = ["following", "create", "inbox", "profile"];
@@ -277,6 +279,7 @@ function TabsContent() {
         name="inbox"
         options={{
           title: "Inbox",
+          lazy: false,
         }}
       />
       <Tabs.Screen
@@ -292,6 +295,10 @@ function TabsContent() {
 export default function TabLayout() {
   const { hasShareIntent } = useShareIntentContext();
   const hasNavigatedRef = useRef(false);
+
+  useEffect(() => {
+    signalTabsReady();
+  }, []);
 
   useEffect(() => {
     if (hasShareIntent && !hasNavigatedRef.current) {

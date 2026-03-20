@@ -112,6 +112,7 @@ export interface NodeConfigResponse {
   validator_consensus_address: string;
   validator_moniker: string;
   validator_operator_address: string;
+  push_notifications_enabled?: boolean;
 }
 
 // ============================================
@@ -224,6 +225,7 @@ export interface Post {
   edited_at: number; // 0 if never edited
   thumbnail: string;
   media?: string[];
+  media_meta?: Array<{ w?: number; h?: number }>;
   points: number;
   comments: number;
   user_vote: number; // -1, 0, 1

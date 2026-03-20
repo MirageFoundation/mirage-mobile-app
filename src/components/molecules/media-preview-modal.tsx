@@ -7,6 +7,7 @@ import YoutubePlayer, { type YoutubeIframeRef } from "react-native-youtube-ifram
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -29,6 +30,7 @@ import { StyleSheet } from "react-native-unistyles";
 import type { ResolvedMedia } from "./post-card-utils";
 
 import { Text } from "@/src/components/ui/primitives";
+import { useAppState } from "@/src/hooks";
 import { useScreenOrientation } from "@/src/hooks/use-screen-orientation";
 import { useVideoMuteStore, useVideoPositionStore } from "@/src/stores";
 import {
@@ -153,6 +155,12 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
   const setPositionStore = useVideoPositionStore((s) => s.setPosition);
   const hasRestoredRef = useRef(false);
   const lastKnownTimeRef = useRef(0);
+  const playingRef = useRef(playing);
+  const resumePlaybackRef = useRef(true);
+
+  useEffect(() => {
+    playingRef.current = playing;
+  }, [playing]);
 
   const showControlsTemporarily = useCallback(() => {
     setControlsVisible(true);
@@ -207,6 +215,7 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
 
   useEffect(() => {
     if (!isActive) {
+      resumePlaybackRef.current = playingRef.current;
       savePositionSync();
       setPlaying(false);
       if (isAndroid) {
@@ -214,6 +223,9 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
       }
     } else {
       hasRestoredRef.current = false;
+      if (resumePlaybackRef.current) {
+        setPlaying(true);
+      }
     }
   }, [isActive, isAndroid, savePositionSync]);
 
@@ -357,6 +369,22 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
           </View>
         </Pressable>
       )}
+      {isAndroid && (
+        <Pressable
+          onPress={() => {
+            if (item.uri) Linking.openURL(item.uri);
+          }}
+          style={[previewVideoStyles.watchOnYouTubeButton, { bottom: insets.bottom + 10, left: 16 }]}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <View style={previewVideoStyles.watchOnYouTubeInner}>
+            <Ionicons name="logo-youtube" size={14} color="#FF0000" />
+            <Text size="xs" weight="semibold" style={{ color: "#fff", marginLeft: 4 }}>
+              Watch on YouTube
+            </Text>
+          </View>
+        </Pressable>
+      )}
     </View>
   );
 });
@@ -415,6 +443,20 @@ const previewVideoStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  watchOnYouTubeButton: {
+    position: "absolute",
+    bottom: 80,
+    left: 20,
+  },
+  watchOnYouTubeInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+  },
 });
 
 type MediaPreviewModalProps = {
@@ -434,6 +476,8 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
 }: MediaPreviewModalProps) {
   const insets = useSafeAreaInsets();
   const { screenWidth, screenHeight } = useScreenOrientation();
+  const { currentState } = useAppState();
+  const mediaSurfaceActive = visible && currentState === "active";
 
   useEffect(() => {
     if (visible) {
@@ -490,6 +534,12 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
       setIsVideoPlaying(true);
     }
   }, [visible]);
+
+  useEffect(() => {
+    if (!mediaSurfaceActive) {
+      videoRef.current?.pauseAsync().catch(() => {});
+    }
+  }, [mediaSurfaceActive]);
 
   const handleVideoToggle = useCallback(async () => {
     if (!videoRef.current) return;
@@ -625,9 +675,9 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
             keyExtractor={(item, index) => `${item.uri}-${index}`}
             renderItem={({ item, index }) =>
               item.type === "video" ? (
-                <PreviewVideoItem item={item} width={screenWidth} height={screenHeight} isActive={index === activeGalleryIndex} />
+                <PreviewVideoItem item={item} width={screenWidth} height={screenHeight} isActive={index === activeGalleryIndex && mediaSurfaceActive} />
               ) : item.type === "youtube" ? (
-                <PreviewYouTubeItem item={item} width={screenWidth} height={screenHeight} isActive={index === activeGalleryIndex} />
+                <PreviewYouTubeItem item={item} width={screenWidth} height={screenHeight} isActive={index === activeGalleryIndex && mediaSurfaceActive} />
               ) : (
                 <View style={[styles.mediaContainer, { width: screenWidth, height: screenHeight }]}>
                   <Image
@@ -707,7 +757,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
                 source={{ uri: media!.uri }}
                 style={styles.fullMedia}
                 resizeMode={ResizeMode.CONTAIN}
-                shouldPlay={isVideoPlaying}
+                shouldPlay={isVideoPlaying && mediaSurfaceActive}
                 isLooping
                 isMuted={isMuted}
                 useNativeControls={false}
@@ -725,7 +775,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
           )}
 
           {isYouTube && (
-            <PreviewYouTubeItem item={media!} width={screenWidth} height={screenHeight} isActive={visible} />
+            <PreviewYouTubeItem item={media!} width={screenWidth} height={screenHeight} isActive={mediaSurfaceActive} />
           )}
 
           {!isYouTube && isLoading && (

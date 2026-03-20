@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import Animated, {
@@ -244,6 +244,7 @@ export function QuestsSummaryCard() {
 
   const hasClaimed = useMemo(() => {
     if (!data) return false;
+    if (data.flash_quest && !data.flash_quest.completed) return false;
     return allComplete && data.pending_rewards.length === 0;
   }, [allComplete, data]);
 

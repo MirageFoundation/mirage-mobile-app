@@ -58,6 +58,7 @@ type HomePostCardState = {
  shareServer: ShareServer;
  allowAutoplay: boolean;
   activeFeedScreen: 'home' | 'following' | 'topic' | null;
+ sideMenuOpen: boolean;
  shouldScrollToTop: boolean;
  skipNextRefresh: boolean;
  disabledTopicName?: string;
@@ -79,6 +80,7 @@ type HomePostCardState = {
  setShareServer: (server: ShareServer) => void;
  setAllowAutoplay: (allow: boolean) => void;
   setActiveFeedScreen: (screen: 'home' | 'following' | 'topic' | null) => void;
+ setSideMenuOpen: (open: boolean) => void;
  triggerScrollToTop: () => void;
  clearScrollToTop: () => void;
  setSkipNextRefresh: (skip: boolean) => void;
@@ -103,6 +105,7 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
  shareServer: "mirage.talk",
  allowAutoplay: true,
   activeFeedScreen: null,
+ sideMenuOpen: false,
  shouldScrollToTop: false,
  skipNextRefresh: false,
  disabledTopicName: undefined,
@@ -208,6 +211,7 @@ setVoteOverride: (postId, override) =>
  setShareServer: (server) => set({ shareServer: server }),
  setAllowAutoplay: (allow) => set({ allowAutoplay: allow }),
   setActiveFeedScreen: (screen) => set({ activeFeedScreen: screen }),
+ setSideMenuOpen: (open) => set({ sideMenuOpen: open }),
  triggerScrollToTop: () => set({ shouldScrollToTop: true }),
  clearScrollToTop: () => set({ shouldScrollToTop: false }),
  setSkipNextRefresh: (skip) => set({ skipNextRefresh: skip }),
@@ -227,6 +231,7 @@ setVoteOverride: (postId, override) =>
   skipNextRefresh: false,
    disabledTopicName: undefined,
     activeFeedScreen: null,
+ sideMenuOpen: false,
  }),
 }));
 
@@ -271,7 +276,7 @@ export const useAllowAutoplay = () =>
  useHomePostCardStore((state) => state.allowAutoplay);
 
 export const useFeedActive = (screen: 'home' | 'following' | 'topic') =>
-  useHomePostCardStore((state) => state.activeFeedScreen === screen);
+  useHomePostCardStore((state) => state.activeFeedScreen === screen && !state.sideMenuOpen);
 
 export const useHandlers = () =>
   useHomePostCardStore((state) => state.handlers);

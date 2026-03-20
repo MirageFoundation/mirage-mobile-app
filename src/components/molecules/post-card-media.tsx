@@ -2,7 +2,7 @@ import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
+import { Audio, AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
 import {
   memo,
@@ -17,7 +17,9 @@ import {
 import { type ImageLoadEventData } from "expo-image";
 import {
   ActivityIndicator,
+  AppState,
   Dimensions,
+  Linking,
   Platform,
   Pressable,
   View,
@@ -125,6 +127,8 @@ export const PostCardMedia = memo(
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const playRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pauseDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const videoErrorRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const videoErrorRetryCountRef = useRef(0);
 
     const aspectRatioLockedRef = useRef(false);
     const userInitiatedPlayRef = useRef(false);
@@ -194,6 +198,9 @@ export const PostCardMedia = memo(
         if (pauseDelayRef.current) {
           clearTimeout(pauseDelayRef.current);
         }
+        if (videoErrorRetryRef.current) {
+          clearTimeout(videoErrorRetryRef.current);
+        }
       };
     }, []);
 
@@ -222,30 +229,22 @@ export const PostCardMedia = memo(
     const cachedAspectRatio = resolvedMediaUri
       ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
       : undefined;
-    const initialAspectRatio = cachedAspectRatio ?? getMediaAspectRatio(media);
-    const [mediaAspectRatio, setMediaAspectRatio] = useState(initialAspectRatio);
+    const targetAspectRatio = cachedAspectRatio ?? getMediaAspectRatio(media);
+    const [mediaAspectRatio, setMediaAspectRatio] = useState(targetAspectRatio);
 
-    if (cachedAspectRatio && !aspectRatioLockedRef.current) {
+    const prevMediaUriRef = useRef(resolvedMediaUri);
+    const uriChanged = prevMediaUriRef.current !== resolvedMediaUri;
+    if (uriChanged) {
+      prevMediaUriRef.current = resolvedMediaUri;
+      aspectRatioLockedRef.current = !!cachedAspectRatio;
+      if (Math.abs(mediaAspectRatio - targetAspectRatio) >= 0.01) {
+        setMediaAspectRatio(targetAspectRatio);
+      }
+    } else if (cachedAspectRatio && !aspectRatioLockedRef.current) {
       aspectRatioLockedRef.current = true;
     }
 
-    const prevMediaUriRef = useRef(resolvedMediaUri);
-    if (prevMediaUriRef.current !== resolvedMediaUri) {
-      prevMediaUriRef.current = resolvedMediaUri;
-      const newCached = resolvedMediaUri ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri) : undefined;
-      if (newCached) {
-        if (Math.abs(mediaAspectRatio - newCached) >= 0.01) {
-          setMediaAspectRatio(newCached);
-        }
-        aspectRatioLockedRef.current = true;
-      } else {
-        const computed = getMediaAspectRatio(media);
-        if (Math.abs(mediaAspectRatio - computed) >= 0.01) {
-          setMediaAspectRatio(computed);
-        }
-        aspectRatioLockedRef.current = false;
-      }
-    }
+    const effectiveAspectRatio = uriChanged ? targetAspectRatio : mediaAspectRatio;
 
     useEffect(() => {
       const isPlayable = media?.type === "video" || media?.type === "youtube";
@@ -355,7 +354,6 @@ export const PostCardMedia = memo(
     const updateMediaAspectRatioFromSize = useCallback(
       (width?: number, height?: number) => {
         if (!width || !height) return;
-        if (aspectRatioLockedRef.current) return;
         const ratio = width / height;
         if (!Number.isFinite(ratio) || ratio <= 0) return;
         setMediaAspectRatio((current) => {
@@ -416,6 +414,10 @@ export const PostCardMedia = memo(
       (event: GestureResponderEvent) => {
         event.stopPropagation?.();
         if (isPostDetail) return;
+        if (shouldBlurContent) {
+          onRevealContent?.();
+          return;
+        }
         if (!allowAutoplay && !isVideoPlaying && !feedTappedToPlay) {
           setFeedTappedToPlay(true);
           handleVideoToggle();
@@ -424,13 +426,17 @@ export const PostCardMedia = memo(
         triggerHaptic("selection");
         onMediaPress?.();
       },
-      [isPostDetail, allowAutoplay, isVideoPlaying, feedTappedToPlay, handleVideoToggle, onMediaPress],
+      [isPostDetail, shouldBlurContent, onRevealContent, allowAutoplay, isVideoPlaying, feedTappedToPlay, handleVideoToggle, onMediaPress],
     );
 
     const handleFeedYouTubeTap = useCallback(
       (event: GestureResponderEvent) => {
         event.stopPropagation?.();
         if (isPostDetail) return;
+        if (shouldBlurContent) {
+          onRevealContent?.();
+          return;
+        }
         if (Platform.OS === "android" && !shouldAutoPlayYouTube && !isVideoPlaying && !feedTappedToPlay) {
           setFeedTappedToPlay(true);
           return;
@@ -438,7 +444,7 @@ export const PostCardMedia = memo(
         triggerHaptic("selection");
         onMediaPress?.();
       },
-      [isPostDetail, shouldAutoPlayYouTube, isVideoPlaying, feedTappedToPlay, onMediaPress],
+      [isPostDetail, shouldBlurContent, onRevealContent, shouldAutoPlayYouTube, isVideoPlaying, feedTappedToPlay, onMediaPress],
     );
 
     const resolvedMediaUriForCacheRef = useRef(media?.uri);
@@ -478,6 +484,13 @@ export const PostCardMedia = memo(
         triggerHaptic("light");
         const newGlobalMuted = !globalMuted;
         toggleMute();
+
+        if (!newGlobalMuted) {
+          await Audio.setAudioModeAsync({
+            playsInSilentModeIOS: true,
+            staysActiveInBackground: false,
+          }).catch(() => {});
+        }
 
         if (media?.type === "youtube") {
           if (shouldUseAndroidYouTubeEmbed) {
@@ -562,14 +575,36 @@ export const PostCardMedia = memo(
       [shouldBlurContent, onRevealContent, onMediaPress],
     );
 
-    // Don't hide cloudflarestream videos on error - they might be processing
     const isCloudflareVideo =
       media?.uri?.includes("cloudflarestream.com") ||
       media?.uri?.includes("videodelivery.net");
+    const isRedgifsVideo = media?.uri?.includes("redgifs.com");
+    const isRetryableVideo = isCloudflareVideo || isRedgifsVideo;
     const shouldHideOnError =
-      imageError && !isCloudflareVideo && !isVideoProcessing;
+      imageError && !isRetryableVideo && !isVideoProcessing;
 
     const wasOfflineRef = useRef(false);
+    const wasBackgroundedRef = useRef(false);
+
+    useEffect(() => {
+      const sub = AppState.addEventListener("change", (nextState) => {
+        if (nextState === "background") {
+          wasBackgroundedRef.current = true;
+        } else if (nextState === "active" && wasBackgroundedRef.current) {
+          wasBackgroundedRef.current = false;
+          if (isVideoProcessing || (imageError && isRetryableVideo)) {
+            setTimeout(() => {
+              setIsVideoProcessing(false);
+              setImageError(false);
+              setIsVideoLoading(false);
+              setMediaRetryKey((k) => k + 1);
+            }, 500);
+          }
+        }
+      });
+      return () => sub.remove();
+    }, [isVideoProcessing, imageError, isRetryableVideo]);
+
     useEffect(() => {
       if (!isConnected) {
         wasOfflineRef.current = true;
@@ -591,12 +626,12 @@ export const PostCardMedia = memo(
     }, [isConnected]);
 
     const containerWidth = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
-    const calculatedHeight = containerWidth / mediaAspectRatio;
+    const calculatedHeight = containerWidth / effectiveAspectRatio;
     const exceedsMaxHeight = calculatedHeight > MEDIA_MAX_HEIGHT;
 
     const mediaWrapperStyle = exceedsMaxHeight
       ? { height: MEDIA_MAX_HEIGHT }
-      : { aspectRatio: mediaAspectRatio };
+      : { aspectRatio: effectiveAspectRatio };
 
     if (!media || shouldHideOnError) return null;
 
@@ -625,7 +660,7 @@ export const PostCardMedia = memo(
                 >
                   No internet connection
                 </Text>
-                <Text>
+                <Text
                   size="xs"
                   style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}
                 >
@@ -633,6 +668,7 @@ export const PostCardMedia = memo(
                 </Text>
               </View>
             )}
+            <View style={styles.borderOverlay} pointerEvents="none" />
           </View>
         </View>
       );
@@ -821,9 +857,13 @@ export const PostCardMedia = memo(
                     setIsVideoLoading(false);
                     userInitiatedPlayRef.current = false;
                   }
-                  // Video loaded successfully - clear processing state
                   if (isVideoProcessing) {
                     setIsVideoProcessing(false);
+                  }
+                  videoErrorRetryCountRef.current = 0;
+                  if (videoErrorRetryRef.current) {
+                    clearTimeout(videoErrorRetryRef.current);
+                    videoErrorRetryRef.current = null;
                   }
                   videoRef.current?.setStatusAsync({ isMuted: effectiveMuted }).catch(() => {});
                 }}
@@ -837,12 +877,27 @@ export const PostCardMedia = memo(
                       mediaSource.uri,
                     );
                   }
-                  // For cloudflare stream videos, show processing state instead of hiding
                   const isCloudflare =
                     mediaSource.uri?.includes("cloudflarestream.com") ||
                     mediaSource.uri?.includes("videodelivery.net");
-                  if (isCloudflare) {
+                  const isRedgifs = mediaSource.uri?.includes("redgifs.com");
+                  if (isCloudflare || isRedgifs) {
                     setIsVideoProcessing(true);
+                    if (videoErrorRetryCountRef.current < 3) {
+                      videoErrorRetryCountRef.current += 1;
+                      if (videoErrorRetryRef.current) clearTimeout(videoErrorRetryRef.current);
+                      videoErrorRetryRef.current = setTimeout(() => {
+                        setIsVideoProcessing(false);
+                        setImageError(false);
+                        setIsVideoLoading(false);
+                        setMediaRetryKey((k) => k + 1);
+                      }, 2000 * videoErrorRetryCountRef.current);
+                    } else {
+                      if (videoErrorRetryRef.current) clearTimeout(videoErrorRetryRef.current);
+                      videoErrorRetryRef.current = setTimeout(() => {
+                        setIsVideoProcessing(false);
+                      }, 5000);
+                    }
                   } else {
                     setImageError(true);
                   }
@@ -964,8 +1019,25 @@ export const PostCardMedia = memo(
               </Pressable>
             )}
 
-          {/* Video processing overlay for Cloudflare Stream */}
-          {isVideoProcessing && isCloudflareVideo && isConnected && (
+          {media.type === "youtube" && Platform.OS === "android" && !shouldBlurContent && (
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation?.();
+                if (media.uri) Linking.openURL(media.uri);
+              }}
+              style={isPostDetail ? styles.watchOnYouTubeButtonTop : styles.watchOnYouTubeButton}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <View style={styles.watchOnYouTubeInner}>
+                <Ionicons name="logo-youtube" size={14} color="#FF0000" />
+                <Text size="xs" weight="semibold" style={{ color: "#fff", marginLeft: 4 }}>
+                  Watch on YouTube
+                </Text>
+              </View>
+            </Pressable>
+          )}
+
+          {isVideoProcessing && isRetryableVideo && isConnected && (
             <View style={styles.processingOverlay}>
               <ActivityIndicator size="large" color="#fff" />
               <Text
@@ -973,13 +1045,13 @@ export const PostCardMedia = memo(
                 weight="semibold"
                 style={{ color: "#fff", marginTop: 8 }}
               >
-                Video processing...
+                {isRedgifsVideo ? "Loading video..." : "Video processing..."}
               </Text>
               <Text
                 size="xs"
                 style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}
               >
-                This may take a few moments
+                {isRedgifsVideo ? "Retrying..." : "This may take a few moments"}
               </Text>
             </View>
           )}
@@ -1064,6 +1136,7 @@ export const PostCardMedia = memo(
               </Text>
             </View>
           )}
+          <View style={styles.borderOverlay} pointerEvents="none" />
         </View>
       </View>
     );
@@ -1081,8 +1154,13 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.background.subtle,
     borderRadius: theme.radius.md,
     overflow: "hidden",
+  },
+  borderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.md,
     borderWidth: 0.3,
     borderColor: theme.colors.border.subtle,
+    zIndex: 50,
   },
   skeletonOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -1154,6 +1232,26 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "rgba(0, 0, 0, 0.65)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  watchOnYouTubeButton: {
+    position: "absolute",
+    bottom: theme.spacing.sm,
+    left: theme.spacing.sm,
+    zIndex: 30,
+  },
+  watchOnYouTubeButtonTop: {
+    position: "absolute",
+    top: theme.spacing.sm,
+    left: theme.spacing.sm,
+    zIndex: 30,
+  },
+  watchOnYouTubeInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
   },
   processingOverlay: {
     ...StyleSheet.absoluteFillObject,

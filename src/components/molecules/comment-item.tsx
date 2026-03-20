@@ -11,8 +11,8 @@ import { MediaPreviewModal } from "./media-preview-modal";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import * as Linking from "expo-linking";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { openUrlOrInternal } from "@/src/utils/internal-link-handler";
 import {
   ActivityIndicator,
   Dimensions,
@@ -264,11 +264,7 @@ const CommentContent = memo(({ content }: { content: string }) => {
 
   const handleLinkPress = useCallback((url: string) => {
     triggerHaptic("light");
-    const fullUrl =
-      url.startsWith("http://") || url.startsWith("https://")
-        ? url
-        : `https://${url}`;
-    Linking.openURL(fullUrl).catch(() => {});
+    openUrlOrInternal(url);
   }, []);
 
   const handleImagePress = useCallback((url: string) => {

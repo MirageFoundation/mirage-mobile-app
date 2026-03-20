@@ -22,7 +22,7 @@ import { usePreferencesStore } from "@/src/stores";
 import { useToast } from "@/src/providers/toast-provider";
 import { useQueryClient } from "@tanstack/react-query";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,

@@ -37,7 +37,7 @@ import {
   usePreferencesStore,
   type ApiServer,
 } from "@/src/stores";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { LogoutConfirmationPopup } from "./logout-confirmation-popup";
 import {
   ValuePickerSheet,
@@ -71,6 +71,7 @@ type SideMenuProps = {
   onAbout?: () => void;
   onLogout?: () => Promise<void>;
   onDismiss?: () => void;
+  onOpen?: () => void;
 };
 
 export type SideMenuRef = {
@@ -314,6 +315,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       onAbout,
       onLogout,
       onDismiss,
+      onOpen,
     },
     ref,
   ) => {
@@ -379,7 +381,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       setVisible(true);
       translateX.value = withTiming(0, animationConfig);
       backdropOpacity.value = withTiming(0.5, animationConfig);
-    }, []);
+      onOpen?.();
+    }, [onOpen]);
 
     const close = useCallback(() => {
       translateX.value = withTiming(-MENU_WIDTH, animationConfig);
@@ -398,6 +401,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
         translateX.value = -MENU_WIDTH;
         backdropOpacity.value = 0;
         setVisible(false);
+        onDismiss?.();
       },
     }));
 
@@ -747,7 +751,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 84
+                          update 94
                         </Text>
                         <Text
                           style={{
@@ -757,15 +761,22 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          Huge fix on matching the votes, comments and counts on
-                          posts all over the screen when app state changes,app
-                          optimization on fetching all the pages uptp
-                          10,required update popup, invite code reawrd in quests
-                          handled and all type of quest cases handled, and claim
-                          reawrd showing wrong rewards fixed,platform specific
-                          version check with backend,better error handling for
-                          server error,removed ability to change server from
-                          cloudflare error toast
+                          extracting gif from link shared from external app
+                          fix,added some new conditions to auto fill create post
+                          from meta data,remove username of x in title when auto
+                          filled, race condition in refresh and check new posts
+                          fix,added mark as seen button in header of inbox,
+                          cross in create post should not clear the post
+                          draft,clciking vote icon continously for long time
+                          mess fix,clciking on notification sent from backend
+                          opens the inbox and show activity indicator on top
+                          while fetching new msg,redgif videos not appearing
+                          sometimes fixed, all videos stuck on loading when app
+                          state changes fixed,tap to reveal not responding in
+                          profile posts,refresh quests everytime we open quests
+                          screen, refresh quest on home on refresh or tab
+                          switch, clicking on any button twice quickly opens
+                          double same screen one upon another fixed
                         </Text>
                       </>
                     )}
@@ -806,7 +817,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 84
+                          update 94
                         </Text>
                         <Text
                           style={{
@@ -816,15 +827,22 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          Huge fix on matching the votes, comments and counts on
-                          posts all over the screen when app state changes,app
-                          optimization on fetching all the pages uptp
-                          10,required update popup, invite code reawrd in quests
-                          handled and all type of quest cases handled, and claim
-                          reawrd showing wrong rewards fixed,platform specific
-                          version check with backend,better error handling for
-                          server error,removed ability to change server from
-                          cloudflare error toast
+                          extracting gif from link shared from external app
+                          fix,added some new conditions to auto fill create post
+                          from meta data,remove username of x in title when auto
+                          filled, race condition in refresh and check new posts
+                          fix,added mark as seen button in header of inbox,
+                          cross in create post should not clear the post
+                          draft,clciking vote icon continously for long time
+                          mess fix,clciking on notification sent from backend
+                          opens the inbox and show activity indicator on top
+                          while fetching new msg,redgif videos not appearing
+                          sometimes fixed, all videos stuck on loading when app
+                          state changes fixed,tap to reveal not responding in
+                          profile posts,refresh quests everytime we open quests
+                          screen, refresh quest on home on refresh or tab
+                          switch, clicking on any button twice quickly opens
+                          double same screen one upon another fixed
                         </Text>
                       </>
                     )}

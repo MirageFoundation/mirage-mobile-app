@@ -70,8 +70,9 @@ export const ContentWarningBadge = ({
       ? `${config.label} +${types.length - 1}` 
       : config.label;
 
+    const Wrapper = onPress ? Pressable : View;
     return (
-      <Pressable onPress={onPress ? handlePress : undefined}>
+      <Wrapper onPress={onPress ? handlePress : undefined}>
         <View 
           style={[
             styles.badge, 
@@ -88,13 +89,14 @@ export const ContentWarningBadge = ({
             {label}
           </Text>
         </View>
-      </Pressable>
+      </Wrapper>
     );
   }
 
   // Expanded mode: show all badges
+  const Wrapper = onPress ? Pressable : View;
   return (
-    <Pressable onPress={onPress ? handlePress : undefined}>
+    <Wrapper onPress={onPress ? handlePress : undefined}>
       <View style={styles.container}>
         {types.map((type) => {
           const config = WARNING_CONFIG[type];
@@ -121,7 +123,7 @@ export const ContentWarningBadge = ({
           );
         })}
       </View>
-    </Pressable>
+    </Wrapper>
   );
 };
 

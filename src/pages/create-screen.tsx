@@ -11,7 +11,8 @@ import * as Sentry from "@sentry/react-native";
 import { Audio, ResizeMode, Video } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import { Paths, File as ExpoFile } from "expo-file-system";
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { router } from "@/src/utils/guarded-router";
 import { useShareIntentContext } from "expo-share-intent";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Network from "expo-network";
@@ -426,7 +427,7 @@ export function CreateScreen() {
 
     setTimeout(() => {
       if (shareIntent.text && !shareIntent.webUrl) {
-        updateDraft({ body: shareIntent.text });
+        updateDraft({ body: shareIntent.text.slice(0, tierLimits.maxContentLength) });
       }
       if (shareIntent.webUrl) {
         setIsProcessingShareLink(true);
@@ -439,6 +440,7 @@ export function CreateScreen() {
             image: meta.image,
             images: meta.images,
             video: meta.video,
+            videos: meta.videos,
             audioUrl: meta.audioUrl,
             audioUrls: meta.audioUrls,
           });
@@ -449,6 +451,7 @@ export function CreateScreen() {
             level: "info",
           });
           let finalTitle: string | undefined;
+          let titleOverflow = "";
           if (meta.title) {
             finalTitle = meta.title;
             if (meta.domain === "instagram.com") {
@@ -457,11 +460,45 @@ export function CreateScreen() {
                 finalTitle = `${igMatch[1]} on Instagram`;
               }
             }
-            finalTitle = decodeHtmlEntities(finalTitle);
-            updateDraft({ title: finalTitle.slice(0, tierLimits.maxTitleLength) });
+            if ((meta.domain === "x.com" || meta.domain === "twitter.com") && /^.+\s+\(@\w+\)$/.test(finalTitle)) {
+              finalTitle = undefined;
+            }
+            if (finalTitle) {
+              finalTitle = decodeHtmlEntities(finalTitle);
+              if (finalTitle.length > tierLimits.maxTitleLength) {
+                const lines = finalTitle.split("\n");
+                let titlePart = "";
+                let overflowLines: string[] = [];
+                for (let i = 0; i < lines.length; i++) {
+                  const candidate = titlePart ? `${titlePart}\n${lines[i]}` : lines[i];
+                  if (candidate.length <= tierLimits.maxTitleLength) {
+                    titlePart = candidate;
+                  } else {
+                    overflowLines = lines.slice(i);
+                    break;
+                  }
+                }
+                if (!titlePart && lines[0]) {
+                  titlePart = lines[0].slice(0, tierLimits.maxTitleLength);
+                  overflowLines = lines;
+                }
+                finalTitle = titlePart;
+                titleOverflow = overflowLines.join("\n").trim();
+              }
+              updateDraft({ title: finalTitle.slice(0, tierLimits.maxTitleLength) });
+            }
           }
           const bodyParts: string[] = [];
-          if (meta.description) {
+          if (!finalTitle && meta.description) {
+            let desc = decodeHtmlEntities(meta.description);
+            const lines = desc.split("\n");
+            finalTitle = lines[0].slice(0, tierLimits.maxTitleLength);
+            updateDraft({ title: finalTitle });
+            const remaining = lines.slice(1).join("\n").trim();
+            if (remaining) {
+              bodyParts.push(remaining.slice(0, tierLimits.maxContentLength));
+            }
+          } else if (meta.description && meta.description !== meta.title) {
             let desc = meta.description;
             if (meta.domain === "instagram.com" && meta.title) {
               const igCaptionMatch = meta.title.match(/on\s+Instagram:\s*"(.+)"/s);
@@ -482,7 +519,10 @@ export function CreateScreen() {
             }
             bodyParts.push(desc.slice(0, tierLimits.maxContentLength));
           }
-          updateDraft({ body: bodyParts.join("\n\n") });
+          if (titleOverflow) {
+            bodyParts.unshift(titleOverflow);
+          }
+          updateDraft({ body: bodyParts.join("\n\n").slice(0, tierLimits.maxContentLength) });
           console.log("[CreateScreen] Draft auto-filled:", {
             title: (finalTitle ?? meta.title)?.slice(0, tierLimits.maxTitleLength),
             body: bodyParts.join("\n\n").slice(0, 200),
@@ -497,68 +537,83 @@ export function CreateScreen() {
           }
 
           let videoDownloaded = false;
+          let mediaCount = 0;
 
-          if (meta.video) {
+          const videosToDownload = meta.videos?.length > 0
+            ? meta.videos.slice(0, 10)
+            : meta.video
+              ? [meta.video]
+              : [];
+
+          for (let vi = 0; vi < videosToDownload.length; vi++) {
+            if (mediaCount >= 10) break;
+            const vidUrl = videosToDownload[vi];
             try {
-              const response = await fetch(meta.video);
+              const response = await fetch(vidUrl);
               const contentType = response.headers.get("content-type") ?? "";
-              const videoUrl = response.url;
+              const resolvedUrl = response.url;
 
-              const isVideoContent = contentType.startsWith("video/") || contentType.startsWith("application/octet-stream");
-              const hasVideoExtension = /\.(mp4|mov|webm|m3u8|ts)(\?|#|$)/i.test(videoUrl || meta.video);
+              const isVideoContent = contentType.startsWith("video/") || contentType.startsWith("application/octet-stream") || contentType === "image/gif";
+              const hasVideoExtension = /\.(mp4|mov|webm|m3u8|ts|gif)(\?|#|$)/i.test(resolvedUrl || vidUrl);
 
               if (response.ok && (isVideoContent || hasVideoExtension)) {
                 const ext = contentType.includes("mp4") ? "mp4"
                   : contentType.includes("webm") ? "webm"
                   : contentType.includes("quicktime") ? "mov"
-                  : (videoUrl || meta.video).match(/\.(mp4|mov|webm|m3u8)/i)?.[1] ?? "mp4";
-                const destFile = new ExpoFile(Paths.cache, `shared_link_video_${Date.now()}.${ext}`);
+                  : contentType === "image/gif" ? "gif"
+                  : (resolvedUrl || vidUrl).match(/\.(mp4|mov|webm|m3u8|gif)/i)?.[1] ?? "mp4";
+                const destFile = new ExpoFile(Paths.cache, `shared_link_video_${Date.now()}_${vi}.${ext}`);
                 const arrayBuffer = await response.arrayBuffer();
                 if (arrayBuffer.byteLength > 1000) {
-                  const audioUrlsToTry = meta.audioUrls?.length > 0
-                    ? meta.audioUrls
-                    : meta.audioUrl
-                      ? [meta.audioUrl]
-                      : [];
-                  if (audioUrlsToTry.length > 0) {
-                    for (const tryAudioUrl of audioUrlsToTry) {
-                      if (videoDownloaded) break;
-                      try {
-                        const audioRes = await fetch(tryAudioUrl, {
-                          headers: {
-                            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
-                            "Referer": "https://www.reddit.com/",
-                            "Accept": "*/*",
-                          },
-                        });
-                        if (!audioRes.ok) continue;
-                        const audioBuffer = await audioRes.arrayBuffer();
-                        if (audioBuffer.byteLength < 500) continue;
-                        const audioContentType = audioRes.headers.get("content-type") ?? "";
-                        if (audioContentType.includes("text/html") || audioContentType.includes("text/xml")) continue;
-                        const mergedBuffer = await mergeAudioVideo(arrayBuffer, audioBuffer);
-                        const mergedFile = new ExpoFile(Paths.cache, `shared_link_merged_${Date.now()}.mp4`);
-                        mergedFile.write(new Uint8Array(mergedBuffer));
-                        let finalUri = mergedFile.uri;
+                  let audioMerged = false;
+                  if (vi === 0) {
+                    const audioUrlsToTry = meta.audioUrls?.length > 0
+                      ? meta.audioUrls
+                      : meta.audioUrl
+                        ? [meta.audioUrl]
+                        : [];
+                    if (audioUrlsToTry.length > 0) {
+                      for (const tryAudioUrl of audioUrlsToTry) {
+                        if (audioMerged) break;
                         try {
-                          const { sound } = await Audio.Sound.createAsync({ uri: mergedFile.uri });
-                          const status = await sound.getStatusAsync();
-                          await sound.unloadAsync();
-                          if (status.isLoaded && status.durationMillis && status.durationMillis > 59000) {
-                            finalUri = await trimToMaxDuration(mergedFile.uri, status.durationMillis);
-                          }
-                        } catch {}
-                        setAttachment("video", finalUri);
-                        startVideoUpload(finalUri);
-                        videoDownloaded = true;
-                        Sentry.addBreadcrumb({ category: "share-intent", message: "Audio+video merged", level: "info" });
-                        break;
-                      } catch (mergeErr) {
-                        Sentry.addBreadcrumb({ category: "share-intent", message: "Audio merge attempt failed", data: { error: String(mergeErr) }, level: "warning" });
+                          const audioRes = await fetch(tryAudioUrl, {
+                            headers: {
+                              "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+                              "Referer": "https://www.reddit.com/",
+                              "Accept": "*/*",
+                            },
+                          });
+                          if (!audioRes.ok) continue;
+                          const audioBuffer = await audioRes.arrayBuffer();
+                          if (audioBuffer.byteLength < 500) continue;
+                          const audioContentType = audioRes.headers.get("content-type") ?? "";
+                          if (audioContentType.includes("text/html") || audioContentType.includes("text/xml")) continue;
+                          const mergedBuffer = await mergeAudioVideo(arrayBuffer, audioBuffer);
+                          const mergedFile = new ExpoFile(Paths.cache, `shared_link_merged_${Date.now()}_${vi}.mp4`);
+                          mergedFile.write(new Uint8Array(mergedBuffer));
+                          let finalUri = mergedFile.uri;
+                          try {
+                            const { sound } = await Audio.Sound.createAsync({ uri: mergedFile.uri });
+                            const status = await sound.getStatusAsync();
+                            await sound.unloadAsync();
+                            if (status.isLoaded && status.durationMillis && status.durationMillis > 59000) {
+                              finalUri = await trimToMaxDuration(mergedFile.uri, status.durationMillis);
+                            }
+                          } catch {}
+                          setAttachment("video", finalUri);
+                          startVideoUpload(finalUri);
+                          videoDownloaded = true;
+                          mediaCount++;
+                          audioMerged = true;
+                          Sentry.addBreadcrumb({ category: "share-intent", message: "Audio+video merged", level: "info" });
+                          break;
+                        } catch (mergeErr) {
+                          Sentry.addBreadcrumb({ category: "share-intent", message: "Audio merge attempt failed", data: { error: String(mergeErr) }, level: "warning" });
+                        }
                       }
                     }
                   }
-                  if (!videoDownloaded) {
+                  if (!audioMerged) {
                     destFile.write(new Uint8Array(arrayBuffer));
                     let finalUri = destFile.uri;
                     try {
@@ -572,6 +627,7 @@ export function CreateScreen() {
                     setAttachment("video", finalUri);
                     startVideoUpload(finalUri);
                     videoDownloaded = true;
+                    mediaCount++;
                   }
                 }
               }
@@ -579,7 +635,7 @@ export function CreateScreen() {
               Sentry.addBreadcrumb({
                 category: "share-intent",
                 message: "Failed to download OG video",
-                data: { video: meta.video, error: String(vidErr) },
+                data: { video: vidUrl, error: String(vidErr) },
                 level: "warning",
               });
             }
@@ -587,12 +643,13 @@ export function CreateScreen() {
 
           if (!videoDownloaded) {
             const imagesToDownload = meta.images?.length > 0
-              ? meta.images.slice(0, 10)
+              ? meta.images.slice(0, 10 - mediaCount)
               : meta.image
                 ? [meta.image]
                 : [];
             if (imagesToDownload.length > 0) {
               for (let i = 0; i < imagesToDownload.length; i++) {
+                if (mediaCount >= 10) break;
                 try {
                   const imgUrl = imagesToDownload[i];
                   const ext = imgUrl.match(/\.(jpg|jpeg|png|gif|webp)/i)?.[1] ?? "jpg";
@@ -603,6 +660,7 @@ export function CreateScreen() {
                     if (arrayBuffer.byteLength > 500) {
                       destFile.write(new Uint8Array(arrayBuffer));
                       setAttachment("image", destFile.uri);
+                      mediaCount++;
                     }
                   }
                 } catch (imgErr) {
@@ -617,10 +675,10 @@ export function CreateScreen() {
             }
           }
 
-          if (!videoDownloaded && meta.video) {
+          if (!videoDownloaded && videosToDownload.length > 0) {
             const currentBody = useDraftStore.getState().draft.body;
             const link = shareIntent.webUrl!;
-            const newBody = currentBody ? `${currentBody}\n\n${link}` : link;
+            const newBody = (currentBody ? `${currentBody}\n\n${link}` : link).slice(0, tierLimits.maxContentLength);
             updateDraft({ body: newBody });
           }
 
@@ -628,7 +686,7 @@ export function CreateScreen() {
             updateDraft({ linkUrl: meta.externalUrl });
           }
         }).catch((err: any) => {
-          updateDraft({ body: shareIntent.webUrl! });
+          updateDraft({ body: shareIntent.webUrl!.slice(0, tierLimits.maxContentLength) });
           Sentry.captureException(err, { tags: { feature: "share-intent-meta" } });
         }).finally(() => {
           setIsProcessingShareLink(false);
@@ -679,15 +737,8 @@ export function CreateScreen() {
     if (isSubmitting) return;
 
     triggerHaptic("selection");
-    clearDraft();
-    VIDEO_UPLOADS.clear();
-    setVideoUploadState({});
-    VIDEO_META.clear();
-    _handledVideoParam = null;
-    setIsVideoMuted(false);
-    setIsVideoPlaying(false);
     router.back();
-  }, [isSubmitting, clearDraft]);
+  }, [isSubmitting]);
 
   const handlePost = useCallback(async () => {
     if (!canPost || isSubmitting) return;

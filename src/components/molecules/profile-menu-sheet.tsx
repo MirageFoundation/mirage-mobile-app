@@ -1,7 +1,8 @@
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
-import BottomSheet, {
+import {
   BottomSheetBackdrop,
+  BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import {
@@ -99,17 +100,17 @@ export const ProfileMenuSheet = forwardRef<
     },
     ref,
   ) => {
-    const bottomSheetRef = useRef<BottomSheet>(null);
+    const bottomSheetRef = useRef<BottomSheetModal>(null);
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
     const [onlineStatus, setOnlineStatus] = useState(isOnline);
 
     const present = useCallback(() => {
-      bottomSheetRef.current?.expand();
+      bottomSheetRef.current?.present();
     }, []);
 
     const dismiss = useCallback(() => {
-      bottomSheetRef.current?.close();
+      bottomSheetRef.current?.dismiss();
     }, []);
 
     useImperativeHandle(ref, () => ({
@@ -186,9 +187,8 @@ export const ProfileMenuSheet = forwardRef<
     const activeColor = "rgb(29, 68, 150)";
 
     return (
-      <BottomSheet
+      <BottomSheetModal
         ref={bottomSheetRef}
-        index={-1}
         enableDynamicSizing
         enablePanDownToClose
         onChange={handleSheetChanges}
@@ -277,7 +277,7 @@ export const ProfileMenuSheet = forwardRef<
             />
           </View>
         </BottomSheetView>
-      </BottomSheet>
+      </BottomSheetModal>
     );
   },
 );

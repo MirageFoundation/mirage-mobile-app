@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { EvilIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
+import * as Sentry from "@sentry/react-native";
 import { useCallback, useEffect, useState } from "react";
 import { Keyboard } from "react-native";
 import { Pressable, View } from "react-native";
@@ -29,14 +30,13 @@ export function DeleteAccountScreen() {
   const [confirmText, setConfirmText] = useState("");
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const isConfirmed = confirmText === "DELETE";
+  const txProgress = useTransactionProgress();
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardWillShow", () => setKeyboardVisible(true));
     const hideSub = Keyboard.addListener("keyboardWillHide", () => setKeyboardVisible(false));
     return () => { showSub.remove(); hideSub.remove(); };
   }, []);
-
-  const txProgress = useTransactionProgress();
 
   const handleBack = useCallback(() => {
     triggerHaptic("light");
@@ -47,20 +47,30 @@ export function DeleteAccountScreen() {
     if (!isConfirmed) return;
     triggerHaptic("medium");
 
-    const result = await executeWithProgress(
-      txProgress,
-      async (onPoWProgress) => {
-        const wallet = await getWallet();
-        return deleteUser(wallet, { target: wallet.address }, onPoWProgress);
-      },
-    );
+    try {
+      const txResult = await executeWithProgress(
+        txProgress,
+        async (onPoWProgress) => {
+          const wallet = await getWallet();
+          return deleteUser(wallet, { target: wallet.address }, onPoWProgress);
+        },
+      );
 
-    if (result.success) {
-      txProgress.hideModal();
-      closeSideMenu();
-      await useAuthStore.getState().logout();
-      toast.success("Delete account requested");
-      router.replace("/(tabs)");
+      if (txResult.success) {
+        setTimeout(async () => {
+          txProgress.hideModal();
+          closeSideMenu();
+          await useAuthStore.getState().logout();
+          toast.success("Delete account requested");
+          router.replace("/(tabs)");
+        }, 1200);
+      }
+    } catch (err) {
+      Sentry.captureException(err, {
+        tags: { feature: "delete-account", operation: "delete-account" },
+      });
+      triggerHaptic("error");
+      toast.error("Failed to delete account");
     }
   }, [isConfirmed, txProgress, getWallet, router, toast, closeSideMenu]);
 
@@ -151,6 +161,8 @@ export function DeleteAccountScreen() {
         progress={txProgress.progress}
         title="Deleting Account"
         onDismiss={txProgress.hideModal}
+        showTxHash={false}
+        autoDismissDelay={1200}
       />
     </Box>
   );

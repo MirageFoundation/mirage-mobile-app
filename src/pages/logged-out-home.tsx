@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import * as Sentry from "@sentry/react-native";
 import { useCallback, useState } from "react";
 import {

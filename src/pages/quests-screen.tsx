@@ -1,7 +1,7 @@
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "@react-navigation/native";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -901,13 +901,18 @@ function FlashQuestCountdown({
   );
 }
 
-function FlashQuestCard({ quest }: { quest: FlashQuest }) {
+function FlashQuestCard({ quest, rewardMultiplier }: { quest: FlashQuest; rewardMultiplier: number }) {
   const { theme } = useUnistyles();
   const progressAnim = useSharedValue(0);
   const shimmer = useSharedValue(0);
 
   const progress = quest.target > 0 ? quest.progress / quest.target : 0;
-  const rewardAmount = quest.rewards[0]?.amount ?? 0;
+  const primaryReward = quest.rewards[0];
+  const baseReward = primaryReward?.amount ?? 0;
+  const shouldApplyMultiplier = primaryReward?.apply_multiplier !== false;
+  const rewardAmount = shouldApplyMultiplier
+    ? Math.floor(baseReward * rewardMultiplier)
+    : baseReward;
   const accentColor = "#F59E0B";
 
   useEffect(() => {
@@ -1259,11 +1264,8 @@ export function QuestsScreen() {
     onSuccess: (response) => {
       setIsClaiming(false);
       triggerHaptic("success");
-      const mirageRewards = response.rewards?.filter((r) => r.type === "mirage") ?? [];
       const inviteRewards = response.rewards?.filter((r) => r.type === "invite_code") ?? [];
-      const claimed = mirageRewards.reduce((s, r) => s + r.amount, 0);
       const invites = inviteRewards.reduce((s, r) => s + r.amount, 0);
-      setClaimedRewardAmount(Math.floor(claimed / 1_000_000));
       setClaimedInviteCodes(invites);
       setShowSuccessModal(true);
       refetch();
@@ -1281,10 +1283,8 @@ export function QuestsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!data || dataUpdatedAt < Date.now() - 30_000) {
-        refetch();
-      }
-    }, [refetch, data, dataUpdatedAt]),
+      refetch();
+    }, [refetch]),
   );
 
   useEffect(() => {
@@ -1308,16 +1308,8 @@ export function QuestsScreen() {
   }, [data?.daily_quests]);
 
   const totalReward = useMemo(() => {
-    const multiplier = data?.reward_multiplier ?? 1;
-    return completedQuests.reduce((sum, quest) => {
-      const reward = quest.rewards[0];
-      if (!reward || reward.type !== "mirage") return sum;
-      const amount = reward.apply_multiplier !== false
-        ? reward.amount * multiplier
-        : reward.amount;
-      return Math.floor(sum + amount);
-    }, 0);
-  }, [completedQuests, data?.reward_multiplier]);
+    return Math.floor((data?.total_mirage_after_multiplier ?? 0) / 1_000_000);
+  }, [data?.total_mirage_after_multiplier]);
 
   const allQuestsCompleted = useMemo(() => {
     if (!data?.daily_quests?.length) return false;
@@ -1332,8 +1324,9 @@ export function QuestsScreen() {
   const handleClaimAll = useCallback(() => {
     if ((data?.pending_rewards?.length ?? 0) === 0) return;
     setIsClaiming(true);
+    setClaimedRewardAmount(totalReward);
     claimMutation.mutate({ questId: "all" });
-  }, [data?.pending_rewards, claimMutation]);
+  }, [data?.pending_rewards, claimMutation, totalReward]);
 
   const handleCloseSuccessModal = useCallback(() => {
     setShowSuccessModal(false);
@@ -1509,7 +1502,7 @@ export function QuestsScreen() {
                 >
                   FLASH QUEST
                 </Text>
-                <FlashQuestCard quest={data.flash_quest} />
+                <FlashQuestCard quest={data.flash_quest} rewardMultiplier={data.reward_multiplier} />
               </>
             )}
 

@@ -1,8 +1,10 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
+import * as Sentry from "@sentry/react-native";
+import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect } from "@react-navigation/native";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, View, type AppStateStatus } from "react-native";
+import { AppState, Platform, View, type AppStateStatus } from "react-native";
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -10,6 +12,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import {
   useUserFollowed,
 } from "@/src/api";
+import { queryKeys } from "@/src/api/read/query-keys";
 
 import {
 AdultContentPopup,
@@ -110,13 +113,13 @@ export function HomeScreen() {
         backgroundTimeRef.current = null;
         storage.remove("app_was_backgrounded");
         if (duration >= 2 * 60 * 60 * 1000) {
+          isAutoRefreshingRef.current = true;
+          setHasNewPosts(false);
           setTimeout(async () => {
-            isAutoRefreshingRef.current = true;
-            setHasNewPosts(false);
             showBars();
             tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
-            await tabbedFeedRef.current?.refresh({ fetchAllNew: true });
-            tabbedFeedRef.current?.dismissNewPosts();
+            await tabbedFeedRef.current?.refresh({ fetchAllNew: true, silent: true });
+            tabbedFeedRef.current?.resetBaseline(null);
             setHasNewPosts(false);
             isAutoRefreshingRef.current = false;
             requestAnimationFrame(() => {
@@ -149,25 +152,28 @@ export function HomeScreen() {
     if (wasBackgrounded) {
       const lastForeground = Number(storage.getString("app_last_foreground_time") ?? "0");
       const elapsed = Date.now() - lastForeground;
-      const timer = elapsed >= 2 * 60 * 60 * 1000
-        ? setTimeout(async () => {
-            isAutoRefreshingRef.current = true;
-            setHasNewPosts(false);
+      if (elapsed >= 2 * 60 * 60 * 1000) {
+        isAutoRefreshingRef.current = true;
+        setHasNewPosts(false);
+        const timer = setTimeout(async () => {
             showBars();
             tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
-            await tabbedFeedRef.current?.refresh({ fetchAllNew: true });
-            tabbedFeedRef.current?.dismissNewPosts();
+            await tabbedFeedRef.current?.refresh({ fetchAllNew: true, silent: true });
+            tabbedFeedRef.current?.resetBaseline(null);
             setHasNewPosts(false);
             isAutoRefreshingRef.current = false;
             requestAnimationFrame(() => {
               tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
               showBars();
             });
-          }, 300)
-        : setTimeout(() => {
+          }, 300);
+        return () => clearTimeout(timer);
+      } else {
+        const timer = setTimeout(() => {
             tabbedFeedRef.current?.checkNewPosts();
           }, 300);
-      return () => clearTimeout(timer);
+        return () => clearTimeout(timer);
+      }
     }
   }, []);
 
@@ -257,11 +263,21 @@ export function HomeScreen() {
   const handleEnableAdultContent = useCallback(() => {
     setAdultContent(true);
     setHasSeenAdultPrompt();
+    Sentry.addBreadcrumb({
+      category: "content_filter",
+      message: "iOS: Adult content enabled via popup",
+      level: "info",
+    });
   }, [setAdultContent, setHasSeenAdultPrompt]);
 
   const handleDeclineAdultContent = useCallback(() => {
     setAdultContent(false);
     setHasSeenAdultPrompt();
+    Sentry.addBreadcrumb({
+      category: "content_filter",
+      message: "iOS: Adult content declined via popup",
+      level: "info",
+    });
   }, [setAdultContent, setHasSeenAdultPrompt]);
 
   const revealedPostsRef = useRef<Set<string>>(new Set());
@@ -527,6 +543,18 @@ export function HomeScreen() {
     }, [setActiveFeedScreen, setDisabledTopicName]),
   );
 
+  const queryClient = useQueryClient();
+
+  useFocusEffect(
+    useCallback(() => {
+      if (currentUser?.walletAddress) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.rewardSummary(currentUser.walletAddress),
+        });
+      }
+    }, [queryClient, currentUser?.walletAddress]),
+  );
+
   const handlersRef = useRef({
     handlePostPress,
     handleAuthorPress,
@@ -633,6 +661,7 @@ export function HomeScreen() {
         visible={showAdultPopup}
         onEnable={handleEnableAdultContent}
         onDecline={handleDeclineAdultContent}
+        onGoToSettings={() => router.push("/settings")}
       />
 
       <PostOptionsSheet

@@ -2,7 +2,7 @@ import * as Notifications from "expo-notifications";
 import * as BackgroundFetch from "expo-background-fetch";
 import * as TaskManager from "expo-task-manager";
 import { AppState, Platform } from "react-native";
-import { router } from "expo-router";
+import { router } from "@/src/utils/guarded-router";
 import type { InfiniteData } from "@tanstack/react-query";
 
 import * as Sentry from "@sentry/react-native";
@@ -15,13 +15,16 @@ import { queryClient } from "@/src/providers/query-provider";
 import { storage } from "@/src/stores/mmkv-storage";
 import { useAuthStore } from "@/src/stores/auth-store";
 import { useInboxStore } from "@/src/stores/inbox-store";
+import { isPushEnabled } from "@/src/services/push-notifications";
+import {
+  getInboxNotifiedIds,
+  saveInboxNotifiedIds,
+} from "@/src/services/inbox-notified-ids";
 
 const TASK_NAME = "INBOX_NOTIFICATION_CHECK";
-const NOTIFIED_IDS_KEY = "inbox-notified-ids";
 const LAST_CHECK_KEY = "inbox-last-check-ts";
 const SEEDED_KEY = "inbox-notified-seeded";
 const SEED_TIMESTAMP_KEY = "inbox-seed-timestamp";
-const MAX_NOTIFIED_IDS = 500;
 const FETCH_INTERVAL_SECONDS = 15 * 60;
 const FOREGROUND_INTERVAL_MS = FETCH_INTERVAL_SECONDS * 1000;
 const SIGNAL_THROTTLE_MS = 15_000;
@@ -33,26 +36,37 @@ let appStateSubscription: { remove(): void } | null = null;
 let unsubscribeInboxSignals: (() => void) | null = null;
 let notificationResponseSubscription: Notifications.Subscription | null = null;
 
+let _tabsReadyResolve: (() => void) | null = null;
+let _tabsReadyPromise: Promise<void> = new Promise<void>((resolve) => {
+  _tabsReadyResolve = resolve;
+});
+
+export function signalTabsReady(): void {
+  _tabsReadyResolve?.();
+}
+
+function waitForTabsReady(timeoutMs = 5000): Promise<void> {
+  return Promise.race([
+    _tabsReadyPromise,
+    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+  ]);
+}
+
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     console.log("[InboxNotifications] handleNotification called for:", notification.request.identifier);
+    const isInboxActive = useInboxStore.getState().isInboxActive;
     return {
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
+      shouldShowBanner: !isInboxActive,
+      shouldShowList: !isInboxActive,
+      shouldPlaySound: !isInboxActive,
       shouldSetBadge: false,
     };
   },
 });
 
 export function getNotifiedIds(): Set<string> {
-  const raw = storage.getString(NOTIFIED_IDS_KEY);
-  if (!raw) return new Set();
-  try {
-    return new Set(JSON.parse(raw) as string[]);
-  } catch {
-    return new Set();
-  }
+  return getInboxNotifiedIds();
 }
 
 export function getSeedTimestamp(): number {
@@ -62,11 +76,7 @@ export function getSeedTimestamp(): number {
 }
 
 function saveNotifiedIds(ids: Set<string>): void {
-  const arr = Array.from(ids);
-  const trimmed = arr.length > MAX_NOTIFIED_IDS
-    ? arr.slice(arr.length - MAX_NOTIFIED_IDS)
-    : arr;
-  storage.set(NOTIFIED_IDS_KEY, JSON.stringify(trimmed));
+  saveInboxNotifiedIds(ids);
 }
 
 function seedInboxCache(walletAddress: string, inbox: InboxResponse): void {
@@ -86,15 +96,6 @@ function seedInboxCache(walletAddress: string, inbox: InboxResponse): void {
     },
   );
   queryClient.setQueryData(queryKeys.inbox(walletAddress, page), inbox);
-}
-
-export function markRepliesAsNotified(replyIds: string[]): void {
-  if (replyIds.length === 0) return;
-  const existing = getNotifiedIds();
-  for (const id of replyIds) {
-    existing.add(id);
-  }
-  saveNotifiedIds(existing);
 }
 
 function truncate(text: string, maxLen: number): string {
@@ -235,22 +236,24 @@ async function performInboxCheck(
       notifiedIds.add(reply.reply_id);
       saveNotifiedIds(notifiedIds);
 
-      console.log("[InboxNotifications] Scheduling notification for:", reply.reply_id);
-      const id = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: getNotificationTitle(reply),
-          body: truncate(reply.reply_content, 150),
-          data: {
-            rootPostId: reply.root_post_id,
-            replyId: reply.reply_id,
+      if (!isPushEnabled()) {
+        console.log("[InboxNotifications] Scheduling notification for:", reply.reply_id);
+        const id = await Notifications.scheduleNotificationAsync({
+          content: {
+            title: getNotificationTitle(reply),
+            body: truncate(reply.reply_content, 150),
+            data: {
+              rootPostId: reply.root_post_id,
+              replyId: reply.reply_id,
+            },
+            ...(Platform.OS === "android" && {
+              categoryIdentifier: "inbox",
+            }),
           },
-          ...(Platform.OS === "android" && {
-            categoryIdentifier: "inbox",
-          }),
-        },
-        trigger: null,
-      });
-      console.log("[InboxNotifications] Scheduled notification id:", id);
+          trigger: null,
+        });
+        console.log("[InboxNotifications] Scheduled notification id:", id);
+      }
     }
 
     storage.set(LAST_CHECK_KEY, Date.now().toString());
@@ -297,6 +300,9 @@ async function runInboxCheck(
 function triggerForegroundCheck(): void {
   runInboxCheck("foreground").catch((error) => {
     console.error("[InboxNotifications] Foreground check failed:", error);
+    Sentry.captureException(error, {
+      tags: { feature: "inbox-notifications", operation: "foreground-check" },
+    });
   });
 }
 
@@ -330,7 +336,7 @@ function subscribeAppState(): void {
   }
 }
 
-const STALE_NOTIFICATION_MS = 5 * 60_000;
+const STALE_NOTIFICATION_MS = 24 * 60 * 60_000;
 const HANDLED_NOTIFICATION_IDS_KEY = "inbox-handled-notification-ids";
 
 function getHandledNotificationIds(): Set<string> {
@@ -362,19 +368,29 @@ function handleNotificationResponse(
       return;
     }
     const responseDate = response.notification?.date;
-    if (!responseDate) {
-      console.log("[InboxNotifications] No date on notification, ignoring:", notificationId);
-      return;
-    }
-    const dateMs = responseDate < 1e12 ? responseDate * 1000 : responseDate;
-    const ageMs = Date.now() - dateMs;
-    if (ageMs > STALE_NOTIFICATION_MS) {
-      console.log("[InboxNotifications] Ignoring stale notification response, age:", ageMs);
-      return;
+    if (responseDate) {
+      const dateMs = responseDate < 1e12 ? responseDate * 1000 : responseDate;
+      const ageMs = Date.now() - dateMs;
+      if (ageMs > STALE_NOTIFICATION_MS) {
+        console.log("[InboxNotifications] Ignoring stale notification response, age:", ageMs);
+        return;
+      }
     }
     handledNotificationIds.add(notificationId);
     saveHandledNotificationIds(handledNotificationIds);
-    const navigateToInbox = () => {
+    const prefetchInbox = () => {
+      const address = useAuthStore.getState().walletAddress;
+      if (!address) return;
+      queryClient.prefetchInfiniteQuery({
+        queryKey: queryKeys.inboxInfinite(address),
+        queryFn: () => api.get<InboxResponse>("/get_inbox", { address, limit: 25 }),
+        initialPageParam: 1,
+        staleTime: 0,
+      });
+    };
+    const navigateToInbox = async () => {
+      prefetchInbox();
+      await waitForTabsReady();
       router.navigate({
         pathname: "/(tabs)/inbox",
         params: { fromNotification: notificationId },
@@ -384,11 +400,11 @@ function handleNotificationResponse(
       const sub = AppState.addEventListener("change", (state) => {
         if (state === "active") {
           sub.remove();
-          setTimeout(navigateToInbox, 500);
+          navigateToInbox();
         }
       });
     } else {
-      setTimeout(navigateToInbox, 300);
+      navigateToInbox();
     }
   } catch (error) {
     console.error("[InboxNotifications] Failed to navigate from notification:", error);
@@ -414,6 +430,9 @@ function subscribeNotificationResponses(): void {
         "[InboxNotifications] Failed to read last notification response:",
         error,
       );
+      Sentry.captureException(error, {
+        tags: { feature: "inbox-notifications", operation: "last-notification-response" },
+      });
     });
 }
 
@@ -431,6 +450,9 @@ function subscribeInboxSignals(): void {
     if (hasNewTimestamp || hasUnreadIncrease) {
       runInboxCheck("signal").catch((error) => {
         console.error("[InboxNotifications] Signal check failed:", error);
+        Sentry.captureException(error, {
+          tags: { feature: "inbox-notifications", operation: "signal-check" },
+        });
       });
     }
   });

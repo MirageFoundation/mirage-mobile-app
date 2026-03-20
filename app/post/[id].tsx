@@ -66,7 +66,8 @@ import {
 } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { Image } from "expo-image";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
@@ -156,9 +157,14 @@ export default function PostDetailScreen() {
 
   const [screenActive, setScreenActive] = useState(true);
   const refetchCommentsRef = useRef<((silent?: boolean) => void) | null>(null);
+  const isScreenFocusedRef = useRef(true);
 
   useAppState({
+    onBackground: () => {
+      setScreenActive(false);
+    },
     onForeground: () => {
+      setScreenActive(isScreenFocusedRef.current);
       refetchCommentsRef.current?.(true);
     },
     staleThreshold: 0,
@@ -166,8 +172,10 @@ export default function PostDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      isScreenFocusedRef.current = true;
       setScreenActive(true);
       return () => {
+        isScreenFocusedRef.current = false;
         setScreenActive(false);
       };
     }, []),
@@ -569,26 +577,20 @@ export default function PostDetailScreen() {
       return false;
     };
 
-    // Clean up localComments - remove optimistic comments that now exist on server
     setLocalComments((prev) => {
       const filtered = prev.filter(
-        (c) =>
-          !c.id.startsWith("optimistic-") ||
-          !findMatchingServerComment(c, comments),
+        (c) => !findMatchingServerComment(c, comments),
       );
       return filtered.length === prev.length ? prev : filtered;
     });
 
-    // Clean up optimisticReplies - remove replies that now exist on server
     setOptimisticReplies((prev) => {
       const updated: Record<string, Comment[]> = {};
       let hasChanges = false;
 
       for (const [parentId, replies] of Object.entries(prev)) {
         const filtered = replies.filter(
-          (c) =>
-            !c.id.startsWith("optimistic-") ||
-            !findMatchingServerComment(c, comments),
+          (c) => !findMatchingServerComment(c, comments),
         );
         if (filtered.length > 0) {
           updated[parentId] = filtered;
@@ -883,6 +885,7 @@ export default function PostDetailScreen() {
   const [postHeaderHeight, setPostHeaderHeight] = useState(0);
   const stickyHeaderVisible = useSharedValue(0);
   const [isStickyInteractive, setIsStickyInteractive] = useState(false);
+  const [isVideoVisible, setIsVideoVisible] = useState(true);
 
   const handlePostHeaderLayout = useCallback((event: LayoutChangeEvent) => {
     const nextHeight = event.nativeEvent.layout.height;
@@ -908,6 +911,9 @@ export default function PostDetailScreen() {
           easing: Easing.in(Easing.cubic),
         });
       }
+
+      const videoVisible = postHeaderHeight > 0 ? scrollY < postHeaderHeight : true;
+      setIsVideoVisible((prev) => prev === videoVisible ? prev : videoVisible);
     },
     [postHeaderHeight, stickyHeaderVisible],
   );
@@ -1230,6 +1236,10 @@ export default function PostDetailScreen() {
               id: confirmedCommentId,
             };
           });
+
+          setTimeout(() => {
+            refetchCommentsRef.current?.(true);
+          }, 2000);
         },
         onError: () => {},
         onRollback: () => {
@@ -1627,7 +1637,7 @@ export default function PostDetailScreen() {
         <PostCard
           post={displayPost}
           isOwnPost={currentUser?.id === displayPost.author.id}
-          isVisible={true}
+          isVisible={isVideoVisible}
           isTopicFollowed={
             localTopicFollowed ??
             (displayPost?.topic
@@ -1670,6 +1680,7 @@ export default function PostDetailScreen() {
     revealedContent,
     id,
     screenActive,
+    isVideoVisible,
     theme.colors.background.subtle,
     handlePostHeaderLayout,
     postEnteringStyle,

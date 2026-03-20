@@ -3,6 +3,8 @@ import type { TopicsResponse, SearchTopicsResponse } from "../../types";
 
 export interface GetTopicsParams {
   limit?: number; // max 200
+  address?: string;
+  allowed_tags?: string;
 }
 
 /**
@@ -18,6 +20,7 @@ export interface SearchTopicsParams {
   q: string; // min 2 chars
   limit?: number; // max 50
   offset?: number;
+  allowed_tags?: string;
 }
 
 /**

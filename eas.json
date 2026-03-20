@@ -14,7 +14,10 @@
       "env": {
         "EXPO_PUBLIC_ENV": "dev"
       },
-      "channel": "sim"
+      "channel": "sim",
+      "android": {
+        "resourceClass": "large"
+      }
     },
     "dev": {
       "developmentClient": true,
@@ -22,6 +25,9 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_ENV": "dev"
+      },
+      "android": {
+        "resourceClass": "large"
       }
     },
     "preview": {
@@ -29,6 +35,9 @@
       "channel": "preview",
       "env": {
         "EXPO_PUBLIC_ENV": "preview"
+      },
+      "android": {
+        "resourceClass": "large"
       }
     },
     "production": {
@@ -39,7 +48,8 @@
         "node": "24.4.0"
       },
       "android": {
-        "node": "24.4.0"
+        "node": "24.4.0",
+        "resourceClass": "large"
       }
     }
   },

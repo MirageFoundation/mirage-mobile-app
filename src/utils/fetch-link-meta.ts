@@ -185,6 +185,14 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       videoUrl = post.preview.reddit_video_preview.fallback_url ?? null;
     }
 
+    if (!videoUrl && post.preview?.images?.[0]?.variants?.mp4?.source?.url) {
+      videoUrl = post.preview.images[0].variants.mp4.source.url.replace(/&amp;/g, "&");
+    }
+
+    if (!videoUrl && post.url && /\.gif(\?|$)/i.test(post.url)) {
+      videoUrl = post.url;
+    }
+
     if (post.preview?.images?.[0]?.source?.url) {
       imageUrl = post.preview.images[0].source.url.replace(/&amp;/g, "&");
     } else if (post.thumbnail && post.thumbnail !== "default" && post.thumbnail !== "self" && post.thumbnail !== "nsfw") {
@@ -738,8 +746,10 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
             const apiData = await apiRes.json();
             const tweet = apiData?.tweet;
             if (tweet) {
-              if (!title) title = tweet.author?.name ? `${tweet.author.name} (@${tweet.author.screen_name})` : null;
-              if (!description) description = tweet.text ?? null;
+              const tweetText = tweet.text ?? "";
+              const tweetLines = tweetText.split("\n").filter((l: string) => l.trim().length > 0);
+              if (!title) title = tweetLines[0]?.trim() ?? null;
+              if (!description) description = tweetLines.length > 1 ? tweetLines.slice(1).join("\n").trim() : null;
               if (!siteName) siteName = "X";
               const media = tweet.media?.all ?? tweet.media?.photos ?? [];
               for (const m of media) {
@@ -814,6 +824,19 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
     }
 
     clearTimeout(timeout);
+
+    if (!video) {
+      const gifInImages = images.find((u) => /\.gif(\?|$)/i.test(u));
+      if (gifInImages) {
+        video = gifInImages;
+        videos.unshift(gifInImages);
+        images = images.filter((u) => u !== gifInImages);
+      } else if (image && /\.gif(\?|$)/i.test(image)) {
+        video = image;
+        videos.unshift(image);
+        image = null;
+      }
+    }
 
     const decodeHtml = (s: string | null) =>
       s?.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'") ?? null;

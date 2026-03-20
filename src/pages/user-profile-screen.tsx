@@ -4,7 +4,8 @@ import * as Sentry from "@sentry/react-native";
 import * as Clipboard from "expo-clipboard";
 import { useIsFocused } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
@@ -70,6 +71,7 @@ import { PROFILE_TAB_BAR_HEIGHT } from "@/src/components/molecules/profile-tabs"
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import {
+  useAppState,
   useBlockHandler,
   useDeleteHandler,
   useFollowHandler,
@@ -538,6 +540,11 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         error: "Failed to block user",
       })
       .catch(() => {
+        Sentry.addBreadcrumb({
+          category: "user-profile",
+          message: "Block user failed",
+          level: "warning",
+        });
         setOptimisticBlocked(null);
       })
       .finally(() => {
@@ -559,6 +566,11 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         error: "Failed to unblock user",
       })
       .catch(() => {
+        Sentry.addBreadcrumb({
+          category: "user-profile",
+          message: "Unblock user failed",
+          level: "warning",
+        });
         setOptimisticBlocked(null);
       });
   }, [userAddress, displayUsername, unblockUserMutation, toast]);
@@ -827,16 +839,6 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     }
   }, [postsWithVotes]);
 
-  useEffect(() => {
-    if (activeTab !== 0) return;
-    const posts = postsWithVotes;
-    const firstVideo = posts.find((p) => postHasPlayableVideo(p));
-    if (firstVideo) {
-      setActiveVideoPostId(firstVideo.id);
-      setVisibleVideoPostIds(new Set([firstVideo.id]));
-    }
-  }, [postsWithVotes, activeTab]);
-
   const profileViewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 30,
     minimumViewTime: 300,
@@ -851,36 +853,57 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     const visibleItems = items.filter(
       (item) => item.isViewable && item.item && typeof item.item === "object" && "id" in item.item
     );
-    if (visibleItems.length === 0) return;
+    if (visibleItems.length === 0) {
+      setVisibleVideoPostIds(new Set());
+      setActiveVideoPostId(null);
+      return;
+    }
     const videoItems = visibleItems.filter(
       (item) => postHasPlayableVideo(item.item)
     );
     const newVisibleIds = new Set(videoItems.map((item) => item.item.id));
     setVisibleVideoPostIds(newVisibleIds);
     if (videoItems.length > 0) {
-      const midIdx = Math.floor((visibleItems.length - 1) / 2);
-      const midListIndex = visibleItems[midIdx]?.index ?? 0;
+      const sortedIndices = visibleItems
+        .map((v) => v.index ?? 0)
+        .sort((a, b) => a - b);
+      const mid = Math.floor((sortedIndices.length - 1) / 2);
+      const centerIndex = sortedIndices[mid] ?? 0;
+      const visibleSpan = (sortedIndices[sortedIndices.length - 1] ?? 0) - (sortedIndices[0] ?? 0);
+      const maxDist = Math.max(1, visibleSpan * 0.35);
       let best = videoItems[0];
-      let bestDist = Math.abs((best.index ?? 0) - midListIndex);
+      let bestDist = Math.abs((best.index ?? 0) - centerIndex);
       for (let i = 1; i < videoItems.length; i++) {
-        const d = Math.abs((videoItems[i].index ?? 0) - midListIndex);
+        const d = Math.abs((videoItems[i].index ?? 0) - centerIndex);
         if (d < bestDist) { best = videoItems[i]; bestDist = d; }
       }
-      setActiveVideoPostId(best.item.id);
+      setActiveVideoPostId(bestDist <= maxDist ? best.item.id : null);
     } else {
       setActiveVideoPostId(null);
     }
   };
 
+  const activeVideoPostIdRef = useRef(activeVideoPostId);
+  activeVideoPostIdRef.current = activeVideoPostId;
+
   const onProfileViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       pendingProfileViewableRef.current = viewableItems;
-      if (Platform.OS === "android") {
-        if (profileDeferHandleRef.current !== null) {
-          clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+
+      const currentActive = activeVideoPostIdRef.current;
+      if (currentActive) {
+        const stillVisible = viewableItems.some(
+          (v) => v.isViewable && v.item && typeof v.item === "object" && "id" in v.item && v.item.id === currentActive
+        );
+        if (!stillVisible) {
+          setActiveVideoPostId(null);
         }
-        profileDeferHandleRef.current = setTimeout(flushProfileViewability, 150);
       }
+
+      if (profileDeferHandleRef.current !== null) {
+        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+      }
+      profileDeferHandleRef.current = setTimeout(flushProfileViewability, Platform.OS === "ios" ? 200 : 150);
     }
   ).current;
 
@@ -899,6 +922,35 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
       }, 50);
     }
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (profileDeferHandleRef.current !== null) {
+        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+      }
+    };
+  }, []);
+
+  useAppState({
+    onBackground: () => {
+      if (profileDeferHandleRef.current !== null) {
+        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+        profileDeferHandleRef.current = null;
+      }
+      setVisibleVideoPostIds(new Set());
+      setActiveVideoPostId(null);
+    },
+    onForeground: () => {
+      if (activeTab !== 0) return;
+      if (profileDeferHandleRef.current !== null) {
+        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
+        profileDeferHandleRef.current = null;
+      }
+      requestAnimationFrame(() => {
+        flushProfileViewability();
+      });
+    },
+  });
 
   const keyExtractor = useCallback(
     (item: Post | ApiPost | "header" | "tabs", index: number) => {
@@ -1192,6 +1244,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           viewabilityConfig={profileViewabilityConfig}
           onViewableItemsChanged={onProfileViewableItemsChanged}
           onMomentumScrollEnd={handleProfileMomentumScrollEnd}
+          extraData={revealedPosts}
         />
       </GestureDetector>
 

@@ -4,7 +4,7 @@ import { BlurGradientBox, Box, Button, Icon, Text } from "@/primitives";
 import { formatBalanceDisplay } from "@/utils/format";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
+import { router } from "@/src/utils/guarded-router";
 import { Dimensions, TouchableOpacity } from "react-native";
 
 export type RouteCardProps = {

@@ -49,3 +49,5 @@ build-*
 .env
 
 .env.local
+mirage-talk-*.json
+google-services.json

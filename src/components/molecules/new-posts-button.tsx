@@ -45,7 +45,7 @@ export const NewPostsButton = ({
 
   const top = topOffset ?? insets.top + 44;
   const displayAvatars = avatars.slice(0, 3);
-  const showAvatars = newPostCount >= 3 && displayAvatars.length >= 3;
+  const showAvatars = displayAvatars.length > 0;
 
   useEffect(() => {
     if (visible) {

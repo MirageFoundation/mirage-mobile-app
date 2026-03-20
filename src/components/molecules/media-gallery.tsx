@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { ResizeMode, Video } from "expo-av";
+import { Audio, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -96,6 +96,9 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pauseDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
+  const errorRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const errorRetryCountRef = useRef(0);
 
   useEffect(() => {
     if (GALLERY_LOADED_CACHE.has(item.uri)) return;
@@ -110,6 +113,9 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
       }
       if (pauseDelayRef.current) {
         clearTimeout(pauseDelayRef.current);
+      }
+      if (errorRetryRef.current) {
+        clearTimeout(errorRetryRef.current);
       }
     };
   }, []);
@@ -157,6 +163,12 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
     const newGlobalMuted = !globalMuted;
     toggleMute();
     try {
+      if (!newGlobalMuted) {
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+        });
+      }
       if (videoRef.current) {
         const newEffective = isPostDetail
           ? newGlobalMuted
@@ -184,11 +196,11 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   const showThumbnail = thumbnailUri && !GALLERY_LOADED_CACHE.has(item.uri);
 
   return (
-    <View style={{ width, height, overflow: "hidden" }}>
+    <View style={[galleryStyles.itemContainer, { width, height }]}>
       {showThumbnail ? (
         <Image
           source={{ uri: thumbnailUri }}
-          style={{ width, height, position: "absolute", zIndex: 0 }}
+          style={[galleryStyles.itemMedia, { width, height, position: "absolute", zIndex: 0 }]}
           contentFit="cover"
           cachePolicy="memory-disk"
           onLoad={({ source }) => {
@@ -205,9 +217,10 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
         />
       ) : null}
       <Video
+        key={retryKey}
         ref={videoRef}
         source={{ uri: item.uri }}
-        style={{ width, height }}
+        style={[galleryStyles.itemMedia, { width, height }]}
         resizeMode={ResizeMode.COVER}
         shouldPlay={isPlaying && isActive && screenActive}
         isMuted={effectiveMuted}
@@ -217,6 +230,11 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
           setIsLoading(false);
           GALLERY_LOADED_CACHE.add(item.uri);
           if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+          errorRetryCountRef.current = 0;
+          if (errorRetryRef.current) {
+            clearTimeout(errorRetryRef.current);
+            errorRetryRef.current = null;
+          }
           videoRef.current?.setStatusAsync({ isMuted: effectiveMuted }).catch(() => {});
         }}
         onPlaybackStatusUpdate={(status) => {
@@ -234,6 +252,16 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
               ASPECT_RATIO_CACHE.set(item.uri, ratio);
               onAspectRatioDetected?.(item.uri, ratio);
             }
+          }
+        }}
+        onError={() => {
+          if (errorRetryCountRef.current < 3) {
+            errorRetryCountRef.current += 1;
+            if (errorRetryRef.current) clearTimeout(errorRetryRef.current);
+            errorRetryRef.current = setTimeout(() => {
+              setIsLoading(true);
+              setRetryKey((k) => k + 1);
+            }, 2000 * errorRetryCountRef.current);
           }
         }}
       />
@@ -329,10 +357,10 @@ const GalleryImageItem = memo(function GalleryImageItem({
   }, [item.uri]);
 
   return (
-    <Pressable onPress={onPress} style={{ width, height, overflow: "hidden" }}>
+    <Pressable onPress={onPress} style={[galleryStyles.itemContainer, { width, height }]}>
       <Image
         source={{ uri: item.uri }}
-        style={{ width, height }}
+        style={[galleryStyles.itemMedia, { width, height }]}
         contentFit="cover"
         cachePolicy="memory-disk"
         onLoad={({ source }) => {
@@ -437,7 +465,7 @@ export const MediaGallery = memo(function MediaGallery({
       const itemHeight = getHeightForIndex(index);
       const isVideo = item.type === "video";
       return (
-        <View style={{ width: GALLERY_WIDTH, height: maxHeight }}>
+        <View style={[galleryStyles.itemWrapper, { width: GALLERY_WIDTH, height: maxHeight }]}>
           {isVideo ? (
             <GalleryVideoItem
               item={item}
@@ -473,7 +501,7 @@ export const MediaGallery = memo(function MediaGallery({
   );
 
   return (
-    <View style={{ height: containerHeight, overflow: "hidden" }}>
+    <View style={[galleryStyles.galleryRoot, { height: containerHeight }]}>
       <FlatList
         ref={flatListRef}
         data={media}
@@ -536,7 +564,22 @@ export const MediaGallery = memo(function MediaGallery({
   );
 });
 
-const galleryStyles = StyleSheet.create({
+const galleryStyles = StyleSheet.create((theme) => ({
+  galleryRoot: {
+    overflow: "hidden",
+    borderRadius: theme.radius.md,
+  },
+  itemWrapper: {
+    borderRadius: theme.radius.md,
+    overflow: "hidden",
+  },
+  itemContainer: {
+    overflow: "hidden",
+    borderRadius: theme.radius.md,
+  },
+  itemMedia: {
+    borderRadius: theme.radius.md,
+  },
   indicators: {
     position: "absolute",
     bottom: 10,
@@ -650,4 +693,4 @@ const galleryStyles = StyleSheet.create({
     backgroundColor: "rgba(5, 5, 5, 0.97)",
     gap: 8,
   },
-});
+}));

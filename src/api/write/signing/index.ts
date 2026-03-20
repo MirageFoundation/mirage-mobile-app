@@ -81,3 +81,7 @@ export {
 
 // Envelope builder
 export { buildSignedEnvelope, buildEnvelopeWithParams } from "./envelope";
+
+// Simple signing (no PoW, for push token and mark_inbox_viewed)
+export { buildSimpleSignedPayload } from "./simple-sign";
+export type { SimpleSignedPayload } from "./simple-sign";

@@ -1,6 +1,6 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { useFocusEffect } from "@react-navigation/native";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, View, type AppStateStatus } from "react-native";
 

@@ -63,6 +63,7 @@ function arePostCardItemPropsEqual(
   if (prevProps.isFocused !== nextProps.isFocused) return false;
   if (prevProps.screenActive !== nextProps.screenActive) return false;
   if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
+  if (prevProps.contentRevealed !== nextProps.contentRevealed) return false;
   return true;
 }
 

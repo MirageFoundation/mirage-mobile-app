@@ -1,5 +1,6 @@
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter } from "@/src/hooks/use-router";
+import * as Sentry from "@sentry/react-native";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,7 +13,6 @@ import { Box, Text } from "@/src/components/ui/primitives";
 import { TransactionProgressModal } from "@/src/components/molecules";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { executeWithProgress, useTransactionProgress } from "@/src/hooks";
-import { getTxStatus } from "@/src/api/read/endpoints/tx";
 import { setAgents as setAgentsApi } from "@/src/api/write/endpoints/social";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { useQueryClient } from "@tanstack/react-query";
@@ -215,7 +215,7 @@ export function AgentsScreen() {
   const txProgress = useTransactionProgress();
   const [togglingAgent, setTogglingAgent] = useState<string | null>(null);
   const [localOrder, setLocalOrder] = useState<string[] | null>(null);
-  const isSubmittingRef = useRef(false);
+  const invalidationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const serverEnabledList = followedData?.enabled_agents ?? [];
 
@@ -293,11 +293,15 @@ export function AgentsScreen() {
   );
 
   const submitAgentList = useCallback(
-    async (newList: string[], rollbackList: string[]) => {
-      if (isSubmittingRef.current) return;
-      isSubmittingRef.current = true;
-
+    async (newList: string[]) => {
+      if (invalidationTimerRef.current) {
+        clearTimeout(invalidationTimerRef.current);
+        invalidationTimerRef.current = null;
+      }
       if (address) {
+        await queryClient.cancelQueries({
+          queryKey: queryKeys.userFollowed(address),
+        });
         queryClient.setQueryData(
           queryKeys.userFollowed(address),
           (old: any) => {
@@ -312,21 +316,7 @@ export function AgentsScreen() {
           txProgress,
           async (onPoWProgress) => {
             const wallet = await getWallet();
-            const response = await setAgentsApi(wallet, newList, onPoWProgress);
-            txProgress.setPhase("submitting");
-            return response;
-          },
-          {
-            pollTxStatus: true,
-            getTxStatus: async (hash) => {
-              const s = await getTxStatus({ hash });
-              return {
-                found: s.found,
-                indexed: s.indexed ?? false,
-                success: s.success,
-                error_details: s.error_details,
-              };
-            },
+            return setAgentsApi(wallet, newList, onPoWProgress);
           },
         );
 
@@ -336,45 +326,49 @@ export function AgentsScreen() {
               queryKeys.userFollowed(address),
               (old: any) => {
                 if (!old) return old;
-                return { ...old, enabled_agents: rollbackList };
+                return { ...old, enabled_agents: serverEnabledList };
               },
             );
           }
-        } else {
-          setLocalOrder(null);
-          if (address) {
+          return;
+        }
+        setLocalOrder(null);
+        triggerHaptic("success");
+        const addr = address;
+        invalidationTimerRef.current = setTimeout(() => {
+          if (addr) {
             queryClient.invalidateQueries({
-              queryKey: queryKeys.userFollowed(address),
+              queryKey: queryKeys.userFollowed(addr),
             });
             queryClient.invalidateQueries({
-              queryKey: queryKeys.profile(address),
+              queryKey: queryKeys.profile(addr),
             });
           }
           queryClient.invalidateQueries({ queryKey: ["posts"] });
-          triggerHaptic("success");
-        }
-      } catch {
+        }, 15000);
+       } catch (error) {
+        Sentry.captureException(error, {
+          tags: { feature: "agents", operation: "set-agents" },
+        });
         if (address) {
           queryClient.setQueryData(
             queryKeys.userFollowed(address),
             (old: any) => {
               if (!old) return old;
-              return { ...old, enabled_agents: rollbackList };
+              return { ...old, enabled_agents: serverEnabledList };
             },
           );
         }
         triggerHaptic("error");
-      } finally {
-        isSubmittingRef.current = false;
       }
     },
-    [address, txProgress, getWallet, queryClient],
+    [address, txProgress, getWallet, queryClient, serverEnabledList],
   );
 
   const handleToggleAgent = useCallback(
     async (agent: AgentInfo) => {
       const isCurrentlyEnabled = enabledSet.has(agent.address);
-      const current = localOrder ?? serverEnabledList;
+      const current = currentEnabledList;
       let newList: string[];
 
       if (isCurrentlyEnabled) {
@@ -387,11 +381,11 @@ export function AgentsScreen() {
       setTogglingAgent(agent.address);
       setLocalOrder(null);
       requestAnimationFrame(async () => {
-        await submitAgentList(newList, serverEnabledList);
+        await submitAgentList(newList);
         setTogglingAgent(null);
       });
     },
-    [enabledSet, localOrder, serverEnabledList, submitAgentList],
+    [enabledSet, currentEnabledList, submitAgentList],
   );
 
   const handleApplyOrder = useCallback(async () => {
@@ -399,10 +393,10 @@ export function AgentsScreen() {
     triggerHaptic("medium");
     setTogglingAgent("__reorder__");
     requestAnimationFrame(async () => {
-      await submitAgentList(localOrder, serverEnabledList);
+      await submitAgentList(localOrder);
       setTogglingAgent(null);
     });
-  }, [localOrder, hasOrderChanges, serverEnabledList, submitAgentList]);
+  }, [localOrder, hasOrderChanges, submitAgentList]);
 
   const handleDismiss = useCallback(() => {
     txProgress.hideModal();
