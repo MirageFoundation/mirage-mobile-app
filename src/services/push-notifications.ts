@@ -198,10 +198,15 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
       level: "info",
     });
   } catch (error) {
-    console.error("[PushNotifications] Registration failed, falling back to polling:", error);
-    Sentry.captureException(error, {
-      tags: { feature: "push-notifications", operation: "register" },
-    });
+    const is429 = (error as any)?.response?.status === 429;
+    if (is429) {
+      console.log("[PushNotifications] Registration rate limited, will retry on next foreground");
+    } else {
+      console.error("[PushNotifications] Registration failed, falling back to polling:", error);
+      Sentry.captureException(error, {
+        tags: { feature: "push-notifications", operation: "register" },
+      });
+    }
     setPushEnabled(false);
   } finally {
     isRegisteringPush = false;

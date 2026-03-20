@@ -770,7 +770,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           error handled,react native F (N+1) error
                           handled,sentry log pow cancelled react native 9 error
                           handled,sentry log REACT-NATIVE-22(N+1) error on
-                          getting username from wallet address fix
+                          getting username from wallet address fix,react native
+                          400 error better error handling
                         </Text>
                       </>
                     )}
@@ -826,7 +827,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           error handled,react native F (N+1) error
                           handled,sentry log pow cancelled react native 9 error
                           handled,sentry log REACT-NATIVE-22(N+1) error on
-                          getting username from wallet address fix
+                          getting username from wallet address fix,react native
+                          400 error better error handling
                         </Text>
                       </>
                     )}

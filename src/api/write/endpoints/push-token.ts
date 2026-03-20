@@ -18,26 +18,18 @@ export async function registerPushToken(
     `register_push_token:${token}:${platform}:{timestamp}:{nonce}`,
   );
 
-  try {
-    const response = await api.post<PushTokenResponse>("/core/register_push_token", {
-      ...signed,
-      token,
-      platform,
-    });
-    Sentry.addBreadcrumb({
-      category: "push-notifications",
-      message: "API: register_push_token succeeded",
-      data: { platform },
-      level: "info",
-    });
-    return response;
-  } catch (error) {
-    Sentry.captureException(error, {
-      tags: { feature: "push-notifications", operation: "api-register-push-token" },
-      extra: { platform },
-    });
-    throw error;
-  }
+  const response = await api.post<PushTokenResponse>("/core/register_push_token", {
+    ...signed,
+    token,
+    platform,
+  });
+  Sentry.addBreadcrumb({
+    category: "push-notifications",
+    message: "API: register_push_token succeeded",
+    data: { platform },
+    level: "info",
+  });
+  return response;
 }
 
 export async function unregisterPushToken(
@@ -49,21 +41,14 @@ export async function unregisterPushToken(
     `unregister_push_token:${token}:{timestamp}:{nonce}`,
   );
 
-  try {
-    const response = await api.post<PushTokenResponse>("/core/unregister_push_token", {
-      ...signed,
-      token,
-    });
-    Sentry.addBreadcrumb({
-      category: "push-notifications",
-      message: "API: unregister_push_token succeeded",
-      level: "info",
-    });
-    return response;
-  } catch (error) {
-    Sentry.captureException(error, {
-      tags: { feature: "push-notifications", operation: "api-unregister-push-token" },
-    });
-    throw error;
-  }
+  const response = await api.post<PushTokenResponse>("/core/unregister_push_token", {
+    ...signed,
+    token,
+  });
+  Sentry.addBreadcrumb({
+    category: "push-notifications",
+    message: "API: unregister_push_token succeeded",
+    level: "info",
+  });
+  return response;
 }

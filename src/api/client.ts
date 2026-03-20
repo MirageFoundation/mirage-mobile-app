@@ -254,9 +254,6 @@ class ApiClient {
     }
   }
 
-  /**
-   * POST request
-   */
   async post<T, D = unknown>(path: string, data?: D): Promise<T> {
     const networkState = await Network.getNetworkStateAsync();
     if (!networkState.isConnected) {
@@ -275,6 +272,12 @@ class ApiClient {
         console.log(`[ApiClient] POST ${path} skipped: offline`);
         throw error;
       }
+
+      if (status === 429) {
+        console.log(`[ApiClient] POST ${path} rate limited, skipping`);
+        throw error;
+      }
+
       Sentry.addBreadcrumb({
         category: "api",
         message: `POST ${path} failed`,
