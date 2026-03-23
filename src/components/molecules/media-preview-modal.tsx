@@ -55,12 +55,27 @@ const PreviewVideoItem = memo(function PreviewVideoItem({
   const [isLoading, setIsLoading] = useState(true);
   const muted = useVideoMuteStore((s) => s.isMuted);
   const toggleMute = useVideoMuteStore((s) => s.toggleMute);
+  const getPosition = useVideoPositionStore((s) => s.getPosition);
+  const setPositionStore = useVideoPositionStore((s) => s.setPosition);
+  const currentPositionRef = useRef(0);
+  const hasRestoredRef = useRef(false);
 
   useEffect(() => {
     if (!isActive) {
+      if (item.uri && currentPositionRef.current > 500) {
+        setPositionStore(item.uri, currentPositionRef.current / 1000);
+      }
       ref.current?.pauseAsync().catch(() => {});
     }
-  }, [isActive]);
+  }, [isActive, item.uri, setPositionStore]);
+
+  useEffect(() => {
+    return () => {
+      if (item.uri && currentPositionRef.current > 500) {
+        useVideoPositionStore.getState().setPosition(item.uri, currentPositionRef.current / 1000);
+      }
+    };
+  }, [item.uri]);
 
   const handleTogglePlay = useCallback(() => {
     setPlaying((p) => !p);
@@ -95,11 +110,23 @@ const PreviewVideoItem = memo(function PreviewVideoItem({
           isMuted={muted}
           useNativeControls={false}
           onPlaybackStatusUpdate={(status) => {
-            if (status.isLoaded && status.isPlaying && !status.isBuffering) {
-              setIsLoading(false);
+            if (status.isLoaded) {
+              currentPositionRef.current = status.positionMillis;
+              if (status.isPlaying && !status.isBuffering) {
+                setIsLoading(false);
+              }
             }
           }}
-          onLoad={() => setIsLoading(false)}
+          onLoad={() => {
+            setIsLoading(false);
+            if (!hasRestoredRef.current && item.uri) {
+              const saved = getPosition(item.uri);
+              if (saved > 0.5) {
+                hasRestoredRef.current = true;
+                ref.current?.setStatusAsync({ positionMillis: saved * 1000 }).catch(() => {});
+              }
+            }
+          }}
         />
         {isLoading && (
           <View style={previewVideoStyles.playOverlay}>
@@ -497,6 +524,8 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
   const isMuted = useVideoMuteStore((s) => s.isMuted);
   const toggleMute = useVideoMuteStore((s) => s.toggleMute);
   const [isLoading, setIsLoading] = useState(true);
+  const currentVideoPositionRef = useRef(0);
+  const hasRestoredVideoRef = useRef(false);
 
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(initialIndex);
   const galleryListRef = useRef<FlatList>(null);
@@ -519,12 +548,16 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
   }, [scale, savedScale, translateX, translateY, savedTranslateX, savedTranslateY]);
 
   const handleClose = useCallback(() => {
+    if (media?.type === "video" && media?.uri && currentVideoPositionRef.current > 500) {
+      useVideoPositionStore.getState().setPosition(media.uri, currentVideoPositionRef.current / 1000);
+    }
     videoRef.current?.pauseAsync().catch(() => {});
     resetTransforms();
     setIsVideoPlaying(false);
     setIsLoading(true);
+    hasRestoredVideoRef.current = false;
     onClose();
-  }, [onClose, resetTransforms]);
+  }, [onClose, resetTransforms, media]);
 
   useEffect(() => {
     if (!visible) {
@@ -566,6 +599,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
 
   const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
     if (!status.isLoaded) return;
+    currentVideoPositionRef.current = status.positionMillis;
     if (status.isPlaying && !status.isBuffering) {
       setIsLoading(false);
     }
@@ -762,7 +796,16 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
                 isMuted={isMuted}
                 useNativeControls={false}
                 onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-                onLoad={() => setIsLoading(false)}
+                onLoad={() => {
+                  setIsLoading(false);
+                  if (!hasRestoredVideoRef.current && media?.uri) {
+                    const saved = useVideoPositionStore.getState().getPosition(media.uri);
+                    if (saved > 0.5) {
+                      hasRestoredVideoRef.current = true;
+                      videoRef.current?.setStatusAsync({ positionMillis: saved * 1000 }).catch(() => {});
+                    }
+                  }
+                }}
               />
               {!isVideoPlaying && !isLoading && (
                 <View style={styles.playOverlay}>

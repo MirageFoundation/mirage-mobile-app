@@ -144,6 +144,8 @@ export const PostCardMedia = memo(
     const setPosition = useVideoPositionStore((s) => s.setPosition);
     const lastKnownYouTubeTimeRef = useRef(0);
     const hasRestoredPositionRef = useRef(false);
+    const currentVideoPositionRef = useRef(0);
+    const hasRestoredVideoPositionRef = useRef(false);
 
     const saveYouTubePositionSync = useCallback(() => {
       if (!youtubeVideoId) return;
@@ -173,8 +175,15 @@ export const PostCardMedia = memo(
       lastKnownYouTubeTimeRef.current = seconds;
     }, []);
 
+    const saveVideoPosition = useCallback(() => {
+      if (media?.type !== "video" || !media?.uri) return;
+      const seconds = currentVideoPositionRef.current / 1000;
+      if (seconds > 0.5) setPosition(media.uri, seconds);
+    }, [media?.type, media?.uri, setPosition]);
+
     useImperativeHandle(ref, () => ({
       pauseVideo: () => {
+        saveVideoPosition();
         if (videoRef.current) {
           videoRef.current.pauseAsync().catch(() => {});
         }
@@ -211,6 +220,8 @@ export const PostCardMedia = memo(
       const uriChanged = resolvedMediaUriRef.current !== resolvedMediaUri;
       resolvedMediaUriRef.current = resolvedMediaUri;
       if (uriChanged) {
+        hasRestoredVideoPositionRef.current = false;
+        currentVideoPositionRef.current = 0;
         const wasLoaded = resolvedMediaUri ? MEDIA_LOADED_CACHE.has(resolvedMediaUri) : false;
         setMediaLoaded(wasLoaded);
         if (!wasLoaded) {
@@ -340,6 +351,21 @@ export const PostCardMedia = memo(
       }
     }, [effectiveMuted, media?.type]);
 
+    const wasScreenInactiveForVideoRef = useRef(false);
+    useEffect(() => {
+      if (media?.type !== "video" || !resolvedMediaUri) return;
+      if (!screenActive) {
+        wasScreenInactiveForVideoRef.current = true;
+        saveVideoPosition();
+      } else if (wasScreenInactiveForVideoRef.current) {
+        wasScreenInactiveForVideoRef.current = false;
+        const saved = getPosition(resolvedMediaUri);
+        if (saved > 0.5) {
+          videoRef.current?.setStatusAsync({ positionMillis: saved * 1000 }).catch(() => {});
+        }
+      }
+    }, [screenActive, media?.type, resolvedMediaUri, getPosition, saveVideoPosition]);
+
     const shouldUseAndroidYouTubeEmbed =
       media?.type === "youtube" && Platform.OS === "android";
 
@@ -424,9 +450,10 @@ export const PostCardMedia = memo(
           return;
         }
         triggerHaptic("selection");
+        saveVideoPosition();
         onMediaPress?.();
       },
-      [isPostDetail, shouldBlurContent, onRevealContent, allowAutoplay, isVideoPlaying, feedTappedToPlay, handleVideoToggle, onMediaPress],
+      [isPostDetail, shouldBlurContent, onRevealContent, allowAutoplay, isVideoPlaying, feedTappedToPlay, handleVideoToggle, onMediaPress, saveVideoPosition],
     );
 
     const handleFeedYouTubeTap = useCallback(
@@ -455,6 +482,7 @@ export const PostCardMedia = memo(
         if (!status.isLoaded) {
           return;
         }
+        currentVideoPositionRef.current = status.positionMillis;
         if (status.isPlaying) {
           setIsVideoLoading(false);
           setMediaLoaded(true);
@@ -846,6 +874,13 @@ export const PostCardMedia = memo(
                   setMediaLoaded(true);
                   if (resolvedMediaUri) MEDIA_LOADED_CACHE.add(resolvedMediaUri);
                   videoRef.current?.setStatusAsync({ isMuted: effectiveMuted }).catch(() => {});
+                  if (!hasRestoredVideoPositionRef.current && resolvedMediaUri) {
+                    const saved = getPosition(resolvedMediaUri);
+                    if (saved > 0.5) {
+                      hasRestoredVideoPositionRef.current = true;
+                      videoRef.current?.setStatusAsync({ positionMillis: saved * 1000 }).catch(() => {});
+                    }
+                  }
                 }}
                 onReadyForDisplay={(event) => {
                   const { width, height } = event.naturalSize ?? {};
@@ -988,6 +1023,7 @@ export const PostCardMedia = memo(
             isPostDetail && (
               <Pressable
                 onPress={() => {
+                  saveVideoPosition();
                   onMediaPress?.();
                 }}
                 style={styles.fullscreenButton}
