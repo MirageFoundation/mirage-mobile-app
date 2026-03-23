@@ -153,12 +153,15 @@ export function InboxScreen() {
     advanceHighlightBaseline();
   }, [advanceHighlightBaseline]);
 
+  const routerRef = useRef(router);
+  routerRef.current = router;
+
   const handleItemPress = useCallback(
     (rootPostId: string, replyId: string) => {
       markReplyAsRead(replyId);
-      router.push(`/post/${rootPostId}?highlight=${replyId}`);
+      routerRef.current.push(`/post/${rootPostId}?highlight=${replyId}`);
     },
-    [router, markReplyAsRead],
+    [markReplyAsRead],
   );
 
   const lastFetchTime = useRef(0);
