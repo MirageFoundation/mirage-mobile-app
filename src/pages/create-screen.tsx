@@ -378,12 +378,19 @@ export function CreateScreen() {
 
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const lastProcessedIntentRef = useRef<string | null>(null);
+  const shareTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!hasShareIntent || !shareIntent || isEditMode) return;
 
     const intentKey = shareIntent.webUrl ?? shareIntent.text ?? shareIntent.files?.[0]?.path ?? null;
     if (!intentKey || intentKey === lastProcessedIntentRef.current) return;
     lastProcessedIntentRef.current = intentKey;
+
+    if (shareTimeoutRef.current) {
+      clearTimeout(shareTimeoutRef.current);
+      shareTimeoutRef.current = null;
+    }
+    const currentIntentKey = intentKey;
 
     console.log("[CreateScreen] Share intent received:", {
       type: shareIntent.type,
@@ -430,13 +437,15 @@ export function CreateScreen() {
       }
     }
 
-    setTimeout(() => {
+    shareTimeoutRef.current = setTimeout(() => {
+      if (lastProcessedIntentRef.current !== currentIntentKey) return;
       if (shareIntent.text && !shareIntent.webUrl) {
         updateDraft({ body: shareIntent.text.slice(0, tierLimits.maxContentLength) });
       }
       if (shareIntent.webUrl) {
         setIsProcessingShareLink(true);
         fetchLinkMeta(shareIntent.webUrl).then(async (meta) => {
+          if (lastProcessedIntentRef.current !== currentIntentKey) return;
           console.log("[CreateScreen] Link meta extracted:", {
             url: shareIntent.webUrl,
             title: meta.title,
@@ -691,10 +700,11 @@ export function CreateScreen() {
             updateDraft({ linkUrl: meta.externalUrl });
           }
         }).catch((err: any) => {
+          if (lastProcessedIntentRef.current !== currentIntentKey) return;
           updateDraft({ body: shareIntent.webUrl!.slice(0, tierLimits.maxContentLength) });
           Sentry.captureException(err, { tags: { feature: "share-intent-meta" } });
         }).finally(() => {
-          setIsProcessingShareLink(false);
+          if (lastProcessedIntentRef.current === currentIntentKey) setIsProcessingShareLink(false);
         });
       }
       if (shareIntent.files?.length) {
@@ -708,6 +718,13 @@ export function CreateScreen() {
       }
       resetShareIntent();
     }, 50);
+
+    return () => {
+      if (shareTimeoutRef.current) {
+        clearTimeout(shareTimeoutRef.current);
+        shareTimeoutRef.current = null;
+      }
+    };
   }, [hasShareIntent, shareIntent]);
 
   // Handle video returned from editor
