@@ -773,7 +773,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           in topics screen,topic screen header hide when
                           scrolling,video sync through feed post details screen
                           and full screen,all type of mirage link in app will
-                          open in app
+                          open in app, dark splash sscreen icon configured
                         </Text>
                       </>
                     )}
@@ -832,7 +832,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           in topics screen,topic screen header hide when
                           scrolling,video sync through feed post details screen
                           and full screen,all type of mirage link in app will
-                          open in app
+                          open in app, dark splash sscreen icon configured
                         </Text>
                       </>
                     )}

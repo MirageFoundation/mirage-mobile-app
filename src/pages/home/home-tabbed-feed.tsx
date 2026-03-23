@@ -717,11 +717,11 @@ export const HomeTabbedFeed = forwardRef<
   const ListEmpty = useMemo(
     () =>
       createListEmptyComponent(
-        query.isLoading,
+        query.isPending,
         query.isError,
         query.error?.message,
       ),
-    [createListEmptyComponent, query.isLoading, query.isError, query.error?.message],
+    [createListEmptyComponent, query.isPending, query.isError, query.error?.message],
   );
 
   return (
