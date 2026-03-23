@@ -53,6 +53,7 @@ function truncateParentContent(content: string): string {
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEDIA_HORIZONTAL_PADDING = 32;
 const MEDIA_MAX_HEIGHT = 210;
+const ASPECT_RATIO_CACHE = new Map<string, number>();
 
 const ReplyImage = memo(function ReplyImage({
   url,
@@ -63,8 +64,12 @@ const ReplyImage = memo(function ReplyImage({
 }) {
   const { theme } = useUnistyles();
   const [hasError, setHasError] = useState(false);
-  const [mediaLoaded, setMediaLoaded] = useState(false);
-  const [aspectRatio, setAspectRatio] = useState(16 / 9);
+  const [mediaLoaded, setMediaLoaded] = useState(
+    () => ASPECT_RATIO_CACHE.has(url),
+  );
+  const [aspectRatio, setAspectRatio] = useState(
+    () => ASPECT_RATIO_CACHE.get(url) ?? 16 / 9,
+  );
 
   const mediaSource = useMemo(() => ({ uri: url }), [url]);
 
@@ -74,6 +79,17 @@ const ReplyImage = memo(function ReplyImage({
   const mediaWrapperStyle = exceedsMaxHeight
     ? { height: MEDIA_MAX_HEIGHT }
     : { aspectRatio };
+
+  const handleLoad = useCallback(({ source }: { source: { width: number; height: number } }) => {
+    if (source?.width && source?.height) {
+      const ratio = source.width / source.height;
+      ASPECT_RATIO_CACHE.set(url, ratio);
+      setAspectRatio(ratio);
+    }
+    setMediaLoaded(true);
+  }, [url]);
+
+  const handleError = useCallback(() => setHasError(true), []);
 
   if (hasError) {
     return (
@@ -107,13 +123,8 @@ const ReplyImage = memo(function ReplyImage({
           contentFit="cover"
           cachePolicy="memory-disk"
           recyclingKey={url}
-          onLoad={({ source }) => {
-            if (source?.width && source?.height) {
-              setAspectRatio(source.width / source.height);
-            }
-            setMediaLoaded(true);
-          }}
-          onError={() => setHasError(true)}
+          onLoad={handleLoad}
+          onError={handleError}
         />
         {!mediaLoaded && (
           <View style={styles.imagePlaceholder}>
