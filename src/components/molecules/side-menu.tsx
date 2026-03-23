@@ -770,7 +770,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           extraction, topic validation added while searching or
                           creating topic in topic selector in create post
                           screen, time not updating on posts fixed,search added
-                          in topics screen
+                          in topics screen,topic screen header hide when
+                          scrolling,video sync through feed post details screen
+                          and full screen,
                         </Text>
                       </>
                     )}
@@ -826,7 +828,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           extraction, topic validation added while searching or
                           creating topic in topic selector in create post
                           screen, time not updating on posts fixed,search added
-                          in topics screen
+                          in topics screen,topic screen header hide when
+                          scrolling,video sync through feed post details screen
+                          and full screen,
                         </Text>
                       </>
                     )}
