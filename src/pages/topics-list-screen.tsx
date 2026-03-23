@@ -15,6 +15,7 @@ import Animated, {
   FadeIn,
   FadeOut,
   interpolate,
+  useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -237,6 +238,31 @@ export function TopicsListScreen() {
   const searchInputRef = useRef<TextInput>(null);
   const { handleFollowTopic } = useFollowHandler({});
 
+  const HEADER_HEIGHT = 56 + 58 + insets.top;
+  const scrollY = useSharedValue(0);
+  const lastScrollY = useSharedValue(0);
+  const headerTranslateY = useSharedValue(0);
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      const currentY = event.contentOffset.y;
+      const diff = currentY - lastScrollY.value;
+      if (currentY <= 0) {
+        headerTranslateY.value = 0;
+      } else if (diff > 0) {
+        headerTranslateY.value = Math.max(-HEADER_HEIGHT, headerTranslateY.value - diff);
+      } else if (diff < 0) {
+        headerTranslateY.value = Math.min(0, headerTranslateY.value - diff);
+      }
+      lastScrollY.value = currentY;
+      scrollY.value = currentY;
+    },
+  });
+
+  const headerAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: headerTranslateY.value }],
+  }));
+
   const {
     data: searchData,
     isSearching,
@@ -362,7 +388,7 @@ export function TopicsListScreen() {
 
   return (
     <Box flex background="base">
-      <View
+      <Animated.View
         style={[
           styles.header,
           {
@@ -370,6 +396,7 @@ export function TopicsListScreen() {
             backgroundColor: theme.colors.background.default,
             borderBottomColor: theme.colors.border.subtle,
           },
+          headerAnimatedStyle,
         ]}
       >
         <View style={styles.headerRow}>
@@ -443,13 +470,14 @@ export function TopicsListScreen() {
             </Pressable>
           )}
         </View>
-      </View>
+      </Animated.View>
 
-      <FlatList
+      <Animated.FlatList
         data={topics}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         contentContainerStyle={{
+          paddingTop: HEADER_HEIGHT,
           paddingBottom: insets.bottom + 20,
           flexGrow: topics.length === 0 && !searchText.trim() ? 1 : undefined,
         }}
@@ -459,11 +487,14 @@ export function TopicsListScreen() {
             refreshing={isRefreshing}
             onRefresh={handleRefresh}
             tintColor={theme.colors.text.subtle}
+            progressViewOffset={HEADER_HEIGHT}
           />
         }
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         onScrollBeginDrag={Keyboard.dismiss}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
       />
     </Box>
   );
@@ -471,6 +502,11 @@ export function TopicsListScreen() {
 
 const styles = StyleSheet.create((theme) => ({
   header: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
     borderBottomWidth: 1,
   },
   headerRow: {

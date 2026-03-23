@@ -769,7 +769,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           the topic from shared link and sanitizing it while
                           extraction, topic validation added while searching or
                           creating topic in topic selector in create post
-                          screen, time not updating on posts fixed
+                          screen, time not updating on posts fixed,search added
+                          in topics screen
                         </Text>
                       </>
                     )}
@@ -824,7 +825,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           the topic from shared link and sanitizing it while
                           extraction, topic validation added while searching or
                           creating topic in topic selector in create post
-                          screen, time not updating on posts fixed
+                          screen, time not updating on posts fixed,search added
+                          in topics screen
                         </Text>
                       </>
                     )}
