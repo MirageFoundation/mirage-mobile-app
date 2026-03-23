@@ -773,7 +773,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           in topics screen,topic screen header hide when
                           scrolling,video sync through feed post details screen
                           and full screen,all type of mirage link in app will
-                          open in app, dark splash sscreen icon configured
+                          open in app, dark splash sscreen icon configured,
+                          showing empty state of home feed when loading on cold
+                          start app fixed to show skelton loading
                         </Text>
                       </>
                     )}
@@ -832,7 +834,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           in topics screen,topic screen header hide when
                           scrolling,video sync through feed post details screen
                           and full screen,all type of mirage link in app will
-                          open in app, dark splash sscreen icon configured
+                          open in app, dark splash sscreen icon configured,
+                          showing empty state of home feed when loading on cold
+                          start app fixed to show skelton loading
                         </Text>
                       </>
                     )}
