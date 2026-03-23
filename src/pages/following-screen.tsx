@@ -37,6 +37,7 @@ import {
   useContentModerationStore,
   usePreferencesStore,
   useSavedPostsStore,
+  useTimeTickStore,
 } from "@/src/stores";
 import { HomeTabbedFeed, type HomeTabbedFeedRef } from "./home/home-tabbed-feed";
 import { useHomePostCardStore } from "./home/home-post-card-store";
@@ -91,6 +92,7 @@ export function FollowingScreen() {
         const duration = Date.now() - backgroundTimeRef.current;
         backgroundTimeRef.current = null;
         storage.remove("app_was_backgrounded");
+        useTimeTickStore.getState().bump();
         if (duration >= 2 * 60 * 60 * 1000) {
           setTimeout(async () => {
             showBars();
@@ -395,6 +397,7 @@ export function FollowingScreen() {
     useCallback(() => {
       setActiveFeedScreen('following');
       setDisabledTopicName(undefined);
+      useTimeTickStore.getState().bump();
       return () => {
         const current = useHomePostCardStore.getState().activeFeedScreen;
         if (current === 'following') {

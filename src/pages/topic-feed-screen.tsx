@@ -60,6 +60,7 @@ import {
   useContentModerationStore,
   usePreferencesStore,
   useSavedPostsStore,
+  useTimeTickStore,
 } from "@/src/stores";
 import { useNewPostsChecker } from "@/src/hooks/use-new-posts-checker";
 import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
@@ -485,6 +486,7 @@ export function TopicFeedScreen() {
     } finally {
       setIsManualRefreshing(false);
       dismissNewPostsRef.current?.();
+      useTimeTickStore.getState().bump();
     }
   }, [refetch]);
 
@@ -671,6 +673,7 @@ export function TopicFeedScreen() {
     useCallback(() => {
       setActiveFeedScreen("topic");
       setDisabledTopicName(topicName);
+      useTimeTickStore.getState().bump();
       return () => {
         const current = useHomePostCardStore.getState().activeFeedScreen;
         if (current === "topic") {

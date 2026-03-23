@@ -755,7 +755,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 95
+                          update 96
                         </Text>
                         <Text
                           style={{
@@ -765,22 +765,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          howing logged out state after the app is opened from
-                          background fixed, sentry error react native K, 21, 23
-                          error handled,react native F (N+1) error
-                          handled,sentry log pow cancelled react native 9 error
-                          handled,sentry log REACT-NATIVE-22(N+1) error on
-                          getting username from wallet address fix,react native
-                          400 error better error handling,react native 7 error
-                          noise reduction,react native 422 error handling, long
-                          username overlapping in post card fix,username cut in
-                          thread fix,reduced size of image/gif in inbox, post
-                          creation, editing post,Updating Agents,Changing
-                          Username,Deleting Account fails when there is pending
-                          pow in queue fixed,enabling mature content enables all
-                          the content, disabling mature content disables all the
-                          content, removed enable confirmation popup in content
-                          filter sheet
+                          topic validation and rules chaeck which auto filling
+                          the topic from shared link and sanitizing it while
+                          extraction, topic validation added while searching or
+                          creating topic in topic selector in create post
+                          screen, time not updating on posts fixed
                         </Text>
                       </>
                     )}
@@ -821,7 +810,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 95
+                          update 96
                         </Text>
                         <Text
                           style={{
@@ -831,22 +820,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          howing logged out state after the app is opened from
-                          background fixed, sentry error react native K, 21, 23
-                          error handled,react native F (N+1) error
-                          handled,sentry log pow cancelled react native 9 error
-                          handled,sentry log REACT-NATIVE-22(N+1) error on
-                          getting username from wallet address fix,react native
-                          400 error better error handling,react native 7 error
-                          noise reduction,react native 422 error handling, long
-                          username overlapping in post card fix,username cut in
-                          thread fix,reduced size of image/gif in inbox, post
-                          creation, editing post,Updating Agents,Changing
-                          Username,Deleting Account fails when there is pending
-                          pow in queue fixed,enabling mature content enables all
-                          the content, disabling mature content disables all the
-                          content, removed enable confirmation popup in content
-                          filter sheet
+                          topic validation and rules chaeck which auto filling
+                          the topic from shared link and sanitizing it while
+                          extraction, topic validation added while searching or
+                          creating topic in topic selector in create post
+                          screen, time not updating on posts fixed
                         </Text>
                       </>
                     )}

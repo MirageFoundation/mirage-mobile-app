@@ -22,3 +22,4 @@ export { useHistoryStore, type HistoryEntry } from "./history-store";
 export { useInboxStore } from "./inbox-store";
 export { useVideoMuteStore } from "./video-mute-store";
 export { useVideoPositionStore } from "./video-position-store";
+export { useTimeTickStore } from "./time-tick-store";

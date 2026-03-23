@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { AppState } from "react-native";
 import { Text, type TextProps } from "@/src/components/ui/primitives";
+import { useTimeTickStore } from "@/src/stores";
 
 type TimeAgoProps = Omit<TextProps, "children"> & {
   /** Timestamp to display (Date, ISO string, or Unix timestamp in ms) */
@@ -70,6 +71,7 @@ function getRefreshInterval(timestamp: Date | string | number): number {
 function useTick(timestamp: Date | string | number) {
   const [, setTick] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useTimeTickStore((s) => s.tick);
 
   const startTimer = useCallback(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);

@@ -55,6 +55,7 @@ import {
   usePreferencesStore,
   getShareBaseUrl,
   useSavedPostsStore,
+  useTimeTickStore,
 } from "@/src/stores";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import { useHistoryStore } from "@/src/stores/history-store";
@@ -166,6 +167,7 @@ export default function PostDetailScreen() {
     onForeground: () => {
       setScreenActive(isScreenFocusedRef.current);
       refetchCommentsRef.current?.(true);
+      useTimeTickStore.getState().bump();
     },
     staleThreshold: 0,
   });
@@ -174,6 +176,7 @@ export default function PostDetailScreen() {
     useCallback(() => {
       isScreenFocusedRef.current = true;
       setScreenActive(true);
+      useTimeTickStore.getState().bump();
       return () => {
         isScreenFocusedRef.current = false;
         setScreenActive(false);
@@ -776,12 +779,14 @@ export default function PostDetailScreen() {
 
       const processedReplies = existingReplies.map(applyOptimisticReplies);
 
-      const allReplies = [...processedReplies, ...pendingReplies];
+      const existingIds = new Set(existingReplies.map((r) => r.id));
+      const dedupedPending = pendingReplies.filter((r) => !existingIds.has(r.id));
+      const allReplies = [...processedReplies, ...dedupedPending];
 
       return {
         ...comment,
         replies: allReplies.length > 0 ? allReplies : comment.replies,
-        replyCount: (comment.replyCount ?? 0) + pendingReplies.length,
+        replyCount: (comment.replyCount ?? 0) + dedupedPending.length,
       };
     },
     [optimisticReplies],

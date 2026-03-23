@@ -45,6 +45,7 @@ import {
   useAuthStore,
   useContentModerationStore,
   usePreferencesStore,
+  useTimeTickStore,
 } from "@/src/stores";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNewPostsChecker, type NewPostAvatar } from "@/src/hooks/use-new-posts-checker";
@@ -369,6 +370,7 @@ export const HomeTabbedFeed = forwardRef<
       Sentry.addBreadcrumb({ category: "home-feed", message: "Feed refresh failed", data: { error: String(error) }, level: "error" });
     } finally {
       isRefreshingRef.current = false;
+      useTimeTickStore.getState().bump();
       if (!options?.silent) {
         setIsRefreshing(false);
         onRefreshingChange?.(false);

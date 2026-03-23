@@ -55,6 +55,7 @@ import {
   useContentModerationStore,
   usePreferencesStore,
   useSavedPostsStore,
+  useTimeTickStore,
 } from "@/src/stores";
 import { LoggedOutHome } from "./logged-out-home";
 
@@ -112,6 +113,7 @@ export function HomeScreen() {
         const duration = Date.now() - backgroundTimeRef.current;
         backgroundTimeRef.current = null;
         storage.remove("app_was_backgrounded");
+        useTimeTickStore.getState().bump();
         if (duration >= 2 * 60 * 60 * 1000) {
           isAutoRefreshingRef.current = true;
           setHasNewPosts(false);
@@ -534,6 +536,7 @@ export function HomeScreen() {
     useCallback(() => {
       setActiveFeedScreen('home');
       setDisabledTopicName(undefined);
+      useTimeTickStore.getState().bump();
       return () => {
         const current = useHomePostCardStore.getState().activeFeedScreen;
         if (current === 'home') {
