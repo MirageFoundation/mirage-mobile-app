@@ -447,7 +447,7 @@ export function usePost(options: UsePostOptions = {}) {
       postQueries.forEach(([queryKey, queryData]) => {
         if (!queryData) return;
         const filters = queryKey[1] as PostFilters | undefined;
-        if (filters?.feed && filters.feed !== "home") return;
+        if (filters?.feed !== "home") return;
 
         if (
           typeof queryData === "object" &&
@@ -488,7 +488,8 @@ export function usePost(options: UsePostOptions = {}) {
         }
       });
 
-      // Mark posts as stale without refetching active feeds.
+      // Keep the newly created post visible immediately in Home feeds.
+      // Magic is reconciled back to backend ordering on refresh / new-posts reload.
       queryClient.invalidateQueries({
         queryKey: ["posts"],
         refetchType: "inactive",

@@ -347,7 +347,7 @@ export const HomeTabbedFeed = forwardRef<
         }
       } else {
         queryClient.setQueryData(postsQueryKey, (oldData: any) => {
-          if (!oldData) {
+          if (!oldData || sortBy === "magic") {
             return {
               pages: [newFirstPage],
               pageParams: [1],
