@@ -755,7 +755,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 96
+                          update 97
                         </Text>
                         <Text
                           style={{
@@ -775,7 +775,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           and full screen,all type of mirage link in app will
                           open in app, dark splash sscreen icon configured,
                           showing empty state of home feed when loading on cold
-                          start app fixed to show skelton loading
+                          start app fixed to show skelton loading, sometimes the
+                          data extraction from the shared link right after one
+                          link was shared is not updating the create post screen
+                          to new neta data fix, images not loading in inbox when
+                          clicked on notification and navigated top inbox fix
                         </Text>
                       </>
                     )}
@@ -816,7 +820,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 96
+                          update 97
                         </Text>
                         <Text
                           style={{
@@ -836,7 +840,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           and full screen,all type of mirage link in app will
                           open in app, dark splash sscreen icon configured,
                           showing empty state of home feed when loading on cold
-                          start app fixed to show skelton loading
+                          start app fixed to show skelton loading, sometimes the
+                          data extraction from the shared link right after one
+                          link was shared is not updating the create post screen
+                          to new neta data fix, images not loading in inbox when
+                          clicked on notification and navigated top inbox fix
                         </Text>
                       </>
                     )}

@@ -8,8 +8,8 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { getUsernameColor } from "@/src/utils/tiers";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { memo, useCallback, useMemo, useState } from "react";
-import { Pressable, View } from "react-native";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 const IMAGE_URL_REGEX = /^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp))$/i;
@@ -25,7 +25,7 @@ function isImageUrl(url: string): boolean {
   );
 }
 
-function extractImageUrls(content: string): {
+export function extractImageUrls(content: string): {
   text: string;
   imageUrls: string[];
 } {
@@ -50,6 +50,16 @@ function truncateParentContent(content: string): string {
   return singleLine.slice(0, PARENT_PREVIEW_MAX_LENGTH).trimEnd() + "…";
 }
 
+const ASPECT_RATIO_CACHE = new Map<string, number>();
+const MEDIA_MAX_HEIGHT = 210;
+const CONTAINER_WIDTH = 350;
+
+type ImageState = {
+  status: "loading" | "loaded" | "error";
+  aspectRatio: number;
+  retryKey: number;
+};
+
 const ReplyImage = ({
   url,
   onPress,
@@ -58,18 +68,49 @@ const ReplyImage = ({
   onPress?: () => void;
 }) => {
   const { theme } = useUnistyles();
-  const [hasError, setHasError] = useState(false);
-  const [aspectRatio, setAspectRatio] = useState(16 / 9);
+  const [state, setState] = useState<ImageState>(() => ({
+    status: "loading",
+    aspectRatio: ASPECT_RATIO_CACHE.get(url) ?? 16 / 9,
+    retryKey: 0,
+  }));
+  const retryCount = useRef(0);
 
-  const MEDIA_MAX_HEIGHT = 210;
-  const containerWidth = 350;
-  const calculatedHeight = containerWidth / aspectRatio;
+  const calculatedHeight = CONTAINER_WIDTH / state.aspectRatio;
   const exceedsMaxHeight = calculatedHeight > MEDIA_MAX_HEIGHT;
   const containerStyle = exceedsMaxHeight
     ? { height: MEDIA_MAX_HEIGHT }
-    : { aspectRatio };
+    : { aspectRatio: state.aspectRatio };
 
-  if (hasError) {
+  const handleError = useCallback(() => {
+    if (retryCount.current < 2) {
+      retryCount.current += 1;
+      setState((prev) => ({ ...prev, retryKey: prev.retryKey + 1 }));
+    } else {
+      setState((prev) => ({ ...prev, status: "error" }));
+    }
+  }, []);
+
+  const handleLoad = useCallback(({ source }: { source: { width: number; height: number } }) => {
+    if (source?.width && source?.height) {
+      const ratio = source.width / source.height;
+      ASPECT_RATIO_CACHE.set(url, ratio);
+      setState((prev) => {
+        const ratioChanged = Math.abs(prev.aspectRatio - ratio) >= 0.01;
+        if (prev.status === "loaded" && !ratioChanged) return prev;
+        return {
+          ...prev,
+          status: "loaded",
+          aspectRatio: ratioChanged ? ratio : prev.aspectRatio,
+        };
+      });
+    } else {
+      setState((prev) =>
+        prev.status === "loaded" ? prev : { ...prev, status: "loaded" },
+      );
+    }
+  }, [url]);
+
+  if (state.status === "error") {
     return (
       <View
         style={[
@@ -94,19 +135,20 @@ const ReplyImage = ({
         }
       }}
     >
+      {state.status === "loading" && (
+        <View style={styles.imagePlaceholder}>
+          <ActivityIndicator size="small" color={theme.colors.text.subtle} />
+        </View>
+      )}
       <Image
         source={{ uri: url }}
         style={styles.image}
         contentFit="cover"
         transition={200}
-        recyclingKey={url}
+        recyclingKey={`${url}-${state.retryKey}`}
         cachePolicy="memory-disk"
-        onLoad={({ source }) => {
-          if (source?.width && source?.height) {
-            setAspectRatio(source.width / source.height);
-          }
-        }}
-        onError={() => setHasError(true)}
+        onLoad={handleLoad}
+        onError={handleError}
       />
     </Pressable>
   );
@@ -220,6 +262,13 @@ export const InboxItem = memo(function InboxItem({
       />
     </>
   );
+}, (prev, next) => {
+  return (
+    prev.reply.reply_id === next.reply.reply_id &&
+    prev.reply.reply_content === next.reply.reply_content &&
+    prev.isUnread === next.isUnread &&
+    prev.onPress === next.onPress
+  );
 });
 
 const styles = StyleSheet.create((theme) => ({
@@ -279,5 +328,11 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.xs,
+  },
+  imagePlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
   },
 }));

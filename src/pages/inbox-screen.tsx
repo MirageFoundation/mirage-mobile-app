@@ -1,11 +1,11 @@
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/hooks/use-router";
 import * as Sentry from "@sentry/react-native";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, InteractionManager, Pressable, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { Image } from "expo-image";
+import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
@@ -25,7 +25,7 @@ import { walletService } from "@/src/services/wallet-service";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
-const MemoizedInboxItem = memo(InboxItem);
+const MemoizedInboxItem = InboxItem;
 
 export function InboxScreen() {
   const insets = useSafeAreaInsets();
@@ -83,11 +83,16 @@ export function InboxScreen() {
     return items;
   }, [data]);
 
+  const fromNotificationRef = useRef(fromNotification);
+  fromNotificationRef.current = fromNotification;
+
   useFocusEffect(
     useCallback(() => {
       setInboxActive(true);
       markAsViewed();
-      refetch();
+      if (!fromNotificationRef.current) {
+        refetch();
+      }
       Notifications.dismissAllNotificationsAsync();
       Notifications.setBadgeCountAsync(0);
       const task = InteractionManager.runAfterInteractions(() => {
@@ -127,7 +132,9 @@ export function InboxScreen() {
     requestAnimationFrame(() => {
       listRef.current?.scrollToOffset({ offset: 0, animated: true });
     });
-    refetch();
+    InteractionManager.runAfterInteractions(() => {
+      refetch();
+    });
   }, [fromNotification, refetch]);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -221,7 +228,7 @@ export function InboxScreen() {
 
     return (
       <View style={styles.emptyContainer}>
-        <Image
+        <ExpoImage
           source={emptyInfoImage}
           style={styles.emptyImage}
           contentFit="contain"
