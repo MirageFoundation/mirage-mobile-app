@@ -78,6 +78,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           backgroundColor: "#ffffff",
           dark: {
             backgroundColor: "#000000",
+            image: "./assets/images/splash-icon-dark.png",
           },
         },
       ],

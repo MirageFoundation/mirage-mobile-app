@@ -772,7 +772,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           screen, time not updating on posts fixed,search added
                           in topics screen,topic screen header hide when
                           scrolling,video sync through feed post details screen
-                          and full screen,
+                          and full screen,all type of mirage link in app will
+                          open in app
                         </Text>
                       </>
                     )}
@@ -830,7 +831,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           screen, time not updating on posts fixed,search added
                           in topics screen,topic screen header hide when
                           scrolling,video sync through feed post details screen
-                          and full screen,
+                          and full screen,all type of mirage link in app will
+                          open in app
                         </Text>
                       </>
                     )}
