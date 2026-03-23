@@ -30,6 +30,7 @@ import type { TopicInfo } from "@/src/api/types";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { type Community } from "@/src/stores/draft-store";
+import { validateTopic, TOPIC_MAX_LENGTH } from "@/src/utils/topic-validation";
 
 const topicToCommunity = (topic: TopicInfo): Community => ({
   id: topic.topic.toLowerCase(),
@@ -192,6 +193,15 @@ export const CommunitySelectionModal = ({
     );
   }, [searchText, filteredCommunities]);
 
+  const topicValidation = useMemo(() => {
+    if (!searchText.trim()) return { isValid: false, error: null };
+    const result = validateTopic(searchText.trim());
+    if (!result.error && searchText.trim().length >= TOPIC_MAX_LENGTH) {
+      return { isValid: result.isValid, error: `Topic cannot exceed ${TOPIC_MAX_LENGTH} characters` };
+    }
+    return result;
+  }, [searchText]);
+
   const createTopicOption: Community | null = useMemo(() => {
     if (!searchText.trim() || exactTopicExists || isDebouncing || isSearching)
       return null;
@@ -199,7 +209,7 @@ export const CommunitySelectionModal = ({
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "");
-    if (!cleanName) return null;
+    if (!cleanName || !topicValidation.isValid) return null;
 
     return {
       id: cleanName,
@@ -210,7 +220,7 @@ export const CommunitySelectionModal = ({
       isSubscribed: false,
       isNewTopic: true,
     };
-  }, [searchText, exactTopicExists, isDebouncing, isSearching]);
+  }, [searchText, exactTopicExists, isDebouncing, isSearching, topicValidation.isValid]);
 
   const isLoading = isLoadingTopics || isDebouncing || isSearching;
 
@@ -356,6 +366,7 @@ export const CommunitySelectionModal = ({
                 onBlur={handleSearchBlur}
                 autoCapitalize="none"
                 autoCorrect={false}
+                maxLength={TOPIC_MAX_LENGTH}
               />
               {searchText.length > 0 && (
                 <Animated.View
@@ -388,6 +399,15 @@ export const CommunitySelectionModal = ({
           </Animated.View>
         </Animated.View>
 
+        {topicValidation.error && !exactTopicExists && (
+          <View style={styles.validationError}>
+            <Feather name="alert-circle" size={14} color={theme.colors.error[500]} />
+            <Text size="sm" style={{ color: theme.colors.error[500], marginLeft: 6 }}>
+              {topicValidation.error}
+            </Text>
+          </View>
+        )}
+
         {isLoading ? (
           <Box p="lg" alignItems="center">
             <ActivityIndicator size="large" color={theme.colors.brand[500]} />
@@ -406,13 +426,15 @@ export const CommunitySelectionModal = ({
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             ListHeaderComponent={ListHeaderComponent}
             ListEmptyComponent={
-              <Box center p="lg">
-                <Text mode="subtle">
-                  {searchText.length > 0
-                    ? "No topics found matching your search"
-                    : "No topics available"}
-                </Text>
-              </Box>
+              topicValidation.error && !exactTopicExists ? null : (
+                <Box center p="lg">
+                  <Text mode="subtle">
+                    {searchText.length > 0
+                      ? "No topics found matching your search"
+                      : "No topics available"}
+                  </Text>
+                </Box>
+              )
             }
             ListFooterComponent={() => <View style={{ height: 100 }} />}
           />
@@ -505,5 +527,11 @@ const styles = StyleSheet.create((theme) => ({
   separator: {
     height: 0.5,
     backgroundColor: theme.colors.border.subtle,
+  },
+  validationError: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.xs,
   },
 }));

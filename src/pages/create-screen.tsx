@@ -5,6 +5,7 @@ import { markEditJustCompleted } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { fetchLinkMeta } from "@/src/utils/fetch-link-meta";
 import { mergeAudioVideo } from "@/src/utils/merge-audio-video";
+import { sanitizeTopicName } from "@/src/utils/topic-validation";
 import { trimToMaxDuration } from "@/src/utils/video-processing";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
@@ -415,16 +416,18 @@ export function CreateScreen() {
 
     const redditMatch = (shareIntent.webUrl ?? shareIntent.text ?? "").match(/reddit\.com\/r\/([^/]+)/i);
     if (redditMatch) {
-      const topicName = redditMatch[1].toLowerCase();
-      updateDraft({
-        community: {
-          id: topicName,
-          name: topicName,
-          memberCount: 0,
-          isSubscribed: false,
-          isNewTopic: true,
-        },
-      });
+      const topicName = sanitizeTopicName(redditMatch[1]);
+      if (topicName.length >= 2) {
+        updateDraft({
+          community: {
+            id: topicName,
+            name: topicName,
+            memberCount: 0,
+            isSubscribed: false,
+            isNewTopic: true,
+          },
+        });
+      }
     }
 
     setTimeout(() => {
@@ -528,7 +531,7 @@ export function CreateScreen() {
           console.log("[CreateScreen] Draft auto-filled:", {
             title: (finalTitle ?? meta.title)?.slice(0, tierLimits.maxTitleLength),
             body: bodyParts.join("\n\n").slice(0, 200),
-            community: redditMatch ? redditMatch[1].toLowerCase() : null,
+            community: redditMatch ? sanitizeTopicName(redditMatch[1]) : null,
           });
 
           if (meta.externalUrl) {
@@ -1535,7 +1538,7 @@ export function CreateScreen() {
                 { backgroundColor: theme.colors.warning[500] + "15" },
               ]}
             >
-              <Text size="xs" mode="subtle" style={{ lineHeight: 16 }}>
+              <Text size="xs" style={{ lineHeight: 16, color: theme.colors.warning[500] }}>
                 Topics are communities centered around specific interests.
                 Posting in the wrong topic may affect your overall trust status
                 on Mirage. Make sure to post into the right category!
