@@ -1,15 +1,19 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   Pressable,
   RefreshControl,
+  TextInput,
   View,
 } from "react-native";
 import Animated, {
+  FadeIn,
+  FadeOut,
   interpolate,
   useAnimatedStyle,
   useSharedValue,
@@ -19,7 +23,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { useTopics, useUserFollowed } from "@/src/api/read";
+import { useTopics, useDebouncedSearchTopics, useUserFollowed } from "@/src/api/read";
 import type { TopicInfo } from "@/src/api/types";
 import { Box, Text } from "@/src/components/ui/primitives";
 import {
@@ -229,19 +233,54 @@ export function TopicsListScreen() {
   const { data: followedData } = useUserFollowed();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const searchInputRef = useRef<TextInput>(null);
   const { handleFollowTopic } = useFollowHandler({});
+
+  const {
+    data: searchData,
+    isSearching,
+    isDebouncing,
+  } = useDebouncedSearchTopics(
+    searchText.length >= 2 ? searchText : null,
+    750,
+    50,
+  );
 
   const followedTopics = useMemo(
     () => new Set(followedData?.followed_topics ?? []),
     [followedData],
   );
 
-  const topics = useMemo(() => {
+  const allTopics = useMemo(() => {
     if (!data?.topics) return [];
     return [...data.topics].sort(
       (a, b) => (b.post_count ?? 0) - (a.post_count ?? 0),
     );
   }, [data]);
+
+  const topics = useMemo(() => {
+    if (searchText.length >= 2 && searchData?.topics) {
+      return searchData.topics;
+    }
+    if (searchText.trim()) {
+      const query = searchText.toLowerCase();
+      return allTopics.filter((t) => t.topic.toLowerCase().includes(query));
+    }
+    return allTopics;
+  }, [searchText, searchData, allTopics]);
+
+  const isSearchLoading = isDebouncing || isSearching;
+
+  const handleClearSearch = useCallback(() => {
+    setSearchText("");
+    searchInputRef.current?.focus();
+  }, []);
+
+  const handleSearchCancel = useCallback(() => {
+    Keyboard.dismiss();
+    setSearchText("");
+  }, []);
 
   const handleBack = useCallback(() => {
     router.back();
@@ -290,6 +329,16 @@ export function TopicsListScreen() {
 
   const ListEmptyComponent = useCallback(() => {
     if (isLoading) return <ListSkeleton />;
+    if (searchText.trim()) {
+      if (isSearchLoading) return null;
+      return (
+        <Box center p="lg">
+          <Text mode="subtle">
+            No topics found matching your search
+          </Text>
+        </Box>
+      );
+    }
     return (
       <View style={styles.emptyContainer}>
         <Image
@@ -309,7 +358,7 @@ export function TopicsListScreen() {
         </Text>
       </View>
     );
-  }, [isLoading]);
+  }, [isLoading, searchText, isSearchLoading]);
 
   return (
     <Box flex background="base">
@@ -335,6 +384,65 @@ export function TopicsListScreen() {
             Topics
           </Text>
         </View>
+        <View style={styles.searchContainer}>
+          <View
+            style={[
+              styles.searchInputWrapper,
+              { backgroundColor: theme.colors.background.light },
+            ]}
+          >
+            <Feather
+              name="search"
+              size={20}
+              color={theme.colors.text.subtle}
+              style={{ marginRight: 6 }}
+            />
+            <TextInput
+              ref={searchInputRef}
+              style={[
+                styles.searchInput,
+                {
+                  color: theme.colors.text.default,
+                  fontWeight: "600",
+                  fontSize: theme.typography.size.lg,
+                },
+              ]}
+              placeholder="Search for a topic"
+              placeholderTextColor={theme.colors.text.subtle}
+              value={searchText}
+              onChangeText={setSearchText}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {searchText.length > 0 && (
+              <Animated.View
+                entering={FadeIn.duration(150)}
+                exiting={FadeOut.duration(150)}
+              >
+                {isSearchLoading && searchText.length >= 2 ? (
+                  <View style={styles.clearButton}>
+                    <ActivityIndicator size="small" color={theme.colors.text.subtle} />
+                  </View>
+                ) : (
+                  <Pressable onPress={handleClearSearch} style={styles.clearButton}>
+                    <Feather
+                      name="x-circle"
+                      size={14}
+                      color={theme.colors.text.subtle}
+                    />
+                  </Pressable>
+                )}
+              </Animated.View>
+            )}
+          </View>
+          {searchText.length > 0 && (
+            <Pressable onPress={handleSearchCancel} hitSlop={8} style={styles.cancelButtonContainer}>
+              <Text size="md" style={{ color: theme.colors.brand[500] }}>
+                Cancel
+              </Text>
+            </Pressable>
+          )}
+        </View>
       </View>
 
       <FlatList
@@ -343,7 +451,7 @@ export function TopicsListScreen() {
         keyExtractor={keyExtractor}
         contentContainerStyle={{
           paddingBottom: insets.bottom + 20,
-          flexGrow: topics.length === 0 ? 1 : undefined,
+          flexGrow: topics.length === 0 && !searchText.trim() ? 1 : undefined,
         }}
         ListEmptyComponent={ListEmptyComponent}
         refreshControl={
@@ -354,6 +462,8 @@ export function TopicsListScreen() {
           />
         }
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        onScrollBeginDrag={Keyboard.dismiss}
       />
     </Box>
   );
@@ -369,6 +479,33 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: 16,
     height: 56,
   },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  cancelButtonContainer: {
+    marginLeft: 12,
+  },
+  searchInputWrapper: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    height: 46,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    height: "100%",
+    fontWeight: "400",
+  },
+  clearButton: {
+    padding: 6,
+  },
+
   topicRow: {
     flexDirection: "row",
     alignItems: "center",
