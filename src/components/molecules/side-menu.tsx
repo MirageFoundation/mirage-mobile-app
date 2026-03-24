@@ -755,7 +755,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 99
+                          update 100
                         </Text>
                         <Text
                           style={{
@@ -767,7 +767,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                         >
                           pagination issue in feed not fetching the next pages
                           fixed,account creation stuck on button loading
-                          fix,better sentry logs added in account creation
+                          fix,better sentry logs added in account creation,image
+                          not showing up in comment just created fixed
                         </Text>
                       </>
                     )}
@@ -808,7 +809,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 99
+                          update 100
                         </Text>
                         <Text
                           style={{
@@ -818,21 +819,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          topic validation and rules chaeck which auto filling
-                          the topic from shared link and sanitizing it while
-                          extraction, topic validation added while searching or
-                          creating topic in topic selector in create post
-                          screen, time not updating on posts fixed,search added
-                          in topics screen,topic screen header hide when
-                          scrolling,video sync through feed post details screen
-                          and full screen,all type of mirage link in app will
-                          open in app, dark splash sscreen icon configured,
-                          showing empty state of home feed when loading on cold
-                          start app fixed to show skelton loading, sometimes the
-                          data extraction from the shared link right after one
-                          link was shared is not updating the create post screen
-                          to new neta data fix, images not loading in inbox when
-                          clicked on notification and navigated top inbox fix
+                          pagination issue in feed not fetching the next pages
+                          fixed,account creation stuck on button loading
+                          fix,better sentry logs added in account creation,image
+                          not showing up in comment just created fixed
                         </Text>
                       </>
                     )}
