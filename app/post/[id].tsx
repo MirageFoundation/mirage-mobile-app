@@ -513,11 +513,32 @@ export default function PostDetailScreen() {
     editMutateAsyncRef.current = editMutation.mutateAsync;
   }, [editMutation.mutateAsync]);
 
+  const cachedFeedPost = useMemo(() => {
+    if (!id) return null;
+
+    const cachedQueries = queryClient.getQueriesData<InfiniteData<PostsResponse>>({
+      queryKey: ["posts"],
+    });
+
+    for (const [, queryData] of cachedQueries) {
+      const matchedPost = queryData?.pages?.flatMap((page) => page.posts).find(
+        (candidate) => candidate.post_id === id,
+      );
+      if (matchedPost) {
+        return matchedPost;
+      }
+    }
+
+    return null;
+  }, [id, queryClient]);
+
+  const resolvedRootPost = commentsData?.root ?? cachedFeedPost;
+
   // Transform API post and comments to UI format
   const post = useMemo(() => {
-    if (!commentsData?.root) return null;
-    return transformApiPost(commentsData.root, { followedUsers, currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined });
-  }, [commentsData, followedUsers]);
+    if (!resolvedRootPost) return null;
+    return transformApiPost(resolvedRootPost, { followedUsers, currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined });
+  }, [resolvedRootPost, followedUsers, currentUser?.id, currentUser?.username]);
 
   useEffect(() => {
     if (post) {

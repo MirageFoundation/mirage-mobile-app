@@ -109,6 +109,7 @@ const PreviewVideoItem = memo(function PreviewVideoItem({
           isLooping
           isMuted={muted}
           useNativeControls={false}
+          progressUpdateIntervalMillis={100}
           onPlaybackStatusUpdate={(status) => {
             if (status.isLoaded) {
               currentPositionRef.current = status.positionMillis;
