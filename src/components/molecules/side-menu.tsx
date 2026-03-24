@@ -755,7 +755,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 100
+                          update 101
                         </Text>
                         <Text
                           style={{
@@ -768,7 +768,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           pagination issue in feed not fetching the next pages
                           fixed,account creation stuck on button loading
                           fix,better sentry logs added in account creation,image
-                          not showing up in comment just created fixed
+                          not showing up in comment just created fixed, palm
+                          tree cut on login and account creation screen fix
                         </Text>
                       </>
                     )}
@@ -809,7 +810,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 100
+                          update 101
                         </Text>
                         <Text
                           style={{
@@ -822,7 +823,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           pagination issue in feed not fetching the next pages
                           fixed,account creation stuck on button loading
                           fix,better sentry logs added in account creation,image
-                          not showing up in comment just created fixed
+                          not showing up in comment just created fixed, palm
+                          tree cut on login and account creation screen fix
                         </Text>
                       </>
                     )}
