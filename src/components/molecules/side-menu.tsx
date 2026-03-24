@@ -769,7 +769,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           fixed,account creation stuck on button loading
                           fix,better sentry logs added in account creation,image
                           not showing up in comment just created fixed, palm
-                          tree cut on login and account creation screen fix
+                          tree cut on login and account creation screen fix,
+                          made video sync through feed post details screen and
+                          full screen more quick and snappier, independent video
+                          sync through different feeds
                         </Text>
                       </>
                     )}
@@ -824,7 +827,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           fixed,account creation stuck on button loading
                           fix,better sentry logs added in account creation,image
                           not showing up in comment just created fixed, palm
-                          tree cut on login and account creation screen fix
+                          tree cut on login and account creation screen fix,
+                          made video sync through feed post details screen and
+                          full screen more quick and snappier, independent video
+                          sync through different feeds
                         </Text>
                       </>
                     )}
