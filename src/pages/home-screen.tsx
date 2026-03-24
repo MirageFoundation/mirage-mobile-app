@@ -55,6 +55,7 @@ import {
   useContentModerationStore,
   usePreferencesStore,
   useSavedPostsStore,
+  useTimeTickStore,
 } from "@/src/stores";
 import { LoggedOutHome } from "./logged-out-home";
 
@@ -112,6 +113,7 @@ export function HomeScreen() {
         const duration = Date.now() - backgroundTimeRef.current;
         backgroundTimeRef.current = null;
         storage.remove("app_was_backgrounded");
+        useTimeTickStore.getState().bump();
         if (duration >= 2 * 60 * 60 * 1000) {
           isAutoRefreshingRef.current = true;
           setHasNewPosts(false);
@@ -195,6 +197,8 @@ export function HomeScreen() {
   const handleFeedTypeChange = useCallback((value: string) => {
     setFeedTabIndex(value === "magic" ? 0 : 1);
   }, []);
+
+  const currentFeedSyncContext = feedTabIndex === 0 ? "home:magic" : "home:latest";
 
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
@@ -289,9 +293,13 @@ export function HomeScreen() {
       isNavigatingRef.current = true;
       setTimeout(() => { isNavigatingRef.current = false; }, 500);
       const isRevealed = revealedPostsRef.current.has(postId);
-      router.push(`/post/${postId}${isRevealed ? '?reveal=true' : ''}`);
+      const params = new URLSearchParams({ syncContext: currentFeedSyncContext });
+      if (isRevealed) {
+        params.set("reveal", "true");
+      }
+      router.push(`/post/${postId}?${params.toString()}`);
     },
-    [router]
+    [currentFeedSyncContext, router]
   );
 
   const handleAuthorPress = useCallback((authorId: string) => {
@@ -446,9 +454,9 @@ export function HomeScreen() {
 
   const handleCommentPress = useCallback(
     (postId: string) => {
-      router.push(`/post/${postId}`);
+      router.push(`/post/${postId}?syncContext=${encodeURIComponent(currentFeedSyncContext)}`);
     },
-    [router]
+    [currentFeedSyncContext, router]
   );
 
   const handleFollowUserFromSheet = useCallback(() => {
@@ -534,6 +542,7 @@ export function HomeScreen() {
     useCallback(() => {
       setActiveFeedScreen('home');
       setDisabledTopicName(undefined);
+      useTimeTickStore.getState().bump();
       return () => {
         const current = useHomePostCardStore.getState().activeFeedScreen;
         if (current === 'home') {

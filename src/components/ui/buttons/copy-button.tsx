@@ -4,6 +4,7 @@ import type { StyleProp, ViewStyle } from "react-native";
 import { Button } from "@/components/ui/primitives/button";
 import { Feather } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
+import * as Sentry from "@sentry/react-native";
 import { Icon } from "@/primitives";
 
 interface CopyButtonProps {
@@ -78,7 +79,7 @@ export const CopyButton: React.FC<CopyButtonProps> = ({
       animateToCopied();
       if (onCopy) onCopy();
     } catch (error) {
-      console.error("Failed to copy text: ", error);
+      Sentry.addBreadcrumb({ category: "clipboard", message: "Failed to copy text", data: { error: String(error) }, level: "warning" });
     }
   };
 

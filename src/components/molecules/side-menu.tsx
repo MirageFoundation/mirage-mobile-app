@@ -755,7 +755,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 95
+                          update 102
                         </Text>
                         <Text
                           style={{
@@ -765,22 +765,16 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          howing logged out state after the app is opened from
-                          background fixed, sentry error react native K, 21, 23
-                          error handled,react native F (N+1) error
-                          handled,sentry log pow cancelled react native 9 error
-                          handled,sentry log REACT-NATIVE-22(N+1) error on
-                          getting username from wallet address fix,react native
-                          400 error better error handling,react native 7 error
-                          noise reduction,react native 422 error handling, long
-                          username overlapping in post card fix,username cut in
-                          thread fix,reduced size of image/gif in inbox, post
-                          creation, editing post,Updating Agents,Changing
-                          Username,Deleting Account fails when there is pending
-                          pow in queue fixed,enabling mature content enables all
-                          the content, disabling mature content disables all the
-                          content, removed enable confirmation popup in content
-                          filter sheet
+                          pagination issue in feed not fetching the next pages
+                          fixed,account creation stuck on button loading
+                          fix,better sentry logs added in account creation,image
+                          not showing up in comment just created fixed, palm
+                          tree cut on login and account creation screen fix,
+                          made video sync through feed post details screen and
+                          full screen more quick and snappier, independent video
+                          sync through different feeds, sentry log RN-K error
+                          handling,sentry log REACT-NATIVE-F — N+1 API Call
+                          error fixed and handled,more sentry logs added
                         </Text>
                       </>
                     )}
@@ -821,7 +815,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 95
+                          update 102
                         </Text>
                         <Text
                           style={{
@@ -831,22 +825,16 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          howing logged out state after the app is opened from
-                          background fixed, sentry error react native K, 21, 23
-                          error handled,react native F (N+1) error
-                          handled,sentry log pow cancelled react native 9 error
-                          handled,sentry log REACT-NATIVE-22(N+1) error on
-                          getting username from wallet address fix,react native
-                          400 error better error handling,react native 7 error
-                          noise reduction,react native 422 error handling, long
-                          username overlapping in post card fix,username cut in
-                          thread fix,reduced size of image/gif in inbox, post
-                          creation, editing post,Updating Agents,Changing
-                          Username,Deleting Account fails when there is pending
-                          pow in queue fixed,enabling mature content enables all
-                          the content, disabling mature content disables all the
-                          content, removed enable confirmation popup in content
-                          filter sheet
+                          pagination issue in feed not fetching the next pages
+                          fixed,account creation stuck on button loading
+                          fix,better sentry logs added in account creation,image
+                          not showing up in comment just created fixed, palm
+                          tree cut on login and account creation screen fix,
+                          made video sync through feed post details screen and
+                          full screen more quick and snappier, independent video
+                          sync through different feeds, sentry log RN-K error
+                          handling,sentry log REACT-NATIVE-F — N+1 API Call
+                          error fixed and handled,more sentry logs added
                         </Text>
                       </>
                     )}

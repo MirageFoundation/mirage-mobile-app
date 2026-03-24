@@ -37,6 +37,7 @@ import {
   useContentModerationStore,
   usePreferencesStore,
   useSavedPostsStore,
+  useTimeTickStore,
 } from "@/src/stores";
 import { HomeTabbedFeed, type HomeTabbedFeedRef } from "./home/home-tabbed-feed";
 import { useHomePostCardStore } from "./home/home-post-card-store";
@@ -91,6 +92,7 @@ export function FollowingScreen() {
         const duration = Date.now() - backgroundTimeRef.current;
         backgroundTimeRef.current = null;
         storage.remove("app_was_backgrounded");
+        useTimeTickStore.getState().bump();
         if (duration >= 2 * 60 * 60 * 1000) {
           setTimeout(async () => {
             showBars();
@@ -132,6 +134,8 @@ export function FollowingScreen() {
   const handleFeedTypeChange = useCallback((value: string) => {
     setFeedTabIndex(value === "magic" ? 0 : 1);
   }, []);
+
+  const currentFeedSyncContext = feedTabIndex === 0 ? "following:magic" : "following:latest";
 
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
@@ -177,9 +181,13 @@ export function FollowingScreen() {
   const handlePostPress = useCallback(
     (postId: string) => {
       const isRevealed = revealedPostsRef.current.has(postId);
-      router.push(`/post/${postId}${isRevealed ? '?reveal=true' : ''}`);
+      const params = new URLSearchParams({ syncContext: currentFeedSyncContext });
+      if (isRevealed) {
+        params.set("reveal", "true");
+      }
+      router.push(`/post/${postId}?${params.toString()}`);
     },
-    [router]
+    [currentFeedSyncContext, router]
   );
 
   const handleAuthorPress = useCallback((authorId: string) => {
@@ -197,9 +205,9 @@ export function FollowingScreen() {
 
   const handleCommentPress = useCallback(
     (postId: string) => {
-      router.push(`/post/${postId}`);
+      router.push(`/post/${postId}?syncContext=${encodeURIComponent(currentFeedSyncContext)}`);
     },
-    [router]
+    [currentFeedSyncContext, router]
   );
 
   const blockHandler = useBlockHandler({});
@@ -395,6 +403,7 @@ export function FollowingScreen() {
     useCallback(() => {
       setActiveFeedScreen('following');
       setDisabledTopicName(undefined);
+      useTimeTickStore.getState().bump();
       return () => {
         const current = useHomePostCardStore.getState().activeFeedScreen;
         if (current === 'following') {

@@ -11,6 +11,7 @@ import { useWallet } from "@/src/hooks/use-wallet";
 import { useTxStatusPolling } from "@/src/api/read/hooks/use-tx-status";
 import { vote, type VoteDirection } from "../endpoints/vote";
 import type { PoWProgress } from "../signing";
+import * as Sentry from "@sentry/react-native";
 
 // ============================================
 // Types
@@ -146,7 +147,10 @@ export function useOptimisticVote(options: UseVoteOptions = {}) {
       return { previousPosts, previousComments };
     },
     onError: (err, variables, context) => {
-      // Rollback on error
+      Sentry.captureException(err, {
+        tags: { feature: "vote", operation: "vote", direction: variables.direction },
+        extra: { target: variables.target },
+      });
       if (context?.previousPosts) {
         for (const [key, data] of context.previousPosts) {
           queryClient.setQueryData(key, data);

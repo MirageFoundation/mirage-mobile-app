@@ -9,7 +9,7 @@ import { getUsernameColor } from "@/src/utils/tiers";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { memo, useCallback, useMemo, useState } from "react";
-import { Pressable, View } from "react-native";
+import { ActivityIndicator, Dimensions, Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 const IMAGE_URL_REGEX = /^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp))$/i;
@@ -25,7 +25,7 @@ function isImageUrl(url: string): boolean {
   );
 }
 
-function extractImageUrls(content: string): {
+export function extractImageUrls(content: string): {
   text: string;
   imageUrls: string[];
 } {
@@ -50,24 +50,46 @@ function truncateParentContent(content: string): string {
   return singleLine.slice(0, PARENT_PREVIEW_MAX_LENGTH).trimEnd() + "…";
 }
 
-const ReplyImage = ({
+const SCREEN_WIDTH = Dimensions.get("window").width;
+const MEDIA_HORIZONTAL_PADDING = 32;
+const MEDIA_MAX_HEIGHT = 210;
+const ASPECT_RATIO_CACHE = new Map<string, number>();
+
+const ReplyImage = memo(function ReplyImage({
   url,
   onPress,
 }: {
   url: string;
-  onPress?: () => void;
-}) => {
+  onPress?: (url: string) => void;
+}) {
   const { theme } = useUnistyles();
   const [hasError, setHasError] = useState(false);
-  const [aspectRatio, setAspectRatio] = useState(16 / 9);
+  const [mediaLoaded, setMediaLoaded] = useState(
+    () => ASPECT_RATIO_CACHE.has(url),
+  );
+  const [aspectRatio, setAspectRatio] = useState(
+    () => ASPECT_RATIO_CACHE.get(url) ?? 16 / 9,
+  );
 
-  const MEDIA_MAX_HEIGHT = 210;
-  const containerWidth = 350;
+  const mediaSource = useMemo(() => ({ uri: url }), [url]);
+
+  const containerWidth = (SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING) * 0.7;
   const calculatedHeight = containerWidth / aspectRatio;
   const exceedsMaxHeight = calculatedHeight > MEDIA_MAX_HEIGHT;
-  const containerStyle = exceedsMaxHeight
+  const mediaWrapperStyle = exceedsMaxHeight
     ? { height: MEDIA_MAX_HEIGHT }
     : { aspectRatio };
+
+  const handleLoad = useCallback(({ source }: { source: { width: number; height: number } }) => {
+    if (source?.width && source?.height) {
+      const ratio = source.width / source.height;
+      ASPECT_RATIO_CACHE.set(url, ratio);
+      setAspectRatio(ratio);
+    }
+    setMediaLoaded(true);
+  }, [url]);
+
+  const handleError = useCallback(() => setHasError(true), []);
 
   if (hasError) {
     return (
@@ -85,32 +107,34 @@ const ReplyImage = ({
   }
 
   return (
-    <Pressable
-      style={[styles.imageContainer, containerStyle]}
-      onPress={() => {
-        if (onPress) {
-          triggerHaptic("selection");
-          onPress();
-        }
-      }}
-    >
-      <Image
-        source={{ uri: url }}
-        style={styles.image}
-        contentFit="cover"
-        transition={200}
-        recyclingKey={url}
-        cachePolicy="memory-disk"
-        onLoad={({ source }) => {
-          if (source?.width && source?.height) {
-            setAspectRatio(source.width / source.height);
+    <View style={styles.mediaContainer}>
+      <Pressable
+        style={[styles.mediaWrapper, mediaWrapperStyle]}
+        onPress={() => {
+          if (onPress) {
+            triggerHaptic("selection");
+            onPress(url);
           }
         }}
-        onError={() => setHasError(true)}
-      />
-    </Pressable>
+      >
+        <Image
+          source={mediaSource}
+          style={styles.image}
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          recyclingKey={url}
+          onLoad={handleLoad}
+          onError={handleError}
+        />
+        {!mediaLoaded && (
+          <View style={styles.imagePlaceholder}>
+            <ActivityIndicator size="small" color={theme.colors.text.subtle} />
+          </View>
+        )}
+      </Pressable>
+    </View>
   );
-};
+});
 
 interface InboxItemProps {
   reply: InboxReply;
@@ -203,11 +227,11 @@ export const InboxItem = memo(function InboxItem({
 
         <View style={styles.replyContent}>
           {replyText.length > 0 && <MarkdownContent content={replyText} />}
-          {imageUrls.map((url, index) => (
+          {imageUrls.map((url) => (
             <ReplyImage
               key={url}
               url={url}
-              onPress={() => handleImagePress(url)}
+              onPress={handleImagePress}
             />
           ))}
         </View>
@@ -219,6 +243,13 @@ export const InboxItem = memo(function InboxItem({
         onClose={handleClosePreview}
       />
     </>
+  );
+}, (prev, next) => {
+  return (
+    prev.reply.reply_id === next.reply.reply_id &&
+    prev.reply.reply_content === next.reply.reply_content &&
+    prev.isUnread === next.isUnread &&
+    prev.onPress === next.onPress
   );
 });
 
@@ -258,10 +289,14 @@ const styles = StyleSheet.create((theme) => ({
     marginRight: theme.spacing.sm,
   },
   replyContent: {},
-  imageContainer: {
-    width: "70%",
+  mediaContainer: {
     marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.xs,
+    borderRadius: theme.radius.md,
+    overflow: "hidden",
+  },
+  mediaWrapper: {
+    width: "70%",
     borderRadius: theme.radius.md,
     overflow: "hidden",
     backgroundColor: theme.colors.background.subtle,
@@ -279,5 +314,11 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.xs,
+  },
+  imagePlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
   },
 }));

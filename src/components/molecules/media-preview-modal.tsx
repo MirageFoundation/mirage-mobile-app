@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
 import * as ScreenOrientation from "expo-screen-orientation";
+import * as Sentry from "@sentry/react-native";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import YoutubePlayer, { type YoutubeIframeRef } from "react-native-youtube-iframe";
 import {
@@ -32,7 +33,11 @@ import type { ResolvedMedia } from "./post-card-utils";
 import { Text } from "@/src/components/ui/primitives";
 import { useAppState } from "@/src/hooks";
 import { useScreenOrientation } from "@/src/hooks/use-screen-orientation";
-import { useVideoMuteStore, useVideoPositionStore } from "@/src/stores";
+import {
+  buildVideoPositionKey,
+  useVideoMuteStore,
+  useVideoPositionStore,
+} from "@/src/stores";
 import {
   YouTubeAutoplayEmbed,
   type YouTubeAutoplayEmbedRef,
@@ -44,23 +49,41 @@ const PreviewVideoItem = memo(function PreviewVideoItem({
   width,
   height,
   isActive,
+  videoSyncScope,
 }: {
   item: ResolvedMedia;
   width: number;
   height: number;
   isActive: boolean;
+  videoSyncScope?: string;
 }) {
   const ref = useRef<Video>(null);
   const [playing, setPlaying] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const muted = useVideoMuteStore((s) => s.isMuted);
   const toggleMute = useVideoMuteStore((s) => s.toggleMute);
+  const getPosition = useVideoPositionStore((s) => s.getPosition);
+  const setPositionStore = useVideoPositionStore((s) => s.setPosition);
+  const positionKey = buildVideoPositionKey(item.uri, videoSyncScope);
+  const currentPositionRef = useRef(0);
+  const hasRestoredRef = useRef(false);
 
   useEffect(() => {
     if (!isActive) {
+      if (item.uri && currentPositionRef.current > 500) {
+        setPositionStore(positionKey, currentPositionRef.current / 1000);
+      }
       ref.current?.pauseAsync().catch(() => {});
     }
-  }, [isActive]);
+  }, [isActive, item.uri, setPositionStore]);
+
+  useEffect(() => {
+    return () => {
+      if (item.uri && currentPositionRef.current > 500) {
+        useVideoPositionStore.getState().setPosition(positionKey, currentPositionRef.current / 1000);
+      }
+    };
+  }, [item.uri, positionKey]);
 
   const handleTogglePlay = useCallback(() => {
     setPlaying((p) => !p);
@@ -94,12 +117,25 @@ const PreviewVideoItem = memo(function PreviewVideoItem({
           isLooping
           isMuted={muted}
           useNativeControls={false}
+          progressUpdateIntervalMillis={100}
           onPlaybackStatusUpdate={(status) => {
-            if (status.isLoaded && status.isPlaying && !status.isBuffering) {
-              setIsLoading(false);
+            if (status.isLoaded) {
+              currentPositionRef.current = status.positionMillis;
+              if (status.isPlaying && !status.isBuffering) {
+                setIsLoading(false);
+              }
             }
           }}
-          onLoad={() => setIsLoading(false)}
+          onLoad={() => {
+            setIsLoading(false);
+            if (!hasRestoredRef.current && item.uri) {
+              const saved = getPosition(positionKey);
+              if (saved > 0.5) {
+                hasRestoredRef.current = true;
+                ref.current?.setStatusAsync({ positionMillis: saved * 1000 }).catch(() => {});
+              }
+            }
+          }}
         />
         {isLoading && (
           <View style={previewVideoStyles.playOverlay}>
@@ -132,11 +168,13 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
   width,
   height,
   isActive,
+  videoSyncScope,
 }: {
   item: ResolvedMedia;
   width: number;
   height: number;
   isActive: boolean;
+  videoSyncScope?: string;
 }) {
   const embedRef = useRef<YouTubeAutoplayEmbedRef | null>(null);
   const iframeRef = useRef<YoutubeIframeRef | null>(null);
@@ -149,6 +187,9 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
   const controlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const videoId = extractYouTubeVideoId(item.uri) ?? "";
+  const positionKey = videoId
+    ? buildVideoPositionKey(videoId, videoSyncScope)
+    : "";
   const isAndroid = Platform.OS === "android";
   const youtubeHeight = Math.max(240, height - (insets.top + insets.bottom + 32));
   const getPosition = useVideoPositionStore((s) => s.getPosition);
@@ -186,15 +227,15 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
   }, []);
 
   const savePositionSync = useCallback(() => {
-    if (!videoId) return;
+    if (!positionKey) return;
     if (isAndroid) {
       const t = embedRef.current?.getLastKnownTime?.() ?? lastKnownTimeRef.current;
-      if (t > 2) setPositionStore(videoId, t);
+      if (t > 2) setPositionStore(positionKey, t);
     } else {
       const t = lastKnownTimeRef.current;
-      if (t > 2) setPositionStore(videoId, t);
+      if (t > 2) setPositionStore(positionKey, t);
     }
-  }, [videoId, isAndroid, setPositionStore]);
+  }, [positionKey, isAndroid, setPositionStore]);
 
   const handleTimeUpdate = useCallback((seconds: number) => {
     lastKnownTimeRef.current = seconds;
@@ -202,8 +243,8 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
 
   const restorePosition = useCallback(() => {
     if (!isAndroid) return;
-    if (!videoId || hasRestoredRef.current) return;
-    const saved = getPosition(videoId);
+    if (!positionKey || hasRestoredRef.current) return;
+    const saved = getPosition(positionKey);
     if (saved > 2) {
       hasRestoredRef.current = true;
       setTimeout(() => {
@@ -211,7 +252,7 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
         setTimeout(() => embedRef.current?.play(), 600);
       }, 600);
     }
-  }, [videoId, isAndroid, getPosition]);
+  }, [positionKey, isAndroid, getPosition]);
 
   useEffect(() => {
     if (!isActive) {
@@ -464,6 +505,7 @@ type MediaPreviewModalProps = {
   media: ResolvedMedia | null;
   mediaList?: ResolvedMedia[];
   initialIndex?: number;
+  videoSyncScope?: string;
   onClose: () => void;
 };
 
@@ -472,6 +514,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
   media,
   mediaList,
   initialIndex = 0,
+  videoSyncScope,
   onClose,
 }: MediaPreviewModalProps) {
   const insets = useSafeAreaInsets();
@@ -484,7 +527,9 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
       console.log("[MediaPreview] Setting orientation to DEFAULT (all but upside down)");
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.DEFAULT)
         .then(() => console.log("[MediaPreview] Orientation unlocked for rotation"))
-        .catch((e) => console.warn("[MediaPreview] lockAsync failed:", e));
+        .catch((e) => {
+          Sentry.addBreadcrumb({ category: "media-preview", message: "Orientation lockAsync failed", data: { error: String(e) }, level: "warning" });
+        });
     } else {
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
     }
@@ -497,6 +542,11 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
   const isMuted = useVideoMuteStore((s) => s.isMuted);
   const toggleMute = useVideoMuteStore((s) => s.toggleMute);
   const [isLoading, setIsLoading] = useState(true);
+  const currentVideoPositionRef = useRef(0);
+  const hasRestoredVideoRef = useRef(false);
+  const videoPositionKey = media?.uri
+    ? buildVideoPositionKey(media.uri, videoSyncScope)
+    : "";
 
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(initialIndex);
   const galleryListRef = useRef<FlatList>(null);
@@ -519,12 +569,16 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
   }, [scale, savedScale, translateX, translateY, savedTranslateX, savedTranslateY]);
 
   const handleClose = useCallback(() => {
+    if (media?.type === "video" && videoPositionKey && currentVideoPositionRef.current > 500) {
+      useVideoPositionStore.getState().setPosition(videoPositionKey, currentVideoPositionRef.current / 1000);
+    }
     videoRef.current?.pauseAsync().catch(() => {});
     resetTransforms();
     setIsVideoPlaying(false);
     setIsLoading(true);
+    hasRestoredVideoRef.current = false;
     onClose();
-  }, [onClose, resetTransforms]);
+  }, [onClose, resetTransforms, media, videoPositionKey]);
 
   useEffect(() => {
     if (!visible) {
@@ -566,6 +620,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
 
   const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
     if (!status.isLoaded) return;
+    currentVideoPositionRef.current = status.positionMillis;
     if (status.isPlaying && !status.isBuffering) {
       setIsLoading(false);
     }
@@ -675,9 +730,9 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
             keyExtractor={(item, index) => `${item.uri}-${index}`}
             renderItem={({ item, index }) =>
               item.type === "video" ? (
-                <PreviewVideoItem item={item} width={screenWidth} height={screenHeight} isActive={index === activeGalleryIndex && mediaSurfaceActive} />
+                <PreviewVideoItem item={item} width={screenWidth} height={screenHeight} isActive={index === activeGalleryIndex && mediaSurfaceActive} videoSyncScope={videoSyncScope} />
               ) : item.type === "youtube" ? (
-                <PreviewYouTubeItem item={item} width={screenWidth} height={screenHeight} isActive={index === activeGalleryIndex && mediaSurfaceActive} />
+                <PreviewYouTubeItem item={item} width={screenWidth} height={screenHeight} isActive={index === activeGalleryIndex && mediaSurfaceActive} videoSyncScope={videoSyncScope} />
               ) : (
                 <View style={[styles.mediaContainer, { width: screenWidth, height: screenHeight }]}>
                   <Image
@@ -762,7 +817,16 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
                 isMuted={isMuted}
                 useNativeControls={false}
                 onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-                onLoad={() => setIsLoading(false)}
+                onLoad={() => {
+                  setIsLoading(false);
+                  if (!hasRestoredVideoRef.current && media?.uri) {
+                    const saved = useVideoPositionStore.getState().getPosition(videoPositionKey);
+                    if (saved > 0.5) {
+                      hasRestoredVideoRef.current = true;
+                      videoRef.current?.setStatusAsync({ positionMillis: saved * 1000 }).catch(() => {});
+                    }
+                  }
+                }}
               />
               {!isVideoPlaying && !isLoading && (
                 <View style={styles.playOverlay}>
@@ -775,7 +839,7 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
           )}
 
           {isYouTube && (
-            <PreviewYouTubeItem item={media!} width={screenWidth} height={screenHeight} isActive={mediaSurfaceActive} />
+            <PreviewYouTubeItem item={media!} width={screenWidth} height={screenHeight} isActive={mediaSurfaceActive} videoSyncScope={videoSyncScope} />
           )}
 
           {!isYouTube && isLoading && (

@@ -111,11 +111,15 @@ const CLOUDFLARE_IMAGE_REGEX = /^https?:\/\/imagedelivery\.net\/[^\s]+$/i;
 const GIPHY_URL_REGEX =
   /^https?:\/\/(?:media\d?\.giphy\.com|i\.giphy\.com)\/[^\s]+$/i;
 
+const LOCAL_FILE_IMAGE_REGEX =
+  /^(?:file:\/\/|ph:\/\/|content:\/\/)[^\s]+$/i;
+
 function isImageUrl(url: string): boolean {
   return (
     IMAGE_URL_REGEX.test(url) ||
     CLOUDFLARE_IMAGE_REGEX.test(url) ||
-    GIPHY_URL_REGEX.test(url)
+    GIPHY_URL_REGEX.test(url) ||
+    LOCAL_FILE_IMAGE_REGEX.test(url)
   );
 }
 

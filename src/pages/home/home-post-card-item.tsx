@@ -3,7 +3,7 @@ import type { Post } from "@/src/components/molecules";
 import { PostCard } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { logPress } from "@/src/utils/press-logger";
-import { getShareBaseUrl } from "@/src/stores";
+import { getShareBaseUrl, useTimeTickStore } from "@/src/stores";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import {
   useHomePostCardStore,
@@ -23,6 +23,7 @@ import {
 type HomePostCardItemProps = {
  post: Post;
   feedScreen: 'home' | 'following' | 'topic';
+  feedContext: string;
 };
 
 function areHomePostCardItemPropsEqual(
@@ -40,6 +41,7 @@ function areHomePostCardItemPropsEqual(
  if (prev.hasDisliked !== next.hasDisliked) return false;
  if (prev.awards?.length !== next.awards?.length) return false;
   if (prevProps.feedScreen !== nextProps.feedScreen) return false;
+  if (prevProps.feedContext !== nextProps.feedContext) return false;
  return true;
 }
 
@@ -49,8 +51,9 @@ const getHandlers = () => useHomePostCardStore.getState().handlers;
 export const HomePostCardItem = memo(function HomePostCardItem({
  post,
   feedScreen,
+  feedContext,
 }: HomePostCardItemProps) {
- const visibility = useVideoVisibility(post.id, feedScreen);
+ const visibility = useVideoVisibility(post.id, feedContext);
  const isVisible = (visibility & 2) !== 0;
  const isFocused = (visibility & 1) !== 0;
  const isFollowing = useIsFollowing(post.author.id);
@@ -63,6 +66,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  const shareServer = useShareServer();
  const allowAutoplay = useAllowAutoplay();
   const feedActive = useFeedActive(feedScreen);
+  const timeTick = useTimeTickStore((s) => s.tick);
 
 // Store post data in ref to avoid recreating callbacks
  const postRef = useRef(post);
@@ -153,9 +157,9 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     logPress({ name: "post_reveal", postId: p.id });
     getHandlers().onRevealContent?.(p.id);
     if (postHasPlayableVideo(p)) {
-      useHomePostCardStore.getState().setActiveVideoPostId(feedScreen, p.id);
+      useHomePostCardStore.getState().setActiveVideoPostId(feedContext, p.id);
     }
-  }, [feedScreen]);
+  }, [feedContext]);
 
   const handleBlockUser = useCallback(() => {
     const p = postRef.current;
@@ -185,7 +189,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   const editOverride = usePostEditStore((s) => s.overrides[post.id]);
 
   const displayPost = useMemo(() => {
-    let result = post;
+    let result = { ...post };
     const needsFollowingUpdate = (post.isFollowing ?? false) !== isFollowing;
     const needsVoteUpdate = !!voteOverride;
     const needsCommentCountUpdate = !!commentCountOverride;
@@ -215,7 +219,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       };
     }
     return result;
-  }, [post, isFollowing, voteOverride, commentCountOverride, editOverride]);
+  }, [post, isFollowing, voteOverride, commentCountOverride, editOverride, timeTick]);
 
   return (
    <PostCard
@@ -228,6 +232,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
      showUrlCard={false}
      allowAutoplay={allowAutoplay}
       screenActive={feedActive}
+      videoSyncScope={feedContext}
       onPress={handlePostPress}
       onAuthorPress={handleAuthorPress}
       onTopicPress={handleTopicPress}

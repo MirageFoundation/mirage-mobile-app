@@ -31,6 +31,7 @@ import {
   type DeletePostInput,
 } from "../endpoints/posts";
 import type { PoWProgress } from "../signing";
+import * as Sentry from "@sentry/react-native";
 
 // ============================================
 // Types
@@ -447,7 +448,7 @@ export function usePost(options: UsePostOptions = {}) {
       postQueries.forEach(([queryKey, queryData]) => {
         if (!queryData) return;
         const filters = queryKey[1] as PostFilters | undefined;
-        if (filters?.feed && filters.feed !== "home") return;
+        if (filters?.feed !== "home") return;
 
         if (
           typeof queryData === "object" &&
@@ -488,7 +489,8 @@ export function usePost(options: UsePostOptions = {}) {
         }
       });
 
-      // Mark posts as stale without refetching active feeds.
+      // Keep the newly created post visible immediately in Home feeds.
+      // Magic is reconciled back to backend ordering on refresh / new-posts reload.
       queryClient.invalidateQueries({
         queryKey: ["posts"],
         refetchType: "inactive",
@@ -612,6 +614,10 @@ export function useComment(options: UsePostOptions = {}) {
       };
     },
     onError: (_error, _input, context) => {
+      Sentry.captureException(_error, {
+        tags: { feature: "posts", operation: "comment" },
+        extra: { parentId: _input.parentId },
+      });
       restoreQuerySnapshots(queryClient, context?.previousComments);
       restoreQuerySnapshots(queryClient, context?.previousPosts);
       restoreQuerySnapshots(queryClient, context?.previousUserPosts);
@@ -753,6 +759,10 @@ export function useEdit(options: UsePostOptions = {}) {
       return { previousPosts, previousUserPosts, previousComments };
     },
     onError: (_error, _input, context) => {
+      Sentry.captureException(_error, {
+        tags: { feature: "posts", operation: "edit" },
+        extra: { postId: _input.postId },
+      });
       restoreQuerySnapshots(queryClient, context?.previousPosts);
       restoreQuerySnapshots(queryClient, context?.previousUserPosts);
       restoreQuerySnapshots(queryClient, context?.previousComments);
@@ -853,6 +863,10 @@ export function useDelete(options: UsePostOptions = {}) {
       };
     },
     onError: (_error, _input, context) => {
+      Sentry.captureException(_error, {
+        tags: { feature: "posts", operation: "delete" },
+        extra: { postId: _input.postId },
+      });
       restoreQuerySnapshots(queryClient, context?.previousComments);
       restoreQuerySnapshots(queryClient, context?.previousPosts);
       restoreQuerySnapshots(queryClient, context?.previousUserPosts);

@@ -148,7 +148,7 @@ const InviteCodeCard = ({
       );
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      console.error("Failed to copy:", error);
+      Sentry.addBreadcrumb({ category: "invite", message: "Clipboard copy failed", data: { error: String(error) }, level: "warning" });
     }
   }, [code.code, isUsed, scale]);
 
@@ -283,7 +283,7 @@ const [copiedCode, setCopiedCode] = useState(false);
       setCopiedCode(true);
       setTimeout(() => setCopiedCode(false), 2000);
     } catch (error) {
-      console.error("Failed to copy:", error);
+      Sentry.addBreadcrumb({ category: "invite", message: "Clipboard copy code failed", data: { error: String(error) }, level: "warning" });
     }
   }, [code]);
 
@@ -294,7 +294,7 @@ const [copiedCode, setCopiedCode] = useState(false);
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
     } catch (error) {
-      console.error("Failed to copy:", error);
+      Sentry.addBreadcrumb({ category: "invite", message: "Clipboard copy link failed", data: { error: String(error) }, level: "warning" });
     }
   }, [shareUrl]);
 

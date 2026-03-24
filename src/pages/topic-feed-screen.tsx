@@ -60,6 +60,7 @@ import {
   useContentModerationStore,
   usePreferencesStore,
   useSavedPostsStore,
+  useTimeTickStore,
 } from "@/src/stores";
 import { useNewPostsChecker } from "@/src/hooks/use-new-posts-checker";
 import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
@@ -277,13 +278,18 @@ export function TopicFeedScreen() {
   });
 
   const revealedPostsRef = useRef<Set<string>>(new Set());
+  const topicFeedSyncContext = `topic:${topicName ?? "unknown"}`;
 
   const handlePostPress = useCallback(
     (postId: string) => {
       const isRevealed = revealedPostsRef.current.has(postId);
-      router.push(`/post/${postId}${isRevealed ? '?reveal=true' : ''}`);
+      const params = new URLSearchParams({ syncContext: topicFeedSyncContext });
+      if (isRevealed) {
+        params.set("reveal", "true");
+      }
+      router.push(`/post/${postId}?${params.toString()}`);
     },
-    [router],
+    [router, topicFeedSyncContext],
   );
 
   const handleAuthorPress = useCallback(
@@ -307,9 +313,9 @@ export function TopicFeedScreen() {
 
   const handleCommentPress = useCallback(
     (postId: string) => {
-      router.push(`/post/${postId}`);
+      router.push(`/post/${postId}?syncContext=${encodeURIComponent(topicFeedSyncContext)}`);
     },
-    [router],
+    [router, topicFeedSyncContext],
   );
 
   const blockHandler = useBlockHandler({});
@@ -485,6 +491,7 @@ export function TopicFeedScreen() {
     } finally {
       setIsManualRefreshing(false);
       dismissNewPostsRef.current?.();
+      useTimeTickStore.getState().bump();
     }
   }, [refetch]);
 
@@ -671,6 +678,7 @@ export function TopicFeedScreen() {
     useCallback(() => {
       setActiveFeedScreen("topic");
       setDisabledTopicName(topicName);
+      useTimeTickStore.getState().bump();
       return () => {
         const current = useHomePostCardStore.getState().activeFeedScreen;
         if (current === "topic") {
@@ -916,6 +924,7 @@ export function TopicFeedScreen() {
         ListFooterComponent={ListFooterComponent}
         refreshControl={refreshControl}
         feedScreen="topic"
+        feedContext={topicFeedSyncContext}
         onItemVisible={handleItemVisible}
       />
 

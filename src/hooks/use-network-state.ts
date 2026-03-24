@@ -1,4 +1,5 @@
 import * as Network from "expo-network";
+import * as Sentry from "@sentry/react-native";
 import { AppState, type AppStateStatus } from "react-native";
 import { startTransition, useEffect, useRef, useState } from "react";
 
@@ -61,7 +62,7 @@ export function useNetworkState(): NetworkState {
           });
         });
       } catch (error) {
-        console.warn("[useNetworkState] Failed to get network state:", error);
+        Sentry.addBreadcrumb({ category: "network", message: "Failed to get network state", data: { error: String(error) }, level: "warning" });
       }
     };
 

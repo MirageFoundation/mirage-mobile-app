@@ -55,6 +55,7 @@ import {
   usePreferencesStore,
   getShareBaseUrl,
   useSavedPostsStore,
+  useTimeTickStore,
 } from "@/src/stores";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import { useHistoryStore } from "@/src/stores/history-store";
@@ -97,14 +98,16 @@ import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import type { PostsResponse, Post as ApiPost } from "@/src/api/types";
 
 export default function PostDetailScreen() {
-  const { id, highlight, reveal } = useLocalSearchParams<{
+  const { id, highlight, reveal, syncContext } = useLocalSearchParams<{
     id: string;
     highlight?: string;
     reveal?: string;
+    syncContext?: string;
   }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const videoSyncScope = syncContext ?? (id ? `post:${id}` : undefined);
 
   const pressedY = useMemo(() => getLastPressedPostY(), []);
   const headerHeight = insets.top + 40;
@@ -157,6 +160,8 @@ export default function PostDetailScreen() {
 
   const [screenActive, setScreenActive] = useState(true);
   const refetchCommentsRef = useRef<((silent?: boolean) => void) | null>(null);
+  const lastCommentsFetchRef = useRef<number>(0);
+  const COMMENTS_DEBOUNCE_MS = 2000;
   const isScreenFocusedRef = useRef(true);
 
   useAppState({
@@ -166,6 +171,7 @@ export default function PostDetailScreen() {
     onForeground: () => {
       setScreenActive(isScreenFocusedRef.current);
       refetchCommentsRef.current?.(true);
+      useTimeTickStore.getState().bump();
     },
     staleThreshold: 0,
   });
@@ -174,6 +180,7 @@ export default function PostDetailScreen() {
     useCallback(() => {
       isScreenFocusedRef.current = true;
       setScreenActive(true);
+      useTimeTickStore.getState().bump();
       return () => {
         isScreenFocusedRef.current = false;
         setScreenActive(false);
@@ -197,13 +204,21 @@ export default function PostDetailScreen() {
     data: commentsData,
     isLoading: isLoadingComments,
     isError: isCommentsError,
+    isFetching: isFetchingComments,
     refetch: refetchComments,
     isRefetching: isRefetchingComments,
   } = useComments(id, { enabled: isFocused });
 
   useEffect(() => {
+    if (isFetchingComments) lastCommentsFetchRef.current = Date.now();
+  }, [isFetchingComments]);
+
+  useEffect(() => {
     refetchCommentsRef.current = (silent?: boolean) => {
       if (silent) {
+        const now = Date.now();
+        if (now - lastCommentsFetchRef.current < COMMENTS_DEBOUNCE_MS) return;
+        lastCommentsFetchRef.current = now;
         const address = currentUser?.walletAddress ?? undefined;
         getComments({ post_id: id!, address }).then((data) => {
           queryClient.setQueryData(
@@ -212,6 +227,7 @@ export default function PostDetailScreen() {
           );
         }).catch(() => {});
       } else {
+        lastCommentsFetchRef.current = Date.now();
         refetchComments();
       }
     };
@@ -510,11 +526,32 @@ export default function PostDetailScreen() {
     editMutateAsyncRef.current = editMutation.mutateAsync;
   }, [editMutation.mutateAsync]);
 
+  const cachedFeedPost = useMemo(() => {
+    if (!id) return null;
+
+    const cachedQueries = queryClient.getQueriesData<InfiniteData<PostsResponse>>({
+      queryKey: ["posts"],
+    });
+
+    for (const [, queryData] of cachedQueries) {
+      const matchedPost = queryData?.pages?.flatMap((page) => page.posts).find(
+        (candidate) => candidate.post_id === id,
+      );
+      if (matchedPost) {
+        return matchedPost;
+      }
+    }
+
+    return null;
+  }, [id, queryClient]);
+
+  const resolvedRootPost = commentsData?.root ?? cachedFeedPost;
+
   // Transform API post and comments to UI format
   const post = useMemo(() => {
-    if (!commentsData?.root) return null;
-    return transformApiPost(commentsData.root, { followedUsers, currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined });
-  }, [commentsData, followedUsers]);
+    if (!resolvedRootPost) return null;
+    return transformApiPost(resolvedRootPost, { followedUsers, currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined });
+  }, [resolvedRootPost, followedUsers, currentUser?.id, currentUser?.username]);
 
   useEffect(() => {
     if (post) {
@@ -776,12 +813,14 @@ export default function PostDetailScreen() {
 
       const processedReplies = existingReplies.map(applyOptimisticReplies);
 
-      const allReplies = [...processedReplies, ...pendingReplies];
+      const existingIds = new Set(existingReplies.map((r) => r.id));
+      const dedupedPending = pendingReplies.filter((r) => !existingIds.has(r.id));
+      const allReplies = [...processedReplies, ...dedupedPending];
 
       return {
         ...comment,
         replies: allReplies.length > 0 ? allReplies : comment.replies,
-        replyCount: (comment.replyCount ?? 0) + pendingReplies.length,
+        replyCount: (comment.replyCount ?? 0) + dedupedPending.length,
       };
     },
     [optimisticReplies],
@@ -1664,6 +1703,7 @@ export default function PostDetailScreen() {
           hideCommentAction
           showMoreButton
           isPostDetail
+          videoSyncScope={videoSyncScope}
         />
         <View style={styles.divider} />
       </Animated.View>

@@ -14,6 +14,7 @@ import {
   disableAgent,
 } from "../endpoints/social";
 import type { PoWProgress, WriteResponse } from "../signing";
+import * as Sentry from "@sentry/react-native";
 
 // ============================================
 // Types
@@ -315,7 +316,10 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
         return;
       }
 
-      // Actual error - rollback the optimistic update
+      Sentry.captureException(err, {
+        tags: { feature: "follow", operation: "follow-topic" },
+        extra: { topic, isCurrentlyFollowing, errorMessage },
+      });
       console.log(`[FollowTopic] Error, rolling back: ${errorMessage}`);
       if (address && context?.previousFollowed) {
         queryClient.setQueryData(
@@ -492,7 +496,10 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
         return;
       }
 
-      // Actual error - rollback the optimistic update
+      Sentry.captureException(err, {
+        tags: { feature: "follow", operation: "follow-user" },
+        extra: { userAddress, isCurrentlyFollowing, errorMessage },
+      });
       console.log(`[Follow] Error, rolling back: ${errorMessage}`);
       if (address && context?.previousFollowed) {
         queryClient.setQueryData(

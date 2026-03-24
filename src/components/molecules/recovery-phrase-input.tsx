@@ -3,6 +3,7 @@ import { Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
+import * as Sentry from "@sentry/react-native";
 import { useCallback, useRef, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -108,7 +109,7 @@ export const RecoveryPhraseInput = ({
         onWordsChange(newWords);
       }
     } catch (error) {
-      // Clipboard access failed
+      Sentry.addBreadcrumb({ category: "wallet", message: "Clipboard paste failed for recovery phrase", data: { error: String(error) }, level: "warning" });
       triggerHaptic("error");
     }
   }, [words, onWordsChange, onComplete]);

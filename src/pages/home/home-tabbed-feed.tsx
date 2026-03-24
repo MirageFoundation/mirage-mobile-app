@@ -45,6 +45,7 @@ import {
   useAuthStore,
   useContentModerationStore,
   usePreferencesStore,
+  useTimeTickStore,
 } from "@/src/stores";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNewPostsChecker, type NewPostAvatar } from "@/src/hooks/use-new-posts-checker";
@@ -346,7 +347,7 @@ export const HomeTabbedFeed = forwardRef<
         }
       } else {
         queryClient.setQueryData(postsQueryKey, (oldData: any) => {
-          if (!oldData) {
+          if (!oldData || sortBy === "magic") {
             return {
               pages: [newFirstPage],
               pageParams: [1],
@@ -369,6 +370,7 @@ export const HomeTabbedFeed = forwardRef<
       Sentry.addBreadcrumb({ category: "home-feed", message: "Feed refresh failed", data: { error: String(error) }, level: "error" });
     } finally {
       isRefreshingRef.current = false;
+      useTimeTickStore.getState().bump();
       if (!options?.silent) {
         setIsRefreshing(false);
         onRefreshingChange?.(false);
@@ -422,6 +424,7 @@ export const HomeTabbedFeed = forwardRef<
   }, [baseFeed, registerHomeRefresh, registerFollowingRefresh, scrollToTopAndRefresh]);
 
   const activeSortBy = activeTabIndex === 0 ? "magic" : "newest";
+  const feedContext = `${baseFeed}:${activeTabIndex === 0 ? "magic" : "latest"}`;
   const activeQuery = activeTabIndex === 0 ? magicQuery : latestQuery;
 
   const latestPostTimestamp = useMemo(() => {
@@ -715,11 +718,11 @@ export const HomeTabbedFeed = forwardRef<
   const ListEmpty = useMemo(
     () =>
       createListEmptyComponent(
-        query.isLoading,
+        query.isPending,
         query.isError,
         query.error?.message,
       ),
-    [createListEmptyComponent, query.isLoading, query.isError, query.error?.message],
+    [createListEmptyComponent, query.isPending, query.isError, query.error?.message],
   );
 
   return (
@@ -733,6 +736,7 @@ export const HomeTabbedFeed = forwardRef<
       ListFooterComponent={ListFooter}
       refreshControl={refreshControl}
       feedScreen={baseFeed}
+      feedContext={feedContext}
       onItemVisible={onItemVisible}
     />
   );
