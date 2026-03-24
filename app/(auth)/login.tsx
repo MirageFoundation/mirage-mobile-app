@@ -230,6 +230,7 @@ export default function LoginScreen() {
                 : require("@/assets/images/app-icon.png")
             }
             style={styles.appIcon}
+            resizeMode="contain"
           />
           <Text style={styles.titleText}>Login to Mirage</Text>
           <Text style={styles.subtitleText}>
@@ -517,8 +518,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   appIcon: {
     width: 44,
-    height: 44,
-    borderRadius: 16,
+    height: 50,
     marginBottom: theme.spacing.md,
   },
   titleText: {

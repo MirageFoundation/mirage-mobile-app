@@ -775,8 +775,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   appIcon: {
     width: 44,
-    height: 44,
-    borderRadius: 16,
+    height: 50,
   },
   titleContainer: {
     alignItems: "center",
