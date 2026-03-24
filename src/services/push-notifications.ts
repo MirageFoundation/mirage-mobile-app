@@ -91,21 +91,30 @@ async function getExpoPushToken(): Promise<string | null> {
     return null;
   }
 
-  const { status } = await Notifications.requestPermissionsAsync();
-  if (status !== "granted") {
-    Sentry.addBreadcrumb({
-      category: "push-notifications",
-      message: `Permission not granted: ${status}`,
-      level: "warning",
-    });
-    return null;
+  try {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== "granted") {
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: `Permission not granted: ${status}`,
+        level: "warning",
+      });
+      return null;
+    }
+  } catch (error) {
+    if (isKeychainAccessError(error)) {
+      console.warn("[PushNotifications] Keychain access denied during permission request, will retry on foreground");
+      needsNetworkRetry = true;
+      return null;
+    }
+    throw error;
   }
 
   let lastError: unknown;
   for (let attempt = 0; attempt < TOKEN_FETCH_MAX_RETRIES; attempt++) {
     try {
-      if (attempt > 0 && !isAppInForeground()) {
-        console.log("[PushNotifications] App left foreground during retry, aborting");
+      if (!isAppInForeground()) {
+        console.log("[PushNotifications] App left foreground, aborting token fetch");
         return null;
       }
 
@@ -123,6 +132,7 @@ async function getExpoPushToken(): Promise<string | null> {
           message: "Keychain access denied — suppressed, will retry on foreground",
           level: "warning",
         });
+        needsNetworkRetry = true;
         return null;
       }
 
@@ -198,14 +208,19 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
       level: "info",
     });
   } catch (error) {
-    const is429 = (error as any)?.response?.status === 429;
-    if (is429) {
-      console.log("[PushNotifications] Registration rate limited, will retry on next foreground");
+    if (isKeychainAccessError(error)) {
+      console.warn("[PushNotifications] Keychain access denied during registration, will retry on foreground");
+      needsNetworkRetry = true;
     } else {
-      console.error("[PushNotifications] Registration failed, falling back to polling:", error);
-      Sentry.captureException(error, {
-        tags: { feature: "push-notifications", operation: "register" },
-      });
+      const is429 = (error as any)?.response?.status === 429;
+      if (is429) {
+        console.log("[PushNotifications] Registration rate limited, will retry on next foreground");
+      } else {
+        console.error("[PushNotifications] Registration failed, falling back to polling:", error);
+        Sentry.captureException(error, {
+          tags: { feature: "push-notifications", operation: "register" },
+        });
+      }
     }
     setPushEnabled(false);
   } finally {

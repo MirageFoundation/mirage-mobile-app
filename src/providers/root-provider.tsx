@@ -1,5 +1,5 @@
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
-import React, { memo, useEffect } from "react";
+import React, { memo, useEffect, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { MenuProvider } from "react-native-popup-menu";
@@ -19,6 +19,7 @@ import { initPushNotifications, registerPush } from "@/src/services/push-notific
 import { useAuthStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
 import * as Sentry from "@sentry/react-native";
+import { AppState } from "react-native";
 
 const CoreProviders = memo(({ children }: { children: React.ReactNode }) => (
   <ThemeContextProvider>
@@ -50,17 +51,27 @@ export const RootProvider = memo(
     useEffect(() => {
       if (!walletAddress) return;
 
-      walletService.getWallet()
-        .then((wallet) => {
-          if (!wallet) return;
-          return registerPush(wallet);
-        })
-        .catch((error) => {
-          console.error("[RootProvider] Failed to register push after login:", error);
-          Sentry.captureException(error, {
-            tags: { feature: "push-notifications", operation: "root-provider-register" },
+      if (AppState.currentState !== "active") {
+        return;
+      }
+
+      const timer = setTimeout(() => {
+        if (AppState.currentState !== "active") return;
+
+        walletService.getWallet()
+          .then((wallet) => {
+            if (!wallet) return;
+            return registerPush(wallet);
+          })
+          .catch((error) => {
+            console.error("[RootProvider] Failed to register push after login:", error);
+            Sentry.captureException(error, {
+              tags: { feature: "push-notifications", operation: "root-provider-register" },
+            });
           });
-        });
+      }, 2_000);
+
+      return () => clearTimeout(timer);
     }, [walletAddress]);
 
     return (
