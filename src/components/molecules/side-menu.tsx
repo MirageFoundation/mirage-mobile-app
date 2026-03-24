@@ -755,7 +755,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 101
+                          update 102
                         </Text>
                         <Text
                           style={{
@@ -772,7 +772,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           tree cut on login and account creation screen fix,
                           made video sync through feed post details screen and
                           full screen more quick and snappier, independent video
-                          sync through different feeds
+                          sync through different feeds, sentry log RN-K error
+                          handling
                         </Text>
                       </>
                     )}
@@ -813,7 +814,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 101
+                          update 102
                         </Text>
                         <Text
                           style={{
@@ -830,7 +831,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           tree cut on login and account creation screen fix,
                           made video sync through feed post details screen and
                           full screen more quick and snappier, independent video
-                          sync through different feeds
+                          sync through different feeds, sentry log RN-K error
+                          handling
                         </Text>
                       </>
                     )}

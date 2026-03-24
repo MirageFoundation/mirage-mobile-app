@@ -160,6 +160,8 @@ export default function PostDetailScreen() {
 
   const [screenActive, setScreenActive] = useState(true);
   const refetchCommentsRef = useRef<((silent?: boolean) => void) | null>(null);
+  const lastCommentsFetchRef = useRef<number>(0);
+  const COMMENTS_DEBOUNCE_MS = 2000;
   const isScreenFocusedRef = useRef(true);
 
   useAppState({
@@ -202,13 +204,21 @@ export default function PostDetailScreen() {
     data: commentsData,
     isLoading: isLoadingComments,
     isError: isCommentsError,
+    isFetching: isFetchingComments,
     refetch: refetchComments,
     isRefetching: isRefetchingComments,
   } = useComments(id, { enabled: isFocused });
 
   useEffect(() => {
+    if (isFetchingComments) lastCommentsFetchRef.current = Date.now();
+  }, [isFetchingComments]);
+
+  useEffect(() => {
     refetchCommentsRef.current = (silent?: boolean) => {
       if (silent) {
+        const now = Date.now();
+        if (now - lastCommentsFetchRef.current < COMMENTS_DEBOUNCE_MS) return;
+        lastCommentsFetchRef.current = now;
         const address = currentUser?.walletAddress ?? undefined;
         getComments({ post_id: id!, address }).then((data) => {
           queryClient.setQueryData(
@@ -217,6 +227,7 @@ export default function PostDetailScreen() {
           );
         }).catch(() => {});
       } else {
+        lastCommentsFetchRef.current = Date.now();
         refetchComments();
       }
     };
