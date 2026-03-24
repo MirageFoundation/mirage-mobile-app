@@ -16,7 +16,7 @@ import { CloudflareErrorToast } from "@/src/components/cloudflare-error-toast";
 import { WalletProvider } from "./wallet-provider";
 import { initInboxNotifications } from "@/src/services/inbox-notifications";
 import { initPushNotifications, registerPush } from "@/src/services/push-notifications";
-import { useAuthStore } from "@/src/stores";
+import { useAuthStore, useVideoPositionStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
 import * as Sentry from "@sentry/react-native";
 import { AppState } from "react-native";
@@ -46,6 +46,15 @@ export const RootProvider = memo(
     useEffect(() => {
       initInboxNotifications();
       initPushNotifications();
+    }, []);
+
+    useEffect(() => {
+      const sub = AppState.addEventListener("change", (nextState) => {
+        if (nextState.match(/inactive|background/)) {
+          useVideoPositionStore.getState().clearAll();
+        }
+      });
+      return () => sub.remove();
     }, []);
 
     useEffect(() => {

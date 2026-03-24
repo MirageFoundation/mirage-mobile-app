@@ -11,6 +11,7 @@ type VideoPositionState = {
   getPosition: (videoId: string) => number;
   setPosition: (videoId: string, seconds: number) => void;
   clearPosition: (videoId: string) => void;
+  clearAll: () => void;
 };
 
 export const useVideoPositionStore = create<VideoPositionState>((set, get) => ({
@@ -30,4 +31,5 @@ export const useVideoPositionStore = create<VideoPositionState>((set, get) => ({
       const { [videoId]: _, ...rest } = state.positions;
       return { positions: rest };
     }),
+  clearAll: () => set({ positions: {} }),
 }));
