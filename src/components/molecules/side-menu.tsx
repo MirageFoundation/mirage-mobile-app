@@ -774,7 +774,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           full screen more quick and snappier, independent video
                           sync through different feeds, sentry log RN-K error
                           handling,sentry log REACT-NATIVE-F — N+1 API Call
-                          error fixed and handled
+                          error fixed and handled,more sentry logs added
                         </Text>
                       </>
                     )}
@@ -834,7 +834,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           full screen more quick and snappier, independent video
                           sync through different feeds, sentry log RN-K error
                           handling,sentry log REACT-NATIVE-F — N+1 API Call
-                          error fixed and handled
+                          error fixed and handled,more sentry logs added
                         </Text>
                       </>
                     )}
