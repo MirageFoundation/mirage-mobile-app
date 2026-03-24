@@ -31,6 +31,7 @@ import {
   type DeletePostInput,
 } from "../endpoints/posts";
 import type { PoWProgress } from "../signing";
+import * as Sentry from "@sentry/react-native";
 
 // ============================================
 // Types
@@ -613,6 +614,10 @@ export function useComment(options: UsePostOptions = {}) {
       };
     },
     onError: (_error, _input, context) => {
+      Sentry.captureException(_error, {
+        tags: { feature: "posts", operation: "comment" },
+        extra: { parentId: _input.parentId },
+      });
       restoreQuerySnapshots(queryClient, context?.previousComments);
       restoreQuerySnapshots(queryClient, context?.previousPosts);
       restoreQuerySnapshots(queryClient, context?.previousUserPosts);
@@ -754,6 +759,10 @@ export function useEdit(options: UsePostOptions = {}) {
       return { previousPosts, previousUserPosts, previousComments };
     },
     onError: (_error, _input, context) => {
+      Sentry.captureException(_error, {
+        tags: { feature: "posts", operation: "edit" },
+        extra: { postId: _input.postId },
+      });
       restoreQuerySnapshots(queryClient, context?.previousPosts);
       restoreQuerySnapshots(queryClient, context?.previousUserPosts);
       restoreQuerySnapshots(queryClient, context?.previousComments);
@@ -854,6 +863,10 @@ export function useDelete(options: UsePostOptions = {}) {
       };
     },
     onError: (_error, _input, context) => {
+      Sentry.captureException(_error, {
+        tags: { feature: "posts", operation: "delete" },
+        extra: { postId: _input.postId },
+      });
       restoreQuerySnapshots(queryClient, context?.previousComments);
       restoreQuerySnapshots(queryClient, context?.previousPosts);
       restoreQuerySnapshots(queryClient, context?.previousUserPosts);

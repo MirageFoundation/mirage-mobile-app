@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import * as Updates from "expo-updates";
+import * as Sentry from "@sentry/react-native";
 
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
@@ -40,7 +41,9 @@ export function ForceUpdatePopup({ reason, remoteVersion, isRequired }: ForceUpd
     triggerHaptic("medium");
     if (isNative) {
       const url = Platform.OS === "ios" ? APP_STORE_URL : PLAY_STORE_URL;
-      Linking.openURL(url).catch(() => {});
+      Linking.openURL(url).catch((err) => {
+        Sentry.captureException(err, { tags: { feature: "force-update", operation: "open-store" }, extra: { url } });
+      });
     } else {
       setInstalling(true);
       try {
@@ -51,7 +54,8 @@ export function ForceUpdatePopup({ reason, remoteVersion, isRequired }: ForceUpd
           });
         });
         await Updates.reloadAsync();
-      } catch {
+      } catch (err) {
+        Sentry.captureException(err, { tags: { feature: "force-update", operation: "ota-install" } });
         setInstalling(false);
       }
     }

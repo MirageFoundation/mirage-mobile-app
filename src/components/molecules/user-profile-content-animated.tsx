@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
+import * as Sentry from "@sentry/react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Animated as RNAnimated, View } from "react-native";
@@ -111,7 +112,7 @@ export const UserProfileContentAnimated = memo(
         setCopied(true);
         triggerHaptic("success");
       } catch (error) {
-        console.error("Failed to copy address:", error);
+        Sentry.addBreadcrumb({ category: "user-profile", message: "Clipboard copy address failed", data: { error: String(error) }, level: "warning" });
       }
     }, [walletAddress]);
 

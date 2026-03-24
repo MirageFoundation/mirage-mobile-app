@@ -2,6 +2,7 @@ import * as Linking from "expo-linking";
 import { router } from "@/src/utils/guarded-router";
 import { usePreferencesStore } from "@/src/stores";
 import { getRootPostId } from "@/src/api/read/endpoints/posts";
+import * as Sentry from "@sentry/react-native";
 
 type MirageLinkType =
   | "post"
@@ -119,7 +120,9 @@ export async function handleMirageLink(url: string): Promise<boolean> {
           router.replace(`/post/${response.root_post_id}?highlight=${parsed.id}`);
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        Sentry.addBreadcrumb({ category: "navigation", message: "Failed to resolve root post", data: { commentId: parsed.id, error: String(err) }, level: "warning" });
+      });
     return true;
   }
 
@@ -185,7 +188,12 @@ export function openUrlOrInternal(url: string): void {
 
   handleMirageLink(fullUrl).then((handled) => {
     if (!handled) {
-      Linking.openURL(fullUrl).catch(() => {});
+      Linking.openURL(fullUrl).catch((err) => {
+        Sentry.captureException(err, {
+          tags: { feature: "links", operation: "open-url" },
+          extra: { url: fullUrl },
+        });
+      });
     }
   });
 }

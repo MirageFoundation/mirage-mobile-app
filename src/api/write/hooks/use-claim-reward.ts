@@ -4,6 +4,7 @@ import { claimReward, type ClaimRewardInput, type ClaimRewardResponse } from "..
 import { queryKeys } from "@/src/api/read/query-keys";
 import { useAuthStore } from "@/src/stores";
 import type { PoWProgress } from "../signing";
+import * as Sentry from "@sentry/react-native";
 
 interface UseClaimRewardOptions {
   onSuccess?: (data: ClaimRewardResponse) => void;
@@ -33,7 +34,9 @@ export function useClaimReward(options?: UseClaimRewardOptions) {
       options?.onSuccess?.(data);
     },
     onError: (error: Error) => {
-      console.error("[useClaimReward] Failed to claim reward:", error);
+      Sentry.captureException(error, {
+        tags: { feature: "rewards", operation: "claim-reward" },
+      });
       options?.onError?.(error);
     },
   });

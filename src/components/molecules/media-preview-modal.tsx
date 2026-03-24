@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
 import * as ScreenOrientation from "expo-screen-orientation";
+import * as Sentry from "@sentry/react-native";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import YoutubePlayer, { type YoutubeIframeRef } from "react-native-youtube-iframe";
 import {
@@ -526,7 +527,9 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
       console.log("[MediaPreview] Setting orientation to DEFAULT (all but upside down)");
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.DEFAULT)
         .then(() => console.log("[MediaPreview] Orientation unlocked for rotation"))
-        .catch((e) => console.warn("[MediaPreview] lockAsync failed:", e));
+        .catch((e) => {
+          Sentry.addBreadcrumb({ category: "media-preview", message: "Orientation lockAsync failed", data: { error: String(e) }, level: "warning" });
+        });
     } else {
       ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
     }

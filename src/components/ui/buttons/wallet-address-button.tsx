@@ -3,6 +3,7 @@ import { truncateAddress } from "@/src/wallet";
 import { Feather } from "@expo/vector-icons";
 import { useState, useEffect, useMemo } from "react";
 import * as Clipboard from "expo-clipboard";
+import * as Sentry from "@sentry/react-native";
 import { Animated, Pressable } from "react-native";
 import { StyleSheet , useUnistyles } from "react-native-unistyles";
 import { triggerHaptic } from "@/components/utils/haptics";
@@ -64,7 +65,7 @@ export const WalletAddressButton: React.FC<WalletAddressButtonProps> = ({
         if (onCopy) onCopy();
       }
     } catch (error) {
-      console.error("Failed to copy wallet address: ", error);
+      Sentry.addBreadcrumb({ category: "wallet", message: "Failed to copy wallet address", data: { error: String(error) }, level: "warning" });
     }
   };
 

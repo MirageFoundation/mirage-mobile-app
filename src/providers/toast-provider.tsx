@@ -15,6 +15,7 @@ import React, {
 } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { FullWindowOverlay } from "react-native-screens";
+import * as Sentry from "@sentry/react-native";
 
 import { ToastContainer, type ToastData, type ToastType } from "@/src/components/ui/toast";
 
@@ -181,6 +182,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
         return result;
       } catch (err) {
+        Sentry.addBreadcrumb({
+          category: "toast",
+          message: "Promise toast failed",
+          data: { error: String(err) },
+          level: "error",
+        });
+
         const errorMessage =
           typeof options.error === "function"
             ? options.error(err)

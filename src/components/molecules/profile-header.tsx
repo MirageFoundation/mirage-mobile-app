@@ -6,6 +6,7 @@ const PROFILE_GRADIENT_COLORS: readonly string[] = [
 import { Ionicons } from "@expo/vector-icons";
 import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
 import * as Clipboard from "expo-clipboard";
+import * as Sentry from "@sentry/react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -290,7 +291,7 @@ export const ProfileContent = ({
       setCopied(true);
       triggerHaptic("success");
     } catch (error) {
-      console.error("Failed to copy address:", error);
+      Sentry.addBreadcrumb({ category: "profile", message: "Clipboard copy address failed", data: { error: String(error) }, level: "warning" });
     }
   }, [walletAddress]);
 
