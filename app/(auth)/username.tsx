@@ -168,7 +168,9 @@ export default function UsernameScreen() {
     triggerHaptic("selection");
     Keyboard.dismiss();
 
-    setInviteStatus("checking");
+    if (inviteCodeRequired) {
+      setInviteStatus("checking");
+    }
 
     try {
       if (inviteCodeRequired) {
@@ -192,6 +194,10 @@ export default function UsernameScreen() {
       }
 
       setIsSettingUp(true);
+
+      if (await walletService.hasWallet()) {
+        await walletService.clearWallet();
+      }
 
       const mnemonic = await createNewWallet();
 
@@ -235,6 +241,7 @@ export default function UsernameScreen() {
 
       if (!txResult.success) {
         setIsSettingUp(false);
+        setInviteStatus("idle");
         return;
       }
 
@@ -253,6 +260,7 @@ export default function UsernameScreen() {
       console.error("[Username] Failed to create account:", error);
       triggerHaptic("error");
       setIsSettingUp(false);
+      setInviteStatus("idle");
 
       if (!txProgress.isVisible) {
         if (error instanceof Error) {
