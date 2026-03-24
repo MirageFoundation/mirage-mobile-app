@@ -278,13 +278,18 @@ export function TopicFeedScreen() {
   });
 
   const revealedPostsRef = useRef<Set<string>>(new Set());
+  const topicFeedSyncContext = `topic:${topicName ?? "unknown"}`;
 
   const handlePostPress = useCallback(
     (postId: string) => {
       const isRevealed = revealedPostsRef.current.has(postId);
-      router.push(`/post/${postId}${isRevealed ? '?reveal=true' : ''}`);
+      const params = new URLSearchParams({ syncContext: topicFeedSyncContext });
+      if (isRevealed) {
+        params.set("reveal", "true");
+      }
+      router.push(`/post/${postId}?${params.toString()}`);
     },
-    [router],
+    [router, topicFeedSyncContext],
   );
 
   const handleAuthorPress = useCallback(
@@ -308,9 +313,9 @@ export function TopicFeedScreen() {
 
   const handleCommentPress = useCallback(
     (postId: string) => {
-      router.push(`/post/${postId}`);
+      router.push(`/post/${postId}?syncContext=${encodeURIComponent(topicFeedSyncContext)}`);
     },
-    [router],
+    [router, topicFeedSyncContext],
   );
 
   const blockHandler = useBlockHandler({});
@@ -919,6 +924,7 @@ export function TopicFeedScreen() {
         ListFooterComponent={ListFooterComponent}
         refreshControl={refreshControl}
         feedScreen="topic"
+        feedContext={topicFeedSyncContext}
         onItemVisible={handleItemVisible}
       />
 

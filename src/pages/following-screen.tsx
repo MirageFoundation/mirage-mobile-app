@@ -135,6 +135,8 @@ export function FollowingScreen() {
     setFeedTabIndex(value === "magic" ? 0 : 1);
   }, []);
 
+  const currentFeedSyncContext = feedTabIndex === 0 ? "following:magic" : "following:latest";
+
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
   const hidePost = useContentModerationStore((s) => s.hidePost);
@@ -179,9 +181,13 @@ export function FollowingScreen() {
   const handlePostPress = useCallback(
     (postId: string) => {
       const isRevealed = revealedPostsRef.current.has(postId);
-      router.push(`/post/${postId}${isRevealed ? '?reveal=true' : ''}`);
+      const params = new URLSearchParams({ syncContext: currentFeedSyncContext });
+      if (isRevealed) {
+        params.set("reveal", "true");
+      }
+      router.push(`/post/${postId}?${params.toString()}`);
     },
-    [router]
+    [currentFeedSyncContext, router]
   );
 
   const handleAuthorPress = useCallback((authorId: string) => {
@@ -199,9 +205,9 @@ export function FollowingScreen() {
 
   const handleCommentPress = useCallback(
     (postId: string) => {
-      router.push(`/post/${postId}`);
+      router.push(`/post/${postId}?syncContext=${encodeURIComponent(currentFeedSyncContext)}`);
     },
-    [router]
+    [currentFeedSyncContext, router]
   );
 
   const blockHandler = useBlockHandler({});

@@ -30,7 +30,11 @@ import YoutubePlayer from "react-native-youtube-iframe";
 import type { YoutubeIframeRef } from "react-native-youtube-iframe";
 import { extractYouTubeVideoId, type ResolvedMedia } from "./post-card-utils";
 import { MediaGallery } from "./media-gallery";
-import { useVideoMuteStore, useVideoPositionStore } from "@/src/stores";
+import {
+  buildVideoPositionKey,
+  useVideoMuteStore,
+  useVideoPositionStore,
+} from "@/src/stores";
 import {
   YouTubeAutoplayEmbed,
   type YouTubeAutoplayEmbedRef,
@@ -60,6 +64,7 @@ type PostCardMediaProps = {
   onMediaPress?: () => void;
   onGalleryMediaPress?: (index: number) => void;
   isPostDetail?: boolean;
+  videoSyncScope?: string;
 };
 
 const MEDIA_ASPECT_RATIO_CACHE = new Map<string, number>();
@@ -104,6 +109,7 @@ export const PostCardMedia = memo(
       onMediaPress,
       onGalleryMediaPress,
       isPostDetail = false,
+      videoSyncScope,
     },
     ref,
   ) {
@@ -146,6 +152,12 @@ export const PostCardMedia = memo(
     const feedTapCooldownRef = useRef(false);
 
     const youtubeVideoId = media?.type === "youtube" ? (extractYouTubeVideoId(media.uri) ?? "") : "";
+    const youtubePositionKey = youtubeVideoId
+      ? buildVideoPositionKey(youtubeVideoId, videoSyncScope)
+      : "";
+    const videoPositionKey = media?.type === "video" && media?.uri
+      ? buildVideoPositionKey(media.uri, videoSyncScope)
+      : "";
     const shouldLazyMountYouTube = Platform.OS === "android" && !isPostDetail;
     const videoThumbnailUri = media?.type === "video" ? getVideoThumbnailUri(media.uri) : "";
     const youtubeThumbnailUri = youtubeVideoId ? `https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg` : "";
@@ -157,20 +169,20 @@ export const PostCardMedia = memo(
     const hasRestoredVideoPositionRef = useRef(false);
 
     const saveYouTubePositionSync = useCallback(() => {
-      if (!youtubeVideoId) return;
+      if (!youtubePositionKey) return;
       if (Platform.OS === "android") {
         const t = youtubeEmbedRef.current?.getLastKnownTime?.() ?? lastKnownYouTubeTimeRef.current;
-        if (t > 2) setPosition(youtubeVideoId, t);
+        if (t > 2) setPosition(youtubePositionKey, t);
       } else {
         const t = lastKnownYouTubeTimeRef.current;
-        if (t > 2) setPosition(youtubeVideoId, t);
+        if (t > 2) setPosition(youtubePositionKey, t);
       }
-    }, [youtubeVideoId, setPosition]);
+    }, [youtubePositionKey, setPosition]);
 
     const restoreYouTubePosition = useCallback(() => {
       if (Platform.OS !== "android") return;
-      if (!youtubeVideoId || hasRestoredPositionRef.current) return;
-      const saved = getPosition(youtubeVideoId);
+      if (!youtubePositionKey || hasRestoredPositionRef.current) return;
+      const saved = getPosition(youtubePositionKey);
       if (saved > 2) {
         hasRestoredPositionRef.current = true;
         setTimeout(() => {
@@ -178,30 +190,30 @@ export const PostCardMedia = memo(
           setTimeout(() => youtubeEmbedRef.current?.play(), 600);
         }, 600);
       }
-    }, [youtubeVideoId, getPosition]);
+    }, [youtubePositionKey, getPosition]);
 
     const handleYouTubeTimeUpdate = useCallback((seconds: number) => {
       lastKnownYouTubeTimeRef.current = seconds;
     }, []);
 
     const saveVideoPosition = useCallback(() => {
-      if (media?.type !== "video" || !media?.uri) return;
+      if (media?.type !== "video" || !videoPositionKey) return;
       const seconds = currentVideoPositionRef.current / 1000;
-      if (seconds > 0.5) setPosition(media.uri, seconds);
-    }, [media?.type, media?.uri, setPosition]);
+      if (seconds > 0.5) setPosition(videoPositionKey, seconds);
+    }, [media?.type, videoPositionKey, setPosition]);
 
     const saveVideoPositionFresh = useCallback(async () => {
-      if (media?.type !== "video" || !media?.uri) return;
+      if (media?.type !== "video" || !videoPositionKey) return;
       try {
         const status = await videoRef.current?.getStatusAsync();
         if (status?.isLoaded) {
           const seconds = status.positionMillis / 1000;
-          if (seconds > 0.5) setPosition(media.uri, seconds);
+          if (seconds > 0.5) setPosition(videoPositionKey, seconds);
         }
       } catch {
         saveVideoPosition();
       }
-    }, [media?.type, media?.uri, setPosition, saveVideoPosition]);
+    }, [media?.type, videoPositionKey, setPosition, saveVideoPosition]);
 
     useImperativeHandle(ref, () => ({
       pauseVideo: async () => {
@@ -219,8 +231,8 @@ export const PostCardMedia = memo(
 
     useEffect(() => {
       return () => {
-        if (media?.type === "video" && media?.uri && currentVideoPositionRef.current > 500) {
-          useVideoPositionStore.getState().setPosition(media.uri, currentVideoPositionRef.current / 1000);
+        if (media?.type === "video" && videoPositionKey && currentVideoPositionRef.current > 500) {
+          useVideoPositionStore.getState().setPosition(videoPositionKey, currentVideoPositionRef.current / 1000);
         }
         videoRef.current?.pauseAsync().catch(() => {});
         if (loadingTimeoutRef.current) {
@@ -239,7 +251,7 @@ export const PostCardMedia = memo(
           clearTimeout(videoErrorRetryRef.current);
         }
       };
-    }, [media?.type, media?.uri]);
+    }, [media?.type, videoPositionKey]);
 
     const resolvedMediaUri = media?.uri;
 
@@ -418,18 +430,18 @@ export const PostCardMedia = memo(
 
     const wasScreenInactiveForVideoRef = useRef(false);
     useEffect(() => {
-      if (media?.type !== "video" || !resolvedMediaUri) return;
+      if (media?.type !== "video" || !videoPositionKey) return;
       if (!screenActive) {
         wasScreenInactiveForVideoRef.current = true;
         saveVideoPositionFresh();
       } else if (wasScreenInactiveForVideoRef.current) {
         wasScreenInactiveForVideoRef.current = false;
-        const saved = getPosition(resolvedMediaUri);
+        const saved = getPosition(videoPositionKey);
         if (saved > 0.5) {
           videoRef.current?.setStatusAsync({ positionMillis: saved * 1000 }).catch(() => {});
         }
       }
-    }, [screenActive, media?.type, resolvedMediaUri, getPosition, saveVideoPositionFresh]);
+    }, [screenActive, media?.type, videoPositionKey, getPosition, saveVideoPositionFresh]);
 
     const shouldUseAndroidYouTubeEmbed =
       media?.type === "youtube" && Platform.OS === "android";
@@ -964,8 +976,8 @@ export const PostCardMedia = memo(
                       return;
                     }
 
-                    if (!hasRestoredVideoPositionRef.current && resolvedMediaUri) {
-                      const saved = getPosition(resolvedMediaUri);
+                    if (!hasRestoredVideoPositionRef.current && videoPositionKey) {
+                      const saved = getPosition(videoPositionKey);
                       if (saved > 0.5) {
                         hasRestoredVideoPositionRef.current = true;
                         await videoRef.current.setStatusAsync({

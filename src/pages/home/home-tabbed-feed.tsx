@@ -424,6 +424,7 @@ export const HomeTabbedFeed = forwardRef<
   }, [baseFeed, registerHomeRefresh, registerFollowingRefresh, scrollToTopAndRefresh]);
 
   const activeSortBy = activeTabIndex === 0 ? "magic" : "newest";
+  const feedContext = `${baseFeed}:${activeTabIndex === 0 ? "magic" : "latest"}`;
   const activeQuery = activeTabIndex === 0 ? magicQuery : latestQuery;
 
   const latestPostTimestamp = useMemo(() => {
@@ -735,6 +736,7 @@ export const HomeTabbedFeed = forwardRef<
       ListFooterComponent={ListFooter}
       refreshControl={refreshControl}
       feedScreen={baseFeed}
+      feedContext={feedContext}
       onItemVisible={onItemVisible}
     />
   );

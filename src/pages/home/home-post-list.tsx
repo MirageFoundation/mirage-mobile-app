@@ -39,6 +39,7 @@ type HomePostListProps = {
  onEndReached?: () => void;
  onEndReachedThreshold?: number;
   feedScreen: 'home' | 'following' | 'topic';
+  feedContext: string;
  onItemVisible?: (index: number) => void;
 };
 
@@ -54,6 +55,7 @@ const HomePostListInner = function HomePostListInner(
    onEndReached,
    onEndReachedThreshold,
     feedScreen,
+    feedContext,
    onItemVisible,
  }: HomePostListProps,
  ref: Ref<FlashListRef<Post>>
@@ -64,8 +66,8 @@ const HomePostListInner = function HomePostListInner(
   const onItemVisibleRef = useRef(onItemVisible);
   onItemVisibleRef.current = onItemVisible;
 
-  const feedScreenRef = useRef(feedScreen);
-  feedScreenRef.current = feedScreen;
+  const feedScreenRef = useRef(feedContext);
+  feedScreenRef.current = feedContext;
 
   const viewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 20,
@@ -174,8 +176,8 @@ const HomePostListInner = function HomePostListInner(
 
   useEffect(() => {
     if (data.length !== 0) return;
-    setVideoViewability(feedScreen, new Set(), null);
-  }, [data, feedScreen, setVideoViewability]);
+    setVideoViewability(feedContext, new Set(), null);
+  }, [data, feedContext, setVideoViewability]);
 
   useAppState({
     onBackground: () => {
@@ -199,8 +201,8 @@ const HomePostListInner = function HomePostListInner(
   });
 
  const renderItem = useCallback<ListRenderItem<Post>>(
-    ({ item }) => <HomePostCardItem post={item} feedScreen={feedScreen} />,
-    [feedScreen]
+    ({ item }) => <HomePostCardItem post={item} feedScreen={feedScreen} feedContext={feedContext} />,
+    [feedScreen, feedContext]
  );
 
   const keyExtractor = useMemo(() => (item: Post) => item.id, []);

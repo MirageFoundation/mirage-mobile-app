@@ -67,6 +67,7 @@ type PostCardProps = {
   directFollowUser?: boolean;
   showMoreButton?: boolean;
   isPostDetail?: boolean;
+  videoSyncScope?: string;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -102,6 +103,7 @@ function arePostCardPropsEqual(
   if (prevProps.directFollowUser !== nextProps.directFollowUser) return false;
   if (prevProps.showMoreButton !== nextProps.showMoreButton) return false;
   if (prevProps.isPostDetail !== nextProps.isPostDetail) return false;
+  if (prevProps.videoSyncScope !== nextProps.videoSyncScope) return false;
 
   return true;
 }
@@ -139,6 +141,7 @@ export const PostCard = memo(function PostCard({
   directFollowUser = false,
   showMoreButton = false,
   isPostDetail = false,
+  videoSyncScope,
   style,
 }: PostCardProps) {
   if (__DEV__) {
@@ -279,6 +282,7 @@ export const PostCard = memo(function PostCard({
         onRevealContent={onRevealContent}
         onMediaPress={handleMediaPress}
         isPostDetail={isPostDetail}
+        videoSyncScope={videoSyncScope}
         onGalleryMediaPress={handleGalleryMediaPress}
       />
 
@@ -344,6 +348,7 @@ export const PostCard = memo(function PostCard({
         media={resolvedContent.resolvedMedia ?? null}
         mediaList={resolvedContent.resolvedMediaList}
         initialIndex={selectedMediaIndex}
+        videoSyncScope={videoSyncScope}
         onClose={handleCloseMediaPreview}
       />
     </Pressable>

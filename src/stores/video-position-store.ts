@@ -2,6 +2,10 @@ import { create } from "zustand";
 
 const MAX_ENTRIES = 100;
 
+export function buildVideoPositionKey(videoId: string, scope?: string): string {
+  return scope ? `${scope}::${videoId}` : videoId;
+}
+
 type VideoPositionState = {
   positions: Record<string, number>;
   getPosition: (videoId: string) => number;

@@ -98,14 +98,16 @@ import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import type { PostsResponse, Post as ApiPost } from "@/src/api/types";
 
 export default function PostDetailScreen() {
-  const { id, highlight, reveal } = useLocalSearchParams<{
+  const { id, highlight, reveal, syncContext } = useLocalSearchParams<{
     id: string;
     highlight?: string;
     reveal?: string;
+    syncContext?: string;
   }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const videoSyncScope = syncContext ?? (id ? `post:${id}` : undefined);
 
   const pressedY = useMemo(() => getLastPressedPostY(), []);
   const headerHeight = insets.top + 40;
@@ -1690,6 +1692,7 @@ export default function PostDetailScreen() {
           hideCommentAction
           showMoreButton
           isPostDetail
+          videoSyncScope={videoSyncScope}
         />
         <View style={styles.divider} />
       </Animated.View>
