@@ -25,6 +25,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       supportsTablet: false,
       requireFullScreen: true,
       bundleIdentifier: bundleIdentifier,
+      associatedDomains: [
+        "applinks:mirage.talk",
+        "applinks:mirage.vote",
+      ],
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         UIBackgroundModes: ["fetch", "remote-notification"],
@@ -43,6 +47,17 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
       softwareKeyboardLayoutMode: "resize",
+      intentFilters: [
+        {
+          action: "VIEW",
+          autoVerify: true,
+          data: [
+            { scheme: "https", host: "mirage.talk", pathPrefix: "/" },
+            { scheme: "https", host: "mirage.vote", pathPrefix: "/" },
+          ],
+          category: ["BROWSABLE", "DEFAULT"],
+        },
+      ],
     },
     web: {
       output: "static",
