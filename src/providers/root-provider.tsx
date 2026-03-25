@@ -16,8 +16,9 @@ import { CloudflareErrorToast } from "@/src/components/cloudflare-error-toast";
 import { WalletProvider } from "./wallet-provider";
 import { initInboxNotifications } from "@/src/services/inbox-notifications";
 import { initPushNotifications, registerPush } from "@/src/services/push-notifications";
-import { useAuthStore, useVideoPositionStore } from "@/src/stores";
+import { useAuthStore, useVideoPositionStore, useDeepLinkStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
+import { router } from "@/src/utils/guarded-router";
 import * as Sentry from "@sentry/react-native";
 import { AppState } from "react-native";
 
@@ -42,6 +43,7 @@ AuthProviders.displayName = "AuthProviders";
 export const RootProvider = memo(
   ({ children }: { children: React.ReactNode }) => {
     const walletAddress = useAuthStore((s) => s.walletAddress);
+    const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
 
     useEffect(() => {
       initInboxNotifications();
@@ -56,6 +58,16 @@ export const RootProvider = memo(
       });
       return () => sub.remove();
     }, []);
+
+    useEffect(() => {
+      if (!isLoggedIn) return;
+      const pendingRoute = useDeepLinkStore.getState().consumePendingRoute();
+      if (pendingRoute) {
+        setTimeout(() => {
+          router.push(pendingRoute as any);
+        }, 500);
+      }
+    }, [isLoggedIn]);
 
     useEffect(() => {
       if (!walletAddress) return;
