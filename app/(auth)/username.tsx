@@ -23,6 +23,8 @@ import { useToast } from "@/src/providers/toast-provider";
 import { useQueryClient } from "@tanstack/react-query";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "@/src/hooks/use-router";
+import { useLocalSearchParams } from "expo-router";
+import { getReferralPrecheck } from "@/src/api/read/endpoints/referrals";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -60,12 +62,21 @@ export default function UsernameScreen() {
   const setHasUsername = useAuthStore((s) => s.setHasUsername);
   const clearRecoveryPhrase = useAuthStore((s) => s.clearRecoveryPhrase);
 
+  const searchParams = useLocalSearchParams<{ ref?: string; invite?: string }>();
+
   const [username, setUsername] = useState("");
   const [status, setStatus] = useState<UsernameStatus>("idle");
   const [inviteCode, setInviteCode] = useState("");
   const [inviteStatus, setInviteStatus] = useState<InviteCodeStatus>("idle");
   const [createError, setCreateError] = useState<string | null>(null);
   const [isSettingUp, setIsSettingUp] = useState(false);
+
+  const [referrerUsername, setReferrerUsername] = useState<string | null>(null);
+  const [precheckStatus, setPrecheckStatus] = useState<"idle" | "loading" | "valid" | "error">("idle");
+  const [precheckError, setPrecheckError] = useState<string | null>(null);
+  const [precheckAvailable, setPrecheckAvailable] = useState<number | null>(null);
+  const [alreadyUsedCode, setAlreadyUsedCode] = useState(false);
+  const isReferralMode = precheckStatus === "valid" && !!referrerUsername;
   const savedServer = usePreferencesStore((s) => s.apiServer);
   const setApiServer = usePreferencesStore((s) => s.setApiServer);
   const [activeServer, setActiveServer] = useState<ApiServer>(savedServer);
@@ -94,6 +105,38 @@ export default function UsernameScreen() {
   const inviteCodeRequired = nodeConfig?.registration_invite_code_required ?? true;
   const minUsernameSize = config?.min_username_size ?? 3;
   const maxUsernameSize = config?.max_username_size ?? 20;
+
+  useEffect(() => {
+    if (searchParams.invite) {
+      const raw = searchParams.invite.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+      if (raw.length > 4) {
+        setInviteCode(raw.slice(0, 4) + "-" + raw.slice(4));
+      } else {
+        setInviteCode(raw);
+      }
+    } else if (searchParams.ref && inviteCodeRequired) {
+      const ref = searchParams.ref;
+      setReferrerUsername(ref);
+      setPrecheckStatus("loading");
+      getReferralPrecheck({ username: ref })
+        .then((result) => {
+          if (result.valid) {
+            setPrecheckStatus("valid");
+            setPrecheckAvailable(result.available ?? null);
+          } else {
+            setPrecheckStatus("error");
+            setPrecheckError(result.error ?? "Referral link is not valid");
+            if (result.error === "you already used your code") {
+              setAlreadyUsedCode(true);
+            }
+          }
+        })
+        .catch(() => {
+          setPrecheckStatus("error");
+          setPrecheckError("Failed to verify referral link");
+        });
+    }
+  }, [searchParams.ref, searchParams.invite, inviteCodeRequired]);
 
   const {
     data: usernameData,
@@ -156,9 +199,19 @@ export default function UsernameScreen() {
     setCreateError(null);
   }, []);
 
+  const handleEnterManually = useCallback(() => {
+    setReferrerUsername(null);
+    setPrecheckStatus("idle");
+    setPrecheckError(null);
+    setPrecheckAvailable(null);
+    setAlreadyUsedCode(false);
+    setInviteCode("");
+    setInviteStatus("idle");
+  }, []);
+
   const handleContinue = useCallback(async () => {
     if (status !== "available") return;
-    if (inviteCodeRequired && !inviteCode.trim()) {
+    if (inviteCodeRequired && !isReferralMode && !inviteCode.trim()) {
       setInviteStatus("invalid");
       setCreateError("Please enter an invite code");
       triggerHaptic("error");
@@ -168,12 +221,12 @@ export default function UsernameScreen() {
     triggerHaptic("selection");
     Keyboard.dismiss();
 
-    if (inviteCodeRequired) {
+    if (inviteCodeRequired && !isReferralMode) {
       setInviteStatus("checking");
     }
 
     try {
-      if (inviteCodeRequired) {
+      if (inviteCodeRequired && !isReferralMode) {
         const rawCode = inviteCode.trim();
         console.log("[InviteCode] raw input:", JSON.stringify(inviteCode), "code:", JSON.stringify(rawCode), "length:", rawCode.length);
         const result = await validateInviteCode({ code: rawCode });
@@ -215,8 +268,10 @@ export default function UsernameScreen() {
         txProgress,
         async (onPoWProgress) => {
           txProgress.setPhase("signing");
-          const usernamePayload = { username, ...(inviteCodeRequired && inviteCode.trim() ? { invite_code: inviteCode.trim() } : {}) };
-          console.log("[InviteCode] setUsername payload:", JSON.stringify(usernamePayload));
+          const usernamePayload = isReferralMode
+            ? { username, referrer_username: referrerUsername! }
+            : { username, ...(inviteCodeRequired && inviteCode.trim() ? { invite_code: inviteCode.trim() } : {}) };
+          console.log("[setUsername] payload:", JSON.stringify(usernamePayload));
           const response = await setUsernameOnChain(
             wallet,
             usernamePayload,
@@ -279,6 +334,8 @@ export default function UsernameScreen() {
     username,
     inviteCode,
     inviteCodeRequired,
+    isReferralMode,
+    referrerUsername,
     createNewWallet,
     setHasUsername,
     txProgress,
@@ -425,10 +482,11 @@ export default function UsernameScreen() {
 
   const isButtonEnabled =
     status === "available" &&
-    (inviteCodeRequired ? inviteCode.trim().length > 0 : true) &&
+    (inviteCodeRequired ? (isReferralMode || inviteCode.trim().length > 0) : true) &&
     !isCreatingWallet &&
     !isSettingUp &&
-    inviteStatus !== "checking";
+    inviteStatus !== "checking" &&
+    precheckStatus !== "loading";
 
   return (
     <Box flex background="base">
@@ -512,118 +570,194 @@ export default function UsernameScreen() {
 
           {inviteCodeRequired && (
             <>
-              <View style={styles.inviteInputWrapper}>
+              {precheckStatus === "loading" ? (
+                <View style={styles.inviteInputWrapper}>
+                  <Input
+                    value="Checking referral..."
+                    editable={false}
+                    pointerEvents="none"
+                    size="lg"
+                    variant="filled"
+                    style={[styles.input, { opacity: 0.6 }]}
+                    rightAccessory={
+                      <View style={styles.statusIcon}>
+                        <ActivityIndicator size="small" color={theme.colors.text.subtle} />
+                      </View>
+                    }
+                  />
+                </View>
+              ) : isReferralMode ? (
+                <>
+                  <View style={styles.inviteInputWrapper}>
+                    <Input
+                      value="Invite code applied ✓"
+                      editable={false}
+                      pointerEvents="none"
+                      size="lg"
+                      variant="filled"
+                      style={[styles.input, { opacity: 0.6 }]}
+                      rightAccessory={
+                        <View style={styles.statusIcon}>
+                          <Ionicons name="checkmark-circle" size={20} color="rgb(34,197,94)" />
+                        </View>
+                      }
+                    />
+                  </View>
+                  {precheckAvailable != null && (
+                    <View style={[styles.statusContainer, { marginBottom: theme.spacing.sm }]}>
+                      <Text size="sm" style={{ color: theme.colors.warning[500] }}>
+                        Only {precheckAvailable} codes left
+                      </Text>
+                    </View>
+                  )}
+                </>
+              ) : precheckStatus === "error" ? (
+                <>
+                  <View style={styles.inviteInputWrapper}>
+                    <Input
+                      value={precheckError ?? "Referral link is not valid"}
+                      editable={false}
+                      pointerEvents="none"
+                      size="lg"
+                      variant="filled"
+                      style={[styles.input, { opacity: 0.6 }]}
+                      rightAccessory={
+                        <View style={styles.statusIcon}>
+                          <Ionicons name="close-circle" size={20} color={theme.colors.error[500]} />
+                        </View>
+                      }
+                    />
+                  </View>
+                  <View style={[styles.statusContainer, { marginBottom: theme.spacing.sm }]}>
+                    <Pressable onPress={handleEnterManually}>
+                      <Text size="sm" style={{ color: "#60A5FA" }}>
+                        Have an invite code? Enter it manually
+                      </Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.inviteInputWrapper}>
+                    <Input
+                      value={inviteCode}
+                      onChangeText={handleInviteCodeChange}
+                      placeholder="XXXX-XXXX"
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                      size="lg"
+                      variant="filled"
+                      style={styles.input}
+                      maxLength={9}
+                      rightAccessory={
+                        inviteCode.length > 0 ? (
+                          <Pressable
+                            style={styles.statusIcon}
+                            onPress={() => {
+                              setInviteCode("");
+                              setInviteStatus("idle");
+                            }}
+                          >
+                            {inviteStatus !== "idle" ? (
+                              getInviteStatusIcon()
+                            ) : (
+                              <Ionicons
+                                name="close-circle"
+                                size={20}
+                                color={theme.colors.text.subtle}
+                              />
+                            )}
+                          </Pressable>
+                        ) : undefined
+                      }
+                    />
+                  </View>
+
+                  <View
+                    style={[styles.statusContainer, { marginBottom: theme.spacing.sm }]}
+                  >
+                    {inviteStatus !== "idle" ? (
+                      <Text size="sm" style={{ color: getInviteStatusColor() }}>
+                        {getInviteStatusMessage}
+                      </Text>
+                    ) : (
+                      <Text
+                        size="sm"
+                        style={{ color: theme.colors.neutral[600] }}
+                      >
+                        Enter an invite code
+                      </Text>
+                    )}
+                  </View>
+                </>
+              )}
+            </>
+          )}
+
+          {!alreadyUsedCode && (
+            <>
+              <View style={styles.inputWrapper}>
                 <Input
-                  value={inviteCode}
-                  onChangeText={handleInviteCodeChange}
-                  placeholder="XXXX-XXXX"
-                  autoCapitalize="characters"
+                  value={username}
+                  onChangeText={handleUsernameChange}
+                  placeholder="Choose a username"
+                  autoCapitalize="none"
                   autoCorrect={false}
+                  autoComplete="username"
                   size="lg"
                   variant="filled"
                   style={styles.input}
-                  maxLength={9}
+                  maxLength={maxUsernameSize}
                   rightAccessory={
-                    inviteCode.length > 0 ? (
-                      <Pressable
-                        style={styles.statusIcon}
-                        onPress={() => {
-                          setInviteCode("");
-                          setInviteStatus("idle");
-                        }}
-                      >
-                        {inviteStatus !== "idle" ? (
-                          getInviteStatusIcon()
-                        ) : (
-                          <Ionicons
-                            name="close-circle"
-                            size={20}
-                            color={theme.colors.text.subtle}
-                          />
-                        )}
-                      </Pressable>
+                    username.length > 0 ? (
+                      <View style={styles.statusIcon}>{getStatusIcon()}</View>
                     ) : undefined
                   }
                 />
               </View>
 
-              <View
-                style={[styles.statusContainer, { marginBottom: theme.spacing.sm }]}
-              >
-                {inviteStatus !== "idle" ? (
-                  <Text size="sm" style={{ color: getInviteStatusColor() }}>
-                    {getInviteStatusMessage}
+              <View style={styles.statusContainer}>
+                {status !== "idle" ? (
+                  <Text size="sm" style={{ color: getStatusColor() }}>
+                    {getStatusMessage}
                   </Text>
                 ) : (
                   <Text
                     size="sm"
                     style={{ color: theme.colors.neutral[600] }}
                   >
-                    Enter an invite code
+                    This is how people will find you on Mirage
+                  </Text>
+                )}
+                {createError && (
+                  <Text size="sm" style={{ color: theme.colors.error[500] }}>
+                    {createError}
                   </Text>
                 )}
               </View>
+
+              {precheckStatus !== "loading" && (
+                <Button
+                  size="lg"
+                  rounded="full"
+                  onPress={handleContinue}
+                  disabled={!isButtonEnabled}
+                  loading={
+                    isCreatingWallet || isSettingUp || inviteStatus === "checking"
+                  }
+                  style={[styles.continueButton]}
+                >
+                  <Button.Text weight="medium">
+                    {inviteStatus === "checking"
+                      ? "Validating code..."
+                      : isCreatingWallet || isSettingUp
+                        ? "Creating account..."
+                        : "Continue"}
+                  </Button.Text>
+                </Button>
+              )}
             </>
           )}
-
-          <View style={styles.inputWrapper}>
-            <Input
-              value={username}
-              onChangeText={handleUsernameChange}
-              placeholder="Choose a username"
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="username"
-              size="lg"
-              variant="filled"
-              style={styles.input}
-              maxLength={maxUsernameSize}
-              rightAccessory={
-                username.length > 0 ? (
-                  <View style={styles.statusIcon}>{getStatusIcon()}</View>
-                ) : undefined
-              }
-            />
-          </View>
-
-          <View style={styles.statusContainer}>
-            {status !== "idle" ? (
-              <Text size="sm" style={{ color: getStatusColor() }}>
-                {getStatusMessage}
-              </Text>
-            ) : (
-              <Text
-                size="sm"
-                style={{ color: theme.colors.neutral[600] }}
-              >
-                This is how people will find you on Mirage
-              </Text>
-            )}
-            {createError && (
-              <Text size="sm" style={{ color: theme.colors.error[500] }}>
-                {createError}
-              </Text>
-            )}
-          </View>
-
-          <Button
-            size="lg"
-            rounded="full"
-            onPress={handleContinue}
-            disabled={!isButtonEnabled}
-            loading={
-              isCreatingWallet || isSettingUp || inviteStatus === "checking"
-            }
-            style={[styles.continueButton]}
-          >
-            <Button.Text weight="medium">
-              {inviteStatus === "checking"
-                ? "Validating code..."
-                : isCreatingWallet || isSettingUp
-                  ? "Creating account..."
-                  : "Continue"}
-            </Button.Text>
-          </Button>
 
           <Text style={styles.termsText}>
             By continuing, you agree to our{" "}

@@ -134,6 +134,7 @@ export interface UserStatusResponse {
   reserve_funds: number; // umirage
   profile_registered_at: number | null; // unix seconds
   recent_votes: RecentVote[];
+  referral_precheck_enabled: boolean;
 }
 
 export interface ProfileResponse {
@@ -486,6 +487,7 @@ export interface ReferralNode {
   children: ReferralNode[];
 }
 
+/** @deprecated Use ReferralSummaryResponse instead */
 export interface ReferralStatsResponse {
   pending_total: number;
   paid_total: number;
@@ -494,6 +496,37 @@ export interface ReferralStatsResponse {
   referred_by?: string;
   last_update_ts: number;
   next_update_ts: number;
+}
+
+export interface ReferralPrecheckResponse {
+  valid: boolean;
+  available?: number;
+  error?: string;
+}
+
+export interface ReferralPrecheckOptInResponse {
+  ok: boolean;
+  precheck_enabled: boolean;
+  updated_at: number;
+}
+
+export interface ReferralSummaryItem {
+  address: string;
+  username: string;
+  referred_at: number;
+  posts: number;
+  votes: number;
+  total_actions: number;
+}
+
+export interface ReferralSummaryResponse {
+  referrals: ReferralSummaryItem[];
+  total: number;
+  period_start: number;
+  period_end: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
 }
 
 // ============================================
