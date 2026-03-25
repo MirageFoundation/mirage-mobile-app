@@ -168,16 +168,6 @@ export const PostCardMedia = memo(
     const isVideoType = media?.type === "video";
     const isHls = !!resolvedMediaUri?.includes(".m3u8");
 
-    if (isVideoType) {
-      console.log("[VIDEO_DEBUG] render", {
-        uri: resolvedMediaUri?.slice(-30),
-        isVisible,
-        screenActive,
-        shouldBlurContent,
-        isPostDetail,
-      });
-    }
-
     const shouldCreatePlayer = isVideoType && !shouldBlurContent && isVisible;
     const videoSource = useMemo(
       () => shouldCreatePlayer && resolvedMediaUri ? { uri: resolvedMediaUri, useCaching: !isHls } : null,
@@ -188,7 +178,6 @@ export const PostCardMedia = memo(
       p.loop = true;
       p.muted = true;
       p.timeUpdateEventInterval = isPostDetail ? 0.25 : 0.5;
-      if (isVideoType) console.log("[VIDEO_DEBUG] player created", resolvedMediaUri?.slice(-30));
     });
 
     const { status: playerStatus } = useEvent(player, "statusChange", { status: player.status });
@@ -206,7 +195,6 @@ export const PostCardMedia = memo(
     });
 
     useEffect(() => {
-      if (isVideoType) console.log("[VIDEO_DEBUG] status:", playerStatus, resolvedMediaUri?.slice(-30));
       if (playerStatus === "readyToPlay") {
         setMediaLoaded(true);
         if (resolvedMediaUri) MEDIA_LOADED_CACHE.add(resolvedMediaUri);
@@ -274,7 +262,6 @@ export const PostCardMedia = memo(
 
     useEffect(() => {
       if (!player) return;
-      if (isVideoType) console.log("[VIDEO_DEBUG] play/pause:", shouldVideoPlay, resolvedMediaUri?.slice(-30));
       try {
         if (shouldVideoPlay) {
           player.play();
