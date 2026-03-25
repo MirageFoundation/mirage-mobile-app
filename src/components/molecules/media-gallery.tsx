@@ -265,6 +265,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
           style={[galleryStyles.itemMedia, { width, height }]}
           contentFit="cover"
           nativeControls={false}
+          useExoShutter={false}
           onFirstFrameRender={() => {
             setFirstFrameRendered(true);
             setIsLoading(false);

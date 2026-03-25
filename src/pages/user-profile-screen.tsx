@@ -124,6 +124,7 @@ const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
  if (p.awards?.length !== n.awards?.length) return false;
  if (prev.isVisible !== next.isVisible) return false;
  if (prev.isFocused !== next.isFocused) return false;
+ if (prev.preloadNearby !== next.preloadNearby) return false;
  if (prev.screenActive !== next.screenActive) return false;
  if (prev.contentRevealed !== next.contentRevealed) return false;
  return true;
@@ -139,6 +140,7 @@ const PostWrapper = memo(function PostWrapper({
  isOwnProfile,
  isVisible,
  isFocused,
+ preloadNearby,
  screenActive,
  contentRevealed,
  shareUrl,
@@ -158,6 +160,7 @@ const PostWrapper = memo(function PostWrapper({
  isOwnProfile: boolean;
  isVisible?: boolean;
  isFocused?: boolean;
+ preloadNearby?: boolean;
  screenActive?: boolean;
  contentRevealed?: boolean;
  shareUrl: string;
@@ -189,6 +192,7 @@ const PostWrapper = memo(function PostWrapper({
     isOwnPost={isOwnProfile}
     isVisible={isVisible}
     isFocused={isFocused}
+    preloadNearby={preloadNearby}
     screenActive={screenActive}
     contentRevealed={contentRevealed}
     showUrlCard={false}
@@ -455,6 +459,8 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     const posts = activeTab === 0 ? postsWithVotes : apiPosts;
     return ["header", "tabs", ...posts];
   }, [activeTab, postsWithVotes, apiPosts, isBlocked]);
+  const listDataRef = useRef(listData);
+  listDataRef.current = listData;
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -820,6 +826,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
 
   const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
   const [visibleVideoPostIds, setVisibleVideoPostIds] = useState<Set<string>>(new Set());
+  const [warmVideoPostIds, setWarmVideoPostIds] = useState<Set<string>>(new Set());
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
   const handleRevealContent = useCallback((postId: string) => {
@@ -855,6 +862,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     );
     if (visibleItems.length === 0) {
       setVisibleVideoPostIds(new Set());
+      setWarmVideoPostIds(new Set());
       setActiveVideoPostId(null);
       return;
     }
@@ -863,6 +871,20 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     );
     const newVisibleIds = new Set(videoItems.map((item) => item.item.id));
     setVisibleVideoPostIds(newVisibleIds);
+    const warmVideoIds = new Set<string>(newVisibleIds);
+    const sortedVisibleIndices = visibleItems
+      .map((v) => v.index ?? 0)
+      .sort((a, b) => a - b);
+    const currentListData = listDataRef.current;
+    const warmMinIndex = Math.max(0, (sortedVisibleIndices[0] ?? 0) - 2);
+    const warmMaxIndex = Math.min(currentListData.length - 1, (sortedVisibleIndices[sortedVisibleIndices.length - 1] ?? 0) + 2);
+    for (let i = warmMinIndex; i <= warmMaxIndex; i++) {
+      const listItem = currentListData[i];
+      if (listItem && typeof listItem === "object" && "id" in listItem && postHasPlayableVideo(listItem)) {
+        warmVideoIds.add(listItem.id);
+      }
+    }
+    setWarmVideoPostIds(warmVideoIds);
     if (videoItems.length > 0) {
       const sortedIndices = visibleItems
         .map((v) => v.index ?? 0)
@@ -938,6 +960,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         profileDeferHandleRef.current = null;
       }
       setVisibleVideoPostIds(new Set());
+      setWarmVideoPostIds(new Set());
       setActiveVideoPostId(null);
     },
     onForeground: () => {
@@ -1009,6 +1032,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
              isOwnProfile={isOwnProfile}
              isVisible={visibleVideoPostIds.has(item.id)}
              isFocused={activeVideoPostId === item.id}
+             preloadNearby={warmVideoPostIds.has(item.id)}
              screenActive={isFocused}
              contentRevealed={revealedPosts.has(item.id)}
              shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
@@ -1069,10 +1093,13 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
        handleReportFromCard,
       contentAnimatedStyle,
       animatedTabIndex,
+      visibleVideoPostIds,
+      warmVideoPostIds,
       activeVideoPostId,
       isFocused,
       revealedPosts,
       handleRevealContent,
+      handleTopicPress,
     ]
   );
 

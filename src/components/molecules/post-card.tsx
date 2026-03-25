@@ -94,6 +94,7 @@ function arePostCardPropsEqual(
   if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
   if (prevProps.isVisible !== nextProps.isVisible) return false;
   if (prevProps.isFocused !== nextProps.isFocused) return false;
+  if (prevProps.preloadNearby !== nextProps.preloadNearby) return false;
   if (prevProps.showFollowButton !== nextProps.showFollowButton) return false;
   if (prevProps.isTopicFollowed !== nextProps.isTopicFollowed) return false;
   if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;

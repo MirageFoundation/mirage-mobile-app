@@ -118,6 +118,7 @@ const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
  if (p.awards?.length !== n.awards?.length) return false;
  if (prev.isVisible !== next.isVisible) return false;
  if (prev.isFocused !== next.isFocused) return false;
+ if (prev.preloadNearby !== next.preloadNearby) return false;
  if (prev.screenActive !== next.screenActive) return false;
  return true;
 });
@@ -131,6 +132,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  post,
  isVisible,
  isFocused,
+ preloadNearby,
  screenActive,
  onPostPress,
  onAuthorPress,
@@ -141,6 +143,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  post: Post;
  isVisible?: boolean;
  isFocused?: boolean;
+ preloadNearby?: boolean;
  screenActive?: boolean;
  onPostPress: (postId: string) => void;
  onAuthorPress: (authorId: string) => void;
@@ -164,6 +167,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
     isOwnPost={true}
     isVisible={isVisible}
     isFocused={isFocused}
+    preloadNearby={preloadNearby}
    screenActive={screenActive}
     showUrlCard={false}
     onPostPress={onPostPress}
@@ -357,6 +361,8 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
     const posts = activeTab === 0 ? uiPosts : apiPosts;
     return ["header", "tabs", ...posts];
   }, [activeTab, uiPosts, apiPosts]);
+  const listDataRef = useRef(listData);
+  listDataRef.current = listData;
 
   useEffect(() => {
     const handleRefresh = async () => {
@@ -718,6 +724,7 @@ useEffect(() => {
 
   const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
   const [visibleVideoPostIds, setVisibleVideoPostIds] = useState<Set<string>>(new Set());
+  const [warmVideoPostIds, setWarmVideoPostIds] = useState<Set<string>>(new Set());
 
   const profileViewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 30,
@@ -735,6 +742,7 @@ useEffect(() => {
     );
     if (visibleItems.length === 0) {
       setVisibleVideoPostIds(new Set());
+      setWarmVideoPostIds(new Set());
       setActiveVideoPostId(null);
       return;
     }
@@ -743,6 +751,20 @@ useEffect(() => {
     );
     const newVisibleIds = new Set(videoItems.map((item) => item.item.id));
     setVisibleVideoPostIds(newVisibleIds);
+    const warmVideoIds = new Set<string>(newVisibleIds);
+    const sortedVisibleIndices = visibleItems
+      .map((v) => v.index ?? 0)
+      .sort((a, b) => a - b);
+    const currentListData = listDataRef.current;
+    const warmMinIndex = Math.max(0, (sortedVisibleIndices[0] ?? 0) - 2);
+    const warmMaxIndex = Math.min(currentListData.length - 1, (sortedVisibleIndices[sortedVisibleIndices.length - 1] ?? 0) + 2);
+    for (let i = warmMinIndex; i <= warmMaxIndex; i++) {
+      const listItem = currentListData[i];
+      if (listItem && typeof listItem === "object" && "id" in listItem && postHasPlayableVideo(listItem)) {
+        warmVideoIds.add(listItem.id);
+      }
+    }
+    setWarmVideoPostIds(warmVideoIds);
     if (videoItems.length > 0) {
       const sortedIndices = visibleItems
         .map((v) => v.index ?? 0)
@@ -818,6 +840,7 @@ useEffect(() => {
         profileDeferHandleRef.current = null;
       }
       setVisibleVideoPostIds(new Set());
+      setWarmVideoPostIds(new Set());
       setActiveVideoPostId(null);
     },
     onForeground: () => {
@@ -917,6 +940,7 @@ useEffect(() => {
                post={cleanPost}
                isVisible={visibleVideoPostIds.has(item.id)}
                isFocused={activeVideoPostId === item.id}
+               preloadNearby={warmVideoPostIds.has(item.id)}
                screenActive={isFocused}
                onPostPress={handlePostPress}
                onAuthorPress={handleAuthorPress}
@@ -963,8 +987,11 @@ useEffect(() => {
       contentAnimatedStyle,
       animatedTabIndex,
       postsWithoutWarnings,
+      visibleVideoPostIds,
+      warmVideoPostIds,
       activeVideoPostId,
       isFocused,
+      handleTopicPress,
       ],
     );
 

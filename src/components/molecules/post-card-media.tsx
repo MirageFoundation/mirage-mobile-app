@@ -20,6 +20,7 @@ import {
   ActivityIndicator,
   AppState,
   Dimensions,
+  Image as RNImage,
   Linking,
   Platform,
   Pressable,
@@ -193,6 +194,7 @@ const InlineVideoPlayer = memo(forwardRef<InlineVideoPlayerRef, InlineVideoPlaye
         style={style}
         contentFit="cover"
         nativeControls={false}
+        useExoShutter={false}
         onFirstFrameRender={onFirstFrameRender}
       />
     );
@@ -265,8 +267,14 @@ export const PostCardMedia = memo(
 
     const resolvedMediaUri = media?.uri;
     const isVideoType = media?.type === "video";
+    const hasProvidedAspectRatio = !!media?.aspectRatio || !!(media?.width && media?.height);
+    const shouldUseThumbnailPlaceholder = isVideoType && !!videoThumbnailUri;
 
-    const shouldLoadVideo = isVideoType && screenActive && (isVisible || preloadNearby);
+    const shouldLoadVideo =
+      isVideoType &&
+      screenActive &&
+      isVisible &&
+      (!shouldBlurContent || !shouldUseThumbnailPlaceholder);
     const [playerActive, setPlayerActive] = useState(shouldLoadVideo);
     const [playerMounted, setPlayerMounted] = useState(shouldLoadVideo);
     const playerActiveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -284,6 +292,7 @@ export const PostCardMedia = memo(
           playerActiveTimerRef.current = null;
           setPlayerActive(false);
           setPlayerMounted(false);
+          setVideoFirstFrameRendered(false);
         }, 1500);
       }
       return () => {
@@ -306,6 +315,14 @@ export const PostCardMedia = memo(
       screenActive;
 
     const [videoStatus, setVideoStatus] = useState<string>("idle");
+    const shouldShowVideoThumbnail = !!videoThumbnailUri && (
+      shouldBlurContent ||
+      !isVisible ||
+      !isVideoPlaying ||
+      !playerMounted ||
+      videoStatus !== "readyToPlay" ||
+      !videoFirstFrameRendered
+    );
 
     const handleVideoStatusChange = useCallback((status: string, error?: any) => {
       setVideoStatus(status);
@@ -629,6 +646,28 @@ export const PostCardMedia = memo(
       },
       [resolvedMediaUri],
     );
+
+    const thumbnailDimensionPrefetchRef = useRef<string | null>(null);
+    useEffect(() => {
+      if (!preloadNearby || !videoThumbnailUri || !resolvedMediaUri) return;
+      if (hasProvidedAspectRatio || MEDIA_ASPECT_RATIO_CACHE.has(resolvedMediaUri)) return;
+      if (thumbnailDimensionPrefetchRef.current === videoThumbnailUri) return;
+      thumbnailDimensionPrefetchRef.current = videoThumbnailUri;
+      Image.prefetch(videoThumbnailUri);
+      RNImage.getSize(
+        videoThumbnailUri,
+        (width, height) => {
+          updateMediaAspectRatioFromSize(width, height);
+        },
+        () => {},
+      );
+    }, [
+      preloadNearby,
+      videoThumbnailUri,
+      resolvedMediaUri,
+      hasProvidedAspectRatio,
+      updateMediaAspectRatioFromSize,
+    ]);
 
     const mediaSource = useMemo(
       () => ({ uri: resolvedMediaUri ?? "" }),
@@ -1024,7 +1063,7 @@ export const PostCardMedia = memo(
             </>
           ) : media.type === "video" ? (
             <Pressable onPress={isPostDetail ? handleMediaPress : handleFeedVideoTap} style={styles.media}>
-              {videoThumbnailUri && !videoFirstFrameRendered ? (
+              {shouldShowVideoThumbnail ? (
                 <Image
                   source={{ uri: videoThumbnailUri }}
                   style={[styles.media, { position: "absolute", zIndex: 1 }]}
@@ -1034,6 +1073,7 @@ export const PostCardMedia = memo(
                   onLoad={({ source }) => {
                     updateMediaAspectRatioFromSize(source?.width, source?.height);
                   }}
+                  blurRadius={shouldBlurContent ? 50 : 0}
                 />
               ) : null}
               {playerMounted && videoStatus === "loading" && !videoFirstFrameRendered ? (
