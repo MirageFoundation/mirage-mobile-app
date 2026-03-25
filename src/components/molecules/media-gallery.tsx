@@ -1,10 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { Audio, ResizeMode, Video } from "expo-av";
+import { useVideoPlayer, VideoView } from "expo-video";
+import { useEvent, useEventListener } from "expo";
 import { Image } from "expo-image";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   Dimensions,
   FlatList,
   Platform,
@@ -83,8 +85,6 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   isFocused?: boolean;
   isPostDetail?: boolean;
 }) {
-  const videoRef = useRef<Video>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const globalMuted = useVideoMuteStore((s) => s.isMuted);
   const toggleMute = useVideoMuteStore((s) => s.toggleMute);
   const effectiveMuted = isPostDetail
@@ -94,11 +94,85 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
       : globalMuted;
   const [isLoading, setIsLoading] = useState(() => !GALLERY_LOADED_CACHE.has(item.uri));
   const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
+  const [firstFrameRendered, setFirstFrameRendered] = useState(false);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pauseDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const errorRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errorRetryCountRef = useRef(0);
+
+  const shouldLoadVideo = isActive && screenActive;
+  const [playerActive, setPlayerActive] = useState(shouldLoadVideo);
+  const [playerMounted, setPlayerMounted] = useState(shouldLoadVideo);
+  const playerActiveTimerRef2 = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (shouldLoadVideo) {
+      if (playerActiveTimerRef2.current) {
+        clearTimeout(playerActiveTimerRef2.current);
+        playerActiveTimerRef2.current = null;
+      }
+      setPlayerActive(true);
+      setPlayerMounted(true);
+    } else {
+      if (playerActiveTimerRef2.current) clearTimeout(playerActiveTimerRef2.current);
+      playerActiveTimerRef2.current = setTimeout(() => {
+        playerActiveTimerRef2.current = null;
+        setPlayerActive(false);
+        setPlayerMounted(false);
+      }, 1500);
+    }
+    return () => {
+      if (playerActiveTimerRef2.current) {
+        clearTimeout(playerActiveTimerRef2.current);
+        playerActiveTimerRef2.current = null;
+      }
+    };
+  }, [shouldLoadVideo]);
+
+  const videoSource = useMemo(
+    () => {
+      if (!playerActive) return null;
+      const isHls = item.uri.includes(".m3u8");
+      return { uri: item.uri, useCaching: !isHls };
+    },
+    [playerActive, item.uri, retryKey],
+  );
+
+  const player = useVideoPlayer(videoSource, (p) => {
+    p.loop = true;
+    p.muted = effectiveMuted;
+    p.timeUpdateEventInterval = 0;
+  });
+
+  const { status } = useEvent(player, "statusChange", { status: player.status });
+  const { isPlaying } = useEvent(player, "playingChange", { isPlaying: player.playing });
+
+  useEventListener(player, "statusChange", ({ status: newStatus }) => {
+    if (newStatus === "readyToPlay") {
+      setIsLoading(false);
+      GALLERY_LOADED_CACHE.add(item.uri);
+      if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+      errorRetryCountRef.current = 0;
+      if (errorRetryRef.current) {
+        clearTimeout(errorRetryRef.current);
+        errorRetryRef.current = null;
+      }
+    }
+    if (newStatus === "error") {
+      if (errorRetryCountRef.current < 3) {
+        errorRetryCountRef.current += 1;
+        if (errorRetryRef.current) clearTimeout(errorRetryRef.current);
+        errorRetryRef.current = setTimeout(() => {
+          setIsLoading(true);
+          setRetryKey((k) => k + 1);
+        }, 2000 * errorRetryCountRef.current);
+      }
+    }
+  });
+
+  useEffect(() => {
+    player.muted = effectiveMuted;
+  }, [effectiveMuted, player]);
 
   useEffect(() => {
     if (GALLERY_LOADED_CACHE.has(item.uri)) return;
@@ -107,93 +181,62 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
       GALLERY_LOADED_CACHE.add(item.uri);
     }, 8000);
     return () => {
-      videoRef.current?.pauseAsync().catch(() => {});
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current);
-      }
-      if (pauseDelayRef.current) {
-        clearTimeout(pauseDelayRef.current);
-      }
-      if (errorRetryRef.current) {
-        clearTimeout(errorRetryRef.current);
-      }
+      if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+      if (pauseDelayRef.current) clearTimeout(pauseDelayRef.current);
+      if (errorRetryRef.current) clearTimeout(errorRetryRef.current);
     };
   }, []);
 
+  const shouldPlay = isActive && screenActive && playerActive && (isVisible ?? true) && (allowAutoplay || feedTappedToPlay);
+
   useEffect(() => {
-    if (isActive && screenActive && isVisible && (allowAutoplay || feedTappedToPlay)) {
-      if (pauseDelayRef.current) {
-        clearTimeout(pauseDelayRef.current);
-        pauseDelayRef.current = null;
+    try {
+      if (shouldPlay) {
+        player.play();
+      } else {
+        player.pause();
       }
-      setIsPlaying(true);
-    } else if (!screenActive) {
-      if (pauseDelayRef.current) {
-        clearTimeout(pauseDelayRef.current);
-        pauseDelayRef.current = null;
+    } catch {}
+  }, [shouldPlay, player]);
+
+  const shouldPlayRef = useRef(shouldPlay);
+  shouldPlayRef.current = shouldPlay;
+  const playerRef = useRef(player);
+  playerRef.current = player;
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active" && shouldPlayRef.current) {
+        setTimeout(() => { try { playerRef.current.play(); } catch {} }, 100);
       }
-      setIsPlaying(false);
-      videoRef.current?.pauseAsync().catch(() => {});
-    } else if (!isVisible) {
-      if (!pauseDelayRef.current) {
-        pauseDelayRef.current = setTimeout(() => {
-          pauseDelayRef.current = null;
-          setIsPlaying(false);
-          videoRef.current?.pauseAsync().catch(() => {});
-        }, 400);
-      }
-    }
-  }, [isActive, screenActive, allowAutoplay, isVisible, feedTappedToPlay]);
+    });
+    return () => sub.remove();
+  }, []);
 
   const handlePlayPause = useCallback(() => {
-    setIsPlaying((p) => !p);
-  }, []);
+    if (isPlaying) {
+      player.pause();
+    } else {
+      player.play();
+    }
+  }, [isPlaying, player]);
 
   const handleFeedVideoTap = useCallback(() => {
     if (isPostDetail) return;
     if (!allowAutoplay && !isPlaying && !feedTappedToPlay) {
       setFeedTappedToPlay(true);
-      setIsPlaying(true);
+      player.play();
       return;
     }
     onPress?.();
-  }, [isPostDetail, allowAutoplay, isPlaying, feedTappedToPlay, onPress]);
+  }, [isPostDetail, allowAutoplay, isPlaying, feedTappedToPlay, onPress, player]);
 
-  const handleMuteToggle = useCallback(async () => {
-    const newGlobalMuted = !globalMuted;
+  const handleMuteToggle = useCallback(() => {
     toggleMute();
-    try {
-      if (!newGlobalMuted) {
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-        });
-      }
-      if (videoRef.current) {
-        const newEffective = isPostDetail
-          ? newGlobalMuted
-          : allowAutoplay
-            ? (newGlobalMuted || !isFocused)
-            : newGlobalMuted;
-        if (!newEffective) {
-          await videoRef.current.pauseAsync();
-          await videoRef.current.setStatusAsync({ isMuted: false });
-          await videoRef.current.playAsync();
-        } else {
-          await videoRef.current.setStatusAsync({ isMuted: true });
-        }
-      }
-    } catch {}
-  }, [globalMuted, toggleMute, isFocused, isPostDetail, allowAutoplay]);
-
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.setStatusAsync({ isMuted: effectiveMuted }).catch(() => {});
-    }
-  }, [effectiveMuted]);
+  }, [toggleMute]);
 
   const thumbnailUri = getVideoThumbnailUri(item.uri);
-  const showThumbnail = thumbnailUri && !GALLERY_LOADED_CACHE.has(item.uri);
+  const showThumbnail = thumbnailUri && !firstFrameRendered;
 
   return (
     <View style={[galleryStyles.itemContainer, { width, height }]}>
@@ -216,55 +259,21 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
           }}
         />
       ) : null}
-      <Video
-        key={retryKey}
-        ref={videoRef}
-        source={{ uri: item.uri }}
-        style={[galleryStyles.itemMedia, { width, height }]}
-        resizeMode={ResizeMode.COVER}
-        shouldPlay={isPlaying && isActive && screenActive}
-        isMuted={effectiveMuted}
-        isLooping
-        useNativeControls={false}
-        onLoad={() => {
-          setIsLoading(false);
-          GALLERY_LOADED_CACHE.add(item.uri);
-          if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
-          errorRetryCountRef.current = 0;
-          if (errorRetryRef.current) {
-            clearTimeout(errorRetryRef.current);
-            errorRetryRef.current = null;
-          }
-          videoRef.current?.setStatusAsync({ isMuted: effectiveMuted }).catch(() => {});
-        }}
-        onPlaybackStatusUpdate={(status) => {
-          if (status.isLoaded && (status.isPlaying || status.durationMillis)) {
+      {playerMounted ? (
+        <VideoView
+          player={player}
+          style={[galleryStyles.itemMedia, { width, height }]}
+          contentFit="cover"
+          nativeControls={false}
+          onFirstFrameRender={() => {
+            setFirstFrameRendered(true);
             setIsLoading(false);
             GALLERY_LOADED_CACHE.add(item.uri);
-            if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
-          }
-        }}
-        onReadyForDisplay={(event) => {
-          const { width: w, height: h } = event.naturalSize ?? {};
-          if (w && h) {
-            const ratio = w / h;
-            if (Number.isFinite(ratio) && ratio > 0) {
-              ASPECT_RATIO_CACHE.set(item.uri, ratio);
-              onAspectRatioDetected?.(item.uri, ratio);
-            }
-          }
-        }}
-        onError={() => {
-          if (errorRetryCountRef.current < 3) {
-            errorRetryCountRef.current += 1;
-            if (errorRetryRef.current) clearTimeout(errorRetryRef.current);
-            errorRetryRef.current = setTimeout(() => {
-              setIsLoading(true);
-              setRetryKey((k) => k + 1);
-            }, 2000 * errorRetryCountRef.current);
-          }
-        }}
-      />
+          }}
+        />
+      ) : (
+        <View style={[galleryStyles.itemMedia, { width, height }]} />
+      )}
 
       <View style={galleryStyles.playOverlay}>
         {isPostDetail ? (

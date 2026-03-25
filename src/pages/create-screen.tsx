@@ -11,7 +11,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
 import { isPowCancelled } from "@/src/wallet";
 import { waitForQueueDrain, usePowQueueStore } from "@/src/services/pow-queue";
-import { Audio, ResizeMode, Video } from "expo-av";
+import { createVideoPlayer } from "expo-video";
 import * as ImagePicker from "expo-image-picker";
 import { Paths, File as ExpoFile } from "expo-file-system";
 import { useLocalSearchParams } from "expo-router";
@@ -607,11 +607,17 @@ export function CreateScreen() {
                           mergedFile.write(new Uint8Array(mergedBuffer));
                           let finalUri = mergedFile.uri;
                           try {
-                            const { sound } = await Audio.Sound.createAsync({ uri: mergedFile.uri });
-                            const status = await sound.getStatusAsync();
-                            await sound.unloadAsync();
-                            if (status.isLoaded && status.durationMillis && status.durationMillis > 59000) {
-                              finalUri = await trimToMaxDuration(mergedFile.uri, status.durationMillis);
+                            const tempPlayer = createVideoPlayer({ uri: mergedFile.uri });
+                            await new Promise<void>((resolve) => {
+                              const sub = tempPlayer.addListener("statusChange", ({ status }) => {
+                                if (status === "readyToPlay" || status === "error") { sub.remove(); resolve(); }
+                              });
+                              setTimeout(() => { sub.remove(); resolve(); }, 5000);
+                            });
+                            const durationMs = Math.round(tempPlayer.duration * 1000);
+                            tempPlayer.release();
+                            if (durationMs > 59000) {
+                              finalUri = await trimToMaxDuration(mergedFile.uri, durationMs);
                             }
                           } catch {}
                           setAttachment("video", finalUri);
@@ -631,11 +637,17 @@ export function CreateScreen() {
                     destFile.write(new Uint8Array(arrayBuffer));
                     let finalUri = destFile.uri;
                     try {
-                      const { sound } = await Audio.Sound.createAsync({ uri: destFile.uri });
-                      const status = await sound.getStatusAsync();
-                      await sound.unloadAsync();
-                      if (status.isLoaded && status.durationMillis && status.durationMillis > 59000) {
-                        finalUri = await trimToMaxDuration(destFile.uri, status.durationMillis);
+                      const tempPlayer = createVideoPlayer({ uri: destFile.uri });
+                      await new Promise<void>((resolve) => {
+                        const sub = tempPlayer.addListener("statusChange", ({ status }) => {
+                          if (status === "readyToPlay" || status === "error") { sub.remove(); resolve(); }
+                        });
+                        setTimeout(() => { sub.remove(); resolve(); }, 5000);
+                      });
+                      const durationMs = Math.round(tempPlayer.duration * 1000);
+                      tempPlayer.release();
+                      if (durationMs > 59000) {
+                        finalUri = await trimToMaxDuration(destFile.uri, durationMs);
                       }
                     } catch {}
                     setAttachment("video", finalUri);
@@ -1301,13 +1313,9 @@ export function CreateScreen() {
             return (
               <Pressable key={uri} onPress={() => handleEditVideo(uri)} style={[styles.videoPlayerWrapper, { height: VIDEO_HEIGHT, width: VIDEO_WIDTH }]}>
                 <View pointerEvents="none">
-                  <Video
+                  <Image
                     source={{ uri }}
-                    style={[styles.videoPlayer, { width: VIDEO_WIDTH, height: VIDEO_HEIGHT }]}
-                    resizeMode={ResizeMode.COVER}
-                    shouldPlay={false}
-                    isMuted
-                    useNativeControls={false}
+                    style={[styles.videoPlayer, { width: VIDEO_WIDTH, height: VIDEO_HEIGHT, resizeMode: "cover" }]}
                   />
                 </View>
 

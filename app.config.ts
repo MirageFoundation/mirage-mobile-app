@@ -15,7 +15,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name,
     slug,
-    version: "1.0.12",
+    version: "1.0.13",
     orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: scheme,
@@ -129,6 +129,13 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         "expo-screen-orientation",
         {
           initialOrientation: "PORTRAIT",
+        },
+      ],
+      [
+        "expo-video",
+        {
+          supportsBackgroundPlayback: false,
+          supportsPictureInPicture: false,
         },
       ],
     ],

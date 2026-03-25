@@ -1,9 +1,10 @@
 import { Feather } from "@expo/vector-icons";
 import * as Sentry from "@sentry/react-native";
-import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
+import { useVideoPlayer, VideoView } from "expo-video";
+import { useEvent, useEventListener } from "expo";
 import { useLocalSearchParams } from "expo-router";
 import { router } from "@/src/utils/guarded-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -57,9 +58,6 @@ export function VideoEditorScreen() {
   const videoWidth = params.width ? parseInt(params.width) : 1920;
   const videoHeight = params.height ? parseInt(params.height) : 1080;
   
-  const videoRef = useRef<Video>(null);
-  
-  const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentPosition, setCurrentPosition] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -78,6 +76,33 @@ export function VideoEditorScreen() {
   const aspectRatio = videoWidth / videoHeight;
   const videoDisplayHeight = Math.min(SCREEN_WIDTH / aspectRatio, 400);
 
+  const videoSource = useMemo(() => (videoUri ? { uri: videoUri } : null), [videoUri]);
+  const player = useVideoPlayer(videoSource, (p) => {
+    p.loop = false;
+    p.muted = false;
+    p.timeUpdateEventInterval = 0.05;
+  });
+
+  const { isPlaying } = useEvent(player, "playingChange", { isPlaying: player.playing });
+
+  useEventListener(player, "timeUpdate", ({ currentTime }) => {
+    const posMs = Math.round(currentTime * 1000);
+    setCurrentPosition(posMs);
+    if (posMs >= trimEnd && trimEnd > 0) {
+      player.currentTime = trimStart / 1000;
+    }
+  });
+
+  useEventListener(player, "statusChange", ({ status }) => {
+    if (status === "readyToPlay" && duration === 0) {
+      const durMs = Math.round(player.duration * 1000);
+      if (durMs > 0) {
+        setDuration(durMs);
+        setTrimEnd(Math.min(durMs, MAX_TRIM_DURATION));
+      }
+    }
+  });
+
   useEffect(() => {
     if (duration > 0 && trimEnd === 0) {
       const maxEnd = Math.min(duration, MAX_TRIM_DURATION);
@@ -86,7 +111,7 @@ export function VideoEditorScreen() {
     }
     if (duration > 0 && initialTrimStartMs > 0) {
       leftTrimPosition.value = (initialTrimStartMs / duration) * TIMELINE_WIDTH;
-      videoRef.current?.setPositionAsync(initialTrimStartMs).catch(() => {});
+      player.currentTime = initialTrimStartMs / 1000;
     }
     if (duration > 0 && initialTrimEndMs > 0 && initialTrimEndMs < duration) {
       const clampedEnd = Math.min(initialTrimEndMs, initialTrimStartMs + MAX_TRIM_DURATION);
@@ -95,40 +120,17 @@ export function VideoEditorScreen() {
     }
   }, [duration]);
 
-  const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
-    if (!status.isLoaded) return;
-    
-    if (status.durationMillis && duration === 0) {
-      setDuration(status.durationMillis);
-      setTrimEnd(Math.min(status.durationMillis, MAX_TRIM_DURATION));
-    }
-    
-    setCurrentPosition(status.positionMillis);
-    setIsPlaying(status.isPlaying);
-    
-    // Loop within trim region
-    if (status.positionMillis >= trimEnd && trimEnd > 0) {
-      videoRef.current?.setPositionAsync(trimStart).catch(() => {});
-    }
-  }, [duration, trimStart, trimEnd]);
-
-  const handlePlayPause = useCallback(async () => {
-    if (!videoRef.current) return;
+  const handlePlayPause = useCallback(() => {
     triggerHaptic("light");
-    
-    const status = await videoRef.current.getStatusAsync();
-    if (!status.isLoaded) return;
-    
-    if (status.isPlaying) {
-      await videoRef.current.pauseAsync();
+    if (isPlaying) {
+      player.pause();
     } else {
-      // If at end of trim, restart from trim start
-      if (status.positionMillis >= trimEnd) {
-        await videoRef.current.setPositionAsync(trimStart);
+      if (currentPosition >= trimEnd) {
+        player.currentTime = trimStart / 1000;
       }
-      await videoRef.current.playAsync();
+      player.play();
     }
-  }, [trimStart, trimEnd]);
+  }, [isPlaying, player, trimStart, trimEnd, currentPosition]);
 
   const updateTrimFromPosition = useCallback((position: number, isLeft: boolean) => {
     const newTime = Math.round((position / TIMELINE_WIDTH) * duration);
@@ -139,16 +141,16 @@ export function VideoEditorScreen() {
       const clampedTime = Math.max(Math.max(0, minStart), Math.min(newTime, maxStart));
       setTrimStart(clampedTime);
       leftTrimPosition.value = (clampedTime / duration) * TIMELINE_WIDTH;
-      videoRef.current?.setPositionAsync(clampedTime).catch(() => {});
+      player.currentTime = clampedTime / 1000;
     } else {
       const minEnd = trimStart + MIN_TRIM_DURATION;
       const maxEnd = Math.min(duration, trimStart + MAX_TRIM_DURATION);
       const clampedTime = Math.max(minEnd, Math.min(newTime, maxEnd));
       setTrimEnd(clampedTime);
       rightTrimPosition.value = (clampedTime / duration) * TIMELINE_WIDTH;
-      videoRef.current?.setPositionAsync(clampedTime).catch(() => {});
+      player.currentTime = clampedTime / 1000;
     }
-  }, [duration, trimStart, trimEnd]);
+  }, [duration, trimStart, trimEnd, player]);
 
   const leftPanGesture = Gesture.Pan()
     .onUpdate((event) => {
@@ -308,14 +310,11 @@ export function VideoEditorScreen() {
         {/* Video Preview */}
         <View style={styles.videoContainer}>
           <Pressable onPress={handlePlayPause} style={styles.videoWrapper}>
-            <Video
-              ref={videoRef}
-              source={{ uri: videoUri }}
+            <VideoView
+              player={player}
               style={[styles.video, { height: videoDisplayHeight }]}
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay={false}
-              isLooping={false}
-              onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+              contentFit="contain"
+              nativeControls={false}
             />
             
             {/* Play/Pause overlay */}
