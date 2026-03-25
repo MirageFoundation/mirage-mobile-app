@@ -59,6 +59,9 @@ export const queryKeys = {
 
   // Referral
   referralStats: (address: string) => ["referral", address] as const,
+  referralPrecheck: (username: string) => ["referral", "precheck", username] as const,
+  referralSummary: (address: string, period?: string, month?: string) =>
+    ["referral", "summary", address, period, month] as const,
 
   // Peers
   peers: () => ["peers"] as const,

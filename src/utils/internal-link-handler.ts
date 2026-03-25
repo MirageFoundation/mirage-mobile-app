@@ -14,6 +14,7 @@ type MirageLinkType =
   | "subscription"
   | "inbox"
   | "invite"
+  | "signup"
   | "home"
   | "following"
   | "agents"
@@ -24,6 +25,7 @@ interface ParsedMirageLink {
   id: string;
   server: string;
   query?: string;
+  ref?: string;
 }
 
 const SINGLE_SEGMENT_ROUTES: Record<string, MirageLinkType> = {
@@ -63,12 +65,19 @@ function parseMirageUrl(url: string): ParsedMirageLink | null {
       }
     }
 
-    if (prefix === "create_account" && parsed.searchParams.get("invite")) {
-      return {
-        type: "invite",
-        id: parsed.searchParams.get("invite")!,
-        server: hostname,
-      };
+    if (prefix === "signup" || prefix === "create_account") {
+      const invite = parsed.searchParams.get("invite");
+      const ref = parsed.searchParams.get("ref");
+      if (invite) {
+        return { type: "signup", id: invite, server: hostname };
+      }
+      if (ref) {
+        return { type: "signup", id: "", server: hostname, ref };
+      }
+      if (prefix === "create_account") {
+        return { type: "invite", id: "", server: hostname };
+      }
+      return { type: "signup", id: "", server: hostname };
     }
 
     if (prefix === "search") {
@@ -164,6 +173,17 @@ export async function handleMirageLink(url: string): Promise<boolean> {
 
   if (parsed.type === "following") {
     router.push("/(tabs)/following");
+    return true;
+  }
+
+  if (parsed.type === "signup") {
+    if (parsed.id) {
+      router.push({ pathname: "/(auth)/username", params: { invite: parsed.id } } as any);
+    } else if (parsed.ref) {
+      router.push({ pathname: "/(auth)/username", params: { ref: parsed.ref } } as any);
+    } else {
+      router.push("/(auth)/username" as any);
+    }
     return true;
   }
 

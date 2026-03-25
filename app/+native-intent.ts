@@ -17,6 +17,15 @@ function mapWebPathToAppRoute(pathname: string, search: string): string | null {
     if (prefix === "t") return `/topic/${id}`;
   }
 
+  if (prefix === "signup" || prefix === "create_account") {
+    const params = new URLSearchParams(search);
+    const invite = params.get("invite");
+    const ref = params.get("ref");
+    if (invite) return `/(auth)/username?invite=${invite}`;
+    if (ref) return `/(auth)/username?ref=${ref}`;
+    return "/(auth)/username";
+  }
+
   if (prefix === "home") return "/(tabs)";
   if (prefix === "following") return "/(tabs)/following";
   if (prefix === "inbox") return "/(tabs)/inbox";
@@ -51,6 +60,9 @@ export function redirectSystemPath({
     if (MIRAGE_HOSTS.includes(url.hostname)) {
       const appRoute = mapWebPathToAppRoute(url.pathname, url.search);
       if (appRoute) {
+        if (appRoute.startsWith("/(auth)/")) {
+          return appRoute;
+        }
         const isLoggedIn = useAuthStore.getState().isLoggedIn;
         if (!isLoggedIn) {
           useDeepLinkStore.getState().setPendingRoute(appRoute);

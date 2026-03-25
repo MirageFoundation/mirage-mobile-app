@@ -78,3 +78,7 @@ export type { DeleteUserInput } from "./delete-user";
 // Award
 export { giveAward } from "./award";
 export type { GiveAwardInput } from "./award";
+
+// Referral
+export { referralPrecheckOptIn } from "./referral-precheck-opt-in";
+export type { ReferralPrecheckOptInInput } from "./referral-precheck-opt-in";

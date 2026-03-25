@@ -66,6 +66,7 @@ type SideMenuProps = {
   onTopics?: () => void;
   onAgents?: () => void;
   onInviteAndEarn?: () => void;
+  onReferrals?: () => void;
   onQuests?: () => void;
   onHelp?: () => void;
   onAbout?: () => void;
@@ -311,6 +312,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       onTopics,
       onAgents,
       onInviteAndEarn,
+      onReferrals,
       onQuests,
       onHelp,
       onAbout,
@@ -588,6 +590,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     title="Invite a Friend"
                     subtitle="Get rewards"
                     onPress={createHandler(onInviteAndEarn)}
+                  />
+                  <MenuItem
+                    iconName="people-outline"
+                    title="Referrals"
+                    subtitle="Share your link & track signups"
+                    onPress={createHandler(onReferrals)}
                   />
                   <MenuItem
                     iconName="trophy-outline"

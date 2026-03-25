@@ -32,7 +32,6 @@ import {
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import {
-  useAuthStore,
   usePreferencesStore,
   getShareBaseUrl,
 } from "@/src/stores";
@@ -464,7 +463,6 @@ export function InviteAndEarnScreen() {
     }, [refetch])
   );
 
-  // TODO: Remove mock data before production
   const availableCodes = inviteCodesData?.codes.filter((c) => !c.is_used) ?? [];
   const usedCodes = inviteCodesData?.codes.filter((c) => c.is_used) ?? [];
   const availableCount = inviteCodesData?.available ?? 0;
