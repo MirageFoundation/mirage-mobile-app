@@ -114,11 +114,12 @@ type InlineVideoPlayerProps = {
   onTimeUpdate: (time: number) => void;
   onFirstFrameRender: () => void;
   onPlayingChange: (playing: boolean) => void;
+  onVideoSizeDetected?: (width: number, height: number) => void;
   style: any;
 };
 
 const InlineVideoPlayer = memo(forwardRef<InlineVideoPlayerRef, InlineVideoPlayerProps>(
-  function InlineVideoPlayer({ uri, isHls, isPostDetail, effectiveMuted, shouldPlay, onStatusChange, onTimeUpdate, onFirstFrameRender, onPlayingChange, style }, ref) {
+  function InlineVideoPlayer({ uri, isHls, isPostDetail, effectiveMuted, shouldPlay, onStatusChange, onTimeUpdate, onFirstFrameRender, onPlayingChange, onVideoSizeDetected, style }, ref) {
     const videoSource = useMemo(
       () => ({ uri, useCaching: !isHls }),
       [uri, isHls],
@@ -139,6 +140,15 @@ const InlineVideoPlayer = memo(forwardRef<InlineVideoPlayerRef, InlineVideoPlaye
     onTimeUpdateRef.current = onTimeUpdate;
     const onPlayingChangeRef = useRef(onPlayingChange);
     onPlayingChangeRef.current = onPlayingChange;
+    const onVideoSizeDetectedRef = useRef(onVideoSizeDetected);
+    onVideoSizeDetectedRef.current = onVideoSizeDetected;
+
+    useEventListener(player, "sourceLoad", ({ availableVideoTracks }) => {
+      const track = availableVideoTracks?.[0];
+      if (track?.size?.width && track?.size?.height) {
+        onVideoSizeDetectedRef.current?.(track.size.width, track.size.height);
+      }
+    });
 
     useEventListener(player, "timeUpdate", ({ currentTime }) => {
       onTimeUpdateRef.current(currentTime);
@@ -1049,6 +1059,7 @@ export const PostCardMedia = memo(
                     if (resolvedMediaUri) MEDIA_LOADED_CACHE.add(resolvedMediaUri);
                   }}
                   onPlayingChange={handleVideoPlayingChange}
+                  onVideoSizeDetected={updateMediaAspectRatioFromSize}
                   style={styles.media}
                 />
               ) : (
