@@ -44,7 +44,12 @@ function showAlreadyLoggedInAlert(route: string): void {
           try {
             await useAuthStore.getState().logout();
             setTimeout(() => router.push(route as any), 500);
-          } catch {}
+          } catch (error) {
+            Sentry.captureException(error, {
+              tags: { feature: "deep-link", operation: "logout-for-signup" },
+              extra: { route },
+            });
+          }
         },
       },
     ],

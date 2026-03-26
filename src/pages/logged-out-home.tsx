@@ -148,7 +148,10 @@ export function LoggedOutHome() {
 
           <Pressable
             onPress={() => Linking.openURL("https://mirage.foundation")
-              .catch((e: Error) => Alert.alert("Couldn't open link", e.message))}
+              .catch((e: Error) => {
+                Sentry.captureException(e, { tags: { feature: "logged-out-home", operation: "open-url" } });
+                Alert.alert("Couldn't open link", e.message);
+              })}
           >
             <Text
               style={[styles.learnMore, { color: theme.colors.text.default }]}

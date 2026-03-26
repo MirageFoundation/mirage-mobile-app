@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import * as Sentry from "@sentry/react-native";
 
 const MIRAGE_HOSTS = ["mirage.talk", "mirage.vote"] as const;
 const MIRAGE_SCHEME_PREFIX = "mirage";
@@ -311,7 +312,13 @@ export function resolveMirageUrl(
           hostname: url.hostname,
         }
       : null;
-  } catch {
+  } catch (error) {
+    Sentry.addBreadcrumb({
+      category: "deep-link",
+      message: "URL parse failed, falling back to path split",
+      data: { rawValue: normalizedValue, error: String(error) },
+      level: "warning",
+    });
     const { pathname, search } = splitPathAndSearch(normalizedValue);
     return mapMiragePathToRoute(pathname, search);
   }

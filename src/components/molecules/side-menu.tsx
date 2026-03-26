@@ -789,7 +789,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           will show switch node popup and after switching the
                           code will be applied,logging out from following tab
                           should bring us to home after logout,image flickering
-                          of image in empty state of profile tabs fixed
+                          of image in empty state of profile tabs fixed, api
+                          error integrated, sentry logs
                         </Text>
                       </>
                     )}
@@ -856,7 +857,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           will show switch node popup and after switching the
                           code will be applied,logging out from following tab
                           should bring us to home after logout,image flickering
-                          of image in empty state of profile tabs fixed
+                          of image in empty state of profile tabs fixed, api
+                          error integrated, sentry logs
                         </Text>
                       </>
                     )}
