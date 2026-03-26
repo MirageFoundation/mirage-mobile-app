@@ -16,7 +16,7 @@ import { CloudflareErrorToast } from "@/src/components/cloudflare-error-toast";
 import { WalletProvider } from "./wallet-provider";
 import { initInboxNotifications } from "@/src/services/inbox-notifications";
 import { initPushNotifications, registerPush } from "@/src/services/push-notifications";
-import { useAuthStore, useVideoPositionStore } from "@/src/stores";
+import { useAuthStore, usePreferencesStore, useVideoPositionStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
 import { flushPendingRouteAfterAuth } from "@/src/navigation/auth-navigation";
 import * as Sentry from "@sentry/react-native";
@@ -59,11 +59,14 @@ export const RootProvider = memo(
       return () => sub.remove();
     }, []);
 
+    const hasSeenAdultPrompt = usePreferencesStore((s) => s.hasSeenAdultPrompt);
+
     useEffect(() => {
       if (!isLoggedIn) return;
+      if (!hasSeenAdultPrompt) return;
       const timer = setTimeout(() => flushPendingRouteAfterAuth(), 1000);
       return () => clearTimeout(timer);
-    }, [isLoggedIn]);
+    }, [isLoggedIn, hasSeenAdultPrompt]);
 
     useEffect(() => {
       if (!walletAddress) return;

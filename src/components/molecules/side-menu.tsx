@@ -781,11 +781,13 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           user is logged out then after login they will be
                           navigated to that screen, show alert to logout when
                           user clcik on referral link or invite link and is
-                          logged in, open the screen according to the link
-                          pressed, user clciking on ref link or invite link
-                          while the app is on the node which does not alloww
-                          account creation will show switch node popup and after
-                          switching the code will be applied
+                          logged in and then logging out will take them to
+                          create account screen with invite code applied, open
+                          the screen according to the link pressed, user
+                          clciking on ref link or invite link while the app is
+                          on the node which does not alloww account creation
+                          will show switch node popup and after switching the
+                          code will be applied
                         </Text>
                       </>
                     )}
@@ -844,11 +846,13 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           user is logged out then after login they will be
                           navigated to that screen, show alert to logout when
                           user clcik on referral link or invite link and is
-                          logged in, open the screen according to the link
-                          pressed, user clciking on ref link or invite link
-                          while the app is on the node which does not alloww
-                          account creation will show switch node popup and after
-                          switching the code will be applied
+                          logged in and then logging out will take them to
+                          create account screen with invite code applied, open
+                          the screen according to the link pressed, user
+                          clciking on ref link or invite link while the app is
+                          on the node which does not alloww account creation
+                          will show switch node popup and after switching the
+                          code will be applied
                         </Text>
                       </>
                     )}

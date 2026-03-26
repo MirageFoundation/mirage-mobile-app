@@ -1,3 +1,5 @@
+import { Platform } from "react-native";
+
 const MIRAGE_HOSTS = ["mirage.talk", "mirage.vote"] as const;
 const MIRAGE_SCHEME_PREFIX = "mirage";
 const TAB_HOME_ROUTE = "/(tabs)";
@@ -15,6 +17,8 @@ const KNOWN_APP_ROUTE_PREFIXES = [
   "/agents",
   "/invite-and-earn",
   "/referrals",
+  "/blocked-list",
+  "/user-following/",
 ] as const;
 
 export type MirageRouteType =
@@ -30,7 +34,11 @@ export type MirageRouteType =
   | "home"
   | "following"
   | "profile"
-  | "agents";
+  | "agents"
+  | "create"
+  | "blocks"
+  | "referrals"
+  | "follows";
 
 export interface MirageRouteMatch {
   type: MirageRouteType;
@@ -111,7 +119,7 @@ export function mapMiragePathToRoute(
       return {
         type: "user",
         hostname: "",
-        route: `/user/${resourceId}`,
+        route: `/user/${resourceId}${search || ""}`,
         requiresAuth: true,
         resourceId,
       };
@@ -178,7 +186,7 @@ export function mapMiragePathToRoute(
     return {
       type: "profile",
       hostname: "",
-      route: "/(tabs)/profile",
+      route: `/(tabs)/profile${search || ""}`,
       requiresAuth: true,
     };
   }
@@ -211,6 +219,7 @@ export function mapMiragePathToRoute(
   }
 
   if (prefix === "subscription") {
+    if (Platform.OS === "ios") return null;
     return {
       type: "subscription",
       hostname: "",
@@ -224,6 +233,42 @@ export function mapMiragePathToRoute(
       type: "agents",
       hostname: "",
       route: "/agents",
+      requiresAuth: true,
+    };
+  }
+
+  if (prefix === "create_post") {
+    return {
+      type: "create",
+      hostname: "",
+      route: "/(tabs)/create",
+      requiresAuth: true,
+    };
+  }
+
+  if (prefix === "blocks") {
+    return {
+      type: "blocks",
+      hostname: "",
+      route: "/blocked-list",
+      requiresAuth: true,
+    };
+  }
+
+  if (prefix === "follows") {
+    return {
+      type: "follows",
+      hostname: "",
+      route: "/user-following/__SELF__",
+      requiresAuth: true,
+    };
+  }
+
+  if (prefix === "referrals") {
+    return {
+      type: "referrals",
+      hostname: "",
+      route: "/referrals",
       requiresAuth: true,
     };
   }

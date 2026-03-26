@@ -41,7 +41,7 @@ export function flushPendingRouteAfterAuth(): boolean {
     return false;
   }
 
-  router.push(pendingRoute as any);
+  router.navigate(pendingRoute as any);
 
   return true;
 }

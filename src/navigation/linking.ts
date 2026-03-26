@@ -74,6 +74,13 @@ function resolveRootPostForComment(commentId: string) {
     });
 }
 
+function resolveSelfRoute(route: string): string | null {
+  if (!route.includes("__SELF__")) return route;
+  const walletAddress = useAuthStore.getState().walletAddress;
+  if (!walletAddress) return null;
+  return route.replace("__SELF__", walletAddress);
+}
+
 export async function redirectSystemPath({
   path,
 }: {
@@ -98,19 +105,24 @@ export async function redirectSystemPath({
     return "";
   }
 
-  if (!match.requiresAuth) {
-    if (match.type === "signup" && useAuthStore.getState().isLoggedIn) {
-      showAlreadyLoggedInAlert(match.route);
-      return "/(tabs)";
-    }
-    return match.route;
+  const resolvedRoute = resolveSelfRoute(match.route);
+  if (!resolvedRoute) {
+    return "";
   }
 
-  const target = resolveAuthNavigationTarget(match.route);
-  if (target !== match.route) {
+  if (!match.requiresAuth) {
+    if (match.type === "signup" && useAuthStore.getState().isLoggedIn) {
+      showAlreadyLoggedInAlert(resolvedRoute);
+      return "/(tabs)";
+    }
+    return resolvedRoute;
+  }
+
+  const target = resolveAuthNavigationTarget(resolvedRoute);
+  if (target !== resolvedRoute) {
     setTimeout(() => showLoginRequiredAlert(), 500);
   }
-  return target === match.route ? target : "";
+  return target === resolvedRoute ? target : "";
 }
 
 export async function handleMirageLink(url: string): Promise<boolean> {
@@ -124,18 +136,23 @@ export async function handleMirageLink(url: string): Promise<boolean> {
     return false;
   }
 
+  const resolvedRoute = resolveSelfRoute(match.route);
+  if (!resolvedRoute) {
+    return false;
+  }
+
   if (match.type === "signup" && useAuthStore.getState().isLoggedIn) {
-    showAlreadyLoggedInAlert(match.route);
+    showAlreadyLoggedInAlert(resolvedRoute);
     return true;
   }
 
   if (match.requiresAuth && !useAuthStore.getState().isLoggedIn) {
-    resolveAuthNavigationTarget(match.route);
+    resolveAuthNavigationTarget(resolvedRoute);
     showLoginRequiredAlert();
     return true;
   }
 
-  navigateWithAuthGuard(match.route);
+  navigateWithAuthGuard(resolvedRoute);
 
   if (match.type === "post" && match.resourceId) {
     resolveRootPostForComment(match.resourceId);
