@@ -2,13 +2,10 @@ import { navigateToEditPost } from "@/src/utils/edit-post";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "@/src/navigation/guarded-router";
 import { useIsFocused } from "@react-navigation/native";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Platform, Pressable, View } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  interpolate,
-  runOnJS,
-  useAnimatedStyle,
+import PagerView from "react-native-pager-view";
+import {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
@@ -45,15 +42,8 @@ import {
 
 import { SavedCommentItem } from "./saved/saved-posts-comment-item";
 import { SavedPostsEmptyState } from "./saved/saved-posts-empty-state";
-import {
-  SAVED_POSTS_SCREEN_WIDTH,
-  SAVED_TABS,
-  SAVED_TAB_VELOCITY_THRESHOLD,
-  SavedTabBar,
-} from "./saved/saved-posts-tab-bar";
+import { SavedTabBar } from "./saved/saved-posts-tab-bar";
 import { useSavedPostsViewability } from "./saved/use-saved-posts-viewability";
-
-const TAB_COUNT = SAVED_TABS.length;
 
 type VoteOverride = {
   hasLiked: boolean;
@@ -69,19 +59,18 @@ export function SavedPostsScreen() {
   const toast = useToast();
   const { requireAuth } = useAuthGuard();
 
-  const [activeTab, setActiveTab] = useState(0);
-  const animatedTabIndex = useSharedValue(0);
-  const contentTranslateX = useSharedValue(0);
-  const fadeOpacity = useSharedValue(1);
+  const currentUser = useAuthStore((s) => s.user);
+  const savedPosts = useSavedPostsStore((s) => s.savedPosts);
+  const savedComments = useSavedPostsStore((s) => s.savedComments);
+  const initialTab = savedPosts.length > 0 ? 0 : savedComments.length > 0 ? 1 : 0;
+  const [activeTab, setActiveTab] = useState(initialTab);
+  const animatedTabIndex = useSharedValue(initialTab);
+  const pagerRef = useRef<PagerView>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const commentOptionsSheetRef = useRef<CommentOptionsSheetRef>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [selectedComment, setSelectedComment] = useState<SavedComment | null>(null);
   const [voteOverrides, setVoteOverrides] = useState<Record<string, VoteOverride>>({});
-
-  const currentUser = useAuthStore((s) => s.user);
-  const savedPosts = useSavedPostsStore((s) => s.savedPosts);
-  const savedComments = useSavedPostsStore((s) => s.savedComments);
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedTopicNames = useContentModerationStore((s) => s.blockedTopicNames);
   const shareServer = usePreferencesStore((s) => s.shareServer);
@@ -152,6 +141,14 @@ export function SavedPostsScreen() {
     postsWithOverrides,
     videoAutoplayNetwork,
   });
+
+  useEffect(() => {
+    if (activeTab === 0 && postsWithOverrides.length === 0 && savedComments.length > 0) {
+      setActiveTab(1);
+      animatedTabIndex.value = 1;
+      pagerRef.current?.setPageWithoutAnimation(1);
+    }
+  }, [activeTab, animatedTabIndex, postsWithOverrides.length, savedComments.length]);
 
   const handlePostPress = useCallback(
     (postId: string) => {
@@ -317,104 +314,38 @@ export function SavedPostsScreen() {
   const postKeyExtractor = useCallback((item: Post) => item.id, []);
   const commentKeyExtractor = useCallback((item: SavedComment) => item.id, []);
 
-  const handleSwipeTabChange = useCallback((index: number) => {
-    setActiveTab(index);
-  }, []);
-
-  const completeTransition = useCallback(
-    (targetTab: number) => {
-      contentTranslateX.value = 0;
-      handleSwipeTabChange(targetTab);
-      setTimeout(() => {
-        fadeOpacity.value = withTiming(1, { duration: 180 });
-      }, 50);
+  const setTab = useCallback(
+    (index: number) => {
+      setActiveTab(index);
+      animatedTabIndex.value = withTiming(index, { duration: 200 });
     },
-    [contentTranslateX, fadeOpacity, handleSwipeTabChange],
+    [animatedTabIndex],
   );
-
-  const swipeGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetX([-15, 15])
-        .failOffsetY([-10, 10])
-        .onStart(() => {
-          "worklet";
-          fadeOpacity.value = 1;
-        })
-        .onUpdate((event) => {
-          "worklet";
-          const progress = -event.translationX / SAVED_POSTS_SCREEN_WIDTH;
-          const newIndex = activeTab + progress;
-          const clampedIndex = Math.max(0, Math.min(TAB_COUNT - 1, newIndex));
-          animatedTabIndex.value = clampedIndex;
-          contentTranslateX.value =
-            -(clampedIndex - activeTab) * SAVED_POSTS_SCREEN_WIDTH;
-        })
-        .onEnd((event) => {
-          "worklet";
-          const velocity = event.velocityX;
-          let targetTab: number;
-          if (Math.abs(velocity) > SAVED_TAB_VELOCITY_THRESHOLD) {
-            targetTab =
-              velocity < 0
-                ? Math.min(activeTab + 1, TAB_COUNT - 1)
-                : Math.max(activeTab - 1, 0);
-          } else {
-            targetTab = Math.round(animatedTabIndex.value);
-          }
-          targetTab = Math.max(0, Math.min(TAB_COUNT - 1, targetTab));
-
-          animatedTabIndex.value = withTiming(targetTab, { duration: 200 });
-
-          if (targetTab === activeTab) {
-            contentTranslateX.value = withTiming(0, { duration: 200 });
-          } else {
-            const direction = targetTab > activeTab ? -1 : 1;
-            contentTranslateX.value = withTiming(
-              direction * SAVED_POSTS_SCREEN_WIDTH,
-              { duration: 120 },
-              (finished) => {
-                "worklet";
-                if (finished) {
-                  fadeOpacity.value = 0;
-                  runOnJS(completeTransition)(targetTab);
-                }
-              },
-            );
-          }
-        }),
-    [activeTab, animatedTabIndex, completeTransition, contentTranslateX, fadeOpacity],
-  );
-
-  const contentAnimatedStyle = useAnimatedStyle(() => {
-    const gestureOpacity = interpolate(
-      Math.abs(contentTranslateX.value),
-      [0, SAVED_POSTS_SCREEN_WIDTH * 0.5, SAVED_POSTS_SCREEN_WIDTH],
-      [1, 0.3, 0],
-      "clamp",
-    );
-    return {
-      transform: [{ translateX: contentTranslateX.value }],
-      opacity: Math.min(gestureOpacity, fadeOpacity.value),
-    };
-  });
 
   const handleTabChange = useCallback(
     (index: number) => {
       if (index === activeTab) return;
-      animatedTabIndex.value = withTiming(index, { duration: 200 });
-      fadeOpacity.value = withTiming(
-        0,
-        { duration: 100 },
-        (finished) => {
-          "worklet";
-          if (finished) {
-            runOnJS(completeTransition)(index);
-          }
-        },
-      );
+      setTab(index);
+      pagerRef.current?.setPage(index);
     },
-    [activeTab, animatedTabIndex, completeTransition, fadeOpacity],
+    [activeTab, setTab],
+  );
+
+  const handlePageScroll = useCallback(
+    (event: any) => {
+      const { position, offset } = event.nativeEvent;
+      animatedTabIndex.value = position + offset;
+    },
+    [animatedTabIndex],
+  );
+
+  const handlePageSelected = useCallback(
+    (event: any) => {
+      const index = event.nativeEvent.position;
+      setActiveTab(index);
+      animatedTabIndex.value = index;
+    },
+    [animatedTabIndex],
   );
 
   const renderEmptyState = useCallback(
@@ -465,27 +396,35 @@ export function SavedPostsScreen() {
         animatedIndex={animatedTabIndex}
       />
 
-      <GestureDetector gesture={swipeGesture}>
-        <Animated.View style={[{ flex: 1 }, contentAnimatedStyle]}>
-          {activeTab === 0 ? (
-            postsWithOverrides.length === 0 ? (
-              renderEmptyState("posts")
-            ) : (
-              <FlatList
-                data={postsWithOverrides}
-                keyExtractor={postKeyExtractor}
-                renderItem={renderPostItem}
-                contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
-                showsVerticalScrollIndicator={false}
-                windowSize={Platform.OS === "android" ? 11 : 13}
-                maxToRenderPerBatch={Platform.OS === "android" ? 7 : 9}
-                initialNumToRender={5}
-                viewabilityConfig={savedPostsViewabilityConfig}
-                onViewableItemsChanged={onSavedPostsViewableItemsChanged}
-                onMomentumScrollEnd={handleSavedPostsMomentumScrollEnd}
-              />
-            )
-          ) : savedComments.length === 0 ? (
+      <PagerView
+        ref={pagerRef}
+        style={{ flex: 1 }}
+        initialPage={initialTab}
+        onPageScroll={handlePageScroll}
+        onPageSelected={handlePageSelected}
+      >
+        <View key="posts" style={{ flex: 1 }}>
+          {postsWithOverrides.length === 0 ? (
+            renderEmptyState("posts")
+          ) : (
+            <FlatList
+              data={postsWithOverrides}
+              keyExtractor={postKeyExtractor}
+              renderItem={renderPostItem}
+              contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+              showsVerticalScrollIndicator={false}
+              windowSize={Platform.OS === "android" ? 11 : 13}
+              maxToRenderPerBatch={Platform.OS === "android" ? 7 : 9}
+              initialNumToRender={5}
+              viewabilityConfig={savedPostsViewabilityConfig}
+              onViewableItemsChanged={onSavedPostsViewableItemsChanged}
+              onMomentumScrollEnd={handleSavedPostsMomentumScrollEnd}
+            />
+          )}
+        </View>
+
+        <View key="comments" style={{ flex: 1 }}>
+          {savedComments.length === 0 ? (
             renderEmptyState("comments")
           ) : (
             <FlatList
@@ -496,8 +435,8 @@ export function SavedPostsScreen() {
               showsVerticalScrollIndicator={false}
             />
           )}
-        </Animated.View>
-      </GestureDetector>
+        </View>
+      </PagerView>
 
       <PostOptionsSheet
         ref={postOptionsSheetRef}
