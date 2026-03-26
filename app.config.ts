@@ -15,7 +15,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name,
     slug,
-    version: "1.0.12",
+    version: "1.0.13",
     orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: scheme,
@@ -25,10 +25,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       supportsTablet: false,
       requireFullScreen: true,
       bundleIdentifier: bundleIdentifier,
-      associatedDomains: [
-        "applinks:mirage.talk",
-        "applinks:mirage.vote",
-      ],
+      associatedDomains: ["applinks:mirage.talk", "applinks:mirage.vote"],
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         UIBackgroundModes: ["fetch", "remote-notification"],

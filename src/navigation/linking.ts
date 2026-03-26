@@ -1,8 +1,9 @@
 import * as Linking from "expo-linking";
 import * as Sentry from "@sentry/react-native";
+import { Alert } from "react-native";
 
 import { getRootPostId } from "@/src/api/read/endpoints/posts";
-import { usePreferencesStore } from "@/src/stores";
+import { useAuthStore, usePreferencesStore } from "@/src/stores";
 import { setShareScheme } from "@/src/utils/share-scheme";
 
 import {
@@ -60,6 +61,13 @@ export async function redirectSystemPath({
   }
 
   if (!match.requiresAuth) {
+    if (match.type === "signup" && useAuthStore.getState().isLoggedIn) {
+      Alert.alert(
+        "Already logged in",
+        "Please logout to create a new account using the referral link.",
+      );
+      return "/(tabs)";
+    }
     return match.route;
   }
 
@@ -76,6 +84,14 @@ export async function handleMirageLink(url: string): Promise<boolean> {
   const match = resolveMirageUrl(url, getAdditionalMirageHosts());
   if (!match) {
     return false;
+  }
+
+  if (match.type === "signup" && useAuthStore.getState().isLoggedIn) {
+    Alert.alert(
+      "Already logged in",
+      "Please logout to create a new account using the referral link.",
+    );
+    return true;
   }
 
   navigateWithAuthGuard(match.route);
