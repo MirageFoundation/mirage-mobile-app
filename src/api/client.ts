@@ -4,6 +4,7 @@ import * as Network from "expo-network";
 import { walletService } from "@/src/services/wallet-service";
 import { useInboxStore } from "@/src/stores/inbox-store";
 import { useCloudflareErrorStore } from "@/src/stores/cloudflare-error-store";
+import { isRetryable } from "@/src/utils/error-messages";
 
 const DEFAULT_NODES = [
   "https://mirage.talk",
@@ -13,6 +14,8 @@ const DEFAULT_NODES = [
 const MAX_CONCURRENT_REQUESTS = 6;
 const RATE_LIMIT_RETRY_DELAY = 1000;
 const MAX_RATE_LIMIT_RETRIES = 3;
+const MAX_RETRYABLE_ERROR_RETRIES = 3;
+const RETRYABLE_ERROR_BASE_DELAY = 2000;
 
 class ApiClient {
   private client: AxiosInstance;
@@ -227,6 +230,16 @@ class ApiClient {
         return this.executeGet<T, P>(path, params, retryCount + 1);
       }
 
+      const errorCode = errorData?.error_code;
+      if (errorCode && isRetryable(errorCode) && retryCount < MAX_RETRYABLE_ERROR_RETRIES) {
+        const delay = RETRYABLE_ERROR_BASE_DELAY * Math.pow(2, retryCount);
+        console.log(
+          `[ApiClient] Retryable error_code "${errorCode}" on GET ${path}, retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRYABLE_ERROR_RETRIES})`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        return this.executeGet<T, P>(path, params, retryCount + 1);
+      }
+
       Sentry.addBreadcrumb({
         category: "api",
         message: `GET ${path} failed`,
@@ -276,6 +289,13 @@ class ApiClient {
       if (status === 429) {
         console.log(`[ApiClient] POST ${path} rate limited, skipping`);
         throw error;
+      }
+
+      const errorCode = errorData?.error_code;
+      if (errorCode && isRetryable(errorCode)) {
+        console.log(
+          `[ApiClient] Retryable error_code "${errorCode}" on POST ${path}`,
+        );
       }
 
       Sentry.addBreadcrumb({

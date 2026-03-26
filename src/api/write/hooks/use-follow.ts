@@ -15,6 +15,7 @@ import {
 } from "../endpoints/social";
 import type { PoWProgress, WriteResponse } from "../signing";
 import * as Sentry from "@sentry/react-native";
+import { parseApiError } from "@/src/utils/parse-api-error";
 
 // ============================================
 // Types
@@ -293,21 +294,15 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
       }, 5000);
     },
     onError: (err, { topic, isCurrentlyFollowing }, context) => {
-      let errorMessage = String(err);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const axiosError = err as any;
-      if (axiosError?.response?.data?.error) {
-        errorMessage = axiosError.response.data.error;
-      }
+      const parsed = parseApiError(err);
+      const errorCode = parsed.errorCode;
 
-      console.log(`[FollowTopic] Error received: ${errorMessage}`);
+      console.log(`[FollowTopic] Error received: ${errorCode ?? parsed.message}`);
 
       const isAlreadyFollowedError =
-        !isCurrentlyFollowing && errorMessage.includes("already followed");
+        !isCurrentlyFollowing && errorCode === "topic_already_followed";
       const isNotFollowingError =
-        isCurrentlyFollowing &&
-        (errorMessage.includes("not following") ||
-          errorMessage.includes("not in followed"));
+        isCurrentlyFollowing && errorCode === "topic_already_followed";
 
       if (isAlreadyFollowedError || isNotFollowingError) {
         console.log(
@@ -318,9 +313,9 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
 
       Sentry.captureException(err, {
         tags: { feature: "follow", operation: "follow-topic" },
-        extra: { topic, isCurrentlyFollowing, errorMessage },
+        extra: { topic, isCurrentlyFollowing, errorCode, errorMessage: parsed.message },
       });
-      console.log(`[FollowTopic] Error, rolling back: ${errorMessage}`);
+      console.log(`[FollowTopic] Error, rolling back: ${parsed.message}`);
       if (address && context?.previousFollowed) {
         queryClient.setQueryData(
           queryKeys.userFollowed(address),
@@ -335,13 +330,8 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
       });
 
       if (error) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const axiosError = error as any;
-        const errorMessage = axiosError?.response?.data?.error || String(error);
-        const isStateMismatch =
-          errorMessage.includes("already followed") ||
-          errorMessage.includes("not following") ||
-          errorMessage.includes("not in followed");
+        const parsed = parseApiError(error);
+        const isStateMismatch = parsed.errorCode === "topic_already_followed";
 
         if (!isStateMismatch && address) {
           queryClient.invalidateQueries({
@@ -467,29 +457,17 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
       }, 5000);
     },
     onError: (err, { userAddress, isCurrentlyFollowing }, context) => {
-      // Try to get the actual error message from the API response
-      let errorMessage = String(err);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const axiosError = err as any;
-      if (axiosError?.response?.data?.error) {
-        errorMessage = axiosError.response.data.error;
-      }
+      const parsed = parseApiError(err);
+      const errorCode = parsed.errorCode;
 
-      console.log(`[Follow] Error received: ${errorMessage}`);
+      console.log(`[Follow] Error received: ${errorCode ?? parsed.message}`);
 
-      // Check if error is because user is already in the desired state
-      // These aren't real errors - just state mismatches we can handle gracefully
       const isAlreadyFollowedError =
-        !isCurrentlyFollowing && errorMessage.includes("already followed");
+        !isCurrentlyFollowing && errorCode === "user_already_followed";
       const isNotFollowingError =
-        isCurrentlyFollowing &&
-        (errorMessage.includes("not following") ||
-          errorMessage.includes("not in followed") ||
-          errorMessage.includes("user not followed"));
+        isCurrentlyFollowing && errorCode === "user_already_followed";
 
       if (isAlreadyFollowedError || isNotFollowingError) {
-        // Not a real error - user is already in the desired state
-        // Don't rollback the optimistic update
         console.log(
           `[Follow] State already matches desired state, no rollback needed`
         );
@@ -498,9 +476,9 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
 
       Sentry.captureException(err, {
         tags: { feature: "follow", operation: "follow-user" },
-        extra: { userAddress, isCurrentlyFollowing, errorMessage },
+        extra: { userAddress, isCurrentlyFollowing, errorCode, errorMessage: parsed.message },
       });
-      console.log(`[Follow] Error, rolling back: ${errorMessage}`);
+      console.log(`[Follow] Error, rolling back: ${parsed.message}`);
       if (address && context?.previousFollowed) {
         queryClient.setQueryData(
           queryKeys.userFollowed(address),
@@ -515,17 +493,10 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
       });
 
       if (error) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const axiosError = error as any;
-        const errorMessage = axiosError?.response?.data?.error || String(error);
-        const isStateMismatch =
-          errorMessage.includes("already followed") ||
-          errorMessage.includes("not following") ||
-          errorMessage.includes("not in followed") ||
-          errorMessage.includes("user not followed");
+        const parsed = parseApiError(error);
+        const isStateMismatch = parsed.errorCode === "user_already_followed";
 
         if (!isStateMismatch && address) {
-          // Real error - refetch to get correct state (silent, no indicator)
           queryClient.invalidateQueries({
             queryKey: queryKeys.userFollowed(address),
             refetchType: "none",

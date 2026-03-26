@@ -9,6 +9,7 @@ import { sanitizeTopicName } from "@/src/utils/topic-validation";
 import { trimToMaxDuration } from "@/src/utils/video-processing";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
+import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 import { isPowCancelled } from "@/src/wallet";
 import { waitForQueueDrain, usePowQueueStore } from "@/src/services/pow-queue";
 import { Audio, ResizeMode, Video } from "expo-av";
@@ -242,7 +243,7 @@ export function CreateScreen() {
       })
       .catch((err) => {
         Sentry.addBreadcrumb({ category: "video-upload", message: "Video upload failed", data: { error: String(err) }, level: "error" });
-        const msg = err?.response?.data?.error || (err instanceof Error ? err.message : "Upload failed");
+        const msg = err?.response?.data?.error_code ? getApiErrorMessage(err) : (err instanceof Error ? err.message : "Upload failed");
         const isServerError = !!err?.response?.status && err.response.status >= 400;
         VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg, isServerError });
         videoUploadStateRef.current((prev) => ({
