@@ -7,4 +7,20 @@ module.exports = defineConfig([
   {
     ignores: ['dist/*'],
   },
+  {
+    files: ['src/stores/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            '@/src/pages/*',
+            '@/src/pages/**',
+            '@/src/components/*',
+            '@/src/components/**',
+          ],
+        },
+      ],
+    },
+  },
 ]);

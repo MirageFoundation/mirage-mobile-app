@@ -9,7 +9,12 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "check:file-sizes": "bun tools/check-file-sizes.mjs",
+    "check:navigation": "bun tools/navigation-smoke-check.mjs",
+    "check:stores": "bun tools/check-store-boundaries.mjs",
+    "check:query-keys": "bun tools/check-query-key-literals.mjs",
+    "check:architecture": "bun tools/check-file-sizes.mjs && bun tools/navigation-smoke-check.mjs && bun tools/check-store-boundaries.mjs && bun tools/check-query-key-literals.mjs"
   },
   "dependencies": {
     "@docren/react-native-markdown": "^0.8.5",

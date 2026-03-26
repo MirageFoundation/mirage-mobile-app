@@ -3,7 +3,7 @@
 ## Status
 - Created: 2026-03-26
 - Purpose: canonical plan for cleaning up app structure, routing, cache ownership, deep linking, and file modularity
-- Current phase: Phase 5 in progress
+- Current phase: Phase 6 ready (Phases 5 and 7 complete)
 
 ---
 
@@ -448,7 +448,14 @@ Goal: keep the architecture clean after the refactor.
 - [x] Continued breaking up `src/pages/saved-posts-screen.tsx` by extracting the tab bar, saved-comment/media rendering, empty state, and saved-posts viewability orchestration into `src/pages/saved/*`
 - [x] Continued breaking up `src/pages/quests-screen.tsx` by extracting quest cards, countdowns, loading/empty states, and claim-success UI into `src/pages/quests/*`
 - [x] Continued breaking up `src/pages/annotate-screen.tsx` by extracting annotate header, post summary, tag modal, media section, and basic override sections into `src/pages/annotate/*`
-- [ ] Continue follow-on cleanup for remaining still-large screens (`user-profile-screen`, `topic-feed-screen`, `saved-posts-screen`, `annotate-screen`) as needed
+- [x] Continue follow-on cleanup for remaining still-large screens (`user-profile-screen`, `topic-feed-screen`, `saved-posts-screen`, `annotate-screen`) as needed
+
+### Phase 7 progress
+- [x] Added import-boundary lint protection for `src/stores/*` in `eslint.config.js`
+- [x] Added file-size reporting via `tools/check-file-sizes.mjs`
+- [x] Added navigation/deep-link smoke checks via `tools/navigation-smoke-check.mjs`
+- [x] Documented architecture conventions and verification commands in `docs/architecture-conventions.md` and `README.md`
+- [x] Added additional smoke checks for store boundaries and raw query-key literal regressions (`tools/check-store-boundaries.mjs`, `tools/check-query-key-literals.mjs`)
 
 ### Do not do during Phase 1
 - No logic rewrite unless necessary.

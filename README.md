@@ -49,6 +49,20 @@ Join our community of developers creating universal apps.
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
 
+## Architecture Checks
+
+Useful verification commands:
+
+```bash
+bun run check:file-sizes
+bun run check:navigation
+bun run check:stores
+bun run check:query-keys
+bun run check:architecture
+```
+
+See `docs/architecture-conventions.md` for the current structural conventions.
+
 ## Force Update (Remote Version Config)
 
 The app checks a remote JSON file on launch to determine if a force update is needed. This lets us trigger update prompts without deploying a new app build.
