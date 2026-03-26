@@ -788,7 +788,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           on the node which does not alloww account creation
                           will show switch node popup and after switching the
                           code will be applied,logging out from following tab
-                          should bring us to home after logout
+                          should bring us to home after logout,image flickering
+                          of image in empty state of profile tabs fixed
                         </Text>
                       </>
                     )}
@@ -854,7 +855,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           on the node which does not alloww account creation
                           will show switch node popup and after switching the
                           code will be applied,logging out from following tab
-                          should bring us to home after logout
+                          should bring us to home after logout,image flickering
+                          of image in empty state of profile tabs fixed
                         </Text>
                       </>
                     )}
