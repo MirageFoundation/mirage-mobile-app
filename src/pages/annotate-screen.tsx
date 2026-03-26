@@ -21,7 +21,7 @@ import {
 } from "react-native";
 import { Image } from "react-native";
 import { Image as ExpoImage } from "expo-image";
-import { ResizeMode, Video } from "expo-av";
+
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -875,13 +875,9 @@ export function AnnotateScreen() {
                     return (
                       <Pressable key={uri} onPress={() => handleEditVideo(uri)} style={[styles.videoPlayerWrapper, { height: VIDEO_HEIGHT, width: VIDEO_WIDTH }]}>
                         <View pointerEvents="none">
-                          <Video
+                          <Image
                             source={{ uri }}
-                            style={[styles.videoPlayer, { width: VIDEO_WIDTH, height: VIDEO_HEIGHT }]}
-                            resizeMode={ResizeMode.COVER}
-                            shouldPlay={false}
-                            isMuted
-                            useNativeControls={false}
+                            style={[styles.videoPlayer, { width: VIDEO_WIDTH, height: VIDEO_HEIGHT, resizeMode: "cover" }]}
                           />
                         </View>
 

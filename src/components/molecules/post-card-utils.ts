@@ -257,8 +257,8 @@ export function resolvePostContent(
     ? undefined
     : bodyVideoUrl
     ? (getMediaTypeFromUrl(extractedUrl!) === "youtube"
-      ? ({ uri: extractedUrl!, type: "youtube" as const })
-      : ({ uri: bodyVideoUrl, type: "video" as const }))
+      ? ({ uri: extractedUrl!, type: "youtube" as const, width: primaryMedia?.width, height: primaryMedia?.height, aspectRatio: primaryMedia?.aspectRatio })
+      : ({ uri: bodyVideoUrl, type: "video" as const, width: primaryMedia?.width, height: primaryMedia?.height, aspectRatio: primaryMedia?.aspectRatio }))
     : primaryMedia
     ? {
         ...primaryMedia,

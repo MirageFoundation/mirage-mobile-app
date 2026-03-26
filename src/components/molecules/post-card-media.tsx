@@ -2,7 +2,8 @@ import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { Audio, AVPlaybackStatus, ResizeMode, Video } from "expo-av";
+import { useVideoPlayer, VideoView } from "expo-video";
+import { useEvent, useEventListener } from "expo";
 import { Image } from "expo-image";
 import {
   memo,
@@ -14,7 +15,6 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { type ImageLoadEventData } from "expo-image";
 import {
   ActivityIndicator,
   AppState,
@@ -44,7 +44,7 @@ import { useNetworkState } from "@/src/hooks/use-network-state";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const MEDIA_MAX_HEIGHT = 450;
-const MEDIA_HORIZONTAL_PADDING = 32; // md padding * 2
+const MEDIA_HORIZONTAL_PADDING = 32;
 
 export type PostCardMediaRef = {
   pauseVideo: () => void;
@@ -55,6 +55,7 @@ type PostCardMediaProps = {
   mediaList?: ResolvedMedia[];
   isVisible: boolean;
   isFocused?: boolean;
+  preloadNearby?: boolean;
   shouldBlurContent: boolean;
   hasMultipleMedia: boolean;
   extraMediaCount: number;
@@ -75,6 +76,12 @@ function getVideoThumbnailUri(uri?: string): string {
   if (uri.includes("cloudflarestream.com") || uri.includes("videodelivery.net")) {
     const match = uri.match(/(?:cloudflarestream\.com|videodelivery\.net)\/([a-zA-Z0-9]+)/);
     if (match?.[1]) return `https://videodelivery.net/${match[1]}/thumbnails/thumbnail.jpg?time=1s&width=480`;
+  }
+  if (uri.includes("redgifs.com") && uri.includes("-mobile.mp4")) {
+    return uri.replace("-mobile.mp4", "-poster.jpg");
+  }
+  if (uri.includes("redgifs.com") && uri.endsWith(".mp4")) {
+    return uri.replace(".mp4", "-poster.jpg");
   }
   return "";
 }
@@ -100,6 +107,7 @@ export const PostCardMedia = memo(
       mediaList,
       isVisible,
       isFocused = true,
+      preloadNearby = false,
       shouldBlurContent,
       hasMultipleMedia,
       extraMediaCount,
@@ -119,38 +127,25 @@ export const PostCardMedia = memo(
     const [isVideoProcessing, setIsVideoProcessing] = useState(false);
     const globalMuted = useVideoMuteStore((s) => s.isMuted);
     const toggleMute = useVideoMuteStore((s) => s.toggleMute);
-    const setMuted = useVideoMuteStore((s) => s.setMuted);
     const effectiveMuted = isPostDetail
       ? globalMuted
       : allowAutoplay
         ? (globalMuted || !isFocused)
         : globalMuted;
     const [mediaLoaded, setMediaLoaded] = useState(() => media?.uri ? MEDIA_LOADED_CACHE.has(media.uri) : false);
-    const [videoReadyForDisplay, setVideoReadyForDisplay] = useState(false);
-    const [videoPlaybackPrepared, setVideoPlaybackPrepared] = useState(
-      media?.type !== "video",
-    );
-    const [videoStartedPlayback, setVideoStartedPlayback] = useState(
-      media?.type !== "video",
-    );
-    const videoMuted = media?.type === "video" ? (effectiveMuted || !videoReadyForDisplay) : effectiveMuted;
-    const [showVideoPrepSpinner, setShowVideoPrepSpinner] = useState(false);
+    const [videoFirstFrameRendered, setVideoFirstFrameRendered] = useState(false);
     const [mediaRetryKey, setMediaRetryKey] = useState(0);
     const { isConnected } = useNetworkState();
-    const videoRef = useRef<Video | null>(null);
     const youtubeEmbedRef = useRef<YouTubeAutoplayEmbedRef | null>(null);
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const playRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pauseDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const videoPrepSpinnerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const videoErrorRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const videoErrorRetryCountRef = useRef(0);
 
     const aspectRatioLockedRef = useRef(false);
-    const userInitiatedPlayRef = useRef(false);
     const prevShouldBlurRef = useRef(shouldBlurContent);
     const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
-    const feedTapCooldownRef = useRef(false);
 
     const youtubeVideoId = media?.type === "youtube" ? (extractYouTubeVideoId(media.uri) ?? "") : "";
     const youtubePositionKey = youtubeVideoId
@@ -166,8 +161,167 @@ export const PostCardMedia = memo(
     const setPosition = useVideoPositionStore((s) => s.setPosition);
     const lastKnownYouTubeTimeRef = useRef(0);
     const hasRestoredPositionRef = useRef(false);
-    const currentVideoPositionRef = useRef(0);
+    const currentVideoTimeRef = useRef(0);
     const hasRestoredVideoPositionRef = useRef(false);
+
+    const resolvedMediaUri = media?.uri;
+    const isVideoType = media?.type === "video";
+    const isHls = !!resolvedMediaUri?.includes(".m3u8");
+
+    const shouldCreatePlayer = isVideoType && !shouldBlurContent && isVisible;
+    const videoSource = useMemo(
+      () => shouldCreatePlayer && resolvedMediaUri ? { uri: resolvedMediaUri, useCaching: !isHls } : null,
+      [shouldCreatePlayer, resolvedMediaUri, isHls],
+    );
+
+    const player = useVideoPlayer(videoSource, (p) => {
+      p.loop = true;
+      p.muted = true;
+      p.timeUpdateEventInterval = isPostDetail ? 0.25 : 0.5;
+    });
+
+    const { status: playerStatus } = useEvent(player, "statusChange", { status: player.status });
+    const { isPlaying: playerIsPlaying } = useEvent(player, "playingChange", { isPlaying: player.playing });
+
+    useEventListener(player, "sourceLoad", ({ availableVideoTracks }) => {
+      const track = availableVideoTracks?.[0];
+      if (track?.size?.width && track?.size?.height) {
+        updateMediaAspectRatioFromSize(track.size.width, track.size.height);
+      }
+    });
+
+    useEventListener(player, "timeUpdate", ({ currentTime }) => {
+      currentVideoTimeRef.current = currentTime;
+    });
+
+    useEffect(() => {
+      if (playerStatus === "readyToPlay") {
+        setMediaLoaded(true);
+        if (resolvedMediaUri) MEDIA_LOADED_CACHE.add(resolvedMediaUri);
+        setIsVideoLoading(false);
+        videoErrorRetryCountRef.current = 0;
+        if (videoErrorRetryRef.current) {
+          clearTimeout(videoErrorRetryRef.current);
+          videoErrorRetryRef.current = null;
+        }
+        if (isVideoProcessing) {
+          setIsVideoProcessing(false);
+        }
+        if (!hasRestoredVideoPositionRef.current && videoPositionKey) {
+          const saved = getPosition(videoPositionKey);
+          if (saved > 0.5) {
+            hasRestoredVideoPositionRef.current = true;
+            try { player.currentTime = saved; } catch {}
+          }
+        }
+      }
+      if (playerStatus === "loading") {
+        if (!resolvedMediaUri || !MEDIA_LOADED_CACHE.has(resolvedMediaUri)) {
+          setIsVideoLoading(true);
+        }
+      }
+      if (playerStatus === "error") {
+        const isCloudflare =
+          resolvedMediaUri?.includes("cloudflarestream.com") ||
+          resolvedMediaUri?.includes("videodelivery.net");
+        const isRedgifs = resolvedMediaUri?.includes("redgifs.com");
+        if (isCloudflare || isRedgifs) {
+          setIsVideoProcessing(true);
+          if (videoErrorRetryCountRef.current < 3) {
+            videoErrorRetryCountRef.current += 1;
+            if (videoErrorRetryRef.current) clearTimeout(videoErrorRetryRef.current);
+            videoErrorRetryRef.current = setTimeout(() => {
+              setIsVideoProcessing(false);
+              setImageError(false);
+              setIsVideoLoading(false);
+              setMediaRetryKey((k) => k + 1);
+            }, 2000 * videoErrorRetryCountRef.current);
+          } else {
+            if (videoErrorRetryRef.current) clearTimeout(videoErrorRetryRef.current);
+            videoErrorRetryRef.current = setTimeout(() => {
+              setIsVideoProcessing(false);
+            }, 5000);
+          }
+        } else {
+          setImageError(true);
+        }
+        setIsVideoLoading(false);
+      }
+    }, [playerStatus]);
+
+    useEffect(() => {
+      setIsVideoPlaying(playerIsPlaying);
+    }, [playerIsPlaying]);
+
+    const shouldVideoPlay =
+      isVideoType &&
+      !shouldBlurContent &&
+      (allowAutoplay || feedTappedToPlay) &&
+      isVisible &&
+      screenActive;
+
+    useEffect(() => {
+      if (!player) return;
+      try {
+        if (shouldVideoPlay) {
+          player.play();
+        } else {
+          player.pause();
+        }
+      } catch {}
+    }, [shouldVideoPlay, player]);
+
+    useEffect(() => {
+      if (!player) return;
+      try {
+        player.muted = effectiveMuted;
+      } catch {}
+    }, [effectiveMuted, player]);
+
+    const shouldShowVideoThumbnail = !!videoThumbnailUri && (
+      shouldBlurContent ||
+      !isVisible ||
+      !isVideoPlaying ||
+      playerStatus !== "readyToPlay" ||
+      !videoFirstFrameRendered
+    );
+
+    const prevScreenActiveRef = useRef(screenActive);
+    useEffect(() => {
+      if (!isVideoType || !videoPositionKey) return;
+      const wasInactive = !prevScreenActiveRef.current;
+      prevScreenActiveRef.current = screenActive;
+
+      if (!screenActive && currentVideoTimeRef.current > 0.5) {
+        setPosition(videoPositionKey, currentVideoTimeRef.current);
+      }
+      if (screenActive && wasInactive && player) {
+        hasRestoredVideoPositionRef.current = false;
+        const saved = getPosition(videoPositionKey);
+        if (saved > 0.5) {
+          hasRestoredVideoPositionRef.current = true;
+          try { player.currentTime = saved; } catch {}
+        }
+      }
+    }, [screenActive, isVideoType, videoPositionKey, setPosition, getPosition, player]);
+
+    useEffect(() => {
+      return () => {
+        if (videoPositionKey && currentVideoTimeRef.current > 0.5) {
+          useVideoPositionStore.getState().setPosition(videoPositionKey, currentVideoTimeRef.current);
+        }
+        if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+        if (playRetryRef.current) clearInterval(playRetryRef.current);
+        if (pauseDelayRef.current) clearTimeout(pauseDelayRef.current);
+        if (videoErrorRetryRef.current) clearTimeout(videoErrorRetryRef.current);
+      };
+    }, [videoPositionKey]);
+
+    const saveVideoPosition = useCallback(() => {
+      if (videoPositionKey && currentVideoTimeRef.current > 0.5) {
+        setPosition(videoPositionKey, currentVideoTimeRef.current);
+      }
+    }, [videoPositionKey, setPosition]);
 
     const saveYouTubePositionSync = useCallback(() => {
       if (!youtubePositionKey) return;
@@ -197,123 +351,18 @@ export const PostCardMedia = memo(
       lastKnownYouTubeTimeRef.current = seconds;
     }, []);
 
-    const saveVideoPosition = useCallback(() => {
-      if (media?.type !== "video" || !videoPositionKey) return;
-      const seconds = currentVideoPositionRef.current / 1000;
-      if (seconds > 0.5) setPosition(videoPositionKey, seconds);
-    }, [media?.type, videoPositionKey, setPosition]);
-
-    const saveVideoPositionFresh = useCallback(async () => {
-      if (media?.type !== "video" || !videoPositionKey) return;
-      try {
-        const status = await videoRef.current?.getStatusAsync();
-        if (status?.isLoaded) {
-          const seconds = status.positionMillis / 1000;
-          if (seconds > 0.5) setPosition(videoPositionKey, seconds);
-        }
-      } catch {
-        saveVideoPosition();
-      }
-    }, [media?.type, videoPositionKey, setPosition, saveVideoPosition]);
-
     useImperativeHandle(ref, () => ({
-      pauseVideo: async () => {
-        await saveVideoPositionFresh();
-        if (videoRef.current) {
-          videoRef.current.pauseAsync().catch(() => {});
+      pauseVideo: () => {
+        saveVideoPosition();
+        if (player) {
+          try { player.pause(); } catch {}
         }
         saveYouTubePositionSync();
         youtubeEmbedRef.current?.pause();
         setIsVideoPlaying(false);
         setIsVideoLoading(false);
-        userInitiatedPlayRef.current = false;
       },
     }));
-
-    useEffect(() => {
-      return () => {
-        if (media?.type === "video" && videoPositionKey && currentVideoPositionRef.current > 500) {
-          useVideoPositionStore.getState().setPosition(videoPositionKey, currentVideoPositionRef.current / 1000);
-        }
-        videoRef.current?.pauseAsync().catch(() => {});
-        if (loadingTimeoutRef.current) {
-          clearTimeout(loadingTimeoutRef.current);
-        }
-        if (playRetryRef.current) {
-          clearInterval(playRetryRef.current);
-        }
-        if (pauseDelayRef.current) {
-          clearTimeout(pauseDelayRef.current);
-        }
-        if (videoPrepSpinnerTimeoutRef.current) {
-          clearTimeout(videoPrepSpinnerTimeoutRef.current);
-        }
-        if (videoErrorRetryRef.current) {
-          clearTimeout(videoErrorRetryRef.current);
-        }
-      };
-    }, [media?.type, videoPositionKey]);
-
-    const resolvedMediaUri = media?.uri;
-
-    const resolvedMediaUriRef = useRef(resolvedMediaUri);
-    useEffect(() => {
-      const uriChanged = resolvedMediaUriRef.current !== resolvedMediaUri;
-      resolvedMediaUriRef.current = resolvedMediaUri;
-      if (uriChanged) {
-        hasRestoredVideoPositionRef.current = false;
-        currentVideoPositionRef.current = 0;
-        setVideoReadyForDisplay(false);
-        setVideoPlaybackPrepared(media?.type !== "video");
-        setVideoStartedPlayback(media?.type !== "video");
-        setShowVideoPrepSpinner(false);
-        const wasLoaded = resolvedMediaUri ? MEDIA_LOADED_CACHE.has(resolvedMediaUri) : false;
-        setMediaLoaded(wasLoaded);
-        if (!wasLoaded) {
-          if (loadingTimeoutRef.current) {
-            clearTimeout(loadingTimeoutRef.current);
-          }
-          loadingTimeoutRef.current = setTimeout(() => {
-            setMediaLoaded(true);
-            if (resolvedMediaUri) MEDIA_LOADED_CACHE.add(resolvedMediaUri);
-            setIsVideoLoading(false);
-          }, 8000);
-        }
-      }
-    }, [resolvedMediaUri]);
-
-    useEffect(() => {
-      const needsVideoPrep =
-        media?.type === "video" &&
-        isVideoPlaying &&
-        !videoReadyForDisplay &&
-        !shouldBlurContent;
-
-      if (!needsVideoPrep) {
-        setShowVideoPrepSpinner(false);
-        if (videoPrepSpinnerTimeoutRef.current) {
-          clearTimeout(videoPrepSpinnerTimeoutRef.current);
-          videoPrepSpinnerTimeoutRef.current = null;
-        }
-        return;
-      }
-
-      if (videoPrepSpinnerTimeoutRef.current) {
-        clearTimeout(videoPrepSpinnerTimeoutRef.current);
-      }
-
-      videoPrepSpinnerTimeoutRef.current = setTimeout(() => {
-        setShowVideoPrepSpinner(true);
-        videoPrepSpinnerTimeoutRef.current = null;
-      }, 220);
-
-      return () => {
-        if (videoPrepSpinnerTimeoutRef.current) {
-          clearTimeout(videoPrepSpinnerTimeoutRef.current);
-          videoPrepSpinnerTimeoutRef.current = null;
-        }
-      };
-    }, [media?.type, isVideoPlaying, videoStartedPlayback, shouldBlurContent]);
 
     const cachedAspectRatio = resolvedMediaUri
       ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
@@ -344,7 +393,6 @@ export const PostCardMedia = memo(
       if (!isPlayable || shouldBlurContent) {
         setIsVideoPlaying(false);
         setIsVideoLoading(false);
-        userInitiatedPlayRef.current = false;
         prevShouldBlurRef.current = shouldBlurContent;
         return;
       }
@@ -354,7 +402,6 @@ export const PostCardMedia = memo(
 
       if (wasBlurred && !shouldBlurContent && screenActive && canAutoPlayCurrentMedia) {
         setIsVideoPlaying(true);
-        videoRef.current?.playAsync().catch(() => {});
       }
 
       if (isVisible && screenActive && canAutoPlayCurrentMedia) {
@@ -392,8 +439,6 @@ export const PostCardMedia = memo(
         }
         setIsVideoPlaying(false);
         setIsVideoLoading(false);
-        userInitiatedPlayRef.current = false;
-        videoRef.current?.pauseAsync().catch(() => {});
       } else if (!isVisible) {
         if (!pauseDelayRef.current) {
           pauseDelayRef.current = setTimeout(() => {
@@ -405,8 +450,6 @@ export const PostCardMedia = memo(
             }
             setIsVideoPlaying(false);
             setIsVideoLoading(false);
-            userInitiatedPlayRef.current = false;
-            videoRef.current?.pauseAsync().catch(() => {});
           }, 400);
         }
       }
@@ -422,27 +465,6 @@ export const PostCardMedia = memo(
     ]);
 
     const shouldAutoPlayYouTube = Platform.OS === "android" && allowAutoplay;
-
-    useEffect(() => {
-      if (videoRef.current && media?.type === "video") {
-        videoRef.current.setStatusAsync({ isMuted: videoMuted }).catch(() => {});
-      }
-    }, [videoMuted, media?.type]);
-
-    const wasScreenInactiveForVideoRef = useRef(false);
-    useEffect(() => {
-      if (media?.type !== "video" || !videoPositionKey) return;
-      if (!screenActive) {
-        wasScreenInactiveForVideoRef.current = true;
-        saveVideoPositionFresh();
-      } else if (wasScreenInactiveForVideoRef.current) {
-        wasScreenInactiveForVideoRef.current = false;
-        const saved = getPosition(videoPositionKey);
-        if (saved > 0.5) {
-          videoRef.current?.setStatusAsync({ positionMillis: saved * 1000 }).catch(() => {});
-        }
-      }
-    }, [screenActive, media?.type, videoPositionKey, getPosition, saveVideoPositionFresh]);
 
     const shouldUseAndroidYouTubeEmbed =
       media?.type === "youtube" && Platform.OS === "android";
@@ -477,49 +499,22 @@ export const PostCardMedia = memo(
       [resolvedMediaUri],
     );
 
-    const shouldAutoStartVideo =
-      media?.type === "video" &&
-      isVisible &&
-      screenActive &&
-      !shouldBlurContent &&
-      (allowAutoplay || feedTappedToPlay);
-
-    const handleVideoToggle = useCallback(async () => {
-      if (media?.type !== "video") return;
+    const handleVideoToggle = useCallback(() => {
+      if (!isVideoType || !player) return;
       if (shouldBlurContent) {
         onRevealContent?.();
         return;
       }
-
       try {
-        const status = await videoRef.current?.getStatusAsync();
-        if (!status || !status.isLoaded) {
-          userInitiatedPlayRef.current = true;
-          setIsVideoLoading(true);
-          setIsVideoPlaying(true);
-          return;
-        }
-        if (status.isPlaying) {
-          await videoRef.current?.pauseAsync();
+        if (isVideoPlaying) {
+          player.pause();
           setIsVideoPlaying(false);
-          setIsVideoLoading(false);
-          userInitiatedPlayRef.current = false;
-          return;
-        }
-        userInitiatedPlayRef.current = true;
-        if (status.didJustFinish) {
-          setIsVideoLoading(true);
-          await videoRef.current?.replayAsync();
         } else {
-          setIsVideoLoading(true);
-          await videoRef.current?.playAsync();
+          player.play();
+          setIsVideoPlaying(true);
         }
-        setIsVideoPlaying(true);
-      } catch {
-        setIsVideoLoading(false);
-        userInitiatedPlayRef.current = false;
-      }
-    }, [media?.type, onRevealContent, shouldBlurContent]);
+      } catch {}
+    }, [isVideoType, shouldBlurContent, onRevealContent, isVideoPlaying, player]);
 
     const handleFeedVideoTap = useCallback(
       (event: GestureResponderEvent) => {
@@ -535,10 +530,10 @@ export const PostCardMedia = memo(
           return;
         }
         triggerHaptic("selection");
-        saveVideoPositionFresh();
+        saveVideoPosition();
         onMediaPress?.();
       },
-      [isPostDetail, shouldBlurContent, onRevealContent, allowAutoplay, isVideoPlaying, feedTappedToPlay, handleVideoToggle, onMediaPress, saveVideoPositionFresh],
+      [isPostDetail, shouldBlurContent, onRevealContent, allowAutoplay, isVideoPlaying, feedTappedToPlay, handleVideoToggle, onMediaPress, saveVideoPosition],
     );
 
     const handleFeedYouTubeTap = useCallback(
@@ -559,32 +554,6 @@ export const PostCardMedia = memo(
       [isPostDetail, shouldBlurContent, onRevealContent, shouldAutoPlayYouTube, isVideoPlaying, feedTappedToPlay, onMediaPress],
     );
 
-    const resolvedMediaUriForCacheRef = useRef(media?.uri);
-    resolvedMediaUriForCacheRef.current = media?.uri;
-
-    const handlePlaybackStatusUpdate = useCallback(
-      (status: AVPlaybackStatus) => {
-        if (!status.isLoaded) {
-          return;
-        }
-        currentVideoPositionRef.current = status.positionMillis;
-        if (status.isPlaying && !status.isBuffering) {
-          setVideoStartedPlayback(true);
-          setShowVideoPrepSpinner(false);
-          setIsVideoLoading(false);
-          setMediaLoaded(true);
-          if (resolvedMediaUriForCacheRef.current) MEDIA_LOADED_CACHE.add(resolvedMediaUriForCacheRef.current);
-          userInitiatedPlayRef.current = false;
-        } else if (status.isBuffering && !status.isPlaying) {
-          const uri = resolvedMediaUriForCacheRef.current;
-          if (!uri || !MEDIA_LOADED_CACHE.has(uri)) {
-            setIsVideoLoading(true);
-          }
-        }
-      },
-      [],
-    );
-
     const handleVideoPress = useCallback(
       (event: GestureResponderEvent) => {
         event.stopPropagation?.();
@@ -594,21 +563,14 @@ export const PostCardMedia = memo(
     );
 
     const handleMuteToggle = useCallback(
-      async (event: GestureResponderEvent) => {
+      (event: GestureResponderEvent) => {
         event.stopPropagation?.();
         triggerHaptic("light");
-        const newGlobalMuted = !globalMuted;
         toggleMute();
-
-        if (!newGlobalMuted) {
-          await Audio.setAudioModeAsync({
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-          }).catch(() => {});
-        }
 
         if (media?.type === "youtube") {
           if (shouldUseAndroidYouTubeEmbed) {
+            const newGlobalMuted = !globalMuted;
             const newEffective = isPostDetail
               ? newGlobalMuted
               : allowAutoplay
@@ -618,26 +580,8 @@ export const PostCardMedia = memo(
           }
           return;
         }
-
-        if (videoRef.current) {
-          try {
-            const newEffective = isPostDetail
-              ? newGlobalMuted
-              : allowAutoplay
-                ? (newGlobalMuted || !isFocused)
-                : newGlobalMuted;
-            const newVideoMuted = newEffective || !videoReadyForDisplay;
-            if (!newVideoMuted) {
-              await videoRef.current.pauseAsync();
-              await videoRef.current.setStatusAsync({ isMuted: false });
-              await videoRef.current.playAsync();
-            } else {
-              await videoRef.current.setStatusAsync({ isMuted: true });
-            }
-          } catch {}
-        }
       },
-      [globalMuted, toggleMute, media?.type, shouldUseAndroidYouTubeEmbed, isFocused, isPostDetail, allowAutoplay, videoReadyForDisplay],
+      [globalMuted, toggleMute, media?.type, shouldUseAndroidYouTubeEmbed, isFocused, isPostDetail, allowAutoplay],
     );
 
     const handleYouTubeTogglePlay = useCallback(
@@ -687,9 +631,10 @@ export const PostCardMedia = memo(
         }
         triggerHaptic("selection");
         saveVideoPosition();
+        if (player) try { player.pause(); } catch {}
         onMediaPress?.();
       },
-      [shouldBlurContent, onRevealContent, onMediaPress, saveVideoPosition],
+      [shouldBlurContent, onRevealContent, onMediaPress, saveVideoPosition, player],
     );
 
     const isCloudflareVideo =
@@ -704,6 +649,7 @@ export const PostCardMedia = memo(
     const wasBackgroundedRef = useRef(false);
 
     useEffect(() => {
+      if (!isVideoType) return;
       const sub = AppState.addEventListener("change", (nextState) => {
         if (nextState === "background") {
           wasBackgroundedRef.current = true;
@@ -720,7 +666,7 @@ export const PostCardMedia = memo(
         }
       });
       return () => sub.remove();
-    }, [isVideoProcessing, imageError, isRetryableVideo]);
+    }, [isVideoType, isVideoProcessing, imageError, isRetryableVideo]);
 
     useEffect(() => {
       if (!isConnected) {
@@ -789,14 +735,6 @@ export const PostCardMedia = memo(
           </View>
         </View>
       );
-    }
-
-    if (
-      __DEV__ &&
-      (media.uri?.includes("cloudflarestream") ||
-        media.uri?.includes("videodelivery"))
-    ) {
-      // console.log("[PostCardMedia] Rendering video:", media.uri, "type:", media.type, "imageError:", imageError, "isVideoProcessing:", isVideoProcessing);
     }
 
     return (
@@ -937,118 +875,28 @@ export const PostCardMedia = memo(
             </>
           ) : media.type === "video" ? (
             <Pressable onPress={isPostDetail ? handleMediaPress : handleFeedVideoTap} style={styles.media}>
-              {videoThumbnailUri && !videoReadyForDisplay ? (
-                <>
-                  <Image
-                    source={{ uri: videoThumbnailUri }}
-                    style={[styles.media, { position: "absolute", zIndex: 1 }]}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    recyclingKey={videoThumbnailUri}
-                    onLoad={({ source }) => {
-                      updateMediaAspectRatioFromSize(source?.width, source?.height);
-                    }}
-                  />
-                  {showVideoPrepSpinner ? (
-                    <View style={styles.playOverlay} pointerEvents="none">
-                      <View style={styles.loadingContainer}>
-                        <ActivityIndicator size="small" color="#fff" />
-                      </View>
-                    </View>
-                  ) : null}
-                </>
+              {shouldShowVideoThumbnail ? (
+                <Image
+                  source={{ uri: videoThumbnailUri }}
+                  style={[styles.media, { position: "absolute", zIndex: 1 }]}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  recyclingKey={videoThumbnailUri}
+                  onLoad={({ source }) => {
+                    updateMediaAspectRatioFromSize(source?.width, source?.height);
+                  }}
+                />
               ) : null}
-              <Video
-                key={mediaRetryKey}
-                ref={videoRef}
-                source={mediaSource}
+              <VideoView
+                player={player}
                 style={styles.media}
-                resizeMode={ResizeMode.COVER}
-                shouldPlay={videoPlaybackPrepared && isVideoPlaying && screenActive}
-                isLooping={true}
-                isMuted={videoMuted}
-                useNativeControls={false}
-                progressUpdateIntervalMillis={100}
-              onLoad={() => {
+                contentFit="cover"
+                nativeControls={false}
+                useExoShutter={false}
+                onFirstFrameRender={() => {
+                  setVideoFirstFrameRendered(true);
                   setMediaLoaded(true);
                   if (resolvedMediaUri) MEDIA_LOADED_CACHE.add(resolvedMediaUri);
-                  void (async () => {
-                    if (!videoRef.current) return;
-
-                    if (!hasRestoredVideoPositionRef.current && videoPositionKey) {
-                      const saved = getPosition(videoPositionKey);
-                      if (saved > 0.5) {
-                        hasRestoredVideoPositionRef.current = true;
-                        await videoRef.current.setStatusAsync({
-                          positionMillis: saved * 1000,
-                          shouldPlay: false,
-                          isMuted: true,
-                        }).catch(() => {});
-                        return;
-                      }
-                    }
-
-                    await videoRef.current.setStatusAsync({
-                      shouldPlay: false,
-                      isMuted: true,
-                    }).catch(() => {});
-                  })();
-                }}
-                onReadyForDisplay={(event) => {
-                  const { width, height } = event.naturalSize ?? {};
-                  updateMediaAspectRatioFromSize(width, height);
-                  setVideoReadyForDisplay(true);
-                  setVideoPlaybackPrepared(true);
-                  setMediaLoaded(true);
-                  if (resolvedMediaUri) MEDIA_LOADED_CACHE.add(resolvedMediaUri);
-                  if (userInitiatedPlayRef.current) {
-                    setIsVideoLoading(false);
-                    userInitiatedPlayRef.current = false;
-                  }
-                  if (isVideoProcessing) {
-                    setIsVideoProcessing(false);
-                  }
-                  videoErrorRetryCountRef.current = 0;
-                  if (videoErrorRetryRef.current) {
-                    clearTimeout(videoErrorRetryRef.current);
-                    videoErrorRetryRef.current = null;
-                  }
-                }}
-                onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-                onError={(error) => {
-                  if (__DEV__) {
-                    console.log(
-                      "[PostCardMedia] Video error:",
-                      error,
-                      "uri:",
-                      mediaSource.uri,
-                    );
-                  }
-                  const isCloudflare =
-                    mediaSource.uri?.includes("cloudflarestream.com") ||
-                    mediaSource.uri?.includes("videodelivery.net");
-                  const isRedgifs = mediaSource.uri?.includes("redgifs.com");
-                  if (isCloudflare || isRedgifs) {
-                    setIsVideoProcessing(true);
-                    if (videoErrorRetryCountRef.current < 3) {
-                      videoErrorRetryCountRef.current += 1;
-                      if (videoErrorRetryRef.current) clearTimeout(videoErrorRetryRef.current);
-                      videoErrorRetryRef.current = setTimeout(() => {
-                        setIsVideoProcessing(false);
-                        setImageError(false);
-                        setIsVideoLoading(false);
-                        setMediaRetryKey((k) => k + 1);
-                      }, 2000 * videoErrorRetryCountRef.current);
-                    } else {
-                      if (videoErrorRetryRef.current) clearTimeout(videoErrorRetryRef.current);
-                      videoErrorRetryRef.current = setTimeout(() => {
-                        setIsVideoProcessing(false);
-                      }, 5000);
-                    }
-                  } else {
-                    setImageError(true);
-                  }
-                  setIsVideoLoading(false);
                 }}
               />
             </Pressable>
@@ -1094,14 +942,14 @@ export const PostCardMedia = memo(
                       onPress={handleVideoPress}
                       style={styles.videoTapArea}
                     />
-                    {(isVideoLoading && !(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri))) || (isVideoPlaying && !mediaLoaded && !(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri))) ? (
+                    {playerStatus === "loading" && !(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri)) ? (
                       <View
                         style={styles.loadingContainer}
                         pointerEvents="none"
                       >
                         <ActivityIndicator size="small" color="#fff" />
                       </View>
-                    ) : !isVideoPlaying ? (
+                    ) : !isVideoPlaying && playerStatus === "readyToPlay" ? (
                       <View style={styles.playButton} pointerEvents="none">
                         <Ionicons name="play" size={28} color="#fff" />
                       </View>
@@ -1113,7 +961,7 @@ export const PostCardMedia = memo(
                       onPress={handleFeedVideoTap}
                       style={styles.videoTapArea}
                     />
-                    {(isVideoLoading && !(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri))) || (isVideoPlaying && !mediaLoaded && !(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri))) ? (
+                    {playerStatus === "loading" && !(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri)) ? (
                       <View style={styles.loadingContainer}>
                         <ActivityIndicator size="small" color="#fff" />
                       </View>
@@ -1147,7 +995,6 @@ export const PostCardMedia = memo(
               </Pressable>
             )}
 
-          {/* Mute/Unmute button for videos */}
           {(media.type === "video" || media.type === "youtube") &&
             !shouldBlurContent &&
             (media.type !== "video" || !isVideoProcessing) &&
@@ -1231,7 +1078,6 @@ export const PostCardMedia = memo(
             </View>
           )}
 
-          {/* Blur overlay with reveal button */}
           {shouldBlurContent && (
             <Pressable onPress={onRevealContent} style={styles.blurOverlay}>
               {Platform.OS === "ios" ? (
@@ -1258,7 +1104,6 @@ export const PostCardMedia = memo(
             </Pressable>
           )}
 
-          {/* Video badge - placed after blur so it's always visible */}
           {media.type === "video" && (
             <View style={styles.videoBadge}>
               <Text size="xs" weight="bold" style={{ color: "#fff" }}>
@@ -1267,7 +1112,6 @@ export const PostCardMedia = memo(
             </View>
           )}
 
-          {/* GIF badge - placed after blur so it's always visible */}
           {media.type === "gif" && (
             <View style={styles.gifBadge}>
               <Text size="xs" weight="bold" style={{ color: "#fff" }}>
@@ -1276,7 +1120,6 @@ export const PostCardMedia = memo(
             </View>
           )}
 
-          {/* Image badge - placed after blur so it's always visible */}
           {media.type === "image" && (
             <View style={styles.imageBadge}>
               <Text size="xs" weight="bold" style={{ color: "#fff" }}>

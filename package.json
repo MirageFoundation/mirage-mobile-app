@@ -1,7 +1,7 @@
 {
   "name": "mirage",
   "main": "index.ts",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "scripts": {
     "start": "expo start",
     "postinstall": "patch-package",
@@ -35,7 +35,6 @@
     "color": "^5.0.3",
     "drizzle-orm": "^0.45.1",
     "expo": "~54.0.30",
-    "expo-av": "~16.0.8",
     "expo-background-fetch": "^14.0.9",
     "expo-blur": "~15.0.8",
     "expo-build-properties": "~1.0.10",
@@ -66,6 +65,7 @@
     "expo-system-ui": "~6.0.9",
     "expo-task-manager": "^14.0.9",
     "expo-updates": "~29.0.15",
+    "expo-video": "~3.0.16",
     "expo-video-thumbnails": "~10.0.8",
     "expo-web-browser": "~15.0.10",
     "fast-text-encoding": "^1.0.6",

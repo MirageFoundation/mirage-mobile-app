@@ -66,12 +66,15 @@ const HomePostListInner = function HomePostListInner(
   const onItemVisibleRef = useRef(onItemVisible);
   onItemVisibleRef.current = onItemVisible;
 
+  const dataRef = useRef(data);
+  dataRef.current = data;
+
   const feedScreenRef = useRef(feedContext);
   feedScreenRef.current = feedContext;
 
   const viewabilityConfig = useRef({
-    viewAreaCoveragePercentThreshold: 20,
-    minimumViewTime: 150,
+    itemVisiblePercentThreshold: 10,
+    minimumViewTime: 100,
   }).current;
 
   const pendingViewableRef = useRef<ViewToken[] | null>(null);
@@ -89,7 +92,7 @@ const HomePostListInner = function HomePostListInner(
 
     const visibleItems = items.filter((item) => item.isViewable && item.item?.id);
     if (visibleItems.length === 0) {
-      setVideoViewability(feedScreenRef.current, new Set(), null);
+      setVideoViewability(feedScreenRef.current, new Set(), new Set(), null);
       return;
     }
     const videoItems = visibleItems.filter(
@@ -105,19 +108,30 @@ const HomePostListInner = function HomePostListInner(
         .sort((a, b) => a - b);
       const mid = Math.floor((sortedIndices.length - 1) / 2);
       const centerIndex = sortedIndices[mid] ?? 0;
-      const visibleSpan = (sortedIndices[sortedIndices.length - 1] ?? 0) - (sortedIndices[0] ?? 0);
-      const maxDist = Math.max(1, visibleSpan * 0.35);
 
       let best = videoItems[0];
       let bestDist = Math.abs((best.index ?? 0) - centerIndex);
       for (let i = 1; i < videoItems.length; i++) {
         const d = Math.abs((videoItems[i].index ?? 0) - centerIndex);
-        if (d < bestDist) { best = videoItems[i]; bestDist = d; }
+        if (d < bestDist) {
+          best = videoItems[i];
+          bestDist = d;
+        }
       }
-      activeId = bestDist <= maxDist ? best.item.id : null;
+      activeId = best.item.id;
     }
 
-    setVideoViewability(feedScreenRef.current, visibleVideoIds, activeId);
+    const warmVideoIds = new Set<string>(visibleVideoIds);
+    const warmMinIndex = Math.max(0, Math.min(...visibleItems.map((v) => v.index ?? 0)) - 2);
+    const warmMaxIndex = Math.min(dataRef.current.length - 1, Math.max(...visibleItems.map((v) => v.index ?? 0)) + 2);
+    for (let i = warmMinIndex; i <= warmMaxIndex; i++) {
+      const post = dataRef.current[i];
+      if (post && postHasPlayableVideo(post)) {
+        warmVideoIds.add(post.id);
+      }
+    }
+
+    setVideoViewability(feedScreenRef.current, visibleVideoIds, warmVideoIds, activeId);
 
     const maxIndex = items.reduce((max, item) => {
       if (item.isViewable && item.index != null && item.index > max) return item.index;
@@ -176,7 +190,7 @@ const HomePostListInner = function HomePostListInner(
 
   useEffect(() => {
     if (data.length !== 0) return;
-    setVideoViewability(feedContext, new Set(), null);
+    setVideoViewability(feedContext, new Set(), new Set(), null);
   }, [data, feedContext, setVideoViewability]);
 
   useAppState({
@@ -186,7 +200,7 @@ const HomePostListInner = function HomePostListInner(
         clearTimeout(itemVisibleTimerRef.current);
         itemVisibleTimerRef.current = null;
       }
-      setVideoViewability(feedScreenRef.current, new Set(), null);
+      setVideoViewability(feedScreenRef.current, new Set(), new Set(), null);
     },
     onForeground: () => {
       cancelDeferredFlush();
@@ -237,7 +251,7 @@ const HomePostListInner = function HomePostListInner(
       keyExtractor={keyExtractor}
       getItemType={getItemType}
       estimatedItemSize={ESTIMATED_ITEM_SIZE}
-      drawDistance={Platform.OS === "android" ? 1500 : 2000}
+      drawDistance={Platform.OS === "android" ? 900 : 1200}
       onScroll={onScroll}
       scrollEventThrottle={Platform.OS === "ios" ? 64 : 32}
       showsVerticalScrollIndicator={false}
