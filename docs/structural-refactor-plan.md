@@ -450,6 +450,11 @@ Goal: keep the architecture clean after the refactor.
 - [x] Continued breaking up `src/pages/annotate-screen.tsx` by extracting annotate header, post summary, tag modal, media section, and basic override sections into `src/pages/annotate/*`
 - [x] Continue follow-on cleanup for remaining still-large screens (`user-profile-screen`, `topic-feed-screen`, `saved-posts-screen`, `annotate-screen`) as needed
 
+### Phase 6 progress
+- [x] Consolidated duplicated feed background/foreground refresh timers into `src/hooks/use-feed-resume-refresh.ts` so feed resume work is focus-aware and no longer orchestrated separately inside `home-screen` and `following-screen`
+- [x] Replaced repeated home-post-card sync effects in `home-screen`, `following-screen`, and `topic-feed-screen` with `src/hooks/use-home-post-card-bindings.ts` plus a batched `syncFeedContext` store action
+- [x] Removed per-render handler-ref synchronization in the main feed screens by memoizing feed action handlers and binding them declaratively through the shared hook
+
 ### Phase 7 progress
 - [x] Added import-boundary lint protection for `src/stores/*` in `eslint.config.js`
 - [x] Added file-size reporting via `tools/check-file-sizes.mjs`

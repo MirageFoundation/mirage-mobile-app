@@ -70,4 +70,6 @@ export { useNewPostsChecker } from "./use-new-posts-checker";
 export {
   usePostDataRefresher,
 } from "./use-post-data-refresher";
+export { useHomePostCardBindings } from "./use-home-post-card-bindings";
+export { useFeedResumeRefresh } from "./use-feed-resume-refresh";
 export { useRouter } from "./use-router";

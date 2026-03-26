@@ -1,7 +1,6 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Sentry from "@sentry/react-native";
-import { useFocusEffect } from "@react-navigation/native";
 import type { FlashListRef } from "@shopify/flash-list";
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/navigation/guarded-router";
@@ -32,6 +31,7 @@ import {
   useBlockHandler,
   useDeleteHandler,
   useFollowHandler,
+  useHomePostCardBindings,
   useNetworkState,
   useReportHandler,
   useVoteHandler,
@@ -454,10 +454,10 @@ export function TopicFeedScreen() {
   const handleRevealContent = useCallback(
     (postId: string) => {
       setRevealedPosts((prev) => {
-        const newSet = new Set(prev);
-        newSet.add(postId);
-        revealedPostsRef.current = newSet;
-        return newSet;
+        const nextRevealedPosts = new Set(prev);
+        nextRevealedPosts.add(postId);
+        revealedPostsRef.current = nextRevealedPosts;
+        return nextRevealedPosts;
       });
     },
     [],
@@ -598,159 +598,58 @@ export function TopicFeedScreen() {
     [handleRefresh, insets.top],
   );
 
-  const setCurrentUserId = useHomePostCardStore(
-    (state) => state.setCurrentUserId,
-  );
-  const setFollowedUsersStore = useHomePostCardStore(
-    (state) => state.setFollowedUsers,
-  );
-  const setFollowedTopicsStore = useHomePostCardStore(
-    (state) => state.setFollowedTopics,
-  );
-  const setRevealedPostsStore = useHomePostCardStore(
-    (state) => state.setRevealedPosts,
-  );
-  const setHandlers = useHomePostCardStore((state) => state.setHandlers);
-  const setShareServerStore = useHomePostCardStore(
-    (state) => state.setShareServer,
-  );
-  const setAllowAutoplay = useHomePostCardStore(
-    (state) => state.setAllowAutoplay,
-  );
-  const setActiveFeedScreen = useHomePostCardStore(
-    (state) => state.setActiveFeedScreen,
-  );
-  const setDisabledTopicName = useHomePostCardStore(
-    (state) => state.setDisabledTopicName,
-  );
-
-  const followedUsersSet = useMemo(
-    () => new Set(followedUsers),
-    [followedUsers],
-  );
-  const followedTopicsSet = useMemo(
-    () => new Set(followedTopics),
-    [followedTopics],
-  );
-
   const allowAutoplay = useMemo(
     () =>
       shouldAutoplayVideo(autoPlayVideos, videoAutoplayNetwork, networkType),
     [autoPlayVideos, videoAutoplayNetwork, networkType],
   );
 
-  useEffect(() => {
-    setCurrentUserId(currentUser?.id);
-  }, [currentUser?.id, setCurrentUserId]);
-
-  useEffect(() => {
-    setFollowedUsersStore(followedUsersSet);
-  }, [followedUsersSet, setFollowedUsersStore]);
-
-  useEffect(() => {
-    setFollowedTopicsStore(followedTopicsSet);
-  }, [followedTopicsSet, setFollowedTopicsStore]);
-
-  useEffect(() => {
-    setRevealedPostsStore(revealedPosts);
-  }, [revealedPosts, setRevealedPostsStore]);
-
-  useEffect(() => {
-    setShareServerStore(shareServer);
-  }, [shareServer, setShareServerStore]);
-
-  useEffect(() => {
-    setAllowAutoplay(allowAutoplay);
-  }, [allowAutoplay, setAllowAutoplay]);
-
-  useFocusEffect(
-    useCallback(() => {
-      setActiveFeedScreen("topic");
-      setDisabledTopicName(topicName);
-      useTimeTickStore.getState().bump();
-      return () => {
-        const current = useHomePostCardStore.getState().activeFeedScreen;
-        if (current === "topic") {
-          setActiveFeedScreen(null);
-        }
-      };
-    }, [setActiveFeedScreen, setDisabledTopicName, topicName]),
-  );
-
-  const handlersRef = useRef({
-    handlePostPress,
-    handleAuthorPress,
-    handleTopicPress,
-    handleMorePress,
-    handleUpvote,
-    handleDownvote,
-    handleCommentPress,
-    handleFollowPress,
-    handleFollowTopicFromCard,
-    handleRevealContent,
-    handleBlockUserFromCard,
-    handleBlockPostFromCard,
-    handleBlockTopicFromCard,
-    handleReportFromCard,
-  });
-
-  useEffect(() => {
-    handlersRef.current = {
-      handlePostPress,
+  const homePostCardHandlers = useMemo(
+    () => ({
+      onPostPress: handlePostPress,
+      onAuthorPress: handleAuthorPress,
+      onTopicPress: handleTopicPress,
+      onMorePress: handleMorePress,
+      onLikePress: handleUpvote,
+      onDislikePress: handleDownvote,
+      onCommentPress: handleCommentPress,
+      onFollowUser: handleFollowPress,
+      onFollowTopic: handleFollowTopicFromCard,
+      onRevealContent: handleRevealContent,
+      onBlockUser: handleBlockUserFromCard,
+      onBlockPost: handleBlockPostFromCard,
+      onBlockTopic: handleBlockTopicFromCard,
+      onReport: handleReportFromCard,
+    }),
+    [
       handleAuthorPress,
-      handleTopicPress,
-      handleMorePress,
-      handleUpvote,
-      handleDownvote,
-      handleCommentPress,
-      handleFollowPress,
-      handleFollowTopicFromCard,
-      handleRevealContent,
-      handleBlockUserFromCard,
       handleBlockPostFromCard,
       handleBlockTopicFromCard,
+      handleBlockUserFromCard,
+      handleCommentPress,
+      handleDownvote,
+      handleFollowPress,
+      handleFollowTopicFromCard,
+      handleMorePress,
+      handlePostPress,
       handleReportFromCard,
-    };
-  });
-
-  useFocusEffect(
-    useCallback(() => {
-      setHandlers({
-        onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
-        onAuthorPress: (authorId) =>
-          handlersRef.current.handleAuthorPress(authorId),
-        onTopicPress: (topic) => handlersRef.current.handleTopicPress(topic),
-        onMorePress: (post) => handlersRef.current.handleMorePress(post),
-        onLikePress: (postId, liked, disliked, likes) =>
-          handlersRef.current.handleUpvote(postId, liked, disliked, likes),
-        onDislikePress: (postId, liked, disliked, likes) =>
-          handlersRef.current.handleDownvote(postId, liked, disliked, likes),
-        onCommentPress: (postId) =>
-          handlersRef.current.handleCommentPress(postId),
-        onFollowUser: (authorId, username, isFollowing) =>
-          handlersRef.current.handleFollowPress(
-            authorId,
-            username,
-            isFollowing,
-          ),
-        onFollowTopic: (topic, isFollowed) =>
-          handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
-        onRevealContent: (postId) =>
-          handlersRef.current.handleRevealContent(postId),
-        onBlockUser: (postId, authorId, authorUsername) =>
-          handlersRef.current.handleBlockUserFromCard(
-            postId,
-            authorId,
-            authorUsername,
-          ),
-        onBlockPost: (postId) =>
-          handlersRef.current.handleBlockPostFromCard(postId),
-        onBlockTopic: (postId, topic) =>
-          handlersRef.current.handleBlockTopicFromCard(postId, topic),
-        onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
-      });
-    }, [setHandlers]),
+      handleRevealContent,
+      handleTopicPress,
+      handleUpvote,
+    ],
   );
+
+  useHomePostCardBindings({
+    currentUserId: currentUser?.id,
+    followedUsers,
+    followedTopics,
+    revealedPosts,
+    shareServer,
+    allowAutoplay,
+    activeFeedScreen: "topic",
+    disabledTopicName: topicName,
+    handlers: homePostCardHandlers,
+  });
 
   return (
     <Box flex background="base">

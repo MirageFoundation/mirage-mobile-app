@@ -45,6 +45,15 @@ type HomePostCardHandlers = {
   onReport?: (postId: string) => void;
 };
 
+type HomePostCardSyncContext = {
+  currentUserId?: string;
+  followedUsers: Set<string>;
+  followedTopics: Set<string>;
+  revealedPosts: Set<string>;
+  shareServer: ShareServer;
+  allowAutoplay: boolean;
+};
+
 type HomePostCardState = {
   currentUserId?: string;
   followedUsers: Set<string>;
@@ -84,6 +93,7 @@ type HomePostCardState = {
   incrementCommentCount: (postId: string) => void;
   decrementCommentCount: (postId: string) => void;
   clearCommentCountOverride: (postId: string) => void;
+  syncFeedContext: (context: HomePostCardSyncContext) => void;
   setHandlers: (handlers: HomePostCardHandlers) => void;
   setShareServer: (server: ShareServer) => void;
   setAllowAutoplay: (allow: boolean) => void;
@@ -97,6 +107,39 @@ type HomePostCardState = {
 };
 
 const emptySet = new Set<string>();
+
+function setsMatch(current: Set<string>, next: Set<string>) {
+  if (current === next) return true;
+  if (current.size !== next.size) return false;
+  for (const value of current) {
+    if (!next.has(value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function handlersMatch(
+  current: HomePostCardHandlers,
+  next: HomePostCardHandlers,
+) {
+  return (
+    current.onPostPress === next.onPostPress &&
+    current.onAuthorPress === next.onAuthorPress &&
+    current.onTopicPress === next.onTopicPress &&
+    current.onMorePress === next.onMorePress &&
+    current.onLikePress === next.onLikePress &&
+    current.onDislikePress === next.onDislikePress &&
+    current.onCommentPress === next.onCommentPress &&
+    current.onFollowUser === next.onFollowUser &&
+    current.onFollowTopic === next.onFollowTopic &&
+    current.onRevealContent === next.onRevealContent &&
+    current.onBlockUser === next.onBlockUser &&
+    current.onBlockPost === next.onBlockPost &&
+    current.onBlockTopic === next.onBlockTopic &&
+    current.onReport === next.onReport
+  );
+}
 
 export const useHomePostCardStore = create<HomePostCardState>((set) => ({
   currentUserId: undefined,
@@ -250,7 +293,40 @@ export const useHomePostCardStore = create<HomePostCardState>((set) => ({
       const { [postId]: _, ...rest } = state.commentCountOverrides;
       return { commentCountOverrides: rest };
     }),
-  setHandlers: (handlers) => set({ handlers }),
+  syncFeedContext: (context) =>
+    set((state) => {
+      const nextState: Partial<HomePostCardState> = {};
+      let changed = false;
+
+      if (state.currentUserId !== context.currentUserId) {
+        nextState.currentUserId = context.currentUserId;
+        changed = true;
+      }
+      if (!setsMatch(state.followedUsers, context.followedUsers)) {
+        nextState.followedUsers = context.followedUsers;
+        changed = true;
+      }
+      if (!setsMatch(state.followedTopics, context.followedTopics)) {
+        nextState.followedTopics = context.followedTopics;
+        changed = true;
+      }
+      if (!setsMatch(state.revealedPosts, context.revealedPosts)) {
+        nextState.revealedPosts = context.revealedPosts;
+        changed = true;
+      }
+      if (state.shareServer !== context.shareServer) {
+        nextState.shareServer = context.shareServer;
+        changed = true;
+      }
+      if (state.allowAutoplay !== context.allowAutoplay) {
+        nextState.allowAutoplay = context.allowAutoplay;
+        changed = true;
+      }
+
+      return changed ? nextState : state;
+    }),
+  setHandlers: (handlers) =>
+    set((state) => (handlersMatch(state.handlers, handlers) ? state : { handlers })),
   setShareServer: (server) => set({ shareServer: server }),
   setAllowAutoplay: (allow) => set({ allowAutoplay: allow }),
   setActiveFeedScreen: (screen) => set({ activeFeedScreen: screen }),
