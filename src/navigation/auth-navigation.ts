@@ -41,7 +41,11 @@ export function flushPendingRouteAfterAuth(): boolean {
     return false;
   }
 
-  router.navigate(pendingRoute as any);
+  if (pendingRoute.startsWith("/(tabs)")) {
+    router.navigate(pendingRoute as any);
+  } else {
+    router.push(pendingRoute as any);
+  }
 
   return true;
 }

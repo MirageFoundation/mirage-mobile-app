@@ -4,6 +4,7 @@ import { Alert } from "react-native";
 
 import { getRootPostId } from "@/src/api/read/endpoints/posts";
 import { useAuthStore, usePreferencesStore } from "@/src/stores";
+import { useDeepLinkStore } from "@/src/stores/deep-link-store";
 import { setShareScheme } from "@/src/utils/share-scheme";
 
 import {
@@ -81,8 +82,13 @@ function resolveSelfRoute(route: string): string | null {
   return route.replace("__SELF__", walletAddress);
 }
 
+function isTabRoute(route: string): boolean {
+  return route.startsWith("/(tabs)");
+}
+
 export async function redirectSystemPath({
   path,
+  initial,
 }: {
   path: string;
   initial: boolean;
@@ -121,8 +127,15 @@ export async function redirectSystemPath({
   const target = resolveAuthNavigationTarget(resolvedRoute);
   if (target !== resolvedRoute) {
     setTimeout(() => showLoginRequiredAlert(), 500);
+    return "";
   }
-  return target === resolvedRoute ? target : "";
+
+  if (initial && !isTabRoute(target)) {
+    useDeepLinkStore.getState().setPendingRoute(target);
+    return "/(tabs)";
+  }
+
+  return target;
 }
 
 export async function handleMirageLink(url: string): Promise<boolean> {
