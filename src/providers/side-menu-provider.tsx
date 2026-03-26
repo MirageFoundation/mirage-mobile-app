@@ -52,7 +52,10 @@ export function SideMenuProvider({ children }: { children: React.ReactNode }) {
   const handleQuests = useCallback(() => router.push("/quests"), [router]);
   const handleHelp = useCallback(() => Linking.openURL("https://mirage.foundation/faq").catch((e: Error) => Alert.alert("Couldn't open link", e.message)), []);
   const handleAbout = useCallback(() => Linking.openURL("https://mirage.foundation").catch((e: Error) => Alert.alert("Couldn't open link", e.message)), []);
-  const handleLogout = useCallback(async () => await logout(), [logout]);
+  const handleLogout = useCallback(async () => {
+    await logout();
+    router.replace("/(tabs)");
+  }, [logout, router]);
 
   const handleSideMenuOpen = useCallback(() => {
     useHomePostCardStore.getState().setSideMenuOpen(true);

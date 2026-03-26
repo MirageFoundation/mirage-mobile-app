@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 103
+                          update 1034
                         </Text>
                         <Text
                           style={{
@@ -787,7 +787,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           clciking on ref link or invite link while the app is
                           on the node which does not alloww account creation
                           will show switch node popup and after switching the
-                          code will be applied
+                          code will be applied,logging out from following tab
+                          should bring us to home after logout
                         </Text>
                       </>
                     )}
@@ -828,7 +829,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 103
+                          update 104
                         </Text>
                         <Text
                           style={{
@@ -852,7 +853,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           clciking on ref link or invite link while the app is
                           on the node which does not alloww account creation
                           will show switch node popup and after switching the
-                          code will be applied
+                          code will be applied,logging out from following tab
+                          should bring us to home after logout
                         </Text>
                       </>
                     )}
