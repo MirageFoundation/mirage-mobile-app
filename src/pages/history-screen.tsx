@@ -2,8 +2,9 @@ import { navigateToEditPost } from "@/src/utils/edit-post";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "@/src/navigation/guarded-router";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
-import { FlatList, Pressable, View } from "react-native";
+import { useIsFocused } from "@react-navigation/native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { FlatList, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -16,6 +17,8 @@ import { PostCardItem } from "@/src/components/molecules/post-card-item";
 import { Text } from "@/src/components/ui/primitives";
 import {
   useAuthGuard,
+  useNetworkState,
+  usePostListViewability,
   useVoteHandler,
   type VoteResult,
 } from "@/src/hooks";
@@ -41,6 +44,7 @@ export function HistoryScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const isFocused = useIsFocused();
   const toast = useToast();
   const { requireAuth } = useAuthGuard();
 
@@ -54,6 +58,9 @@ export function HistoryScreen() {
   const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const shareServer = usePreferencesStore((s) => s.shareServer);
+  const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
+  const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
+  const { networkType } = useNetworkState();
 
   const { handleUpvote, handleDownvote } = useVoteHandler({
     onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
@@ -97,6 +104,24 @@ export function HistoryScreen() {
       }),
     [visibleEntries, voteOverrides],
   );
+
+  const {
+    activeVideoPostId,
+    allowAutoplay,
+    currentState,
+    handleMomentumScrollEnd,
+    handleRevealContent,
+    onViewableItemsChanged,
+    revealedPostIds,
+    viewabilityConfig,
+    visibleVideoPostIds,
+  } = usePostListViewability({
+    enabled: isFocused,
+    autoPlayVideos,
+    networkType,
+    posts: entriesWithOverrides,
+    videoAutoplayNetwork,
+  });
 
   const handlePostPress = useCallback(
     (postId: string) => {
@@ -185,15 +210,21 @@ export function HistoryScreen() {
     ({ item }: { item: HistoryEntry }) => (
       <PostCardItem
         post={item}
+        isVisible={visibleVideoPostIds.has(item.id)}
+        isFocused={activeVideoPostId === item.id}
+        screenActive={isFocused && currentState === "active"}
         isOwnPost={currentUser?.id === item.author.id}
+        contentRevealed={revealedPostIds.has(item.id)}
         shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
         showUrlCard={false}
+        allowAutoplay={allowAutoplay}
         onPostPress={handlePostPress}
         onAuthorPress={handleAuthorPress}
         onMorePress={handleMorePress}
         onLikePress={handleLikePress}
         onDislikePress={handleDislikePress}
         onCommentPress={handleCommentPress}
+        onRevealContent={handleRevealContent}
       />
     ),
     [
@@ -204,7 +235,14 @@ export function HistoryScreen() {
       handleMorePress,
       handleLikePress,
       handleDislikePress,
+      activeVideoPostId,
+      allowAutoplay,
+      currentState,
       handleCommentPress,
+      handleRevealContent,
+      isFocused,
+      revealedPostIds,
+      visibleVideoPostIds,
     ],
   );
 
@@ -266,6 +304,12 @@ export function HistoryScreen() {
           renderItem={renderPostItem}
           contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
           showsVerticalScrollIndicator={false}
+          windowSize={Platform.OS === "android" ? 11 : 13}
+          maxToRenderPerBatch={Platform.OS === "android" ? 7 : 9}
+          initialNumToRender={5}
+          viewabilityConfig={viewabilityConfig}
+          onViewableItemsChanged={onViewableItemsChanged}
+          onMomentumScrollEnd={handleMomentumScrollEnd}
         />
       )}
 

@@ -11,6 +11,7 @@ import {
 } from "react";
 import {
   Platform,
+  type LayoutChangeEvent,
   type ListRenderItem,
   type ViewToken,
 } from "react-native";
@@ -73,8 +74,8 @@ const HomePostListInner = function HomePostListInner(
   feedScreenRef.current = feedContext;
 
   const viewabilityConfig = useRef({
-    itemVisiblePercentThreshold: 10,
-    minimumViewTime: 100,
+    itemVisiblePercentThreshold: 50,
+    minimumViewTime: 300,
   }).current;
 
   const pendingViewableRef = useRef<ViewToken[] | null>(null);
@@ -225,6 +226,10 @@ const HomePostListInner = function HomePostListInner(
     [],
   );
 
+  const handleLayout = useCallback((e: LayoutChangeEvent) => {
+    console.log('[HomePostList] layout height:', e.nativeEvent.layout.height);
+  }, []);
+
   const handleMomentumScrollEnd = useCallback(() => {
     cancelDeferredFlush();
     if (Platform.OS === "ios") {
@@ -267,6 +272,7 @@ const HomePostListInner = function HomePostListInner(
       viewabilityConfig={viewabilityConfig}
       onViewableItemsChanged={onViewableItemsChanged}
       onMomentumScrollEnd={handleMomentumScrollEnd}
+      onLayout={handleLayout}
     />
   );
 };

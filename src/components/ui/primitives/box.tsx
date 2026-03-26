@@ -250,6 +250,37 @@ export type BoxProps = {
   animationConfig?: AnimationConfig;
 };
 
+const AnimatedBox = ({
+  children,
+  style,
+  animation,
+  animationConfig,
+  ...variantProps
+}: BoxProps) => {
+  const { currentTheme } = useTheme();
+  const isDark = currentTheme === "dark";
+  let shadowNow = variantProps.shadow;
+  let borderNow = variantProps.border;
+  if (isDark && variantProps.shadow) {
+    shadowNow = "none";
+    borderNow = "thin";
+  }
+
+  const animatedStyle = useAnimations(animation, animationConfig);
+
+  styles.useVariants({
+    ...variantProps,
+    border: borderNow,
+    shadow: shadowNow,
+  });
+
+  return (
+    <Animated.View style={[styles.base, style, animatedStyle]}>
+      {children}
+    </Animated.View>
+  );
+};
+
 const Box = ({
   children,
   style,
@@ -282,6 +313,24 @@ const Box = ({
   animation,
   animationConfig,
 }: BoxProps) => {
+  if (animation) {
+    return (
+      <AnimatedBox
+        style={style}
+        background={background}
+        p={p} px={px} py={py} pt={pt} pb={pb} pl={pl} pr={pr}
+        border={border} shadow={shadow} mode={mode} rounded={rounded}
+        direction={direction} m={m} mt={mt} mb={mb} ml={ml} mr={mr}
+        gap={gap} flex={flex} center={center}
+        safeArea={safeArea} safeAreaTop={safeAreaTop} safeAreaBottom={safeAreaBottom}
+        justifyContent={justifyContent} alignItems={alignItems}
+        animation={animation} animationConfig={animationConfig}
+      >
+        {children}
+      </AnimatedBox>
+    );
+  }
+
   const { currentTheme } = useTheme();
   const isDark = currentTheme === "dark";
   let shadowNow = shadow;
@@ -290,8 +339,6 @@ const Box = ({
     shadowNow = "none";
     borderNow = "thin";
   }
-
-  const animatedStyle = useAnimations(animation, animationConfig);
 
   styles.useVariants({
     background,
@@ -322,12 +369,7 @@ const Box = ({
     alignItems,
   });
 
-  const Component = animation ? Animated.View : View;
-  const componentStyle = animation
-    ? [styles.base, style, animatedStyle]
-    : [styles.base, style];
-
-  return <Component style={componentStyle}>{children}</Component>;
+  return <View style={[styles.base, style]}>{children}</View>;
 };
 
 export { Box };

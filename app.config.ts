@@ -106,7 +106,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
             deploymentTarget: "16.0",
           },
           android: {
-            compileSdkVersion: 35,
+            compileSdkVersion: 36,
           },
         },
       ],

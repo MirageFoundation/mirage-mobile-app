@@ -1,7 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "@/src/navigation/guarded-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -96,20 +96,28 @@ function ListSkeleton() {
   );
 }
 
-function TopicRow({
+const TopicRow = memo(function TopicRow({
   topic,
   isFollowing,
   isLoading,
-  onPress,
+  onTopicPress,
   onFollowToggle,
 }: {
   topic: TopicInfo;
   isFollowing: boolean;
   isLoading: boolean;
-  onPress: () => void;
-  onFollowToggle: () => void;
+  onTopicPress: (name: string) => void;
+  onFollowToggle: (name: string, isFollowing: boolean) => void;
 }) {
   const { theme } = useUnistyles();
+
+  const handlePress = useCallback(() => {
+    onTopicPress(topic.topic);
+  }, [onTopicPress, topic.topic]);
+
+  const handleFollowToggle = useCallback(() => {
+    onFollowToggle(topic.topic, isFollowing);
+  }, [onFollowToggle, topic.topic, isFollowing]);
 
   const contentWarnings = useMemo(() => {
     const warnings: ContentWarningType[] = [];
@@ -148,7 +156,7 @@ function TopicRow({
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={handlePress}
       style={({ pressed }) => [
         styles.topicRow,
         { borderBottomColor: theme.colors.border.subtle },
@@ -185,7 +193,7 @@ function TopicRow({
       <Pressable
         onPress={(e) => {
           e.stopPropagation();
-          onFollowToggle();
+          handleFollowToggle();
         }}
         disabled={isLoading}
         style={({ pressed }) => [
@@ -222,7 +230,7 @@ function TopicRow({
       </Pressable>
     </Pressable>
   );
-}
+});
 
 export function TopicsListScreen() {
   const router = useRouter();
@@ -242,20 +250,46 @@ export function TopicsListScreen() {
   const scrollY = useSharedValue(0);
   const lastScrollY = useSharedValue(0);
   const headerTranslateY = useSharedValue(0);
+  const isHeaderHidden = useSharedValue(false);
+  const accumulatedDist = useSharedValue(0);
+  const lastDir = useSharedValue(0);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       const currentY = event.contentOffset.y;
       const diff = currentY - lastScrollY.value;
-      if (currentY <= 0) {
-        headerTranslateY.value = 0;
-      } else if (diff > 0) {
-        headerTranslateY.value = Math.max(-HEADER_HEIGHT, headerTranslateY.value - diff);
-      } else if (diff < 0) {
-        headerTranslateY.value = Math.min(0, headerTranslateY.value - diff);
-      }
       lastScrollY.value = currentY;
       scrollY.value = currentY;
+
+      if (currentY <= 0) {
+        headerTranslateY.value = withTiming(0, { duration: 200 });
+        isHeaderHidden.value = false;
+        accumulatedDist.value = 0;
+        return;
+      }
+
+      if (diff === 0) return;
+
+      const dir = diff > 0 ? 1 : -1;
+      if (dir !== lastDir.value) {
+        accumulatedDist.value = 0;
+        lastDir.value = dir;
+      }
+      accumulatedDist.value = accumulatedDist.value + Math.abs(diff);
+
+      if (dir === 1 && currentY > 80 && !isHeaderHidden.value) {
+        if (accumulatedDist.value > 40) {
+          headerTranslateY.value = withTiming(-HEADER_HEIGHT, { duration: 200 });
+          isHeaderHidden.value = true;
+          accumulatedDist.value = 0;
+        }
+      } else if (dir === -1 && isHeaderHidden.value) {
+        if (accumulatedDist.value > 25) {
+          headerTranslateY.value = withTiming(0, { duration: 200 });
+          isHeaderHidden.value = false;
+          accumulatedDist.value = 0;
+        }
+      }
     },
   });
 
@@ -342,10 +376,8 @@ export function TopicsListScreen() {
         topic={item}
         isFollowing={followedTopics.has(item.topic)}
         isLoading={false}
-        onPress={() => handleTopicPress(item.topic)}
-        onFollowToggle={() =>
-          handleFollowToggle(item.topic, followedTopics.has(item.topic))
-        }
+        onTopicPress={handleTopicPress}
+        onFollowToggle={handleFollowToggle}
       />
     ),
     [followedTopics, handleTopicPress, handleFollowToggle],
@@ -494,7 +526,7 @@ export function TopicsListScreen() {
         keyboardShouldPersistTaps="handled"
         onScrollBeginDrag={Keyboard.dismiss}
         onScroll={scrollHandler}
-        scrollEventThrottle={16}
+        scrollEventThrottle={64}
       />
     </Box>
   );

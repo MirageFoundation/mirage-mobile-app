@@ -18,9 +18,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const HEADER_HEIGHT = 44;
 const FEED_TAB_BAR_HEIGHT = 44;
 const TAB_BAR_HEIGHT = 56;
-const SCROLL_THRESHOLD = 50;
-const HIDE_THRESHOLD = 10;
-const SHOW_THRESHOLD = 15;
+const SCROLL_THRESHOLD = 80;
+const HIDE_THRESHOLD = 40;
+const SHOW_THRESHOLD = 25;
 
 type ScrollableRef = FlatList<any> | ScrollView | null;
 

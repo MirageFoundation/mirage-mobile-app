@@ -72,4 +72,5 @@ export {
 } from "./use-post-data-refresher";
 export { useHomePostCardBindings } from "./use-home-post-card-bindings";
 export { useFeedResumeRefresh } from "./use-feed-resume-refresh";
+export { usePostListViewability } from "./use-post-list-viewability";
 export { useRouter } from "./use-router";

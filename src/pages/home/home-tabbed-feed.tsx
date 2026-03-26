@@ -685,7 +685,6 @@ export const HomeTabbedFeed = forwardRef<
     () => ({
       paddingTop: insets.top + HEADER_HEIGHT,
       paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 16,
-      flexGrow: 1,
     }),
     [insets.bottom, insets.top],
   );

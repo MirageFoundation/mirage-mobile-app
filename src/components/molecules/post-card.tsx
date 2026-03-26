@@ -3,12 +3,10 @@ import { Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { logPress } from "@/src/utils/press-logger";
 import { setLastPressedPostY } from "@/src/utils/post-transition";
-import { usePreferencesStore, useTimeTickStore } from "@/src/stores";
+import { usePreferencesStore } from "@/src/stores";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   Linking,
-  PixelRatio,
-  Platform,
   Pressable,
   View,
   type StyleProp,
@@ -168,7 +166,6 @@ export const PostCard = memo(function PostCard({
   } = post;
 
   const blurSensitiveMedia = usePreferencesStore((s) => s.blurSensitiveMedia);
-  const timeTick = useTimeTickStore((s) => s.tick);
   const shouldBlurContent = blurSensitiveMedia && !!contentWarnings?.length && !contentRevealed;
 
   const resolvedContent = useMemo(
@@ -240,7 +237,6 @@ export const PostCard = memo(function PostCard({
         author={author}
         topic={topic}
         createdAt={createdAt}
-        timeRefreshKey={timeTick}
         isOwnPost={isOwnPost}
         isFollowing={isFollowing}
         isTopicFollowed={isTopicFollowed}

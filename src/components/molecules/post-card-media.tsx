@@ -1,8 +1,7 @@
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
-import { BlurView } from "expo-blur";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { useVideoPlayer, VideoView, type VideoPlayer } from "expo-video";
 import { useEvent, useEventListener } from "expo";
 import { Image } from "expo-image";
 import {
@@ -17,6 +16,7 @@ import {
 } from "react";
 import {
   ActivityIndicator,
+  Animated,
   AppState,
   Dimensions,
   Linking,
@@ -30,6 +30,7 @@ import YoutubePlayer from "react-native-youtube-iframe";
 import type { YoutubeIframeRef } from "react-native-youtube-iframe";
 import { extractYouTubeVideoId, type ResolvedMedia } from "./post-card-utils";
 import { MediaGallery } from "./media-gallery";
+import { SensitiveContentOverlay } from "./sensitive-content-overlay";
 import {
   buildVideoPositionKey,
   useVideoMuteStore,
@@ -103,7 +104,7 @@ function getMediaAspectRatio(media?: ResolvedMedia): number {
 export const PostCardMedia = memo(
   forwardRef<PostCardMediaRef, PostCardMediaProps>(function PostCardMedia(
     {
-      media,
+      media: mediaProp,
       mediaList,
       isVisible,
       isFocused = true,
@@ -121,6 +122,9 @@ export const PostCardMedia = memo(
     },
     ref,
   ) {
+    const hasMediaGallery = !!(mediaList && mediaList.length > 1);
+    const media = hasMediaGallery ? undefined : mediaProp;
+
     const [imageError, setImageError] = useState(false);
     const [isVideoPlaying, setIsVideoPlaying] = useState(false);
     const [isVideoLoading, setIsVideoLoading] = useState(false);
@@ -167,18 +171,42 @@ export const PostCardMedia = memo(
     const resolvedMediaUri = media?.uri;
     const isVideoType = media?.type === "video";
     const isHls = !!resolvedMediaUri?.includes(".m3u8");
+    const previousMediaUriRef = useRef<string | undefined>(resolvedMediaUri);
 
-    const shouldCreatePlayer = isVideoType && !shouldBlurContent && isVisible;
+    useEffect(() => {
+      if (previousMediaUriRef.current === resolvedMediaUri) {
+        return;
+      }
+      previousMediaUriRef.current = resolvedMediaUri;
+      setVideoFirstFrameRendered(false);
+      setMediaLoaded(resolvedMediaUri ? MEDIA_LOADED_CACHE.has(resolvedMediaUri) : false);
+      setIsVideoLoading(false);
+    }, [resolvedMediaUri]);
+
+    const shouldCreatePlayer =
+      isVideoType &&
+      !shouldBlurContent &&
+      (
+        (isPostDetail && isVisible) ||
+        (isVisible && (isFocused || feedTappedToPlay))
+      );
     const videoSource = useMemo(
       () => shouldCreatePlayer && resolvedMediaUri ? { uri: resolvedMediaUri, useCaching: !isHls } : null,
       [shouldCreatePlayer, resolvedMediaUri, isHls],
     );
 
-    const player = useVideoPlayer(videoSource, (p) => {
-      p.loop = true;
-      p.muted = true;
-      p.timeUpdateEventInterval = isPostDetail ? 0.25 : 0.5;
-    });
+    const setupPlayer = useCallback((playerInstance: VideoPlayer) => {
+      playerInstance.loop = true;
+      playerInstance.muted = true;
+    }, []);
+
+    const player = useVideoPlayer(videoSource, setupPlayer);
+
+    useEffect(() => {
+      try {
+        player.timeUpdateEventInterval = isPostDetail ? 0.25 : 0.5;
+      } catch {}
+    }, [isPostDetail, player]);
 
     const { status: playerStatus } = useEvent(player, "statusChange", { status: player.status });
     const { isPlaying: playerIsPlaying } = useEvent(player, "playingChange", { isPlaying: player.playing });
@@ -256,9 +284,12 @@ export const PostCardMedia = memo(
     const shouldVideoPlay =
       isVideoType &&
       !shouldBlurContent &&
-      (allowAutoplay || feedTappedToPlay) &&
-      isVisible &&
-      screenActive;
+      screenActive &&
+      (
+        (isPostDetail && isVisible) ||
+        (isVisible && allowAutoplay && isFocused) ||
+        (isVisible && feedTappedToPlay)
+      );
 
     useEffect(() => {
       if (!player) return;
@@ -278,13 +309,36 @@ export const PostCardMedia = memo(
       } catch {}
     }, [effectiveMuted, player]);
 
-    const shouldShowVideoThumbnail = !!videoThumbnailUri && (
-      shouldBlurContent ||
-      !isVisible ||
-      !isVideoPlaying ||
-      playerStatus !== "readyToPlay" ||
-      !videoFirstFrameRendered
-    );
+    const shouldShowVideoThumbnail =
+      !!videoThumbnailUri &&
+      (
+        !shouldCreatePlayer ||
+        !isVisible ||
+        !screenActive ||
+        playerStatus !== "readyToPlay" ||
+        !videoFirstFrameRendered
+      );
+    const thumbnailOpacity = useRef(
+      new Animated.Value(shouldShowVideoThumbnail ? 1 : 0),
+    ).current;
+
+    useEffect(() => {
+      if (!videoThumbnailUri) {
+        return;
+      }
+
+      if (shouldShowVideoThumbnail) {
+        thumbnailOpacity.stopAnimation();
+        thumbnailOpacity.setValue(1);
+        return;
+      }
+
+      Animated.timing(thumbnailOpacity, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }).start();
+    }, [shouldShowVideoThumbnail, thumbnailOpacity, videoThumbnailUri]);
 
     const prevScreenActiveRef = useRef(screenActive);
     useEffect(() => {
@@ -386,10 +440,16 @@ export const PostCardMedia = memo(
 
     useEffect(() => {
       const isPlayable = media?.type === "video" || media?.type === "youtube";
+      const shouldActivateCurrentMedia = isPostDetail
+        ? isVisible
+        : isVisible && (isFocused || feedTappedToPlay);
       const canAutoPlayCurrentMedia =
-        media?.type === "youtube"
-          ? ((Platform.OS === "android" && allowAutoplay) || feedTappedToPlay)
-          : (allowAutoplay || feedTappedToPlay);
+        shouldActivateCurrentMedia &&
+        (
+          media?.type === "youtube"
+            ? ((Platform.OS === "android" && allowAutoplay) || feedTappedToPlay)
+            : (allowAutoplay || feedTappedToPlay)
+        );
       if (!isPlayable || shouldBlurContent) {
         setIsVideoPlaying(false);
         setIsVideoLoading(false);
@@ -404,7 +464,7 @@ export const PostCardMedia = memo(
         setIsVideoPlaying(true);
       }
 
-      if (isVisible && screenActive && canAutoPlayCurrentMedia) {
+      if (screenActive && canAutoPlayCurrentMedia) {
         if (pauseDelayRef.current) {
           clearTimeout(pauseDelayRef.current);
           pauseDelayRef.current = null;
@@ -439,7 +499,7 @@ export const PostCardMedia = memo(
         }
         setIsVideoPlaying(false);
         setIsVideoLoading(false);
-      } else if (!isVisible) {
+      } else if (!isPostDetail) {
         if (!pauseDelayRef.current) {
           pauseDelayRef.current = setTimeout(() => {
             pauseDelayRef.current = null;
@@ -450,13 +510,15 @@ export const PostCardMedia = memo(
             }
             setIsVideoPlaying(false);
             setIsVideoLoading(false);
-          }, 400);
+          }, 250);
         }
       }
     }, [
       media?.type,
       shouldBlurContent,
       isVisible,
+      isFocused,
+      isPostDetail,
       allowAutoplay,
       screenActive,
       resolvedMediaUri,
@@ -696,8 +758,6 @@ export const PostCardMedia = memo(
       ? { height: MEDIA_MAX_HEIGHT }
       : { aspectRatio: effectiveAspectRatio };
 
-    if (!media || shouldHideOnError) return null;
-
     if (mediaList && mediaList.length > 1) {
       return (
         <View style={styles.mediaContainer}>
@@ -736,6 +796,8 @@ export const PostCardMedia = memo(
         </View>
       );
     }
+
+    if (!media || shouldHideOnError) return null;
 
     return (
       <View style={styles.mediaContainer}>
@@ -875,30 +937,42 @@ export const PostCardMedia = memo(
             </>
           ) : media.type === "video" ? (
             <Pressable onPress={isPostDetail ? handleMediaPress : handleFeedVideoTap} style={styles.media}>
-              {shouldShowVideoThumbnail ? (
-                <Image
-                  source={{ uri: videoThumbnailUri }}
-                  style={[styles.media, { position: "absolute", zIndex: 1 }]}
+              {videoThumbnailUri ? (
+                <Animated.View
+                  pointerEvents="none"
+                  style={[styles.videoThumbnailOverlay, { opacity: thumbnailOpacity }]}
+                >
+                  <Image
+                    source={{ uri: videoThumbnailUri }}
+                    style={styles.media}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    recyclingKey={videoThumbnailUri}
+                    onLoad={({ source }) => {
+                      updateMediaAspectRatioFromSize(source?.width, source?.height);
+                      if (shouldBlurContent) {
+                        setMediaLoaded(true);
+                      }
+                    }}
+                    blurRadius={shouldBlurContent ? 50 : 0}
+                  />
+                </Animated.View>
+              ) : null}
+              {!shouldBlurContent && shouldCreatePlayer && (
+                <VideoView
+                  player={player}
+                  style={styles.media}
                   contentFit="cover"
-                  cachePolicy="memory-disk"
-                  recyclingKey={videoThumbnailUri}
-                  onLoad={({ source }) => {
-                    updateMediaAspectRatioFromSize(source?.width, source?.height);
+                  nativeControls={false}
+                  surfaceType="textureView"
+                  useExoShutter={false}
+                  onFirstFrameRender={() => {
+                    setVideoFirstFrameRendered(true);
+                    setMediaLoaded(true);
+                    if (resolvedMediaUri) MEDIA_LOADED_CACHE.add(resolvedMediaUri);
                   }}
                 />
-              ) : null}
-              <VideoView
-                player={player}
-                style={styles.media}
-                contentFit="cover"
-                nativeControls={false}
-                useExoShutter={false}
-                onFirstFrameRender={() => {
-                  setVideoFirstFrameRendered(true);
-                  setMediaLoaded(true);
-                  if (resolvedMediaUri) MEDIA_LOADED_CACHE.add(resolvedMediaUri);
-                }}
-              />
+              )}
             </Pressable>
           ) : (
             <Pressable onPress={handleMediaPress} style={styles.media}>
@@ -1079,29 +1153,7 @@ export const PostCardMedia = memo(
           )}
 
           {shouldBlurContent && (
-            <Pressable onPress={onRevealContent} style={styles.blurOverlay}>
-              {Platform.OS === "ios" ? (
-                <BlurView
-                  intensity={80}
-                  tint="dark"
-                  style={styles.blurViewFill}
-                >
-                  <View style={styles.revealTextContainer}>
-                    <Ionicons name="eye-outline" size={24} color="#fff" />
-                    <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                      Tap to reveal
-                    </Text>
-                  </View>
-                </BlurView>
-              ) : (
-                <View style={styles.androidBlurOverlay}>
-                  <Ionicons name="eye-outline" size={24} color="#fff" />
-                  <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                    Tap to reveal
-                  </Text>
-                </View>
-              )}
-            </Pressable>
+            <SensitiveContentOverlay onPress={onRevealContent} style={styles.blurOverlay} />
           )}
 
           {media.type === "video" && (
@@ -1164,6 +1216,10 @@ const styles = StyleSheet.create((theme) => ({
     width: "100%",
     height: "100%",
     borderRadius: theme.radius.md,
+  },
+  videoThumbnailOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
   },
   playOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -1320,24 +1376,5 @@ const styles = StyleSheet.create((theme) => ({
   },
   blurOverlay: {
     ...StyleSheet.absoluteFillObject,
-  },
-  blurViewFill: {
-    flex: 1,
-    width: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  revealTextContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  androidBlurOverlay: {
-    flex: 1,
-    width: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(5, 5, 5, 0.97)",
-    gap: 8,
   },
 }));

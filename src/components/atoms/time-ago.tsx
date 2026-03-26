@@ -1,14 +1,10 @@
-import { useMemo, useState, useEffect, useCallback, useRef } from "react";
-import { AppState } from "react-native";
 import { Text, type TextProps } from "@/src/components/ui/primitives";
-import { useTimeTickStore } from "@/src/stores";
+import { useSyncExternalStore } from "react";
+import { AppState } from "react-native";
 
 type TimeAgoProps = Omit<TextProps, "children"> & {
-  /** Timestamp to display (Date, ISO string, or Unix timestamp in ms) */
   timestamp: Date | string | number;
-  /** Whether to show "ago" suffix */
   showSuffix?: boolean;
-  /** Whether to show full text (e.g., "2 hours ago" vs "2h") */
   verbose?: boolean;
 };
 
@@ -22,17 +18,69 @@ const TIME_UNITS = [
   { unit: "s", full: "second", seconds: 1 },
 ] as const;
 
+const SHARED_TICK_INTERVAL_MS = 30_000;
+
+let currentTick = Date.now();
+let intervalHandle: ReturnType<typeof setInterval> | null = null;
+let appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
+const listeners = new Set<() => void>();
+
+function emitTick() {
+  currentTick = Date.now();
+  for (const listener of listeners) {
+    listener();
+  }
+}
+
+function ensureTickingStarted() {
+  if (intervalHandle) {
+    return;
+  }
+
+  emitTick();
+  intervalHandle = setInterval(emitTick, SHARED_TICK_INTERVAL_MS);
+  appStateSubscription = AppState.addEventListener("change", (state) => {
+    if (state === "active") {
+      emitTick();
+    }
+  });
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  ensureTickingStarted();
+
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size !== 0) {
+      return;
+    }
+
+    if (intervalHandle) {
+      clearInterval(intervalHandle);
+      intervalHandle = null;
+    }
+    appStateSubscription?.remove();
+    appStateSubscription = null;
+  };
+}
+
+function getSnapshot() {
+  return currentTick;
+}
+
+function useSharedTimeTick() {
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
 function formatTimeAgo(
   timestamp: Date | string | number,
+  nowMs: number,
   showSuffix: boolean,
   verbose: boolean,
 ): string {
-  const date = timestamp instanceof Date
-    ? timestamp
-    : new Date(timestamp);
-
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
+  const diffInSeconds = Math.floor((nowMs - date.getTime()) / 1000);
 
   if (diffInSeconds < 0) {
     return verbose ? "just now" : "now";
@@ -44,54 +92,20 @@ function formatTimeAgo(
 
   for (const { unit, full, seconds } of TIME_UNITS) {
     const value = Math.floor(diffInSeconds / seconds);
-    if (value >= 1) {
-      if (verbose) {
-        const suffix = showSuffix ? " ago" : "";
-        const plural = value === 1 ? "" : "s";
-        return `${value} ${full}${plural}${suffix}`;
-      }
-      return `${value}${unit}${showSuffix ? " ago" : ""}`;
+    if (value < 1) {
+      continue;
     }
+
+    if (verbose) {
+      const suffix = showSuffix ? " ago" : "";
+      const plural = value === 1 ? "" : "s";
+      return `${value} ${full}${plural}${suffix}`;
+    }
+
+    return `${value}${unit}${showSuffix ? " ago" : ""}`;
   }
 
   return verbose ? "just now" : "now";
-}
-
-function getRefreshInterval(timestamp: Date | string | number): number {
-  const date = timestamp instanceof Date
-    ? timestamp
-    : new Date(timestamp);
-  const diffInSeconds = Math.floor((Date.now() - date.getTime()) / 1000);
-
-  if (diffInSeconds < 60) return 10_000;
-  if (diffInSeconds < 3600) return 60_000;
-  return 300_000;
-}
-
-function useTick(timestamp: Date | string | number) {
-  const [, setTick] = useState(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useTimeTickStore((s) => s.tick);
-
-  const startTimer = useCallback(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    const ms = getRefreshInterval(timestamp);
-    intervalRef.current = setInterval(() => setTick((t) => t + 1), ms);
-  }, [timestamp]);
-
-  useEffect(() => {
-    startTimer();
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        setTick((t) => t + 1);
-        startTimer();
-      }
-    });
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      sub.remove();
-    };
-  }, [startTimer]);
 }
 
 export const TimeAgo = ({
@@ -102,8 +116,8 @@ export const TimeAgo = ({
   mode = "subtle",
   ...textProps
 }: TimeAgoProps) => {
-  useTick(timestamp);
-  const timeAgoText = formatTimeAgo(timestamp, showSuffix, verbose);
+  const tick = useSharedTimeTick();
+  const timeAgoText = formatTimeAgo(timestamp, tick, showSuffix, verbose);
 
   return (
     <Text size={size} mode={mode} {...textProps}>
@@ -112,14 +126,11 @@ export const TimeAgo = ({
   );
 };
 
-/**
- * Hook to get time ago string (useful when you need just the string)
- */
 export const useTimeAgo = (
   timestamp: Date | string | number,
-  options?: { showSuffix?: boolean; verbose?: boolean }
+  options?: { showSuffix?: boolean; verbose?: boolean },
 ): string => {
+  const tick = useSharedTimeTick();
   const { showSuffix = true, verbose = false } = options ?? {};
-  useTick(timestamp);
-  return formatTimeAgo(timestamp, showSuffix, verbose);
+  return formatTimeAgo(timestamp, tick, showSuffix, verbose);
 };

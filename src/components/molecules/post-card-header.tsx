@@ -6,6 +6,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { memo, useCallback, useMemo } from "react";
 import { Pressable, View } from "react-native";
+import {
+  Menu,
+  MenuOption,
+  MenuOptions,
+  MenuTrigger,
+} from "react-native-popup-menu";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
+
+import { getUsernameColor } from "@/src/utils/tiers";
+import type { PostAuthor } from "./post-card-types";
 
 const MAX_HEADER_LENGTH = 30;
 
@@ -22,23 +32,12 @@ function getTopicUsernameDisplay(topic?: string, username?: string) {
   return { displayTopic: topic, showUsername: false };
 }
 
-import {
-  Menu,
-  MenuOption,
-  MenuOptions,
-  MenuTrigger,
-} from "react-native-popup-menu";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import type { PostAuthor } from "./post-card-types";
-import { getUsernameColor } from "@/src/utils/tiers";
-
 const NEW_USER_COLOR = "rgb(94,194,106)";
 
 type PostCardHeaderProps = {
   author: PostAuthor;
   topic?: string;
   createdAt: Date | string | number;
-  timeRefreshKey?: number;
   isOwnPost: boolean;
   isFollowing?: boolean;
   isTopicFollowed?: boolean;
@@ -57,7 +56,6 @@ export const PostCardHeader = memo(function PostCardHeader({
   author,
   topic,
   createdAt,
-  timeRefreshKey = 0,
   isOwnPost,
   isFollowing,
   isTopicFollowed,
@@ -181,7 +179,6 @@ export const PostCardHeader = memo(function PostCardHeader({
             </Text>
           )}
           <TimeAgo
-            key={`${String(createdAt)}-${timeRefreshKey}`}
             timestamp={createdAt}
             showSuffix={false}
             size="md"
