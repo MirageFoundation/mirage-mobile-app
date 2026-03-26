@@ -1,16 +1,11 @@
+import type { ContentWarningType } from "@/src/domain/content/types";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-export type ContentWarningType = 
-  | "sensitive" 
-  | "porn" 
-  | "violence" 
-  | "gore" 
-  | "death"
-  | "nsfw";
+export type { ContentWarningType };
 
 type ContentWarningBadgeProps = {
   /** Warning types to display */

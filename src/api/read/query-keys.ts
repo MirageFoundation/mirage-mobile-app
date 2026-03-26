@@ -1,6 +1,28 @@
 import type { PostFilters, UserFilters } from "../types";
 
 export const queryKeys = {
+  // Root keys / prefixes
+  postsRoot: () => ["posts"] as const,
+  commentsRoot: () => ["comments"] as const,
+  topicsRoot: () => ["topics"] as const,
+  inboxRoot: () => ["inbox"] as const,
+  searchRoot: () => ["search"] as const,
+  resolveRoot: () => ["resolve"] as const,
+  statsRoot: () => ["stats"] as const,
+  referralRoot: () => ["referral"] as const,
+  rewardsRoot: () => ["rewards"] as const,
+  txRoot: () => ["tx"] as const,
+  userRoot: () => ["user"] as const,
+  usersRoot: () => ["users"] as const,
+  userPostsRoot: (owner?: string) =>
+    owner ? (["user", "posts", owner] as const) : (["user", "posts"] as const),
+  inviteCodeRoot: () => ["inviteCode"] as const,
+  inviteCodesRoot: () => ["inviteCodes"] as const,
+  leaderboardRoot: () => ["leaderboard"] as const,
+  parametersRoot: () => ["parameters"] as const,
+  rootPostIdRoot: () => ["rootPostId"] as const,
+  commentContextRoot: () => ["commentContext"] as const,
+
   // Config & Parameters
   parameters: (address?: string) => ["parameters", address] as const,
   config: () => ["config"] as const,
@@ -44,6 +66,7 @@ export const queryKeys = {
     ["resolve", "address", username] as const,
   usernameFromAddress: (address: string) =>
     ["resolve", "username", address] as const,
+  batchUsernames: (stableKey: string) => ["batchUsernames", stableKey] as const,
   users: (filters?: UserFilters) => ["users", filters] as const,
 
   // Transaction
@@ -65,15 +88,16 @@ export const queryKeys = {
 
   // Peers
   peers: () => ["peers"] as const,
+  peersSource: () => ["peers", "source"] as const,
 
- // Invite Code
- inviteCode: (code: string) => ["inviteCode", code] as const,
- inviteCodes: (address: string) => ["inviteCodes", address] as const,
+  // Invite Code
+  inviteCode: (code: string) => ["inviteCode", code] as const,
+  inviteCodes: (address: string) => ["inviteCodes", address] as const,
 
- // Rewards
- rewardSummary: (address: string) => ["rewards", "summary", address] as const,
- achievements: (address: string) => ["rewards", "achievements", address] as const,
+  // Rewards
+  rewardSummary: (address: string) => ["rewards", "summary", address] as const,
+  achievements: (address: string) => ["rewards", "achievements", address] as const,
 
- // Agents
- agents: () => ["agents"] as const,
+  // Agents
+  agents: () => ["agents"] as const,
 } as const;

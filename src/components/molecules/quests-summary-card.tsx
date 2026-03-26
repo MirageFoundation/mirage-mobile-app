@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import Animated, {
@@ -21,7 +21,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { usePreferencesStore } from "@/src/stores";
 import { useAuthStore } from "@/src/stores";
 import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
-import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 
 function formatTimeShort(seconds: number): string {
   const hours = Math.floor(seconds / 3600);

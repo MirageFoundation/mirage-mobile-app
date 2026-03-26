@@ -3,7 +3,7 @@ import * as Sentry from "@sentry/react-native";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useEvent, useEventListener } from "expo";
 import { useLocalSearchParams } from "expo-router";
-import { router } from "@/src/utils/guarded-router";
+import { router } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,

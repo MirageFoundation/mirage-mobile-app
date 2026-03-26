@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import type { Post } from "@/src/domain/posts/types";
 import { mmkvStorage } from "./mmkv-storage";
-import type { Post } from "@/src/components/molecules/post-card-types";
 
 export type HistoryEntry = Post & {
   viewedAt: number;

@@ -4,6 +4,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/src/api/read/query-keys";
+import { mutationKeys } from "@/src/api/write/mutation-keys";
 import { useWallet } from "@/src/hooks/use-wallet";
 import {
   blockUser,
@@ -32,6 +33,7 @@ export function useBlockUser(options: UseBlockOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.blockUser(),
     mutationFn: async (userAddress: string) => {
       const wallet = await getWallet();
       return blockUser(wallet, userAddress, options.onPoWProgress);
@@ -45,8 +47,11 @@ export function useBlockUser(options: UseBlockOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
-      queryClient.invalidateQueries({ queryKey: ["comments"], refetchType: "inactive" });
+      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.commentsRoot(),
+        refetchType: "inactive",
+      });
     },
   });
 }
@@ -60,6 +65,7 @@ export function useBlockTopic(options: UseBlockOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.blockTopic(),
     mutationFn: async (topic: string) => {
       const wallet = await getWallet();
       return blockTopic(wallet, topic, options.onPoWProgress);
@@ -73,7 +79,7 @@ export function useBlockTopic(options: UseBlockOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
     },
   });
 }
@@ -83,6 +89,7 @@ export function useUnblockTopic(options: UseBlockOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.unblockTopic(),
     mutationFn: async (topic: string) => {
       const wallet = await getWallet();
       return unblockTopic(wallet, topic, options.onPoWProgress);
@@ -96,7 +103,7 @@ export function useUnblockTopic(options: UseBlockOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
     },
   });
 }
@@ -106,6 +113,7 @@ export function useUnblockUser(options: UseBlockOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.unblockUser(),
     mutationFn: async (userAddress: string) => {
       const wallet = await getWallet();
       return unblockUser(wallet, userAddress, options.onPoWProgress);
@@ -119,8 +127,11 @@ export function useUnblockUser(options: UseBlockOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
-      queryClient.invalidateQueries({ queryKey: ["comments"], refetchType: "inactive" });
+      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.commentsRoot(),
+        refetchType: "inactive",
+      });
     },
   });
 }
@@ -134,6 +145,7 @@ export function useBlockPost(options: UseBlockOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.blockPost(),
     mutationFn: async (postId: string) => {
       const wallet = await getWallet();
       return blockPost(wallet, postId, options.onPoWProgress);
@@ -148,8 +160,11 @@ export function useBlockPost(options: UseBlockOptions = {}) {
         });
       }
       // Blocked post should be hidden
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
-      queryClient.invalidateQueries({ queryKey: ["comments"], refetchType: "inactive" });
+      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.commentsRoot(),
+        refetchType: "inactive",
+      });
     },
   });
 }
@@ -159,6 +174,7 @@ export function useUnblockPost(options: UseBlockOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.unblockPost(),
     mutationFn: async (postId: string) => {
       const wallet = await getWallet();
       return unblockPost(wallet, postId, options.onPoWProgress);
@@ -172,8 +188,11 @@ export function useUnblockPost(options: UseBlockOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
-      queryClient.invalidateQueries({ queryKey: ["comments"], refetchType: "inactive" });
+      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.commentsRoot(),
+        refetchType: "inactive",
+      });
     },
   });
 }

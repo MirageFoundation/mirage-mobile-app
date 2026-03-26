@@ -1,4 +1,5 @@
 import { queryKeys } from "@/src/api/read/query-keys";
+import { mutationKeys } from "@/src/api/write/mutation-keys";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { setBiography } from "../endpoints/biography";
@@ -13,6 +14,7 @@ export function useSetBiography(options: UseSetBiographyOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.setBiography(),
     mutationFn: async (biography: string) => {
       const wallet = await getWallet();
       return setBiography(wallet, biography, options.onPoWProgress);

@@ -1,6 +1,6 @@
 import { Text } from "@/src/components/ui/primitives";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import React, { forwardRef, useCallback, useImperativeHandle } from "react";
 import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

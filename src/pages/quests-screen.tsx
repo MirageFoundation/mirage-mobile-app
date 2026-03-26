@@ -1,1248 +1,27 @@
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect } from "@react-navigation/native";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  Modal,
-  Pressable,
-  ScrollView,
-  View,
-} from "react-native";
-import Animated, {
-  interpolate,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withRepeat,
-  withSequence,
-  withSpring,
-  withTiming,
-  Easing,
-} from "react-native-reanimated";
+import { Alert, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { useRewardSummary } from "@/src/api/read/hooks";
 import { useNodeConfig } from "@/src/api/read/hooks/use-parameters";
 import { useClaimReward } from "@/src/api/write/hooks";
-import type { DailyQuest } from "@/src/api/read/endpoints/rewards";
-import type { FlashQuest } from "@/src/api/read/endpoints/rewards";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
-const ACTION_ICONS: Record<string, string> = {
-  comment: "chatbubble-outline",
-  vote: "thumbs-up-outline",
-  balanced_vote: "swap-vertical-outline",
-  post: "create-outline",
-  follow: "person-add-outline",
-  share: "share-outline",
-  upvotes_received: "trending-up-outline",
-  comment_upvotes_received: "chatbubbles-outline",
-  invite_recruit: "people-outline",
-  claim_only: "gift-outline",
-};
-
-const ACTION_COLORS: Record<string, string> = {
-  comment: "#3B82F6",
-  vote: "#10B981",
-  balanced_vote: "#06B6D4",
-  post: "#8B5CF6",
-  follow: "#F59E0B",
-  share: "#EC4899",
-  upvotes_received: "#F97316",
-  comment_upvotes_received: "#6366F1",
-  invite_recruit: "#14B8A6",
-  claim_only: "#A855F7",
-};
-
-const BUTTON_GRADIENT_COLORS: readonly [string, string] = [
-  "rgb(102, 126, 234)",
-  "rgb(118, 75, 162)",
-];
-
-const CONFETTI_COLORS = [
-  "#FF6B6B",
-  "#4ECDC4",
-  "#45B7D1",
-  "#96CEB4",
-  "#FFEAA7",
-  "#DDA0DD",
-  "#98D8C8",
-  "#F7DC6F",
-  "#BB8FCE",
-  "#85C1E9",
-];
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-
-function ConfettiPiece({ delay, index }: { delay: number; index: number }) {
-  const translateY = useSharedValue(-50);
-  const translateX = useSharedValue(0);
-  const rotate = useSharedValue(0);
-  const opacity = useSharedValue(1);
-  const scale = useSharedValue(1);
-
-  const startX = Math.random() * SCREEN_WIDTH;
-  const color = CONFETTI_COLORS[index % CONFETTI_COLORS.length];
-  const size = 8 + Math.random() * 8;
-  const isCircle = Math.random() > 0.5;
-
-  useEffect(() => {
-    const drift = (Math.random() - 0.5) * 100;
-
-    translateY.value = withDelay(
-      delay,
-      withTiming(SCREEN_HEIGHT + 100, {
-        duration: 3000 + Math.random() * 2000,
-        easing: Easing.out(Easing.quad),
-      }),
-    );
-
-    translateX.value = withDelay(
-      delay,
-      withRepeat(
-        withSequence(
-          withTiming(drift, { duration: 500 }),
-          withTiming(-drift, { duration: 500 }),
-        ),
-        -1,
-        true,
-      ),
-    );
-
-    rotate.value = withDelay(
-      delay,
-      withRepeat(
-        withTiming(360, { duration: 1000 + Math.random() * 1000 }),
-        -1,
-        false,
-      ),
-    );
-
-    opacity.value = withDelay(delay + 2000, withTiming(0, { duration: 1000 }));
-
-    scale.value = withDelay(
-      delay,
-      withSequence(
-        withSpring(1.2, { damping: 8 }),
-        withSpring(1, { damping: 10 }),
-      ),
-    );
-  }, []);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: translateY.value },
-      { translateX: translateX.value },
-      { rotate: `${rotate.value}deg` },
-      { scale: scale.value },
-    ],
-    opacity: opacity.value,
-  }));
-
-  return (
-    <Animated.View
-      style={[
-        {
-          position: "absolute",
-          left: startX,
-          top: 0,
-          width: size,
-          height: isCircle ? size : size * 0.6,
-          backgroundColor: color,
-          borderRadius: isCircle ? size / 2 : 2,
-        },
-        animatedStyle,
-      ]}
-    />
-  );
-}
-
-function ConfettiAnimation({ isVisible }: { isVisible: boolean }) {
-  if (!isVisible) return null;
-
-  return (
-    <View
-      style={{
-        position: "absolute",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        pointerEvents: "none",
-        zIndex: 1000,
-      }}
-    >
-      {Array.from({ length: 50 }).map((_, i) => (
-        <ConfettiPiece key={i} index={i} delay={i * 30} />
-      ))}
-    </View>
-  );
-}
-
-function ClaimSuccessModal({
-  visible,
-  rewardAmount,
-  inviteCodes,
-  onClose,
-}: {
-  visible: boolean;
-  rewardAmount: number;
-  inviteCodes: number;
-  onClose: () => void;
-}) {
-  const { theme } = useUnistyles();
-  const scaleAnim = useSharedValue(0);
-  const opacityAnim = useSharedValue(0);
-
-  useEffect(() => {
-    if (visible) {
-      opacityAnim.value = withTiming(1, { duration: 300 });
-      scaleAnim.value = withSequence(
-        withSpring(1.03, { damping: 15, stiffness: 300 }),
-        withSpring(1, { damping: 15 }),
-      );
-    } else {
-      opacityAnim.value = withTiming(0, { duration: 200 });
-      scaleAnim.value = withTiming(0, { duration: 200 });
-    }
-  }, [visible]);
-
-  const backdropStyle = useAnimatedStyle(() => ({
-    opacity: opacityAnim.value * 0.7,
-  }));
-
-  const modalStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scaleAnim.value }],
-    opacity: opacityAnim.value,
-  }));
-
-  const handleClose = useCallback(() => {
-    triggerHaptic("light");
-    onClose();
-  }, [onClose]);
-
-  return (
-    <Modal visible={visible} transparent animationType="none">
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <Animated.View
-          style={[
-            {
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: "#000",
-            },
-            backdropStyle,
-          ]}
-        />
-        <ConfettiAnimation isVisible={visible} />
-        <Animated.View
-          style={[
-            {
-              backgroundColor: theme.colors.background.default,
-              borderRadius: 24,
-              padding: 32,
-              alignItems: "center",
-              marginHorizontal: 32,
-              borderWidth: 1,
-              borderColor: theme.colors.border.subtle,
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 10 },
-              shadowOpacity: 0.3,
-              shadowRadius: 20,
-              elevation: 10,
-            },
-            modalStyle,
-          ]}
-        >
-          <View
-            style={{
-              width: 80,
-              height: 80,
-              borderRadius: 40,
-              backgroundColor: theme.colors.success[500] + "20",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: 20,
-            }}
-          >
-            <Ionicons
-              name="trophy"
-              size={40}
-              color={theme.colors.success[500]}
-            />
-          </View>
-
-          <Text
-            size="xl"
-            weight="bold"
-            style={{ marginBottom: 8, textAlign: "center" }}
-          >
-            Rewards Claimed!
-          </Text>
-
-          {rewardAmount > 0 && (
-            <Box
-              direction="row"
-              alignItems="center"
-              gap="xs"
-              style={{ marginBottom: inviteCodes > 0 ? 8 : 24 }}
-            >
-              <Ionicons
-                name="sparkles"
-                size={20}
-                color={theme.colors.warning[500]}
-              />
-              <Text
-                size="lg"
-                weight="bold"
-                style={{ color: theme.colors.warning[500] }}
-              >
-                +{rewardAmount.toLocaleString()} MIRAGE
-              </Text>
-            </Box>
-          )}
-
-          {inviteCodes > 0 && (
-            <Box
-              direction="row"
-              alignItems="center"
-              gap="xs"
-              style={{ marginBottom: 24 }}
-            >
-              <Ionicons
-                name="mail-outline"
-                size={20}
-                color={theme.colors.primary[500]}
-              />
-              <Text
-                size="lg"
-                weight="bold"
-                style={{ color: theme.colors.primary[500] }}
-              >
-                +{inviteCodes} Invite {inviteCodes === 1 ? "Code" : "Codes"}
-              </Text>
-            </Box>
-          )}
-
-          <Text
-            size="sm"
-            mode="subtle"
-            style={{ textAlign: "center", marginBottom: 24 }}
-          >
-            Your rewards have been added to your balance
-          </Text>
-
-          <Pressable
-            onPress={handleClose}
-            style={({ pressed }) => [
-              {
-                paddingHorizontal: 48,
-                borderRadius: 12,
-                overflow: "hidden",
-              },
-              { opacity: pressed ? 0.9 : 1 },
-            ]}
-          >
-            <LinearGradient
-              colors={[...BUTTON_GRADIENT_COLORS]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={{
-                paddingVertical: 12,
-                paddingHorizontal: 32,
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 12,
-              }}
-            >
-              <Text size="md" weight="bold" style={{ color: "#fff" }}>
-                Awesome!
-              </Text>
-            </LinearGradient>
-          </Pressable>
-        </Animated.View>
-      </View>
-    </Modal>
-  );
-}
-
-function formatTimeRemaining(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-  return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-}
-
-function SkeletonBox({
-  width,
-  height,
-  style,
-  borderRadius,
-}: {
-  width: number | `${number}%`;
-  height: number;
-  style?: object;
-  borderRadius?: number;
-}) {
-  const { theme } = useUnistyles();
-  const shimmer = useSharedValue(0);
-
-  useEffect(() => {
-    shimmer.value = withRepeat(withTiming(1, { duration: 1200 }), -1, false);
-  }, [shimmer]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(shimmer.value, [0, 0.5, 1], [0.3, 0.6, 0.3]),
-  }));
-
-  return (
-    <Animated.View
-      style={[
-        {
-          width,
-          height,
-          backgroundColor: theme.colors.background.subtle,
-          borderRadius: borderRadius ?? theme.radius.sm,
-        },
-        animatedStyle,
-        style,
-      ]}
-    />
-  );
-}
-
-function QuestsSkeleton() {
-  const { theme } = useUnistyles();
-
-  return (
-    <ScrollView
-      contentContainerStyle={{
-        paddingTop: theme.spacing.lg,
-        paddingHorizontal: theme.spacing.md,
-      }}
-      showsVerticalScrollIndicator={false}
-    >
-      <Box
-        rounded="lg"
-        p="lg"
-        mb="lg"
-        style={{
-          backgroundColor: theme.colors.background.default,
-          borderWidth: 1,
-          borderColor: theme.colors.border.subtle,
-        }}
-      >
-        <Box alignItems="center" gap="md">
-          <SkeletonBox width={120} height={16} />
-          <SkeletonBox width={180} height={48} borderRadius={theme.radius.md} />
-          <SkeletonBox width={200} height={14} />
-        </Box>
-      </Box>
-
-      {[0, 1, 2].map((i) => (
-        <Box
-          key={i}
-          rounded="lg"
-          p="md"
-          mb="md"
-          style={{
-            backgroundColor: theme.colors.background.default,
-            borderWidth: 1,
-            borderColor: theme.colors.border.subtle,
-          }}
-        >
-          <Box direction="row" alignItems="center" gap="sm" mb="md">
-            <SkeletonBox
-              width={36}
-              height={36}
-              borderRadius={theme.radius.md}
-            />
-            <Box flex gap="xs">
-              <SkeletonBox width={120} height={18} />
-              <SkeletonBox width={180} height={14} />
-            </Box>
-          </Box>
-          <SkeletonBox width="100%" height={8} borderRadius={4} />
-          <Box direction="row" justifyContent="space-between" mt="sm">
-            <SkeletonBox width={60} height={14} />
-            <SkeletonBox width={80} height={14} />
-          </Box>
-        </Box>
-      ))}
-    </ScrollView>
-  );
-}
-
-function CountdownTimer({
-  secondsRemaining,
-  onTick,
-}: {
-  secondsRemaining: number;
-  onTick: (seconds: number) => void;
-}) {
-  const { theme } = useUnistyles();
-  const pulseAnim = useSharedValue(1);
-
-  useEffect(() => {
-    pulseAnim.value = withRepeat(
-      withSequence(
-        withTiming(1.05, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-        withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-      true,
-    );
-  }, [pulseAnim]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      onTick(Math.max(0, secondsRemaining - 1));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [secondsRemaining, onTick]);
-
-  const pulseStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pulseAnim.value }],
-  }));
-
-  const progress = 1 - secondsRemaining / (24 * 60 * 60);
-
-  return (
-    <Box
-      rounded="lg"
-      p="lg"
-      mb="lg"
-      style={[
-        styles.timerCard,
-        {
-          backgroundColor: theme.colors.background.default,
-          borderWidth: 1,
-          borderColor: theme.colors.border.subtle,
-        },
-      ]}
-    >
-      <Box
-        style={[
-          styles.timerGlow,
-          { backgroundColor: theme.colors.primary[500] },
-        ]}
-      />
-      <Box
-        style={[
-          styles.timerGlowLeft,
-          { backgroundColor: theme.colors.primary[500] },
-        ]}
-      />
-      <Box
-        style={[
-          styles.timerGlowRight,
-          { backgroundColor: theme.colors.primary[500] },
-        ]}
-      />
-      <Box alignItems="center" gap="sm">
-        <Text size="sm" weight="semibold" mode="subtle">
-          TIME REMAINING
-        </Text>
-        <Animated.View style={pulseStyle}>
-          <Text
-            size="mega"
-            weight="bold"
-            style={{ color: theme.colors.primary[500], letterSpacing: 2 }}
-          >
-            {formatTimeRemaining(secondsRemaining)}
-          </Text>
-        </Animated.View>
-        <Box
-          style={[
-            styles.progressBarContainer,
-            { backgroundColor: "rgba(255,255,255,0.1)" },
-          ]}
-        >
-          <Box
-            style={[
-              styles.progressBarFill,
-              {
-                backgroundColor: theme.colors.primary[500],
-                width: `${progress * 100}%`,
-              },
-            ]}
-          />
-        </Box>
-        <Text size="sm" mode="subtle">
-          Complete quests before timer resets
-        </Text>
-      </Box>
-    </Box>
-  );
-}
-
-function QuestRequirements({ quest }: { quest: DailyQuest }) {
-  const { theme } = useUnistyles();
-  const requirements: string[] = [];
-  const hasVoteProgress =
-    quest.target_upvotes != null &&
-    quest.upvotes != null &&
-    quest.target_downvotes != null &&
-    quest.downvotes != null;
-
-  if (quest.min_content_length && quest.min_content_length > 0) {
-    requirements.push(`Minimum ${quest.min_content_length} characters`);
-  }
-
-  if (quest.unique_target === true) {
-    requirements.push("Must be different targets");
-  }
-
-  if (quest.count_vote_changes === false) {
-    requirements.push("New votes only (changes don't count)");
-  }
-
-  if (quest.time_spacing_minutes && quest.time_spacing_minutes > 0) {
-    requirements.push(`${quest.time_spacing_minutes} min between actions`);
-  }
-
-  if (quest.unique_topics_min && quest.unique_topics_min > 0) {
-    requirements.push(`At least ${quest.unique_topics_min} different topics`);
-  }
-
-  if (requirements.length === 0 && !hasVoteProgress) return null;
-
-  return (
-    <Box mt="sm" gap="xs">
-      {hasVoteProgress && (
-        <Box direction="row" gap="sm" mt="xs">
-          <Box flex direction="row" alignItems="center" gap="xs">
-            <Ionicons name="arrow-up" size={14} color="#10B981" />
-            <Box
-              flex
-              style={{
-                height: 6,
-                borderRadius: 3,
-                backgroundColor: "rgba(255,255,255,0.1)",
-                overflow: "hidden",
-              }}
-            >
-              <View
-                style={{
-                  height: "100%",
-                  borderRadius: 3,
-                  backgroundColor: "#10B981",
-                  width: `${quest.target_upvotes! > 0 ? (quest.upvotes! / quest.target_upvotes!) * 100 : 0}%`,
-                }}
-              />
-            </Box>
-            <Text size="xs" mode="subtle">
-              {quest.upvotes}/{quest.target_upvotes}
-            </Text>
-          </Box>
-          <Box flex direction="row" alignItems="center" gap="xs">
-            <Ionicons name="arrow-down" size={14} color="#8B5CF6" />
-            <Box
-              flex
-              style={{
-                height: 6,
-                borderRadius: 3,
-                backgroundColor: "rgba(255,255,255,0.1)",
-                overflow: "hidden",
-              }}
-            >
-              <View
-                style={{
-                  height: "100%",
-                  borderRadius: 3,
-                  backgroundColor: "#8B5CF6",
-                  width: `${quest.target_downvotes! > 0 ? (quest.downvotes! / quest.target_downvotes!) * 100 : 0}%`,
-                }}
-              />
-            </Box>
-            <Text size="xs" mode="subtle">
-              {quest.downvotes}/{quest.target_downvotes}
-            </Text>
-          </Box>
-        </Box>
-      )}
-      {requirements.map((req, index) => (
-        <Box key={index} direction="row" alignItems="center" gap="xs">
-          <View
-            style={{
-              width: 4,
-              height: 4,
-              borderRadius: 2,
-              backgroundColor: theme.colors.text.subtle,
-            }}
-          />
-          <Text size="sm" mode="subtle">
-            {req}
-          </Text>
-        </Box>
-      ))}
-    </Box>
-  );
-}
-
-function QuestCard({
-  quest,
-  rewardMultiplier,
-}: {
-  quest: DailyQuest;
-  rewardMultiplier: number;
-}) {
-  const { theme } = useUnistyles();
-  const progressAnim = useSharedValue(0);
-  const checkmarkScale = useSharedValue(quest.completed ? 1 : 0);
-
-  const iconName = ACTION_ICONS[quest.action_type] || "star-outline";
-  const accentColor =
-    ACTION_COLORS[quest.action_type] || theme.colors.primary[500];
-  const progress = quest.target > 0 ? quest.progress / quest.target : 0;
-  const primaryReward = quest.rewards[0];
-  const baseReward = primaryReward?.amount ?? 0;
-  const isInviteCode = primaryReward?.type === "invite_code";
-  const shouldApplyMultiplier = primaryReward?.apply_multiplier !== false;
-  const rewardAmount = shouldApplyMultiplier
-    ? Math.floor(baseReward * rewardMultiplier)
-    : baseReward;
-
-  useEffect(() => {
-    progressAnim.value = withSpring(progress, { damping: 15, stiffness: 100 });
-  }, [progress, progressAnim]);
-
-  useEffect(() => {
-    checkmarkScale.value = withSpring(quest.completed ? 1 : 0, {
-      damping: 12,
-      stiffness: 200,
-    });
-  }, [quest.completed, checkmarkScale]);
-
-  const progressStyle = useAnimatedStyle(() => ({
-    width: `${progressAnim.value * 100}%`,
-  }));
-
-  const checkmarkStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: checkmarkScale.value }],
-    opacity: checkmarkScale.value,
-  }));
-
-  return (
-    <Box
-      rounded="lg"
-      p="md"
-      mb="md"
-      style={[
-        styles.questCard,
-        {
-          backgroundColor: quest.completed
-            ? theme.colors.success[500] + "10"
-            : theme.colors.background.default,
-          borderWidth: quest.completed ? 2 : 1,
-          borderColor: quest.completed
-            ? theme.colors.success[500] + "40"
-            : theme.colors.border.subtle,
-        },
-      ]}
-    >
-      <Box direction="row" alignItems="center" gap="sm">
-        <Box
-          style={[
-            styles.questIconContainer,
-            { backgroundColor: accentColor + "20" },
-          ]}
-        >
-          <Ionicons name={iconName as any} size={18} color={accentColor} />
-          {quest.completed && (
-            <Animated.View style={[styles.checkmarkBadge, checkmarkStyle]}>
-              <Ionicons
-                name="checkmark-circle"
-                size={16}
-                color={theme.colors.success[500]}
-              />
-            </Animated.View>
-          )}
-        </Box>
-
-        <Box flex>
-          <Box
-            direction="row"
-            alignItems="center"
-            justifyContent="space-between"
-          >
-            <Text
-              size="md"
-              weight="semibold"
-              numberOfLines={1}
-              style={{ flex: 1 }}
-            >
-              {quest.title}
-            </Text>
-            <Box
-              direction="row"
-              alignItems="center"
-              gap="xs"
-              style={[
-                styles.rewardBadge,
-                { backgroundColor: theme.colors.warning[500] + "20" },
-              ]}
-            >
-              <Ionicons
-                name="sparkles"
-                size={12}
-                color={theme.colors.warning[500]}
-              />
-              <Text
-                size="sm"
-                weight="bold"
-                style={{ color: theme.colors.warning[500] }}
-              >
-                {isInviteCode ? `+${baseReward} Invite` : `+${rewardAmount}`}
-              </Text>
-            </Box>
-          </Box>
-          <Text
-            size="sm"
-            mode="subtle"
-            numberOfLines={2}
-            style={{ marginTop: 2 }}
-          >
-            {quest.description}
-          </Text>
-        </Box>
-      </Box>
-
-      <QuestRequirements quest={quest} />
-
-      <Box mt="md">
-        <Box
-          style={[
-            styles.questProgressContainer,
-            { backgroundColor: "rgba(255,255,255,0.1)" },
-          ]}
-        >
-          <Animated.View
-            style={[
-              styles.questProgressFill,
-              {
-                backgroundColor: quest.completed
-                  ? theme.colors.success[500]
-                  : accentColor,
-              },
-              progressStyle,
-            ]}
-          />
-        </Box>
-        <Box
-          direction="row"
-          justifyContent="space-between"
-          alignItems="center"
-          mt="xs"
-        >
-          <Text size="sm" mode="subtle">
-            {quest.progress} / {quest.target}
-          </Text>
-          <Text
-            size="sm"
-            weight="semibold"
-            style={{
-              color: quest.completed
-                ? theme.colors.success[500]
-                : theme.colors.text.subtle,
-            }}
-          >
-            {quest.completed ? "Completed!" : `${Math.round(progress * 100)}%`}
-          </Text>
-        </Box>
-      </Box>
-    </Box>
-  );
-}
-
-function FlashQuestCountdown({
-  secondsRemaining: initial,
-}: {
-  secondsRemaining: number;
-}) {
-  const { theme } = useUnistyles();
-  const [seconds, setSeconds] = useState(initial);
-
-  useEffect(() => {
-    setSeconds(initial);
-  }, [initial]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setSeconds((s) => Math.max(0, s - 1));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const hours = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-
-  const isUrgent = seconds < 1800;
-  const color = isUrgent ? theme.colors.error[500] : "#F59E0B";
-
-  return (
-    <Box direction="row" alignItems="center" gap="xs">
-      <Ionicons name="timer-outline" size={14} color={color} />
-      <Text size="sm" weight="bold" style={{ color, fontVariant: ["tabular-nums"] }}>
-        {hours > 0 && `${hours}h `}{mins.toString().padStart(2, "0")}m {secs.toString().padStart(2, "0")}s
-      </Text>
-    </Box>
-  );
-}
-
-function FlashQuestCard({ quest, rewardMultiplier }: { quest: FlashQuest; rewardMultiplier: number }) {
-  const { theme } = useUnistyles();
-  const progressAnim = useSharedValue(0);
-  const shimmer = useSharedValue(0);
-
-  const progress = quest.target > 0 ? quest.progress / quest.target : 0;
-  const primaryReward = quest.rewards[0];
-  const baseReward = primaryReward?.amount ?? 0;
-  const shouldApplyMultiplier = primaryReward?.apply_multiplier !== false;
-  const rewardAmount = shouldApplyMultiplier
-    ? Math.floor(baseReward * rewardMultiplier)
-    : baseReward;
-  const accentColor = "#F59E0B";
-
-  useEffect(() => {
-    progressAnim.value = withSpring(progress, { damping: 15, stiffness: 100 });
-  }, [progress, progressAnim]);
-
-  useEffect(() => {
-    shimmer.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-      false,
-    );
-  }, [shimmer]);
-
-  const progressStyle = useAnimatedStyle(() => ({
-    width: `${progressAnim.value * 100}%`,
-  }));
-
-  const borderStyle = useAnimatedStyle(() => ({
-    borderColor: `rgba(245, 158, 11, ${interpolate(shimmer.value, [0, 1], [0.3, 0.7])})`,
-  }));
-
-  const requirements: string[] = [];
-  if (quest.unique_target) requirements.push("Must be different targets");
-  if (quest.count_vote_changes === false) requirements.push("New votes only");
-  if (quest.time_spacing_minutes && quest.time_spacing_minutes > 0)
-    requirements.push(`${quest.time_spacing_minutes} min between actions`);
-  if (quest.unique_topics_min && quest.unique_topics_min > 0)
-    requirements.push(`At least ${quest.unique_topics_min} different topics`);
-  if (quest.min_content_length && quest.min_content_length > 0)
-    requirements.push(`Minimum ${quest.min_content_length} characters`);
-
-  return (
-    <Animated.View
-      style={[
-        {
-          borderRadius: theme.radius.lg,
-          padding: theme.spacing.md,
-          marginBottom: theme.spacing.md,
-          overflow: "hidden",
-          borderWidth: 2,
-          backgroundColor: quest.completed
-            ? theme.colors.success[500] + "10"
-            : accentColor + "08",
-        },
-        borderStyle,
-      ]}
-    >
-      <LinearGradient
-        colors={[accentColor + "15", "transparent"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-        }}
-      />
-
-      <Box direction="row" alignItems="center" justifyContent="space-between" mb="sm">
-        <Box direction="row" alignItems="center" gap="xs" px="sm" py="xs" rounded="full"
-          style={{ backgroundColor: accentColor + "20" }}
-        >
-          <Ionicons name="flash" size={14} color={accentColor} />
-          <Text size="xs" weight="bold" style={{ color: accentColor, letterSpacing: 1 }}>
-            FLASH QUEST
-          </Text>
-        </Box>
-        {!quest.completed && (
-          <FlashQuestCountdown secondsRemaining={quest.seconds_remaining} />
-        )}
-      </Box>
-
-      <Box direction="row" alignItems="center" gap="sm">
-        <Box
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: accentColor + "20",
-          }}
-        >
-          <Ionicons name="flash" size={18} color={accentColor} />
-          {quest.completed && (
-            <View style={{ position: "absolute", bottom: -3, right: -3, backgroundColor: "white", borderRadius: 8 }}>
-              <Ionicons name="checkmark-circle" size={16} color={theme.colors.success[500]} />
-            </View>
-          )}
-        </Box>
-        <Box flex>
-          <Box direction="row" alignItems="center" justifyContent="space-between">
-            <Text size="md" weight="semibold" numberOfLines={1} style={{ flex: 1 }}>
-              {quest.title}
-            </Text>
-            <Box direction="row" alignItems="center" gap="xs"
-              style={{
-                paddingHorizontal: theme.spacing.sm,
-                paddingVertical: 3,
-                borderRadius: 20,
-                backgroundColor: theme.colors.warning[500] + "20",
-              }}
-            >
-              <Ionicons name="sparkles" size={12} color={theme.colors.warning[500]} />
-              <Text size="sm" weight="bold" style={{ color: theme.colors.warning[500] }}>
-                +{rewardAmount}
-              </Text>
-            </Box>
-          </Box>
-          <Text size="sm" mode="subtle" numberOfLines={2} style={{ marginTop: 2 }}>
-            {quest.description}
-          </Text>
-        </Box>
-      </Box>
-
-      {requirements.length > 0 && (
-        <Box mt="sm" gap="xs">
-          {requirements.map((req, index) => (
-            <Box key={index} direction="row" alignItems="center" gap="xs">
-              <View
-                style={{
-                  width: 4,
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: theme.colors.text.subtle,
-                }}
-              />
-              <Text size="sm" mode="subtle">
-                {req}
-              </Text>
-            </Box>
-          ))}
-        </Box>
-      )}
-
-      <Box mt="md">
-        <Box
-          style={{
-            width: "100%",
-            height: 6,
-            borderRadius: 3,
-            overflow: "hidden",
-            backgroundColor: "rgba(255,255,255,0.1)",
-          }}
-        >
-          <Animated.View
-            style={[
-              {
-                height: "100%",
-                borderRadius: 3,
-                backgroundColor: quest.completed
-                  ? theme.colors.success[500]
-                  : accentColor,
-              },
-              progressStyle,
-            ]}
-          />
-        </Box>
-        <Box direction="row" justifyContent="space-between" alignItems="center" mt="xs">
-          <Text size="sm" mode="subtle">
-            {quest.progress} / {quest.target}
-          </Text>
-          <Text
-            size="sm"
-            weight="semibold"
-            style={{
-              color: quest.completed
-                ? theme.colors.success[500]
-                : theme.colors.text.subtle,
-            }}
-          >
-            {quest.completed ? "Completed!" : `${Math.round(progress * 100)}%`}
-          </Text>
-        </Box>
-      </Box>
-    </Animated.View>
-  );
-}
-
-function RewardMultiplierBadge({ multiplier }: { multiplier: number }) {
-  const { theme } = useUnistyles();
-  const bounceAnim = useSharedValue(1);
-
-  useEffect(() => {
-    bounceAnim.value = withRepeat(
-      withSequence(
-        withSpring(1.1, { damping: 8 }),
-        withSpring(1, { damping: 8 }),
-      ),
-      -1,
-      true,
-    );
-  }, [bounceAnim]);
-
-  const bounceStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: bounceAnim.value }],
-  }));
-
-  return (
-    <Animated.View style={bounceStyle}>
-      <Box
-        direction="row"
-        alignItems="center"
-        gap="xs"
-        px="sm"
-        py="xs"
-        rounded="full"
-        style={{
-          backgroundColor: theme.colors.warning[500] + "20",
-          borderWidth: 1,
-          borderColor: theme.colors.warning[500] + "40",
-        }}
-      >
-        <Ionicons name="flame" size={12} color={theme.colors.warning[500]} />
-        <Text
-          size="sm"
-          weight="bold"
-          style={{ color: theme.colors.warning[500] }}
-        >
-          {multiplier.toFixed(2)}x Rewards
-        </Text>
-      </Box>
-    </Animated.View>
-  );
-}
-
-function ClaimAllButton({
-  completedQuests,
-  totalQuests,
-  totalReward,
-  onClaim,
-  isClaiming,
-  hasClaimed,
-  payoutsEnabled = true,
-  hasRewardsToClaim = false,
-}: {
-  completedQuests: DailyQuest[];
-  totalQuests: number;
-  totalReward: number;
-  onClaim: () => void;
-  isClaiming: boolean;
-  hasClaimed: boolean;
-  payoutsEnabled?: boolean;
-  hasRewardsToClaim?: boolean;
-}) {
-  const canClaim = hasRewardsToClaim && !hasClaimed && payoutsEnabled;
-
-  const handlePress = useCallback(() => {
-    if (canClaim && !isClaiming) {
-      triggerHaptic("medium");
-      onClaim();
-    }
-  }, [canClaim, isClaiming, onClaim]);
-
-  return (
-    <Pressable
-      onPress={handlePress}
-      disabled={!canClaim || isClaiming}
-      style={({ pressed }) => [
-        styles.claimAllButton,
-        { opacity: pressed && canClaim ? 0.9 : canClaim ? 1 : 0.5 },
-      ]}
-    >
-      <LinearGradient
-        colors={[...BUTTON_GRADIENT_COLORS]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.gradientButton}
-      >
-        {isClaiming ? (
-          <>
-            <Text size="lg" weight="bold" style={{ color: "#fff" }}>
-              Claiming
-            </Text>
-            <ActivityIndicator
-              size="small"
-              color="#fff"
-              style={{ marginLeft: 8 }}
-            />
-          </>
-        ) : hasClaimed ? (
-          <Text size="lg" weight="bold" style={{ color: "#fff" }}>
-            Claimed
-          </Text>
-        ) : (
-          <Text size="lg" weight="bold" style={{ color: "#fff" }}>
-            Claim Rewards
-          </Text>
-        )}
-      </LinearGradient>
-    </Pressable>
-  );
-}
-
-function EmptyState() {
-  const { theme } = useUnistyles();
-
-  return (
-    <Box flex alignItems="center" justifyContent="center" p="lg">
-      <Box
-        style={[
-          styles.emptyIconContainer,
-          { backgroundColor: theme.colors.background.subtle },
-        ]}
-      >
-        <Ionicons
-          name="trophy-outline"
-          size={48}
-          color={theme.colors.text.subtle}
-        />
-      </Box>
-      <Text size="lg" weight="semibold" style={{ marginTop: 16 }}>
-        No Quests Available
-      </Text>
-      <Text
-        size="sm"
-        mode="subtle"
-        style={{ marginTop: 8, textAlign: "center" }}
-      >
-        Check back later for new daily quests!
-      </Text>
-    </Box>
-  );
-}
+import {
+  ClaimAllButton,
+  ClaimSuccessModal,
+  CountdownTimer,
+  EmptyState,
+  FlashQuestCard,
+  QuestsSkeleton,
+  QuestCard,
+  RewardMultiplierBadge,
+} from "./quests/quest-components";
 
 export function QuestsScreen() {
   const router = useRouter();
@@ -1253,7 +32,7 @@ export function QuestsScreen() {
   const questsEnabled = nodeConfig?.quests_enabled ?? true;
   const payoutsEnabled = nodeConfig?.quest_payouts_enabled ?? true;
 
-  const { data, isLoading, error, refetch, dataUpdatedAt } = useRewardSummary();
+  const { data, isLoading, error, refetch } = useRewardSummary();
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [isClaiming, setIsClaiming] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -1264,18 +43,18 @@ export function QuestsScreen() {
     onSuccess: (response) => {
       setIsClaiming(false);
       triggerHaptic("success");
-      const inviteRewards = response.rewards?.filter((r) => r.type === "invite_code") ?? [];
-      const invites = inviteRewards.reduce((s, r) => s + r.amount, 0);
+      const inviteRewards = response.rewards?.filter((reward) => reward.type === "invite_code") ?? [];
+      const invites = inviteRewards.reduce((sum, reward) => sum + reward.amount, 0);
       setClaimedInviteCodes(invites);
       setShowSuccessModal(true);
       refetch();
     },
-    onError: (error) => {
+    onError: (claimError) => {
       setIsClaiming(false);
       triggerHaptic("error");
       Alert.alert(
         "Claim Failed",
-        error.message || "Failed to claim rewards. Please try again.",
+        claimError.message || "Failed to claim rewards. Please try again.",
         [{ text: "OK" }],
       );
     },
@@ -1304,7 +83,7 @@ export function QuestsScreen() {
 
   const completedQuests = useMemo(() => {
     if (!data?.daily_quests) return [];
-    return data.daily_quests.filter((q) => q.completed);
+    return data.daily_quests.filter((quest) => quest.completed);
   }, [data?.daily_quests]);
 
   const totalReward = useMemo(() => {
@@ -1313,7 +92,7 @@ export function QuestsScreen() {
 
   const allQuestsCompleted = useMemo(() => {
     if (!data?.daily_quests?.length) return false;
-    return data.daily_quests.every((q) => q.completed);
+    return data.daily_quests.every((quest) => quest.completed);
   }, [data?.daily_quests]);
 
   const hasClaimed = useMemo(() => {
@@ -1326,7 +105,7 @@ export function QuestsScreen() {
     setIsClaiming(true);
     setClaimedRewardAmount(totalReward);
     claimMutation.mutate({ questId: "all" });
-  }, [data?.pending_rewards, claimMutation, totalReward]);
+  }, [claimMutation, data?.pending_rewards, totalReward]);
 
   const handleCloseSuccessModal = useCallback(() => {
     setShowSuccessModal(false);
@@ -1352,10 +131,7 @@ export function QuestsScreen() {
       >
         <Pressable
           onPress={handleBack}
-          style={({ pressed }) => [
-            styles.backButton,
-            pressed && { opacity: 0.7 },
-          ]}
+          style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.7 }]}
         >
           <EvilIcons name="close" size={28} color={theme.colors.text.default} />
         </Pressable>
@@ -1367,8 +143,17 @@ export function QuestsScreen() {
 
       {!questsEnabled ? (
         <Box flex center p="lg">
-          <Ionicons name="trophy-outline" size={48} color={theme.colors.text.subtle} style={{ marginBottom: 12 }} />
-          <Text size="lg" weight="semibold" style={{ textAlign: "center", marginBottom: 8 }}>
+          <Ionicons
+            name="trophy-outline"
+            size={48}
+            color={theme.colors.text.subtle}
+            style={{ marginBottom: 12 }}
+          />
+          <Text
+            size="lg"
+            weight="semibold"
+            style={{ textAlign: "center", marginBottom: 8 }}
+          >
             Quests Unavailable
           </Text>
           <Text size="md" mode="subtle" style={{ textAlign: "center" }}>
@@ -1390,54 +175,25 @@ export function QuestsScreen() {
               alignItems="center"
               p="lg"
               rounded="lg"
-              style={{
-                backgroundColor: "#EF444410",
-                borderWidth: 1,
-                borderColor: "#EF444425",
-              }}
+              style={styles.suspendedCard}
             >
-              <View
-                style={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: 40,
-                  backgroundColor: "#EF444420",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginBottom: 20,
-                }}
-              >
+              <View style={styles.suspendedIconWrap}>
                 <Ionicons name="warning" size={40} color="#EF4444" />
               </View>
               <Text
                 size="xl"
                 weight="bold"
-                style={{ color: "#EF4444", textAlign: "center", marginBottom: 8 }}
+                style={styles.suspendedTitle}
               >
                 Your quest rewards have been suspended
               </Text>
-              <Text
-                size="md"
-                style={{ color: "#F87171", textAlign: "center", marginBottom: 20 }}
-              >
+              <Text size="md" style={styles.suspendedReason}>
                 {data.suspension.reason}
               </Text>
-              <View
-                style={{
-                  backgroundColor: "#EF444415",
-                  borderWidth: 1,
-                  borderColor: "#EF444430",
-                  borderRadius: theme.radius.md,
-                  padding: theme.spacing.md,
-                  width: "100%",
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: theme.spacing.sm,
-                }}
-              >
+              <View style={[styles.suspendedUntilCard, { borderRadius: theme.radius.md }]}> 
                 <Ionicons name="time-outline" size={20} color="#F87171" />
                 <View style={{ flex: 1 }}>
-                  <Text size="xs" weight="semibold" style={{ color: "#F8717180", marginBottom: 2 }}>
+                  <Text size="xs" weight="semibold" style={styles.suspendedLabel}>
                     SUSPENDED UNTIL
                   </Text>
                   <Text size="md" weight="semibold" style={{ color: "#EF4444" }}>
@@ -1482,9 +238,9 @@ export function QuestsScreen() {
                   {completedQuests.length} / {totalCount}
                 </Text>
               </Box>
-              {data.reward_multiplier > 1 && (
+              {data.reward_multiplier > 1 ? (
                 <RewardMultiplierBadge multiplier={data.reward_multiplier} />
-              )}
+              ) : null}
             </Box>
 
             <CountdownTimer
@@ -1492,7 +248,7 @@ export function QuestsScreen() {
               onTick={handleTimeTick}
             />
 
-            {data.flash_quest && (
+            {data.flash_quest ? (
               <>
                 <Text
                   size="xs"
@@ -1502,9 +258,12 @@ export function QuestsScreen() {
                 >
                   FLASH QUEST
                 </Text>
-                <FlashQuestCard quest={data.flash_quest} rewardMultiplier={data.reward_multiplier} />
+                <FlashQuestCard
+                  quest={data.flash_quest}
+                  rewardMultiplier={data.reward_multiplier}
+                />
               </>
-            )}
+            ) : null}
 
             <Text
               size="xs"
@@ -1512,7 +271,7 @@ export function QuestsScreen() {
               mode="subtle"
               style={styles.sectionTitle}
             >
-              TODAY'S QUESTS
+              TODAY’S QUESTS
             </Text>
 
             {data.daily_quests.map((quest) => (
@@ -1522,12 +281,14 @@ export function QuestsScreen() {
                 rewardMultiplier={data.reward_multiplier}
               />
             ))}
-
           </Box>
         </ScrollView>
       )}
 
-      {questsEnabled && !isLoading && (data?.daily_quests?.length ?? 0) > 0 && !data?.suspended && (
+      {questsEnabled &&
+      !isLoading &&
+      (data?.daily_quests?.length ?? 0) > 0 &&
+      !data?.suspended ? (
         <View
           style={[
             styles.claimButtonContainer,
@@ -1550,7 +311,7 @@ export function QuestsScreen() {
             />
           </Box>
         </View>
-      )}
+      ) : null}
 
       <ClaimSuccessModal
         visible={showSuccessModal}
@@ -1587,85 +348,43 @@ const styles = StyleSheet.create((theme) => ({
     letterSpacing: 0.5,
     marginBottom: theme.spacing.md,
   },
-  timerCard: {
-    overflow: "hidden",
+  suspendedCard: {
+    backgroundColor: "#EF444410",
+    borderWidth: 1,
+    borderColor: "#EF444425",
   },
-  timerGlow: {
-    position: "absolute",
-    top: -50,
-    left: "25%",
-    width: "50%",
-    height: 100,
-    borderRadius: 50,
-    opacity: 0.1,
-  },
-  timerGlowLeft: {
-    position: "absolute",
-    bottom: -30,
-    left: -80,
-    width: 120,
-    height: 120,
-    borderRadius: 35,
-    opacity: 0.08,
-  },
-  timerGlowRight: {
-    position: "absolute",
-    bottom: -30,
-    right: -50,
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    opacity: 0.08,
-  },
-  progressBarContainer: {
-    width: "100%",
-    height: 6,
-    borderRadius: 3,
-    overflow: "hidden",
-    marginTop: theme.spacing.sm,
-  },
-  progressBarFill: {
-    height: "100%",
-    borderRadius: 3,
-  },
-  questCard: {
-    overflow: "hidden",
-  },
-  questIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+  suspendedIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#EF444420",
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 20,
   },
-  checkmarkBadge: {
-    position: "absolute",
-    bottom: -3,
-    right: -3,
-    backgroundColor: "white",
-    borderRadius: 8,
+  suspendedTitle: {
+    color: "#EF4444",
+    textAlign: "center",
+    marginBottom: 8,
   },
-  rewardBadge: {
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 3,
-    borderRadius: 20,
+  suspendedReason: {
+    color: "#F87171",
+    textAlign: "center",
+    marginBottom: 20,
   },
-  questProgressContainer: {
+  suspendedUntilCard: {
+    backgroundColor: "#EF444415",
+    borderWidth: 1,
+    borderColor: "#EF444430",
+    padding: 16,
     width: "100%",
-    height: 6,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  questProgressFill: {
-    height: "100%",
-    borderRadius: 3,
-  },
-  emptyIconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 8,
+  },
+  suspendedLabel: {
+    color: "#F8717180",
+    marginBottom: 2,
   },
   claimButtonContainer: {
     position: "absolute",
@@ -1673,15 +392,5 @@ const styles = StyleSheet.create((theme) => ({
     left: 0,
     right: 0,
     paddingTop: theme.spacing.md,
-  },
-  claimAllButton: {
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  gradientButton: {
-    paddingVertical: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
   },
 }));

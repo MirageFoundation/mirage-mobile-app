@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { mutationKeys } from "@/src/api/write/mutation-keys";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { giveAward, type GiveAwardInput } from "../endpoints/award";
@@ -59,16 +60,17 @@ export function useGiveAward() {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.award(),
     mutationFn: async (input: GiveAwardInput) => {
       const wallet = await getWallet();
       return giveAward(wallet, input);
     },
     onMutate: async ({ target, award_type }) => {
-      await queryClient.cancelQueries({ queryKey: ["posts"] });
-      await queryClient.cancelQueries({ queryKey: ["comments"] });
+      await queryClient.cancelQueries({ queryKey: queryKeys.postsRoot() });
+      await queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() });
 
-      const previousPosts = queryClient.getQueriesData({ queryKey: ["posts"] });
-      const previousComments = queryClient.getQueriesData({ queryKey: ["comments"] });
+      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() });
+      const previousComments = queryClient.getQueriesData({ queryKey: queryKeys.commentsRoot() });
 
       for (const [key, data] of previousPosts) {
         if (!data) continue;
@@ -124,11 +126,11 @@ export function useGiveAward() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["posts"],
+        queryKey: queryKeys.postsRoot(),
         refetchType: "none",
       });
       queryClient.invalidateQueries({
-        queryKey: ["comments"],
+        queryKey: queryKeys.commentsRoot(),
         refetchType: "none",
       });
       if (address) {

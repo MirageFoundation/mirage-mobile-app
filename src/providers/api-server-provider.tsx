@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/react-native";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { clearServerScopedQueries } from "@/src/api/cache/server-cache";
 import { apiClient } from "@/src/api/client";
 import { usePreferencesStore, getApiBaseUrl, type ApiServer } from "@/src/stores";
 import { useAuthStore } from "@/src/stores";
@@ -84,8 +85,7 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const baseUrl = getApiBaseUrl(server);
       apiClient.setBaseUrl(baseUrl);
 
-      queryClient.removeQueries();
-      queryClient.clear();
+      clearServerScopedQueries(queryClient);
 
       setApiServer(server);
       previousServerRef.current = server;

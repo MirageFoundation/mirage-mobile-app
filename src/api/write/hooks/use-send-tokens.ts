@@ -4,6 +4,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/src/api/read/query-keys";
+import { mutationKeys } from "@/src/api/write/mutation-keys";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { useAuthStore } from "@/src/stores";
 import {
@@ -32,6 +33,7 @@ export function useSendTokens(options: UseSendTokensOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.sendTokens(),
     mutationFn: async (input: SendTokensInput) => {
       const wallet = await getWallet();
       return sendTokens(wallet, input, options.onPoWProgress);
@@ -65,6 +67,7 @@ export function useUpgradeLevel() {
   const setUserLevel = useAuthStore((s) => s.setUserLevel);
 
   return useMutation({
+    mutationKey: mutationKeys.upgradeLevel(),
     mutationFn: async (level: SubscriptionLevel) => {
       const wallet = await getWallet();
       return upgradeLevel(wallet, level);
@@ -98,6 +101,7 @@ export function useSetAutoRenewal() {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.setAutoRenewal(),
     mutationFn: async (autoRenew: boolean) => {
       const wallet = await getWallet();
       return setAutoRenewal(wallet, autoRenew);

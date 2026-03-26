@@ -2,7 +2,7 @@ import * as Notifications from "expo-notifications";
 import * as BackgroundFetch from "expo-background-fetch";
 import * as TaskManager from "expo-task-manager";
 import { AppState, Platform } from "react-native";
-import { router } from "@/src/utils/guarded-router";
+import { router } from "@/src/navigation/guarded-router";
 import type { InfiniteData } from "@tanstack/react-query";
 
 import * as Sentry from "@sentry/react-native";

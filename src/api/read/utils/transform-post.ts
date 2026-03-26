@@ -1,5 +1,5 @@
-import type { ContentWarningType } from "@/src/components/atoms";
-import type { Post as UIPost } from "@/src/components/molecules";
+import type { ContentWarningType } from "@/src/domain/content/types";
+import type { Post as UIPost } from "@/src/domain/posts/types";
 import type { Post as ApiPost } from "../../types";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { calculateDisplayPoints } from "../endpoints/posts";

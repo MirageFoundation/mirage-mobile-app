@@ -1,4 +1,4 @@
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import * as Sentry from "@sentry/react-native";
 import { useCallback, useState } from "react";
 import {
@@ -16,6 +16,8 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useWelcomeStats } from "@/src/api/read/hooks/use-stats";
 import { useNodeConfig } from "@/src/api/read/hooks/use-parameters";
+import { clearServerScopedQueries } from "@/src/api/cache/server-cache";
+import { queryKeys } from "@/src/api/read/query-keys";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useToast } from "@/src/providers/toast-provider";
@@ -73,8 +75,13 @@ export function LoggedOutHome() {
       const newServer = otherServer;
       console.log("[LoggedOutHome] Switching server to:", newServer);
       apiClient.setBaseUrl(`https://${newServer}`);
-      queryClient.clear();
-      await queryClient.invalidateQueries();
+      queryClient.removeQueries({ queryKey: queryKeys.nodeConfig() });
+      queryClient.removeQueries({ queryKey: queryKeys.config() });
+      queryClient.removeQueries({ queryKey: queryKeys.welcomeStats() });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.welcomeStats(),
+        refetchType: "active",
+      });
 
       const result = await refetchNodeConfig();
 
@@ -88,7 +95,7 @@ export function LoggedOutHome() {
     } finally {
       setIsSwitching(false);
     }
-  }, [otherServer, setApiServer, queryClient, refetchNodeConfig, router]);
+  }, [otherServer, setApiServer, queryClient, refetchNodeConfig, router, toast]);
 
   return (
     <Box flex background="base">
@@ -418,8 +425,7 @@ export function LoggedOutHome() {
                       setSwitchingServer(server);
                       try {
                         apiClient.setBaseUrl(`https://${server}`);
-                        queryClient.clear();
-                        await queryClient.invalidateQueries();
+                        clearServerScopedQueries(queryClient);
                         await refetchNodeConfig();
                         setApiServer(server);
                         toast.success(`Switched to ${server}`);

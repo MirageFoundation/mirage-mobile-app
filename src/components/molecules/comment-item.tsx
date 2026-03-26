@@ -12,7 +12,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons, Octicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { openUrlOrInternal } from "@/src/utils/internal-link-handler";
+import { openUrlOrInternal } from "@/src/navigation/linking";
 import {
   ActivityIndicator,
   Dimensions,
@@ -29,6 +29,10 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import type {
+  Comment,
+  CommentAuthor,
+} from "@/src/domain/comments/types";
 import { getUsernameColor } from "@/src/utils/tiers";
 
 // Vote colors (same as post-actions)
@@ -36,29 +40,9 @@ const UPVOTE_COLOR = "#22C55E"; // Green for upvote
 const DOWNVOTE_COLOR = "#EF4444"; // Red for downvote
 const NEW_USER_COLOR = "rgb(94,194,106)";
 
-export type CommentAuthor = {
-  id: string;
-  username: string;
-  avatarSeed?: string;
-  avatarUrl?: string;
-  level?: number;
-  isNewUser?: boolean;
-};
-
-export type Comment = {
-  id: string;
-  author: CommentAuthor;
-  content: string;
-  likes: number;
-  dislikes: number;
-  hasLiked?: boolean;
-  hasDisliked?: boolean;
-  createdAt: Date | string | number;
-  replies?: Comment[];
-  replyCount?: number;
-  parentId?: string | null;
-  depth?: number;
-  awards?: import("@/src/api/types").AwardBadge[];
+export type {
+  Comment,
+  CommentAuthor,
 };
 
 type CommentItemProps = {

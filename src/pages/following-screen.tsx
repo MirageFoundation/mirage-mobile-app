@@ -1,6 +1,6 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { useFocusEffect } from "@react-navigation/native";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, View, type AppStateStatus } from "react-native";
 
@@ -40,7 +40,7 @@ import {
   useTimeTickStore,
 } from "@/src/stores";
 import { HomeTabbedFeed, type HomeTabbedFeedRef } from "./home/home-tabbed-feed";
-import { useHomePostCardStore } from "./home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 
 export function FollowingScreen() {
   const { theme } = useUnistyles();

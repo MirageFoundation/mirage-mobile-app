@@ -37,7 +37,7 @@ import {
   usePreferencesStore,
   type ApiServer,
 } from "@/src/stores";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { LogoutConfirmationPopup } from "./logout-confirmation-popup";
 import {
   ValuePickerSheet,

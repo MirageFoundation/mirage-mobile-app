@@ -1,26 +1,17 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Sentry from "@sentry/react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import type { FlashListRef } from "@shopify/flash-list";
 import { useLocalSearchParams } from "expo-router";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Pressable,
   RefreshControl,
-  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import {
-  Menu,
-  MenuOption,
-  MenuOptions,
-  MenuTrigger,
-} from "react-native-popup-menu";
+import { useUnistyles } from "react-native-unistyles";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
 import {
@@ -29,15 +20,11 @@ import {
   useUserFollowed,
 } from "@/src/api";
 import {
-  ConfirmationPopup,
   NewPostsButton,
   type Post,
   PostCardSkeletonList,
-  PostOptionsSheet,
   type PostOptionsSheetRef,
-  AwardPickerSheet,
   type AwardPickerSheetRef,
-  ReportSheet,
   type ReportSheetRef,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
@@ -53,7 +40,7 @@ import {
 } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
 import { HomePostList } from "./home/home-post-list";
-import { useHomePostCardStore } from "./home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
   getAllowedTagsFromContentTypes,
   useAuthStore,
@@ -64,6 +51,9 @@ import {
 } from "@/src/stores";
 import { useNewPostsChecker } from "@/src/hooks/use-new-posts-checker";
 import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
+
+import { TopicFeedHeader } from "./topic-feed/topic-feed-header";
+import { TopicFeedOverlays } from "./topic-feed/topic-feed-overlays";
 
 export function TopicFeedScreen() {
   const { id: topicName } = useLocalSearchParams<{ id: string }>();
@@ -77,7 +67,6 @@ export function TopicFeedScreen() {
   const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
 
-  const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const [isBannerLoading, setIsBannerLoading] = useState(false);
@@ -765,154 +754,33 @@ export function TopicFeedScreen() {
 
   return (
     <Box flex background="base">
-      <View
-        style={[
-          styles.headerContainer,
-          {
-            paddingTop: insets.top,
-            backgroundColor: theme.colors.background.default,
-            borderBottomColor: theme.colors.border.subtle,
-          },
-        ]}
-      >
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => [
-            styles.backButton,
-            pressed && { opacity: 0.7 },
-          ]}
-        >
-          <Ionicons
-            name="arrow-back"
-            size={24}
-            color={theme.colors.text.default}
-          />
-        </Pressable>
-        <Menu style={styles.headerTitleMenu}>
-          <MenuTrigger
-            customStyles={{
-              triggerTouchable: {
-                hitSlop: { top: 8, bottom: 8, left: 4, right: 4 },
-              },
-            }}
-          >
-            <View style={styles.titleButton}>
-              <Text
-                size="xl"
-                weight="bold"
-                numberOfLines={1}
-                style={{ flexShrink: 1 }}
-              >
-                #{topicName}
-              </Text>
-              <Text
-                size="xl"
-                weight="medium"
-                style={{
-                  color: theme.colors.text.subtle,
-                  marginLeft: 6,
-                }}
-              >
-                ǀ {SORT_OPTIONS.find((o) => o.value === sortBy)?.label}
-              </Text>
-              <Ionicons
-                name="chevron-down"
-                size={14}
-                color={theme.colors.text.subtle}
-                style={{ marginLeft: 2, marginTop: 4 }}
-              />
-            </View>
-          </MenuTrigger>
-          <MenuOptions
-            customStyles={{
-              optionsContainer: {
-                backgroundColor: theme.colors.background.default,
-                borderRadius: theme.radius.lg,
-                minWidth: 160,
-                shadowColor: theme.colors.contrast.base,
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.15,
-                shadowRadius: 12,
-                elevation: 8,
-                borderWidth: 1,
-                borderColor: theme.colors.border.subtle,
-                marginTop: 4,
-                paddingVertical: 4,
-              },
-            }}
-          >
-            {SORT_OPTIONS.map((option, index) => {
-              const isActive = option.value === sortBy;
-              return (
-                <View key={option.value}>
-                  {index > 0 && (
-                    <View
-                      style={{
-                        height: 1,
-                        backgroundColor: theme.colors.border.subtle,
-                        marginHorizontal: theme.spacing.md,
-                        marginVertical: 2,
-                      }}
-                    />
-                  )}
-                  <MenuOption onSelect={() => handleSortChange(option.value)}>
-                    <View style={styles.menuOption}>
-                      <Ionicons
-                        name={isActive ? "checkmark-circle" : "ellipse-outline"}
-                        size={16}
-                        color={
-                          isActive
-                            ? theme.colors.primary[500]
-                            : theme.colors.text.subtle
-                        }
-                      />
-                      <Text
-                        size="md"
-                        weight={isActive ? "semibold" : "medium"}
-                        style={
-                          isActive
-                            ? { color: theme.colors.primary[500] }
-                            : undefined
-                        }
-                      >
-                        {option.label}
-                      </Text>
-                    </View>
-                  </MenuOption>
-                </View>
-              );
-            })}
-          </MenuOptions>
-        </Menu>
-        <Pressable
-          onPress={handleHeaderFollowTopic}
-          style={[
-            styles.headerFollowButton,
-            {
-              backgroundColor: isTopicFollowed
-                ? "transparent"
-                : theme.colors.primary[500],
-              borderColor: isTopicFollowed
-                ? theme.colors.border.default
-                : theme.colors.primary[500],
-              paddingVertical: 2,
-              // height: isTopicFollowed ? 28 : 24,
-            },
-          ]}
-        >
-          <Text
-            size="md"
-            weight="bold"
-            style={{
-              color: isTopicFollowed
-                ? theme.colors.text.default
-                : theme.colors.background.default,
-            }}
-          >
-            {isTopicFollowed ? "Following" : "Follow"}
-          </Text>
-        </Pressable>
-      </View>
+      <TopicFeedHeader
+        borderBottomColor={theme.colors.border.subtle}
+        followBackgroundColor={
+          isTopicFollowed ? "transparent" : theme.colors.primary[500]
+        }
+        followBorderColor={
+          isTopicFollowed
+            ? theme.colors.border.default
+            : theme.colors.primary[500]
+        }
+        followTextColor={
+          isTopicFollowed
+            ? theme.colors.text.default
+            : theme.colors.background.default
+        }
+        insetsTop={insets.top}
+        isTopicFollowed={isTopicFollowed}
+        onBack={() => router.back()}
+        onFollowTopic={handleHeaderFollowTopic}
+        onSortChange={handleSortChange}
+        sortBy={sortBy}
+        sortLabel={SORT_OPTIONS.find((option) => option.value === sortBy)?.label ?? "Magic"}
+        sortOptions={SORT_OPTIONS}
+        textColor={theme.colors.text.default}
+        subtleTextColor={theme.colors.text.subtle}
+        topicName={topicName}
+      />
 
       <HomePostList
         ref={flatListRef}
@@ -937,126 +805,42 @@ export function TopicFeedScreen() {
         loading={isBannerLoading}
       />
 
-      <PostOptionsSheet
-        ref={postOptionsSheetRef}
-        post={selectedPost}
-        isOwnPost={currentUser?.id === selectedPost?.author.id}
-        isTopicFollowed={
-          selectedPost?.topic
-            ? followedTopics.includes(selectedPost.topic)
-            : false
-        }
-        isFollowingUser={
-          selectedPost?.author.id
-            ? followedUsers.includes(selectedPost.author.id)
-            : false
-        }
-        onShowFewer={handleShowFewer}
-        onFollowUser={handleFollowUserFromSheet}
-        onFollowTopic={handleFollowTopic}
-        onSave={handleSavePost}
-        isSaved={selectedPost ? savedPosts.some((p) => p.id === selectedPost.id) : false}
-        onCopyText={handleCopyText}
-        onReport={handleReport}
+      <TopicFeedOverlays
+        awardPickerSheetRef={awardPickerSheetRef}
+        blockCancel={blockHandler.cancelBlock}
+        blockConfirm={handleConfirmBlock}
+        blockLabel={blockHandler.pendingBlock?.label}
+        blockVisible={blockHandler.showConfirmation}
+        currentUserId={currentUser?.id}
+        deleteCancel={deleteHandler.cancelDelete}
+        deleteConfirm={handleConfirmDelete}
+        deleteVisible={deleteHandler.showConfirmation}
+        followedTopics={followedTopics}
+        followedUsers={followedUsers}
+        isReporting={reportHandler.isReporting}
+        onBlockPost={handleHidePost}
         onBlockUser={handleBlockUser}
-        onHidePost={handleHidePost}
-        onEdit={handleEditPost}
+        onCopyText={handleCopyText}
         onDelete={handleDeletePost}
+        onDismissPostOptions={() => setSelectedPost(null)}
+        onEdit={handleEditPost}
+        onFollowTopic={handleFollowTopic}
+        onFollowUser={handleFollowUserFromSheet}
         onGiveAward={() => {
           if (!selectedPost) return;
           setTimeout(() => awardPickerSheetRef.current?.present(), 300);
         }}
-        onDismiss={() => setSelectedPost(null)}
-      />
-
-      <AwardPickerSheet
-        ref={awardPickerSheetRef}
-        targetId={selectedPost?.id ?? ""}
-        targetType="post"
-        isOwnContent={currentUser?.id === selectedPost?.author.id}
-      />
-
-      <ReportSheet
-        ref={reportSheetRef}
-        targetType="post"
-        onSubmit={handleReportSubmitWithOptimistic}
-        onDismiss={reportHandler.cancelReport}
-        isLoading={reportHandler.isReporting}
-      />
-
-      <ConfirmationPopup
-        visible={blockHandler.showConfirmation}
-        title={`Block ${blockHandler.pendingBlock?.label || "user"}?`}
-        message="You won't see their content anymore."
-        description="You can unblock them later from settings."
-        icon="ban-outline"
-        confirmText="Block"
-        isDestructive
-        onConfirm={handleConfirmBlock}
-        onCancel={blockHandler.cancelBlock}
-      />
-
-      <ConfirmationPopup
-        visible={deleteHandler.showConfirmation}
-        title="Delete this post?"
-        message="This action cannot be undone."
-        description="Your post will be permanently removed."
-        icon="trash-outline"
-        confirmText="Delete"
-        isDestructive
-        onConfirm={handleConfirmDelete}
-        onCancel={deleteHandler.cancelDelete}
+        onHidePost={handleHidePost}
+        onReport={handleReport}
+        onReportDismiss={reportHandler.cancelReport}
+        onReportSubmit={handleReportSubmitWithOptimistic}
+        onSave={handleSavePost}
+        onShowFewer={handleShowFewer}
+        postOptionsSheetRef={postOptionsSheetRef}
+        reportSheetRef={reportSheetRef}
+        selectedPost={selectedPost}
       />
     </Box>
   );
 }
 
-const styles = StyleSheet.create((theme) => ({
-  headerContainer: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingBottom: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.sm,
-    borderBottomWidth: 0.5,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: theme.radius.full,
-  },
-  headerTitle: {
-    flex: 1,
-    marginHorizontal: theme.spacing.sm,
-  },
-  headerTitleMenu: {
-    flex: 1,
-  },
-  titleButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 4,
-    paddingHorizontal: 4,
-  },
-  menuOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.md,
-  },
-  headerFollowButton: {
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: theme.radius.full,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    marginRight: theme.spacing.xs,
-  },
-}));

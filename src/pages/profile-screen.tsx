@@ -1,17 +1,13 @@
-import { navigateToEditPost } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
-import * as Sentry from "@sentry/react-native";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "@/src/hooks/use-router";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "@/src/navigation/guarded-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
   Platform,
-  Share,
   useWindowDimensions,
-  View,
   type ViewToken,
 } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
@@ -36,27 +32,21 @@ import { queryKeys } from "@/src/api/read/query-keys";
 import { transformApiPost } from "@/src/api/read/utils";
 import type { Post as ApiPost } from "@/src/api/types";
 import {
-  ConfirmationPopup,
   getGradientColor,
   type Post,
-  PostOptionsSheet,
   PostOptionsSheetRef,
   PROFILE_CONTENT_HEIGHT,
   ProfileHeaderBar,
   ProfileTabBar,
-  ProfileEmptyState,
-  ReportSheet,
   ReportSheetRef,
-  ProfileAboutTab,
 } from "@/src/components/molecules";
-import { PostCardItem } from "@/src/components/molecules/post-card-item";
-import { PostCardSkeletonList } from "@/src/components/molecules/post-card-skeleton";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
-import { ProfileCommentItem } from "@/src/components/molecules/profile-comment-item";
-import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
-import { ProfileContentAnimated } from "@/src/components/molecules/profile-content-animated";
 import { PROFILE_TAB_BAR_HEIGHT } from "@/src/components/molecules/profile-tabs";
 import { Box } from "@/src/components/ui/primitives";
+import { ProfileContentItem } from "./profile/profile-content-item";
+import { ProfileFooter } from "./profile/profile-footer";
+import { ProfileOverlays } from "./profile/profile-overlays";
+import { useProfilePostActions } from "./profile/use-profile-post-actions";
 import {
   useAppState,
   useBlockHandler,
@@ -68,8 +58,6 @@ import { useScrollAnimationContext } from "@/src/providers/scroll-animation-cont
 import {
   useAuthStore,
   useContentModerationStore,
-  usePreferencesStore,
-  getShareBaseUrl,
   useSavedPostsStore,
 } from "@/src/stores";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
@@ -102,103 +90,10 @@ const calculateAccountAgeDays = (
   return ageInSeconds / (60 * 60 * 24);
 };
 
-type TabType = "posts" | "comments" | "about";
-
-const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
- const p = prev.post;
- const n = next.post;
- if (p.id !== n.id) return false;
- if (p.title !== n.title) return false;
- if (p.body !== n.body) return false;
- if (p.likes !== n.likes) return false;
- if (p.dislikes !== n.dislikes) return false;
- if (p.comments !== n.comments) return false;
- if (p.hasLiked !== n.hasLiked) return false;
- if (p.hasDisliked !== n.hasDisliked) return false;
- if (p.awards?.length !== n.awards?.length) return false;
- if (prev.isVisible !== next.isVisible) return false;
- if (prev.isFocused !== next.isFocused) return false;
- if (prev.preloadNearby !== next.preloadNearby) return false;
- if (prev.screenActive !== next.screenActive) return false;
- return true;
-});
-const MemoizedProfileCommentItem = memo(ProfileCommentItem, (prev, next) => {
- return prev.comment.post_id === next.comment.post_id
-  && prev.comment.content === next.comment.content
-  && prev.comment.points === next.comment.points;
-});
-
-const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
- post,
- isVisible,
- isFocused,
- preloadNearby,
- screenActive,
- onPostPress,
- onAuthorPress,
- onCommentPress,
- onMorePress,
-  onTopicPress,
-}: {
- post: Post;
- isVisible?: boolean;
- isFocused?: boolean;
- preloadNearby?: boolean;
- screenActive?: boolean;
- onPostPress: (postId: string) => void;
- onAuthorPress: (authorId: string) => void;
- onCommentPress: (postId: string) => void;
- onMorePress: (postId: string) => void;
-  onTopicPress: (topic: string) => void;
-}) {
- const editOverride = usePostEditStore((s) => s.overrides[post.id]);
- const displayPost = editOverride ? {
-   ...post,
-   title: editOverride.title,
-   body: editOverride.content || undefined,
-   topic: editOverride.topic ?? post.topic,
-   media: editOverride.media
-     ? editOverride.media.map((url: string) => ({ uri: url, type: "image" as const }))
-     : post.media,
- } : post;
- return (
-   <MemoizedPostCardItem
-    post={displayPost}
-    isOwnPost={true}
-    isVisible={isVisible}
-    isFocused={isFocused}
-    preloadNearby={preloadNearby}
-   screenActive={screenActive}
-    showUrlCard={false}
-    onPostPress={onPostPress}
-    onAuthorPress={onAuthorPress}
-    onCommentPress={onCommentPress}
-    onMorePress={onMorePress}
-   onTopicPress={onTopicPress}
-   />
- );
-});
-
-const MemoizedCommentWrapper = memo(function MemoizedCommentWrapper({
- comment,
- onPress,
-}: {
- comment: ApiPost;
- onPress: (commentId: string, rootPostId: string) => void;
-}) {
- return (
-   <MemoizedProfileCommentItem
-    comment={comment}
-    onPress={onPress}
-   />
- );
-});
-
 export function ProfileScreen() {
   const router = useRouter();
   const isFocused = useIsFocused();
   const user = useAuthStore((s) => s.user);
-  const shareServer = usePreferencesStore((s) => s.shareServer);
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { theme } = useUnistyles();
@@ -345,7 +240,7 @@ export function ProfileScreen() {
         const override = commentEditOverrides[post.post_id];
         return override !== undefined ? { ...post, content: override } : post;
       });
-  }, [postsData, getTabType, hiddenPostIds, hiddenCommentIds, commentEditOverrides, focusVersion]);
+  }, [postsData, getTabType, hiddenPostIds, hiddenCommentIds, commentEditOverrides]);
 
   const uiPosts = useMemo(
     () => apiPosts.map((post) => transformApiPost(post, {
@@ -354,7 +249,7 @@ export function ProfileScreen() {
     [apiPosts, user],
   );
 
-const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
+const listData = useMemo((): (Post | ApiPost | "header" | "tabs")[] => {
    if (activeTab === 2) {
       return ["header", "tabs"];
    }
@@ -380,10 +275,10 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
         ]);
         if (user?.walletAddress) {
           queryClient.invalidateQueries({
-            queryKey: ["user", "posts", user.walletAddress],
+            queryKey: queryKeys.userPostsRoot(user.walletAddress),
           });
           queryClient.invalidateQueries({
-            queryKey: ["user", "blocked", user.walletAddress],
+            queryKey: queryKeys.userBlocked(user.walletAddress),
           });
         }
       } finally {
@@ -408,10 +303,10 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
         refetchUserStatus();
         refetchProfile();
         queryClient.invalidateQueries({
-          queryKey: ["user", "posts", user.walletAddress],
+          queryKey: queryKeys.userPostsRoot(user.walletAddress),
         });
         queryClient.invalidateQueries({
-          queryKey: ["user", "blocked", user.walletAddress],
+          queryKey: queryKeys.userBlocked(user.walletAddress),
         });
       }
     }, [showBars, queryClient, user?.walletAddress, refetchUserStatus, refetchProfile]),
@@ -445,17 +340,6 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
   const handleBackPress = useCallback(() => {
     router.back();
   }, [router]);
-
-  const handleSharePress = useCallback(async () => {
-    try {
-      await Share.share({
-        message: `Check out @${user?.username} on Mirage!`,
-        url: `${getShareBaseUrl(shareServer)}/u/${user?.username}`,
-      });
-    } catch (error) {
-      Sentry.addBreadcrumb({ category: "profile", message: "Share failed", data: { error: String(error) }, level: "warning" });
-    }
-  }, [user?.username, shareServer]);
 
   const handleEditUsernamePress = useCallback(() => {
     router.push("/change-username");
@@ -495,29 +379,6 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
       router.push(`/post/${rootPostId}?highlight=${commentId}`);
     },
     [router],
-  );
-
-  const handleEditCommentPress = useCallback(
-    (comment: ApiPost, rootPostId: string) => {
-      const params: Record<string, string> = {
-        postId: rootPostId,
-        postTitle: "",
-        postAuthorUsername: "",
-        editCommentId: comment.post_id,
-        editParentId: comment.root_post_id || rootPostId,
-        editContent: comment.content,
-        editSource: "profile",
-      };
-      router.push({ pathname: "/comment-compose", params });
-    },
-    [router],
-  );
-
-  const handleDeleteCommentPress = useCallback(
-    (comment: ApiPost) => {
-      deleteHandler.requestDelete(comment.post_id, "comment");
-    },
-    [deleteHandler],
   );
 
 useEffect(() => {
@@ -593,79 +454,29 @@ useEffect(() => {
     return map;
   }, [uiPosts]);
 
-  const handlePostMorePress = useCallback(
-    (postId: string) => {
-      const post = postsById.get(postId);
-      if (post) {
-        setSelectedPost(post);
-        postOptionsSheetRef.current?.present();
-      }
-    },
-    [postsById],
-  );
-
-  const handleEditPost = useCallback(() => {
-    if (!selectedPost) return;
-    navigateToEditPost(router, selectedPost);
-  }, [selectedPost, router]);
-
-  const handleDeletePost = useCallback(() => {
-    if (!selectedPost) return;
-    deleteHandler.requestDelete(selectedPost.id, "post");
-  }, [selectedPost, deleteHandler]);
-
-  const handleBlockPost = useCallback(() => {
-    if (!selectedPost) return;
-    blockHandler.requestBlockPost(selectedPost.id);
-  }, [selectedPost, blockHandler]);
-
-  const handleReportPost = useCallback(() => {
-    if (!selectedPost) return;
-    reportHandler.requestReport(selectedPost.id, "post");
-  }, [selectedPost, reportHandler]);
-
-  const handleConfirmDelete = useCallback(() => {
-    const pending = deleteHandler.pendingTarget;
-    if (pending) {
-      if (pending.type === "post") {
-        globalHidePost(pending.id);
-      } else {
-        globalHideComment(pending.id);
-      }
-    }
-    setSelectedPost(null);
-    deleteHandler.confirmDelete();
-  }, [deleteHandler, globalHidePost, globalHideComment]);
-
-  const handleConfirmBlock = useCallback(() => {
-    const pending = blockHandler.pendingBlock;
-    if (pending && pending.type === "topic") {
-      blockTopicOptimistic(pending.id);
-    } else if (pending && pending.type === "post") {
-      globalHidePost(pending.id);
-    }
-    setSelectedPost(null);
-    blockHandler.confirmBlock();
-  }, [blockHandler, globalHidePost, blockTopicOptimistic]);
-
-  const handleReportSubmit = useCallback(
-    (reason: string) => {
-      const pending = reportHandler.pendingTarget;
-      if (pending && pending.type === "post") {
-        globalHidePost(pending.id);
-      }
-      setSelectedPost(null);
-      reportSheetRef.current?.dismiss();
-      reportHandler.submitReport(reason);
-    },
-    [reportHandler, globalHidePost],
-  );
-
-  useEffect(() => {
-    if (reportHandler.showReportSheet) {
-      reportSheetRef.current?.present();
-    }
-  }, [reportHandler.showReportSheet]);
+  const {
+    handlePostMorePress,
+    handleEditPost,
+    handleDeletePost,
+    handleBlockPost,
+    handleReportPost,
+    handleConfirmDelete,
+    handleConfirmBlock,
+    handleReportSubmit,
+  } = useProfilePostActions({
+    router,
+    selectedPost,
+    setSelectedPost,
+    postOptionsSheetRef,
+    reportSheetRef,
+    deleteHandler,
+    blockHandler,
+    reportHandler,
+    globalHidePost,
+    globalHideComment,
+    blockTopicOptimistic,
+    postsById,
+  });
 
   const handleSwipeTabChange = useCallback((index: number) => {
     setActiveTab(index);
@@ -709,10 +520,10 @@ useEffect(() => {
         ]);
         if (user?.walletAddress) {
           queryClient.invalidateQueries({
-            queryKey: ["user", "posts", user.walletAddress],
+            queryKey: queryKeys.userPostsRoot(user.walletAddress),
           });
           queryClient.invalidateQueries({
-            queryKey: ["user", "blocked", user.walletAddress],
+            queryKey: queryKeys.userBlocked(user.walletAddress),
           });
         }
       } finally {
@@ -893,173 +704,95 @@ useEffect(() => {
   }, [uiPosts]);
 
   const renderItem = useCallback(
-      ({ item }: { item: Post | ApiPost | "header" | "tabs" }) => {
-        if (item === "header") {
-         return (
-           <ProfileContentAnimated
-             username={username}
-             avatarSeed={user?.walletAddress || username}
-             avatarUrl={avatarUrl}
-            walletAddress={user?.walletAddress || "0x0000...0000"}
-            balance={profileData.balance}
-             reserve={profileData.reserve}
-             accountAgeDays={profileData.accountAgeDays}
-             gradientColors={gradientColors}
-             scrollY={scrollY}
-             onFollowersPress={handleFollowersPress}
-             onEditUsernamePress={handleEditUsernamePress}
-             isLoading={isLoading}
-            headerHeight={headerHeight}
-           />
-         );
-        }
-
-        if (item === "tabs") {
-          if (isTabsSticky) {
-            return <View style={styles.inlineTabPlaceholder} />;
-          }
-
-          return (
-            <View>
-              <ProfileTabBar
-                activeTab={activeTab}
-                onTabChange={handleTabChange}
-                onTabDoubleTap={handleTabDoubleTap}
-                tabWidth={SCREEN_WIDTH}
-                animatedIndex={animatedTabIndex}
-              />
-            </View>
-          );
-        }
-
-        if (activeTab === 0 && "id" in item) {
-          const cleanPost = postsWithoutWarnings.get(item.id) || item;
-          return (
-            <Animated.View style={contentAnimatedStyle}>
-              <AnimatedPostWrapper
-               post={cleanPost}
-               isVisible={visibleVideoPostIds.has(item.id)}
-               isFocused={activeVideoPostId === item.id}
-               preloadNearby={warmVideoPostIds.has(item.id)}
-               screenActive={isFocused}
-               onPostPress={handlePostPress}
-               onAuthorPress={handleAuthorPress}
-               onCommentPress={handlePostPress}
-               onMorePress={handlePostMorePress}
-               onTopicPress={handleTopicPress}
-              />
-            </Animated.View>
-          );
-        }
-
-       if (activeTab === 1 && "post_id" in item) {
-         return (
-           <Animated.View style={contentAnimatedStyle}>
-             <MemoizedCommentWrapper
-              comment={item}
-              onPress={handleCommentPress}
-             />
-           </Animated.View>
-         );
-       }
-
-        return null;
-      },
-     [
+    ({ item }: { item: Post | ApiPost | "header" | "tabs" }) => (
+      <ProfileContentItem
+        item={item}
+        username={username}
+        walletAddress={user?.walletAddress}
+        avatarUrl={avatarUrl}
+        balance={profileData.balance}
+        reserve={profileData.reserve}
+        accountAgeDays={profileData.accountAgeDays}
+        gradientColors={gradientColors}
+        scrollY={scrollY}
+        onFollowersPress={handleFollowersPress}
+        onEditUsernamePress={handleEditUsernamePress}
+        isLoading={isLoading}
+        headerHeight={headerHeight}
+        isTabsSticky={isTabsSticky}
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        onTabDoubleTap={handleTabDoubleTap}
+        animatedTabIndex={animatedTabIndex}
+        tabWidth={SCREEN_WIDTH}
+        contentAnimatedStyle={contentAnimatedStyle}
+        postsWithoutWarnings={postsWithoutWarnings}
+        visibleVideoPostIds={visibleVideoPostIds}
+        warmVideoPostIds={warmVideoPostIds}
+        activeVideoPostId={activeVideoPostId}
+        screenActive={isFocused}
+        onPostPress={handlePostPress}
+        onAuthorPress={handleAuthorPress}
+        onMorePress={handlePostMorePress}
+        onCommentPress={handleCommentPress}
+        onTopicPress={handleTopicPress}
+      />
+    ),
+    [
       username,
       user?.walletAddress,
       avatarUrl,
       profileData,
-       gradientColors,
-       scrollY,
-       handleFollowersPress,
-       handleEditUsernamePress,
-        isLoading,
-       headerHeight,
-        isTabsSticky,
-        activeTab,
-        handleTabChange,
-        handleTabDoubleTap,
-        handlePostPress,
-        handleAuthorPress,
-        handlePostMorePress,
-       handleCommentPress,
-      contentAnimatedStyle,
+      gradientColors,
+      scrollY,
+      handleFollowersPress,
+      handleEditUsernamePress,
+      isLoading,
+      headerHeight,
+      isTabsSticky,
+      activeTab,
+      handleTabChange,
+      handleTabDoubleTap,
       animatedTabIndex,
+      contentAnimatedStyle,
       postsWithoutWarnings,
       visibleVideoPostIds,
       warmVideoPostIds,
       activeVideoPostId,
       isFocused,
+      handlePostPress,
+      handleAuthorPress,
+      handlePostMorePress,
+      handleCommentPress,
       handleTopicPress,
-      ],
-    );
+    ],
+  );
 
- const ListFooterComponent = useCallback(() => {
-    if (activeTab === 2) {
-      return (
-          <Animated.View style={contentAnimatedStyle}>
-            <ProfileAboutTab
-              userAddress={user?.walletAddress}
-              isOwnProfile={true}
-              onBlockedPress={handleBlockedPress}
-            />
-          </Animated.View>
-      );
-    }
-
-    if (isLoadingPosts) {
-      return activeTab === 0 ? (
-            <Animated.View style={contentAnimatedStyle}>
-              <PostCardSkeletonList count={3} />
-            </Animated.View>
-          ) : (
-            <Animated.View style={contentAnimatedStyle}>
-              <ProfilePostsSkeleton count={5} type="comments" />
-            </Animated.View>
-          );
-    }
-
-    if (listData.length <= 2) {
-      const tabType = activeTab === 0 ? "posts" : "comments";
-      return (
-          <Animated.View style={contentAnimatedStyle}>
-            <ProfileEmptyState
-              tabType={tabType}
-              onSettingsPress={handleSettingsPress}
-              isOwnProfile={true}
-            />
-          </Animated.View>
-      );
-    }
-
-    if (isFetchingNextPage) {
-      return activeTab === 0 ? (
-            <Animated.View style={contentAnimatedStyle}>
-              <PostCardSkeletonList count={1} />
-            </Animated.View>
-          ) : (
-            <Animated.View style={contentAnimatedStyle}>
-              <ProfilePostsSkeleton count={2} type="comments" />
-            </Animated.View>
-          );
-    }
-
-    return (
-      <Animated.View style={contentAnimatedStyle}>
-        <View style={styles.bottomSpacer} />
-      </Animated.View>
-    );
-  }, [
-    activeTab,
-    isLoadingPosts,
-    isFetchingNextPage,
-    listData.length,
-    handleSettingsPress,
-    user?.walletAddress,
-    handleBlockedPress,
-    contentAnimatedStyle,
-  ]);
+  const ListFooterComponent = useCallback(
+    () => (
+      <ProfileFooter
+        activeTab={activeTab}
+        isLoadingPosts={isLoadingPosts}
+        isFetchingNextPage={isFetchingNextPage}
+        hasContent={listData.length > 2}
+        contentAnimatedStyle={contentAnimatedStyle}
+        userAddress={user?.walletAddress}
+        onBlockedPress={handleBlockedPress}
+        onSettingsPress={handleSettingsPress}
+        bottomSpacerHeight={80}
+      />
+    ),
+    [
+      activeTab,
+      isLoadingPosts,
+      isFetchingNextPage,
+      listData.length,
+      contentAnimatedStyle,
+      user?.walletAddress,
+      handleBlockedPress,
+      handleSettingsPress,
+    ],
+  );
 
   const stickyTabsAnimatedStyle = useAnimatedStyle(() => {
     const isSticky = scrollY.value >= stickyThreshold;
@@ -1148,11 +881,18 @@ useEffect(() => {
         />
       </GestureDetector>
 
-      <PostOptionsSheet
-        ref={postOptionsSheetRef}
-        post={selectedPost}
-        isOwnPost={true}
+      <ProfileOverlays
+        postOptionsSheetRef={postOptionsSheetRef}
+        reportSheetRef={reportSheetRef}
+        selectedPost={selectedPost}
         isSaved={selectedPost ? savedPosts.some((p) => p.id === selectedPost.id) : false}
+        deleteVisible={deleteHandler.showConfirmation}
+        deleteType={deleteHandler.pendingTarget?.type}
+        isDeleting={deleteHandler.isDeleting}
+        blockVisible={blockHandler.showConfirmation}
+        blockLabel={blockHandler.pendingBlock?.label}
+        reportTargetType={reportHandler.pendingTarget?.type}
+        isReporting={reportHandler.isReporting}
         onSave={() => {
           if (!selectedPost) return;
           const saved = useSavedPostsStore.getState().toggleSavePost(selectedPost);
@@ -1165,48 +905,13 @@ useEffect(() => {
         onDelete={handleDeletePost}
         onBlockPost={handleBlockPost}
         onReport={handleReportPost}
-        onDismiss={() => setSelectedPost(null)}
-      />
-
-      <ConfirmationPopup
-        visible={deleteHandler.showConfirmation}
-        title={
-          deleteHandler.pendingTarget?.type === "comment"
-            ? "Delete Comment?"
-            : "Delete Post?"
-        }
-        message="This action cannot be undone."
-        description={
-          deleteHandler.pendingTarget?.type === "comment"
-            ? "The comment will be permanently removed."
-            : "The post will be permanently removed."
-        }
-        icon="trash-outline"
-        isDestructive
-        isLoading={deleteHandler.isDeleting}
-        confirmText="Delete"
-        onConfirm={handleConfirmDelete}
-        onCancel={deleteHandler.cancelDelete}
-      />
-
-      <ConfirmationPopup
-        visible={blockHandler.showConfirmation}
-        title={`Block ${blockHandler.pendingBlock?.label || "this post"}?`}
-        message="You won't see this content anymore."
-        description="You can unblock later from settings."
-        icon="ban-outline"
-        confirmText="Block"
-        isDestructive
-        onConfirm={handleConfirmBlock}
-        onCancel={blockHandler.cancelBlock}
-      />
-
-      <ReportSheet
-        ref={reportSheetRef}
-        targetType={reportHandler.pendingTarget?.type}
-        onSubmit={handleReportSubmit}
-        onDismiss={reportHandler.cancelReport}
-        isLoading={reportHandler.isReporting}
+        onDismissPostOptions={() => setSelectedPost(null)}
+        onConfirmDelete={handleConfirmDelete}
+        onCancelDelete={deleteHandler.cancelDelete}
+        onConfirmBlock={handleConfirmBlock}
+        onCancelBlock={blockHandler.cancelBlock}
+        onSubmitReport={handleReportSubmit}
+        onDismissReport={reportHandler.cancelReport}
       />
     </Box>
   );

@@ -1,5 +1,5 @@
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
-import React, { memo, useEffect, useRef } from "react";
+import React, { memo, useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { MenuProvider } from "react-native-popup-menu";
@@ -16,9 +16,9 @@ import { CloudflareErrorToast } from "@/src/components/cloudflare-error-toast";
 import { WalletProvider } from "./wallet-provider";
 import { initInboxNotifications } from "@/src/services/inbox-notifications";
 import { initPushNotifications, registerPush } from "@/src/services/push-notifications";
-import { useAuthStore, useVideoPositionStore, useDeepLinkStore } from "@/src/stores";
+import { useAuthStore, useVideoPositionStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
-import { router } from "@/src/utils/guarded-router";
+import { flushPendingRouteAfterAuth } from "@/src/navigation/auth-navigation";
 import * as Sentry from "@sentry/react-native";
 import { AppState } from "react-native";
 
@@ -61,12 +61,7 @@ export const RootProvider = memo(
 
     useEffect(() => {
       if (!isLoggedIn) return;
-      const pendingRoute = useDeepLinkStore.getState().consumePendingRoute();
-      if (pendingRoute) {
-        setTimeout(() => {
-          router.push(pendingRoute as any);
-        }, 500);
-      }
+      flushPendingRouteAfterAuth();
     }, [isLoggedIn]);
 
     useEffect(() => {

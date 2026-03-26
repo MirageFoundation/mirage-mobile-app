@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { useAuthStore, useUIStore } from "@/src/stores";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 
 export const useAuthGuard = () => {
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);

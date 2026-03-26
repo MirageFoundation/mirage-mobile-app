@@ -1,11 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   FlatList,
   Keyboard,
   Pressable,
@@ -14,167 +12,36 @@ import {
 } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  FadeIn,
-  FadeInDown,
-  FadeOut,
-  Layout,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
-  interpolate,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { useDebouncedSearch, usePosts, useTopics } from "@/src/api/read";
 import type { Post, TopicInfo, UserInfo } from "@/src/api/types";
-import { getUsernameColor } from "@/src/utils/tiers";
-import { TimeAgo } from "@/src/components/atoms/time-ago";
 import { Box, Text } from "@/src/components/ui/primitives";
-import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useTabSwipeGesture } from "@/src/hooks";
 import { useSearchStore, type RecentSearch } from "@/src/stores";
 
-type SearchTab = "posts" | "topics" | "users";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-
-const getTopicIcon = (
-  topic: string,
-): { icon: keyof typeof Ionicons.glyphMap; color: string } => {
-  const lowerTopic = topic.toLowerCase();
-
-  if (lowerTopic.includes("bitcoin") || lowerTopic.includes("btc")) {
-    return { icon: "logo-bitcoin", color: "#F7931A" };
-  }
-  if (
-    lowerTopic.includes("crypto") ||
-    lowerTopic.includes("eth") ||
-    lowerTopic.includes("defi")
-  ) {
-    return { icon: "wallet", color: "#627EEA" };
-  }
-  if (
-    lowerTopic.includes("ai") ||
-    lowerTopic.includes("artificial") ||
-    lowerTopic.includes("machine")
-  ) {
-    return { icon: "sparkles", color: "#8B5CF6" };
-  }
-  if (
-    lowerTopic.includes("game") ||
-    lowerTopic.includes("gaming") ||
-    lowerTopic.includes("esport")
-  ) {
-    return { icon: "game-controller", color: "#10B981" };
-  }
-  if (
-    lowerTopic.includes("space") ||
-    lowerTopic.includes("rocket") ||
-    lowerTopic.includes("nasa")
-  ) {
-    return { icon: "rocket", color: "#3B82F6" };
-  }
-  if (
-    lowerTopic.includes("sport") ||
-    lowerTopic.includes("football") ||
-    lowerTopic.includes("soccer")
-  ) {
-    return { icon: "football", color: "#EF4444" };
-  }
-  if (
-    lowerTopic.includes("music") ||
-    lowerTopic.includes("song") ||
-    lowerTopic.includes("album")
-  ) {
-    return { icon: "musical-notes", color: "#EC4899" };
-  }
-  if (
-    lowerTopic.includes("movie") ||
-    lowerTopic.includes("film") ||
-    lowerTopic.includes("cinema")
-  ) {
-    return { icon: "film", color: "#F59E0B" };
-  }
-  if (
-    lowerTopic.includes("tech") ||
-    lowerTopic.includes("code") ||
-    lowerTopic.includes("programming")
-  ) {
-    return { icon: "code-slash", color: "#06B6D4" };
-  }
-  if (
-    lowerTopic.includes("news") ||
-    lowerTopic.includes("politics") ||
-    lowerTopic.includes("world")
-  ) {
-    return { icon: "newspaper", color: "#64748B" };
-  }
-  if (
-    lowerTopic.includes("science") ||
-    lowerTopic.includes("research") ||
-    lowerTopic.includes("study")
-  ) {
-    return { icon: "flask", color: "#14B8A6" };
-  }
-  if (
-    lowerTopic.includes("art") ||
-    lowerTopic.includes("design") ||
-    lowerTopic.includes("creative")
-  ) {
-    return { icon: "color-palette", color: "#F472B6" };
-  }
-  if (
-    lowerTopic.includes("food") ||
-    lowerTopic.includes("cook") ||
-    lowerTopic.includes("recipe")
-  ) {
-    return { icon: "restaurant", color: "#FB923C" };
-  }
-  if (
-    lowerTopic.includes("health") ||
-    lowerTopic.includes("fitness") ||
-    lowerTopic.includes("workout")
-  ) {
-    return { icon: "fitness", color: "#22C55E" };
-  }
-  if (
-    lowerTopic.includes("travel") ||
-    lowerTopic.includes("trip") ||
-    lowerTopic.includes("vacation")
-  ) {
-    return { icon: "airplane", color: "#0EA5E9" };
-  }
-
-  // Default icon
-  return { icon: "chatbubble", color: "#6366F1" };
-};
-
-// Format post count for display
-const formatPostCount = (count?: number): string => {
-  if (!count) return "";
-  if (count >= 1000000) {
-    return `${(count / 1000000).toFixed(1)}M posts`;
-  }
-  if (count >= 1000) {
-    return `${(count / 1000).toFixed(1)}K posts`;
-  }
-  return `${count} posts`;
-};
-
-// Format count with label
-const formatCount = (
-  count: number,
-  singular: string,
-  plural: string,
-): string => {
-  if (count === 1) {
-    return `${count} ${singular}`;
-  }
-  return `${count} ${plural}`;
-};
+import { SearchEmptyState } from "./search/search-empty-state";
+import { SearchHeader } from "./search/search-header";
+import {
+  PostResultItem,
+  RecentSearchItem,
+  TopicListItem,
+  UserResultItem,
+} from "./search/search-result-items";
+import { SearchTabs } from "./search/search-tabs";
+import {
+  indexToTab,
+  SCREEN_WIDTH,
+  SearchTab,
+  tabToIndex,
+} from "./search/search-utils";
 
 export function SearchScreen() {
   const router = useRouter();
@@ -183,71 +50,43 @@ export function SearchScreen() {
   const inputRef = useRef<TextInput>(null);
   const { q, tab } = useLocalSearchParams<{ q?: string; tab?: string }>();
 
-  // Local state
   const [searchQuery, setSearchQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const [activeTab, setActiveTab] = useState<SearchTab>(
     tab === "topics" || tab === "users" ? tab : "posts",
   );
-
-  const SEARCH_TABS: SearchTab[] = ["posts", "topics", "users"];
-  const tabToIndex = (t: SearchTab) => SEARCH_TABS.indexOf(t);
-  const indexToTab = (i: number) => SEARCH_TABS[i] ?? "posts";
+  const [selectedTopic, setSelectedTopic] = useState<TopicInfo | null>(null);
 
   const animatedTabIndex = useSharedValue(tabToIndex(activeTab));
 
-  const handleSwipeTabChange = useCallback((index: number) => {
-    const t = indexToTab(index);
-    setActiveTab(t);
-    if (t !== "topics") setSelectedTopic(null);
-  }, []);
+  const recentSearches = useSearchStore((state) => state.recentSearches);
+  const addRecentSearch = useSearchStore((state) => state.addRecentSearch);
+  const removeRecentSearch = useSearchStore((state) => state.removeRecentSearch);
+  const clearRecentSearches = useSearchStore((state) => state.clearRecentSearches);
 
-  const { swipeGesture, contentAnimatedStyle, fadeOpacity, completeTransition } = useTabSwipeGesture({
-    onTabChange: handleSwipeTabChange,
-    animatedIndex: animatedTabIndex,
-    tabCount: 3,
-  });
-
-  const [selectedTopic, setSelectedTopic] = useState<TopicInfo | null>(null);
-
-  // Search store for recent searches
-  const recentSearches = useSearchStore((s) => s.recentSearches);
-  const addRecentSearch = useSearchStore((s) => s.addRecentSearch);
-  const removeRecentSearch = useSearchStore((s) => s.removeRecentSearch);
-  const clearRecentSearches = useSearchStore((s) => s.clearRecentSearches);
-
-  // API hooks - Debounced search (300ms delay)
   const {
     data: searchResults,
     isSearching,
     debouncedQuery,
   } = useDebouncedSearch(searchQuery, 750, { limit: 30 });
 
-  // Fetch posts for selected topic
   const { data: topicPostsData, isLoading: isLoadingTopicPosts } = usePosts({
     topic: selectedTopic?.topic,
     limit: 50,
   });
 
-  // Trending topics - fetch topics sorted by activity
   const { data: topicsData, isLoading: isLoadingTopics } = useTopics(20);
 
-  // Sort topics by post count to get "trending"
   const trendingTopics = useMemo(() => {
     if (!topicsData?.topics) return [];
     return [...topicsData.topics]
-      .filter((t) => t.post_count && t.post_count > 0)
+      .filter((topic) => topic.post_count && topic.post_count > 0)
       .sort((a, b) => (b.post_count || 0) - (a.post_count || 0))
       .slice(0, 10);
   }, [topicsData]);
 
-  // Posts for selected topic
-  const topicPosts = useMemo(() => {
-    if (!topicPostsData?.posts) return [];
-    return topicPostsData.posts;
-  }, [topicPostsData]);
+  const topicPosts = useMemo(() => topicPostsData?.posts ?? [], [topicPostsData]);
 
-  // Auto-focus the input when screen mounts
   useEffect(() => {
     if (q) {
       setSearchQuery(q);
@@ -259,9 +98,8 @@ export function SearchScreen() {
       inputRef.current?.focus();
     }, 100);
     return () => clearTimeout(timer);
-  }, [q]);
+  }, [q, tab]);
 
-  // Handlers
   const handleBack = useCallback(() => {
     triggerHaptic("light");
     Keyboard.dismiss();
@@ -279,7 +117,6 @@ export function SearchScreen() {
     (query: string) => {
       const trimmedQuery = query.trim();
       if (!trimmedQuery) return;
-
       triggerHaptic("light");
       addRecentSearch(trimmedQuery);
       Keyboard.dismiss();
@@ -351,830 +188,302 @@ export function SearchScreen() {
       Keyboard.dismiss();
       router.push(`/user/${user.address}`);
     },
-    [router, addRecentSearch],
+    [addRecentSearch, router],
   );
 
   const handleSubmitEditing = useCallback(() => {
     handleSearch(searchQuery);
   }, [handleSearch, searchQuery]);
 
-  const handleTabPress = useCallback((tab: SearchTab) => {
-    triggerHaptic("light");
-    const index = tabToIndex(tab);
-    if (index === tabToIndex(activeTab)) return;
-    animatedTabIndex.value = withTiming(index, { duration: 200 });
-    fadeOpacity.value = withTiming(
-      0,
-      { duration: 100 },
-      (finished) => {
-        "worklet";
-        if (finished) {
-          runOnJS(completeTransition)(index);
-        }
-      },
-    );
-  }, [activeTab, animatedTabIndex, fadeOpacity, completeTransition]);
+  const handleSwipeTabChange = useCallback((index: number) => {
+    const nextTab = indexToTab(index);
+    setActiveTab(nextTab);
+    if (nextTab !== "topics") {
+      setSelectedTopic(null);
+    }
+  }, []);
+
+  const { swipeGesture, contentAnimatedStyle, fadeOpacity, completeTransition } =
+    useTabSwipeGesture({
+      onTabChange: handleSwipeTabChange,
+      animatedIndex: animatedTabIndex,
+      tabCount: 3,
+    });
+
+  const handleTabPress = useCallback(
+    (tabName: SearchTab) => {
+      triggerHaptic("light");
+      const index = tabToIndex(tabName);
+      if (index === tabToIndex(activeTab)) return;
+      animatedTabIndex.value = withTiming(index, { duration: 200 });
+      fadeOpacity.value = withTiming(
+        0,
+        { duration: 100 },
+        (finished) => {
+          "worklet";
+          if (finished) {
+            runOnJS(completeTransition)(index);
+          }
+        },
+      );
+    },
+    [activeTab, animatedTabIndex, completeTransition, fadeOpacity],
+  );
 
   const singleTabWidth = SCREEN_WIDTH / 3;
   const tabIndicatorStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: animatedTabIndex.value * singleTabWidth }],
   }));
 
-  // Render recent search item
   const renderRecentSearchItem = useCallback(
     ({ item, index }: { item: RecentSearch; index: number }) => (
-      <Animated.View
-        entering={FadeInDown.delay(index * 50).duration(200)}
-        layout={Layout.springify()}
-      >
-        <Pressable
-          onPress={() => handleRecentSearchPress(item)}
-          style={({ pressed }) => [
-            styles.recentSearchItem,
-            pressed && { opacity: 0.7 },
-          ]}
-        >
-          <View style={styles.recentSearchLeft}>
-            <Ionicons
-              name="time-outline"
-              size={18}
-              color={theme.colors.text.subtle}
-            />
-            <Text size="md" style={{ flex: 1 }}>
-              {item.query}
-            </Text>
-          </View>
-          <Pressable
-            onPress={() => handleRemoveRecentSearch(item.id)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={({ pressed }) => [
-              styles.clearButton,
-              pressed && { opacity: 0.5 },
-            ]}
-          >
-            <Ionicons name="close" size={18} color={theme.colors.text.subtle} />
-          </Pressable>
-        </Pressable>
-      </Animated.View>
+      <RecentSearchItem
+        item={item}
+        index={index}
+        subtleTextColor={theme.colors.text.subtle}
+        onPress={() => handleRecentSearchPress(item)}
+        onRemove={() => handleRemoveRecentSearch(item.id)}
+      />
     ),
-    [
-      theme.colors.text.subtle,
-      handleRecentSearchPress,
-      handleRemoveRecentSearch,
-    ],
+    [handleRecentSearchPress, handleRemoveRecentSearch, theme.colors.text.subtle],
   );
 
-  // Render trending topic item
   const renderTrendingTopicItem = useCallback(
-    ({ item, index }: { item: TopicInfo; index: number }) => {
-      const { icon, color } = getTopicIcon(item.topic);
-      return (
-        <Animated.View
-          entering={FadeInDown.delay(index * 50 + 100).duration(200)}
-        >
-          <Pressable
-            onPress={() => handleTrendingTopicPress(item)}
-            style={({ pressed }) => [
-              styles.trendingItem,
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <View
-              style={[styles.trendingIcon, { backgroundColor: `${color}15` }]}
-            >
-              <Ionicons name={icon} size={20} color={color} />
-            </View>
-            <View style={styles.trendingContent}>
-              <Text size="md" weight="medium">
-                #{item.topic}
-              </Text>
-              <Text size="sm" mode="subtle">
-                {formatPostCount(item.post_count || item.count)}
-              </Text>
-            </View>
-          </Pressable>
-        </Animated.View>
-      );
-    },
-    [handleTrendingTopicPress],
+    ({ item, index }: { item: TopicInfo; index: number }) => (
+      <TopicListItem
+        topic={item}
+        index={index}
+        isTrending
+        subtleTextColor={theme.colors.text.subtle}
+        dividerColor={theme.colors.border.subtle}
+        onPress={() => handleTrendingTopicPress(item)}
+      />
+    ),
+    [handleTrendingTopicPress, theme.colors.border.subtle, theme.colors.text.subtle],
   );
 
-  // Render topic search result with divider
   const renderTopicResult = useCallback(
-    ({ item, index }: { item: TopicInfo; index: number }) => {
-      const { icon, color } = getTopicIcon(item.topic);
-      const isLast = index === (searchResults?.topics.length ?? 0) - 1;
-
-      return (
-        <Animated.View entering={FadeInDown.delay(index * 30).duration(150)}>
-          <Pressable
-            onPress={() => handleTopicResultPress(item)}
-            style={({ pressed }) => [
-              styles.topicResultItem,
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <View
-              style={[
-                styles.topicResultIcon,
-                { backgroundColor: `${color}15` },
-              ]}
-            >
-              <Ionicons name={icon} size={18} color={color} />
-            </View>
-            <View style={styles.topicResultContent}>
-              <Text size="md" weight="medium">
-                #{item.topic}
-              </Text>
-              {(item.post_count || item.count) && (
-                <Text size="sm" mode="subtle">
-                  {formatPostCount(item.post_count || item.count)}
-                </Text>
-              )}
-            </View>
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={theme.colors.text.subtle}
-            />
-          </Pressable>
-          {!isLast && (
-            <View
-              style={[
-                styles.divider,
-                { backgroundColor: theme.colors.border.subtle },
-              ]}
-            />
-          )}
-        </Animated.View>
-      );
-    },
-    [
-      theme.colors.text.subtle,
-      theme.colors.border.subtle,
-      handleTopicResultPress,
-      searchResults?.topics.length,
-    ],
+    ({ item, index }: { item: TopicInfo; index: number }) => (
+      <TopicListItem
+        topic={item}
+        index={index}
+        isLast={index === (searchResults?.topics.length ?? 0) - 1}
+        subtleTextColor={theme.colors.text.subtle}
+        dividerColor={theme.colors.border.subtle}
+        onPress={() => handleTopicResultPress(item)}
+      />
+    ),
+    [handleTopicResultPress, searchResults?.topics.length, theme.colors.border.subtle, theme.colors.text.subtle],
   );
 
-  // Render post search result with new design
   const renderPostResult = useCallback(
     ({ item, index }: { item: Post; index: number }) => {
-      const totalPosts = selectedTopic
-        ? topicPosts.length
-        : (searchResults?.posts.length ?? 0);
-      const isLast = index === totalPosts - 1;
-      const hasThumbnail = item.thumbnail && item.thumbnail.length > 0;
-      // Convert timestamp - API returns seconds, we need milliseconds
-      const timestampMs = item.timestamp * 1000;
-
+      const totalPosts = selectedTopic ? topicPosts.length : searchResults?.posts.length ?? 0;
       return (
-        <Animated.View entering={FadeInDown.delay(index * 30).duration(150)}>
-          <Pressable
-            onPress={() => handlePostResultPress(item)}
-            style={({ pressed }) => [
-              styles.postResultItem,
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            {/* Left: Content */}
-            <View style={styles.postResultContent}>
-              {/* Avatar + Username + dot + time ago - all in one row */}
-              <View style={styles.postResultHeader}>
-                <Text
-                  size="sm"
-                  weight="medium"
-                  numberOfLines={1}
-                  style={(item.level ?? item.author_level ?? item.user_level) ? { color: getUsernameColor(item.level ?? item.author_level ?? item.user_level ?? 0) } : (item.new_user ?? item.author_is_new) ? { color: "rgb(94,194,106)" } : { color: theme.colors.text.subtle }}
-                >
-                  @{item.username || "anonymous"}
-                </Text>
-                <Text size="sm" mode="subtle">
-                  •
-                </Text>
-                <TimeAgo
-                  timestamp={timestampMs}
-                  size="sm"
-                  mode="subtle"
-                  weight="regular"
-                  showSuffix={false}
-                />
-              </View>
-
-              {/* Title (2 lines max) */}
-              {item.title ? (
-                <Text
-                  size="md"
-                  weight="regular"
-                  numberOfLines={2}
-                  style={styles.postTitle}
-                >
-                  {item.title}
-                </Text>
-              ) : item.content ? (
-                <View>
-                  <MarkdownContent content={item.content} />
-                </View>
-              ) : null}
-
-              {/* Upvotes + dot + comments */}
-              <View style={styles.postResultMeta}>
-                <Text size="sm" mode="subtle">
-                  {formatCount(Math.round(item.points), "point", "points")}
-                </Text>
-                <Text size="sm" mode="subtle">
-                  •
-                </Text>
-                <Text size="sm" mode="subtle">
-                  {formatCount(item.comments, "comment", "comments")}
-                </Text>
-              </View>
-            </View>
-
-            {/* Right: Thumbnail if available */}
-            {hasThumbnail && (
-              <Image
-                source={{ uri: item.thumbnail }}
-                style={styles.postThumbnail}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-              />
-            )}
-          </Pressable>
-          {!isLast && (
-            <View
-              style={[
-                styles.divider,
-                { backgroundColor: theme.colors.border.subtle },
-              ]}
-            />
-          )}
-        </Animated.View>
+        <PostResultItem
+          item={item}
+          index={index}
+          total={totalPosts}
+          dividerColor={theme.colors.border.subtle}
+          onPress={() => handlePostResultPress(item)}
+        />
       );
     },
-    [
-      theme.colors.border.subtle,
-      handlePostResultPress,
-      searchResults?.posts.length,
-      selectedTopic,
-      topicPosts.length,
-    ],
+    [handlePostResultPress, searchResults?.posts.length, selectedTopic, theme.colors.border.subtle, topicPosts.length],
   );
 
-  // Render user search result
   const renderUserResult = useCallback(
-    ({ item, index }: { item: UserInfo; index: number }) => {
-      const isLast = index === (searchResults?.users.length ?? 0) - 1;
-
-      return (
-        <Animated.View entering={FadeInDown.delay(index * 30).duration(150)}>
-          <Pressable
-            onPress={() => handleUserResultPress(item)}
-            style={({ pressed }) => [
-              styles.userResultItem,
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <View style={styles.userResultContent}>
-              <View style={styles.userResultNameRow}>
-                <Text
-                  size="md"
-                  weight="medium"
-                  style={item.level ? { color: getUsernameColor(item.level) } : item.user_is_new ? { color: "rgb(94,194,106)" } : undefined}
-                >
-                  @{item.username}
-                </Text>
-                {item.level === 10 && (
-                  <View style={[styles.agentTag, { backgroundColor: "#EF4444" }]}>
-                    <Text size="xs" weight="semibold" style={{ color: "#fff" }}>Agent</Text>
-                  </View>
-                )}
-              </View>
-              <Text size="sm" mode="subtle" numberOfLines={1}>
-                {item.address.slice(0, 8)}...{item.address.slice(-6)}
-              </Text>
-            </View>
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={theme.colors.text.subtle}
-            />
-          </Pressable>
-          {!isLast && (
-            <View
-              style={[
-                styles.divider,
-                { backgroundColor: theme.colors.border.subtle },
-              ]}
-            />
-          )}
-        </Animated.View>
-      );
-    },
-    [
-      theme.colors.text.subtle,
-      theme.colors.border.subtle,
-      handleUserResultPress,
-      searchResults?.users.length,
-    ],
-  );
-
-  // Empty state for posts
-  const PostsEmptyState = useCallback(
-    () => (
-      <View style={styles.emptyState}>
-        <Ionicons
-          name="document-text-outline"
-          size={48}
-          color={theme.colors.text.subtle}
-          style={{ marginBottom: 12 }}
-        />
-        <Text size="lg" mode="subtle" weight="semibold">
-          No posts found
-        </Text>
-        <Text
-          size="md"
-          mode="subtle"
-          style={{ marginTop: 2, textAlign: "center" }}
-        >
-          Try searching with different keywords
-        </Text>
-      </View>
+    ({ item, index }: { item: UserInfo; index: number }) => (
+      <UserResultItem
+        item={item}
+        index={index}
+        total={searchResults?.users.length ?? 0}
+        subtleTextColor={theme.colors.text.subtle}
+        dividerColor={theme.colors.border.subtle}
+        onPress={() => handleUserResultPress(item)}
+      />
     ),
-    [theme.colors.text.subtle],
-  );
-
-  // Empty state for topics
-  const TopicsEmptyState = useCallback(
-    () => (
-      <View style={styles.emptyState}>
-        <Ionicons
-          name="pricetag-outline"
-          size={48}
-          color={theme.colors.text.subtle}
-          style={{ marginBottom: 12 }}
-        />
-        <Text size="lg" mode="subtle" weight="semibold">
-          No topics found
-        </Text>
-        <Text
-          size="md"
-          mode="subtle"
-          style={{ marginTop: 4, textAlign: "center" }}
-        >
-          Try searching for a different topic name
-        </Text>
-      </View>
-    ),
-    [theme.colors.text.subtle],
-  );
-
-  // Empty state for users
-  const UsersEmptyState = useCallback(
-    () => (
-      <View style={styles.emptyState}>
-        <Ionicons
-          name="people-outline"
-          size={48}
-          color={theme.colors.text.subtle}
-          style={{ marginBottom: 12 }}
-        />
-        <Text size="lg" mode="subtle" weight="semibold">
-          No users found
-        </Text>
-        <Text
-          size="md"
-          mode="subtle"
-          style={{ marginTop: 4, textAlign: "center" }}
-        >
-          Try searching for a username
-        </Text>
-      </View>
-    ),
-    [theme.colors.text.subtle],
+    [handleUserResultPress, searchResults?.users.length, theme.colors.border.subtle, theme.colors.text.subtle],
   );
 
   const hasSearchQuery = searchQuery.trim().length > 0;
   const showResults = hasSearchQuery && debouncedQuery;
+  const topicsTabCount = selectedTopic ? topicPosts.length : searchResults?.topics.length ?? 0;
 
-  // Get the count to show in topics tab (either topic posts or search topics count)
-  const topicsTabCount = selectedTopic
-    ? topicPosts.length
-    : (searchResults?.topics.length ?? 0);
-
-  // Render topic posts header with back button
-  const TopicPostsHeader = useCallback(() => {
+  const topicPostsHeader = useMemo(() => {
     if (!selectedTopic) return null;
-    const { icon, color } = getTopicIcon(selectedTopic.topic);
-
     return (
       <View style={styles.topicHeader}>
-        <Pressable
-          onPress={handleBackFromTopic}
-          style={({ pressed }) => [
-            styles.topicBackButton,
-            pressed && { opacity: 0.7 },
-          ]}
-        >
-          <Ionicons
-            name="arrow-back"
-            size={20}
-            color={theme.colors.text.default}
-          />
+        <Pressable onPress={handleBackFromTopic} style={({ pressed }) => [styles.topicBackButton, pressed && { opacity: 0.7 }]}>
+          <Ionicons name="arrow-back" size={20} color={theme.colors.text.default} />
         </Pressable>
-        <View
-          style={[styles.topicHeaderIcon, { backgroundColor: `${color}15` }]}
-        >
-          <Ionicons name={icon} size={16} color={color} />
-        </View>
         <Text size="lg" weight="semibold" numberOfLines={1} style={{ flex: 1 }}>
           #{selectedTopic.topic}
         </Text>
       </View>
     );
-  }, [selectedTopic, theme.colors.text.default, handleBackFromTopic]);
+  }, [handleBackFromTopic, selectedTopic, theme.colors.text.default]);
 
   return (
     <Box flex background="base">
-      {/* Header with Search Input */}
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop: insets.top + 8,
-            backgroundColor: theme.colors.background.default,
-            borderBottomColor: theme.colors.border.subtle,
-          },
-        ]}
-      >
-        {/* Back Button */}
-        <Pressable
-          onPress={handleBack}
-          style={({ pressed }) => [
-            styles.backButton,
-            pressed && { opacity: 0.7 },
-          ]}
-        >
-          <Ionicons
-            name="arrow-back"
-            size={24}
-            color={theme.colors.text.default}
-          />
-        </Pressable>
+      <SearchHeader
+        topInset={insets.top}
+        query={searchQuery}
+        isFocused={isFocused}
+        isSearching={isSearching}
+        inputRef={inputRef}
+        textColor={theme.colors.text.default}
+        subtleTextColor={theme.colors.text.subtle}
+        lighterBackgroundColor={theme.colors.background.lighter}
+        borderColor={theme.colors.border.subtle}
+        primaryColor={theme.colors.primary[500]}
+        backgroundColor={theme.colors.background.default}
+        onBack={handleBack}
+        onChangeQuery={(text) => {
+          setSearchQuery(text);
+          setSelectedTopic(null);
+        }}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        onSubmit={handleSubmitEditing}
+        onClear={handleClearInput}
+      />
 
-        {/* Search Input */}
-        <View
-          style={[
-            styles.inputContainer,
-            {
-              backgroundColor: theme.colors.background.lighter,
-              borderColor: isFocused
-                ? theme.colors.primary[500]
-                : theme.colors.border.subtle,
-            },
-          ]}
-        >
-          <Ionicons
-            name="search-outline"
-            size={20}
-            color={theme.colors.text.subtle}
-            style={styles.searchIcon}
-          />
-          <TextInput
-            ref={inputRef}
-            value={searchQuery}
-            onChangeText={(text) => {
-              setSearchQuery(text);
-              setSelectedTopic(null);
-            }}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            onSubmitEditing={handleSubmitEditing}
-            placeholder="Search posts, topics, users..."
-            placeholderTextColor={theme.colors.text.subtle}
-            returnKeyType="search"
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={[styles.input, { color: theme.colors.text.default }]}
-          />
-          {isSearching && (
-            <Animated.View entering={FadeIn.duration(100)}>
-              <ActivityIndicator
-                size="small"
-                color={theme.colors.primary[500]}
-                style={{ marginRight: 4 }}
-              />
-            </Animated.View>
-          )}
-          {hasSearchQuery && !isSearching && (
-            <Animated.View
-              entering={FadeIn.duration(150)}
-              exiting={FadeOut.duration(150)}
-            >
-              <Pressable
-                onPress={handleClearInput}
-                style={({ pressed }) => [
-                  styles.clearInputButton,
-                  pressed && { opacity: 0.5 },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.clearInputIcon,
-                    { backgroundColor: theme.colors.text.subtle },
-                  ]}
-                >
-                  <Ionicons
-                    name="close"
-                    size={12}
-                    color={theme.colors.background.default}
-                  />
-                </View>
-              </Pressable>
-            </Animated.View>
-          )}
-        </View>
-      </View>
+      <SearchTabs
+        visible={!!showResults}
+        activeTab={activeTab}
+        postsCount={searchResults?.posts.length ?? 0}
+        topicsCount={topicsTabCount}
+        usersCount={searchResults?.users.length ?? 0}
+        backgroundColor={theme.colors.background.default}
+        borderColor={theme.colors.border.subtle}
+        primaryColor={theme.colors.primary[500]}
+        subtleTextColor={theme.colors.text.subtle}
+        inverseTextColor={theme.colors.background.default}
+        singleTabWidth={singleTabWidth}
+        tabIndicatorStyle={tabIndicatorStyle}
+        onPressTab={handleTabPress}
+      />
 
-      {/* Tabs - only show when searching */}
-      {showResults && (
-        <Animated.View
-          entering={FadeIn.duration(200)}
-          style={[
-            styles.tabsContainer,
-            {
-              backgroundColor: theme.colors.background.default,
-              borderBottomColor: theme.colors.border.subtle,
-            },
-          ]}
-        >
-          {/* Posts Tab */}
-          <Pressable
-            onPress={() => handleTabPress("posts")}
-            style={({ pressed }) => [
-              styles.tab,
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <Text
-              size="md"
-              weight={activeTab === "posts" ? "semibold" : "regular"}
-              style={{
-                color:
-                  activeTab === "posts"
-                    ? theme.colors.primary[500]
-                    : theme.colors.text.subtle,
-              }}
-            >
-              Posts
-            </Text>
-            {searchResults && searchResults.posts.length > 0 && (
-              <View
-                style={[
-                  styles.tabBadge,
-                  {
-                    backgroundColor:
-                      activeTab === "posts"
-                        ? theme.colors.primary[500]
-                        : theme.colors.background.subtle,
-                  },
-                ]}
-              >
-                <Text
-                  size="xs"
-                  weight="medium"
-                  style={{
-                    color:
-                      activeTab === "posts"
-                        ? theme.colors.background.default
-                        : theme.colors.text.subtle,
-                  }}
-                >
-                  {searchResults.posts.length}
-                </Text>
-              </View>
-            )}
-          </Pressable>
-
-          {/* Topics Tab */}
-          <Pressable
-            onPress={() => handleTabPress("topics")}
-            style={({ pressed }) => [
-              styles.tab,
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <Text
-              size="md"
-              weight={activeTab === "topics" ? "semibold" : "regular"}
-              style={{
-                color:
-                  activeTab === "topics"
-                    ? theme.colors.primary[500]
-                    : theme.colors.text.subtle,
-              }}
-            >
-              Topics
-            </Text>
-            {topicsTabCount > 0 && (
-              <View
-                style={[
-                  styles.tabBadge,
-                  {
-                    backgroundColor:
-                      activeTab === "topics"
-                        ? theme.colors.primary[500]
-                        : theme.colors.background.subtle,
-                  },
-                ]}
-              >
-                <Text
-                  size="xs"
-                  weight="medium"
-                  style={{
-                    color:
-                      activeTab === "topics"
-                        ? theme.colors.background.default
-                        : theme.colors.text.subtle,
-                  }}
-                >
-                  {topicsTabCount}
-                </Text>
-              </View>
-            )}
-          </Pressable>
-
-          {/* Users Tab */}
-          <Pressable
-            onPress={() => handleTabPress("users")}
-            style={({ pressed }) => [
-              styles.tab,
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <Text
-              size="md"
-              weight={activeTab === "users" ? "semibold" : "regular"}
-              style={{
-                color:
-                  activeTab === "users"
-                    ? theme.colors.primary[500]
-                    : theme.colors.text.subtle,
-              }}
-            >
-              Users
-            </Text>
-            {searchResults && searchResults.users.length > 0 && (
-              <View
-                style={[
-                  styles.tabBadge,
-                  {
-                    backgroundColor:
-                      activeTab === "users"
-                        ? theme.colors.primary[500]
-                        : theme.colors.background.subtle,
-                  },
-                ]}
-              >
-                <Text
-                  size="xs"
-                  weight="medium"
-                  style={{
-                    color:
-                      activeTab === "users"
-                        ? theme.colors.background.default
-                        : theme.colors.text.subtle,
-                  }}
-                >
-                  {searchResults.users.length}
-                </Text>
-              </View>
-            )}
-          </Pressable>
-          <Animated.View
-            style={[
-              styles.tabIndicator,
-              { width: singleTabWidth, backgroundColor: theme.colors.primary[500] },
-              tabIndicatorStyle,
-            ]}
-          />
-        </Animated.View>
-      )}
-
-      {/* Content */}
       {showResults ? (
         <GestureDetector gesture={swipeGesture}>
-        <Animated.View style={[{ flex: 1 }, contentAnimatedStyle]}>
-        {activeTab === "posts" ? (
-          <FlatList
-            data={searchResults?.posts ?? []}
-            keyExtractor={(item) => `post-${item.post_id}`}
-            renderItem={renderPostResult}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={[
-              styles.listContent,
-              { paddingBottom: insets.bottom + 20 },
-            ]}
-            ListEmptyComponent={!isSearching ? PostsEmptyState : null}
-          />
-        ) : activeTab === "topics" ? (
-          // Topics tab - show topic posts if selected, otherwise show topic list
-          selectedTopic ? (
-            <FlatList
-              data={topicPosts}
-              keyExtractor={(item) => `topic-post-${item.post_id}`}
-              renderItem={renderPostResult}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={[
-                styles.listContent,
-                { paddingBottom: insets.bottom + 20 },
-              ]}
-              ListHeaderComponent={TopicPostsHeader}
-              ListEmptyComponent={
-                isLoadingTopicPosts ? (
-                  <View style={styles.loadingState}>
-                    <ActivityIndicator
-                      size="small"
-                      color={theme.colors.primary[500]}
-                    />
-                  </View>
-                ) : (
-                  <PostsEmptyState />
-                )
-              }
-            />
-          ) : (
-            <FlatList
-              data={searchResults?.topics ?? []}
-              keyExtractor={(item) => `topic-${item.topic}`}
-              renderItem={renderTopicResult}
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={[
-                styles.listContent,
-                { paddingBottom: insets.bottom + 20 },
-              ]}
-              ListEmptyComponent={!isSearching ? TopicsEmptyState : null}
-            />
-          )
-        ) : (
-          // Users tab
-          <FlatList
-            data={searchResults?.users ?? []}
-            keyExtractor={(item) => `user-${item.address}`}
-            renderItem={renderUserResult}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={[
-              styles.listContent,
-              { paddingBottom: insets.bottom + 20 },
-            ]}
-            ListEmptyComponent={!isSearching ? UsersEmptyState : null}
-          />
-        )}
-        </Animated.View>
+          <Animated.View style={[{ flex: 1 }, contentAnimatedStyle]}>
+            {activeTab === "posts" ? (
+              <FlatList
+                data={searchResults?.posts ?? []}
+                keyExtractor={(item) => `post-${item.post_id}`}
+                renderItem={renderPostResult}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
+                ListEmptyComponent={
+                  !isSearching
+                    ? () => (
+                        <SearchEmptyState
+                          icon="document-text-outline"
+                          title="No posts found"
+                          description="Try searching with different keywords"
+                          color={theme.colors.text.subtle}
+                        />
+                      )
+                    : null
+                }
+              />
+            ) : activeTab === "topics" ? (
+              selectedTopic ? (
+                <FlatList
+                  data={topicPosts}
+                  keyExtractor={(item) => `topic-post-${item.post_id}`}
+                  renderItem={renderPostResult}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="on-drag"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
+                  ListHeaderComponent={topicPostsHeader}
+                  ListEmptyComponent={
+                    isLoadingTopicPosts
+                      ? () => (
+                          <View style={styles.loadingState}>
+                            <ActivityIndicator size="small" color={theme.colors.primary[500]} />
+                          </View>
+                        )
+                      : () => (
+                          <SearchEmptyState
+                            icon="document-text-outline"
+                            title="No posts found"
+                            description="Try searching with different keywords"
+                            color={theme.colors.text.subtle}
+                          />
+                        )
+                  }
+                />
+              ) : (
+                <FlatList
+                  data={searchResults?.topics ?? []}
+                  keyExtractor={(item) => `topic-${item.topic}`}
+                  renderItem={renderTopicResult}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="on-drag"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
+                  ListEmptyComponent={
+                    !isSearching
+                      ? () => (
+                          <SearchEmptyState
+                            icon="pricetag-outline"
+                            title="No topics found"
+                            description="Try searching for a different topic name"
+                            color={theme.colors.text.subtle}
+                          />
+                        )
+                      : null
+                  }
+                />
+              )
+            ) : (
+              <FlatList
+                data={searchResults?.users ?? []}
+                keyExtractor={(item) => `user-${item.address}`}
+                renderItem={renderUserResult}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
+                ListEmptyComponent={
+                  !isSearching
+                    ? () => (
+                        <SearchEmptyState
+                          icon="people-outline"
+                          title="No users found"
+                          description="Try searching for a username"
+                          color={theme.colors.text.subtle}
+                        />
+                      )
+                    : null
+                }
+              />
+            )}
+          </Animated.View>
         </GestureDetector>
       ) : (
-        // Show recent searches and trending topics when empty
         <FlatList
           data={[]}
-          renderItem={null}
+          renderItem={null as any}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: insets.bottom + 20 },
-          ]}
+          contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 20 }]}
           ListHeaderComponent={
             <>
-              {/* Recent Searches Section */}
-              {recentSearches.length > 0 && (
+              {recentSearches.length > 0 ? (
                 <View style={styles.section}>
                   <View style={styles.sectionHeader}>
-                    <Text
-                      size="sm"
-                      weight="semibold"
-                      mode="subtle"
-                      style={styles.sectionHeaderTitle}
-                    >
+                    <Text size="sm" weight="semibold" mode="subtle" style={styles.sectionHeaderTitle}>
                       RECENT
                     </Text>
-                    <Pressable
-                      onPress={handleClearAllRecentSearches}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      style={({ pressed }) => [pressed && { opacity: 0.5 }]}
-                    >
-                      <Text
-                        size="sm"
-                        style={{ color: theme.colors.primary[500] }}
-                      >
+                    <Pressable onPress={handleClearAllRecentSearches} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={({ pressed }) => [pressed && { opacity: 0.5 }]}>
+                      <Text size="sm" style={{ color: theme.colors.primary[500] }}>
                         Clear all
                       </Text>
                     </Pressable>
@@ -1186,24 +495,15 @@ export function SearchScreen() {
                     scrollEnabled={false}
                   />
                 </View>
-              )}
+              ) : null}
 
-              {/* Trending Topics Section */}
               <View style={styles.section}>
-                <Text
-                  size="sm"
-                  weight="semibold"
-                  mode="subtle"
-                  style={styles.sectionTitle}
-                >
+                <Text size="sm" weight="semibold" mode="subtle" style={styles.sectionTitle}>
                   TRENDING TOPICS
                 </Text>
                 {isLoadingTopics ? (
                   <View style={styles.loadingState}>
-                    <ActivityIndicator
-                      size="small"
-                      color={theme.colors.primary[500]}
-                    />
+                    <ActivityIndicator size="small" color={theme.colors.primary[500]} />
                   </View>
                 ) : trendingTopics.length > 0 ? (
                   <FlatList
@@ -1229,246 +529,46 @@ export function SearchScreen() {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: theme.spacing.sm,
-    paddingBottom: theme.spacing.sm,
-    borderBottomWidth: 0.5,
-    gap: theme.spacing.sm,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: theme.radius.full,
-  },
-  inputContainer: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    height: 44,
-    borderRadius: theme.radius.xxl + 10,
-    borderWidth: 1,
-    paddingHorizontal: theme.spacing.sm,
-  },
-  searchIcon: {
-    marginRight: theme.spacing.xs,
-  },
-  input: {
-    flex: 1,
-    fontSize: theme.typography.size.lg,
-    fontFamily: theme.typography.family.mono,
-    height: "100%",
-    backgroundColor: theme.colors.background.lighter,
-    borderRadius: theme.radius.xxl + 10,
-  },
-  clearInputButton: {
-    padding: 4,
-  },
-  clearInputIcon: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  // Tabs
-  tabsContainer: {
-    flexDirection: "row",
-    borderBottomWidth: 0.5,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: theme.spacing.sm + 2,
-  },
-  tabIndicator: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    height: 2,
-  },
-  tabBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: theme.radius.full,
-    minWidth: 20,
-    alignItems: "center",
-  },
-  // List content
   listContent: {
-    paddingTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing.sm,
+  },
+  loadingState: {
+    paddingVertical: theme.spacing.xl,
+    alignItems: "center",
   },
   section: {
-    marginBottom: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: theme.spacing.md,
     marginBottom: theme.spacing.sm,
   },
   sectionHeaderTitle: {
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
   sectionTitle: {
-    paddingHorizontal: theme.spacing.md,
     marginBottom: theme.spacing.sm,
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
-  // Divider
-  divider: {
-    height: 0.5,
-    marginHorizontal: theme.spacing.md,
-  },
-  // Recent search item
-  recentSearchItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-  },
-  recentSearchLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.sm,
-    flex: 1,
-  },
-  clearButton: {
-    padding: 4,
-  },
-  // Trending topic item
-  trendingItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    gap: theme.spacing.sm,
-  },
-  trendingIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: theme.radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  trendingContent: {
-    flex: 1,
-    gap: 2,
-  },
-  // Topic result item
-  topicResultItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: theme.spacing.sm + 4,
-    paddingHorizontal: theme.spacing.md,
-    gap: theme.spacing.sm,
-  },
-  topicResultIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: theme.radius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  topicResultContent: {
-    flex: 1,
-    gap: 2,
-  },
-  // Topic header when viewing posts
   topicHeader: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: theme.spacing.md,
-    paddingBottom: theme.spacing.md,
     gap: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.md,
   },
   topicBackButton: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: theme.radius.full,
   },
-  topicHeaderIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: theme.radius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  // User result item
-  userResultItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: theme.spacing.sm + 4,
-    paddingHorizontal: theme.spacing.md,
-    gap: theme.spacing.md,
-  },
-  userResultContent: {
-    flex: 1,
-    gap: 2,
-  },
-  userResultNameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  agentTag: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  // Post result item - new design
-  postResultItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: theme.spacing.sm + 2,
-    paddingHorizontal: theme.spacing.md,
-    gap: theme.spacing.md,
-  },
-  postResultContent: {
-    flex: 1,
-    gap: 4,
-  },
-  postResultHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  postTitle: {
-    lineHeight: 20,
-  },
-  postResultMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 2,
-  },
-  postThumbnail: {
-    width: 72,
-    height: 72,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.background.subtle,
-  },
-  // Empty states
-  emptyState: {
-    paddingVertical: theme.spacing.xl * 2,
-    alignItems: "center",
-  },
   emptyTrendingState: {
     paddingVertical: theme.spacing.lg,
-    alignItems: "center",
-  },
-  loadingState: {
-    paddingVertical: theme.spacing.xl,
     alignItems: "center",
   },
 }));

@@ -1,5 +1,5 @@
 import type { Router } from "expo-router";
-import type { Post } from "@/src/components/molecules/post-card-types";
+import type { Post } from "@/src/domain/posts/types";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 
 let _lastEditTimestamp = 0;

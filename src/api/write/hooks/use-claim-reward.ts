@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { mutationKeys } from "@/src/api/write/mutation-keys";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { claimReward, type ClaimRewardInput, type ClaimRewardResponse } from "../endpoints/rewards";
 import { queryKeys } from "@/src/api/read/query-keys";
@@ -18,6 +19,7 @@ export function useClaimReward(options?: UseClaimRewardOptions) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
 
   return useMutation({
+    mutationKey: mutationKeys.claimReward(),
     mutationFn: async (input: ClaimRewardInput) => {
       const wallet = await getWallet();
       return claimReward(wallet, input, options?.onPoWProgress);

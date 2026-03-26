@@ -5,17 +5,13 @@ import * as Clipboard from "expo-clipboard";
 import { useIsFocused } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
-import { useRouter } from "@/src/hooks/use-router";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "@/src/navigation/guarded-router";
+import { useCallback, useEffect, useMemo, useRef, useState, type ListRenderItem } from "react";
 import {
-  Dimensions,
   FlatList,
-  ListRenderItem,
   Platform,
-  Share,
   useWindowDimensions,
   View,
-  type ViewToken,
 } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -40,7 +36,6 @@ import {
 import { getUserPosts } from "@/src/api/read/endpoints/posts";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { transformApiPost } from "@/src/api/read/utils";
-import type { Post as ApiPost } from "@/src/api/types";
 import {
   useBlockUser,
   useUnblockUser,
@@ -54,24 +49,16 @@ import {
   PROFILE_CONTENT_HEIGHT,
   ProfileHeaderBar,
   ProfileTabBar,
-  ProfileEmptyState,
   ReportSheet,
   ReportSheetRef,
   UserProfileMenuSheet,
   UserProfileMenuSheetRef,
-  ProfileAboutTab,
 } from "@/src/components/molecules";
-import { PostCardItem } from "@/src/components/molecules/post-card-item";
-import { PostCardSkeletonList } from "@/src/components/molecules/post-card-skeleton";
-import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
-import { ProfileCommentItem } from "@/src/components/molecules/profile-comment-item";
-import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { UserProfileContentAnimated } from "@/src/components/molecules/user-profile-content-animated";
 import { PROFILE_TAB_BAR_HEIGHT } from "@/src/components/molecules/profile-tabs";
-import { Box, Text } from "@/src/components/ui/primitives";
+import { Box } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import {
-  useAppState,
   useBlockHandler,
   useDeleteHandler,
   useFollowHandler,
@@ -90,143 +77,23 @@ import {
   useSavedPostsStore,
 } from "@/src/stores";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+import {
+  USER_PROFILE_HEADER_BAR_HEIGHT,
+  USER_PROFILE_SCREEN_WIDTH,
+  type UserProfileListItem,
+  calculateAccountAgeDays,
+  formatMirageBalance,
+} from "./user-profile/user-profile-utils";
+import {
+  PostWrapper,
+  UserProfileCommentWrapper,
+} from "./user-profile/user-profile-list-items";
+import { useUserProfileViewability } from "./user-profile/use-user-profile-viewability";
+import { UserProfileListFooter } from "./user-profile/user-profile-list-footer";
+
 const AnimatedFlatList = Animated.createAnimatedComponent(
-  FlatList<Post | ApiPost | "header" | "tabs">
+  FlatList<UserProfileListItem>,
 );
-
-const HEADER_BAR_HEIGHT = 56;
-
-const formatMirageBalance = (umirage: number): number => {
-  return Math.floor(umirage / 1_000_000);
-};
-
-const calculateAccountAgeDays = (
-  createdAt: number | null | undefined
-): number => {
-  if (!createdAt) return 0;
-  const now = Date.now() / 1000;
-  const ageInSeconds = now - createdAt;
-  return ageInSeconds / (60 * 60 * 24);
-};
-
-const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
- const p = prev.post;
- const n = next.post;
- if (p.id !== n.id) return false;
- if (p.title !== n.title) return false;
- if (p.body !== n.body) return false;
- if (p.likes !== n.likes) return false;
- if (p.dislikes !== n.dislikes) return false;
- if (p.comments !== n.comments) return false;
- if (p.hasLiked !== n.hasLiked) return false;
- if (p.hasDisliked !== n.hasDisliked) return false;
- if (p.awards?.length !== n.awards?.length) return false;
- if (prev.isVisible !== next.isVisible) return false;
- if (prev.isFocused !== next.isFocused) return false;
- if (prev.preloadNearby !== next.preloadNearby) return false;
- if (prev.screenActive !== next.screenActive) return false;
- if (prev.contentRevealed !== next.contentRevealed) return false;
- return true;
-});
-const MemoizedProfileCommentItem = memo(ProfileCommentItem, (prev, next) => {
- return prev.comment.post_id === next.comment.post_id
-  && prev.comment.content === next.comment.content
-  && prev.comment.points === next.comment.points;
-});
-
-const PostWrapper = memo(function PostWrapper({
- post,
- isOwnProfile,
- isVisible,
- isFocused,
- preloadNearby,
- screenActive,
- contentRevealed,
- shareUrl,
- onPostPress,
- onAuthorPress,
- onCommentPress,
- onMorePress,
- onLikePress,
- onDislikePress,
- onBlockUser,
- onBlockPost,
- onReport,
- onRevealContent,
-  onTopicPress,
-}: {
- post: Post;
- isOwnProfile: boolean;
- isVisible?: boolean;
- isFocused?: boolean;
- preloadNearby?: boolean;
- screenActive?: boolean;
- contentRevealed?: boolean;
- shareUrl: string;
- onPostPress: (postId: string) => void;
- onAuthorPress: (authorId: string) => void;
- onCommentPress: (postId: string) => void;
- onMorePress: (postId: string) => void;
- onLikePress: (postId: string, liked: boolean, disliked: boolean, likes: number) => void;
- onDislikePress: (postId: string, liked: boolean, disliked: boolean, likes: number) => void;
- onBlockUser: (postId: string, authorId: string, authorUsername: string) => void;
- onBlockPost: (postId: string) => void;
- onReport: (postId: string) => void;
- onRevealContent?: (postId: string) => void;
-  onTopicPress: (topic: string) => void;
-}) {
- const editOverride = usePostEditStore((s) => s.overrides[post.id]);
- const displayPost = editOverride ? {
-   ...post,
-   title: editOverride.title,
-   body: editOverride.content || undefined,
-   topic: editOverride.topic ?? post.topic,
-   media: editOverride.media
-     ? editOverride.media.map((url: string) => ({ uri: url, type: "image" as const }))
-     : post.media,
- } : post;
- return (
-   <MemoizedPostCardItem
-    post={displayPost}
-    isOwnPost={isOwnProfile}
-    isVisible={isVisible}
-    isFocused={isFocused}
-    preloadNearby={preloadNearby}
-    screenActive={screenActive}
-    contentRevealed={contentRevealed}
-    showUrlCard={false}
-    showFollowButton={false}
-    shareUrl={shareUrl}
-    onPostPress={onPostPress}
-    onAuthorPress={onAuthorPress}
-    onCommentPress={onCommentPress}
-    onMorePress={onMorePress}
-    onLikePress={onLikePress}
-    onDislikePress={onDislikePress}
-    onBlockUser={onBlockUser}
-    onBlockPost={onBlockPost}
-    onReport={onReport}
-    onRevealContent={onRevealContent}
-   onTopicPress={onTopicPress}
-   />
- );
-});
-
-const MemoizedCommentWrapper = memo(function MemoizedCommentWrapper({
- comment,
- onPress,
-}: {
- comment: ApiPost;
- onPress: (commentId: string, rootPostId: string) => void;
-}) {
- return (
-   <MemoizedProfileCommentItem
-    comment={comment}
-    onPress={onPress}
-   />
- );
-});
 
 export function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -354,7 +221,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     return blockedData.blocked_users.includes(userAddress);
   }, [userAddress, blockedData?.blocked_users, optimisticBlocked]);
 
-  const headerHeight = insets.top + HEADER_BAR_HEIGHT;
+  const headerHeight = insets.top + USER_PROFILE_HEADER_BAR_HEIGHT;
   const stickyThreshold = PROFILE_CONTENT_HEIGHT;
   const minimumContentHeight = useMemo(
     () => windowHeight + stickyThreshold + 1,
@@ -452,16 +319,13 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     });
   }, [uiPosts, voteOverrides]);
 
- const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
+ const listData = useMemo((): UserProfileListItem[] => {
     if (isBlocked || activeTab === 2) {
       return ["header", "tabs"];
     }
     const posts = activeTab === 0 ? postsWithVotes : apiPosts;
     return ["header", "tabs", ...posts];
   }, [activeTab, postsWithVotes, apiPosts, isBlocked]);
-  const listDataRef = useRef(listData);
-  listDataRef.current = listData;
-
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       scrollY.value = event.contentOffset.y;
@@ -495,17 +359,6 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const handleBackPress = useCallback(() => {
     router.back();
   }, [router]);
-
-  const handleSharePress = useCallback(async () => {
-    try {
-      await Share.share({
-        message: `Check out @${username} on Mirage!`,
-        url: `${getShareBaseUrl(shareServer)}/u/${username}`,
-      });
-    } catch (error) {
-      Sentry.addBreadcrumb({ category: "user-profile", message: "Share failed", data: { error: String(error) }, level: "warning" });
-    }
-  }, [username, shareServer]);
 
   const handleMenuPress = useCallback(() => {
     if (!isOwnProfile) {
@@ -794,7 +647,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         if (userAddress) {
           const type = index === 0 ? "submissions" : "comments";
           queryClient.invalidateQueries({
-            queryKey: ["user", "posts", userAddress, type],
+            queryKey: queryKeys.userPosts(userAddress, type),
           });
         }
       } finally {
@@ -824,159 +677,25 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, activeTab, isBlocked]);
 
-  const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
-  const [visibleVideoPostIds, setVisibleVideoPostIds] = useState<Set<string>>(new Set());
-  const [warmVideoPostIds, setWarmVideoPostIds] = useState<Set<string>>(new Set());
-  const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
-
-  const handleRevealContent = useCallback((postId: string) => {
-    setRevealedPosts((prev) => {
-      const next = new Set(prev);
-      next.add(postId);
-      return next;
-    });
-    const post = postsWithVotes.find((p) => p.id === postId);
-    if (postHasPlayableVideo(post)) {
-      setActiveVideoPostId(postId);
-      setVisibleVideoPostIds((prev) => {
-        const next = new Set(prev);
-        next.add(postId);
-        return next;
-      });
-    }
-  }, [postsWithVotes]);
-
-  const profileViewabilityConfig = useRef({
-    viewAreaCoveragePercentThreshold: 30,
-    minimumViewTime: 300,
-  }).current;
-
-  const pendingProfileViewableRef = useRef<ViewToken[] | null>(null);
-  const profileDeferHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const flushProfileViewability = () => {
-    const items = pendingProfileViewableRef.current;
-    if (!items) return;
-    const visibleItems = items.filter(
-      (item) => item.isViewable && item.item && typeof item.item === "object" && "id" in item.item
-    );
-    if (visibleItems.length === 0) {
-      setVisibleVideoPostIds(new Set());
-      setWarmVideoPostIds(new Set());
-      setActiveVideoPostId(null);
-      return;
-    }
-    const videoItems = visibleItems.filter(
-      (item) => postHasPlayableVideo(item.item)
-    );
-    const newVisibleIds = new Set(videoItems.map((item) => item.item.id));
-    setVisibleVideoPostIds(newVisibleIds);
-    const warmVideoIds = new Set<string>(newVisibleIds);
-    const sortedVisibleIndices = visibleItems
-      .map((v) => v.index ?? 0)
-      .sort((a, b) => a - b);
-    const currentListData = listDataRef.current;
-    const warmMinIndex = Math.max(0, (sortedVisibleIndices[0] ?? 0) - 2);
-    const warmMaxIndex = Math.min(currentListData.length - 1, (sortedVisibleIndices[sortedVisibleIndices.length - 1] ?? 0) + 2);
-    for (let i = warmMinIndex; i <= warmMaxIndex; i++) {
-      const listItem = currentListData[i];
-      if (listItem && typeof listItem === "object" && "id" in listItem && postHasPlayableVideo(listItem)) {
-        warmVideoIds.add(listItem.id);
-      }
-    }
-    setWarmVideoPostIds(warmVideoIds);
-    if (videoItems.length > 0) {
-      const sortedIndices = visibleItems
-        .map((v) => v.index ?? 0)
-        .sort((a, b) => a - b);
-      const mid = Math.floor((sortedIndices.length - 1) / 2);
-      const centerIndex = sortedIndices[mid] ?? 0;
-      const visibleSpan = (sortedIndices[sortedIndices.length - 1] ?? 0) - (sortedIndices[0] ?? 0);
-      const maxDist = Math.max(1, visibleSpan * 0.35);
-      let best = videoItems[0];
-      let bestDist = Math.abs((best.index ?? 0) - centerIndex);
-      for (let i = 1; i < videoItems.length; i++) {
-        const d = Math.abs((videoItems[i].index ?? 0) - centerIndex);
-        if (d < bestDist) { best = videoItems[i]; bestDist = d; }
-      }
-      setActiveVideoPostId(bestDist <= maxDist ? best.item.id : null);
-    } else {
-      setActiveVideoPostId(null);
-    }
-  };
-
-  const activeVideoPostIdRef = useRef(activeVideoPostId);
-  activeVideoPostIdRef.current = activeVideoPostId;
-
-  const onProfileViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      pendingProfileViewableRef.current = viewableItems;
-
-      const currentActive = activeVideoPostIdRef.current;
-      if (currentActive) {
-        const stillVisible = viewableItems.some(
-          (v) => v.isViewable && v.item && typeof v.item === "object" && "id" in v.item && v.item.id === currentActive
-        );
-        if (!stillVisible) {
-          setActiveVideoPostId(null);
-        }
-      }
-
-      if (profileDeferHandleRef.current !== null) {
-        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
-      }
-      profileDeferHandleRef.current = setTimeout(flushProfileViewability, Platform.OS === "ios" ? 200 : 150);
-    }
-  ).current;
-
-  const handleProfileMomentumScrollEnd = useCallback(() => {
-    if (profileDeferHandleRef.current !== null) {
-      clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
-      profileDeferHandleRef.current = null;
-    }
-    if (Platform.OS === "ios") {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(flushProfileViewability);
-      });
-    } else {
-      setTimeout(() => {
-        requestAnimationFrame(flushProfileViewability);
-      }, 50);
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (profileDeferHandleRef.current !== null) {
-        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
-      }
-    };
-  }, []);
-
-  useAppState({
-    onBackground: () => {
-      if (profileDeferHandleRef.current !== null) {
-        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
-        profileDeferHandleRef.current = null;
-      }
-      setVisibleVideoPostIds(new Set());
-      setWarmVideoPostIds(new Set());
-      setActiveVideoPostId(null);
-    },
-    onForeground: () => {
-      if (activeTab !== 0) return;
-      if (profileDeferHandleRef.current !== null) {
-        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
-        profileDeferHandleRef.current = null;
-      }
-      requestAnimationFrame(() => {
-        flushProfileViewability();
-      });
-    },
+  const {
+    activeVideoPostId,
+    handleProfileMomentumScrollEnd,
+    handleRevealContent,
+    onProfileViewableItemsChanged,
+    profileViewabilityConfig,
+    revealedPosts,
+    visibleVideoPostIds,
+    warmVideoPostIds,
+  } = useUserProfileViewability({
+    activeTab,
+    isBlocked,
+    isFocused,
+    listData,
+    postsWithVotes,
   });
 
   const keyExtractor = useCallback(
-    (item: Post | ApiPost | "header" | "tabs", index: number) => {
+    (item: UserProfileListItem, index: number) => {
       if (item === "header") return "header";
       if (item === "tabs") return "tabs";
       return "id" in item ? item.id : item.post_id;
@@ -984,7 +703,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     []
   );
 
-  const renderItem: ListRenderItem<Post | ApiPost | "header" | "tabs"> =
+  const renderItem: ListRenderItem<UserProfileListItem> =
     useCallback(
       ({ item, index }) => {
         if (item === "header") {
@@ -1017,7 +736,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
                 activeTab={activeTab}
                 onTabChange={handleTabChange}
                 onTabDoubleTap={handleTabDoubleTap}
-                tabWidth={SCREEN_WIDTH}
+                tabWidth={USER_PROFILE_SCREEN_WIDTH}
                 animatedIndex={animatedTabIndex}
               />
             </View>
@@ -1055,7 +774,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         if (activeTab === 1 && "post_id" in item) {
           return (
             <Animated.View style={contentAnimatedStyle}>
-              <MemoizedCommentWrapper
+              <UserProfileCommentWrapper
                comment={item}
                onPress={handleCommentPress}
               />
@@ -1104,84 +823,31 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   );
 
   const ListFooterComponent = useCallback(() => {
-    if (isBlocked) {
-      const tabType = activeTab === 0 ? "posts" : activeTab === 1 ? "comments" : "about";
-      return (
-          <Animated.View style={contentAnimatedStyle}>
-            <ProfileEmptyState
-              tabType={tabType}
-              isOwnProfile={false}
-              isBlocked={true}
-              onUnblock={handleUnblockUser}
-            />
-          </Animated.View>
-      );
-   }
-
-    if (activeTab === 2) {
-      return (
-          <Animated.View style={contentAnimatedStyle}>
-            <ProfileAboutTab
-              userAddress={userAddress}
-              isOwnProfile={isOwnProfile}
-            />
-          </Animated.View>
-      );
-    }
-
-    if (isLoadingPosts) {
-      return activeTab === 0 ? (
-            <Animated.View style={contentAnimatedStyle}>
-              <PostCardSkeletonList count={3} />
-            </Animated.View>
-          ) : (
-            <Animated.View style={contentAnimatedStyle}>
-              <ProfilePostsSkeleton count={5} type="comments" />
-            </Animated.View>
-          );
-    }
-
-    if (listData.length <= 2) {
-      const tabType = activeTab === 0 ? "posts" : "comments";
-      return (
-          <Animated.View style={contentAnimatedStyle}>
-            <ProfileEmptyState
-              tabType={tabType}
-              onSettingsPress={handleSettingsPress}
-              isOwnProfile={isOwnProfile}
-            />
-          </Animated.View>
-      );
-    }
-
-    if (isFetchingNextPage) {
-      return activeTab === 0 ? (
-            <Animated.View style={contentAnimatedStyle}>
-              <PostCardSkeletonList count={1} />
-            </Animated.View>
-          ) : (
-            <Animated.View style={contentAnimatedStyle}>
-              <ProfilePostsSkeleton count={2} type="comments" />
-            </Animated.View>
-          );
-    }
-
     return (
-      <Animated.View style={contentAnimatedStyle}>
-        <View style={styles.bottomSpacer} />
-      </Animated.View>
+      <UserProfileListFooter
+        activeTab={activeTab}
+        contentAnimatedStyle={contentAnimatedStyle}
+        handleSettingsPress={handleSettingsPress}
+        handleUnblockUser={handleUnblockUser}
+        isBlocked={isBlocked}
+        isFetchingNextPage={isFetchingNextPage}
+        isLoadingPosts={isLoadingPosts}
+        isOwnProfile={isOwnProfile}
+        listDataLength={listData.length}
+        userAddress={userAddress}
+      />
     );
   }, [
     activeTab,
-    isLoadingPosts,
-    isFetchingNextPage,
-    listData.length,
-    handleSettingsPress,
-    isOwnProfile,
-    isBlocked,
-    handleUnblockUser,
-    userAddress,
     contentAnimatedStyle,
+    handleSettingsPress,
+    handleUnblockUser,
+    isBlocked,
+    isFetchingNextPage,
+    isLoadingPosts,
+    isOwnProfile,
+    listData.length,
+    userAddress,
   ]);
 
   const stickyTabsAnimatedStyle = useAnimatedStyle(() => {
@@ -1243,7 +909,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           activeTab={activeTab}
           onTabChange={handleTabChange}
           onTabDoubleTap={handleTabDoubleTap}
-          tabWidth={SCREEN_WIDTH}
+          tabWidth={USER_PROFILE_SCREEN_WIDTH}
           animatedIndex={animatedTabIndex}
         />
       </Animated.View>
@@ -1382,8 +1048,5 @@ const styles = StyleSheet.create((theme) => ({
     left: 0,
     right: 0,
     zIndex: 99,
-  },
-  bottomSpacer: {
-    height: 80,
   },
 }));

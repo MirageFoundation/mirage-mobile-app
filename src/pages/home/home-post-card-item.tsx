@@ -18,7 +18,7 @@ import {
   useVoteOverride,
   useCommentCountOverride,
   useIsTopicDisabled,
-} from "./home-post-card-store";
+} from "@/src/stores/home-post-card-store";
 
 type HomePostCardItemProps = {
  post: Post;

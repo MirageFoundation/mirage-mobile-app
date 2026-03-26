@@ -20,7 +20,7 @@ import type { Post } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { useAppState } from "@/src/hooks";
 import { HomePostCardItem } from "./home-post-card-item";
-import { useHomePostCardStore } from "./home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 
 const AnimatedFlashList = Animated.createAnimatedComponent(
   FlashList as ComponentType<any>,

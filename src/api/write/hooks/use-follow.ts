@@ -3,6 +3,7 @@
  */
 
 import { queryKeys } from "@/src/api/read/query-keys";
+import { mutationKeys } from "@/src/api/write/mutation-keys";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -38,6 +39,7 @@ export function useFollowUser(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.followUser(),
     mutationFn: async (userAddress: string) => {
       const wallet = await getWallet();
       return followUser(wallet, userAddress, options.onPoWProgress);
@@ -52,7 +54,7 @@ export function useFollowUser(options: UseFollowOptions = {}) {
         });
       }
       // Following affects the feed
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
     },
   });
 }
@@ -62,6 +64,7 @@ export function useUnfollowUser(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.unfollowUser(),
     mutationFn: async (userAddress: string) => {
       const wallet = await getWallet();
       return unfollowUser(wallet, userAddress, options.onPoWProgress);
@@ -75,7 +78,7 @@ export function useUnfollowUser(options: UseFollowOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
     },
   });
 }
@@ -89,6 +92,7 @@ export function useFollowTopic(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.followTopic(),
     mutationFn: async (topic: string) => {
       const wallet = await getWallet();
       return followTopic(wallet, topic, options.onPoWProgress);
@@ -103,7 +107,7 @@ export function useFollowTopic(options: UseFollowOptions = {}) {
         });
       }
       // Topic following affects the feed
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
     },
   });
 }
@@ -113,6 +117,7 @@ export function useUnfollowTopic(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.unfollowTopic(),
     mutationFn: async (topic: string) => {
       const wallet = await getWallet();
       return unfollowTopic(wallet, topic, options.onPoWProgress);
@@ -126,7 +131,7 @@ export function useUnfollowTopic(options: UseFollowOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
     },
   });
 }
@@ -140,6 +145,7 @@ export function useEnableAgent(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.enableAgent(),
     mutationFn: async (agentAddress: string) => {
       const wallet = await getWallet();
       return enableAgent(wallet, agentAddress, options.onPoWProgress);
@@ -154,7 +160,7 @@ export function useEnableAgent(options: UseFollowOptions = {}) {
         });
       }
       // Enabling agents affects content filtering
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
     },
   });
 }
@@ -164,6 +170,7 @@ export function useDisableAgent(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.disableAgent(),
     mutationFn: async (agentAddress: string) => {
       const wallet = await getWallet();
       return disableAgent(wallet, agentAddress, options.onPoWProgress);
@@ -177,7 +184,7 @@ export function useDisableAgent(options: UseFollowOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
     },
   });
 }
@@ -200,6 +207,7 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.toggleFollowTopic(),
     mutationFn: async ({
       topic,
       isCurrentlyFollowing,
@@ -287,7 +295,7 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
           });
         }
         queryClient.invalidateQueries({
-          queryKey: ["posts"],
+          queryKey: queryKeys.postsRoot(),
           refetchType: "active",
         });
       }, 5000);
@@ -330,7 +338,7 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
     },
     onSettled: (_data, error) => {
       queryClient.invalidateQueries({
-        queryKey: ["posts"],
+        queryKey: queryKeys.postsRoot(),
         refetchType: "active",
       });
 
@@ -367,6 +375,7 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.toggleFollowUser(),
     mutationFn: async ({
       userAddress,
       isCurrentlyFollowing,
@@ -461,7 +470,7 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
           });
         }
         queryClient.invalidateQueries({
-          queryKey: ["posts"],
+          queryKey: queryKeys.postsRoot(),
           refetchType: "active",
         });
       }, 5000);
@@ -510,7 +519,7 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
     },
     onSettled: (_data, error) => {
       queryClient.invalidateQueries({
-        queryKey: ["posts"],
+        queryKey: queryKeys.postsRoot(),
         refetchType: "active",
       });
 

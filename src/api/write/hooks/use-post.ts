@@ -10,6 +10,7 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import { queryKeys } from "@/src/api/read/query-keys";
+import { mutationKeys } from "@/src/api/write/mutation-keys";
 import type {
   CommentsResponse,
   PostFilters,
@@ -431,6 +432,7 @@ export function usePost(options: UsePostOptions = {}) {
   const username = useAuthStore((s) => s.user?.username);
 
   return useMutation({
+    mutationKey: mutationKeys.createPost(),
     mutationFn: async (input: CreatePostMutationInput) => {
       const wallet = await getWallet();
       const { optimisticMediaUrl, optimisticMediaUrls, ...postInput } = input;
@@ -444,7 +446,7 @@ export function usePost(options: UsePostOptions = {}) {
         username,
       );
 
-      const postQueries = queryClient.getQueriesData({ queryKey: ["posts"] });
+      const postQueries = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() });
       postQueries.forEach(([queryKey, queryData]) => {
         if (!queryData) return;
         const filters = queryKey[1] as PostFilters | undefined;
@@ -492,7 +494,7 @@ export function usePost(options: UsePostOptions = {}) {
       // Keep the newly created post visible immediately in Home feeds.
       // Magic is reconciled back to backend ordering on refresh / new-posts reload.
       queryClient.invalidateQueries({
-        queryKey: ["posts"],
+        queryKey: queryKeys.postsRoot(),
         refetchType: "inactive",
       });
 
@@ -506,7 +508,7 @@ export function usePost(options: UsePostOptions = {}) {
 
       // Invalidate topics cache to include newly created topics
       queryClient.invalidateQueries({
-        queryKey: ["topics"],
+        queryKey: queryKeys.topicsRoot(),
         refetchType: "inactive",
       });
     },
@@ -553,23 +555,24 @@ export function useComment(options: UsePostOptions = {}) {
   const username = useAuthStore((s) => s.user?.username);
 
   return useMutation({
+    mutationKey: mutationKeys.createComment(),
     mutationFn: async (input: CreateCommentInput) => {
       const wallet = await getWallet();
       return createComment(wallet, input, options.onPoWProgress);
     },
     onMutate: async (input) => {
-      await queryClient.cancelQueries({ queryKey: ["comments"] });
-      await queryClient.cancelQueries({ queryKey: ["posts"] });
-      await queryClient.cancelQueries({ queryKey: ["user", "posts"] });
+      await queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() });
+      await queryClient.cancelQueries({ queryKey: queryKeys.postsRoot() });
+      await queryClient.cancelQueries({ queryKey: queryKeys.userPostsRoot() });
 
       const previousComments = queryClient.getQueriesData<CommentsResponse>({
-        queryKey: ["comments"],
+        queryKey: queryKeys.commentsRoot(),
       }) as Array<[QueryKey, CommentsResponse | undefined]>;
-      const previousPosts = queryClient.getQueriesData({ queryKey: ["posts"] }) as Array<
+      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as Array<
         [QueryKey, unknown]
       >;
       const previousUserPosts = queryClient.getQueriesData({
-        queryKey: ["user", "posts"],
+        queryKey: queryKeys.userPostsRoot(),
       }) as Array<[QueryKey, unknown]>;
 
       const optimisticCommentId = `optimistic-${Date.now()}`;
@@ -598,10 +601,10 @@ export function useComment(options: UsePostOptions = {}) {
       });
 
       affectedRootPostIds.forEach((rootPostId) => {
-        updateQueriesWithReducer(queryClient, ["posts"], (queryData) =>
+        updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (queryData) =>
           applyCommentDeltaToPostsData(queryData, rootPostId, 1),
         );
-        updateQueriesWithReducer(queryClient, ["user", "posts"], (queryData) =>
+        updateQueriesWithReducer(queryClient, queryKeys.userPostsRoot(), (queryData) =>
           applyCommentDeltaToPostsData(queryData, rootPostId, 1),
         );
       });
@@ -625,11 +628,11 @@ export function useComment(options: UsePostOptions = {}) {
     onSuccess: () => {},
     onSettled: () => {
       queryClient.invalidateQueries({
-        queryKey: ["comments"],
+        queryKey: queryKeys.commentsRoot(),
         refetchType: "inactive",
       });
       queryClient.invalidateQueries({
-        queryKey: ["posts"],
+        queryKey: queryKeys.postsRoot(),
         refetchType: "inactive",
       });
 
@@ -682,20 +685,21 @@ export function useEdit(options: UsePostOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.editPost(),
     mutationFn: async (input: EditPostInput) => {
       const wallet = await getWallet();
       return editPost(wallet, input, options.onPoWProgress);
     },
     onMutate: async (input) => {
-      await queryClient.cancelQueries({ queryKey: ["posts"] });
-      await queryClient.cancelQueries({ queryKey: ["comments"] });
+      await queryClient.cancelQueries({ queryKey: queryKeys.postsRoot() });
+      await queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() });
       if (address) {
         await queryClient.cancelQueries({ queryKey: queryKeys.userPosts(address) });
       }
 
-      const previousPosts = queryClient.getQueriesData({ queryKey: ["posts"] }) as Array<[QueryKey, unknown]>;
-      const previousUserPosts = queryClient.getQueriesData({ queryKey: ["user", "posts"] }) as Array<[QueryKey, unknown]>;
-      const previousComments = queryClient.getQueriesData({ queryKey: ["comments"] }) as Array<[QueryKey, unknown]>;
+      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as Array<[QueryKey, unknown]>;
+      const previousUserPosts = queryClient.getQueriesData({ queryKey: queryKeys.userPostsRoot() }) as Array<[QueryKey, unknown]>;
+      const previousComments = queryClient.getQueriesData({ queryKey: queryKeys.commentsRoot() }) as Array<[QueryKey, unknown]>;
 
       const nowSeconds = Math.floor(Date.now() / 1000);
 
@@ -736,10 +740,10 @@ export function useEdit(options: UsePostOptions = {}) {
         return { nextData: didUpdate ? { ...singleData, posts: nextPosts } : data, didUpdate };
       };
 
-      updateQueriesWithReducer(queryClient, ["posts"], applyToPostsData);
-      updateQueriesWithReducer(queryClient, ["user", "posts"], applyToPostsData);
+      updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), applyToPostsData);
+      updateQueriesWithReducer(queryClient, queryKeys.userPostsRoot(), applyToPostsData);
 
-      const commentsQueries = queryClient.getQueriesData<CommentsResponse>({ queryKey: ["comments"] });
+      const commentsQueries = queryClient.getQueriesData<CommentsResponse>({ queryKey: queryKeys.commentsRoot() });
       commentsQueries.forEach(([queryKey, queryData]) => {
         if (!queryData?.root || queryData.root.post_id !== input.postId) return;
         queryClient.setQueryData<CommentsResponse>(queryKey, {
@@ -781,6 +785,7 @@ export function useDelete(options: UsePostOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.deletePost(),
     mutationFn: async (input: DeletePostInput) => {
       const wallet = await getWallet();
       const maxAttempts = 3;
@@ -803,18 +808,18 @@ export function useDelete(options: UsePostOptions = {}) {
       throw new Error("Delete failed");
     },
     onMutate: async (input) => {
-      await queryClient.cancelQueries({ queryKey: ["comments"] });
-      await queryClient.cancelQueries({ queryKey: ["posts"] });
-      await queryClient.cancelQueries({ queryKey: ["user", "posts"] });
+      await queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() });
+      await queryClient.cancelQueries({ queryKey: queryKeys.postsRoot() });
+      await queryClient.cancelQueries({ queryKey: queryKeys.userPostsRoot() });
 
       const previousComments = queryClient.getQueriesData<CommentsResponse>({
-        queryKey: ["comments"],
+        queryKey: queryKeys.commentsRoot(),
       }) as Array<[QueryKey, CommentsResponse | undefined]>;
-      const previousPosts = queryClient.getQueriesData({ queryKey: ["posts"] }) as Array<
+      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as Array<
         [QueryKey, unknown]
       >;
       const previousUserPosts = queryClient.getQueriesData({
-        queryKey: ["user", "posts"],
+        queryKey: queryKeys.userPostsRoot(),
       }) as Array<[QueryKey, unknown]>;
 
       const affectedRootPostIds = new Set<string>();
@@ -841,18 +846,18 @@ export function useDelete(options: UsePostOptions = {}) {
       });
 
       affectedRootPostIds.forEach((rootPostId) => {
-        updateQueriesWithReducer(queryClient, ["posts"], (queryData) =>
+        updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (queryData) =>
           applyCommentDeltaToPostsData(queryData, rootPostId, -1),
         );
-        updateQueriesWithReducer(queryClient, ["user", "posts"], (queryData) =>
+        updateQueriesWithReducer(queryClient, queryKeys.userPostsRoot(), (queryData) =>
           applyCommentDeltaToPostsData(queryData, rootPostId, -1),
         );
       });
 
-      updateQueriesWithReducer(queryClient, ["posts"], (queryData) =>
+      updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (queryData) =>
         removePostFromPostsData(queryData, input.postId),
       );
-      updateQueriesWithReducer(queryClient, ["user", "posts"], (queryData) =>
+      updateQueriesWithReducer(queryClient, queryKeys.userPostsRoot(), (queryData) =>
         removePostFromPostsData(queryData, input.postId),
       );
 
@@ -872,8 +877,8 @@ export function useDelete(options: UsePostOptions = {}) {
       restoreQuerySnapshots(queryClient, context?.previousUserPosts);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["posts"], refetchType: "inactive" });
-      queryClient.invalidateQueries({ queryKey: ["comments"], refetchType: "inactive" });
+      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot(), refetchType: "inactive" });
+      queryClient.invalidateQueries({ queryKey: queryKeys.commentsRoot(), refetchType: "inactive" });
 
       if (address) {
         queryClient.invalidateQueries({

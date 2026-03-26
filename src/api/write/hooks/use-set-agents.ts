@@ -1,4 +1,5 @@
 import { queryKeys } from "@/src/api/read/query-keys";
+import { mutationKeys } from "@/src/api/write/mutation-keys";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { setAgents } from "../endpoints/social";
@@ -13,6 +14,7 @@ export function useSetAgents(options: UseSetAgentsOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.setAgents(),
     mutationFn: async (agents: string[]) => {
       const wallet = await getWallet();
       return setAgents(wallet, agents, options.onPoWProgress);
@@ -26,7 +28,7 @@ export function useSetAgents(options: UseSetAgentsOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
     },
   });
 }

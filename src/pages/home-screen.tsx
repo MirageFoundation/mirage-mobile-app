@@ -2,7 +2,7 @@ import { navigateToEditPost } from "@/src/utils/edit-post";
 import * as Sentry from "@sentry/react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect } from "@react-navigation/native";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Platform, View, type AppStateStatus } from "react-native";
 
@@ -49,7 +49,7 @@ import {
 import { HEADER_HEIGHT } from "@/src/providers/scroll-animation-context";
 import { useToast } from "@/src/providers/toast-provider";
 import { HomeTabbedFeed, type HomeTabbedFeedRef } from "./home/home-tabbed-feed";
-import { useHomePostCardStore } from "./home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
   useAuthStore,
   useContentModerationStore,

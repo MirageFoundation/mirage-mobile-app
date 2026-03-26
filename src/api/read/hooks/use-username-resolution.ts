@@ -111,7 +111,7 @@ export function useUsernameFromAddress(address: string | undefined | null) {
 export function useBatchUsernamesFromAddresses(addresses: string[]) {
   const stableKey = addresses.slice().sort().join(",");
   return useQuery({
-    queryKey: ["batchUsernames", stableKey],
+    queryKey: queryKeys.batchUsernames(stableKey),
     queryFn: async () => {
       if (addresses.length === 0) return {};
       const resp = await bulkGetUsernameFromAddress(addresses);

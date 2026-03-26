@@ -8,7 +8,7 @@ import { memo, useCallback, useMemo } from "react";
 import { Text } from "react-native";
 import { useUnistyles } from "react-native-unistyles";
 import { hasSpoilers, parseSpoilers } from "@/src/utils/spoiler-parser";
-import { openUrlOrInternal } from "@/src/utils/internal-link-handler";
+import { openUrlOrInternal } from "@/src/navigation/linking";
 
 // Regex to match plain URLs (excluding trailing punctuation that might be markdown syntax)
 const PLAIN_URL_REGEX = /https?:\/\/[^\s<>"]+/g;
