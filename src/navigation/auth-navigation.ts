@@ -41,9 +41,7 @@ export function flushPendingRouteAfterAuth(): boolean {
     return false;
   }
 
-  requestAnimationFrame(() => {
-    router.push(pendingRoute as any);
-  });
+  router.push(pendingRoute as any);
 
   return true;
 }

@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 102
+                          update 103
                         </Text>
                         <Text
                           style={{
@@ -773,16 +773,19 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          pagination issue in feed not fetching the next pages
-                          fixed,account creation stuck on button loading
-                          fix,better sentry logs added in account creation,image
-                          not showing up in comment just created fixed, palm
-                          tree cut on login and account creation screen fix,
-                          made video sync through feed post details screen and
-                          full screen more quick and snappier, independent video
-                          sync through different feeds, sentry log RN-K error
-                          handling,sentry log REACT-NATIVE-F — N+1 API Call
-                          error fixed and handled,more sentry logs added
+                          audio distorting fix, the audio mess up on feed type
+                          change fix, the video not playing on feed type change
+                          fix, the videos not playing after the app backgrounded
+                          fix, deep linking setup, show alert to login when the
+                          link of post tabs agents profile etc is clicked but
+                          user is logged out then after login they will be
+                          navigated to that screen, show alert to logout when
+                          user clcik on referral link or invite link and is
+                          logged in, open the screen according to the link
+                          pressed, user clciking on ref link or invite link
+                          while the app is on the node which does not alloww
+                          account creation will show switch node popup and after
+                          switching the code will be applied
                         </Text>
                       </>
                     )}
@@ -823,7 +826,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 102
+                          update 103
                         </Text>
                         <Text
                           style={{
@@ -833,16 +836,19 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          pagination issue in feed not fetching the next pages
-                          fixed,account creation stuck on button loading
-                          fix,better sentry logs added in account creation,image
-                          not showing up in comment just created fixed, palm
-                          tree cut on login and account creation screen fix,
-                          made video sync through feed post details screen and
-                          full screen more quick and snappier, independent video
-                          sync through different feeds, sentry log RN-K error
-                          handling,sentry log REACT-NATIVE-F — N+1 API Call
-                          error fixed and handled,more sentry logs added
+                          audio distorting fix, the audio mess up on feed type
+                          change fix, the video not playing on feed type change
+                          fix, the videos not playing after the app backgrounded
+                          fix, deep linking setup, show alert to login when the
+                          link of post tabs agents profile etc is clicked but
+                          user is logged out then after login they will be
+                          navigated to that screen, show alert to logout when
+                          user clcik on referral link or invite link and is
+                          logged in, open the screen according to the link
+                          pressed, user clciking on ref link or invite link
+                          while the app is on the node which does not alloww
+                          account creation will show switch node popup and after
+                          switching the code will be applied
                         </Text>
                       </>
                     )}

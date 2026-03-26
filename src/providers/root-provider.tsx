@@ -61,7 +61,8 @@ export const RootProvider = memo(
 
     useEffect(() => {
       if (!isLoggedIn) return;
-      flushPendingRouteAfterAuth();
+      const timer = setTimeout(() => flushPendingRouteAfterAuth(), 1000);
+      return () => clearTimeout(timer);
     }, [isLoggedIn]);
 
     useEffect(() => {

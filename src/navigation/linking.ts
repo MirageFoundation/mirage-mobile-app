@@ -27,6 +27,29 @@ function showLoginRequiredAlert(): void {
   );
 }
 
+function showAlreadyLoggedInAlert(route: string): void {
+  const isInvite = route.includes("invite=");
+  Alert.alert(
+    "Already logged in",
+    isInvite
+      ? "Please logout to create a new account using the invite code."
+      : "Please logout to create a new account using the referral link.",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log Out",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await useAuthStore.getState().logout();
+            setTimeout(() => router.push(route as any), 500);
+          } catch {}
+        },
+      },
+    ],
+  );
+}
+
 function getAdditionalMirageHosts(): string[] {
   return [usePreferencesStore.getState().apiServer];
 }
@@ -77,13 +100,7 @@ export async function redirectSystemPath({
 
   if (!match.requiresAuth) {
     if (match.type === "signup" && useAuthStore.getState().isLoggedIn) {
-      const isInvite = match.route.includes("invite=");
-      Alert.alert(
-        "Already logged in",
-        isInvite
-          ? "Please logout to create a new account using the invite code."
-          : "Please logout to create a new account using the referral link.",
-      );
+      showAlreadyLoggedInAlert(match.route);
       return "/(tabs)";
     }
     return match.route;
@@ -108,13 +125,7 @@ export async function handleMirageLink(url: string): Promise<boolean> {
   }
 
   if (match.type === "signup" && useAuthStore.getState().isLoggedIn) {
-    const isInvite = match.route.includes("invite=");
-    Alert.alert(
-      "Already logged in",
-      isInvite
-        ? "Please logout to create a new account using the invite code."
-        : "Please logout to create a new account using the referral link.",
-    );
+    showAlreadyLoggedInAlert(match.route);
     return true;
   }
 
