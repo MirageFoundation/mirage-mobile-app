@@ -39,6 +39,7 @@ import {
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { LinearGradient } from "expo-linear-gradient";
 
 type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid";
 type InviteCodeStatus =
@@ -101,10 +102,45 @@ export default function UsernameScreen() {
   }, []);
 
   const { data: config } = useConfig();
-  const { data: nodeConfig } = useNodeConfig();
+  const { data: nodeConfig, refetch: refetchNodeConfig } = useNodeConfig();
+  const registrationEnabled = nodeConfig?.registration_enabled ?? true;
   const inviteCodeRequired = nodeConfig?.registration_invite_code_required ?? true;
+  const [showRegPopup, setShowRegPopup] = useState(false);
+  const [isSwitchingNode, setIsSwitchingNode] = useState(false);
+  const otherServer = servers.find((s) => s !== activeServer) ?? servers[0];
   const minUsernameSize = config?.min_username_size ?? 3;
   const maxUsernameSize = config?.max_username_size ?? 20;
+
+  useEffect(() => {
+    if (nodeConfig && !registrationEnabled) {
+      setShowRegPopup(true);
+    }
+  }, [nodeConfig, registrationEnabled]);
+
+  const handleSwitchNode = useCallback(async () => {
+    triggerHaptic("selection");
+    setIsSwitchingNode(true);
+    try {
+      const newServer = otherServer;
+      apiClient.setBaseUrl(`https://${newServer}`);
+      queryClient.removeQueries({ queryKey: queryKeys.nodeConfig() });
+      queryClient.removeQueries({ queryKey: queryKeys.config() });
+      await queryClient.invalidateQueries();
+      const freshNodeConfig = await getNodeConfig();
+      setActiveServer(newServer as ApiServer);
+      setApiServer(newServer as ApiServer);
+      setShowRegPopup(false);
+      toast.success(`Switched to ${newServer}`);
+      if (!freshNodeConfig.registration_enabled) {
+        router.replace("/(tabs)");
+      }
+    } catch (e) {
+      console.error("[UsernameScreen] Failed to switch node:", e);
+      toast.error(`Failed to connect to ${otherServer}`);
+    } finally {
+      setIsSwitchingNode(false);
+    }
+  }, [otherServer, activeServer, setApiServer, queryClient, router, toast]);
 
   useEffect(() => {
     if (searchParams.invite) {
@@ -870,6 +906,103 @@ export default function UsernameScreen() {
                 </Pressable>
               );
             })}
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={showRegPopup}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowRegPopup(false);
+          router.replace("/(tabs)");
+        }}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => {
+            setShowRegPopup(false);
+            router.replace("/(tabs)");
+          }}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.colors.background.default },
+            ]}
+          >
+            <View style={{ alignItems: "center", marginBottom: 16 }}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={48}
+                color={theme.colors.warning[500]}
+              />
+            </View>
+            <Text
+              size="lg"
+              weight="bold"
+              style={{ textAlign: "center", marginBottom: 10 }}
+            >
+              Registration Unavailable
+            </Text>
+            <Text
+              size="md"
+              style={{
+                textAlign: "center",
+                color: theme.colors.text.subtle,
+                marginBottom: 20,
+              }}
+            >
+              Account creation is not available on{" "}
+              <Text size="md" weight="semibold">
+                {activeServer}
+              </Text>
+              . Switch to{" "}
+              <Text size="md" weight="semibold">
+                {otherServer}
+              </Text>{" "}
+              to create an account.
+            </Text>
+            <Pressable
+              onPress={handleSwitchNode}
+              disabled={isSwitchingNode}
+              style={{ borderRadius: 12, overflow: "hidden", opacity: isSwitchingNode ? 0.7 : 1 }}
+            >
+              <LinearGradient
+                colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{
+                  paddingVertical: 14,
+                  paddingHorizontal: 24,
+                  borderRadius: 12,
+                  alignItems: "center",
+                }}
+              >
+                {isSwitchingNode ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text
+                    style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "600" }}
+                  >
+                    Switch to {otherServer}
+                  </Text>
+                )}
+              </LinearGradient>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setShowRegPopup(false);
+                router.replace("/(tabs)");
+              }}
+              disabled={isSwitchingNode}
+              style={{ paddingTop: 12, alignItems: "center", opacity: isSwitchingNode ? 0.3 : 1 }}
+            >
+              <Text size="md" style={{ color: theme.colors.text.subtle }}>
+                Cancel
+              </Text>
+            </Pressable>
           </View>
         </Pressable>
       </Modal>

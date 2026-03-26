@@ -296,7 +296,10 @@ export function LoggedOutHome() {
                   borderColor: theme.colors.border.subtle,
                 },
               ]}
-              onPress={() => router.push("/(auth)/login")}
+              onPress={() => {
+                triggerHaptic("selection");
+                router.push("/(auth)/login");
+              }}
             >
               <Text style={styles.signInButtonText}>Sign In</Text>
             </Pressable>

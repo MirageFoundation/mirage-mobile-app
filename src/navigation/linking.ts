@@ -62,9 +62,12 @@ export async function redirectSystemPath({
 
   if (!match.requiresAuth) {
     if (match.type === "signup" && useAuthStore.getState().isLoggedIn) {
+      const isInvite = match.route.includes("invite=");
       Alert.alert(
         "Already logged in",
-        "Please logout to create a new account using the referral link.",
+        isInvite
+          ? "Please logout to create a new account using the invite code."
+          : "Please logout to create a new account using the referral link.",
       );
       return "/(tabs)";
     }
@@ -87,9 +90,12 @@ export async function handleMirageLink(url: string): Promise<boolean> {
   }
 
   if (match.type === "signup" && useAuthStore.getState().isLoggedIn) {
+    const isInvite = match.route.includes("invite=");
     Alert.alert(
       "Already logged in",
-      "Please logout to create a new account using the referral link.",
+      isInvite
+        ? "Please logout to create a new account using the invite code."
+        : "Please logout to create a new account using the referral link.",
     );
     return true;
   }

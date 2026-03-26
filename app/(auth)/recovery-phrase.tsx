@@ -73,17 +73,7 @@ useEffect(() => {
     <Box flex background="base">
       <View style={[styles.header, { paddingTop: Platform.OS === "ios" ? 20 : insets.top }]}>
         <View style={styles.headerLeft} />
-        <View style={styles.headerCenter}>
-          <Image
-            source={
-              isDark
-                ? require("@/assets/images/app-dark-icon.png")
-                : require("@/assets/images/app-icon.png")
-            }
-            style={styles.appIcon}
-            resizeMode="contain"
-          />
-        </View>
+        <View style={styles.headerCenter} />
         <View style={styles.headerRight} />
       </View>
 

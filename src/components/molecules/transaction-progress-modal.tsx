@@ -415,22 +415,10 @@ export function TransactionProgressModal({
             </Text>
           )}
 
-          {/* TX Hash (for success) */}
-          {showTxHash && progress.phase === "success" && progress.txHash && (
-            <View style={styles.txHashContainer}>
-              <Text size="xs" mode="subtle">
-                Transaction:{" "}
-                <Text size="xs" weight="medium">
-                  {progress.txHash.slice(0, 8)}...{progress.txHash.slice(-8)}
-                </Text>
-              </Text>
-            </View>
-          )}
-
           {/* Buttons */}
-          {canDismiss && (
+          {canDismiss && progress.phase === "error" && (
             <Box gap="sm" style={styles.buttons}>
-              {progress.phase === "error" && onRetry && (
+              {onRetry && (
                 <Button
                   size="lg"
                   variant="outline"
@@ -442,26 +430,18 @@ export function TransactionProgressModal({
                 </Button>
               )}
 
-             <Button
-               size="lg"
-                mode={progress.phase === "success" ? "brand" : "brand"}
-               rounded="full"
-               onPress={handleDismiss}
+              <Button
+                size="lg"
+                mode="brand"
+                rounded="full"
+                onPress={handleDismiss}
                 style={[
                   styles.button,
-                  progress.phase === "error" && {
-                    backgroundColor: "rgba(239, 68, 68, 0.9)",
-                  },
+                  { backgroundColor: "rgba(239, 68, 68, 0.9)" },
                 ]}
-             >
-               <Button.Text
-                 style={
-                    progress.phase === "success" || progress.phase === "error"
-                      ? { color: "#fff" }
-                      : undefined
-                 }
-               >
-                  {progress.phase === "success" ? "Continue" : "Close"}
+              >
+                <Button.Text style={{ color: "#fff" }}>
+                  Close
                 </Button.Text>
               </Button>
             </Box>
