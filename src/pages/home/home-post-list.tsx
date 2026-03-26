@@ -179,6 +179,31 @@ const HomePostListInner = function HomePostListInner(
     setVideoViewability(feedContext, new Set(), null);
   }, [data, feedContext, setVideoViewability]);
 
+  const prevFeedContextRef = useRef(feedContext);
+  const dataRef = useRef(data);
+  dataRef.current = data;
+
+  useEffect(() => {
+    if (prevFeedContextRef.current === feedContext) return;
+    prevFeedContextRef.current = feedContext;
+    pendingViewableRef.current = null;
+
+    const timer = setTimeout(() => {
+      if (pendingViewableRef.current) {
+        flushViewability();
+        return;
+      }
+      const currentData = dataRef.current;
+      if (currentData.length === 0) return;
+      const firstItems = currentData.slice(0, 5);
+      const videoItems = firstItems.filter(item => postHasPlayableVideo(item));
+      if (videoItems.length === 0) return;
+      const visibleVideoIds = new Set(videoItems.map(item => item.id));
+      setVideoViewability(feedContext, visibleVideoIds, videoItems[0].id);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [feedContext, flushViewability, setVideoViewability]);
+
   useAppState({
     onBackground: () => {
       cancelDeferredFlush();
