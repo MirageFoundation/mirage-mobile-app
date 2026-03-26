@@ -11,6 +11,21 @@ import {
   resolveAuthNavigationTarget,
 } from "./auth-navigation";
 import { isAppRoute, resolveMirageUrl } from "./route-map";
+import { router } from "@/src/utils/guarded-router";
+
+function showLoginRequiredAlert(): void {
+  Alert.alert(
+    "Login Required",
+    "Log in to view this content.",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log In",
+        onPress: () => router.push("/(auth)/login" as any),
+      },
+    ],
+  );
+}
 
 function getAdditionalMirageHosts(): string[] {
   return [usePreferencesStore.getState().apiServer];
@@ -75,6 +90,9 @@ export async function redirectSystemPath({
   }
 
   const target = resolveAuthNavigationTarget(match.route);
+  if (target !== match.route) {
+    setTimeout(() => showLoginRequiredAlert(), 500);
+  }
   return target === match.route ? target : "";
 }
 
@@ -97,6 +115,12 @@ export async function handleMirageLink(url: string): Promise<boolean> {
         ? "Please logout to create a new account using the invite code."
         : "Please logout to create a new account using the referral link.",
     );
+    return true;
+  }
+
+  if (match.requiresAuth && !useAuthStore.getState().isLoggedIn) {
+    resolveAuthNavigationTarget(match.route);
+    showLoginRequiredAlert();
     return true;
   }
 
