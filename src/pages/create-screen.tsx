@@ -564,7 +564,13 @@ export function CreateScreen() {
             if (mediaCount >= 10) break;
             const vidUrl = videosToDownload[vi];
             try {
-              const response = await fetch(vidUrl);
+              const response = await fetch(vidUrl, {
+                headers: {
+                  "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+                  "Referer": "https://www.reddit.com/",
+                  "Accept": "*/*",
+                },
+              });
               const contentType = response.headers.get("content-type") ?? "";
               const resolvedUrl = response.url;
 

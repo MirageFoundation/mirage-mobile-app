@@ -74,7 +74,8 @@ function isRedditUrl(url: string): boolean {
 async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Partial<LinkMeta>> {
   try {
     let resolvedUrl = url;
-    if (/redd\.it/i.test(url) || /\/s\/[a-zA-Z0-9]+/i.test(url)) {
+    const needsRedirect = /redd\.it/i.test(url) || /\/s\/[a-zA-Z0-9]+/i.test(url);
+    if (needsRedirect) {
       try {
         const redirectRes = await fetch(url, {
           signal,
@@ -86,6 +87,32 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
           resolvedUrl = redirectRes.url;
         }
       } catch {}
+      if (resolvedUrl === url) {
+        try {
+          const getRes = await fetch(url, {
+            signal,
+            redirect: "follow",
+            headers: {
+              "User-Agent": BROWSER_UA,
+              Accept: "text/html",
+            },
+          });
+          if (getRes.url && getRes.url !== url) {
+            resolvedUrl = getRes.url;
+          } else {
+            const html = await getRes.text();
+            const canonical = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)?.[1]
+              ?? html.match(/<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i)?.[1];
+            if (canonical && canonical !== url) {
+              resolvedUrl = canonical;
+            }
+          }
+        } catch {}
+      }
+      console.log("[fetchRedditVideo] Redirect resolution:", {
+        method: resolvedUrl !== url ? "resolved" : "failed",
+        needsFallback: resolvedUrl === url,
+      });
     }
     console.log("[fetchRedditVideo] URL resolution:", {
       originalUrl: url,
@@ -103,7 +130,10 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       },
       redirect: "follow",
     });
-    if (!res.ok) return {};
+    if (!res.ok) {
+      console.log("[fetchRedditVideo] JSON fetch failed:", { status: res.status, jsonUrl });
+      return {};
+    }
 
     const raw = await res.text();
     const data = JSON.parse(raw);
