@@ -782,7 +782,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           better sntry logs for same, sharing external link to
                           the app when user logged out should not extract the
                           meta and auto fill the create post screen and should
-                          show ath sheet instead
+                          show ath sheet instead, react native 1c error fix
+                          related to register push token
                         </Text>
                       </>
                     )}
@@ -842,7 +843,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           better sntry logs for same, sharing external link to
                           the app when user logged out should not extract the
                           meta and auto fill the create post screen and should
-                          show ath sheet instead
+                          show ath sheet instead, react native 1c error fix
+                          related to register push token
                         </Text>
                       </>
                     )}
