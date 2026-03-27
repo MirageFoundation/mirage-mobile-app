@@ -577,6 +577,12 @@ export function CreateScreen() {
               const isVideoContent = contentType.startsWith("video/") || contentType.startsWith("application/octet-stream") || contentType === "image/gif";
               const hasVideoExtension = /\.(mp4|mov|webm|m3u8|ts|gif)(\?|#|$)/i.test(resolvedUrl || vidUrl);
 
+              if (!response.ok) {
+                Sentry.addBreadcrumb({ category: "share-intent", message: "Video download failed", data: { status: response.status, vidUrl, contentType }, level: "warning" });
+              } else if (!isVideoContent && !hasVideoExtension) {
+                Sentry.addBreadcrumb({ category: "share-intent", message: "Video URL returned non-video content", data: { vidUrl, contentType, resolvedUrl }, level: "warning" });
+              }
+
               if (response.ok && (isVideoContent || hasVideoExtension)) {
                 const ext = contentType.includes("mp4") ? "mp4"
                   : contentType.includes("webm") ? "webm"
