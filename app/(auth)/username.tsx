@@ -25,6 +25,7 @@ import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "@/src/hooks/use-router";
 import { useLocalSearchParams } from "expo-router";
 import { getReferralPrecheck } from "@/src/api/read/endpoints/referrals";
+import * as Linking from "expo-linking";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -173,6 +174,58 @@ export default function UsernameScreen() {
         });
     }
   }, [searchParams.ref, searchParams.invite, inviteCodeRequired]);
+
+  useEffect(() => {
+    const subscription = Linking.addEventListener("url", (event) => {
+      try {
+        const url = new URL(event.url);
+        const invite = url.searchParams.get("invite");
+        const ref = url.searchParams.get("ref");
+
+        if (invite) {
+          setReferrerUsername(null);
+          setPrecheckStatus("idle");
+          setPrecheckError(null);
+          setPrecheckAvailable(null);
+          setAlreadyUsedCode(false);
+
+          const raw = invite.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+          if (raw.length > 4) {
+            setInviteCode(raw.slice(0, 4) + "-" + raw.slice(4));
+          } else {
+            setInviteCode(raw);
+          }
+          setInviteStatus("idle");
+        } else if (ref && inviteCodeRequired) {
+          setInviteCode("");
+          setInviteStatus("idle");
+
+          setReferrerUsername(ref);
+          setPrecheckStatus("loading");
+          getReferralPrecheck({ username: ref })
+            .then((result) => {
+              if (result.valid) {
+                setPrecheckStatus("valid");
+                setPrecheckAvailable(result.available ?? null);
+              } else {
+                setPrecheckStatus("error");
+                setPrecheckError(result.error ?? "Referral link is not valid");
+                if (result.error === "you already used your code") {
+                  setAlreadyUsedCode(true);
+                }
+              }
+            })
+            .catch(() => {
+              setPrecheckStatus("error");
+              setPrecheckError("Failed to verify referral link");
+            });
+        }
+      } catch (_e) {
+      }
+    });
+
+    return () => subscription.remove();
+  }, [inviteCodeRequired]);
 
   const {
     data: usernameData,
