@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 107
+                          update 108
                         </Text>
                         <Text
                           style={{
@@ -773,7 +773,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          changed sharelink of invite code to be correct one
+                          changed sharelink of invite code to be correct one,
+                          clciking on login link while already logged in shows
+                          an alert now
                         </Text>
                       </>
                     )}
@@ -814,7 +816,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 107
+                          update 108
                         </Text>
                         <Text
                           style={{
@@ -824,7 +826,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          changed sharelink of invite code to be correct one
+                          changed sharelink of invite code to be correct one,
+                          clciking on login link while already logged in shows
+                          an alert now
                         </Text>
                       </>
                     )}
