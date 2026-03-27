@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 109
+                          update 110
                         </Text>
                         <Text
                           style={{
@@ -823,7 +823,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 109
+                          update 110
                         </Text>
                         <Text
                           style={{
@@ -837,7 +837,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           clciking on login link while already logged in shows
                           an alert now, opening invitaion link after just opened
                           referral link was not auto filling the invite code in
-                          input fixed
+                          input fixed,added better handling for some video from
+                          reddit link not getting extracted sometimes and added
+                          better sntry logs for same, sharing external link to
+                          the app when user logged out should not extract the
+                          meta and auto fill the create post screen and should
+                          show ath sheet instead
                         </Text>
                       </>
                     )}
