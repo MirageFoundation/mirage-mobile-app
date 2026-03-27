@@ -779,7 +779,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           referral link was not auto filling the invite code in
                           input fixed,added better handling for some video from
                           reddit link not getting extracted sometimes and added
-                          better sntry logs for same
+                          better sntry logs for same, sharing external link to
+                          the app when user logged out should not extract the
+                          meta and auto fill the create post screen and should
+                          show ath sheet instead
                         </Text>
                       </>
                     )}

@@ -52,7 +52,8 @@ import { useTransactionProgress } from "@/src/hooks/use-transaction-progress";
 import { getTxStatus } from "@/src/api/read/endpoints/tx";
 import { useDraftStore, type Community } from "@/src/stores/draft-store";
 import { useHomePostCardStore } from "./home/home-post-card-store";
-import { useUserLevel } from "@/src/stores/auth-store";
+import { useUserLevel, useAuthStore } from "@/src/stores/auth-store";
+import { useUIStore } from "@/src/stores";
 import { getTierPostLimits, canEditContent } from "@/src/utils/tiers";
 
 import { CommunitySelectionModal } from "./create/community-selection-modal";
@@ -100,6 +101,8 @@ export function CreateScreen() {
   const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
   const userLevel = useUserLevel();
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const showAuthSheet = useUIStore((s) => s.showAuthSheet);
   const tierLimits = useMemo(() => getTierPostLimits(userLevel), [userLevel]);
 
   // Get params from video editor or edit mode
@@ -382,6 +385,13 @@ export function CreateScreen() {
   const shareTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!hasShareIntent || !shareIntent || isEditMode) return;
+
+    if (!isLoggedIn) {
+      resetShareIntent();
+      router.replace("/(tabs)/");
+      showAuthSheet();
+      return;
+    }
 
     const intentKey = shareIntent.webUrl ?? shareIntent.text ?? shareIntent.files?.[0]?.path ?? null;
     if (!intentKey || intentKey === lastProcessedIntentRef.current) return;
@@ -738,7 +748,7 @@ export function CreateScreen() {
         shareTimeoutRef.current = null;
       }
     };
-  }, [hasShareIntent, shareIntent]);
+  }, [hasShareIntent, shareIntent, isLoggedIn]);
 
   // Handle video returned from editor
   useEffect(() => {
