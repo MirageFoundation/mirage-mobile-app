@@ -270,7 +270,7 @@ const [copiedCode, setCopiedCode] = useState(false);
  const [copiedLink, setCopiedLink] = useState(false);
 
   const shareUrl = code
-    ? `${getShareBaseUrl(shareServer)}/create_account?invite=${code}`
+    ? `${getShareBaseUrl(shareServer)}/signup?invite=${code}`
     : "";
   const shareMessage = `Join me on Mirage! Use my invite code: ${code}\n\n${shareUrl}`;
 
