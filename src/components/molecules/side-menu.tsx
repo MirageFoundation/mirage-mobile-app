@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 106
+                          update 107
                         </Text>
                         <Text
                           style={{
@@ -773,24 +773,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          audio distorting fix, the audio mess up on feed type
-                          change fix, the video not playing on feed type change
-                          fix, the videos not playing after the app backgrounded
-                          fix, deep linking setup, show alert to login when the
-                          link of post tabs agents profile etc is clicked but
-                          user is logged out then after login they will be
-                          navigated to that screen, show alert to logout when
-                          user clcik on referral link or invite link and is
-                          logged in and then logging out will take them to
-                          create account screen with invite code applied, open
-                          the screen according to the link pressed, user
-                          clciking on ref link or invite link while the app is
-                          on the node which does not alloww account creation
-                          will show switch node popup and after switching the
-                          code will be applied,logging out from following tab
-                          should bring us to home after logout,image flickering
-                          of image in empty state of profile tabs fixed, api
-                          error integrated, sentry logs
+                          changed sharelink of invite code to be correct one
                         </Text>
                       </>
                     )}
@@ -831,7 +814,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 106
+                          update 107
                         </Text>
                         <Text
                           style={{
@@ -841,24 +824,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          audio distorting fix, the audio mess up on feed type
-                          change fix, the video not playing on feed type change
-                          fix, the videos not playing after the app backgrounded
-                          fix, deep linking setup, show alert to login when the
-                          link of post tabs agents profile etc is clicked but
-                          user is logged out then after login they will be
-                          navigated to that screen, show alert to logout when
-                          user clcik on referral link or invite link and is
-                          logged in and then logging out will take them to
-                          create account screen with invite code applied, open
-                          the screen according to the link pressed, user
-                          clciking on ref link or invite link while the app is
-                          on the node which does not alloww account creation
-                          will show switch node popup and after switching the
-                          code will be applied,logging out from following tab
-                          should bring us to home after logout,image flickering
-                          of image in empty state of profile tabs fixed, api
-                          error integrated, sentry logs
+                          changed sharelink of invite code to be correct one
                         </Text>
                       </>
                     )}
