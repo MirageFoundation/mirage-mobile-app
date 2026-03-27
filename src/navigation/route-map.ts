@@ -39,7 +39,8 @@ export type MirageRouteType =
   | "create"
   | "blocks"
   | "referrals"
-  | "follows";
+  | "follows"
+  | "login";
 
 export interface MirageRouteMatch {
   type: MirageRouteType;
@@ -271,6 +272,15 @@ export function mapMiragePathToRoute(
       hostname: "",
       route: "/referrals",
       requiresAuth: true,
+    };
+  }
+
+  if (prefix === "login") {
+    return {
+      type: "login",
+      hostname: "",
+      route: "/(auth)/login",
+      requiresAuth: false,
     };
   }
 

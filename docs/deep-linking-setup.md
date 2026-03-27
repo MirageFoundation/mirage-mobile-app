@@ -38,7 +38,12 @@ Serve at `https://<domain>/.well-known/apple-app-site-association` with `Content
           "/signup",
           "/signup?*",
           "/create_account?invite=*",
-          "/create_account?ref=*"
+          "/create_account?ref=*",
+          "/referrals",
+          "/blocks",
+          "/follows",
+          "/create_post",
+          "/login"
         ]
       }
     ]
@@ -112,6 +117,11 @@ Android App Links with `autoVerify: true` handle this automatically. For additio
 | `/signup?ref=<username>` | Referral signup |
 | `/signup?invite=<code>` | Invite code signup |
 | `/create_account?invite=<code>` | Invite flow |
+| `/referrals` | Referrals |
+| `/blocks` | Blocked list |
+| `/follows` | User following |
+| `/create_post` | Create post |
+| `/login` | Login |
 
 ## Logged-Out Behavior
 

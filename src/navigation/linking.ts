@@ -28,6 +28,31 @@ function showLoginRequiredAlert(): void {
   );
 }
 
+function showAlreadyLoggedInForLoginAlert(route: string): void {
+  Alert.alert(
+    "Already logged in",
+    "You are already logged in. Please logout to login to another account.",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log Out",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await useAuthStore.getState().logout();
+            setTimeout(() => router.push(route as any), 500);
+          } catch (error) {
+            Sentry.captureException(error, {
+              tags: { feature: "deep-link", operation: "logout-for-login" },
+              extra: { route },
+            });
+          }
+        },
+      },
+    ],
+  );
+}
+
 function showAlreadyLoggedInAlert(route: string): void {
   const isInvite = route.includes("invite=");
   Alert.alert(
@@ -126,6 +151,10 @@ export async function redirectSystemPath({
       showAlreadyLoggedInAlert(resolvedRoute);
       return "/(tabs)";
     }
+    if (match.type === "login" && useAuthStore.getState().isLoggedIn) {
+      showAlreadyLoggedInForLoginAlert(resolvedRoute);
+      return "/(tabs)";
+    }
     return resolvedRoute;
   }
 
@@ -161,6 +190,11 @@ export async function handleMirageLink(url: string): Promise<boolean> {
 
   if (match.type === "signup" && useAuthStore.getState().isLoggedIn) {
     showAlreadyLoggedInAlert(resolvedRoute);
+    return true;
+  }
+
+  if (match.type === "login" && useAuthStore.getState().isLoggedIn) {
+    showAlreadyLoggedInForLoginAlert(resolvedRoute);
     return true;
   }
 
