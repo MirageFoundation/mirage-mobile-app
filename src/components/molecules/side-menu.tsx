@@ -774,7 +774,15 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           weight="light"
                         >
                           removed the hardcoded body silce to 500 text while
-                          extracting meta from external shared link
+                          extracting meta from external shared link, made the
+                          link addition in create post screen to add multiple
+                          links, added link validation in comment input link
+                          aadition, added link detection in auto filled body
+                          from meta of external link shared and show it properly
+                          the link in blue color and pressable, added to show
+                          all the added links under link option in comment input
+                          screen which can be removed directly from there as
+                          well
                         </Text>
                       </>
                     )}
@@ -826,7 +834,15 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           weight="light"
                         >
                           removed the hardcoded body silce to 500 text while
-                          extracting meta from external shared link
+                          extracting meta from external shared link, made the
+                          link addition in create post screen to add multiple
+                          links, added link validation in comment input link
+                          aadition, added link detection in auto filled body
+                          from meta of external link shared and show it properly
+                          the link in blue color and pressable, added to show
+                          all the added links under link option in comment input
+                          screen which can be removed directly from there as
+                          well
                         </Text>
                       </>
                     )}
