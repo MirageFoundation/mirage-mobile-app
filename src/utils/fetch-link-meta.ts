@@ -290,7 +290,7 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
 
     return {
       title: post.title ?? null,
-      description: post.selftext?.slice(0, 500) ?? null,
+      description: post.selftext ?? null,
       image: images[0] ?? imageUrl,
       video: videoUrl,
       audioUrl,
