@@ -38,6 +38,27 @@ type InputMode = "keyboard" | "link" | "gif" | "photo";
 const PREVIEW_WIDTH = 180;
 const PREVIEW_HEIGHT = 140;
 
+const URL_REGEX = /^https?:\/\/[^\s<>"{}|\\^`\[\]]+$/i;
+
+function looksLikeUrlWithoutProtocol(text: string): boolean {
+  return (
+    /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z]{2,})+/i.test(text) &&
+    !text.startsWith("http")
+  );
+}
+
+const MARKDOWN_LINK_EXTRACT = /\[([^\]]+)\]\(([^)]+)\)/g;
+
+function extractMarkdownLinks(text: string): { name: string; url: string }[] {
+  const links: { name: string; url: string }[] = [];
+  let match: RegExpExecArray | null;
+  MARKDOWN_LINK_EXTRACT.lastIndex = 0;
+  while ((match = MARKDOWN_LINK_EXTRACT.exec(text)) !== null) {
+    links.push({ name: match[1], url: match[2] });
+  }
+  return links;
+}
+
 const IMAGE_URL_REGEX = /^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp))$/i;
 const CLOUDFLARE_IMAGE_REGEX = /^https?:\/\/imagedelivery\.net\/[^\s]+$/i;
 const GIPHY_URL_REGEX =
@@ -147,6 +168,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const inputModeRef = useRef<InputMode>("keyboard");
   const [linkName, setLinkName] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   const {
     gifs,
@@ -172,7 +194,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const editBlocked = isEditMode && editability && !editability.allowed;
   const editExpired = !!editBlocked;
   const canSubmit = (text.trim().length > 0 || hasAttachment) && !editExpired;
- const canAddLink = linkName.trim().length > 0 && linkUrl.trim().length > 0;
+ const canAddLink = linkName.trim().length > 0 && linkUrl.trim().length > 0 && !linkError;
 
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
@@ -258,6 +280,23 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
     inputRef.current?.focus();
   }, [setGifSearch]);
 
+ const handleLinkUrlChange = useCallback((text: string) => {
+   setLinkUrl(text);
+   const trimmed = text.trim();
+   if (trimmed.length > 0) {
+     const isValid = URL_REGEX.test(trimmed);
+     if (isValid) {
+       setLinkError(null);
+     } else if (looksLikeUrlWithoutProtocol(trimmed)) {
+       setLinkError("Add https:// to the beginning of your link");
+     } else {
+       setLinkError("Please enter a valid URL (e.g., https://example.com)");
+     }
+   } else {
+     setLinkError(null);
+   }
+ }, []);
+
  const handleAddLink = useCallback(() => {
    if (!canAddLink) return;
    triggerHaptic("medium");
@@ -268,6 +307,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
    });
    setLinkName("");
    setLinkUrl("");
+   setLinkError(null);
    setInputMode("keyboard");
    inputModeRef.current = "keyboard";
  }, [canAddLink, linkName, linkUrl]);
@@ -474,33 +514,99 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
                placeholder="https://"
                 placeholderTextColor={theme.colors.text.subtle}
                 value={linkUrl}
-                onChangeText={setLinkUrl}
+                onChangeText={handleLinkUrlChange}
                 keyboardType="url"
                 autoCapitalize="none"
               />
-              <Pressable
-                onPress={handleAddLink}
-                disabled={!canAddLink}
-                style={[
-                  styles.addLinkButton,
-                  {
-                    backgroundColor: canAddLink
-                      ? theme.colors.brand[500]
-                      : theme.colors.background.subtle,
-                  },
-                ]}
-              >
-                <Text
-                  size="md"
-                  weight="semibold"
-                  style={{
-                    color: canAddLink ? "#FFFFFF" : theme.colors.text.subtle,
-                    fontSize: 16,
-                  }}
+              {linkError && (
+                <View style={styles.linkErrorContainer}>
+                  <Feather
+                    name="alert-circle"
+                    size={14}
+                    color={theme.colors.error[500]}
+                  />
+                  <Text
+                    size="xs"
+                    style={{ color: theme.colors.error[500], marginLeft: 4 }}
+                  >
+                    {linkError}
+                  </Text>
+                </View>
+              )}
+              <View style={{ flexDirection: "row", gap: theme.spacing.sm, marginTop: theme.spacing.xs }}>
+                <Pressable
+                  onPress={handleAddLink}
+                  disabled={!canAddLink}
+                  style={[
+                    styles.addLinkButton,
+                    {
+                      backgroundColor: canAddLink
+                        ? theme.colors.brand[500]
+                        : theme.colors.background.subtle,
+                    },
+                  ]}
                 >
-                  Add link
-                </Text>
-              </Pressable>
+                  <Text
+                    size="md"
+                    weight="semibold"
+                    style={{
+                      color: canAddLink ? "#FFFFFF" : theme.colors.text.subtle,
+                      fontSize: 16,
+                    }}
+                  >
+                    Add link
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setLinkName("");
+                    setLinkUrl("");
+                    setLinkError(null);
+                    setInputMode("keyboard");
+                    inputModeRef.current = "keyboard";
+                    inputRef.current?.focus();
+                  }}
+                  style={[
+                    styles.addLinkButton,
+                    { backgroundColor: theme.colors.background.subtle },
+                  ]}
+                >
+                  <Text size="md" weight="semibold" style={{ color: theme.colors.text.subtle, fontSize: 16 }}>
+                    Cancel
+                  </Text>
+                </Pressable>
+              </View>
+              {(() => {
+                const links = extractMarkdownLinks(text);
+                if (links.length === 0) return null;
+                return (
+                  <View style={styles.addedLinksContainer}>
+                    <Text size="md" weight="semibold">Added links:</Text>
+                    {links.map((link, i) => (
+                      <View key={i} style={styles.addedLinkRow}>
+                        <Feather name="link" size={16} color={theme.colors.text.subtle} style={{ marginTop: 4 }} />
+                        <View style={{ flex: 1 }}>
+                          <Text size="md" style={{ color: "#3B82F6" }}>
+                            {link.name}
+                          </Text>
+                          <Text size="md" mode="subtle">
+                            {link.url.split("").join("\u200B")}
+                          </Text>
+                        </View>
+                        <Pressable
+                          onPress={() => {
+                            const markdown = `[${link.name}](${link.url})`;
+                            setText((prev) => prev.replace(markdown, "").replace(/\n{2,}/g, "\n").trim());
+                          }}
+                          hitSlop={8}
+                        >
+                          <Ionicons name="close-circle" size={18} color={theme.colors.error[500]} style={{ marginTop: 4 }} />
+                        </Pressable>
+                      </View>
+                    ))}
+                  </View>
+                );
+              })()}
             </Animated.View>
           )}
 
@@ -877,12 +983,30 @@ const styles = StyleSheet.create((theme) => ({
     fontSize: 20,
     fontWeight: "600",
   },
+  linkErrorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border.default,
+    borderRadius: theme.radius.md,
+  },
   addLinkButton: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: theme.spacing.sm + 4,
     borderRadius: theme.radius.full,
-    marginTop: theme.spacing.xs,
+  },
+  addedLinksContainer: {
+    marginTop: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  addedLinkRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: theme.spacing.xs,
   },
   previewContainer: {
     marginBottom: theme.spacing.sm,

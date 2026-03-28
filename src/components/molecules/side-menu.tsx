@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 110
+                          update 111
                         </Text>
                         <Text
                           style={{
@@ -773,17 +773,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          changed sharelink of invite code to be correct one,
-                          clciking on login link while already logged in shows
-                          an alert now, opening invitaion link after just opened
-                          referral link was not auto filling the invite code in
-                          input fixed,added better handling for some video from
-                          reddit link not getting extracted sometimes and added
-                          better sntry logs for same, sharing external link to
-                          the app when user logged out should not extract the
-                          meta and auto fill the create post screen and should
-                          show ath sheet instead, react native 1c error fix
-                          related to register push token
+                          removed the hardcoded body silce to 500 text while
+                          extracting meta from external shared link
                         </Text>
                       </>
                     )}
@@ -824,7 +815,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 110
+                          update 111
                         </Text>
                         <Text
                           style={{
@@ -834,17 +825,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          changed sharelink of invite code to be correct one,
-                          clciking on login link while already logged in shows
-                          an alert now, opening invitaion link after just opened
-                          referral link was not auto filling the invite code in
-                          input fixed,added better handling for some video from
-                          reddit link not getting extracted sometimes and added
-                          better sntry logs for same, sharing external link to
-                          the app when user logged out should not extract the
-                          meta and auto fill the create post screen and should
-                          show ath sheet instead, react native 1c error fix
-                          related to register push token
+                          removed the hardcoded body silce to 500 text while
+                          extracting meta from external shared link
                         </Text>
                       </>
                     )}
