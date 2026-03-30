@@ -255,14 +255,18 @@ class ApiClient {
           extra: { status, errorData },
         });
       }
-      console.error(`[ApiClient] GET ${path} failed`);
-      console.error(`[ApiClient] Status:`, status);
-      console.error(`[ApiClient] Error data:`, errorData);
-      console.error(`[ApiClient] Error message:`, errorMessage);
-      console.error(
-        `[ApiClient] Params sent:`,
-        JSON.stringify(params, null, 2)
-      );
+      if (status && status >= 400 && status < 500) {
+        console.warn(`[ApiClient] GET ${path} → ${status} ${errorData?.error_code ?? errorMessage}`);
+      } else {
+        console.error(`[ApiClient] GET ${path} failed`);
+        console.error(`[ApiClient] Status:`, status);
+        console.error(`[ApiClient] Error data:`, errorData);
+        console.error(`[ApiClient] Error message:`, errorMessage);
+        console.error(
+          `[ApiClient] Params sent:`,
+          JSON.stringify(params, null, 2)
+        );
+      }
       throw error;
     }
   }

@@ -5,6 +5,7 @@ import {
   useUserFollowed,
   uploadImageAndGetUrl,
 } from "@/src/api/read";
+import { parseApiError } from "@/src/utils/parse-api-error";
 import { getComments } from "@/src/api/read/endpoints/posts";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { LinearGradient } from "expo-linear-gradient";
@@ -209,10 +210,18 @@ export default function PostDetailScreen() {
     data: commentsData,
     isLoading: isLoadingComments,
     isError: isCommentsError,
+    error: commentsError,
     isFetching: isFetchingComments,
     refetch: refetchComments,
     isRefetching: isRefetchingComments,
   } = useComments(id, { enabled: isFocused });
+
+  const commentsApiError = useMemo(() => {
+    if (!commentsError) return null;
+    return parseApiError(commentsError);
+  }, [commentsError]);
+
+  const isPostNotFound = commentsApiError?.errorCode === "post_not_found" || commentsApiError?.httpStatus === 404;
 
   useEffect(() => {
     if (isFetchingComments) lastCommentsFetchRef.current = Date.now();
@@ -220,6 +229,7 @@ export default function PostDetailScreen() {
 
   useEffect(() => {
     refetchCommentsRef.current = (silent?: boolean) => {
+      if (isPostNotFound) return;
       if (silent) {
         const now = Date.now();
         if (now - lastCommentsFetchRef.current < COMMENTS_DEBOUNCE_MS) return;
@@ -236,7 +246,7 @@ export default function PostDetailScreen() {
         refetchComments();
       }
     };
-  }, [refetchComments, id, currentUser?.walletAddress, queryClient]);
+  }, [refetchComments, id, currentUser?.walletAddress, queryClient, isPostNotFound]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1877,6 +1887,52 @@ export default function PostDetailScreen() {
 
   // Get the first media thumbnail if available
   const postThumbnail = displayPost?.media?.[0]?.uri;
+
+  if (isPostNotFound) {
+    return (
+      <Box flex background="base">
+        {renderHeader}
+        <Box flex center p="lg">
+          <Ionicons
+            name="trash-outline"
+            size={48}
+            color={theme.colors.text.subtle}
+          />
+          <Text
+            size="lg"
+            weight="semibold"
+            mode="subtle"
+            style={{ marginTop: 12 }}
+          >
+            {commentsApiError?.message ?? "Post not found."}
+          </Text>
+          <Text
+            size="md"
+            mode="subtle"
+            style={{ marginTop: 4, textAlign: "center" }}
+          >
+            This post may have been deleted or doesn't exist.
+          </Text>
+          <Pressable
+            onPress={() => router.back()}
+            style={{
+              marginTop: 20,
+              paddingHorizontal: 24,
+              paddingVertical: 12,
+              borderWidth: 1,
+              borderColor: theme.colors.border.default,
+              borderRadius: 8,
+              backgroundColor: theme.colors.background.subtle,
+            }}
+          >
+            <Text size="sm" weight="medium">
+              Go back
+            </Text>
+          </Pressable>
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <KeyboardAvoidingView style={styles.keyboardView} behavior="padding">

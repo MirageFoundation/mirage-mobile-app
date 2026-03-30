@@ -27,6 +27,11 @@ export function useComments(postId: string | undefined | null, options?: { enabl
     enabled: !!postId && (options?.enabled ?? true),
     staleTime: 1000 * 30, // 30 seconds
     gcTime: 1000 * 60 * 60, // 1 hour
+    retry: (failureCount, error) => {
+      const status = (error as any)?.response?.status;
+      if (status === 404) return false;
+      return failureCount < 2;
+    },
   });
 }
 
