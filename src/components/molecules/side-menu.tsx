@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 112
+                          update 113
                         </Text>
                         <Text
                           style={{
@@ -784,7 +784,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           screen which can be removed directly from there as
                           well.comments in profile hardly pressable on android
                           fixed, double comment count incrementing or
-                          decrementing on comment made or deleted fix
+                          decrementing on comment made or deleted fix, error
+                          message updated in post details screen when pressed on
+                          comment of post which does not exist anymore
                         </Text>
                       </>
                     )}
@@ -825,7 +827,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 112
+                          update 113
                         </Text>
                         <Text
                           style={{
@@ -846,7 +848,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           screen which can be removed directly from there as
                           well.comments in profile hardly pressable on android
                           fixed, double comment count incrementing or
-                          decrementing on comment made or deleted fix
+                          decrementing on comment made or deleted fix, error
+                          message updated in post details screen when pressed on
+                          comment of post which does not exist anymore
                         </Text>
                       </>
                     )}
