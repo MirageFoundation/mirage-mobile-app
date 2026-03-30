@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 111
+                          update 112
                         </Text>
                         <Text
                           style={{
@@ -782,7 +782,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           the link in blue color and pressable, added to show
                           all the added links under link option in comment input
                           screen which can be removed directly from there as
-                          well
+                          well.comments in profile hardly pressable on android
+                          fixed, double comment count incrementing or
+                          decrementing on comment made or deleted fix
                         </Text>
                       </>
                     )}
@@ -823,7 +825,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 111
+                          update 112
                         </Text>
                         <Text
                           style={{
@@ -842,7 +844,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           the link in blue color and pressable, added to show
                           all the added links under link option in comment input
                           screen which can be removed directly from there as
-                          well
+                          well.comments in profile hardly pressable on android
+                          fixed, double comment count incrementing or
+                          decrementing on comment made or deleted fix
                         </Text>
                       </>
                     )}
