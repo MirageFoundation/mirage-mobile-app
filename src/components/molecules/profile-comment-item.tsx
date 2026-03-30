@@ -8,7 +8,8 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { memo, useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Dimensions, Pressable, View } from "react-native";
+import { ActivityIndicator, Dimensions, View } from "react-native";
+import { Pressable } from "react-native-gesture-handler";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 const IMAGE_URL_REGEX = /^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp))$/i;
