@@ -103,38 +103,47 @@ function truncate(text: string, maxLen: number): string {
   return text.slice(0, maxLen - 1) + "…";
 }
 
+function formatMirageAmount(amountUmirage: number): string {
+  const value = amountUmirage / 1_000_000;
+  const text = value % 1 === 0 ? value.toLocaleString() : value.toLocaleString(undefined, { maximumFractionDigits: 6 });
+  return text;
+}
+
 function getNotificationBody(reply: InboxResponse["replies"][number]): string {
   if (reply.type === "donation") {
-    const amount = reply.amount ?? 0;
-    const mirage = amount / 1_000_000;
-    return `@${reply.reply_username} sent you ${mirage.toLocaleString()} MIRAGE`;
+    return "You received a donation";
   }
   if (reply.type === "follow") {
-    return "You have a new follower!";
+    return "Tap to view their profile";
   }
   if (reply.type === "subscription_gift") {
-    return `@${reply.reply_username} gifted you a subscription`;
+    return "Welcome to Mirage";
+  }
+  if (reply.type === "award") {
+    return `Your post received a ${reply.award_type ?? ""}  award`;
   }
   return truncate(reply.reply_content, 150);
 }
 
 function getNotificationTitle(reply: InboxResponse["replies"][number]): string {
+  const displayName = reply.reply_username ? `@${reply.reply_username}` : reply.reply_owner?.slice(0, 12) ?? "";
   if (reply.type === "mention") {
-    return `@${reply.reply_username} mentioned you`;
+    return `${displayName} mentioned you`;
   }
   if (reply.type === "donation") {
-    return "Donation received";
+    const amount = formatMirageAmount(reply.amount ?? 0);
+    return `${displayName} donated ${amount} MIRAGE`;
   }
   if (reply.type === "follow") {
-    return `@${reply.reply_username} started following you`;
+    return `${displayName} followed you`;
   }
   if (reply.type === "subscription_gift") {
-    return "Subscription received";
+    return `${displayName} gifted you a subscription`;
   }
   if (reply.type === "award") {
-    return `@${reply.reply_username} gave your post an award`;
+    return `${displayName} gave you an award`;
   }
-  return `@${reply.reply_username} replied`;
+  return `${displayName} replied`;
 }
 
 async function seedExistingReplies(walletAddress: string): Promise<void> {

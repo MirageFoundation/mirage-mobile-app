@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 113
+                          update 114
                         </Text>
                         <Text
                           style={{
@@ -773,20 +773,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          removed the hardcoded body silce to 500 text while
-                          extracting meta from external shared link, made the
-                          link addition in create post screen to add multiple
-                          links, added link validation in comment input link
-                          aadition, added link detection in auto filled body
-                          from meta of external link shared and show it properly
-                          the link in blue color and pressable, added to show
-                          all the added links under link option in comment input
-                          screen which can be removed directly from there as
-                          well.comments in profile hardly pressable on android
-                          fixed, double comment count incrementing or
-                          decrementing on comment made or deleted fix, error
-                          message updated in post details screen when pressed on
-                          comment of post which does not exist anymore
+                          send mirage as gift, send subscription as gift
                         </Text>
                       </>
                     )}
@@ -827,7 +814,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 113
+                          update 114
                         </Text>
                         <Text
                           style={{
@@ -837,20 +824,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          removed the hardcoded body silce to 500 text while
-                          extracting meta from external shared link, made the
-                          link addition in create post screen to add multiple
-                          links, added link validation in comment input link
-                          aadition, added link detection in auto filled body
-                          from meta of external link shared and show it properly
-                          the link in blue color and pressable, added to show
-                          all the added links under link option in comment input
-                          screen which can be removed directly from there as
-                          well.comments in profile hardly pressable on android
-                          fixed, double comment count incrementing or
-                          decrementing on comment made or deleted fix, error
-                          message updated in post details screen when pressed on
-                          comment of post which does not exist anymore
+                          send mirage as gift, send subscription as gift
                         </Text>
                       </>
                     )}
