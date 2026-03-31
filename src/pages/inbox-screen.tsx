@@ -165,6 +165,11 @@ export function InboxScreen() {
         return;
       }
 
+      if (reply.type === "follow" && reply.reply_owner) {
+        routerRef.current.push(`/user/${reply.reply_owner}`);
+        return;
+      }
+
       if (reply.type === "subscription_gift") {
         if (Platform.OS === "android") {
           routerRef.current.push("/subscription");

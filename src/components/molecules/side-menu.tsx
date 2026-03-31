@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 115
+                          update 116
                         </Text>
                         <Text
                           style={{
@@ -775,12 +775,14 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                         >
                           send mirage as gift ui created and integrated, send
                           subscription as gift ui created and integrated, inbox
-                          updated to show correct message for donation and
-                          subscription recieved, pressing on msg of donation
-                          recieved in inbox navigates us to profile tab,
-                          pressing on subscription recieved in inbox navigates
-                          user to profile tab in ios and to subscription screen
-                          on android
+                          updated to show correct message for donation recieved
+                          subscription recieved and someone followed you,
+                          pressing on msg of donation recieved in inbox
+                          navigates us to profile tab, pressing on subscription
+                          recieved in inbox navigates user to profile tab in ios
+                          and to subscription screen on android, pressing on
+                          follow msg in inbox navigates you to the user profile
+                          who followed u
                         </Text>
                       </>
                     )}
@@ -821,7 +823,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 115
+                          update 116
                         </Text>
                         <Text
                           style={{
@@ -833,12 +835,14 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                         >
                           send mirage as gift ui created and integrated, send
                           subscription as gift ui created and integrated, inbox
-                          updated to show correct message for donation and
-                          subscription recieved, pressing on msg of donation
-                          recieved in inbox navigates us to profile tab,
-                          pressing on subscription recieved in inbox navigates
-                          user to profile tab in ios and to subscription screen
-                          on android
+                          updated to show correct message for donation recieved
+                          subscription recieved and someone followed you,
+                          pressing on msg of donation recieved in inbox
+                          navigates us to profile tab, pressing on subscription
+                          recieved in inbox navigates user to profile tab in ios
+                          and to subscription screen on android, pressing on
+                          follow msg in inbox navigates you to the user profile
+                          who followed u
                         </Text>
                       </>
                     )}
