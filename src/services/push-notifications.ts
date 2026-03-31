@@ -54,6 +54,20 @@ function isTransientNetworkError(error: unknown): boolean {
   return false;
 }
 
+function isOfflineRegistrationError(error: unknown): boolean {
+  const code = (error as { code?: unknown })?.code;
+  if (code === "ERR_NETWORK") {
+    return true;
+  }
+
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return msg === "network error" || msg.includes("network error") || msg.includes("offline");
+  }
+
+  return false;
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -236,9 +250,18 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
     if (isKeychainAccessError(error)) {
       console.warn("[PushNotifications] Keychain access denied during registration, will retry on foreground");
       needsNetworkRetry = true;
+    } else if (isOfflineRegistrationError(error) || isTransientNetworkError(error)) {
+      needsNetworkRetry = true;
+      console.log("[PushNotifications] Registration skipped: network unavailable, falling back to polling");
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: "Push registration skipped: network unavailable",
+        level: "warning",
+      });
     } else {
       const is429 = (error as any)?.response?.status === 429;
       if (is429) {
+        needsNetworkRetry = true;
         console.log("[PushNotifications] Registration rate limited, will retry on next foreground");
       } else {
         console.error("[PushNotifications] Registration failed, falling back to polling:", error);
