@@ -773,7 +773,14 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          send mirage as gift, send subscription as gift
+                          send mirage as gift ui created and integrated, send
+                          subscription as gift ui created and integrated, inbox
+                          updated to show correct message for donation and
+                          subscription recieved, pressing on msg of donation
+                          recieved in inbox navigates us to profile tab,
+                          pressing on subscription recieved in inbox navigates
+                          user to profile tab in ios and to subscription screen
+                          on android
                         </Text>
                       </>
                     )}

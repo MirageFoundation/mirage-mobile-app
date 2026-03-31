@@ -139,7 +139,7 @@ const ReplyImage = memo(function ReplyImage({
 
 interface InboxItemProps {
   reply: InboxReply;
-  onPress: (rootPostId: string, replyId: string) => void;
+  onPress: (reply: InboxReply) => void;
   isUnread?: boolean;
 }
 
@@ -153,8 +153,8 @@ export const InboxItem = memo(function InboxItem({
 
   const handlePress = useCallback(() => {
     triggerHaptic("selection");
-    onPress(reply.root_post_id, reply.reply_id);
-  }, [onPress, reply.root_post_id, reply.reply_id]);
+    onPress(reply);
+  }, [onPress, reply]);
 
   const handleImagePress = useCallback((url: string) => {
     setPreviewImageUrl(url);
