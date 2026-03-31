@@ -785,7 +785,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           who followed u, same video getting uploaded twice from
                           external shared link to create post screen fix,
                           reduced the time of showing success state on pow
-                          status popup
+                          status popup, sentry issue RN 2C,24 and 30 handled
                         </Text>
                       </>
                     )}
@@ -848,7 +848,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           who followed u, same video getting uploaded twice from
                           external shared link to create post screen fix,
                           reduced the time of showing success state on pow
-                          status popup
+                          status popup, sentry issue RN 2C,24 and 30 handled
                         </Text>
                       </>
                     )}
