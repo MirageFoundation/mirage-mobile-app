@@ -1032,7 +1032,7 @@ export function CreateScreen() {
           txProgress.hideModal();
           useHomePostCardStore.getState().setSkipNextRefresh(true);
           router.replace("/(tabs)/");
-        }, 1000);
+        }, 500);
       }
     } catch (error) {
       setIsSubmitting(false);
@@ -2109,6 +2109,7 @@ export function CreateScreen() {
           setIsSubmitting(false);
           handlePost();
         }}
+        autoDismissDelay={500}
       />
     </Box>
   );

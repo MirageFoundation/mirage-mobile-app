@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 116
+                          update 117
                         </Text>
                         <Text
                           style={{
@@ -782,7 +782,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           recieved in inbox navigates user to profile tab in ios
                           and to subscription screen on android, pressing on
                           follow msg in inbox navigates you to the user profile
-                          who followed u
+                          who followed u, same video getting uploaded twice from
+                          external shared link to create post screen fix,
+                          reduced the time of showing success state on pow
+                          status popup
                         </Text>
                       </>
                     )}
@@ -823,7 +826,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 116
+                          update 117
                         </Text>
                         <Text
                           style={{
@@ -842,7 +845,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           recieved in inbox navigates user to profile tab in ios
                           and to subscription screen on android, pressing on
                           follow msg in inbox navigates you to the user profile
-                          who followed u
+                          who followed u, same video getting uploaded twice from
+                          external shared link to create post screen fix,
+                          reduced the time of showing success state on pow
+                          status popup
                         </Text>
                       </>
                     )}

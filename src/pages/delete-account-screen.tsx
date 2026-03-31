@@ -63,7 +63,7 @@ export function DeleteAccountScreen() {
           await useAuthStore.getState().logout();
           toast.success("Delete account requested");
           router.replace("/(tabs)");
-        }, 1200);
+        }, 500);
       }
     } catch (err) {
       Sentry.captureException(err, {
@@ -162,7 +162,7 @@ export function DeleteAccountScreen() {
         title="Deleting Account"
         onDismiss={txProgress.hideModal}
         showTxHash={false}
-        autoDismissDelay={1200}
+        autoDismissDelay={500}
       />
     </Box>
   );

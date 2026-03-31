@@ -173,7 +173,7 @@ export function ChangeUsernameScreen() {
       setTimeout(() => {
         setIsSubmitting(false);
         router.back();
-      }, 1200);
+      }, 500);
     } catch (err) {
       Sentry.captureException(err, { tags: { feature: "change-username" } });
       triggerHaptic("error");
@@ -268,7 +268,7 @@ export function ChangeUsernameScreen() {
         description={`Updating username to @${username}`}
         onDismiss={handleDismissProgress}
         showTxHash={false}
-        autoDismissDelay={1200}
+        autoDismissDelay={500}
       />
 
       <View

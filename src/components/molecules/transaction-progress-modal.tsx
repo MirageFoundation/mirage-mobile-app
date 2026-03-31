@@ -126,7 +126,7 @@ export function TransactionProgressModal({
   onRetry,
   dismissible = true,
   showTxHash = true,
-  autoDismissDelay = 0,
+  autoDismissDelay = 500,
 }: TransactionProgressModalProps) {
   const { theme, rt } = useUnistyles();
   const isDark = rt.themeName === "dark";
