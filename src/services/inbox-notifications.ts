@@ -103,18 +103,33 @@ function truncate(text: string, maxLen: number): string {
   return text.slice(0, maxLen - 1) + "…";
 }
 
+function getNotificationBody(reply: InboxResponse["replies"][number]): string {
+  if (reply.type === "donation") {
+    const amount = reply.amount ?? 0;
+    const mirage = amount / 1_000_000;
+    return `@${reply.reply_username} sent you ${mirage.toLocaleString()} MIRAGE`;
+  }
+  if (reply.type === "follow") {
+    return "You have a new follower!";
+  }
+  if (reply.type === "subscription_gift") {
+    return `@${reply.reply_username} gifted you a subscription`;
+  }
+  return truncate(reply.reply_content, 150);
+}
+
 function getNotificationTitle(reply: InboxResponse["replies"][number]): string {
   if (reply.type === "mention") {
     return `@${reply.reply_username} mentioned you`;
   }
   if (reply.type === "donation") {
-    return `@${reply.reply_username} sent you MIRAGE`;
+    return "Donation received";
   }
   if (reply.type === "follow") {
     return `@${reply.reply_username} started following you`;
   }
   if (reply.type === "subscription_gift") {
-    return `@${reply.reply_username} gifted you a subscription`;
+    return "Subscription received";
   }
   if (reply.type === "award") {
     return `@${reply.reply_username} gave your post an award`;
@@ -253,7 +268,7 @@ async function performInboxCheck(
         const id = await Notifications.scheduleNotificationAsync({
           content: {
             title: getNotificationTitle(reply),
-            body: truncate(reply.reply_content, 150),
+            body: getNotificationBody(reply),
             data: {
               rootPostId: reply.root_post_id,
               replyId: reply.reply_id,

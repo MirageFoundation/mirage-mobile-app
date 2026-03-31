@@ -184,7 +184,7 @@ export const InboxItem = memo(function InboxItem({
     : isFollow
     ? "started following you"
     : isSubscriptionGift
-    ? "gifted you a subscription"
+    ? "gifted you a subscription 💎"
     : isMention ? "mentioned you in" : "replied to";
   const actionIcon = isAward
     ? "gift-outline"
