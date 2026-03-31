@@ -160,9 +160,10 @@ export const AwardPickerSheet = forwardRef<
           disappearsOnIndex={-1}
           appearsOnIndex={0}
           opacity={0.5}
+          pressBehavior={isSending ? "none" : "close"}
         />
       ),
-      [],
+      [isSending],
     );
 
     const selectedConfig = awardConfigs?.find((c) => c.name === selectedType);
@@ -213,7 +214,9 @@ export const AwardPickerSheet = forwardRef<
       <BottomSheetModal
         ref={bottomSheetRef}
         enableDynamicSizing
-        enablePanDownToClose
+        enablePanDownToClose={!isSending}
+        enableHandlePanningGesture={!isSending}
+        enableContentPanningGesture={!isSending}
         onChange={handleSheetChanges}
         backdropComponent={renderBackdrop}
         backgroundStyle={{ backgroundColor: theme.colors.background.default }}
@@ -224,7 +227,11 @@ export const AwardPickerSheet = forwardRef<
             <Text size="lg" weight="bold">
               Give Award
             </Text>
-            <Pressable onPress={dismiss} style={styles.closeButton}>
+            <Pressable
+              onPress={dismiss}
+              disabled={isSending}
+              style={[styles.closeButton, isSending && { opacity: 0.5 }]}
+            >
               <EvilIcons
                 name="close"
                 size={24}

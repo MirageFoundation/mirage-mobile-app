@@ -97,9 +97,10 @@ export const GiftSubscriptionSheet = forwardRef<
         disappearsOnIndex={-1}
         appearsOnIndex={0}
         opacity={0.5}
+        pressBehavior={isSending ? "none" : "close"}
       />
     ),
-    [],
+    [isSending],
   );
 
   const handleConfirm = useCallback(async () => {
@@ -141,7 +142,9 @@ export const GiftSubscriptionSheet = forwardRef<
     <BottomSheetModal
       ref={bottomSheetRef}
       enableDynamicSizing
-      enablePanDownToClose
+      enablePanDownToClose={!isSending}
+      enableHandlePanningGesture={!isSending}
+      enableContentPanningGesture={!isSending}
       onChange={handleSheetChanges}
       backdropComponent={renderBackdrop}
       backgroundStyle={{ backgroundColor: theme.colors.background.default }}
@@ -152,7 +155,11 @@ export const GiftSubscriptionSheet = forwardRef<
           <Text size="lg" weight="bold">
             Gift Subscription
           </Text>
-          <Pressable onPress={dismiss} style={styles.closeButton}>
+          <Pressable
+            onPress={dismiss}
+            disabled={isSending}
+            style={[styles.closeButton, isSending && { opacity: 0.5 }]}
+          >
             <EvilIcons name="close" size={24} color={theme.colors.text.default} />
           </Pressable>
         </View>

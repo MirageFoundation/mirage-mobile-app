@@ -37,6 +37,8 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
     const toast = useToast();
+    const amountInputRef = useRef<any>(null);
+    const keyboardRestoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const { data: userStatus } = useUserStatus();
     const sendTokensMutation = useSendTokens();
@@ -48,13 +50,32 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
     useEffect(() => {
       const showSub = Keyboard.addListener(
         Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-        () => setKeyboardVisible(true),
+        () => {
+          if (keyboardRestoreTimeoutRef.current) {
+            clearTimeout(keyboardRestoreTimeoutRef.current);
+            keyboardRestoreTimeoutRef.current = null;
+          }
+          setKeyboardVisible(true);
+        },
       );
       const hideSub = Keyboard.addListener(
-        Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-        () => setKeyboardVisible(false),
+        "keyboardDidHide",
+        () => {
+          setKeyboardVisible(false);
+          if (keyboardRestoreTimeoutRef.current) {
+            clearTimeout(keyboardRestoreTimeoutRef.current);
+          }
+          keyboardRestoreTimeoutRef.current = setTimeout(() => {
+            bottomSheetRef.current?.snapToIndex(0);
+            keyboardRestoreTimeoutRef.current = null;
+          }, Platform.OS === "ios" ? 60 : 0);
+        },
       );
       return () => {
+        if (keyboardRestoreTimeoutRef.current) {
+          clearTimeout(keyboardRestoreTimeoutRef.current);
+          keyboardRestoreTimeoutRef.current = null;
+        }
         showSub.remove();
         hideSub.remove();
       };
@@ -99,14 +120,14 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
           disappearsOnIndex={-1}
           appearsOnIndex={0}
           opacity={0.5}
+          pressBehavior={isSending ? "none" : "close"}
         />
       ),
-      [],
+      [isSending],
     );
 
     const handleSend = useCallback(async () => {
       if (!canSend || !recipientAddress) return;
-      Keyboard.dismiss();
       setIsSending(true);
       triggerHaptic("medium");
 
@@ -118,6 +139,8 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
         });
         triggerHaptic("success");
         toast.success(`${parsedAmount} MIRAGE sent!`);
+        amountInputRef.current?.blur();
+        Keyboard.dismiss();
         dismiss();
         onSuccess?.();
       } catch (err) {
@@ -145,10 +168,12 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
       <BottomSheetModal
         ref={bottomSheetRef}
         enableDynamicSizing
-        enablePanDownToClose
+        enablePanDownToClose={!isSending}
+        enableHandlePanningGesture={!isSending}
+        enableContentPanningGesture={!isSending}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
+        android_keyboardInputMode="adjustPan"
         onChange={handleSheetChanges}
         backdropComponent={renderBackdrop}
         backgroundStyle={{ backgroundColor: theme.colors.background.default }}
@@ -159,7 +184,11 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
             <Text size="lg" weight="bold">
               Gift Mirage
             </Text>
-            <Pressable onPress={dismiss} style={styles.closeButton}>
+            <Pressable
+              onPress={dismiss}
+              disabled={isSending}
+              style={[styles.closeButton, isSending && { opacity: 0.5 }]}
+            >
               <EvilIcons name="close" size={24} color={theme.colors.text.default} />
             </Pressable>
           </View>
@@ -188,6 +217,7 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
             </Text>
 
             <BottomSheetTextInput
+              ref={amountInputRef}
               style={[
                 styles.input,
                 {
