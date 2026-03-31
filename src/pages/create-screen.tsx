@@ -403,6 +403,7 @@ export function CreateScreen() {
       shareTimeoutRef.current = null;
     }
     const currentIntentKey = intentKey;
+    const shouldImportSharedFiles = !shareIntent.webUrl;
 
     console.log("[CreateScreen] Share intent received:", {
       type: shareIntent.type,
@@ -565,11 +566,15 @@ export function CreateScreen() {
           let videoDownloaded = false;
           let mediaCount = 0;
 
-          const videosToDownload = meta.videos?.length > 0
-            ? meta.videos.slice(0, 10)
-            : meta.video
-              ? [meta.video]
-              : [];
+          const videosToDownload = Array.from(
+            new Set(
+              meta.videos?.length > 0
+                ? meta.videos
+                : meta.video
+                  ? [meta.video]
+                  : []
+            )
+          ).slice(0, 10);
 
           for (let vi = 0; vi < videosToDownload.length; vi++) {
             if (mediaCount >= 10) break;
@@ -680,11 +685,15 @@ export function CreateScreen() {
           }
 
           if (!videoDownloaded) {
-            const imagesToDownload = meta.images?.length > 0
-              ? meta.images.slice(0, 10 - mediaCount)
-              : meta.image
-                ? [meta.image]
-                : [];
+            const imagesToDownload = Array.from(
+              new Set(
+                meta.images?.length > 0
+                  ? meta.images
+                  : meta.image
+                    ? [meta.image]
+                    : []
+              )
+            ).slice(0, 10 - mediaCount);
             if (imagesToDownload.length > 0) {
               for (let i = 0; i < imagesToDownload.length; i++) {
                 if (mediaCount >= 10) break;
@@ -731,7 +740,7 @@ export function CreateScreen() {
           if (lastProcessedIntentRef.current === currentIntentKey) setIsProcessingShareLink(false);
         });
       }
-      if (shareIntent.files?.length) {
+      if (shareIntent.files?.length && shouldImportSharedFiles) {
         const file = shareIntent.files[0];
         if (file.mimeType?.startsWith("image/")) {
           setAttachment("image", file.path);
