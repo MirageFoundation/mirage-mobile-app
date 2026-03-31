@@ -684,3 +684,30 @@ export function canonBaseAnnotate(params: AnnotateParams): Uint8Array {
     : [];
   return concatBytes(base, ...mediaFields);
 }
+
+// --- MsgSubscribe / Gift Subscription (No PoW) ---
+
+export interface GiftSubscriptionParams {
+  pubkey33: Uint8Array;
+  lastBlockHashBytes: Uint8Array;
+  timestampMs: number;
+  envelopeNonce: bigint;
+  level: number;
+  target: string;
+}
+
+export function canonBaseGiftSubscription(params: GiftSubscriptionParams): Uint8Array {
+  const baseParams: BaseParams = {
+    pubkey33: params.pubkey33,
+    lastBlockHashBytes: params.lastBlockHashBytes,
+    difficulty: 0,
+    timestampMs: params.timestampMs,
+    envelopeNonce: params.envelopeNonce,
+  };
+  return concatBytes(
+    prefix("MsgSubscribe"),
+    encodeHeader(baseParams),
+    encU64(100, params.level),
+    encString(101, params.target)
+  );
+}

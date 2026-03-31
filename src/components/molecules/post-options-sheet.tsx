@@ -57,6 +57,10 @@ type PostOptionsSheetProps = {
   onReport?: () => void;
   /** Callback when give award is pressed */
   onGiveAward?: () => void;
+  /** Callback when gift mirage is pressed */
+  onGiftMirage?: () => void;
+  /** Callback when gift subscription is pressed */
+  onGiftSubscription?: () => void;
   /** Callback when annotate is pressed (agent only) */
   onAnnotate?: () => void;
   /** Callback when sheet is dismissed */
@@ -222,6 +226,8 @@ export const PostOptionsSheet = forwardRef<
       onEdit,
       onReport,
       onGiveAward,
+      onGiftMirage,
+      onGiftSubscription,
       onAnnotate,
       onDismiss,
     },
@@ -434,6 +440,18 @@ export const PostOptionsSheet = forwardRef<
       onGiveAward?.();
     }, [dismiss, onGiveAward]);
 
+    const handleGiftMirage = useCallback(() => {
+      triggerHaptic("medium");
+      dismiss();
+      onGiftMirage?.();
+    }, [dismiss, onGiftMirage]);
+
+    const handleGiftSubscription = useCallback(() => {
+      triggerHaptic("medium");
+      dismiss();
+      onGiftSubscription?.();
+    }, [dismiss, onGiftSubscription]);
+
     const handleAnnotate = useCallback(() => {
       triggerHaptic("medium");
       dismiss();
@@ -535,6 +553,22 @@ export const PostOptionsSheet = forwardRef<
                 iconName="gift-outline"
                 title="Give Award"
                 onPress={handleGiveAward}
+              />
+            )}
+
+            {!isOwnPost && onGiftMirage && (
+              <MenuItem
+                iconName="cash-outline"
+                title="Gift Mirage"
+                onPress={handleGiftMirage}
+              />
+            )}
+
+            {!isOwnPost && onGiftSubscription && (
+              <MenuItem
+                iconName="diamond-outline"
+                title="Gift Subscription"
+                onPress={handleGiftSubscription}
               />
             )}
 

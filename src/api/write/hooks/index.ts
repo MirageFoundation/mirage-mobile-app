@@ -75,3 +75,6 @@ export { useDeleteUser } from "./use-delete-user";
 
 // Award
 export { useGiveAward } from "./use-award";
+
+// Gift Subscription
+export { useGiftSubscription } from "./use-gift-subscription";

@@ -30,6 +30,10 @@ import {
   CommentOptionsSheetRef,
   CommentThread,
   ConfirmationPopup,
+  GiftMirageSheet,
+  GiftMirageSheetRef,
+  GiftSubscriptionSheet,
+  GiftSubscriptionSheetRef,
   PostCard,
   PostOptionsSheet,
   PostOptionsSheetRef,
@@ -152,10 +156,14 @@ export default function PostDetailScreen() {
   const optionsSheetRef = useRef<CommentOptionsSheetRef>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
+  const giftMirageSheetRef = useRef<GiftMirageSheetRef>(null);
+  const giftSubscriptionSheetRef = useRef<GiftSubscriptionSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
   const [awardTargetId, setAwardTargetId] = useState<string>("");
   const [awardTargetType, setAwardTargetType] = useState<"post" | "comment">("post");
   const [awardTargetIsOwn, setAwardTargetIsOwn] = useState(false);
+  const [giftRecipientAddress, setGiftRecipientAddress] = useState("");
+  const [giftRecipientUsername, setGiftRecipientUsername] = useState("");
   const commentInputRef = useRef<CommentInputRef>(null);
   const flatListRef = useRef<FlatList<Comment>>(null);
 
@@ -2071,6 +2079,18 @@ export default function PostDetailScreen() {
             setAwardTargetIsOwn(currentUser?.id === selectedComment.author.id);
             setTimeout(() => awardPickerSheetRef.current?.present(), 300);
           }}
+          onGiftMirage={() => {
+            if (!selectedComment) return;
+            setGiftRecipientAddress(selectedComment.author.id);
+            setGiftRecipientUsername(selectedComment.author.username);
+            setTimeout(() => giftMirageSheetRef.current?.present(), 300);
+          }}
+          onGiftSubscription={() => {
+            if (!selectedComment) return;
+            setGiftRecipientAddress(selectedComment.author.id);
+            setGiftRecipientUsername(selectedComment.author.username);
+            setTimeout(() => giftSubscriptionSheetRef.current?.present(), 300);
+          }}
           onDismiss={() => setSelectedComment(null)}
         />
 
@@ -2112,6 +2132,18 @@ export default function PostDetailScreen() {
             setAwardTargetIsOwn(currentUser?.id === displayPost.author.id);
             setTimeout(() => awardPickerSheetRef.current?.present(), 300);
           }}
+          onGiftMirage={() => {
+            if (!displayPost) return;
+            setGiftRecipientAddress(displayPost.author.id);
+            setGiftRecipientUsername(displayPost.author.username);
+            setTimeout(() => giftMirageSheetRef.current?.present(), 300);
+          }}
+          onGiftSubscription={() => {
+            if (!displayPost) return;
+            setGiftRecipientAddress(displayPost.author.id);
+            setGiftRecipientUsername(displayPost.author.username);
+            setTimeout(() => giftSubscriptionSheetRef.current?.present(), 300);
+          }}
           onAnnotate={handleAnnotatePost}
           onDismiss={() => {}}
         />
@@ -2121,6 +2153,18 @@ export default function PostDetailScreen() {
           targetId={awardTargetId}
           targetType={awardTargetType}
           isOwnContent={awardTargetIsOwn}
+        />
+
+        <GiftMirageSheet
+          ref={giftMirageSheetRef}
+          recipientAddress={giftRecipientAddress}
+          recipientUsername={giftRecipientUsername}
+        />
+
+        <GiftSubscriptionSheet
+          ref={giftSubscriptionSheetRef}
+          recipientAddress={giftRecipientAddress}
+          recipientUsername={giftRecipientUsername}
         />
 
         {/* Delete confirmation popup */}

@@ -279,8 +279,9 @@ export interface InboxReply {
   parent_content: string;
   parent_owner: string;
   root_post_id: string;
-  type?: "reply" | "mention" | "award";
+  type?: "reply" | "mention" | "award" | "donation" | "follow" | "subscription_gift";
   award_type?: string;
+  amount?: number;
 }
 
 export interface InboxResponse {

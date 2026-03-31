@@ -107,6 +107,18 @@ function getNotificationTitle(reply: InboxResponse["replies"][number]): string {
   if (reply.type === "mention") {
     return `@${reply.reply_username} mentioned you`;
   }
+  if (reply.type === "donation") {
+    return `@${reply.reply_username} sent you MIRAGE`;
+  }
+  if (reply.type === "follow") {
+    return `@${reply.reply_username} started following you`;
+  }
+  if (reply.type === "subscription_gift") {
+    return `@${reply.reply_username} gifted you a subscription`;
+  }
+  if (reply.type === "award") {
+    return `@${reply.reply_username} gave your post an award`;
+  }
   return `@${reply.reply_username} replied`;
 }
 

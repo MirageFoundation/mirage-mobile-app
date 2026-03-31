@@ -13,6 +13,7 @@ import {
   canonBaseSendTokens,
   canonBaseUpgradeLevel,
   canonBaseSetAutoRenewal,
+  canonBaseGiftSubscription,
 } from "../signing";
 import type { WriteResponse, PoWProgressCallback } from "../signing";
 import { withPowRetry } from "../utils/retry-pow";
@@ -105,4 +106,32 @@ export async function setAutoRenewal(
 
   const { autoRenew: _, ...rest } = payload;
   return api.post<WriteResponse>("/core/set_auto_renewal", { ...rest, auto_renew: autoRenew });
+}
+
+// ============================================
+// Gift Subscription
+// ============================================
+
+export interface GiftSubscriptionInput {
+  recipient: string;
+  level: SubscriptionLevel;
+}
+
+export async function giftSubscription(
+  wallet: MirageWallet,
+  input: GiftSubscriptionInput
+): Promise<WriteResponse> {
+  const { recipient, level } = input;
+
+  const payload = await buildSignedEnvelope({
+    wallet,
+    baseBuilder: canonBaseGiftSubscription,
+    payloadFields: {
+      level,
+      target: recipient,
+    },
+    skipPoW: true,
+  });
+
+  return api.post<WriteResponse>("/core/subscribe", payload);
 }

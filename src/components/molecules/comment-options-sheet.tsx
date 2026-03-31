@@ -32,6 +32,8 @@ type CommentOptionsSheetProps = {
   onReport?: () => void;
   onToggleFollowAuthor?: () => void;
   onGiveAward?: () => void;
+  onGiftMirage?: () => void;
+  onGiftSubscription?: () => void;
   onDismiss?: () => void;
 };
 
@@ -99,6 +101,8 @@ export const CommentOptionsSheet = forwardRef<
       onReport,
       onToggleFollowAuthor,
       onGiveAward,
+      onGiftMirage,
+      onGiftSubscription,
       onDismiss,
     },
     ref,
@@ -209,6 +213,18 @@ export const CommentOptionsSheet = forwardRef<
       onGiveAward?.();
     }, [dismiss, onGiveAward]);
 
+    const handleGiftMirage = useCallback(() => {
+      triggerHaptic("medium");
+      dismiss();
+      onGiftMirage?.();
+    }, [dismiss, onGiftMirage]);
+
+    const handleGiftSubscription = useCallback(() => {
+      triggerHaptic("medium");
+      dismiss();
+      onGiftSubscription?.();
+    }, [dismiss, onGiftSubscription]);
+
     const handleSave = useCallback(() => {
       triggerHaptic("medium");
       dismiss();
@@ -288,6 +304,22 @@ export const CommentOptionsSheet = forwardRef<
                 iconName="gift-outline"
                 title="Give Award"
                 onPress={handleGiveAward}
+              />
+            )}
+
+            {!isOwnComment && onGiftMirage && (
+              <MenuItem
+                iconName="cash-outline"
+                title="Gift Mirage"
+                onPress={handleGiftMirage}
+              />
+            )}
+
+            {!isOwnComment && onGiftSubscription && (
+              <MenuItem
+                iconName="diamond-outline"
+                title="Gift Subscription"
+                onPress={handleGiftSubscription}
               />
             )}
 

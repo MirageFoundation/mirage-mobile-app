@@ -6,6 +6,7 @@ import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { MediaPreviewModal } from "./media-preview-modal";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { getUsernameColor } from "@/src/utils/tiers";
+import { formatCompactNumber } from "@/src/utils/format-number";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { memo, useCallback, useMemo, useState } from "react";
@@ -170,12 +171,29 @@ export const InboxItem = memo(function InboxItem({
 
   const isAward = reply.type === "award";
   const isMention = reply.type === "mention";
+  const isDonation = reply.type === "donation";
+  const isFollow = reply.type === "follow";
+  const isSubscriptionGift = reply.type === "subscription_gift";
+  const isSpecialEvent = isDonation || isFollow || isSubscriptionGift;
   const awardInfo = isAward ? getAwardInfo(reply.award_type ?? "") : undefined;
+
   const actionLabel = isAward
-    ? `gave your post a '${awardInfo?.label ?? ""}' award`
+    ? `gave your post a '${awardInfo?.label ?? ""}' ${awardInfo?.icon ?? ""}`
+    : isDonation
+    ? "sent you a donation"
+    : isFollow
+    ? "started following you"
+    : isSubscriptionGift
+    ? "gifted you a subscription"
     : isMention ? "mentioned you in" : "replied to";
   const actionIcon = isAward
     ? "gift-outline"
+    : isDonation
+    ? "gift-outline"
+    : isFollow
+    ? "person-add-outline"
+    : isSubscriptionGift
+    ? "diamond-outline"
     : isMention ? "at-outline" : "arrow-undo-outline";
 
   const { text: replyText, imageUrls } = useMemo(
@@ -192,12 +210,12 @@ export const InboxItem = memo(function InboxItem({
           isUnread && styles.unreadContainer,
         ]}
       >
-        <View style={styles.headerTextRow}>
+        <View style={[styles.headerTextRow, isSpecialEvent && !isDonation && styles.headerTextRowNoContent]}>
           <Ionicons
             name={actionIcon}
             size={16}
             color={theme.colors.text.subtle}
-            style={styles.headerIcon}
+            style={isSpecialEvent || isAward ? undefined : styles.headerIcon}
           />
           <Text size="sm" style={styles.headerLeft}>
             <Text
@@ -212,10 +230,8 @@ export const InboxItem = memo(function InboxItem({
               {reply.reply_username}
             </Text>
             <Text size="sm" mode="subtle">
-              {" "}{actionLabel}{" "}
-            </Text>
-            <Text size="sm" mode="subtle">
-              {`"${parentPreview}"`}
+              {" "}{actionLabel}
+              {!isSpecialEvent && parentPreview ? ` "${parentPreview}"` : ""}
             </Text>
           </Text>
           <TimeAgo
@@ -225,16 +241,24 @@ export const InboxItem = memo(function InboxItem({
           />
         </View>
 
-        <View style={styles.replyContent}>
-          {replyText.length > 0 && <MarkdownContent content={replyText} />}
-          {imageUrls.map((url) => (
-            <ReplyImage
-              key={url}
-              url={url}
-              onPress={handleImagePress}
-            />
-          ))}
-        </View>
+        {isDonation && reply.amount != null && reply.amount > 0 && (
+          <Text size="sm" weight="bold" style={styles.donationAmount}>
+            {formatCompactNumber(reply.amount / 1_000_000)} MIRAGE
+          </Text>
+        )}
+
+        {!isSpecialEvent && (replyText.length > 0 || imageUrls.length > 0) && (
+          <View style={styles.replyContent}>
+            {replyText.length > 0 && <MarkdownContent content={replyText} />}
+            {imageUrls.map((url) => (
+              <ReplyImage
+                key={url}
+                url={url}
+                onPress={handleImagePress}
+              />
+            ))}
+          </View>
+        )}
       </Pressable>
 
       <MediaPreviewModal
@@ -281,12 +305,18 @@ const styles = StyleSheet.create((theme) => ({
     gap: 4,
     marginBottom: theme.spacing.sm,
   },
+  headerTextRowNoContent: {
+    marginBottom: 0,
+  },
   headerIcon: {
     marginTop: 2,
   },
   headerLeft: {
     flex: 1,
     marginRight: theme.spacing.sm,
+  },
+  donationAmount: {
+    marginLeft: 20,
   },
   replyContent: {},
   mediaContainer: {
