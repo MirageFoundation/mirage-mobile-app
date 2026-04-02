@@ -31,22 +31,33 @@ export function InboxScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const router = useRouter();
-  const { fromNotification } = useLocalSearchParams<{
+  useLocalSearchParams<{
     fromNotification?: string;
+    replyId?: string;
   }>();
   const isLoggedIn = !!useAuthStore((s) => s.user);
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
-  const { markAsViewed, highlightBaselineAt, readReplyIds, markReplyAsRead, advanceHighlightBaseline, setInboxActive } =
-    useInboxStore(
-      useShallow((s) => ({
-        markAsViewed: s.markAsViewed,
-        highlightBaselineAt: s.highlightBaselineAt,
-        readReplyIds: s.readReplyIds,
-        markReplyAsRead: s.markReplyAsRead,
-        advanceHighlightBaseline: s.advanceHighlightBaseline,
-        setInboxActive: s.setInboxActive,
-      })),
-    );
+  const {
+    markAsViewed,
+    highlightBaselineAt,
+    readReplyIds,
+    markReplyAsRead,
+    advanceHighlightBaseline,
+    setInboxActive,
+    notificationTarget,
+    clearNotificationTarget,
+  } = useInboxStore(
+    useShallow((s) => ({
+      markAsViewed: s.markAsViewed,
+      highlightBaselineAt: s.highlightBaselineAt,
+      readReplyIds: s.readReplyIds,
+      markReplyAsRead: s.markReplyAsRead,
+      advanceHighlightBaseline: s.advanceHighlightBaseline,
+      setInboxActive: s.setInboxActive,
+      notificationTarget: s.notificationTarget,
+      clearNotificationTarget: s.clearNotificationTarget,
+    })),
+  );
   const readReplyIdsSet = useMemo(() => new Set(readReplyIds), [readReplyIds]);
   const listRef = useRef<FlatList<InboxReply>>(null);
   const applyViewedTimestamp = useCallback(
@@ -66,7 +77,6 @@ export function InboxScreen() {
     hasNextPage,
     isFetchingNextPage,
     isLoading,
-    isRefetching,
     refetch,
   } = useInfiniteInbox({ limit: 25 });
 
@@ -83,8 +93,23 @@ export function InboxScreen() {
     return items;
   }, [data]);
 
-  const fromNotificationRef = useRef(fromNotification);
-  fromNotificationRef.current = fromNotification;
+  const activeNotificationId = notificationTarget?.notificationId;
+  const targetReplyId = notificationTarget?.replyId;
+  const previewReply = notificationTarget?.previewReply ?? null;
+  const hasFetchedTargetReply = useMemo(
+    () => (targetReplyId ? replies.some((item) => item.reply_id === targetReplyId) : false),
+    [replies, targetReplyId],
+  );
+  const visibleReplies = useMemo(() => {
+    if (!previewReply || replies.some((item) => item.reply_id === previewReply.reply_id)) {
+      return replies;
+    }
+    return [previewReply, ...replies];
+  }, [previewReply, replies]);
+
+  const fromNotificationRef = useRef(activeNotificationId);
+  fromNotificationRef.current = activeNotificationId;
+  const [isNotificationLoading, setIsNotificationLoading] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -122,20 +147,70 @@ export function InboxScreen() {
   );
 
   useEffect(() => {
-    if (replies.length > 0) {
-      markRepliesAsNotified(replies.map((r) => r.reply_id));
+    if (visibleReplies.length > 0) {
+      markRepliesAsNotified(visibleReplies.map((r) => r.reply_id));
     }
-  }, [replies]);
+  }, [visibleReplies]);
 
   useEffect(() => {
-    if (!fromNotification) return;
+    if (!activeNotificationId) {
+      setIsNotificationLoading(false);
+      return;
+    }
+
     requestAnimationFrame(() => {
       listRef.current?.scrollToOffset({ offset: 0, animated: true });
     });
-    InteractionManager.runAfterInteractions(() => {
-      refetch();
-    });
-  }, [fromNotification, refetch]);
+
+    if (hasFetchedTargetReply) {
+      setIsNotificationLoading(false);
+      clearNotificationTarget(activeNotificationId);
+      return;
+    }
+
+    setIsNotificationLoading(true);
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
+    const maxAttempts = targetReplyId ? 6 : 1;
+
+    const runFetch = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      await refetch();
+      if (cancelled) return;
+      if (attempts >= maxAttempts) {
+        setIsNotificationLoading(false);
+        return;
+      }
+      timeoutId = setTimeout(() => {
+        void runFetch();
+      }, 700);
+    };
+
+    void runFetch();
+
+    return () => {
+      cancelled = true;
+      setIsNotificationLoading(false);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [
+    activeNotificationId,
+    clearNotificationTarget,
+    hasFetchedTargetReply,
+    refetch,
+    targetReplyId,
+  ]);
+
+  useEffect(() => {
+    if (!activeNotificationId || !hasFetchedTargetReply) {
+      return;
+    }
+    clearNotificationTarget(activeNotificationId);
+  }, [activeNotificationId, clearNotificationTarget, hasFetchedTargetReply]);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -303,10 +378,17 @@ export function InboxScreen() {
 
       <FlatList
         ref={listRef}
-        data={replies}
+        data={visibleReplies}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
-        ListHeaderComponent={fromNotification && isRefetching && !isRefreshing ? <ActivityIndicator style={{ paddingVertical: 12 }} color={theme.colors.primary[500]} /> : null}
+        ListHeaderComponent={
+          isNotificationLoading ? (
+            <ActivityIndicator
+              style={{ paddingVertical: 12 }}
+              color={theme.colors.primary[500]}
+            />
+          ) : null
+        }
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}
         onEndReached={handleEndReached}

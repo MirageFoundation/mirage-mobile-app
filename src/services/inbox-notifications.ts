@@ -10,7 +10,7 @@ import * as Network from "expo-network";
 import { isAxiosError } from "axios";
 import { api } from "@/src/api/client";
 import { queryKeys } from "@/src/api/read/query-keys";
-import type { InboxResponse } from "@/src/api/types";
+import type { InboxReply, InboxResponse } from "@/src/api/types";
 import { queryClient } from "@/src/providers/query-provider";
 import { storage } from "@/src/stores/mmkv-storage";
 import { useAuthStore } from "@/src/stores/auth-store";
@@ -130,6 +130,18 @@ function seedInboxCache(walletAddress: string, inbox: InboxResponse): void {
   queryClient.setQueryData(queryKeys.inbox(walletAddress, page), inbox);
 }
 
+async function fetchAndSeedInboxCache(
+  walletAddress: string,
+  limit = 25,
+): Promise<InboxResponse> {
+  const inbox = await api.get<InboxResponse>("/get_inbox", {
+    address: walletAddress,
+    limit,
+  });
+  seedInboxCache(walletAddress, inbox);
+  return inbox;
+}
+
 function truncate(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
   return text.slice(0, maxLen - 1) + "…";
@@ -139,6 +151,91 @@ function formatMirageAmount(amountUmirage: number): string {
   const value = amountUmirage / 1_000_000;
   const text = value % 1 === 0 ? value.toLocaleString() : value.toLocaleString(undefined, { maximumFractionDigits: 6 });
   return text;
+}
+
+function toOptionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function toOptionalNumber(value: unknown): number | undefined {
+  const normalized = Number(value);
+  return Number.isFinite(normalized) ? normalized : undefined;
+}
+
+function normalizeInboxReplyType(value: unknown): InboxReply["type"] {
+  switch (value) {
+    case "reply":
+    case "mention":
+    case "award":
+    case "donation":
+    case "follow":
+    case "subscription_gift":
+      return value;
+    default:
+      return "reply";
+  }
+}
+
+function buildPreviewReplyFromNotification(
+  notification: Notifications.Notification,
+): InboxReply | null {
+  const data = (notification.request.content.data ?? {}) as Record<string, unknown>;
+  const snapshot = data.inboxReply;
+  const notificationDate = notification.date;
+  const replyTimestamp = notificationDate
+    ? Math.floor((notificationDate < 1e12 ? notificationDate * 1000 : notificationDate) / 1000)
+    : Math.floor(Date.now() / 1000);
+
+  if (snapshot && typeof snapshot === "object") {
+    const candidate = snapshot as Record<string, unknown>;
+    const replyId = toOptionalString(candidate.reply_id);
+    const rootPostId = toOptionalString(candidate.root_post_id);
+    if (replyId && rootPostId) {
+      return {
+        reply_id: replyId,
+        reply_owner: toOptionalString(candidate.reply_owner) ?? "",
+        reply_username: toOptionalString(candidate.reply_username) ?? "Someone",
+        reply_content: toOptionalString(candidate.reply_content) ?? "",
+        reply_timestamp:
+          toOptionalNumber(candidate.reply_timestamp) ?? replyTimestamp,
+        reply_author_level:
+          toOptionalNumber(candidate.reply_author_level) ?? 0,
+        parent_id: toOptionalString(candidate.parent_id) ?? rootPostId,
+        parent_content: toOptionalString(candidate.parent_content) ?? "",
+        parent_owner: toOptionalString(candidate.parent_owner) ?? "",
+        root_post_id: rootPostId,
+        type: normalizeInboxReplyType(candidate.type),
+        award_type: toOptionalString(candidate.award_type) ?? undefined,
+        amount: toOptionalNumber(candidate.amount),
+      };
+    }
+  }
+
+  const replyId = toOptionalString(data.replyId);
+  const rootPostId = toOptionalString(data.rootPostId);
+  if (!replyId || !rootPostId) {
+    return null;
+  }
+
+  const title = notification.request.content.title?.trim() ?? "";
+  const body = notification.request.content.body?.trim() ?? "";
+  const fallbackUsername = title.match(/^@?([^\s]+)/)?.[1] ?? "Someone";
+
+  return {
+    reply_id: replyId,
+    reply_owner: toOptionalString(data.replyOwner) ?? "",
+    reply_username: toOptionalString(data.replyUsername) ?? fallbackUsername,
+    reply_content: toOptionalString(data.replyContent) ?? body,
+    reply_timestamp: replyTimestamp,
+    reply_author_level: toOptionalNumber(data.replyAuthorLevel) ?? 0,
+    parent_id: toOptionalString(data.parentId) ?? rootPostId,
+    parent_content: toOptionalString(data.parentContent) ?? "",
+    parent_owner: toOptionalString(data.parentOwner) ?? "",
+    root_post_id: rootPostId,
+    type: normalizeInboxReplyType(data.type),
+    award_type: toOptionalString(data.awardType) ?? undefined,
+    amount: toOptionalNumber(data.amount),
+  };
 }
 
 function getNotificationBody(reply: InboxResponse["replies"][number]): string {
@@ -252,13 +349,9 @@ async function performInboxCheck(
       useInboxStore.setState({ _suppressUntil: Date.now() + 30_000 });
     }
 
-    const inbox = await api.get<InboxResponse>("/get_inbox", {
-      address: walletAddress,
-      limit: 50,
-    });
+    const inbox = await fetchAndSeedInboxCache(walletAddress, 50);
 
     console.log("[InboxNotifications] Fetched replies:", inbox.replies?.length ?? 0);
-    seedInboxCache(walletAddress, inbox);
 
     if (!inbox.replies || inbox.replies.length === 0) {
       storage.set(LAST_CHECK_KEY, Date.now().toString());
@@ -313,6 +406,17 @@ async function performInboxCheck(
             data: {
               rootPostId: reply.root_post_id,
               replyId: reply.reply_id,
+              replyOwner: reply.reply_owner,
+              replyUsername: reply.reply_username,
+              replyAuthorLevel: reply.reply_author_level,
+              replyContent: reply.reply_content,
+              parentId: reply.parent_id,
+              parentContent: reply.parent_content,
+              parentOwner: reply.parent_owner,
+              type: reply.type,
+              awardType: reply.award_type,
+              amount: reply.amount,
+              inboxReply: reply,
             },
             ...(Platform.OS === "android" && {
               categoryIdentifier: "inbox",
@@ -442,6 +546,18 @@ function handleNotificationResponse(
       console.log("[InboxNotifications] Already handled notification:", notificationId);
       return;
     }
+    const notificationData = response.notification?.request?.content?.data;
+    const previewReply = buildPreviewReplyFromNotification(response.notification);
+    const replyId =
+      previewReply?.reply_id ??
+      (typeof notificationData?.replyId === "string"
+        ? notificationData.replyId
+        : null);
+    const rootPostId =
+      previewReply?.root_post_id ??
+      (typeof notificationData?.rootPostId === "string"
+        ? notificationData.rootPostId
+        : null);
     const responseDate = response.notification?.date;
     if (responseDate) {
       const dateMs = responseDate < 1e12 ? responseDate * 1000 : responseDate;
@@ -453,22 +569,28 @@ function handleNotificationResponse(
     }
     handledNotificationIds.add(notificationId);
     saveHandledNotificationIds(handledNotificationIds);
-    const prefetchInbox = () => {
+    useInboxStore.getState().setNotificationTarget({
+      notificationId,
+      replyId,
+      rootPostId,
+      previewReply,
+    });
+    const prefetchInbox = async () => {
       const address = useAuthStore.getState().walletAddress;
       if (!address) return;
-      queryClient.prefetchInfiniteQuery({
-        queryKey: queryKeys.inboxInfinite(address),
-        queryFn: () => api.get<InboxResponse>("/get_inbox", { address, limit: 25 }),
-        initialPageParam: 1,
-        staleTime: 0,
-      });
+      await fetchAndSeedInboxCache(address, 25);
     };
     const navigateToInbox = async () => {
-      prefetchInbox();
+      void prefetchInbox().catch((error) => {
+        console.warn("[InboxNotifications] Failed to prefetch inbox before navigation:", error);
+      });
       await waitForTabsReady();
       router.navigate({
         pathname: "/(tabs)/inbox",
-        params: { fromNotification: notificationId },
+        params: {
+          fromNotification: notificationId,
+          replyId: replyId ?? undefined,
+        },
       });
     };
     if (AppState.currentState !== "active") {
