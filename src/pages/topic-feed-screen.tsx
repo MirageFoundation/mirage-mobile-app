@@ -577,7 +577,7 @@ export function TopicFeedScreen() {
   }, [isLoading, isError, error, topicName]);
 
   const ListHeaderComponent = useCallback(() => {
-    if (Platform.OS === "android" || !isManualRefreshing) return null;
+    if (!isManualRefreshing) return null;
     return (
       <Box center p="md">
         <ActivityIndicator
@@ -607,14 +607,15 @@ export function TopicFeedScreen() {
   const refreshControl = useMemo(
     () => (
       <RefreshControl
-        refreshing={Platform.OS === "android" ? isManualRefreshing : false}
+        refreshing={Platform.OS === "android" ? false : isManualRefreshing}
         onRefresh={handleRefresh}
         tintColor="transparent"
-        colors={[theme.colors.text.subtle]}
-        progressViewOffset={insets.top + HEADER_HEIGHT}
+        colors={["transparent"]}
+        progressBackgroundColor="transparent"
+        progressViewOffset={Platform.OS === "android" ? -10000 : insets.top + HEADER_HEIGHT}
       />
     ),
-    [handleRefresh, insets.top, isManualRefreshing, theme.colors.text.subtle],
+    [handleRefresh, insets.top, isManualRefreshing],
   );
 
   const setCurrentUserId = useHomePostCardStore(

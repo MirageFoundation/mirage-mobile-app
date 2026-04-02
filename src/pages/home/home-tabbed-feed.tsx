@@ -652,7 +652,7 @@ export const HomeTabbedFeed = forwardRef<
     }
   }, [activeQueryLoading, activeTabIndex, showBars]);
 
-  const showHeaderSpinner = Platform.OS !== "android" && isRefreshing && !activeQueryLoading;
+  const showHeaderSpinner = isRefreshing && !activeQueryLoading;
   const showQuests = baseFeed === "home" && activeTabIndex === 0;
 
   const ListHeader = useMemo(() => (
@@ -698,14 +698,15 @@ export const HomeTabbedFeed = forwardRef<
   const refreshControl = useMemo(
     () => (
       <RefreshControl
-        refreshing={isRefreshing}
+        refreshing={Platform.OS === "android" ? false : isRefreshing}
         onRefresh={handleRefresh}
         tintColor="transparent"
-        colors={[theme.colors.text.subtle]}
-        progressViewOffset={progressViewOffset}
+        colors={["transparent"]}
+        progressBackgroundColor="transparent"
+        progressViewOffset={Platform.OS === "android" ? -10000 : progressViewOffset}
       />
     ),
-    [handleRefresh, progressViewOffset, isRefreshing, theme.colors.text.subtle],
+    [handleRefresh, progressViewOffset, isRefreshing],
   );
 
   const posts = activeTabIndex === 0 ? magicPosts : latestPosts;
