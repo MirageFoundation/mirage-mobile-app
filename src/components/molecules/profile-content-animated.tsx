@@ -73,6 +73,7 @@ type ProfileContentAnimatedProps = {
   onEditUsernamePress?: () => void;
   isLoading?: boolean;
   headerHeight?: number;
+  userLevel?: number;
 };
 
 export const ProfileContentAnimated = memo(function ProfileContentAnimated({
@@ -89,6 +90,7 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
   onFollowersPress,
   onEditUsernamePress,
   isLoading = false,
+  userLevel = 0,
 }: ProfileContentAnimatedProps) {
   const [copied, setCopied] = useState(false);
   const walletScale = useRef(new RNAnimated.Value(1)).current;
@@ -213,35 +215,45 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
             {isLoading ? (
               <View style={styles.usernameContentSkeleton} />
             ) : (
-              <Box direction="row" alignItems="center" gap="xs">
-                <Text size="xl" weight="bold" style={styles.whiteText}>
-                  {username}
-                </Text>
-                {onEditUsernamePress && (
-                  <Pressable
-                    onPress={() => {
-                      triggerHaptic("light");
-                      onEditUsernamePress();
-                    }}
-                    hitSlop={8}
-                    style={styles.editButton}
-                  >
-                    <Text
-                      size="sm"
-                      weight="medium"
-                      style={styles.editButtonText}
+              <>
+                <Box direction="row" alignItems="center" gap="xs">
+                  <Text size="xl" weight="bold" style={styles.whiteText}>
+                    {username}
+                  </Text>
+                  {onEditUsernamePress && (
+                    <Pressable
+                      onPress={() => {
+                        triggerHaptic("light");
+                        onEditUsernamePress();
+                      }}
+                      hitSlop={8}
+                      style={styles.editButton}
                     >
-                      Edit
+                      <Text
+                        size="sm"
+                        weight="medium"
+                        style={styles.editButtonText}
+                      >
+                        Edit
+                      </Text>
+                      <Icon
+                        icon={AntDesign}
+                        name="edit"
+                        size={13}
+                        color="rgba(255,255,255,0.7)"
+                      />
+                    </Pressable>
+                  )}
+                </Box>
+                {userLevel > 0 && username.toLowerCase().startsWith("anon") && onEditUsernamePress && (
+                  <Pressable onPress={() => { triggerHaptic("light"); onEditUsernamePress(); }} style={styles.anonNoteContainer}>
+                    <Ionicons name="information-circle" size={16} color="#F59E0B" />
+                    <Text size="sm" style={styles.anonNoteText}>
+                      As a subscriber, you can now remove the "anon" prefix from your username. <Text size="sm" weight="bold" style={styles.anonNoteText}>Tap to edit.</Text>
                     </Text>
-                    <Icon
-                      icon={AntDesign}
-                      name="edit"
-                      size={13}
-                      color="rgba(255,255,255,0.7)"
-                    />
                   </Pressable>
                 )}
-              </Box>
+              </>
             )}
           </Box>
 
@@ -452,5 +464,22 @@ const styles = StyleSheet.create((theme) => ({
   editButtonText: {
     color: "rgba(255,255,255,0.7)",
     // marginTop: 2,
+  },
+  anonNoteContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 8,
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.25)",
+  },
+  anonNoteText: {
+    color: "#FBBF24",
+    flex: 1,
+    lineHeight: 18,
   },
 }));

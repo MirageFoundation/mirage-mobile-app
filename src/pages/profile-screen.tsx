@@ -887,6 +887,7 @@ useEffect(() => {
              onEditUsernamePress={handleEditUsernamePress}
              isLoading={isLoading}
             headerHeight={headerHeight}
+            userLevel={userStatus?.user_level ?? 0}
            />
          );
         }
