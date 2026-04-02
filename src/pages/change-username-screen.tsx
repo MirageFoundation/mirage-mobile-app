@@ -12,6 +12,7 @@ import {
   ScrollView,
   View,
 } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -58,8 +59,8 @@ export function ChangeUsernameScreen() {
   const [status, setStatus] = useState<UsernameStatus>("idle");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const txProgress = useTransactionProgress();
+  const bottomPadding = useSharedValue(insets.bottom + 16);
 
   useFocusEffect(
     useCallback(() => {
@@ -68,10 +69,20 @@ export function ChangeUsernameScreen() {
   );
 
   useEffect(() => {
-    const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
-    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, () => {
+      bottomPadding.value = withTiming(12, { duration: 250 });
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      bottomPadding.value = withTiming(insets.bottom + 16, { duration: 250 });
+    });
     return () => { showSub.remove(); hideSub.remove(); };
-  }, []);
+  }, [insets.bottom]);
+
+  const animatedBottomStyle = useAnimatedStyle(() => ({
+    paddingBottom: bottomPadding.value,
+  }));
 
   const { data: config } = useConfig();
   const minUsernameSize = config?.min_username_size ?? 3;
@@ -155,14 +166,147 @@ export function ChangeUsernameScreen() {
         setUser({ ...user, username });
       }
 
-      if (user?.walletAddress) {
-        const walletAddr = user.walletAddress;
+      const walletAddr = user?.walletAddress;
+
+      const updatePostAuthorUsername = (post: any) => {
+        if (!post || typeof post !== "object") return post;
+
+        const updatedPost =
+          post.user_id === walletAddr ? { ...post, username } : post;
+
+        if (Array.isArray(updatedPost.children)) {
+          return {
+            ...updatedPost,
+            children: updatedPost.children.map(updatePostAuthorUsername),
+          };
+        }
+
+        return updatedPost;
+      };
+
+      const updateCachedPostData = (data: any) => {
+        if (!data || typeof data !== "object") return data;
+
+        if (Array.isArray(data.pages)) {
+          return {
+            ...data,
+            pages: data.pages.map((page: any) =>
+              page?.posts
+                ? { ...page, posts: page.posts.map(updatePostAuthorUsername) }
+                : page,
+            ),
+          };
+        }
+
+        if (Array.isArray(data.posts)) {
+          return {
+            ...data,
+            posts: data.posts.map(updatePostAuthorUsername),
+          };
+        }
+
+        if (data.root || Array.isArray(data.children)) {
+          return {
+            ...data,
+            root: data.root ? updatePostAuthorUsername(data.root) : data.root,
+            children: Array.isArray(data.children)
+              ? data.children.map(updatePostAuthorUsername)
+              : data.children,
+          };
+        }
+
+        if (Array.isArray(data.context)) {
+          return {
+            ...data,
+            context: data.context.map(updatePostAuthorUsername),
+          };
+        }
+
+        return data;
+      };
+
+      const applyOptimisticUpdates = () => {
+        if (!walletAddr) return;
+
+        queryClient.setQueryData(
+          queryKeys.userStatus(walletAddr),
+          (old: any) => (old ? { ...old, username } : old),
+        );
+        queryClient.setQueryData(
+          queryKeys.profile(walletAddr),
+          (old: any) => (old ? { ...old, username } : old),
+        );
+        queryClient.setQueryData(
+          queryKeys.usernameFromAddress(walletAddr),
+          username,
+        );
+
+        queryClient.getQueriesData({ queryKey: ["posts"] }).forEach(([key]) => {
+          queryClient.setQueryData(key, (old: any) => updateCachedPostData(old));
+        });
+        queryClient.getQueriesData({ queryKey: ["user", "posts"] }).forEach(([key]) => {
+          queryClient.setQueryData(key, (old: any) => updateCachedPostData(old));
+        });
+        queryClient.getQueriesData({ queryKey: ["comments"] }).forEach(([key]) => {
+          queryClient.setQueryData(key, (old: any) => updateCachedPostData(old));
+        });
+        queryClient.getQueriesData({ queryKey: ["commentContext"] }).forEach(([key]) => {
+          queryClient.setQueryData(key, (old: any) => updateCachedPostData(old));
+        });
+        queryClient.getQueriesData({ queryKey: ["batchUsernames"] }).forEach(([key]) => {
+          queryClient.setQueryData(key, (old: any) => {
+            if (!old || typeof old !== "object") return old;
+            return { ...old, [walletAddr.toLowerCase()]: username };
+          });
+        });
+      };
+
+      applyOptimisticUpdates();
+
+      if (walletAddr) {
+        queryClient.cancelQueries({
+          queryKey: queryKeys.userStatus(walletAddr),
+        });
+        queryClient.cancelQueries({
+          queryKey: queryKeys.profile(walletAddr),
+        });
+        queryClient.cancelQueries({ queryKey: ["posts"] });
+        queryClient.cancelQueries({ queryKey: ["user", "posts"] });
+        queryClient.cancelQueries({ queryKey: ["comments"] });
+        queryClient.cancelQueries({ queryKey: ["commentContext"] });
+
+        setTimeout(() => {
+          applyOptimisticUpdates();
+        }, 1000);
+
+        setTimeout(() => {
+          applyOptimisticUpdates();
+        }, 3000);
+
         setTimeout(() => {
           queryClient.invalidateQueries({
             queryKey: queryKeys.userStatus(walletAddr),
           });
           queryClient.invalidateQueries({
             queryKey: queryKeys.profile(walletAddr),
+          });
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.usernameFromAddress(walletAddr),
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["batchUsernames"],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["posts"],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["user", "posts"],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["comments"],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["commentContext"],
           });
         }, 15000);
       }
@@ -259,6 +403,10 @@ export function ChangeUsernameScreen() {
     username.length >= 1 &&
     !isSubmitting;
 
+  const initials = currentUsername
+    ? currentUsername.slice(0, 2).toUpperCase()
+    : "??";
+
   return (
     <Box flex background="base">
       <TransactionProgressModal
@@ -308,14 +456,45 @@ export function ChangeUsernameScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.centerContent}>
-            <Box mb="lg">
-              <Text size="sm" weight="medium" mode="subtle" style={styles.label}>
-                Current Username
+            <View style={styles.avatarContainer}>
+              <LinearGradient
+                colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.avatar}
+              >
+                <Text style={styles.avatarText}>{initials}</Text>
+              </LinearGradient>
+            </View>
+
+            <View
+              style={[
+                styles.currentBadge,
+                {
+                  backgroundColor: `${theme.colors.primary[500]}10`,
+                  borderColor: `${theme.colors.primary[500]}25`,
+                },
+              ]}
+            >
+              <Text size="sm" mode="subtle" style={styles.currentLabel}>
+                CURRENT
               </Text>
-              <Text size="lg" weight="semibold">
+              <Text size="lg" weight="bold">
                 @{currentUsername}
               </Text>
-            </Box>
+            </View>
+
+            <View style={styles.arrowContainer}>
+              <Ionicons
+                name="arrow-down"
+                size={22}
+                color={theme.colors.text.subtle}
+              />
+            </View>
+
+            <Text size="md" weight="semibold" style={styles.newLabel}>
+              New Username
+            </Text>
 
             <View style={styles.inputWrapper}>
               <Input
@@ -338,62 +517,114 @@ export function ChangeUsernameScreen() {
               />
             </View>
 
-            <View style={styles.statusContainer}>
-              {status !== "idle" ? (
-                <Text size="sm" style={{ color: getStatusColor() }}>
-                  {getStatusMessage}
-                </Text>
-              ) : (
+            <View style={styles.statusRow}>
+              <View style={{ flex: 1 }}>
+                {status !== "idle" ? (
+                  <Text size="sm" style={{ color: getStatusColor() }}>
+                    {getStatusMessage}
+                  </Text>
+                ) : (
+                  <Text
+                    size="sm"
+                    style={{ color: theme.colors.text.subtle }}
+                  >
+                    This is how people will find you on Mirage
+                  </Text>
+                )}
+                {error && (
+                  <Text
+                    size="sm"
+                    style={{ color: theme.colors.error[500], marginTop: 4 }}
+                  >
+                    {error}
+                  </Text>
+                )}
+              </View>
+              {username.length > 0 && (
                 <Text
-                  size="sm"
-                  style={{ color: theme.colors.text.subtle, opacity: 0.6 }}
+                  size="xs"
+                  style={{
+                    color:
+                      username.length >= minUsernameSize
+                        ? theme.colors.text.subtle
+                        : theme.colors.warning[500],
+                    marginLeft: 8,
+                  }}
                 >
-                  This is how people will find you on Mirage
-                </Text>
-              )}
-              {error && (
-                <Text size="sm" style={{ color: theme.colors.error[500] }}>
-                  {error}
+                  {username.length}/{maxUsernameSize}
                 </Text>
               )}
             </View>
 
             {!canChangeName && (
-              <Box
-                p="md"
-                rounded="lg"
-                mt="md"
-                style={{
-                  backgroundColor: `${theme.colors.warning[500]}15`,
-                  borderWidth: 1,
-                  borderColor: `${theme.colors.warning[500]}30`,
-                }}
+              <View
+                style={[
+                  styles.upgradeCard,
+                  {
+                    backgroundColor: `${theme.colors.warning[500]}10`,
+                    borderColor: `${theme.colors.warning[500]}25`,
+                  },
+                ]}
               >
+                <View style={styles.upgradeIconRow}>
+                  <Ionicons
+                    name="lock-closed"
+                    size={18}
+                    color={theme.colors.warning[500]}
+                  />
+                  <Text
+                    size="sm"
+                    weight="semibold"
+                    style={{ color: theme.colors.warning[500], marginLeft: 8 }}
+                  >
+                    Premium Feature
+                  </Text>
+                </View>
                 <Text
                   size="sm"
-                  style={{ color: theme.colors.warning[500], lineHeight: 20 }}
+                  style={{
+                    color: theme.colors.warning[500],
+                    lineHeight: 20,
+                    marginTop: 6,
+                    opacity: 0.85,
+                  }}
                 >
-                  Changing username is not available for the basic tier. Upgrade your plan to change your username.
+                  Upgrade your plan to change your username.
                 </Text>
                 {Platform.OS !== "ios" && (
                   <Pressable
                     onPress={() => router.push("/subscription")}
-                    style={{ marginTop: 12 }}
+                    style={({ pressed }) => [
+                      styles.upgradeButton,
+                      pressed && { opacity: 0.8 },
+                    ]}
                   >
-                    <Text
-                      size="sm"
-                      weight="semibold"
-                      style={{ color: theme.colors.primary[500] }}
+                    <LinearGradient
+                      colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.upgradeGradient}
                     >
-                      Update Subscription
-                    </Text>
+                      <Text
+                        size="sm"
+                        weight="semibold"
+                        style={{ color: "#FFFFFF" }}
+                      >
+                        Upgrade Now
+                      </Text>
+                    </LinearGradient>
                   </Pressable>
                 )}
-              </Box>
+              </View>
             )}
           </View>
 
-          <View style={[styles.bottomButton, { paddingBottom: keyboardVisible ? 12 : insets.bottom + 16 }]}>
+          <Animated.View
+            style={[
+              styles.bottomButton,
+              animatedBottomStyle,
+            ]}
+          >
             <Button
               size="lg"
               rounded="full"
@@ -405,7 +636,7 @@ export function ChangeUsernameScreen() {
                 {isSubmitting ? "Changing username..." : "Continue"}
               </Button.Text>
             </Button>
-          </View>
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
     </Box>
@@ -438,20 +669,56 @@ const styles = StyleSheet.create((theme) => ({
   centerContent: {
     flex: 1,
     justifyContent: "center",
+    alignItems: "stretch",
+  },
+  avatarContainer: {
+    alignItems: "center",
+    marginBottom: theme.spacing.lg,
+  },
+  avatar: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    color: "#FFFFFF",
+    fontSize: 26,
+    fontWeight: "700",
+    lineHeight: 30,
+    includeFontPadding: false,
+    textAlignVertical: "center",
+  },
+  currentBadge: {
+    alignItems: "center",
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: theme.spacing.sm,
+  },
+  currentLabel: {
+    letterSpacing: 1.2,
+    marginBottom: 4,
+    opacity: 0.7,
+    fontSize: 11,
+  },
+  arrowContainer: {
+    alignItems: "center",
+    paddingVertical: theme.spacing.sm,
+  },
+  newLabel: {
+    marginBottom: theme.spacing.sm,
   },
   bottomButton: {
     paddingTop: theme.spacing.lg,
-  },
-  label: {
-    marginBottom: theme.spacing.xs,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
   },
   inputWrapper: {
     marginBottom: theme.spacing.xs,
   },
   input: {
-    paddingLeft: 12,
+    paddingHorizontal: theme.spacing.md,
   },
   statusIcon: {
     paddingHorizontal: theme.spacing.sm,
@@ -460,9 +727,32 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     alignItems: "center",
   },
-  statusContainer: {
-    paddingHorizontal: theme.spacing.sm,
-    borderRadius: 8,
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
     minHeight: 20,
+    marginTop: 4,
+  },
+  upgradeCard: {
+    padding: theme.spacing.md,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: theme.spacing.lg,
+  },
+  upgradeIconRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  upgradeButton: {
+    marginTop: 12,
+    borderRadius: 10,
+    overflow: "hidden",
+    alignSelf: "flex-start",
+  },
+  upgradeGradient: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
   },
 }));
