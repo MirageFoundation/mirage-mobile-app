@@ -783,7 +783,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           immediately,changed ui of edit username button on
                           profile tab, added edit username option in settings,
                           reduced the number of videos to play off screen on
-                          android to fix the out of memory crash
+                          android to fix the out of memory crash, double spinner
+                          removed from android
                         </Text>
                       </>
                     )}
@@ -844,7 +845,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           immediately,changed ui of edit username button on
                           profile tab, added edit username option in settings,
                           reduced the number of videos to play off screen on
-                          android to fix the out of memory crash
+                          android to fix the out of memory crash, double spinner
+                          removed from android
                         </Text>
                       </>
                     )}
