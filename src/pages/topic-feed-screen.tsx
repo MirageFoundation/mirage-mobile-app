@@ -9,6 +9,7 @@ import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   RefreshControl,
   View,
@@ -576,7 +577,7 @@ export function TopicFeedScreen() {
   }, [isLoading, isError, error, topicName]);
 
   const ListHeaderComponent = useCallback(() => {
-    if (!isManualRefreshing) return null;
+    if (Platform.OS === "android" || !isManualRefreshing) return null;
     return (
       <Box center p="md">
         <ActivityIndicator
@@ -606,13 +607,14 @@ export function TopicFeedScreen() {
   const refreshControl = useMemo(
     () => (
       <RefreshControl
-        refreshing={false}
+        refreshing={Platform.OS === "android" ? isManualRefreshing : false}
         onRefresh={handleRefresh}
         tintColor="transparent"
+        colors={[theme.colors.text.subtle]}
         progressViewOffset={insets.top + HEADER_HEIGHT}
       />
     ),
-    [handleRefresh, insets.top],
+    [handleRefresh, insets.top, isManualRefreshing, theme.colors.text.subtle],
   );
 
   const setCurrentUserId = useHomePostCardStore(
