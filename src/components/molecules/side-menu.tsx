@@ -781,7 +781,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           happening on sticker upload and fixed, edit username
                           screen UI updated, changing username reflects
                           immediately,changed ui of edit username button on
-                          profile tab, added edit username option in settings
+                          profile tab, added edit username option in settings,
+                          reduced the number of videos to play off screen on
+                          android to fix the out of memory crash
                         </Text>
                       </>
                     )}
@@ -840,7 +842,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           happening on sticker upload and fixed, edit username
                           screen UI updated, changing username reflects
                           immediately,changed ui of edit username button on
-                          profile tab, added edit username option in settings
+                          profile tab, added edit username option in settings,
+                          reduced the number of videos to play off screen on
+                          android to fix the out of memory crash
                         </Text>
                       </>
                     )}
