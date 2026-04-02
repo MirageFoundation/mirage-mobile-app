@@ -287,8 +287,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   unreadContainer: {
     backgroundColor: `${theme.colors.primary[500]}08`,
-    borderLeftWidth: 3,
-    borderLeftColor: theme.colors.primary[500],
   },
   unreadDot: {
     position: "absolute",
