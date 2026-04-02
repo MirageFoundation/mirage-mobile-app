@@ -776,7 +776,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           change the ui of new unread msg in inbox, video not
                           getting uploaded fix, better sentry logs added for
                           comment posting error video not getting extracted
-                          error, some UI change in inbox msgs
+                          error, some UI change in inbox msgs, comment failed
+                          error investigated and understood the failure
+                          happening on sticker upload and fixed
                         </Text>
                       </>
                     )}
@@ -830,7 +832,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           change the ui of new unread msg in inbox, video not
                           getting uploaded fix, better sentry logs added for
                           comment posting error video not getting extracted
-                          error, some UI change in inbox msgs
+                          error, some UI change in inbox msgs, comment failed
+                          error investigated and understood the failure
+                          happening on sticker upload and fixed
                         </Text>
                       </>
                     )}
