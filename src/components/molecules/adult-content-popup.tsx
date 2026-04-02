@@ -171,7 +171,7 @@ export const AdultContentPopup = ({
           mode="subtle"
           style={{ textAlign: "center", marginTop: 12, lineHeight: 20 }}
         >
-          Mirage is uncensored and includes adult content like pornography,
+          Mirage is uncensored and includes mature content like adult content,
           violence, and other NSFW material. Would you like to see this content
           in your feed?
         </Text>

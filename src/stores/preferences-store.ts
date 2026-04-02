@@ -9,15 +9,15 @@ export type ApiServer = string;
 export type VideoAutoplayNetwork = "always" | "wifi_only" | "never";
 export type ContentType =
   | "sensitive"
-  | "porn"
+  | "adult"
   | "violence"
   | "gore"
   | "death"
   | "none"
   | "all";
 
-const CONTENT_TAGS = ["sensitive", "porn", "violence", "gore", "death"] as const;
-const ADULT_CONTENT_TAGS = ["porn", "violence", "gore", "death"] as const;
+const CONTENT_TAGS = ["sensitive", "adult", "violence", "gore", "death"] as const;
+const ADULT_CONTENT_TAGS = ["adult", "violence", "gore", "death"] as const;
 
 type ContentTag = (typeof CONTENT_TAGS)[number];
 
@@ -36,11 +36,13 @@ export const getAllowedTagsFromContentTypes = (
   types: ContentType[]
 ): string => {
  const normalized = normalizeContentTypes(types);
- if (normalized.includes("all")) return CONTENT_TAGS.join(",");
+ if (normalized.includes("all")) return [...CONTENT_TAGS, "porn"].join(",");
   if (normalized.length === 0) return "";
 
  const selected = new Set(normalized);
-  return CONTENT_TAGS.filter((tag) => selected.has(tag)).join(",");
+  const tags = CONTENT_TAGS.filter((tag) => selected.has(tag));
+  if (selected.has("adult")) tags.push("porn" as any);
+  return tags.join(",");
 };
 
 export const isAdultContentEnabled = (types: ContentType[]): boolean => {
@@ -187,7 +189,7 @@ export const usePreferencesStore = create<PreferencesState>()(
             const nextTypes = Array.from(nextSet);
             return {
               adultContentEnabled: true,
-              selectedContentTypes: nextTypes.length ? nextTypes : ["porn"],
+              selectedContentTypes: nextTypes.length ? nextTypes : ["adult"],
             };
           }
 
@@ -223,24 +225,24 @@ export const usePreferencesStore = create<PreferencesState>()(
      toggleContentType: (type) =>
        set((state) => {
          if (type === "all") {
-           const hasPorn = state.selectedContentTypes.includes("porn");
-           const nonPornTags: ContentType[] = [...CONTENT_TAGS].filter((t) => t !== "porn");
-           if (hasPorn) {
+           const hasAdult = state.selectedContentTypes.includes("adult");
+           const nonAdultTags: ContentType[] = [...CONTENT_TAGS].filter((t) => t !== "adult");
+           if (hasAdult) {
              return {
-               selectedContentTypes: [...nonPornTags, "porn"],
+               selectedContentTypes: [...nonAdultTags, "adult"],
                adultContentEnabled: true,
              };
            }
            return {
-             selectedContentTypes: nonPornTags,
+             selectedContentTypes: nonAdultTags,
              adultContentEnabled: false,
            };
          }
         if (type === "none") {
-          const hadPorn = state.selectedContentTypes.includes("porn");
-          if (hadPorn) {
+          const hadAdult = state.selectedContentTypes.includes("adult");
+          if (hadAdult) {
             return {
-              selectedContentTypes: ["porn"],
+              selectedContentTypes: ["adult"],
               adultContentEnabled: true,
             };
           }
@@ -290,8 +292,7 @@ export const usePreferencesStore = create<PreferencesState>()(
    {
      name: "preferences-storage",
       storage: createJSONStorage(() => mmkvStorage),
-      version: 2,
-      version: 3,
+      version: 4,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<PreferencesState>;
         
@@ -313,6 +314,14 @@ export const usePreferencesStore = create<PreferencesState>()(
           state.adultContentEnabled = false;
           state.blurSensitiveMedia = false;
           state.hasSeenAdultPrompt = true;
+        }
+
+        if (version < 4) {
+          if (state.selectedContentTypes) {
+            state.selectedContentTypes = state.selectedContentTypes.map(
+              (t) => (t === ("porn" as ContentType) ? "adult" : t)
+            );
+          }
         }
         
         return state as PreferencesState;

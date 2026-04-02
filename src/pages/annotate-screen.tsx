@@ -49,7 +49,7 @@ import {
 
 const CONTENT_WARNING_OPTIONS: { value: string; label: string }[] = [
   { value: "sensitive", label: "Sensitive" },
-  { value: "porn", label: "Porn" },
+  { value: "adult", label: "Adult" },
   { value: "violence", label: "Violence" },
   { value: "gore", label: "Gore" },
   { value: "death", label: "Death" },

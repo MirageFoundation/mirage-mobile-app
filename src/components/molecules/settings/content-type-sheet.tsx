@@ -94,9 +94,9 @@ export const ContentTypeSheet = forwardRef<
     [onToggle, selectedTypes, setBlurSensitiveMedia],
   );
 
-  const NON_PORN_TAGS = ["sensitive", "violence", "gore", "death"] as const;
-  const isAllSelected = NON_PORN_TAGS.every((t) => selectedTypes.includes(t));
-  const isNoneSelected = selectedTypes.length === 0 || (selectedTypes.length === 1 && selectedTypes.includes("porn"));
+  const NON_ADULT_TAGS = ["sensitive", "violence", "gore", "death"] as const;
+  const isAllSelected = NON_ADULT_TAGS.every((t) => selectedTypes.includes(t));
+  const isNoneSelected = selectedTypes.length === 0 || (selectedTypes.length === 1 && selectedTypes.includes("adult"));
 
   const isIndividualSelected = (type: ContentType) => {
     return selectedTypes.includes(type);

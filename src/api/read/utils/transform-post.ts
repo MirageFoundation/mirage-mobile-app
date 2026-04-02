@@ -70,9 +70,9 @@ function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" | "youtube"
 function mapTagToContentWarning(tag: string): ContentWarningType | null {
   const tagMap: Record<string, ContentWarningType> = {
     sensitive: "sensitive",
-    adult: "porn",
+    adult: "adult",
     nsfw: "nsfw",
-    porn: "porn",
+    porn: "adult",
     violence: "violence",
     gore: "gore",
     death: "death",

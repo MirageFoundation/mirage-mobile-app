@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 119
+                          update 120
                         </Text>
                         <Text
                           style={{
@@ -781,7 +781,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           happening on sticker upload and fixed, edit username
                           screen UI updated, changing username reflects
                           immediately,changed ui of edit username button on
-                          profile tab, added edit username option in settings
+                          profile tab, added edit username option in settings,
+                          added a note for subscriber having anon prefix in
+                          username, porn to adult migration
                         </Text>
                       </>
                     )}
@@ -822,7 +824,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 119
+                          update 120
                         </Text>
                         <Text
                           style={{
@@ -840,7 +842,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           happening on sticker upload and fixed, edit username
                           screen UI updated, changing username reflects
                           immediately,changed ui of edit username button on
-                          profile tab, added edit username option in settings
+                          profile tab, added edit username option in settings,
+                          added a note for subscriber having anon prefix in
+                          username, porn to adult migration
                         </Text>
                       </>
                     )}

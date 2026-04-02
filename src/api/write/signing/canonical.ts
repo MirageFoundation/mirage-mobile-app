@@ -209,7 +209,7 @@ export interface PostParams extends BaseParams {
   title: string;
   /** Post content */
   content: string;
-  /** Content tag: "", "sensitive", "porn", "gore", "violence", "death" */
+  /** Content tag: "", "sensitive", "adult", "gore", "violence", "death" */
   tag: string;
   /** Media URLs */
   media?: string[];

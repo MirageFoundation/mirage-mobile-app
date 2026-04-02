@@ -104,7 +104,7 @@ export function SettingsScreen() {
 
   const [showMatureConfirm, setShowMatureConfirm] = useState(false);
 
-  const matureContentEnabled = selectedContentTypes.includes("porn") || selectedContentTypes.includes("all");
+  const matureContentEnabled = selectedContentTypes.includes("adult") || selectedContentTypes.includes("all");
 
   const handleMatureToggle = useCallback((value: boolean) => {
     if (value) {
@@ -115,7 +115,7 @@ export function SettingsScreen() {
   }, [setSelectedContentTypes]);
 
   const handleConfirmMature = useCallback(() => {
-    setSelectedContentTypes(["sensitive", "porn", "violence", "gore", "death"]);
+    setSelectedContentTypes(["sensitive", "adult", "violence", "gore", "death"]);
     setBlurSensitiveMedia(true);
     setShowMatureConfirm(false);
   }, [setSelectedContentTypes, setBlurSensitiveMedia]);
@@ -169,10 +169,10 @@ const handleApiServerChange = useCallback(
 
   // Get display labels
  const getContentTypeLabel = () => {
-   const filtered = selectedContentTypes.filter((t) => t !== "porn");
-   const NON_PORN_TAGS: string[] = ["sensitive", "violence", "gore", "death"];
-   const allNonPornSelected = NON_PORN_TAGS.every((t) => filtered.includes(t as any));
-   if (allNonPornSelected) return "All";
+   const filtered = selectedContentTypes.filter((t) => t !== "adult");
+   const NON_ADULT_TAGS: string[] = ["sensitive", "violence", "gore", "death"];
+   const allNonAdultSelected = NON_ADULT_TAGS.every((t) => filtered.includes(t as any));
+   if (allNonAdultSelected) return "All";
     if (filtered.length === 0) return "None";
    if (filtered.length === 1) {
      return (

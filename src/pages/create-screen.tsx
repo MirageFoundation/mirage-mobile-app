@@ -81,7 +81,7 @@ function looksLikeUrlWithoutProtocol(text: string): boolean {
 
 const CONTENT_WARNING_OPTIONS: { value: ContentTag; label: string }[] = [
   { value: "sensitive", label: "Sensitive" },
-  { value: "porn", label: "Porn" },
+  { value: "adult", label: "Adult" },
   { value: "violence", label: "Violence" },
   { value: "gore", label: "Gore" },
   { value: "death", label: "Death" },
