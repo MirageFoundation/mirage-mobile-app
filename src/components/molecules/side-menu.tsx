@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 118
+                          update 119
                         </Text>
                         <Text
                           style={{
@@ -773,19 +773,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          send mirage as gift ui created and integrated, send
-                          subscription as gift ui created and integrated, inbox
-                          updated to show correct message for donation recieved
-                          subscription recieved and someone followed you,
-                          pressing on msg of donation recieved in inbox
-                          navigates us to profile tab, pressing on subscription
-                          recieved in inbox navigates user to profile tab in ios
-                          and to subscription screen on android, pressing on
-                          follow msg in inbox navigates you to the user profile
-                          who followed u, same video getting uploaded twice from
-                          external shared link to create post screen fix,
-                          reduced the time of showing success state on pow
-                          status popup, sentry issue RN 2C,24 and 30 handled
+                          change the ui of new unread msg in inbox, video not
+                          getting uploaded fix
                         </Text>
                       </>
                     )}
@@ -826,7 +815,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 118
+                          update 119
                         </Text>
                         <Text
                           style={{
@@ -836,19 +825,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          send mirage as gift ui created and integrated, send
-                          subscription as gift ui created and integrated, inbox
-                          updated to show correct message for donation recieved
-                          subscription recieved and someone followed you,
-                          pressing on msg of donation recieved in inbox
-                          navigates us to profile tab, pressing on subscription
-                          recieved in inbox navigates user to profile tab in ios
-                          and to subscription screen on android, pressing on
-                          follow msg in inbox navigates you to the user profile
-                          who followed u, same video getting uploaded twice from
-                          external shared link to create post screen fix,
-                          reduced the time of showing success state on pow
-                          status popup, sentry issue RN 2C,24 and 30 handled
+                          change the ui of new unread msg in inbox, video not
+                          getting uploaded fix
                         </Text>
                       </>
                     )}
