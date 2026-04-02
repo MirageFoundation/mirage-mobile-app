@@ -583,20 +583,25 @@ export function CreateScreen() {
               const response = await fetch(vidUrl, {
                 headers: {
                   "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
-                  "Referer": "https://www.reddit.com/",
+                  "Referer": meta.domain ? `https://${meta.domain}/` : "https://www.reddit.com/",
                   "Accept": "*/*",
                 },
               });
               const contentType = response.headers.get("content-type") ?? "";
               const resolvedUrl = response.url;
 
-              const isVideoContent = contentType.startsWith("video/") || contentType.startsWith("application/octet-stream") || contentType === "image/gif";
-              const hasVideoExtension = /\.(mp4|mov|webm|m3u8|ts|gif)(\?|#|$)/i.test(resolvedUrl || vidUrl);
+              const isVideoContent = contentType.startsWith("video/") || contentType.startsWith("application/octet-stream") || contentType.startsWith("binary/octet-stream") || contentType === "image/gif" || contentType.startsWith("application/mp4") || contentType.startsWith("application/x-mpegurl");
+              const videoExtRe = /\.(mp4|mov|webm|m3u8|ts|gif)(\?|#|$)/i;
+              const hasVideoExtension = videoExtRe.test(resolvedUrl) || videoExtRe.test(vidUrl);
 
               if (!response.ok) {
                 Sentry.addBreadcrumb({ category: "share-intent", message: "Video download failed", data: { status: response.status, vidUrl, contentType }, level: "warning" });
               } else if (!isVideoContent && !hasVideoExtension) {
-                Sentry.addBreadcrumb({ category: "share-intent", message: "Video URL returned non-video content", data: { vidUrl, contentType, resolvedUrl }, level: "warning" });
+                Sentry.captureMessage("Video URL returned non-video content", {
+                  level: "warning",
+                  tags: { feature: "share-intent", domain: meta.domain },
+                  extra: { vidUrl, contentType, resolvedUrl },
+                });
               }
 
               if (response.ok && (isVideoContent || hasVideoExtension)) {
