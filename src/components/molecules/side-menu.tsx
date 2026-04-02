@@ -792,7 +792,19 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           notification tap now shows the new msgs in inbox
                           immediately,username taken issue on edit username fix,
                           2 or more agent modified post touching each other fix,
-                          spcae between paragraph increased in markdown
+                          spcae between paragraph increased in markdown, change
+                          the ui of new unread msg in inbox, video not getting
+                          uploaded fix, better sentry logs added for comment
+                          posting error video not getting extracted error, some
+                          UI change in inbox msgs, comment failed error
+                          investigated and understood the failure happening on
+                          sticker upload and fixed, edit username screen UI
+                          updated, changing username reflects immediately,
+                          changed ui of edit username button on profile tab,
+                          added edit username option in settings, added a note
+                          for subscriber having anon prefix in username, porn to
+                          adult migration, reduced the number of videos to play
+                          off screen on android to fix the out of memory crash
                         </Text>
                       </>
                     )}
@@ -862,7 +874,19 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           notification tap now shows the new msgs in inbox
                           immediately,username taken issue on edit username fix,
                           2 or more agent modified post touching each other fix,
-                          spcae between paragraph increased in markdown
+                          spcae between paragraph increased in markdown, change
+                          the ui of new unread msg in inbox, video not getting
+                          uploaded fix, better sentry logs added for comment
+                          posting error video not getting extracted error, some
+                          UI change in inbox msgs, comment failed error
+                          investigated and understood the failure happening on
+                          sticker upload and fixed, edit username screen UI
+                          updated, changing username reflects immediately,
+                          changed ui of edit username button on profile tab,
+                          added edit username option in settings, added a note
+                          for subscriber having anon prefix in username, porn to
+                          adult migration, reduced the number of videos to play
+                          off screen on android to fix the out of memory crash
                         </Text>
                       </>
                     )}
