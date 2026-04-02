@@ -783,7 +783,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           immediately,changed ui of edit username button on
                           profile tab, added edit username option in settings,
                           added a note for subscriber having anon prefix in
-                          username, porn to adult migration
+                          username, porn to adult migration, reduced the number
+                          of videos to play off screen on android to fix the out
+                          of memory crash
                         </Text>
                       </>
                     )}
@@ -844,7 +846,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           immediately,changed ui of edit username button on
                           profile tab, added edit username option in settings,
                           added a note for subscriber having anon prefix in
-                          username, porn to adult migration
+                          username, porn to adult migration, reduced the number
+                          of videos to play off screen on android to fix the out
+                          of memory crash
                         </Text>
                       </>
                     )}

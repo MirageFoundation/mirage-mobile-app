@@ -589,111 +589,124 @@ export function CreateScreen() {
             if (mediaCount >= 10) break;
             const vidUrl = videosToDownload[vi];
             try {
-              const response = await fetch(vidUrl, {
+              const ext = vidUrl.match(/\.(mp4|mov|webm|m3u8|gif)/i)?.[1] ?? "mp4";
+              const destFile = new ExpoFile(Paths.cache, `shared_link_video_${Date.now()}_${vi}.${ext}`);
+              const downloadedFile = await ExpoFile.downloadFileAsync(vidUrl, destFile, {
                 headers: {
                   "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
                   "Referer": meta.domain ? `https://${meta.domain}/` : "https://www.reddit.com/",
                   "Accept": "*/*",
                 },
               });
-              const contentType = response.headers.get("content-type") ?? "";
-              const resolvedUrl = response.url;
 
-              const isVideoContent = contentType.startsWith("video/") || contentType.startsWith("application/octet-stream") || contentType.startsWith("binary/octet-stream") || contentType === "image/gif" || contentType.startsWith("application/mp4") || contentType.startsWith("application/x-mpegurl");
-              const videoExtRe = /\.(mp4|mov|webm|m3u8|ts|gif)(\?|#|$)/i;
-              const hasVideoExtension = videoExtRe.test(resolvedUrl) || videoExtRe.test(vidUrl);
-
-              if (!response.ok) {
-                Sentry.addBreadcrumb({ category: "share-intent", message: "Video download failed", data: { status: response.status, vidUrl, contentType }, level: "warning" });
-              } else if (!isVideoContent && !hasVideoExtension) {
-                Sentry.captureMessage("Video URL returned non-video content", {
+              const fileSize = downloadedFile.size ?? 0;
+              if (fileSize <= 1000) {
+                Sentry.captureMessage("Share intent: video download too small", {
                   level: "warning",
                   tags: { feature: "share-intent", domain: meta.domain },
-                  extra: { vidUrl, contentType, resolvedUrl },
+                  extra: { vidUrl, fileSize },
                 });
+                try { downloadedFile.delete(); } catch {}
+                continue;
               }
 
-              if (response.ok && (isVideoContent || hasVideoExtension)) {
-                const ext = contentType.includes("mp4") ? "mp4"
-                  : contentType.includes("webm") ? "webm"
-                  : contentType.includes("quicktime") ? "mov"
-                  : contentType === "image/gif" ? "gif"
-                  : (resolvedUrl || vidUrl).match(/\.(mp4|mov|webm|m3u8|gif)/i)?.[1] ?? "mp4";
-                const destFile = new ExpoFile(Paths.cache, `shared_link_video_${Date.now()}_${vi}.${ext}`);
-                const arrayBuffer = await response.arrayBuffer();
-                if (arrayBuffer.byteLength <= 1000) {
-                  Sentry.captureMessage("Share intent: video response body too small", {
-                    level: "warning",
-                    tags: { feature: "share-intent", domain: meta.domain },
-                    extra: { vidUrl, contentType, resolvedUrl, byteLength: arrayBuffer.byteLength },
-                  });
-                }
-                if (arrayBuffer.byteLength > 1000) {
-                  let audioMerged = false;
-                  if (vi === 0) {
-                    const audioUrlsToTry = meta.audioUrls?.length > 0
-                      ? meta.audioUrls
-                      : meta.audioUrl
-                        ? [meta.audioUrl]
-                        : [];
-                    if (audioUrlsToTry.length > 0) {
-                      for (const tryAudioUrl of audioUrlsToTry) {
-                        if (audioMerged) break;
-                        try {
-                          const audioRes = await fetch(tryAudioUrl, {
-                            headers: {
-                              "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
-                              "Referer": "https://www.reddit.com/",
-                              "Accept": "*/*",
-                            },
-                          });
-                          if (!audioRes.ok) continue;
-                          const audioBuffer = await audioRes.arrayBuffer();
-                          if (audioBuffer.byteLength < 500) continue;
-                          const audioContentType = audioRes.headers.get("content-type") ?? "";
-                          if (audioContentType.includes("text/html") || audioContentType.includes("text/xml")) continue;
-                          const mergedBuffer = await mergeAudioVideo(arrayBuffer, audioBuffer);
-                          const mergedFile = new ExpoFile(Paths.cache, `shared_link_merged_${Date.now()}_${vi}.mp4`);
-                          mergedFile.write(new Uint8Array(mergedBuffer));
-                          let finalUri = mergedFile.uri;
-                          try {
-                            const { sound } = await Audio.Sound.createAsync({ uri: mergedFile.uri });
-                            const status = await sound.getStatusAsync();
-                            await sound.unloadAsync();
-                            if (status.isLoaded && status.durationMillis && status.durationMillis > 59000) {
-                              finalUri = await trimToMaxDuration(mergedFile.uri, status.durationMillis);
-                            }
-                          } catch {}
-                          setAttachment("video", finalUri);
-                          startVideoUpload(finalUri);
-                          videoDownloaded = true;
-                          mediaCount++;
-                          audioMerged = true;
-                          Sentry.addBreadcrumb({ category: "share-intent", message: "Audio+video merged", level: "info" });
-                          break;
-                        } catch (mergeErr) {
-                          Sentry.addBreadcrumb({ category: "share-intent", message: "Audio merge attempt failed", data: { error: String(mergeErr) }, level: "warning" });
-                        }
-                      }
-                    }
-                  }
-                  if (!audioMerged) {
-                    destFile.write(new Uint8Array(arrayBuffer));
-                    let finalUri = destFile.uri;
+              const tryMergeAudioVideo = async (videoFile: any, audioUrlsToTry: string[], viIdx: number): Promise<string | null> => {
+                for (const tryAudioUrl of audioUrlsToTry) {
+                  try {
+                    const audioFile = new ExpoFile(Paths.cache, `shared_link_audio_${Date.now()}_${viIdx}.mp4`);
+                    const downloadedAudio = await ExpoFile.downloadFileAsync(tryAudioUrl, audioFile, {
+                      headers: {
+                        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+                        "Referer": "https://www.reddit.com/",
+                        "Accept": "*/*",
+                      },
+                    });
+                    const audioSize = downloadedAudio.size ?? 0;
+                    if (audioSize < 500) { try { downloadedAudio.delete(); } catch {} continue; }
+                    const videoBytes = await videoFile.bytes();
+                    const audioBytes = await downloadedAudio.bytes();
+                    const mergedBuffer = await mergeAudioVideo(videoBytes.buffer as ArrayBuffer, audioBytes.buffer as ArrayBuffer);
+                    const mergedFile = new ExpoFile(Paths.cache, `shared_link_merged_${Date.now()}_${viIdx}.mp4`);
+                    mergedFile.write(new Uint8Array(mergedBuffer));
+                    try { downloadedAudio.delete(); } catch {}
+                    let finalUri = mergedFile.uri;
                     try {
-                      const { sound } = await Audio.Sound.createAsync({ uri: destFile.uri });
+                      const { sound } = await Audio.Sound.createAsync({ uri: mergedFile.uri });
                       const status = await sound.getStatusAsync();
                       await sound.unloadAsync();
                       if (status.isLoaded && status.durationMillis && status.durationMillis > 59000) {
-                        finalUri = await trimToMaxDuration(destFile.uri, status.durationMillis);
+                        finalUri = await trimToMaxDuration(mergedFile.uri, status.durationMillis);
                       }
                     } catch {}
-                    setAttachment("video", finalUri);
-                    startVideoUpload(finalUri);
-                    videoDownloaded = true;
-                    mediaCount++;
+                    return finalUri;
+                  } catch (mergeErr) {
+                    Sentry.addBreadcrumb({ category: "share-intent", message: "Audio merge attempt failed", data: { error: String(mergeErr) }, level: "warning" });
                   }
                 }
+                return null;
+              };
+
+              let audioMerged = false;
+              if (vi === 0) {
+                const audioUrlsToTry = meta.audioUrls?.length > 0
+                  ? meta.audioUrls
+                  : meta.audioUrl
+                    ? [meta.audioUrl]
+                    : [];
+                if (audioUrlsToTry.length > 0) {
+                  let mergedUri = await tryMergeAudioVideo(downloadedFile, audioUrlsToTry, vi);
+                  if (!mergedUri && fileSize > 50 * 1024 * 1024) {
+                    Sentry.addBreadcrumb({ category: "share-intent", message: "Full-res merge failed (likely OOM), trying 360p fallback", data: { fileSize, vidUrl }, level: "warning" });
+                    const lowerResUrl = vidUrl
+                      .replace(/CMAF_\d+/i, "CMAF_360")
+                      .replace(/DASH_\d+/i, "DASH_360");
+                    if (lowerResUrl !== vidUrl) {
+                      try {
+                        const lrFile = new ExpoFile(Paths.cache, `shared_link_video_lr_${Date.now()}_${vi}.mp4`);
+                        const lrDownloaded = await ExpoFile.downloadFileAsync(lowerResUrl, lrFile, {
+                          headers: {
+                            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+                            "Referer": meta.domain ? `https://${meta.domain}/` : "https://www.reddit.com/",
+                            "Accept": "*/*",
+                          },
+                        });
+                        if ((lrDownloaded.size ?? 0) > 1000) {
+                          mergedUri = await tryMergeAudioVideo(lrDownloaded, audioUrlsToTry, vi);
+                          if (mergedUri) {
+                            try { downloadedFile.delete(); } catch {}
+                          } else {
+                            try { lrDownloaded.delete(); } catch {}
+                          }
+                        } else {
+                          try { lrDownloaded.delete(); } catch {}
+                        }
+                      } catch {}
+                    }
+                  }
+                  if (mergedUri) {
+                    setAttachment("video", mergedUri);
+                    startVideoUpload(mergedUri);
+                    videoDownloaded = true;
+                    mediaCount++;
+                    audioMerged = true;
+                    Sentry.addBreadcrumb({ category: "share-intent", message: "Audio+video merged", data: { fileSize }, level: "info" });
+                  }
+                }
+              }
+              if (!audioMerged) {
+                let finalUri = downloadedFile.uri;
+                try {
+                  const { sound } = await Audio.Sound.createAsync({ uri: downloadedFile.uri });
+                  const status = await sound.getStatusAsync();
+                  await sound.unloadAsync();
+                  if (status.isLoaded && status.durationMillis && status.durationMillis > 59000) {
+                    finalUri = await trimToMaxDuration(downloadedFile.uri, status.durationMillis);
+                  }
+                } catch {}
+                setAttachment("video", finalUri);
+                startVideoUpload(finalUri);
+                videoDownloaded = true;
+                mediaCount++;
               }
             } catch (vidErr) {
               Sentry.captureMessage("Share intent: video download threw exception", {
