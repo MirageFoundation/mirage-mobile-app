@@ -576,6 +576,15 @@ export function CreateScreen() {
             )
           ).slice(0, 10);
 
+          if (videosToDownload.length === 0 && meta.images?.length > 0) {
+            Sentry.addBreadcrumb({
+              category: "share-intent",
+              message: "No video URLs found in link meta, using images",
+              data: { domain: meta.domain, imageCount: meta.images.length, sharedUrl: shareIntent.webUrl },
+              level: "info",
+            });
+          }
+
           for (let vi = 0; vi < videosToDownload.length; vi++) {
             if (mediaCount >= 10) break;
             const vidUrl = videosToDownload[vi];
@@ -612,6 +621,13 @@ export function CreateScreen() {
                   : (resolvedUrl || vidUrl).match(/\.(mp4|mov|webm|m3u8|gif)/i)?.[1] ?? "mp4";
                 const destFile = new ExpoFile(Paths.cache, `shared_link_video_${Date.now()}_${vi}.${ext}`);
                 const arrayBuffer = await response.arrayBuffer();
+                if (arrayBuffer.byteLength <= 1000) {
+                  Sentry.captureMessage("Share intent: video response body too small", {
+                    level: "warning",
+                    tags: { feature: "share-intent", domain: meta.domain },
+                    extra: { vidUrl, contentType, resolvedUrl, byteLength: arrayBuffer.byteLength },
+                  });
+                }
                 if (arrayBuffer.byteLength > 1000) {
                   let audioMerged = false;
                   if (vi === 0) {
@@ -680,13 +696,25 @@ export function CreateScreen() {
                 }
               }
             } catch (vidErr) {
-              Sentry.addBreadcrumb({
-                category: "share-intent",
-                message: "Failed to download OG video",
-                data: { video: vidUrl, error: String(vidErr) },
+              Sentry.captureMessage("Share intent: video download threw exception", {
                 level: "warning",
+                tags: { feature: "share-intent", domain: meta.domain },
+                extra: { video: vidUrl, error: String(vidErr) },
               });
             }
+          }
+
+          if (!videoDownloaded && videosToDownload.length > 0) {
+            Sentry.captureMessage("Share intent: video URLs found but all downloads failed, falling back to images", {
+              level: "warning",
+              tags: { feature: "share-intent", domain: meta.domain },
+              extra: {
+                videoUrls: videosToDownload.slice(0, 3),
+                videoCount: videosToDownload.length,
+                imageCount: meta.images?.length ?? 0,
+                sharedUrl: shareIntent.webUrl,
+              },
+            });
           }
 
           if (!videoDownloaded) {
