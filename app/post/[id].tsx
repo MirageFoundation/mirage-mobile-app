@@ -5,6 +5,7 @@ import {
   useUserFollowed,
   uploadImageAndGetUrl,
 } from "@/src/api/read";
+import * as Sentry from "@sentry/react-native";
 import { parseApiError } from "@/src/utils/parse-api-error";
 import { getComments } from "@/src/api/read/endpoints/posts";
 import { queryKeys } from "@/src/api/read/query-keys";
@@ -1169,7 +1170,9 @@ export default function PostDetailScreen() {
         execute: async () => {
           let mediaUrl: string | null = null;
           if (capturedImageUri) {
-            mediaUrl = await uploadImageAndGetUrl(capturedImageUri);
+            mediaUrl = capturedImageUri.startsWith("http")
+              ? capturedImageUri
+              : await uploadImageAndGetUrl(capturedImageUri);
           } else if (capturedGifUrl) {
             mediaUrl = capturedGifUrl;
           }
@@ -1223,7 +1226,17 @@ export default function PostDetailScreen() {
             refetchCommentsRef.current?.(true);
           }, 2000);
         },
-        onError: () => {},
+        onError: (err) => {
+          Sentry.captureException(err, {
+            tags: { feature: "comment", operation: "submit_comment" },
+            extra: {
+              parentId,
+              hadImage: !!capturedImageUri,
+              hadGif: !!capturedGifUrl,
+              contentLength: capturedText.length,
+            },
+          });
+        },
         onRollback: () => {
           removeOptimisticComment(id, optimisticCommentId);
           setLocalPostUpdates((prev) => ({

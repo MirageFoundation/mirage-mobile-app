@@ -774,7 +774,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           weight="light"
                         >
                           change the ui of new unread msg in inbox, video not
-                          getting uploaded fix
+                          getting uploaded fix, better sentry logs added for
+                          comment posting error video not getting extracted
+                          error, some UI change in inbox msgs
                         </Text>
                       </>
                     )}
@@ -826,7 +828,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           weight="light"
                         >
                           change the ui of new unread msg in inbox, video not
-                          getting uploaded fix
+                          getting uploaded fix, better sentry logs added for
+                          comment posting error video not getting extracted
+                          error, some UI change in inbox msgs
                         </Text>
                       </>
                     )}
