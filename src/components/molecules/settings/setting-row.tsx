@@ -8,6 +8,8 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 type SettingRowBaseProps = {
   /** Icon name from Ionicons */
   icon?: string;
+  /** Custom icon element (overrides icon prop) */
+  iconElement?: React.ReactNode;
   /** Setting title */
   title: string;
   /** Optional subtitle/description */
@@ -46,7 +48,7 @@ export type SettingRowProps =
 
 export function SettingRow(props: SettingRowProps) {
   const { theme } = useUnistyles();
-  const { icon, title, subtitle, type } = props;
+  const { icon, title, subtitle, type, iconElement } = props;
 
   const isDisabled = type === "toggle" && props.disabled;
 
@@ -69,7 +71,9 @@ export function SettingRow(props: SettingRowProps) {
       style={({ pressed }) => [styles.container, pressed && !isDisabled && { opacity: 0.7 }, isDisabled && { opacity: 0.4 }]}
     >
       <Box direction="row" alignItems="flex-start" gap="md" flex>
-        {icon && (
+        {iconElement ? (
+          <Box style={styles.icon}>{iconElement}</Box>
+        ) : icon ? (
           <Ionicons
             name={icon as any}
             size={20}
@@ -81,7 +85,7 @@ export function SettingRow(props: SettingRowProps) {
               },
             ]}
           />
-        )}
+        ) : null}
         <Box flex gap="xxs">
           <Text
             size="md"

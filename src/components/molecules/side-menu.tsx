@@ -778,7 +778,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           comment posting error video not getting extracted
                           error, some UI change in inbox msgs, comment failed
                           error investigated and understood the failure
-                          happening on sticker upload and fixed
+                          happening on sticker upload and fixed, edit username
+                          screen UI updated, changing username reflects
+                          immediately,changed ui of edit username button on
+                          profile tab, added edit username option in settings
                         </Text>
                       </>
                     )}
@@ -834,7 +837,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           comment posting error video not getting extracted
                           error, some UI change in inbox msgs, comment failed
                           error investigated and understood the failure
-                          happening on sticker upload and fixed
+                          happening on sticker upload and fixed, edit username
+                          screen UI updated, changing username reflects
+                          immediately,changed ui of edit username button on
+                          profile tab, added edit username option in settings
                         </Text>
                       </>
                     )}

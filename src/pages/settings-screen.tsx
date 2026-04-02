@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/react-native";
-import { EvilIcons } from "@expo/vector-icons";
+import { EvilIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useRef, useState } from "react";
 import { Pressable, SectionList, View } from "react-native";
@@ -211,8 +211,31 @@ const handleApiServerChange = useCallback(
     }
   };
 
+  const handleEditUsername = useCallback(() => {
+    triggerHaptic("light");
+    router.push("/change-username");
+  }, [router]);
+
   // Section data
   const sections: Section[] = [
+    {
+      title: "Account",
+      data: [
+        {
+          id: "edit-username",
+          component: (
+            <SettingRow
+              type="value"
+              iconElement={<MaterialCommunityIcons name="account-edit-outline" size={20} color={theme.colors.text.default} />}
+              title="Edit Username"
+              subtitle="Change your display name"
+              rightText=""
+              onPress={handleEditUsername}
+            />
+          ),
+        },
+      ],
+    },
     {
       title: "Content",
       data: [
