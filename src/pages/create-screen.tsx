@@ -656,6 +656,7 @@ export function CreateScreen() {
                 if (audioUrlsToTry.length > 0) {
                   let mergedUri = await tryMergeAudioVideo(downloadedFile, audioUrlsToTry, vi);
                   if (!mergedUri && fileSize > 50 * 1024 * 1024) {
+                    Sentry.addBreadcrumb({ category: "share-intent", message: "Full-res merge failed (likely OOM), trying 360p fallback", data: { fileSize, vidUrl }, level: "warning" });
                     const lowerResUrl = vidUrl
                       .replace(/CMAF_\d+/i, "CMAF_360")
                       .replace(/DASH_\d+/i, "DASH_360");
@@ -688,7 +689,7 @@ export function CreateScreen() {
                     videoDownloaded = true;
                     mediaCount++;
                     audioMerged = true;
-                    Sentry.addBreadcrumb({ category: "share-intent", message: "Audio+video merged", level: "info" });
+                    Sentry.addBreadcrumb({ category: "share-intent", message: "Audio+video merged", data: { fileSize }, level: "info" });
                   }
                 }
               }
