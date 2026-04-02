@@ -148,7 +148,10 @@ export function LoggedOutHome() {
 
           <Pressable
             onPress={() => Linking.openURL("https://mirage.foundation")
-              .catch((e: Error) => Alert.alert("Couldn't open link", e.message))}
+              .catch((e: Error) => {
+                Sentry.captureException(e, { tags: { feature: "logged-out-home", operation: "open-url" } });
+                Alert.alert("Couldn't open link", e.message);
+              })}
           >
             <Text
               style={[styles.learnMore, { color: theme.colors.text.default }]}
@@ -296,7 +299,10 @@ export function LoggedOutHome() {
                   borderColor: theme.colors.border.subtle,
                 },
               ]}
-              onPress={() => router.push("/(auth)/login")}
+              onPress={() => {
+                triggerHaptic("selection");
+                router.push("/(auth)/login");
+              }}
             >
               <Text style={styles.signInButtonText}>Sign In</Text>
             </Pressable>

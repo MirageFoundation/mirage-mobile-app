@@ -18,6 +18,7 @@ import { create } from "zustand";
 import { AppState, InteractionManager } from "react-native";
 import * as Sentry from "@sentry/react-native";
 import * as Network from "expo-network";
+import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 import { cancelPow, isPowCancelled } from "@/src/wallet";
 
 export type PowActionType =
@@ -73,7 +74,7 @@ type PowQueueStore = PowQueueState & PowQueueActions;
 const RESULT_DISPLAY_DELAY_MS = 800;
 const SUCCESS_SYNC_DELAY_MS = 500;
 const NATIVE_CLEANUP_TIMEOUT_MS = 500;
-const SUCCESS_OVERLAY_DURATION_MS = 2000;
+const SUCCESS_OVERLAY_DURATION_MS = 500;
 const MAX_NETWORK_RETRIES = 3;
 const NETWORK_RETRY_BACKOFF_MS = 2000;
 
@@ -372,10 +373,9 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
         wasCancelled = true;
       } else {
         const err = error instanceof Error ? error : new Error(String(error));
-        const serverMsg = (error as any)?.response?.data?.error;
         const displayMsg = isNetworkError(error)
           ? "No internet connection"
-          : serverMsg || err.message || "Something went wrong";
+          : getApiErrorMessage(error);
         if (!isNetworkError(error) && !isPowCancelled(error)) {
           Sentry.captureException(err, {
             tags: { action: "pow_action", pow_type: nextAction.type },

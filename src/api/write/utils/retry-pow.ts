@@ -7,6 +7,7 @@
  */
 
 import * as Sentry from "@sentry/react-native";
+import { parseApiError } from "@/src/utils/parse-api-error";
 
 const MAX_POW_RETRIES = 3;
 
@@ -23,16 +24,16 @@ export async function withPowRetry<T>(
     try {
       return await operation();
     } catch (error: any) {
-      const errorMsg = error?.response?.data?.error || error?.message || "";
-      const isRetryable =
-        errorMsg.includes("insufficient pow") ||
-        errorMsg.includes("invalid last_block_hash") ||
-        errorMsg.includes("stale");
-      if (isRetryable && attempt < MAX_POW_RETRIES) {
+      const parsed = parseApiError(error);
+      const errorCode = parsed.errorCode;
+      const isPowRetryable =
+        errorCode === "insufficient_pow_precheck" ||
+        errorCode === "invalid_last_block_hash";
+      if (isPowRetryable && attempt < MAX_POW_RETRIES) {
         Sentry.addBreadcrumb({
           category: "pow-retry",
           message: `${operationName} PoW rejected, retrying`,
-          data: { attempt: attempt + 1, maxAttempts: MAX_POW_RETRIES + 1, errorMsg },
+          data: { attempt: attempt + 1, maxAttempts: MAX_POW_RETRIES + 1, errorCode },
           level: "warning",
         });
         lastError = error;

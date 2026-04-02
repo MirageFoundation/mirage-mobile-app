@@ -10,6 +10,7 @@ type VoteOverride = {
 
 type CommentCountOverride = {
   commentDelta: number;
+  baseComments: number;
 };
 
 type HomePostCardHandlers = {
@@ -73,8 +74,8 @@ type HomePostCardState = {
  setVideoViewability: (feedScreen: string, visibleIds: Set<string>, activeId: string | null) => void;
  setVoteOverride: (postId: string, override: VoteOverride) => void;
  clearVoteOverride: (postId: string) => void;
- incrementCommentCount: (postId: string) => void;
- decrementCommentCount: (postId: string) => void;
+ incrementCommentCount: (postId: string, currentComments: number) => void;
+ decrementCommentCount: (postId: string, currentComments: number) => void;
  clearCommentCountOverride: (postId: string) => void;
  setHandlers: (handlers: HomePostCardHandlers) => void;
  setShareServer: (server: ShareServer) => void;
@@ -180,25 +181,43 @@ setVoteOverride: (postId, override) =>
       const { [postId]: _, ...rest } = state.voteOverrides;
       return { voteOverrides: rest };
     }),
- incrementCommentCount: (postId) =>
+ incrementCommentCount: (postId, currentComments) =>
    set((state) => {
      const current = state.commentCountOverrides[postId];
-     const currentDelta = current?.commentDelta ?? 0;
+     const shouldRebase = !current || current.baseComments !== currentComments;
+     const baseComments = shouldRebase ? currentComments : current.baseComments;
+     const currentDelta = shouldRebase ? 0 : current.commentDelta;
+     const nextDelta = currentDelta + 1;
+
+     if (nextDelta === 0) {
+       const { [postId]: _, ...rest } = state.commentCountOverrides;
+       return { commentCountOverrides: rest };
+     }
+
      return {
        commentCountOverrides: {
          ...state.commentCountOverrides,
-         [postId]: { commentDelta: currentDelta + 1 },
+         [postId]: { commentDelta: nextDelta, baseComments },
        },
      };
    }),
- decrementCommentCount: (postId) =>
+ decrementCommentCount: (postId, currentComments) =>
    set((state) => {
      const current = state.commentCountOverrides[postId];
-     const currentDelta = current?.commentDelta ?? 0;
+     const shouldRebase = !current || current.baseComments !== currentComments;
+     const baseComments = shouldRebase ? currentComments : current.baseComments;
+     const currentDelta = shouldRebase ? 0 : current.commentDelta;
+     const nextDelta = currentDelta - 1;
+
+     if (nextDelta === 0) {
+       const { [postId]: _, ...rest } = state.commentCountOverrides;
+       return { commentCountOverrides: rest };
+     }
+
      return {
        commentCountOverrides: {
          ...state.commentCountOverrides,
-         [postId]: { commentDelta: currentDelta - 1 },
+         [postId]: { commentDelta: nextDelta, baseComments },
        },
      };
    }),

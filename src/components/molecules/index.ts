@@ -40,6 +40,14 @@ export {
   AwardPickerSheet,
   type AwardPickerSheetRef,
 } from "./award-picker-sheet";
+export {
+  GiftMirageSheet,
+  type GiftMirageSheetRef,
+} from "./gift-mirage-sheet";
+export {
+  GiftSubscriptionSheet,
+  type GiftSubscriptionSheetRef,
+} from "./gift-subscription-sheet";
 
 // Authentication & Onboarding
 export { AdultContentPopup } from "./adult-content-popup";

@@ -66,6 +66,7 @@ type SideMenuProps = {
   onTopics?: () => void;
   onAgents?: () => void;
   onInviteAndEarn?: () => void;
+  onReferrals?: () => void;
   onQuests?: () => void;
   onHelp?: () => void;
   onAbout?: () => void;
@@ -311,6 +312,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       onTopics,
       onAgents,
       onInviteAndEarn,
+      onReferrals,
       onQuests,
       onHelp,
       onAbout,
@@ -590,6 +592,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                     onPress={createHandler(onInviteAndEarn)}
                   />
                   <MenuItem
+                    iconName="people-outline"
+                    title="Referrals"
+                    subtitle="Share your link & track signups"
+                    onPress={createHandler(onReferrals)}
+                  />
+                  <MenuItem
                     iconName="trophy-outline"
                     title="Daily Quests"
                     subtitle="Complete tasks for rewards"
@@ -755,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 102
+                          update 118
                         </Text>
                         <Text
                           style={{
@@ -765,16 +773,19 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          pagination issue in feed not fetching the next pages
-                          fixed,account creation stuck on button loading
-                          fix,better sentry logs added in account creation,image
-                          not showing up in comment just created fixed, palm
-                          tree cut on login and account creation screen fix,
-                          made video sync through feed post details screen and
-                          full screen more quick and snappier, independent video
-                          sync through different feeds, sentry log RN-K error
-                          handling,sentry log REACT-NATIVE-F — N+1 API Call
-                          error fixed and handled,more sentry logs added
+                          send mirage as gift ui created and integrated, send
+                          subscription as gift ui created and integrated, inbox
+                          updated to show correct message for donation recieved
+                          subscription recieved and someone followed you,
+                          pressing on msg of donation recieved in inbox
+                          navigates us to profile tab, pressing on subscription
+                          recieved in inbox navigates user to profile tab in ios
+                          and to subscription screen on android, pressing on
+                          follow msg in inbox navigates you to the user profile
+                          who followed u, same video getting uploaded twice from
+                          external shared link to create post screen fix,
+                          reduced the time of showing success state on pow
+                          status popup, sentry issue RN 2C,24 and 30 handled
                         </Text>
                       </>
                     )}
@@ -815,7 +826,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 102
+                          update 118
                         </Text>
                         <Text
                           style={{
@@ -825,16 +836,19 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          pagination issue in feed not fetching the next pages
-                          fixed,account creation stuck on button loading
-                          fix,better sentry logs added in account creation,image
-                          not showing up in comment just created fixed, palm
-                          tree cut on login and account creation screen fix,
-                          made video sync through feed post details screen and
-                          full screen more quick and snappier, independent video
-                          sync through different feeds, sentry log RN-K error
-                          handling,sentry log REACT-NATIVE-F — N+1 API Call
-                          error fixed and handled,more sentry logs added
+                          send mirage as gift ui created and integrated, send
+                          subscription as gift ui created and integrated, inbox
+                          updated to show correct message for donation recieved
+                          subscription recieved and someone followed you,
+                          pressing on msg of donation recieved in inbox
+                          navigates us to profile tab, pressing on subscription
+                          recieved in inbox navigates user to profile tab in ios
+                          and to subscription screen on android, pressing on
+                          follow msg in inbox navigates you to the user profile
+                          who followed u, same video getting uploaded twice from
+                          external shared link to create post screen fix,
+                          reduced the time of showing success state on pow
+                          status popup, sentry issue RN 2C,24 and 30 handled
                         </Text>
                       </>
                     )}

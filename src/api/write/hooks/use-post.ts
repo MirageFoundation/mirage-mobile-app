@@ -559,21 +559,12 @@ export function useComment(options: UsePostOptions = {}) {
     },
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: ["comments"] });
-      await queryClient.cancelQueries({ queryKey: ["posts"] });
-      await queryClient.cancelQueries({ queryKey: ["user", "posts"] });
 
       const previousComments = queryClient.getQueriesData<CommentsResponse>({
         queryKey: ["comments"],
       }) as Array<[QueryKey, CommentsResponse | undefined]>;
-      const previousPosts = queryClient.getQueriesData({ queryKey: ["posts"] }) as Array<
-        [QueryKey, unknown]
-      >;
-      const previousUserPosts = queryClient.getQueriesData({
-        queryKey: ["user", "posts"],
-      }) as Array<[QueryKey, unknown]>;
 
       const optimisticCommentId = `optimistic-${Date.now()}`;
-      const affectedRootPostIds = new Set<string>();
 
       previousComments.forEach(([queryKey, queryData]) => {
         if (!queryData?.root) return;
@@ -586,8 +577,6 @@ export function useComment(options: UsePostOptions = {}) {
 
         if (!isTopLevelComment && !isReplyToNestedComment) return;
 
-        affectedRootPostIds.add(queryData.root.post_id);
-
         queryClient.setQueryData<CommentsResponse>(queryKey, {
           ...queryData,
           root: {
@@ -597,19 +586,8 @@ export function useComment(options: UsePostOptions = {}) {
         });
       });
 
-      affectedRootPostIds.forEach((rootPostId) => {
-        updateQueriesWithReducer(queryClient, ["posts"], (queryData) =>
-          applyCommentDeltaToPostsData(queryData, rootPostId, 1),
-        );
-        updateQueriesWithReducer(queryClient, ["user", "posts"], (queryData) =>
-          applyCommentDeltaToPostsData(queryData, rootPostId, 1),
-        );
-      });
-
       return {
         previousComments,
-        previousPosts,
-        previousUserPosts,
         optimisticCommentId,
       };
     },
@@ -619,8 +597,6 @@ export function useComment(options: UsePostOptions = {}) {
         extra: { parentId: _input.parentId },
       });
       restoreQuerySnapshots(queryClient, context?.previousComments);
-      restoreQuerySnapshots(queryClient, context?.previousPosts);
-      restoreQuerySnapshots(queryClient, context?.previousUserPosts);
     },
     onSuccess: () => {},
     onSettled: () => {
@@ -817,8 +793,6 @@ export function useDelete(options: UsePostOptions = {}) {
         queryKey: ["user", "posts"],
       }) as Array<[QueryKey, unknown]>;
 
-      const affectedRootPostIds = new Set<string>();
-
       previousComments.forEach(([queryKey, queryData]) => {
         if (!queryData?.root || queryData.root.post_id === input.postId) {
           return;
@@ -829,7 +803,6 @@ export function useDelete(options: UsePostOptions = {}) {
           return;
         }
 
-        affectedRootPostIds.add(queryData.root.post_id);
         queryClient.setQueryData<CommentsResponse>(queryKey, {
           ...queryData,
           root: {
@@ -838,15 +811,6 @@ export function useDelete(options: UsePostOptions = {}) {
           },
           children: removalResult.nextComments,
         });
-      });
-
-      affectedRootPostIds.forEach((rootPostId) => {
-        updateQueriesWithReducer(queryClient, ["posts"], (queryData) =>
-          applyCommentDeltaToPostsData(queryData, rootPostId, -1),
-        );
-        updateQueriesWithReducer(queryClient, ["user", "posts"], (queryData) =>
-          applyCommentDeltaToPostsData(queryData, rootPostId, -1),
-        );
       });
 
       updateQueriesWithReducer(queryClient, ["posts"], (queryData) =>

@@ -36,7 +36,6 @@ Sentry.init({
 export default Sentry.wrap(function RootLayout() {
   const ref = useNavigationContainerRef();
   const { reason: forceUpdateReason, remoteVersion, isRequired } = useForceUpdate();
-
   useEffect(() => {
     if (ref?.current) {
       navigationIntegration.registerNavigationContainer(ref);

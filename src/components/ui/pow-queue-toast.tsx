@@ -21,7 +21,7 @@ const TOAST_MIN_WIDTH = Math.round(SCREEN_WIDTH * 0.42);
 const TOAST_MAX_WIDTH = Math.round(SCREEN_WIDTH * 0.6);
 const TOAST_STACK_ID = "pow-queue-toast";
 const EMPTY_STATE_DISMISS_DELAY_MS = 400;
-const RESULT_DISPLAY_DURATION_MS = 2200;
+const RESULT_DISPLAY_DURATION_MS = 500;
 
 type PowPhase = "preparing" | "solving" | "submitting";
 
@@ -108,6 +108,7 @@ export const PowQueueToast = () => {
       immediateResultAction !== null ||
       !hasQueuedOrActiveWork
     );
+  const hasActiveResultAction = activeResultAction !== null;
   const isShowingProcessing = hasPendingWork && !isShowingResult;
 
   const displayLabel = isShowingResult
@@ -197,7 +198,7 @@ export const PowQueueToast = () => {
     transientResultTimeoutRef.current = setTimeout(() => {
       setTransientResultAction(null);
       transientResultTimeoutRef.current = null;
-    }, 1200);
+    }, RESULT_DISPLAY_DURATION_MS);
 
     return () => {
       if (transientResultTimeoutRef.current) {
@@ -242,7 +243,7 @@ export const PowQueueToast = () => {
         ) {
           animateOut();
         }
-      }, activeResultAction ? RESULT_DISPLAY_DURATION_MS : EMPTY_STATE_DISMISS_DELAY_MS);
+      }, hasActiveResultAction ? RESULT_DISPLAY_DURATION_MS : EMPTY_STATE_DISMISS_DELAY_MS);
     }
 
     return () => {
@@ -250,7 +251,7 @@ export const PowQueueToast = () => {
         clearTimeout(dismissTimeoutRef.current);
       }
     };
-  }, [activeResultAction, hasPendingWork, isVisible]);
+  }, [hasActiveResultAction, hasPendingWork, isVisible]);
 
   useEffect(() => {
     if (isShowingProcessing && isVisible) {

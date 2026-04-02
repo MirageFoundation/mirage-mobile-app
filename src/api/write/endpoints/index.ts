@@ -52,8 +52,8 @@ export { annotate } from "./annotate";
 export type { AnnotateInput } from "./annotate";
 
 // Tokens & Subscription
-export { sendTokens, upgradeLevel, setAutoRenewal } from "./tokens";
-export type { SendTokensInput, SubscriptionLevel } from "./tokens";
+export { sendTokens, upgradeLevel, setAutoRenewal, giftSubscription } from "./tokens";
+export type { SendTokensInput, SubscriptionLevel, GiftSubscriptionInput } from "./tokens";
 
 // Moderation
 export { report } from "./moderation";
@@ -78,3 +78,7 @@ export type { DeleteUserInput } from "./delete-user";
 // Award
 export { giveAward } from "./award";
 export type { GiveAwardInput } from "./award";
+
+// Referral
+export { referralPrecheckOptIn } from "./referral-precheck-opt-in";
+export type { ReferralPrecheckOptInInput } from "./referral-precheck-opt-in";

@@ -1076,7 +1076,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     ]
   );
 
-  const ListFooterComponent = useCallback(() => {
+  const listFooter = useMemo(() => {
     if (isBlocked) {
       const tabType = activeTab === 0 ? "posts" : activeTab === 1 ? "comments" : "about";
       return (
@@ -1234,7 +1234,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           contentContainerStyle={contentContainerStyle}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.3}
-          ListFooterComponent={ListFooterComponent}
+          ListFooterComponent={listFooter}
           removeClippedSubviews={true}
           maxToRenderPerBatch={Platform.OS === "android" ? 7 : 9}
           windowSize={Platform.OS === "android" ? 11 : 13}

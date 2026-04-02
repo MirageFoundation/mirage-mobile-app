@@ -583,7 +583,7 @@ export function AgentsScreen() {
         description="Saving your agent preferences on-chain"
         onDismiss={handleDismiss}
         showTxHash={false}
-        autoDismissDelay={1200}
+        autoDismissDelay={500}
       />
     </Box>
   );

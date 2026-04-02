@@ -121,6 +121,8 @@ export {
   deleteUser,
   // Award
   giveAward,
+  // Referral
+  referralPrecheckOptIn,
 } from "./endpoints";
 
 // Endpoint types
@@ -139,6 +141,7 @@ export type {
   DeleteUserInput,
   GiveAwardInput,
   AnnotateInput,
+  ReferralPrecheckOptInInput,
 } from "./endpoints";
 
 // ============================================

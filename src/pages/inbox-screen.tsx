@@ -2,7 +2,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/hooks/use-router";
 import * as Sentry from "@sentry/react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, InteractionManager, Pressable, RefreshControl, View } from "react-native";
+import { ActivityIndicator, FlatList, InteractionManager, Platform, Pressable, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Image as ExpoImage } from "expo-image";
@@ -157,9 +157,30 @@ export function InboxScreen() {
   routerRef.current = router;
 
   const handleItemPress = useCallback(
-    (rootPostId: string, replyId: string) => {
-      markReplyAsRead(replyId);
-      routerRef.current.push(`/post/${rootPostId}?highlight=${replyId}`);
+    (reply: InboxReply) => {
+      markReplyAsRead(reply.reply_id);
+
+      if (reply.type === "donation") {
+        routerRef.current.navigate("/(tabs)/profile");
+        return;
+      }
+
+      if (reply.type === "follow" && reply.reply_owner) {
+        routerRef.current.push(`/user/${reply.reply_owner}`);
+        return;
+      }
+
+      if (reply.type === "subscription_gift") {
+        if (Platform.OS === "android") {
+          routerRef.current.push("/subscription");
+          return;
+        }
+
+        routerRef.current.navigate("/(tabs)/profile");
+        return;
+      }
+
+      routerRef.current.push(`/post/${reply.root_post_id}?highlight=${reply.reply_id}`);
     },
     [markReplyAsRead],
   );

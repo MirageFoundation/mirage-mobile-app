@@ -48,10 +48,14 @@ export function SideMenuProvider({ children }: { children: React.ReactNode }) {
   const handleTopics = useCallback(() => router.push("/topics"), [router]);
   const handleAgents = useCallback(() => router.push("/agents"), [router]);
   const handleInviteAndEarn = useCallback(() => router.push("/invite-and-earn"), [router]);
+  const handleReferrals = useCallback(() => router.push("/referrals"), [router]);
   const handleQuests = useCallback(() => router.push("/quests"), [router]);
   const handleHelp = useCallback(() => Linking.openURL("https://mirage.foundation/faq").catch((e: Error) => Alert.alert("Couldn't open link", e.message)), []);
   const handleAbout = useCallback(() => Linking.openURL("https://mirage.foundation").catch((e: Error) => Alert.alert("Couldn't open link", e.message)), []);
-  const handleLogout = useCallback(async () => await logout(), [logout]);
+  const handleLogout = useCallback(async () => {
+    await logout();
+    router.replace("/(tabs)");
+  }, [logout, router]);
 
   const handleSideMenuOpen = useCallback(() => {
     useHomePostCardStore.getState().setSideMenuOpen(true);
@@ -74,6 +78,7 @@ export function SideMenuProvider({ children }: { children: React.ReactNode }) {
         onTopics={handleTopics}
         onAgents={handleAgents}
         onInviteAndEarn={handleInviteAndEarn}
+        onReferrals={handleReferrals}
         onQuests={handleQuests}
         onHelp={handleHelp}
         onAbout={handleAbout}

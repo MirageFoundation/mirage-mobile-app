@@ -7,7 +7,7 @@ import type { InfiniteData } from "@tanstack/react-query";
 
 import * as Sentry from "@sentry/react-native";
 import * as Network from "expo-network";
-import axios from "axios";
+import { isAxiosError } from "axios";
 import { api } from "@/src/api/client";
 import { queryKeys } from "@/src/api/read/query-keys";
 import type { InboxResponse } from "@/src/api/types";
@@ -35,6 +35,9 @@ let foregroundInterval: ReturnType<typeof setInterval> | null = null;
 let appStateSubscription: { remove(): void } | null = null;
 let unsubscribeInboxSignals: (() => void) | null = null;
 let notificationResponseSubscription: Notifications.Subscription | null = null;
+let deferredInitSubscription: { remove(): void } | null = null;
+let isInboxNotificationsInitialized = false;
+let isInitializingInboxNotifications = false;
 
 let _tabsReadyResolve: (() => void) | null = null;
 let _tabsReadyPromise: Promise<void> = new Promise<void>((resolve) => {
@@ -50,6 +53,35 @@ function waitForTabsReady(timeoutMs = 5000): Promise<void> {
     _tabsReadyPromise,
     new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
   ]);
+}
+
+function isNotificationAccessDeferredError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("getregistrationinfoasync") ||
+    message.includes("keychain access failed") ||
+    message.includes("user interaction is not allowed")
+  );
+}
+
+function scheduleInitInboxNotificationsOnForeground(): void {
+  if (deferredInitSubscription) {
+    return;
+  }
+
+  deferredInitSubscription = AppState.addEventListener("change", (nextState) => {
+    if (nextState !== "active") {
+      return;
+    }
+
+    deferredInitSubscription?.remove();
+    deferredInitSubscription = null;
+    void initInboxNotifications();
+  });
 }
 
 Notifications.setNotificationHandler({
@@ -103,11 +135,47 @@ function truncate(text: string, maxLen: number): string {
   return text.slice(0, maxLen - 1) + "…";
 }
 
-function getNotificationTitle(reply: InboxResponse["replies"][number]): string {
-  if (reply.type === "mention") {
-    return `@${reply.reply_username} mentioned you`;
+function formatMirageAmount(amountUmirage: number): string {
+  const value = amountUmirage / 1_000_000;
+  const text = value % 1 === 0 ? value.toLocaleString() : value.toLocaleString(undefined, { maximumFractionDigits: 6 });
+  return text;
+}
+
+function getNotificationBody(reply: InboxResponse["replies"][number]): string {
+  if (reply.type === "donation") {
+    return "You received a donation";
   }
-  return `@${reply.reply_username} replied`;
+  if (reply.type === "follow") {
+    return "Tap to view their profile";
+  }
+  if (reply.type === "subscription_gift") {
+    return "Welcome to Mirage";
+  }
+  if (reply.type === "award") {
+    return `Your post received a ${reply.award_type ?? ""}  award`;
+  }
+  return truncate(reply.reply_content, 150);
+}
+
+function getNotificationTitle(reply: InboxResponse["replies"][number]): string {
+  const displayName = reply.reply_username ? `@${reply.reply_username}` : reply.reply_owner?.slice(0, 12) ?? "";
+  if (reply.type === "mention") {
+    return `${displayName} mentioned you`;
+  }
+  if (reply.type === "donation") {
+    const amount = formatMirageAmount(reply.amount ?? 0);
+    return `${displayName} donated ${amount} MIRAGE`;
+  }
+  if (reply.type === "follow") {
+    return `${displayName} followed you`;
+  }
+  if (reply.type === "subscription_gift") {
+    return `${displayName} gifted you a subscription`;
+  }
+  if (reply.type === "award") {
+    return `${displayName} gave you an award`;
+  }
+  return `${displayName} replied`;
 }
 
 async function seedExistingReplies(walletAddress: string): Promise<void> {
@@ -132,7 +200,7 @@ async function seedExistingReplies(walletAddress: string): Promise<void> {
     storage.set(SEED_TIMESTAMP_KEY, Math.floor(Date.now() / 1000).toString());
     console.log("[InboxNotifications] Seeded existing replies, won't spam on first run");
   } catch (error) {
-    if (axios.isAxiosError(error) && error.message === "Network Error") {
+    if (isAxiosError(error) && error.message === "Network Error") {
       console.log("[InboxNotifications] Seed skipped: device is offline");
       return;
     }
@@ -241,7 +309,7 @@ async function performInboxCheck(
         const id = await Notifications.scheduleNotificationAsync({
           content: {
             title: getNotificationTitle(reply),
-            body: truncate(reply.reply_content, 150),
+            body: getNotificationBody(reply),
             data: {
               rootPostId: reply.root_post_id,
               replyId: reply.reply_id,
@@ -262,7 +330,14 @@ async function performInboxCheck(
         ? BackgroundFetch.BackgroundFetchResult.NewData
         : BackgroundFetch.BackgroundFetchResult.NoData;
   } catch (error) {
-    if (axios.isAxiosError(error) && error.message === "Network Error") {
+    if (isNotificationAccessDeferredError(error)) {
+      console.warn("[InboxNotifications] Notification permission access deferred until foreground");
+      if (AppState.currentState !== "active") {
+        scheduleInitInboxNotificationsOnForeground();
+      }
+      return BackgroundFetch.BackgroundFetchResult.NoData;
+    }
+    if (isAxiosError(error) && error.message === "Network Error") {
       console.log("[InboxNotifications] Check skipped: device is offline");
       return BackgroundFetch.BackgroundFetchResult.NoData;
     }
@@ -463,6 +538,12 @@ TaskManager.defineTask(TASK_NAME, async () => {
 });
 
 export async function initInboxNotifications(): Promise<void> {
+  if (isInboxNotificationsInitialized || isInitializingInboxNotifications) {
+    return;
+  }
+
+  isInitializingInboxNotifications = true;
+
   try {
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("inbox", {
@@ -473,13 +554,39 @@ export async function initInboxNotifications(): Promise<void> {
       });
     }
 
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    console.log("[InboxNotifications] Init - existing permission:", existingStatus);
+    if (AppState.currentState !== "active") {
+      console.log("[InboxNotifications] App not active, deferring init until foreground");
+      scheduleInitInboxNotificationsOnForeground();
+      return;
+    }
 
-    if (existingStatus !== "granted") {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
+    let finalStatus: Notifications.PermissionStatus;
+
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      finalStatus = existingStatus;
+      console.log("[InboxNotifications] Init - existing permission:", existingStatus);
+    } catch (error) {
+      if (isNotificationAccessDeferredError(error)) {
+        console.warn("[InboxNotifications] Permission lookup deferred until foreground");
+        scheduleInitInboxNotificationsOnForeground();
+        return;
+      }
+      throw error;
+    }
+
+    if (finalStatus !== "granted") {
+      try {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      } catch (error) {
+        if (isNotificationAccessDeferredError(error)) {
+          console.warn("[InboxNotifications] Permission request deferred until foreground");
+          scheduleInitInboxNotificationsOnForeground();
+          return;
+        }
+        throw error;
+      }
     }
 
     console.log("[InboxNotifications] Init - final permission:", finalStatus);
@@ -513,12 +620,17 @@ export async function initInboxNotifications(): Promise<void> {
     subscribeAppState();
     subscribeNotificationResponses();
 
+    deferredInitSubscription?.remove();
+    deferredInitSubscription = null;
+    isInboxNotificationsInitialized = true;
     console.log("[InboxNotifications] Background fetch registered");
   } catch (error) {
     console.error("[InboxNotifications] Init failed:", error);
     Sentry.captureException(error, {
       tags: { action: "inbox_init" },
     });
+  } finally {
+    isInitializingInboxNotifications = false;
   }
 }
 

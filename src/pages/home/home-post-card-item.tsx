@@ -202,8 +202,8 @@ export const HomePostCardItem = memo(function HomePostCardItem({
           hasLiked: voteOverride.hasLiked ?? post.hasLiked,
           hasDisliked: voteOverride.hasDisliked ?? post.hasDisliked,
         }),
-        ...(commentCountOverride && {
-          comments: post.comments + (commentCountOverride.commentDelta ?? 0),
+        ...(commentCountOverride && post.comments === commentCountOverride.baseComments && {
+          comments: commentCountOverride.baseComments + (commentCountOverride.commentDelta ?? 0),
         }),
       };
     }

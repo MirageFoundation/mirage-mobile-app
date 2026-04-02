@@ -1,6 +1,5 @@
 import { Entypo, EvilIcons, Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { LinkPreviewCard } from "@/src/components/molecules/link-preview-card";
 import { markEditJustCompleted } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { fetchLinkMeta } from "@/src/utils/fetch-link-meta";
@@ -9,6 +8,7 @@ import { sanitizeTopicName } from "@/src/utils/topic-validation";
 import { trimToMaxDuration } from "@/src/utils/video-processing";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
+import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 import { isPowCancelled } from "@/src/wallet";
 import { waitForQueueDrain, usePowQueueStore } from "@/src/services/pow-queue";
 import { Audio, ResizeMode, Video } from "expo-av";
@@ -51,7 +51,8 @@ import { useTransactionProgress } from "@/src/hooks/use-transaction-progress";
 import { getTxStatus } from "@/src/api/read/endpoints/tx";
 import { useDraftStore, type Community } from "@/src/stores/draft-store";
 import { useHomePostCardStore } from "./home/home-post-card-store";
-import { useUserLevel } from "@/src/stores/auth-store";
+import { useUserLevel, useAuthStore } from "@/src/stores/auth-store";
+import { useUIStore } from "@/src/stores";
 import { getTierPostLimits, canEditContent } from "@/src/utils/tiers";
 
 import { CommunitySelectionModal } from "./create/community-selection-modal";
@@ -99,6 +100,8 @@ export function CreateScreen() {
   const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
   const userLevel = useUserLevel();
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const showAuthSheet = useUIStore((s) => s.showAuthSheet);
   const tierLimits = useMemo(() => getTierPostLimits(userLevel), [userLevel]);
 
   // Get params from video editor or edit mode
@@ -136,12 +139,14 @@ export function CreateScreen() {
   const bodySelectionRef = useRef({ start: 0, end: 0 });
   const [bodySelection, setBodySelection] = useState<{ start: number; end: number } | undefined>(undefined);
   const linkInputRef = useRef<TextInput>(null);
+  const linkUrlInputRef = useRef<TextInput>(null);
   const videoScrollRef = useRef<ScrollView>(null);
   const editingVideoUriRef = useRef<string | null>(null);
   const videoMetaRef = useRef<Map<string, { originalUri: string; width: number; height: number; trimStart: number; trimEnd: number }>>(new Map());
 
   const [showCommunityModal, setShowCommunityModal] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
+  const [linkName, setLinkName] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -242,7 +247,7 @@ export function CreateScreen() {
       })
       .catch((err) => {
         Sentry.addBreadcrumb({ category: "video-upload", message: "Video upload failed", data: { error: String(err) }, level: "error" });
-        const msg = err?.response?.data?.error || (err instanceof Error ? err.message : "Upload failed");
+        const msg = err?.response?.data?.error_code ? getApiErrorMessage(err) : (err instanceof Error ? err.message : "Upload failed");
         const isServerError = !!err?.response?.status && err.response.status >= 400;
         VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg, isServerError });
         videoUploadStateRef.current((prev) => ({
@@ -382,6 +387,13 @@ export function CreateScreen() {
   useEffect(() => {
     if (!hasShareIntent || !shareIntent || isEditMode) return;
 
+    if (!isLoggedIn) {
+      resetShareIntent();
+      router.replace("/(tabs)/");
+      showAuthSheet();
+      return;
+    }
+
     const intentKey = shareIntent.webUrl ?? shareIntent.text ?? shareIntent.files?.[0]?.path ?? null;
     if (!intentKey || intentKey === lastProcessedIntentRef.current) return;
     lastProcessedIntentRef.current = intentKey;
@@ -391,6 +403,7 @@ export function CreateScreen() {
       shareTimeoutRef.current = null;
     }
     const currentIntentKey = intentKey;
+    const shouldImportSharedFiles = !shareIntent.webUrl;
 
     console.log("[CreateScreen] Share intent received:", {
       type: shareIntent.type,
@@ -553,22 +566,38 @@ export function CreateScreen() {
           let videoDownloaded = false;
           let mediaCount = 0;
 
-          const videosToDownload = meta.videos?.length > 0
-            ? meta.videos.slice(0, 10)
-            : meta.video
-              ? [meta.video]
-              : [];
+          const videosToDownload = Array.from(
+            new Set(
+              meta.videos?.length > 0
+                ? meta.videos
+                : meta.video
+                  ? [meta.video]
+                  : []
+            )
+          ).slice(0, 10);
 
           for (let vi = 0; vi < videosToDownload.length; vi++) {
             if (mediaCount >= 10) break;
             const vidUrl = videosToDownload[vi];
             try {
-              const response = await fetch(vidUrl);
+              const response = await fetch(vidUrl, {
+                headers: {
+                  "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+                  "Referer": "https://www.reddit.com/",
+                  "Accept": "*/*",
+                },
+              });
               const contentType = response.headers.get("content-type") ?? "";
               const resolvedUrl = response.url;
 
               const isVideoContent = contentType.startsWith("video/") || contentType.startsWith("application/octet-stream") || contentType === "image/gif";
               const hasVideoExtension = /\.(mp4|mov|webm|m3u8|ts|gif)(\?|#|$)/i.test(resolvedUrl || vidUrl);
+
+              if (!response.ok) {
+                Sentry.addBreadcrumb({ category: "share-intent", message: "Video download failed", data: { status: response.status, vidUrl, contentType }, level: "warning" });
+              } else if (!isVideoContent && !hasVideoExtension) {
+                Sentry.addBreadcrumb({ category: "share-intent", message: "Video URL returned non-video content", data: { vidUrl, contentType, resolvedUrl }, level: "warning" });
+              }
 
               if (response.ok && (isVideoContent || hasVideoExtension)) {
                 const ext = contentType.includes("mp4") ? "mp4"
@@ -656,11 +685,15 @@ export function CreateScreen() {
           }
 
           if (!videoDownloaded) {
-            const imagesToDownload = meta.images?.length > 0
-              ? meta.images.slice(0, 10 - mediaCount)
-              : meta.image
-                ? [meta.image]
-                : [];
+            const imagesToDownload = Array.from(
+              new Set(
+                meta.images?.length > 0
+                  ? meta.images
+                  : meta.image
+                    ? [meta.image]
+                    : []
+              )
+            ).slice(0, 10 - mediaCount);
             if (imagesToDownload.length > 0) {
               for (let i = 0; i < imagesToDownload.length; i++) {
                 if (mediaCount >= 10) break;
@@ -707,7 +740,7 @@ export function CreateScreen() {
           if (lastProcessedIntentRef.current === currentIntentKey) setIsProcessingShareLink(false);
         });
       }
-      if (shareIntent.files?.length) {
+      if (shareIntent.files?.length && shouldImportSharedFiles) {
         const file = shareIntent.files[0];
         if (file.mimeType?.startsWith("image/")) {
           setAttachment("image", file.path);
@@ -725,7 +758,7 @@ export function CreateScreen() {
         shareTimeoutRef.current = null;
       }
     };
-  }, [hasShareIntent, shareIntent]);
+  }, [hasShareIntent, shareIntent, isLoggedIn]);
 
   // Handle video returned from editor
   useEffect(() => {
@@ -999,7 +1032,7 @@ export function CreateScreen() {
           txProgress.hideModal();
           useHomePostCardStore.getState().setSkipNextRefresh(true);
           router.replace("/(tabs)/");
-        }, 1000);
+        }, 500);
       }
     } catch (error) {
       setIsSubmitting(false);
@@ -1078,25 +1111,20 @@ export function CreateScreen() {
   }, []);
 
   const handleLinkPress = useCallback(() => {
-    if (hasAttachment && !showLinkInput) return;
     triggerHaptic("selection");
     setShowLinkInput(true);
     setTimeout(() => linkInputRef.current?.focus(), 100);
-  }, [hasAttachment, showLinkInput]);
+  }, []);
 
-  const handleLinkChange = useCallback(
+  const handleLinkUrlChange = useCallback(
     (text: string) => {
       setLinkUrl(text);
       const trimmed = text.trim();
       if (trimmed.length > 0) {
-        // Check if it's a valid URL with protocol
-        const isValid = URL_REGEX.test(text);
+        const isValid = URL_REGEX.test(trimmed);
         if (isValid) {
           setLinkError(null);
-          setAttachment("link", text);
-          updateDraft({ linkUrl: text });
         } else if (looksLikeUrlWithoutProtocol(trimmed)) {
-          // User typed something like "google.com" - show hint to add protocol
           setLinkError("Add https:// to the beginning of your link");
         } else {
           setLinkError("Please enter a valid URL (e.g., https://example.com)");
@@ -1105,22 +1133,33 @@ export function CreateScreen() {
         setLinkError(null);
       }
     },
-    [setAttachment, updateDraft],
+    [],
   );
 
-  const handleLinkSubmit = useCallback(() => {
-    if (linkUrl && !linkError) {
-      setAttachment("link", linkUrl);
-      updateDraft({ linkUrl });
-    }
-  }, [linkUrl, linkError, setAttachment, updateDraft]);
+  const canAddLink = linkName.trim().length > 0 && linkUrl.trim().length > 0 && !linkError;
+
+  const handleAddLink = useCallback(() => {
+    if (!canAddLink) return;
+    triggerHaptic("medium");
+    const trimmedUrl = linkUrl.trim();
+    const trimmedName = linkName.trim();
+    const markdownLink = `[${trimmedName}](${trimmedUrl})`;
+    const currentBody = useDraftStore.getState().draft.body;
+    const newBody = currentBody.trim()
+      ? `${currentBody}\n\n${markdownLink}`
+      : markdownLink;
+    updateDraft({ body: newBody });
+    setLinkName("");
+    setLinkUrl("");
+    setShowLinkInput(false);
+  }, [canAddLink, linkName, linkUrl, updateDraft]);
 
   const handleRemoveLink = useCallback(() => {
     setShowLinkInput(false);
+    setLinkName("");
     setLinkUrl("");
     setLinkError(null);
-    removeAttachment();
-  }, [removeAttachment]);
+  }, []);
 
   const handleImagePress = useCallback(async () => {
     if (hasAttachment && draft.attachmentType !== "image") return;
@@ -1642,39 +1681,36 @@ export function CreateScreen() {
               exiting={FadeOut.duration(200)}
               style={styles.linkInputContainer}
             >
-              <View style={styles.linkInputWrapper}>
-                <TextInput
-                  ref={linkInputRef}
-                  style={[
-                    styles.linkInput,
-                    { color: theme.colors.text.default },
-                  ]}
-                  placeholder="URL"
-                  placeholderTextColor={theme.colors.text.subtle}
-                  value={linkUrl}
-                  onChangeText={handleLinkChange}
-                  onSubmitEditing={handleLinkSubmit}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="url"
-                  multiline
-                />
-                <Pressable
-                  onPress={handleRemoveLink}
-                  disabled={editExpired}
-                  style={[
-                    styles.linkClearButton,
-                    { backgroundColor: theme.colors.background.subtle },
-                    editExpired && { opacity: 0 },
-                  ]}
-                >
-                  <Feather
-                    name="x"
-                    size={16}
-                    color={theme.colors.text.subtle}
-                  />
-                </Pressable>
-              </View>
+              <TextInput
+                ref={linkInputRef}
+                style={[
+                  styles.linkInput,
+                  styles.linkNameInput,
+                  { color: theme.colors.text.default },
+                ]}
+                placeholder="Link name"
+                placeholderTextColor={theme.colors.text.subtle}
+                value={linkName}
+                onChangeText={setLinkName}
+                autoFocus
+                returnKeyType="next"
+                onSubmitEditing={() => linkUrlInputRef.current?.focus()}
+                blurOnSubmit={false}
+              />
+              <TextInput
+                ref={linkUrlInputRef}
+                style={[
+                  styles.linkInput,
+                  { color: theme.colors.text.default },
+                ]}
+                placeholder="https://"
+                placeholderTextColor={theme.colors.text.subtle}
+                value={linkUrl}
+                onChangeText={handleLinkUrlChange}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+              />
               {linkError && (
                 <View
                   style={[
@@ -1695,12 +1731,44 @@ export function CreateScreen() {
                   </Text>
                 </View>
               )}
+              <View style={{ flexDirection: "row", gap: theme.spacing.sm, marginTop: theme.spacing.xs }}>
+                <Pressable
+                  onPress={handleAddLink}
+                  disabled={!canAddLink}
+                  style={[
+                    styles.addLinkButton,
+                    {
+                      backgroundColor: canAddLink
+                        ? theme.colors.brand[500]
+                        : theme.colors.background.subtle,
+                    },
+                  ]}
+                >
+                  <Text
+                    size="md"
+                    weight="semibold"
+                    style={{
+                      color: canAddLink ? "#FFFFFF" : theme.colors.text.subtle,
+                    }}
+                  >
+                    Add link
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleRemoveLink}
+                  style={[
+                    styles.addLinkButton,
+                    { backgroundColor: theme.colors.background.subtle },
+                  ]}
+                >
+                  <Text size="md" weight="semibold" style={{ color: theme.colors.text.subtle }}>
+                    Cancel
+                  </Text>
+                </Pressable>
+              </View>
             </Animated.View>
           )}
 
-          {showLinkInput && linkUrl && !linkError && (
-            <LinkPreviewCard url={linkUrl} />
-          )}
 
           {draft.attachmentType === "image" && draft.mediaUris.length > 0 && (
             <Animated.View
@@ -1849,20 +1917,13 @@ export function CreateScreen() {
           <View style={[styles.mediaBarContent, editExpired && { opacity: 0.4 }]} pointerEvents={editExpired ? "none" : "auto"}>
             <Pressable
               onPress={handleLinkPress}
-              disabled={editExpired || (hasAttachment && !showLinkInput)}
-              style={[
-                styles.mediaButton,
-                hasAttachment && !showLinkInput && styles.mediaButtonDisabled,
-              ]}
+              disabled={editExpired}
+              style={[styles.mediaButton]}
             >
               <Feather
                 name="link"
                 size={22}
-                color={
-                  hasAttachment && !showLinkInput
-                    ? theme.colors.text.subtle
-                    : theme.colors.text.default
-                }
+                color={theme.colors.text.default}
               />
             </Pressable>
 
@@ -2048,6 +2109,7 @@ export function CreateScreen() {
           setIsSubmitting(false);
           handlePost();
         }}
+        autoDismissDelay={500}
       />
     </Box>
   );
@@ -2117,23 +2179,24 @@ const styles = StyleSheet.create((theme) => ({
   },
   linkInputContainer: {
     paddingTop: theme.spacing.md,
-  },
-  linkInputWrapper: {
-    flexDirection: "row",
-    alignItems: "flex-start",
+    gap: theme.spacing.sm,
   },
   linkInput: {
-    flex: 1,
-    fontSize: 16,
+    fontSize: 18,
     fontFamily: theme.typography.family.mono,
     paddingVertical: theme.spacing.sm,
+    minHeight: 44,
   },
-  linkClearButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  linkNameInput: {
+    fontSize: 20,
+    fontWeight: "600",
+  },
+  addLinkButton: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    paddingVertical: theme.spacing.sm + 4,
+    borderRadius: theme.radius.full,
   },
   linkErrorContainer: {
     flexDirection: "row",

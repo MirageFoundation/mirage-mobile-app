@@ -74,7 +74,8 @@ function isRedditUrl(url: string): boolean {
 async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Partial<LinkMeta>> {
   try {
     let resolvedUrl = url;
-    if (/redd\.it/i.test(url) || /\/s\/[a-zA-Z0-9]+/i.test(url)) {
+    const needsRedirect = /redd\.it/i.test(url) || /\/s\/[a-zA-Z0-9]+/i.test(url);
+    if (needsRedirect) {
       try {
         const redirectRes = await fetch(url, {
           signal,
@@ -85,7 +86,43 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
         if (redirectRes.url && redirectRes.url !== url) {
           resolvedUrl = redirectRes.url;
         }
-      } catch {}
+      } catch (headErr) {
+        Sentry.addBreadcrumb({ category: "link-meta", message: "Reddit HEAD redirect failed", data: { url, error: String(headErr) }, level: "warning" });
+      }
+      if (resolvedUrl === url) {
+        try {
+          const getRes = await fetch(url, {
+            signal,
+            redirect: "follow",
+            headers: {
+              "User-Agent": BROWSER_UA,
+              Accept: "text/html",
+            },
+          });
+          if (getRes.url && getRes.url !== url) {
+            resolvedUrl = getRes.url;
+          } else {
+            const html = await getRes.text();
+            const canonical = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)?.[1]
+              ?? html.match(/<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i)?.[1];
+            if (canonical && canonical !== url) {
+              resolvedUrl = canonical;
+            }
+          }
+        } catch (getErr) {
+          Sentry.addBreadcrumb({ category: "link-meta", message: "Reddit GET redirect fallback failed", data: { url, error: String(getErr) }, level: "warning" });
+        }
+      }
+      Sentry.addBreadcrumb({
+        category: "link-meta",
+        message: "Reddit redirect resolution",
+        data: { originalUrl: url, resolved: resolvedUrl !== url, resolvedUrl },
+        level: resolvedUrl !== url ? "info" : "warning",
+      });
+      console.log("[fetchRedditVideo] Redirect resolution:", {
+        method: resolvedUrl !== url ? "resolved" : "failed",
+        needsFallback: resolvedUrl === url,
+      });
     }
     console.log("[fetchRedditVideo] URL resolution:", {
       originalUrl: url,
@@ -103,7 +140,11 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       },
       redirect: "follow",
     });
-    if (!res.ok) return {};
+    if (!res.ok) {
+      console.log("[fetchRedditVideo] JSON fetch failed:", { status: res.status, jsonUrl });
+      Sentry.addBreadcrumb({ category: "link-meta", message: "Reddit JSON fetch failed", data: { status: res.status, jsonUrl }, level: "warning" });
+      return {};
+    }
 
     const raw = await res.text();
     const data = JSON.parse(raw);
@@ -249,7 +290,7 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
 
     return {
       title: post.title ?? null,
-      description: post.selftext?.slice(0, 500) ?? null,
+      description: post.selftext ?? null,
       image: images[0] ?? imageUrl,
       video: videoUrl,
       audioUrl,

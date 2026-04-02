@@ -8,6 +8,7 @@ export { SettingsScreen } from "./settings-screen";
 export { SubscriptionScreen } from "./subscription-screen";
 export { ChangeUsernameScreen } from "./change-username-screen";
 export { InviteAndEarnScreen } from "./invite-and-earn-screen";
+export { ReferralsScreen } from "./referrals-screen";
 export { SearchScreen } from "./search-screen";
 export { VideoEditorScreen } from "./create/video-editor-screen";
 export { UserProfileScreen } from "./user-profile-screen";

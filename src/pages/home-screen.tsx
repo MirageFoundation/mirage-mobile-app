@@ -24,6 +24,10 @@ type Post,
  type PostOptionsSheetRef,
  AwardPickerSheet,
  type AwardPickerSheetRef,
+ GiftMirageSheet,
+ type GiftMirageSheetRef,
+ GiftSubscriptionSheet,
+ type GiftSubscriptionSheetRef,
  ReportSheet,
  type ReportSheetRef,
 UpdateBanner,
@@ -181,6 +185,8 @@ export function HomeScreen() {
 
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
+  const giftMirageSheetRef = useRef<GiftMirageSheetRef>(null);
+  const giftSubscriptionSheetRef = useRef<GiftSubscriptionSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
 
   const { openSideMenu } = useSideMenu();
@@ -702,6 +708,14 @@ export function HomeScreen() {
           if (!selectedPost) return;
           setTimeout(() => awardPickerSheetRef.current?.present(), 300);
         }}
+        onGiftMirage={() => {
+          if (!selectedPost) return;
+          setTimeout(() => giftMirageSheetRef.current?.present(), 300);
+        }}
+        onGiftSubscription={() => {
+          if (!selectedPost) return;
+          setTimeout(() => giftSubscriptionSheetRef.current?.present(), 300);
+        }}
         onDismiss={() => setSelectedPost(null)}
       />
 
@@ -710,6 +724,18 @@ export function HomeScreen() {
         targetId={selectedPost?.id ?? ""}
         targetType="post"
         isOwnContent={currentUser?.id === selectedPost?.author.id}
+      />
+
+      <GiftMirageSheet
+        ref={giftMirageSheetRef}
+        recipientAddress={selectedPost?.author.id ?? ""}
+        recipientUsername={selectedPost?.author.username ?? ""}
+      />
+
+      <GiftSubscriptionSheet
+        ref={giftSubscriptionSheetRef}
+        recipientAddress={selectedPost?.author.id ?? ""}
+        recipientUsername={selectedPost?.author.username ?? ""}
       />
 
       <ReportSheet

@@ -32,6 +32,7 @@ import {
   uploadVideoAndGetUrl,
 } from "@/src/api/read/hooks/use-upload-media";
 import * as Sentry from "@sentry/react-native";
+import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 import { useAnnotate } from "@/src/api/write";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { StickerPicker } from "@/src/components/molecules/sticker-picker";
@@ -194,7 +195,7 @@ export function AnnotateScreen() {
         triggerHaptic("success");
       })
       .catch((err) => {
-        const msg = err?.response?.data?.error || (err instanceof Error ? err.message : "Upload failed");
+        const msg = err?.response?.data?.error_code ? getApiErrorMessage(err) : (err instanceof Error ? err.message : "Upload failed");
         Sentry.captureException(err, { tags: { feature: "annotate", operation: "video-upload" } });
         const isServerError = !!err?.response?.status && err.response.status >= 400;
         VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg, isServerError });

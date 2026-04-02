@@ -37,6 +37,10 @@ import {
   type PostOptionsSheetRef,
   AwardPickerSheet,
   type AwardPickerSheetRef,
+  GiftMirageSheet,
+  type GiftMirageSheetRef,
+  GiftSubscriptionSheet,
+  type GiftSubscriptionSheetRef,
   ReportSheet,
   type ReportSheetRef,
 } from "@/src/components/molecules";
@@ -75,6 +79,8 @@ export function TopicFeedScreen() {
   const flatListRef = useRef<FlashListRef<Post>>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
+  const giftMirageSheetRef = useRef<GiftMirageSheetRef>(null);
+  const giftSubscriptionSheetRef = useRef<GiftSubscriptionSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
 
   const savedPosts = useSavedPostsStore((s) => s.savedPosts);
@@ -966,6 +972,14 @@ export function TopicFeedScreen() {
           if (!selectedPost) return;
           setTimeout(() => awardPickerSheetRef.current?.present(), 300);
         }}
+        onGiftMirage={() => {
+          if (!selectedPost) return;
+          setTimeout(() => giftMirageSheetRef.current?.present(), 300);
+        }}
+        onGiftSubscription={() => {
+          if (!selectedPost) return;
+          setTimeout(() => giftSubscriptionSheetRef.current?.present(), 300);
+        }}
         onDismiss={() => setSelectedPost(null)}
       />
 
@@ -974,6 +988,18 @@ export function TopicFeedScreen() {
         targetId={selectedPost?.id ?? ""}
         targetType="post"
         isOwnContent={currentUser?.id === selectedPost?.author.id}
+      />
+
+      <GiftMirageSheet
+        ref={giftMirageSheetRef}
+        recipientAddress={selectedPost?.author.id ?? ""}
+        recipientUsername={selectedPost?.author.username ?? ""}
+      />
+
+      <GiftSubscriptionSheet
+        ref={giftSubscriptionSheetRef}
+        recipientAddress={selectedPost?.author.id ?? ""}
+        recipientUsername={selectedPost?.author.username ?? ""}
       />
 
       <ReportSheet

@@ -67,32 +67,33 @@ export const useDraftStore = create<DraftState>()(
         })),
       clearDraft: () => set({ draft: emptyDraft, hasDraft: false }),
       setAttachment: (type, uri) =>
-        set((state) => ({
-          draft: {
-            ...state.draft,
-            attachmentType: type,
-            linkUrl: type === "link" ? (uri && uri.length > 0 ? uri : null) : null,
-            mediaUris:
-              type === "image"
-                ? uri
-                  ? [...state.draft.mediaUris, uri].slice(0, MAX_MEDIA_ITEMS)
-                  : state.draft.mediaUris
-                : type === "video"
-                  ? uri
-                    ? [...state.draft.mediaUris, uri].slice(0, MAX_MEDIA_ITEMS)
-                    : state.draft.mediaUris
-                  : [],
-          },
-          hasDraft: true,
-        })),
+        set((state) => {
+          const mediaUris =
+            type === "image" || type === "video"
+              ? uri
+                ? Array.from(new Set([...state.draft.mediaUris, uri])).slice(0, MAX_MEDIA_ITEMS)
+                : state.draft.mediaUris
+              : [];
+
+          return {
+            draft: {
+              ...state.draft,
+              attachmentType: type,
+              linkUrl: type === "link" ? (uri && uri.length > 0 ? uri : null) : null,
+              mediaUris,
+            },
+            hasDraft: true,
+          };
+        }),
       addMediaUri: (uri) =>
         set((state) => {
-          if (state.draft.mediaUris.length >= MAX_MEDIA_ITEMS) return state;
+          const mediaUris = Array.from(new Set([...state.draft.mediaUris, uri])).slice(0, MAX_MEDIA_ITEMS);
+          if (mediaUris.length === state.draft.mediaUris.length) return state;
           return {
             draft: {
               ...state.draft,
               attachmentType: "image",
-              mediaUris: [...state.draft.mediaUris, uri],
+              mediaUris,
             },
             hasDraft: true,
           };
@@ -112,7 +113,9 @@ export const useDraftStore = create<DraftState>()(
         set((state) => ({
           draft: {
             ...state.draft,
-            mediaUris: state.draft.mediaUris.map((u) => u === oldUri ? newUri : u),
+            mediaUris: Array.from(
+              new Set(state.draft.mediaUris.map((u) => u === oldUri ? newUri : u))
+            ),
           },
         })),
       removeAttachment: () =>

@@ -32,7 +32,6 @@ import {
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import {
-  useAuthStore,
   usePreferencesStore,
   getShareBaseUrl,
 } from "@/src/stores";
@@ -271,7 +270,7 @@ const [copiedCode, setCopiedCode] = useState(false);
  const [copiedLink, setCopiedLink] = useState(false);
 
   const shareUrl = code
-    ? `${getShareBaseUrl(shareServer)}/create_account?invite=${code}`
+    ? `${getShareBaseUrl(shareServer)}/signup?invite=${code}`
     : "";
   const shareMessage = `Join me on Mirage! Use my invite code: ${code}\n\n${shareUrl}`;
 
@@ -464,7 +463,6 @@ export function InviteAndEarnScreen() {
     }, [refetch])
   );
 
-  // TODO: Remove mock data before production
   const availableCodes = inviteCodesData?.codes.filter((c) => !c.is_used) ?? [];
   const usedCodes = inviteCodesData?.codes.filter((c) => c.is_used) ?? [];
   const availableCount = inviteCodesData?.available ?? 0;

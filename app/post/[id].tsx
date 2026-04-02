@@ -5,6 +5,7 @@ import {
   useUserFollowed,
   uploadImageAndGetUrl,
 } from "@/src/api/read";
+import { parseApiError } from "@/src/utils/parse-api-error";
 import { getComments } from "@/src/api/read/endpoints/posts";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { LinearGradient } from "expo-linear-gradient";
@@ -29,6 +30,10 @@ import {
   CommentOptionsSheetRef,
   CommentThread,
   ConfirmationPopup,
+  GiftMirageSheet,
+  GiftMirageSheetRef,
+  GiftSubscriptionSheet,
+  GiftSubscriptionSheetRef,
   PostCard,
   PostOptionsSheet,
   PostOptionsSheetRef,
@@ -59,6 +64,11 @@ import {
 } from "@/src/stores";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import { useHistoryStore } from "@/src/stores/history-store";
+import {
+  useOptimisticReplyComments,
+  useOptimisticTopLevelComments,
+  usePostCommentOptimisticStore,
+} from "@/src/stores/post-comment-optimistic-store";
 import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 import {
   AntDesign,
@@ -146,10 +156,14 @@ export default function PostDetailScreen() {
   const optionsSheetRef = useRef<CommentOptionsSheetRef>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
+  const giftMirageSheetRef = useRef<GiftMirageSheetRef>(null);
+  const giftSubscriptionSheetRef = useRef<GiftSubscriptionSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
   const [awardTargetId, setAwardTargetId] = useState<string>("");
   const [awardTargetType, setAwardTargetType] = useState<"post" | "comment">("post");
   const [awardTargetIsOwn, setAwardTargetIsOwn] = useState(false);
+  const [giftRecipientAddress, setGiftRecipientAddress] = useState("");
+  const [giftRecipientUsername, setGiftRecipientUsername] = useState("");
   const commentInputRef = useRef<CommentInputRef>(null);
   const flatListRef = useRef<FlatList<Comment>>(null);
 
@@ -204,10 +218,18 @@ export default function PostDetailScreen() {
     data: commentsData,
     isLoading: isLoadingComments,
     isError: isCommentsError,
+    error: commentsError,
     isFetching: isFetchingComments,
     refetch: refetchComments,
     isRefetching: isRefetchingComments,
   } = useComments(id, { enabled: isFocused });
+
+  const commentsApiError = useMemo(() => {
+    if (!commentsError) return null;
+    return parseApiError(commentsError);
+  }, [commentsError]);
+
+  const isPostNotFound = commentsApiError?.errorCode === "post_not_found" || commentsApiError?.httpStatus === 404;
 
   useEffect(() => {
     if (isFetchingComments) lastCommentsFetchRef.current = Date.now();
@@ -215,6 +237,7 @@ export default function PostDetailScreen() {
 
   useEffect(() => {
     refetchCommentsRef.current = (silent?: boolean) => {
+      if (isPostNotFound) return;
       if (silent) {
         const now = Date.now();
         if (now - lastCommentsFetchRef.current < COMMENTS_DEBOUNCE_MS) return;
@@ -231,7 +254,7 @@ export default function PostDetailScreen() {
         refetchComments();
       }
     };
-  }, [refetchComments, id, currentUser?.walletAddress, queryClient]);
+  }, [refetchComments, id, currentUser?.walletAddress, queryClient, isPostNotFound]);
 
   useFocusEffect(
     useCallback(() => {
@@ -370,28 +393,19 @@ export default function PostDetailScreen() {
           ...prev,
           comments: (prev.comments ?? 0) + 1,
         }));
-        if (id) incrementCommentCount(id);
+        if (id) incrementCommentCount(id, commentsData?.root?.comments ?? 0);
       }
     },
   });
   const blockHandler = useBlockHandler({});
   const reportHandler = useReportHandler({});
 
-  // Helper to remove comment from local state
+  // Helper to remove comment from shared optimistic state
   const removeCommentFromState = useCallback(
     (commentId: string) => {
-      const removeComment = (
-        targetId: string,
-        commentList: Comment[],
-      ): Comment[] => {
-        return commentList
-          .filter((c) => c.id !== targetId)
-          .map((c) => ({
-            ...c,
-            replies: c.replies ? removeComment(targetId, c.replies) : undefined,
-          }));
-      };
-      setLocalComments((prev) => removeComment(commentId, prev));
+      if (id) {
+        usePostCommentOptimisticStore.getState().removeComment(id, commentId);
+      }
       setLocalPostUpdates((prev) => ({
         ...prev,
         comments: Math.max(
@@ -399,7 +413,7 @@ export default function PostDetailScreen() {
           (prev.comments ?? commentsData?.root?.comments ?? 0) - 1,
         ),
       }));
-      if (id) decrementCommentCount(id);
+      if (id) decrementCommentCount(id, commentsData?.root?.comments ?? 0);
     },
     [commentsData?.root?.comments, id, decrementCommentCount],
   );
@@ -569,11 +583,23 @@ export default function PostDetailScreen() {
   const [localTopicFollowed, setLocalTopicFollowed] = useState<boolean | null>(
     null,
   );
-  const [localComments, setLocalComments] = useState<Comment[]>([]);
-  // Track optimistic replies to API comments (parentId -> optimistic comments)
-  const [optimisticReplies, setOptimisticReplies] = useState<
-    Record<string, Comment[]>
-  >({});
+  const optimisticTopLevelComments = useOptimisticTopLevelComments(id);
+  const optimisticReplyComments = useOptimisticReplyComments(id);
+  const addTopLevelOptimisticComment = usePostCommentOptimisticStore(
+    (state) => state.addTopLevelComment,
+  );
+  const addReplyOptimisticComment = usePostCommentOptimisticStore(
+    (state) => state.addReplyComment,
+  );
+  const replaceOptimisticCommentId = usePostCommentOptimisticStore(
+    (state) => state.replaceCommentId,
+  );
+  const removeOptimisticComment = usePostCommentOptimisticStore(
+    (state) => state.removeComment,
+  );
+  const pruneCommentsPresentOnServer = usePostCommentOptimisticStore(
+    (state) => state.pruneCommentsPresentOnServer,
+  );
 
   // Vote overrides for comments (tracks hasLiked, hasDisliked, and likeDelta)
 
@@ -583,65 +609,15 @@ export default function PostDetailScreen() {
   // Clean up optimistic comments when server data is refreshed
   // This prevents duplicates when user pulls to refresh after posting
   useEffect(() => {
-    if (!commentsData?.children) return;
+    if (!id || !commentsData?.children) return;
 
-    // Skip initial load - only clean up on subsequent refreshes
     if (!hasInitialCommentsLoaded.current) {
       hasInitialCommentsLoaded.current = true;
       return;
     }
 
-    // Helper to check if server comments contain a matching comment
-    const findMatchingServerComment = (
-      optimisticComment: Comment,
-      serverComments: Comment[],
-    ): boolean => {
-      for (const serverComment of serverComments) {
-        // Match by content and author (since optimistic IDs are different)
-        if (
-          serverComment.content === optimisticComment.content &&
-          serverComment.author.id === optimisticComment.author.id
-        ) {
-          return true;
-        }
-        // Check nested replies
-        if (serverComment.replies && serverComment.replies.length > 0) {
-          if (
-            findMatchingServerComment(optimisticComment, serverComment.replies)
-          ) {
-            return true;
-          }
-        }
-      }
-      return false;
-    };
-
-    setLocalComments((prev) => {
-      const filtered = prev.filter(
-        (c) => !findMatchingServerComment(c, comments),
-      );
-      return filtered.length === prev.length ? prev : filtered;
-    });
-
-    setOptimisticReplies((prev) => {
-      const updated: Record<string, Comment[]> = {};
-      let hasChanges = false;
-
-      for (const [parentId, replies] of Object.entries(prev)) {
-        const filtered = replies.filter(
-          (c) => !findMatchingServerComment(c, comments),
-        );
-        if (filtered.length > 0) {
-          updated[parentId] = filtered;
-        }
-        if (filtered.length !== replies.length) {
-          hasChanges = true;
-        }
-      }
-
-      return hasChanges ? updated : prev;
-    });
-  }, [commentsData?.children, comments]);
+    pruneCommentsPresentOnServer(id, comments);
+  }, [commentsData?.children, comments, id, pruneCommentsPresentOnServer]);
   const [commentVoteOverrides, setCommentVoteOverrides] = useState<
     Record<
       string,
@@ -742,14 +718,15 @@ export default function PostDetailScreen() {
       };
     }
 
-    // Apply shared store comment count override if present (and not already overridden locally)
     if (sharedCommentCountOverride && localPostUpdates.comments === undefined) {
-      result = {
-        ...result,
-        comments:
-          (result.comments ?? 0) +
-          (sharedCommentCountOverride.commentDelta ?? 0),
-      };
+      if ((result.comments ?? 0) === sharedCommentCountOverride.baseComments) {
+        result = {
+          ...result,
+          comments:
+            sharedCommentCountOverride.baseComments +
+            (sharedCommentCountOverride.commentDelta ?? 0),
+        };
+      }
     }
 
     return result;
@@ -808,7 +785,7 @@ export default function PostDetailScreen() {
   // Apply optimistic replies to a comment tree recursively
   const applyOptimisticReplies = useCallback(
     (comment: Comment): Comment => {
-      const pendingReplies = optimisticReplies[comment.id] ?? [];
+      const pendingReplies = optimisticReplyComments[comment.id] ?? [];
       const existingReplies = comment.replies ?? [];
 
       const processedReplies = existingReplies.map(applyOptimisticReplies);
@@ -823,7 +800,7 @@ export default function PostDetailScreen() {
         replyCount: (comment.replyCount ?? 0) + dedupedPending.length,
       };
     },
-    [optimisticReplies],
+    [optimisticReplyComments],
   );
 
   // Filter out hidden comments and comments from blocked users recursively
@@ -849,9 +826,9 @@ export default function PostDetailScreen() {
   // Merge API comments with locally added comments and apply vote overrides + optimistic replies
   // Filter hidden/blocked and sort by createdAt descending (latest first)
   const allComments = useMemo(() => {
-    const localIds = new Set(localComments.map((c) => c.id));
+    const localIds = new Set(optimisticTopLevelComments.map((c) => c.id));
     const dedupedComments = comments.filter((c) => !localIds.has(c.id));
-    const merged = [...localComments, ...dedupedComments];
+    const merged = [...optimisticTopLevelComments, ...dedupedComments];
     return filterComments(
       merged
         .map(applyOptimisticReplies)
@@ -869,7 +846,7 @@ export default function PostDetailScreen() {
       return timeB - timeA; // Descending order (latest first)
     });
   }, [
-    localComments,
+    optimisticTopLevelComments,
     comments,
     applyOptimisticReplies,
     applyVoteOverridesToComment,
@@ -1211,21 +1188,15 @@ export default function PostDetailScreen() {
         },
         onOptimisticUpdate: () => {
           if (replyTarget) {
-            setOptimisticReplies((prev) => ({
-              ...prev,
-              [replyTarget.id]: [
-                ...(prev[replyTarget.id] ?? []),
-                optimisticComment,
-              ],
-            }));
+            addReplyOptimisticComment(id, replyTarget.id, optimisticComment);
           } else {
-            setLocalComments((prev) => [optimisticComment, ...prev]);
+            addTopLevelOptimisticComment(id, optimisticComment);
           }
           setLocalPostUpdates((prev) => ({
             ...prev,
             comments: (prev.comments ?? displayPost?.comments ?? 0) + 1,
           }));
-          if (id) incrementCommentCount(id);
+          if (id) incrementCommentCount(id, post?.comments ?? 0);
         },
         onSuccess: (result) => {
           const confirmedCommentId =
@@ -1238,37 +1209,7 @@ export default function PostDetailScreen() {
 
           if (!confirmedCommentId) return;
 
-          if (replyTarget) {
-            setOptimisticReplies((prev) => {
-              const existingReplies = prev[replyTarget.id];
-              if (!existingReplies) return prev;
-
-              let hasChange = false;
-              const nextReplies = existingReplies.map((comment) => {
-                if (comment.id !== optimisticCommentId) return comment;
-                hasChange = true;
-                return {
-                  ...comment,
-                  id: confirmedCommentId,
-                };
-              });
-
-              if (!hasChange) return prev;
-
-              return {
-                ...prev,
-                [replyTarget.id]: nextReplies,
-              };
-            });
-          } else {
-            setLocalComments((prev) =>
-              prev.map((comment) =>
-                comment.id === optimisticCommentId
-                  ? { ...comment, id: confirmedCommentId }
-                  : comment,
-              ),
-            );
-          }
+          replaceOptimisticCommentId(id, optimisticCommentId, confirmedCommentId);
 
           setSelectedComment((prev) => {
             if (!prev || prev.id !== optimisticCommentId) return prev;
@@ -1284,24 +1225,7 @@ export default function PostDetailScreen() {
         },
         onError: () => {},
         onRollback: () => {
-          if (replyTarget) {
-            setOptimisticReplies((prev) => {
-              const updated = { ...prev };
-              if (updated[replyTarget.id]) {
-                updated[replyTarget.id] = updated[replyTarget.id].filter(
-                  (c) => c.id !== optimisticCommentId,
-                );
-                if (updated[replyTarget.id].length === 0) {
-                  delete updated[replyTarget.id];
-                }
-              }
-              return updated;
-            });
-          } else {
-            setLocalComments((prev) =>
-              prev.filter((c) => c.id !== optimisticCommentId),
-            );
-          }
+          removeOptimisticComment(id, optimisticCommentId);
           setLocalPostUpdates((prev) => ({
             ...prev,
             comments: Math.max(
@@ -1309,7 +1233,7 @@ export default function PostDetailScreen() {
               (prev.comments ?? displayPost?.comments ?? 0) - 1,
             ),
           }));
-          if (id) decrementCommentCount(id);
+          if (id) decrementCommentCount(id, post?.comments ?? 0);
         },
       });
     },
@@ -1972,6 +1896,52 @@ export default function PostDetailScreen() {
   // Get the first media thumbnail if available
   const postThumbnail = displayPost?.media?.[0]?.uri;
 
+  if (isPostNotFound) {
+    return (
+      <Box flex background="base">
+        {renderHeader}
+        <Box flex center p="lg">
+          <Ionicons
+            name="trash-outline"
+            size={48}
+            color={theme.colors.text.subtle}
+          />
+          <Text
+            size="lg"
+            weight="semibold"
+            mode="subtle"
+            style={{ marginTop: 12 }}
+          >
+            {commentsApiError?.message ?? "Post not found."}
+          </Text>
+          <Text
+            size="md"
+            mode="subtle"
+            style={{ marginTop: 4, textAlign: "center" }}
+          >
+            This post may have been deleted or doesn't exist.
+          </Text>
+          <Pressable
+            onPress={() => router.back()}
+            style={{
+              marginTop: 20,
+              paddingHorizontal: 24,
+              paddingVertical: 12,
+              borderWidth: 1,
+              borderColor: theme.colors.border.default,
+              borderRadius: 8,
+              backgroundColor: theme.colors.background.subtle,
+            }}
+          >
+            <Text size="sm" weight="medium">
+              Go back
+            </Text>
+          </Pressable>
+        </Box>
+      </Box>
+    );
+  }
+
   return (
     <KeyboardAvoidingView style={styles.keyboardView} behavior="padding">
       <Box flex background="base">
@@ -2109,6 +2079,18 @@ export default function PostDetailScreen() {
             setAwardTargetIsOwn(currentUser?.id === selectedComment.author.id);
             setTimeout(() => awardPickerSheetRef.current?.present(), 300);
           }}
+          onGiftMirage={() => {
+            if (!selectedComment) return;
+            setGiftRecipientAddress(selectedComment.author.id);
+            setGiftRecipientUsername(selectedComment.author.username);
+            setTimeout(() => giftMirageSheetRef.current?.present(), 300);
+          }}
+          onGiftSubscription={() => {
+            if (!selectedComment) return;
+            setGiftRecipientAddress(selectedComment.author.id);
+            setGiftRecipientUsername(selectedComment.author.username);
+            setTimeout(() => giftSubscriptionSheetRef.current?.present(), 300);
+          }}
           onDismiss={() => setSelectedComment(null)}
         />
 
@@ -2150,6 +2132,18 @@ export default function PostDetailScreen() {
             setAwardTargetIsOwn(currentUser?.id === displayPost.author.id);
             setTimeout(() => awardPickerSheetRef.current?.present(), 300);
           }}
+          onGiftMirage={() => {
+            if (!displayPost) return;
+            setGiftRecipientAddress(displayPost.author.id);
+            setGiftRecipientUsername(displayPost.author.username);
+            setTimeout(() => giftMirageSheetRef.current?.present(), 300);
+          }}
+          onGiftSubscription={() => {
+            if (!displayPost) return;
+            setGiftRecipientAddress(displayPost.author.id);
+            setGiftRecipientUsername(displayPost.author.username);
+            setTimeout(() => giftSubscriptionSheetRef.current?.present(), 300);
+          }}
           onAnnotate={handleAnnotatePost}
           onDismiss={() => {}}
         />
@@ -2159,6 +2153,18 @@ export default function PostDetailScreen() {
           targetId={awardTargetId}
           targetType={awardTargetType}
           isOwnContent={awardTargetIsOwn}
+        />
+
+        <GiftMirageSheet
+          ref={giftMirageSheetRef}
+          recipientAddress={giftRecipientAddress}
+          recipientUsername={giftRecipientUsername}
+        />
+
+        <GiftSubscriptionSheet
+          ref={giftSubscriptionSheetRef}
+          recipientAddress={giftRecipientAddress}
+          recipientUsername={giftRecipientUsername}
         />
 
         {/* Delete confirmation popup */}

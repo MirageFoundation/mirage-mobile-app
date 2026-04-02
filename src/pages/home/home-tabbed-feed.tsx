@@ -95,6 +95,9 @@ export const HomeTabbedFeed = forwardRef<
 
   useEffect(() => {
     if (prevTabIndexRef.current !== activeTabIndex) {
+      const oldFeedContext = `${baseFeed}:${prevTabIndexRef.current === 0 ? "magic" : "latest"}`;
+      useHomePostCardStore.getState().setVideoViewability(oldFeedContext, new Set(), null);
+
       prevTabIndexRef.current = activeTabIndex;
       if (activeTabIndex === 1) {
         setLatestTabActivated(true);
@@ -108,7 +111,7 @@ export const HomeTabbedFeed = forwardRef<
         setTimeout(() => handleRefreshRef.current?.(), 100);
       }
     }
-  }, [activeTabIndex, showBars]);
+  }, [activeTabIndex, showBars, baseFeed]);
 
   const currentUser = useAuthStore((s) => s.user);
   const selectedContentTypes = usePreferencesStore(

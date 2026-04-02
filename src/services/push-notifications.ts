@@ -1,6 +1,6 @@
 import * as Notifications from "expo-notifications";
 import * as Network from "expo-network";
-import { AppState, Platform } from "react-native";
+import { AppState, type NativeEventSubscription, Platform } from "react-native";
 import * as Sentry from "@sentry/react-native";
 
 import { registerPushToken, unregisterPushToken } from "@/src/api/write/endpoints/push-token";
@@ -9,6 +9,7 @@ import { storage } from "@/src/stores/mmkv-storage";
 import { markRepliesAsNotified } from "@/src/services/inbox-notified-ids";
 import { queryClient } from "@/src/providers/query-provider";
 import { queryKeys } from "@/src/api/read/query-keys";
+import { getNodeConfig } from "@/src/api/read/endpoints/parameters";
 import type { NodeConfigResponse } from "@/src/api/types";
 import type { MirageWallet } from "@/src/wallet";
 import { useAuthStore } from "@/src/stores/auth-store";
@@ -26,6 +27,7 @@ let needsNetworkRetry = false;
 let isRegisteringPush = false;
 let lastRegisterPushAt = 0;
 const REGISTER_PUSH_MIN_INTERVAL_MS = 30_000;
+let unhandledRejectionHandler: ((event: any) => void) | null = null;
 
 function isKeychainAccessError(error: unknown): boolean {
   if (error instanceof Error) {
@@ -49,6 +51,20 @@ function isTransientNetworkError(error: unknown): boolean {
       msg.includes("fetch failed")
     );
   }
+  return false;
+}
+
+function isOfflineRegistrationError(error: unknown): boolean {
+  const code = (error as { code?: unknown })?.code;
+  if (code === "ERR_NETWORK") {
+    return true;
+  }
+
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return msg === "network error" || msg.includes("network error") || msg.includes("offline");
+  }
+
   return false;
 }
 
@@ -118,12 +134,30 @@ async function getExpoPushToken(): Promise<string | null> {
         return null;
       }
 
-      const tokenData = await Notifications.getExpoPushTokenAsync({
-        projectId: "25839d12-3bbc-4a6a-b1ee-67c4a6de816f",
+      let foregroundSub: NativeEventSubscription | null = null;
+      const tokenData = await Promise.race([
+        Notifications.getExpoPushTokenAsync({
+          projectId: "25839d12-3bbc-4a6a-b1ee-67c4a6de816f",
+        }),
+        new Promise<never>((_, reject) => {
+          foregroundSub = AppState.addEventListener("change", (state) => {
+            if (state !== "active") {
+              reject(new Error("App left foreground during token fetch"));
+            }
+          });
+        }),
+      ]).finally(() => {
+        foregroundSub?.remove();
       });
       return tokenData.data;
     } catch (error) {
       lastError = error;
+
+      if (error instanceof Error && error.message === "App left foreground during token fetch") {
+        console.log("[PushNotifications] App left foreground during token fetch, will retry on foreground");
+        needsNetworkRetry = true;
+        return null;
+      }
 
       if (isKeychainAccessError(error)) {
         console.warn("[PushNotifications] Keychain access denied (device likely locked/background), will retry on foreground");
@@ -169,7 +203,12 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
   if (now - lastRegisterPushAt < REGISTER_PUSH_MIN_INTERVAL_MS) return;
   isRegisteringPush = true;
   try {
-    const nodeConfig = queryClient.getQueryData<NodeConfigResponse>(queryKeys.nodeConfig());
+    const nodeConfig =
+      queryClient.getQueryData<NodeConfigResponse>(queryKeys.nodeConfig()) ??
+      (await queryClient.fetchQuery<NodeConfigResponse>({
+        queryKey: queryKeys.nodeConfig(),
+        queryFn: getNodeConfig,
+      }));
     if (!nodeConfig?.push_notifications_enabled) {
       console.log("[PushNotifications] Push not enabled on this node, skipping");
       Sentry.addBreadcrumb({
@@ -211,9 +250,18 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
     if (isKeychainAccessError(error)) {
       console.warn("[PushNotifications] Keychain access denied during registration, will retry on foreground");
       needsNetworkRetry = true;
+    } else if (isOfflineRegistrationError(error) || isTransientNetworkError(error)) {
+      needsNetworkRetry = true;
+      console.log("[PushNotifications] Registration skipped: network unavailable, falling back to polling");
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: "Push registration skipped: network unavailable",
+        level: "warning",
+      });
     } else {
       const is429 = (error as any)?.response?.status === 429;
       if (is429) {
+        needsNetworkRetry = true;
         console.log("[PushNotifications] Registration rate limited, will retry on next foreground");
       } else {
         console.error("[PushNotifications] Registration failed, falling back to polling:", error);
@@ -352,12 +400,35 @@ function subscribeNetworkRecovery(): void {
   });
 }
 
+function subscribeKeychainRejectionHandler(): void {
+  if (unhandledRejectionHandler) return;
+
+  unhandledRejectionHandler = (event: any) => {
+    const error = event?.reason ?? event;
+    if (isKeychainAccessError(error)) {
+      event?.preventDefault?.();
+      needsNetworkRetry = true;
+      console.warn("[PushNotifications] Suppressed unhandled keychain rejection, will retry on foreground");
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: "Suppressed unhandled keychain rejection",
+        level: "warning",
+      });
+    }
+  };
+
+  if (typeof globalThis !== "undefined" && globalThis.addEventListener) {
+    globalThis.addEventListener("unhandledrejection", unhandledRejectionHandler);
+  }
+}
+
 export async function initPushNotifications(): Promise<void> {
   Sentry.addBreadcrumb({
     category: "push-notifications",
     message: "Initializing push notifications service",
     level: "info",
   });
+  subscribeKeychainRejectionHandler();
   subscribePushReceived();
   subscribeAppStateForegroundReRegister();
   subscribeNetworkRecovery();
@@ -371,6 +442,10 @@ export function cleanupPushNotifications(): void {
   networkSubscription?.remove();
   networkSubscription = null;
   needsNetworkRetry = false;
+  if (unhandledRejectionHandler && typeof globalThis !== "undefined" && globalThis.removeEventListener) {
+    globalThis.removeEventListener("unhandledrejection", unhandledRejectionHandler);
+    unhandledRejectionHandler = null;
+  }
 }
 
 export { isPushEnabled };

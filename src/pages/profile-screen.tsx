@@ -968,7 +968,7 @@ useEffect(() => {
       ],
     );
 
- const ListFooterComponent = useCallback(() => {
+ const listFooter = useMemo(() => {
     if (activeTab === 2) {
       return (
           <Animated.View style={contentAnimatedStyle}>
@@ -1107,7 +1107,7 @@ useEffect(() => {
           contentContainerStyle={contentContainerStyle}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.5}
-          ListFooterComponent={ListFooterComponent}
+          ListFooterComponent={listFooter}
           extraData={focusVersion}
           removeClippedSubviews={true}
           maxToRenderPerBatch={Platform.OS === "android" ? 7 : 9}

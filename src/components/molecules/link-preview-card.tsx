@@ -14,6 +14,7 @@ export function LinkPreviewCard({ url }: LinkPreviewCardProps) {
   const { theme } = useUnistyles();
   const [meta, setMeta] = useState<LinkMeta | null>(null);
   const [loading, setLoading] = useState(true);
+  const [imageError, setImageError] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -21,6 +22,7 @@ export function LinkPreviewCard({ url }: LinkPreviewCardProps) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setLoading(true);
     setMeta(null);
+    setImageError(false);
     debounceRef.current = setTimeout(async () => {
       const result = await fetchLinkMeta(url);
       setMeta(result);
@@ -50,12 +52,13 @@ export function LinkPreviewCard({ url }: LinkPreviewCardProps) {
 
   return (
     <View style={[styles.container, { borderColor: theme.colors.border.default, backgroundColor: theme.colors.background.subtle }]}>
-      {meta.image && (
+      {meta.image && !imageError && (
         <Image
           source={{ uri: meta.image }}
           style={styles.image}
           contentFit="cover"
           cachePolicy="memory-disk"
+          onError={() => setImageError(true)}
         />
       )}
       <View style={styles.content}>
