@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 121
+                          update 122
                         </Text>
                         <Text
                           style={{
@@ -790,7 +790,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           comment,save comment draft even after going back or
                           closing the app, draft expires after 2 days,
                           notification tap now shows the new msgs in inbox
-                          immediately,username taken issue on edit username fix
+                          immediately,username taken issue on edit username fix,
+                          2 or more agent modified post touching each other fix,
+                          spcae between paragraph increased in markdown
                         </Text>
                       </>
                     )}
@@ -831,7 +833,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 121
+                          update 122
                         </Text>
                         <Text
                           style={{
@@ -858,7 +860,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           comment,save comment draft even after going back or
                           closing the app, draft expires after 2 days,
                           notification tap now shows the new msgs in inbox
-                          immediately,username taken issue on edit username fix
+                          immediately,username taken issue on edit username fix,
+                          2 or more agent modified post touching each other fix,
+                          spcae between paragraph increased in markdown
                         </Text>
                       </>
                     )}
