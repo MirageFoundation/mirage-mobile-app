@@ -132,7 +132,7 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
 
     const jsonUrl = resolvedUrl.replace(/\?.*$/, "").replace(/\/$/, "") + ".json";
 
-    const res = await fetch(jsonUrl, {
+    let res = await fetch(jsonUrl, {
       signal,
       headers: {
         "User-Agent": "MirageApp/1.0",
@@ -140,9 +140,24 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       },
       redirect: "follow",
     });
+    if (!res.ok && (res.status === 429 || res.status >= 500)) {
+      await new Promise((r) => setTimeout(r, 1500));
+      res = await fetch(jsonUrl, {
+        signal,
+        headers: {
+          "User-Agent": BROWSER_UA,
+          Accept: "application/json",
+        },
+        redirect: "follow",
+      });
+    }
     if (!res.ok) {
       console.log("[fetchRedditVideo] JSON fetch failed:", { status: res.status, jsonUrl });
-      Sentry.addBreadcrumb({ category: "link-meta", message: "Reddit JSON fetch failed", data: { status: res.status, jsonUrl }, level: "warning" });
+      Sentry.captureMessage("Reddit JSON fetch failed", {
+        level: "warning",
+        tags: { feature: "share-intent", domain: "reddit.com" },
+        extra: { status: res.status, jsonUrl, originalUrl: url },
+      });
       return {};
     }
 
@@ -153,6 +168,11 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
     const post = listing?.data?.children?.[0]?.data;
     if (!post) {
       console.log("[fetchRedditVideo] No post data found in JSON response");
+      Sentry.captureMessage("Reddit JSON returned no post data", {
+        level: "warning",
+        tags: { feature: "share-intent", domain: "reddit.com" },
+        extra: { jsonUrl, originalUrl: url, listingKeys: Object.keys(listing?.data ?? {}) },
+      });
       return {};
     }
     console.log("[fetchRedditVideo] Post data:", {
@@ -301,11 +321,10 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       externalUrl: !post.is_self && post.url && !post.url.startsWith("https://www.reddit.com") && !post.url.startsWith("https://reddit.com") && !post.url.startsWith("https://i.redd.it") && !post.url.startsWith("https://v.redd.it") ? post.url : null,
     };
   } catch (err) {
-    Sentry.addBreadcrumb({
-      category: "link-meta",
-      message: "Reddit fetch failed",
-      data: { error: String(err) },
+    Sentry.captureMessage("Reddit video extraction failed", {
       level: "warning",
+      tags: { feature: "share-intent", domain: "reddit.com" },
+      extra: { url, error: String(err) },
     });
     return {};
   }
@@ -913,7 +932,12 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       domain,
       externalUrl: decodeHtml(externalUrl),
     };
-  } catch {
+  } catch (err) {
+    Sentry.captureMessage("fetchLinkMeta failed completely", {
+      level: "warning",
+      tags: { feature: "share-intent", domain },
+      extra: { url, error: String(err) },
+    });
     return { title: null, description: null, image: null, video: null, audioUrl: null, audioUrls: [], images: [], videos: [], siteName: null, domain, externalUrl: null };
   }
 }

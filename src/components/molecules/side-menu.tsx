@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 118
+                          update 121
                         </Text>
                         <Text
                           style={{
@@ -773,19 +773,22 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          send mirage as gift ui created and integrated, send
-                          subscription as gift ui created and integrated, inbox
-                          updated to show correct message for donation recieved
-                          subscription recieved and someone followed you,
-                          pressing on msg of donation recieved in inbox
-                          navigates us to profile tab, pressing on subscription
-                          recieved in inbox navigates user to profile tab in ios
-                          and to subscription screen on android, pressing on
-                          follow msg in inbox navigates you to the user profile
-                          who followed u, same video getting uploaded twice from
-                          external shared link to create post screen fix,
-                          reduced the time of showing success state on pow
-                          status popup, sentry issue RN 2C,24 and 30 handled
+                          migrate content tag to adult all over the app, added
+                          adult content option in content filter sheet in
+                          settings, enabling mature content toggle will enable
+                          all the content in content filter, disabling the
+                          mature content toggle will disable the adult content
+                          in content filter sheet, selecting the adult content
+                          in content filter sheet while the mature content
+                          toggle is disabled will show a note saying the
+                          enabling mature content toggle is necessary to see
+                          adult content, both the show mature content toggle and
+                          the adult type content should be enabled to see adult
+                          content, made the parent comment to be visble on
+                          comment input screen covering 20% of screen height and
+                          can also scroll throught it to see full parent
+                          comment,save comment draft even after going back or
+                          closing the app, draft expires after 2 days
                         </Text>
                       </>
                     )}
@@ -826,7 +829,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 118
+                          update 121
                         </Text>
                         <Text
                           style={{
@@ -836,19 +839,18 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          send mirage as gift ui created and integrated, send
-                          subscription as gift ui created and integrated, inbox
-                          updated to show correct message for donation recieved
-                          subscription recieved and someone followed you,
-                          pressing on msg of donation recieved in inbox
-                          navigates us to profile tab, pressing on subscription
-                          recieved in inbox navigates user to profile tab in ios
-                          and to subscription screen on android, pressing on
-                          follow msg in inbox navigates you to the user profile
-                          who followed u, same video getting uploaded twice from
-                          external shared link to create post screen fix,
-                          reduced the time of showing success state on pow
-                          status popup, sentry issue RN 2C,24 and 30 handled
+                          migrate content tag to adult all over the app, added
+                          adult content option in content filter sheet in
+                          settings, enabling mature content toggle will enable
+                          all the content in content filter, disabling the
+                          mature content toggle will disable the adult content
+                          in content filter sheet, selecting the adult content
+                          in content filter sheet while the mature content
+                          toggle is disabled will show a note saying the
+                          enabling mature content toggle is necessary to see
+                          adult content, both the show mature content toggle and
+                          the adult type content should be enabled to see adult
+                          content
                         </Text>
                       </>
                     )}

@@ -164,7 +164,8 @@ export function useUserPosts(
 ) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
   const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
-  const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes);
+  const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
+  const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
 
   return useQuery({
     queryKey: queryKeys.userPosts(owner!, type, allowedTags),
@@ -189,7 +190,8 @@ export function useInfiniteUserPosts(
 ) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
   const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
-  const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes);
+  const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
+  const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
 
   return useInfiniteQuery({
     queryKey: queryKeys.userPosts(owner!, params?.type, allowedTags),

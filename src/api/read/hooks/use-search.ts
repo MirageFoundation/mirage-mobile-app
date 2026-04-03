@@ -17,7 +17,8 @@ export function useSearch(
 ) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
   const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
-  const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes);
+  const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
+  const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
 
   return useQuery({
     queryKey: queryKeys.search(query!, params?.type, params?.limit, allowedTags),

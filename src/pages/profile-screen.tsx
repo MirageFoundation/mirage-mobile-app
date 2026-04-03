@@ -887,6 +887,7 @@ useEffect(() => {
              onEditUsernamePress={handleEditUsernamePress}
              isLoading={isLoading}
             headerHeight={headerHeight}
+            userLevel={userStatus?.user_level ?? 0}
            />
          );
         }
@@ -1110,8 +1111,8 @@ useEffect(() => {
           ListFooterComponent={listFooter}
           extraData={focusVersion}
           removeClippedSubviews={true}
-          maxToRenderPerBatch={Platform.OS === "android" ? 7 : 9}
-          windowSize={Platform.OS === "android" ? 11 : 13}
+          maxToRenderPerBatch={Platform.OS === "android" ? 5 : 9}
+          windowSize={Platform.OS === "android" ? 7 : 13}
           initialNumToRender={5}
           updateCellsBatchingPeriod={Platform.OS === "android" ? 100 : 50}
           bounces={true}

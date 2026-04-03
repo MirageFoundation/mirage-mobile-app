@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import { AntDesign, Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import * as Sentry from "@sentry/react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -73,6 +73,7 @@ type ProfileContentAnimatedProps = {
   onEditUsernamePress?: () => void;
   isLoading?: boolean;
   headerHeight?: number;
+  userLevel?: number;
 };
 
 export const ProfileContentAnimated = memo(function ProfileContentAnimated({
@@ -89,9 +90,10 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
   onFollowersPress,
   onEditUsernamePress,
   isLoading = false,
+  userLevel = 0,
 }: ProfileContentAnimatedProps) {
- const [copied, setCopied] = useState(false);
- const walletScale = useRef(new RNAnimated.Value(1)).current;
+  const [copied, setCopied] = useState(false);
+  const walletScale = useRef(new RNAnimated.Value(1)).current;
   const followingScale = useRef(new RNAnimated.Value(1)).current;
 
   const truncatedAddress = useMemo(() => {
@@ -112,7 +114,12 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
       setCopied(true);
       triggerHaptic("success");
     } catch (error) {
-      Sentry.addBreadcrumb({ category: "profile", message: "Clipboard copy address failed", data: { error: String(error) }, level: "warning" });
+      Sentry.addBreadcrumb({
+        category: "profile",
+        message: "Clipboard copy address failed",
+        data: { error: String(error) },
+        level: "warning",
+      });
     }
   }, [walletAddress]);
 
@@ -126,13 +133,13 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
   }, [walletScale]);
 
   const handleWalletPressOut = useCallback(() => {
-   RNAnimated.spring(walletScale, {
-     toValue: 1,
-     useNativeDriver: true,
-     friction: 8,
-     tension: 100,
-   }).start();
- }, [walletScale]);
+    RNAnimated.spring(walletScale, {
+      toValue: 1,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 100,
+    }).start();
+  }, [walletScale]);
 
   const handleFollowingPressIn = useCallback(() => {
     RNAnimated.spring(followingScale, {
@@ -171,8 +178,21 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
   );
 
   return (
-    <View style={[styles.container, headerHeight > 0 && { marginTop: -headerHeight, paddingTop: headerHeight }]}>
-      <View style={[styles.overscrollFill, { backgroundColor: gradientColorsArray[0] }]} />
+    <View
+      style={[
+        styles.container,
+        headerHeight > 0 && {
+          marginTop: -headerHeight,
+          paddingTop: headerHeight,
+        },
+      ]}
+    >
+      <View
+        style={[
+          styles.overscrollFill,
+          { backgroundColor: gradientColorsArray[0] },
+        ]}
+      />
       <View style={styles.gradientWrapper}>
         <LinearGradient
           colors={gradientColorsArray}
@@ -195,25 +215,54 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
             {isLoading ? (
               <View style={styles.usernameContentSkeleton} />
             ) : (
-              <Box direction="row" alignItems="center" gap="xs">
-                <Text size="xl" weight="bold" style={styles.whiteText}>
-                  {username}
-                </Text>
-                {onEditUsernamePress && (
-                  <Pressable onPress={onEditUsernamePress} hitSlop={8}>
-                    <Icon
-                      icon={Ionicons}
-                      name="pencil"
-                      size={16}
-                      color="rgba(255,255,255,0.7)"
-                    />
+              <>
+                <Box direction="row" alignItems="center" gap="xs">
+                  <Text size="xl" weight="bold" style={styles.whiteText}>
+                    {username}
+                  </Text>
+                  {onEditUsernamePress && (
+                    <Pressable
+                      onPress={() => {
+                        triggerHaptic("light");
+                        onEditUsernamePress();
+                      }}
+                      hitSlop={8}
+                      style={styles.editButton}
+                    >
+                      <Text
+                        size="sm"
+                        weight="medium"
+                        style={styles.editButtonText}
+                      >
+                        Edit
+                      </Text>
+                      <Icon
+                        icon={AntDesign}
+                        name="edit"
+                        size={13}
+                        color="rgba(255,255,255,0.7)"
+                      />
+                    </Pressable>
+                  )}
+                </Box>
+                {userLevel > 0 && username.toLowerCase().startsWith("anon") && onEditUsernamePress && (
+                  <Pressable onPress={() => { triggerHaptic("light"); onEditUsernamePress(); }} style={styles.anonNoteContainer}>
+                    <Ionicons name="information-circle" size={16} color="#F59E0B" />
+                    <Text size="sm" style={styles.anonNoteText}>
+                      As a subscriber, you can now remove the "anon" prefix from your username. <Text size="sm" weight="bold" style={styles.anonNoteText}>Tap to edit.</Text>
+                    </Text>
                   </Pressable>
                 )}
-              </Box>
+              </>
             )}
           </Box>
 
-          <RNAnimated.View style={{ transform: [{ scale: followingScale }], alignSelf: "flex-start" }}>
+          <RNAnimated.View
+            style={{
+              transform: [{ scale: followingScale }],
+              alignSelf: "flex-start",
+            }}
+          >
             <Pressable
               onPress={onFollowersPress}
               onPressIn={handleFollowingPressIn}
@@ -405,5 +454,32 @@ const styles = StyleSheet.create((theme) => ({
     height: 22,
     borderRadius: 4,
     backgroundColor: "rgba(255,255,255,0.15)",
+  },
+  editButton: {
+    flexDirection: "row",
+    // alignItems: "flex-end",
+    gap: 4,
+    marginLeft: 6,
+  },
+  editButtonText: {
+    color: "rgba(255,255,255,0.7)",
+    // marginTop: 2,
+  },
+  anonNoteContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 8,
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.25)",
+  },
+  anonNoteText: {
+    color: "#FBBF24",
+    flex: 1,
+    lineHeight: 18,
   },
 }));

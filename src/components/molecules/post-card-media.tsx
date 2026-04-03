@@ -477,6 +477,11 @@ export const PostCardMedia = memo(
       [resolvedMediaUri],
     );
 
+    const shouldMountNativeVideo =
+      isPostDetail ||
+      Platform.OS === "ios" ||
+      isVisible;
+
     const shouldAutoStartVideo =
       media?.type === "video" &&
       isVisible &&
@@ -937,7 +942,7 @@ export const PostCardMedia = memo(
             </>
           ) : media.type === "video" ? (
             <Pressable onPress={isPostDetail ? handleMediaPress : handleFeedVideoTap} style={styles.media}>
-              {videoThumbnailUri && !videoReadyForDisplay ? (
+              {(videoThumbnailUri && !videoReadyForDisplay) || !shouldMountNativeVideo ? (
                 <>
                   <Image
                     source={{ uri: videoThumbnailUri }}
@@ -958,7 +963,7 @@ export const PostCardMedia = memo(
                   ) : null}
                 </>
               ) : null}
-              <Video
+              {shouldMountNativeVideo ? <Video
                 key={mediaRetryKey}
                 ref={videoRef}
                 source={mediaSource}
@@ -1050,7 +1055,7 @@ export const PostCardMedia = memo(
                   }
                   setIsVideoLoading(false);
                 }}
-              />
+              /> : null}
             </Pressable>
           ) : (
             <Pressable onPress={handleMediaPress} style={styles.media}>
