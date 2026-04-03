@@ -75,6 +75,8 @@ export function SettingsScreen() {
     theme: themeMode,
     setTheme,
     selectedContentTypes,
+    adultContentEnabled,
+    setAdultContent,
     toggleContentType,
     setSelectedContentTypes,
     blurSensitiveMedia,
@@ -104,21 +106,19 @@ export function SettingsScreen() {
 
   const [showMatureConfirm, setShowMatureConfirm] = useState(false);
 
-  const matureContentEnabled = selectedContentTypes.includes("adult") || selectedContentTypes.includes("all");
-
   const handleMatureToggle = useCallback((value: boolean) => {
     if (value) {
       setShowMatureConfirm(true);
     } else {
-      setSelectedContentTypes([]);
+      setAdultContent(false);
     }
-  }, [setSelectedContentTypes]);
+  }, [setAdultContent]);
 
   const handleConfirmMature = useCallback(() => {
-    setSelectedContentTypes(["sensitive", "adult", "violence", "gore", "death"]);
+    setAdultContent(true);
     setBlurSensitiveMedia(true);
     setShowMatureConfirm(false);
-  }, [setSelectedContentTypes, setBlurSensitiveMedia]);
+  }, [setAdultContent, setBlurSensitiveMedia]);
 
   const handleCancelMature = useCallback(() => {
     setShowMatureConfirm(false);
@@ -169,18 +169,17 @@ const handleApiServerChange = useCallback(
 
   // Get display labels
  const getContentTypeLabel = () => {
-   const filtered = selectedContentTypes.filter((t) => t !== "adult");
-   const NON_ADULT_TAGS: string[] = ["sensitive", "violence", "gore", "death"];
-   const allNonAdultSelected = NON_ADULT_TAGS.every((t) => filtered.includes(t as any));
-   if (allNonAdultSelected) return "All";
-    if (filtered.length === 0) return "None";
-   if (filtered.length === 1) {
+   const ALL_TAGS = ["sensitive", "adult", "violence", "gore", "death"];
+   const allSelected = ALL_TAGS.every((t) => selectedContentTypes.includes(t as any));
+   if (allSelected) return "All";
+    if (selectedContentTypes.length === 0) return "None";
+   if (selectedContentTypes.length === 1) {
      return (
-        filtered[0].charAt(0).toUpperCase() +
-        filtered[0].slice(1)
+        selectedContentTypes[0].charAt(0).toUpperCase() +
+        selectedContentTypes[0].slice(1)
       );
     }
-    return `${filtered.length} selected`;
+    return `${selectedContentTypes.length} selected`;
   };
 
   const getCollapseThresholdLabel = () => {
@@ -261,7 +260,7 @@ const handleApiServerChange = useCallback(
               icon="eye-off-outline"
               title="Show Mature Content"
               subtitle="I'm over 18"
-              value={matureContentEnabled}
+              value={adultContentEnabled}
               onValueChange={handleMatureToggle}
             />
           ),
@@ -276,7 +275,7 @@ const handleApiServerChange = useCallback(
               subtitle="Blur mature (18+) images and media"
               value={blurSensitiveMedia}
               onValueChange={handleBlurToggle}
-              disabled={!matureContentEnabled}
+              disabled={!adultContentEnabled}
             />
           ),
         },
@@ -665,6 +664,7 @@ const handleApiServerChange = useCallback(
       <ContentTypeSheet
         ref={contentTypeSheetRef}
         selectedTypes={selectedContentTypes}
+        matureToggleEnabled={adultContentEnabled}
         onToggle={toggleContentType}
       />
 

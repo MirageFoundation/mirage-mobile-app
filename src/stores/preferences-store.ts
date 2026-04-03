@@ -33,13 +33,20 @@ const normalizeContentTypes = (types: ContentType[]): ContentType[] => {
 };
 
 export const getAllowedTagsFromContentTypes = (
-  types: ContentType[]
+  types: ContentType[],
+  adultToggleEnabled?: boolean
 ): string => {
  const normalized = normalizeContentTypes(types);
- if (normalized.includes("all")) return CONTENT_TAGS.join(",");
+ if (normalized.includes("all")) {
+   if (adultToggleEnabled === false) {
+     return CONTENT_TAGS.filter((tag) => tag !== "adult").join(",");
+   }
+   return CONTENT_TAGS.join(",");
+ }
   if (normalized.length === 0) return "";
 
  const selected = new Set(normalized);
+  if (!adultToggleEnabled) selected.delete("adult" as any);
   return CONTENT_TAGS.filter((tag) => selected.has(tag)).join(",");
 };
 
@@ -167,49 +174,19 @@ export const usePreferencesStore = create<PreferencesState>()(
       setAdultContent: (enabled) =>
         set((state) => {
           if (enabled) {
-            if (state.selectedContentTypes.includes("all")) {
-              return { adultContentEnabled: true };
-            }
-
-            const baseTypes = state.selectedContentTypes.filter(
-              (type) => type !== "none" && type !== "all"
-            );
-            const nextSet = new Set<ContentType>(baseTypes);
-
-            for (const tag of ADULT_CONTENT_TAGS) {
-              nextSet.add(tag);
-            }
-
-            if (baseTypes.length === 0) {
-              nextSet.add("sensitive");
-            }
-
-            const nextTypes = Array.from(nextSet);
             return {
               adultContentEnabled: true,
-              selectedContentTypes: nextTypes.length ? nextTypes : ["adult"],
+              selectedContentTypes: [...CONTENT_TAGS] as ContentType[],
             };
           }
 
-          if (state.selectedContentTypes.includes("all")) {
-            return {
-              adultContentEnabled: false,
-              selectedContentTypes: ["sensitive"],
-            };
-          }
-
-          const baseTypes = state.selectedContentTypes.filter(
-            (type) => type !== "none" && type !== "all"
-          );
-          const filteredTypes = baseTypes.filter(
-            (type) => !ADULT_CONTENT_TAGS.includes(type as ContentTag)
+          const kept = state.selectedContentTypes.filter(
+            (type) => type !== "adult" && type !== "all" && type !== "none"
           );
 
           return {
             adultContentEnabled: false,
-            selectedContentTypes: filteredTypes.length
-              ? filteredTypes
-              : ["sensitive"],
+            selectedContentTypes: kept.length ? kept : kept,
           };
         }),
       setHasSeenAdultPrompt: () => set({ hasSeenAdultPrompt: true }),
@@ -217,36 +194,18 @@ export const usePreferencesStore = create<PreferencesState>()(
         const normalized = normalizeContentTypes(types);
         set({
           selectedContentTypes: normalized,
-          adultContentEnabled: isAdultContentEnabled(normalized),
         });
       },
      toggleContentType: (type) =>
        set((state) => {
          if (type === "all") {
-           const hasAdult = state.selectedContentTypes.includes("adult");
-           const nonAdultTags: ContentType[] = [...CONTENT_TAGS].filter((t) => t !== "adult");
-           if (hasAdult) {
-             return {
-               selectedContentTypes: [...nonAdultTags, "adult"],
-               adultContentEnabled: true,
-             };
-           }
            return {
-             selectedContentTypes: nonAdultTags,
-             adultContentEnabled: false,
+             selectedContentTypes: [...CONTENT_TAGS] as ContentType[],
            };
          }
         if (type === "none") {
-          const hadAdult = state.selectedContentTypes.includes("adult");
-          if (hadAdult) {
-            return {
-              selectedContentTypes: ["adult"],
-              adultContentEnabled: true,
-            };
-          }
           return {
              selectedContentTypes: [],
-            adultContentEnabled: false,
           };
         }
 
@@ -260,16 +219,8 @@ export const usePreferencesStore = create<PreferencesState>()(
             newTypes = [...newTypes, type];
           }
 
-        if (newTypes.length === 0) {
-          return {
-             selectedContentTypes: [],
-             adultContentEnabled: false,
-           };
-          }
-
           return {
             selectedContentTypes: newTypes,
-            adultContentEnabled: isAdultContentEnabled(newTypes),
           };
         }),
       setBlurSensitiveMedia: (blur) => set({ blurSensitiveMedia: blur }),

@@ -117,6 +117,7 @@ export function TopicFeedScreen() {
   const selectedContentTypes = usePreferencesStore(
     (s) => s.selectedContentTypes,
   );
+  const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const shareServer = usePreferencesStore((s) => s.shareServer);
   const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
   const videoAutoplayNetwork = usePreferencesStore(
@@ -166,8 +167,8 @@ export function TopicFeedScreen() {
   }, [topicName, isTopicFollowed, handleFollowTopicFromCard]);
 
   const allowedTags = useMemo(
-    () => getAllowedTagsFromContentTypes(selectedContentTypes),
-    [selectedContentTypes],
+    () => getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled),
+    [selectedContentTypes, adultContentEnabled],
   );
 
   const {

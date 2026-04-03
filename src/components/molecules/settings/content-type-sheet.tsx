@@ -24,6 +24,7 @@ type ContentTypeOption = {
 
 const individualOptions: ContentTypeOption[] = [
   { value: "sensitive", label: "Sensitive", icon: "warning-outline" },
+  { value: "adult", label: "Adult", icon: "eye-off-outline" },
   { value: "violence", label: "Violence", icon: "flash-outline" },
   { value: "gore", label: "Gore", icon: "skull-outline" },
   { value: "death", label: "Death", icon: "alert-circle-outline" },
@@ -31,6 +32,7 @@ const individualOptions: ContentTypeOption[] = [
 
 type ContentTypeSheetProps = {
   selectedTypes: ContentType[];
+  matureToggleEnabled: boolean;
   onToggle: (type: ContentType) => void;
   onDismiss?: () => void;
 };
@@ -43,7 +45,7 @@ export type ContentTypeSheetRef = {
 export const ContentTypeSheet = forwardRef<
   ContentTypeSheetRef,
   ContentTypeSheetProps
->(({ selectedTypes, onToggle, onDismiss }, ref) => {
+>(({ selectedTypes, matureToggleEnabled, onToggle, onDismiss }, ref) => {
   const bottomSheetRef = useRef<BottomSheetModal>(null);
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
@@ -94,9 +96,10 @@ export const ContentTypeSheet = forwardRef<
     [onToggle, selectedTypes, setBlurSensitiveMedia],
   );
 
-  const NON_ADULT_TAGS = ["sensitive", "violence", "gore", "death"] as const;
-  const isAllSelected = NON_ADULT_TAGS.every((t) => selectedTypes.includes(t));
-  const isNoneSelected = selectedTypes.length === 0 || (selectedTypes.length === 1 && selectedTypes.includes("adult"));
+  const ALL_TAGS = ["sensitive", "adult", "violence", "gore", "death"] as const;
+  const isAllSelected = ALL_TAGS.every((t) => selectedTypes.includes(t));
+  const isNoneSelected = selectedTypes.length === 0;
+  const adultSelectedButToggleOff = selectedTypes.includes("adult") && !matureToggleEnabled;
 
   const isIndividualSelected = (type: ContentType) => {
     return selectedTypes.includes(type);
@@ -206,44 +209,57 @@ export const ContentTypeSheet = forwardRef<
           <View style={styles.optionsList}>
             {individualOptions.map((option) => {
               const selected = isIndividualSelected(option.value);
+              const showNote = option.value === "adult" && selected && !matureToggleEnabled;
 
               return (
-                <Pressable
-                  key={option.value}
-                  onPress={() => handleSelect(option.value)}
-                  style={({ pressed }) => [
-                    styles.optionItem,
-                    pressed && { opacity: 0.7 },
-                  ]}
-                >
-                  <Box direction="row" alignItems="center" gap="md" flex>
-                    <Ionicons
-                      name={option.icon as any}
-                      size={20}
-                      color={theme.colors.text.default}
-                    />
-                    <Text size="md" weight="regular">
-                      {option.label}
-                    </Text>
-                  </Box>
-                  <View
-                    style={[
-                      styles.checkbox,
-                      {
-                        backgroundColor: selected
-                          ? "rgb(30,67,150)"
-                          : "transparent",
-                        borderColor: selected
-                          ? "rgb(30,67,150)"
-                          : theme.colors.border.default,
-                      },
+                <View key={option.value}>
+                  <Pressable
+                    onPress={() => handleSelect(option.value)}
+                    style={({ pressed }) => [
+                      styles.optionItem,
+                      pressed && { opacity: 0.7 },
                     ]}
                   >
-                    {selected && (
-                      <Ionicons name="checkmark" size={14} color="#FFFFFF" />
-                    )}
-                  </View>
-                </Pressable>
+                    <Box direction="row" alignItems="center" gap="md" flex>
+                      <Ionicons
+                        name={option.icon as any}
+                        size={20}
+                        color={theme.colors.text.default}
+                      />
+                      <Text size="md" weight="regular">
+                        {option.label}
+                      </Text>
+                    </Box>
+                    <View
+                      style={[
+                        styles.checkbox,
+                        {
+                          backgroundColor: selected
+                            ? "rgb(30,67,150)"
+                            : "transparent",
+                          borderColor: selected
+                            ? "rgb(30,67,150)"
+                            : theme.colors.border.default,
+                        },
+                      ]}
+                    >
+                      {selected && (
+                        <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                      )}
+                    </View>
+                  </Pressable>
+                  {showNote && (
+                    <View style={[styles.noteContainer, { backgroundColor: `${theme.colors.warning[500]}15`, borderColor: `${theme.colors.warning[500]}30` }]}>
+                      <Ionicons name="information-circle-outline" size={14} color={theme.colors.warning[500]} />
+                      <Text
+                        size="xs"
+                        style={{ color: theme.colors.warning[500], flex: 1 }}
+                      >
+                        Enable "Show Mature Content" toggle to see adult content
+                      </Text>
+                    </View>
+                  )}
+                </View>
               );
             })}
           </View>
@@ -303,5 +319,16 @@ const styles = StyleSheet.create((theme) => ({
     borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
+  },
+  noteContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+    marginLeft: 0,
+    marginBottom: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
   },
 }));

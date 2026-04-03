@@ -117,6 +117,7 @@ export const HomeTabbedFeed = forwardRef<
   const selectedContentTypes = usePreferencesStore(
     (s) => s.selectedContentTypes,
   );
+  const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const hideDownvotedPosts = usePreferencesStore((s) => s.hideDownvotedPosts);
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
@@ -126,8 +127,8 @@ export const HomeTabbedFeed = forwardRef<
   const followedTopics = useHomePostCardStore((s) => s.followedTopics);
 
   const allowedTags = useMemo(
-    () => getAllowedTagsFromContentTypes(selectedContentTypes),
-    [selectedContentTypes],
+    () => getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled),
+    [selectedContentTypes, adultContentEnabled],
   );
 
   const INITIAL_PAGE_SIZE = 10;

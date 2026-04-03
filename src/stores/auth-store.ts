@@ -138,10 +138,9 @@ export const useAuthStore = create<AuthState>()(
           }
 
           if (!hasWalletResult) {
-            const contentTypes =
-              usePreferencesStore.getState().selectedContentTypes;
+            const prefs = usePreferencesStore.getState();
             const allowedTags =
-              getAllowedTagsFromContentTypes(contentTypes) || undefined;
+              getAllowedTagsFromContentTypes(prefs.selectedContentTypes, prefs.adultContentEnabled) || undefined;
             const prefetchParams = {
               limit: 10,
               feed: "home" as const,
@@ -186,10 +185,9 @@ export const useAuthStore = create<AuthState>()(
               isInitializing: false,
             });
 
-            const contentTypes =
-              usePreferencesStore.getState().selectedContentTypes;
+            const prefs2 = usePreferencesStore.getState();
             const allowedTags =
-              getAllowedTagsFromContentTypes(contentTypes) || undefined;
+              getAllowedTagsFromContentTypes(prefs2.selectedContentTypes, prefs2.adultContentEnabled) || undefined;
             const prefetchParams = {
               limit: 10,
               feed: "home" as const,
