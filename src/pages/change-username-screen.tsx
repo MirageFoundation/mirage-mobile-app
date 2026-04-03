@@ -37,7 +37,7 @@ import { useToast } from "@/src/providers/toast-provider";
 import { walletService } from "@/src/services/wallet-service";
 import { useAuthStore } from "@/src/stores";
 
-type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid";
+type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid" | "same";
 
 export function ChangeUsernameScreen() {
   const router = useRouter();
@@ -107,6 +107,15 @@ export function ChangeUsernameScreen() {
     [minUsernameSize, maxUsernameSize],
   );
 
+  const isSameAsCurrentUsername = useCallback(
+    (value: string) => {
+      const lower = value.toLowerCase();
+      const current = currentUsername.toLowerCase();
+      return lower === current || `anon-${lower}` === current;
+    },
+    [currentUsername],
+  );
+
   useEffect(() => {
     if (username.length === 0) {
       setStatus("idle");
@@ -115,6 +124,11 @@ export function ChangeUsernameScreen() {
 
     if (!validateUsername(username)) {
       setStatus("invalid");
+      return;
+    }
+
+    if (isSameAsCurrentUsername(username)) {
+      setStatus("same");
       return;
     }
 
@@ -130,7 +144,7 @@ export function ChangeUsernameScreen() {
         setStatus("available");
       }
     }
-  }, [username, validateUsername, isCheckingUsername, isFetched, usernameData]);
+  }, [username, validateUsername, isSameAsCurrentUsername, isCheckingUsername, isFetched, usernameData]);
 
   const handleUsernameChange = useCallback((text: string) => {
     const sanitized = text.replace(/[^a-zA-Z0-9-]/g, "");
@@ -349,6 +363,14 @@ export function ChangeUsernameScreen() {
         );
       case "available":
         return <Ionicons name="checkmark" size={20} color="rgb(34,197,94)" />;
+      case "same":
+        return (
+          <Ionicons
+            name="information-circle"
+            size={20}
+            color={theme.colors.warning[500]}
+          />
+        );
       case "taken":
         return (
           <Ionicons
@@ -376,6 +398,8 @@ export function ChangeUsernameScreen() {
         return "Checking availability...";
       case "available":
         return "Great name! It's not taken, so it's all yours.";
+      case "same":
+        return "This is your current username, try something different.";
       case "taken":
         return "This username is already taken";
       case "invalid":
@@ -389,6 +413,8 @@ export function ChangeUsernameScreen() {
     switch (status) {
       case "available":
         return "rgb(34,197,94)";
+      case "same":
+        return theme.colors.warning[500];
       case "taken":
         return theme.colors.error[500];
       case "invalid":
