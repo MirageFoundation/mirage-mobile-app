@@ -785,7 +785,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           added a note for subscriber having anon prefix in
                           username, porn to adult migration, reduced the number
                           of videos to play off screen on android to fix the out
-                          of memory crash
+                          of memory crash, double spinner removed from android
                         </Text>
                       </>
                     )}
@@ -848,7 +848,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           added a note for subscriber having anon prefix in
                           username, porn to adult migration, reduced the number
                           of videos to play off screen on android to fix the out
-                          of memory crash
+                          of memory crash, double spinner removed from android
                         </Text>
                       </>
                     )}

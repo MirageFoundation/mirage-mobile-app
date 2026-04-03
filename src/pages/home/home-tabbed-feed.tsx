@@ -698,11 +698,12 @@ export const HomeTabbedFeed = forwardRef<
   const refreshControl = useMemo(
     () => (
       <RefreshControl
-        refreshing={isRefreshing}
+        refreshing={Platform.OS === "android" ? false : isRefreshing}
         onRefresh={handleRefresh}
         tintColor="transparent"
         colors={["transparent"]}
-        progressViewOffset={progressViewOffset}
+        progressBackgroundColor="transparent"
+        progressViewOffset={Platform.OS === "android" ? -10000 : progressViewOffset}
       />
     ),
     [handleRefresh, progressViewOffset, isRefreshing],
