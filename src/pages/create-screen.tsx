@@ -4,6 +4,7 @@ import { markEditJustCompleted } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { fetchLinkMeta } from "@/src/utils/fetch-link-meta";
 import { mergeAudioVideo } from "@/src/utils/merge-audio-video";
+import { muxAudioVideo } from "@/src/utils/mux-audio-video";
 import { sanitizeTopicName } from "@/src/utils/topic-validation";
 import { trimToMaxDuration } from "@/src/utils/video-processing";
 import { useQueryClient } from "@tanstack/react-query";
@@ -601,7 +602,6 @@ export function CreateScreen() {
               };
 
               let finalUri: string | null = null;
-              let usedDiskFallback = false;
 
               try {
                 const response = await fetch(vidUrl, { headers: fetchHeaders });
@@ -687,8 +687,6 @@ export function CreateScreen() {
                   tags: { feature: "share-intent", domain: meta.domain },
                   extra: { vidUrl, error: String(ramErr) },
                 });
-                usedDiskFallback = true;
-
                 const ext = vidUrl.match(/\.(mp4|mov|webm|m3u8|gif)/i)?.[1] ?? "mp4";
                 const destFile = new ExpoFile(Paths.cache, `shared_link_video_${Date.now()}_${vi}.${ext}`);
                 const downloadedFile = await ExpoFile.downloadFileAsync(vidUrl, destFile, {
@@ -703,13 +701,44 @@ export function CreateScreen() {
                   try { downloadedFile.delete(); } catch {}
                   continue;
                 }
+
                 let diskUri = downloadedFile.uri;
+                if (vi === 0) {
+                  const audioUrlsToTry = meta.audioUrls?.length > 0
+                    ? meta.audioUrls
+                    : meta.audioUrl
+                      ? [meta.audioUrl]
+                      : [];
+                  for (const tryAudioUrl of audioUrlsToTry) {
+                    try {
+                      const audioFile = new ExpoFile(Paths.cache, `shared_link_audio_${Date.now()}_${vi}.mp4`);
+                      const downloadedAudio = await ExpoFile.downloadFileAsync(tryAudioUrl, audioFile, {
+                        headers: {
+                          "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+                          "Referer": meta.domain ? `https://${meta.domain}/` : "https://www.reddit.com/",
+                          "Accept": "*/*",
+                        },
+                      });
+                      if ((downloadedAudio.size ?? 0) < 500) {
+                        try { downloadedAudio.delete(); } catch {}
+                        continue;
+                      }
+                      diskUri = await muxAudioVideo(downloadedFile.uri, downloadedAudio.uri, "mp4");
+                      try { downloadedAudio.delete(); } catch {}
+                      Sentry.addBreadcrumb({ category: "share-intent", message: "Audio+video merged (native disk fallback)", level: "info" });
+                      break;
+                    } catch (muxErr) {
+                      Sentry.addBreadcrumb({ category: "share-intent", message: "Native disk mux attempt failed", data: { error: String(muxErr) }, level: "warning" });
+                    }
+                  }
+                }
+
                 try {
-                  const { sound } = await Audio.Sound.createAsync({ uri: downloadedFile.uri });
+                  const { sound } = await Audio.Sound.createAsync({ uri: diskUri });
                   const status = await sound.getStatusAsync();
                   await sound.unloadAsync();
                   if (status.isLoaded && status.durationMillis && status.durationMillis > 59000) {
-                    diskUri = await trimToMaxDuration(downloadedFile.uri, status.durationMillis);
+                    diskUri = await trimToMaxDuration(diskUri, status.durationMillis);
                   }
                 } catch {}
                 finalUri = diskUri;

@@ -1,0 +1,314 @@
+--- a/node_modules/react-native-video-trim/src/NativeVideoTrim.ts
++++ b/node_modules/react-native-video-trim/src/NativeVideoTrim.ts
+@@ -93,6 +93,12 @@
+   success: boolean;
+ }
+ 
++export interface MuxResult {
++  outputPath: string;
++  success: boolean;
++  message?: string;
++}
++
+ export interface Spec extends TurboModule {
+   showEditor(filePath: string, config: EditorConfig): void;
+   listFiles(): Promise<string[]>;
+@@ -100,6 +106,7 @@
+   deleteFile(filePath: string): Promise<boolean>;
+   closeEditor(): void;
+   isValidFile(url: string): Promise<FileValidationResult>;
++  mux(videoUrl: string, audioUrl: string, outputExt: string): Promise<MuxResult>;
+   trim(url: string, options: TrimOptions): Promise<TrimResult>;
+ 
+   readonly onStartTrimming: EventEmitter<void>;
+--- a/node_modules/react-native-video-trim/src/index.tsx
++++ b/node_modules/react-native-video-trim/src/index.tsx
+@@ -4,6 +4,7 @@
+   BaseOptions,
+   EditorConfig,
+   FileValidationResult,
++  MuxResult,
+   TrimOptions,
+   TrimResult,
+ } from './NativeVideoTrim';
+@@ -171,6 +172,17 @@
+ }
+ 
+ /**
++ * Mux a video and audio file into a single MP4.
++ */
++export function mux(
++  videoUrl: string,
++  audioUrl: string,
++  outputExt: string = 'mp4'
++): Promise<MuxResult> {
++  return VideoTrim.mux(videoUrl, audioUrl, outputExt);
++}
++
++/**
+  * Trim a video file
+  *
+  * @param {string} url: absolute non-empty file path to edit
+--- a/node_modules/react-native-video-trim/lib/typescript/src/NativeVideoTrim.d.ts
++++ b/node_modules/react-native-video-trim/lib/typescript/src/NativeVideoTrim.d.ts
+@@ -86,6 +86,11 @@
+     outputPath: string;
+     success: boolean;
+ }
++export interface MuxResult {
++    outputPath: string;
++    success: boolean;
++    message?: string;
++}
+ export interface Spec extends TurboModule {
+     showEditor(filePath: string, config: EditorConfig): void;
+     listFiles(): Promise<string[]>;
+@@ -93,6 +98,7 @@
+     deleteFile(filePath: string): Promise<boolean>;
+     closeEditor(): void;
+     isValidFile(url: string): Promise<FileValidationResult>;
++    mux(videoUrl: string, audioUrl: string, outputExt: string): Promise<MuxResult>;
+     trim(url: string, options: TrimOptions): Promise<TrimResult>;
+     readonly onStartTrimming: EventEmitter<void>;
+     readonly onCancelTrimming: EventEmitter<void>;
+--- a/node_modules/react-native-video-trim/lib/typescript/src/index.d.ts
++++ b/node_modules/react-native-video-trim/lib/typescript/src/index.d.ts
+@@ -1,4 +1,4 @@
+-import type { EditorConfig, FileValidationResult, TrimOptions, TrimResult } from './NativeVideoTrim';
++import type { EditorConfig, FileValidationResult, MuxResult, TrimOptions, TrimResult } from './NativeVideoTrim';
+ declare const VideoTrim: any;
+ /**
+  * Show video editor
+@@ -44,6 +44,10 @@
+  */
+ export declare function isValidFile(url: string): Promise<FileValidationResult>;
+ /**
++ * Mux a video and audio file into a single MP4.
++ */
++export declare function mux(videoUrl: string, audioUrl: string, outputExt?: string): Promise<MuxResult>;
++/**
+  * Trim a video file
+  *
+  * @param {string} url: absolute non-empty file path to edit
+--- a/node_modules/react-native-video-trim/android/src/oldarch/VideoTrimSpec.kt
++++ b/node_modules/react-native-video-trim/android/src/oldarch/VideoTrimSpec.kt
+@@ -20,5 +20,7 @@
+ 
+   abstract fun isValidFile(url: String, promise: Promise)
+ 
++  abstract fun mux(videoUrl: String, audioUrl: String, outputExt: String, promise: Promise)
++
+   abstract fun trim(url: String, options: ReadableMap?, promise: Promise)
+ }
+--- a/node_modules/react-native-video-trim/android/src/oldarch/VideoTrimModule.kt
++++ b/node_modules/react-native-video-trim/android/src/oldarch/VideoTrimModule.kt
+@@ -61,6 +61,16 @@
+   }
+ 
+   @ReactMethod
++  override fun mux(
++    videoUrl: String,
++    audioUrl: String,
++    outputExt: String,
++    promise: Promise
++  ) {
++    base.mux(videoUrl, audioUrl, outputExt, promise)
++  }
++
++  @ReactMethod
+   override fun trim(
+     url: String,
+     options: ReadableMap?,
+--- a/node_modules/react-native-video-trim/android/src/newarch/VideoTrimModule.kt
++++ b/node_modules/react-native-video-trim/android/src/newarch/VideoTrimModule.kt
+@@ -61,6 +61,15 @@
+     base.isValidFile(url, promise)
+   }
+ 
++  override fun mux(
++    videoUrl: String,
++    audioUrl: String,
++    outputExt: String,
++    promise: Promise
++  ) {
++    base.mux(videoUrl, audioUrl, outputExt, promise)
++  }
++
+   override fun trim(
+     url: String,
+     options: ReadableMap,
+--- a/node_modules/react-native-video-trim/android/src/main/java/com/videotrim/BaseVideoTrimModule.kt
++++ b/node_modules/react-native-video-trim/android/src/main/java/com/videotrim/BaseVideoTrimModule.kt
+@@ -569,6 +569,58 @@
+ 
+       promise.resolve(result)
+     }
++  }
++
++  fun mux(videoUrl: String, audioUrl: String, outputExt: String, promise: Promise) {
++    val normalizedVideoUrl = videoUrl.removePrefix("file://")
++    val normalizedAudioUrl = audioUrl.removePrefix("file://")
++    val outputFile = StorageUtil.getOutputPath(reactApplicationContext, outputExt)
++
++    val cmds = arrayOf(
++      "-i",
++      normalizedVideoUrl,
++      "-i",
++      normalizedAudioUrl,
++      "-c:v",
++      "copy",
++      "-c:a",
++      "aac",
++      "-map",
++      "0:v:0",
++      "-map",
++      "1:a:0",
++      "-shortest",
++      "-movflags",
++      "+faststart",
++      outputFile
++    )
++
++    Log.d(TAG, "Mux command: ${cmds.joinToString(",")}")
++
++    FFmpegKit.executeWithArgumentsAsync(cmds, { session ->
++      val state = session.state
++      val returnCode = session.returnCode
++      when {
++        ReturnCode.isSuccess(returnCode) -> {
++          val result = Arguments.createMap()
++          result.putString("outputPath", outputFile)
++          result.putBoolean("success", true)
++          promise.resolve(result)
++        }
++        ReturnCode.isCancel(returnCode) -> {
++          promise.reject(Exception("FFmpeg mux was cancelled with code $returnCode"))
++        }
++        else -> {
++          val errorMessage = String.format("Mux command failed with state %s and rc %s.%s", state, returnCode, session.getFailStackTrace())
++          Log.d(TAG, errorMessage)
++          promise.reject(Exception(errorMessage))
++        }
++      }
++    }, { log ->
++      Log.d(TAG, "FFmpeg mux log ${log.message}")
++    }, { _ ->
++      // Handle statistics if needed
++    })
+   }
+ 
+   fun trim(url: String, options: ReadableMap?, promise: Promise) {
+--- a/node_modules/react-native-video-trim/ios/VideoTrim.swift
++++ b/node_modules/react-native-video-trim/ios/VideoTrim.swift
+@@ -624,6 +624,50 @@
+     }, withLogCallback: nil, withStatisticsCallback: nil)
+   }
+   
++  // New Arch
++  @objc(mux:audioUrl:outputExt:completion:)
++  public func _mux(videoUrl: String, audioUrl: String, outputExt: String, completion: @escaping ([String: Any]) -> Void) {
++    let normalizedVideoPath = videoUrl.replacingOccurrences(of: "file://", with: "")
++    let normalizedAudioPath = audioUrl.replacingOccurrences(of: "file://", with: "")
++
++    let timestamp = Int(Date().timeIntervalSince1970)
++    let outputName = "\(FILE_PREFIX)_mux_\(timestamp).\(outputExt)"
++    let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
++    let outputFile = documentsDirectory.appendingPathComponent(outputName)
++
++    let cmds = [
++      "-i", normalizedVideoPath,
++      "-i", normalizedAudioPath,
++      "-c:v", "copy",
++      "-c:a", "aac",
++      "-map", "0:v:0",
++      "-map", "1:a:0",
++      "-shortest",
++      "-movflags", "+faststart",
++      outputFile.path,
++    ]
++
++    FFmpegKit.execute(withArgumentsAsync: cmds, withCompleteCallback: { session in
++      let returnCode = session?.getReturnCode()
++      if ReturnCode.isSuccess(returnCode) {
++        completion([
++          "success": true,
++          "outputPath": outputFile.absoluteString,
++        ])
++      } else if ReturnCode.isCancel(returnCode) {
++        completion([
++          "success": false,
++          "message": "FFmpeg mux was cancelled with code \(returnCode?.getValue() ?? -1)",
++        ])
++      } else {
++        completion([
++          "success": false,
++          "message": "Mux command failed with rc \(String(describing: returnCode)).\(String(describing: session?.getFailStackTrace()))",
++        ])
++      }
++    }, withLogCallback: nil, withStatisticsCallback: nil)
++  }
++
+   // Old Arch
+   @objc(trim:withConfig:withResolver:withRejecter:)
+   func _trim(inputFile: String, config: NSDictionary, resolve: @escaping RCTPromiseResolveBlock,reject: @escaping RCTPromiseRejectBlock) -> Void {
+@@ -637,6 +681,19 @@
+       }
+     })
+   }
++
++  @objc(mux:withAudioUrl:withOutputExt:withResolver:withRejecter:)
++  func _mux(videoUrl: String, audioUrl: String, outputExt: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) -> Void {
++    _mux(videoUrl: videoUrl, audioUrl: audioUrl, outputExt: outputExt, completion: { payload in
++      if let success = payload["success"] as? Bool, success {
++        resolve(payload)
++      } else {
++        let message = payload["message"] as? String ?? "Unknown error"
++        let error = NSError(domain: "", code: 200, userInfo: nil)
++        reject("ERR_MUX_FAILED", message, error)
++      }
++    })
++  }
+   
+   private func saveFileToFilesApp(fileURL: URL) {
+     DispatchQueue.main.async {
+--- a/node_modules/react-native-video-trim/ios/VideoTrim.mm
++++ b/node_modules/react-native-video-trim/ios/VideoTrim.mm
+@@ -54,6 +54,28 @@
+   resolve([VideoTrimSwift listFiles]);
+ }
+ 
++- (void)mux:(nonnull NSString *)videoUrl
++   audioUrl:(nonnull NSString *)audioUrl
++   outputExt:(nonnull NSString *)outputExt
++    resolve:(nonnull RCTPromiseResolveBlock)resolve
++     reject:(nonnull RCTPromiseRejectBlock)reject {
++  if (!self->videoTrim) {
++    self->videoTrim = [[VideoTrimSwift alloc] init];
++    self->videoTrim.isNewArch = true;
++  }
++
++  [self->videoTrim mux:videoUrl audioUrl:audioUrl outputExt:outputExt completion:^(NSDictionary<NSString *,id> * _Nonnull result) {
++    BOOL success = [result[@"success"] boolValue];
++    if (success) {
++      resolve(result);
++    } else {
++      NSString *message = result[@"message"];
++      NSError *error = [NSError errorWithDomain:@"" code:200 userInfo:nil];
++      reject(@"ERR_MUX_FAILED", message, error);
++    }
++  }];
++}
++
+ - (void)trim:(nonnull NSString *)url
+      options:(JS::NativeVideoTrim::TrimOptions &)options
+      resolve:(nonnull RCTPromiseResolveBlock)resolve
+@@ -222,6 +244,9 @@
+ RCT_EXTERN_METHOD(closeEditor)
+ RCT_EXTERN_METHOD(isValidFile:(NSString*)uri withResolver:(RCTPromiseResolveBlock)resolve
+                   withRejecter:(RCTPromiseRejectBlock)reject)
++RCT_EXTERN_METHOD(mux:(NSString*)videoUrl withAudioUrl:(NSString*)audioUrl withOutputExt:(NSString*)outputExt
++                  withResolver:(RCTPromiseResolveBlock)resolve
++                  withRejecter:(RCTPromiseRejectBlock)reject)
+ RCT_EXTERN_METHOD(trim:(NSString*)uri withConfig:(NSDictionary *)config
+                   withResolver:(RCTPromiseResolveBlock)resolve
+                   withRejecter:(RCTPromiseRejectBlock)reject)
