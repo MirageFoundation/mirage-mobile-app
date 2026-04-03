@@ -30,10 +30,11 @@ export function useAddressFromUsername(username: string | undefined | null) {
  *
  * @param username - The username to check availability for
  */
-export function useUsernameAvailability(username: string | undefined | null) {
+export function useUsernameAvailability(username: string | undefined | null, currentUsername?: string) {
   const isEnabled = !!username && username.length >= 2;
   const safeUsername = username ?? "__disabled__";
   const anonUsername = `anon-${safeUsername}`;
+  const normalizedCurrent = currentUsername?.toLowerCase();
 
   const results = useQueries({
     queries: [
@@ -60,15 +61,13 @@ export function useUsernameAvailability(username: string | undefined | null) {
   const isFetched = regularResult.isFetched && anonResult.isFetched;
   const isError = regularResult.isError || anonResult.isError;
 
-  // Username is only available if BOTH regular and anon- versions are available
-  const isAvailable =
-    isFetched &&
-    regularResult.data?.exists === false &&
-    anonResult.data?.exists === false;
-
   // Determine which version is taken (for better error messaging)
-  const regularTaken = regularResult.data?.exists === true;
-  const anonTaken = anonResult.data?.exists === true;
+  const regularTaken = regularResult.data?.exists === true &&
+    safeUsername.toLowerCase() !== normalizedCurrent;
+  const anonTaken = anonResult.data?.exists === true &&
+    anonUsername.toLowerCase() !== normalizedCurrent;
+
+  const isAvailable = isFetched && !regularTaken && !anonTaken;
 
   return {
     isLoading,

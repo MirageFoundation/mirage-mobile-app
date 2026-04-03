@@ -94,6 +94,7 @@ export function ChangeUsernameScreen() {
     isFetched,
   } = useUsernameAvailability(
     username.length >= minUsernameSize ? username : null,
+    currentUsername,
   );
 
   const validateUsername = useCallback(
