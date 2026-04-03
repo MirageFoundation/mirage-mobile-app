@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Sentry from "@sentry/react-native";
-import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
+import { Audio, AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { useLocalSearchParams } from "expo-router";
 import { router } from "@/src/utils/guarded-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -63,6 +63,13 @@ export function VideoEditorScreen() {
   const [duration, setDuration] = useState(0);
   const [currentPosition, setCurrentPosition] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+    }).catch(() => {});
+  }, []);
   
   const initialTrimStartMs = params.initialTrimStart ? parseInt(params.initialTrimStart) : 0;
   const initialTrimEndMs = params.initialTrimEnd ? parseInt(params.initialTrimEnd) : 0;

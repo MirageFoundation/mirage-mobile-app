@@ -623,11 +623,14 @@ export function CreateScreen() {
                       try { downloadedAudio.delete(); } catch {}
                       continue;
                     }
+                    console.log("[CreateScreen] Starting native mux:", { video: downloadedFile.uri, audio: downloadedAudio.uri });
                     finalUri = await muxAudioVideo(downloadedFile.uri, downloadedAudio.uri, "mp4");
+                    console.log("[CreateScreen] Native mux succeeded:", finalUri);
                     try { downloadedAudio.delete(); } catch {}
                     Sentry.addBreadcrumb({ category: "share-intent", message: "Audio+video merged (native disk path)", level: "info" });
                     break;
                   } catch (muxErr) {
+                    console.log("[CreateScreen] Native mux failed:", String(muxErr));
                     Sentry.addBreadcrumb({ category: "share-intent", message: "Native disk mux attempt failed", data: { error: String(muxErr) }, level: "warning" });
                   }
                 }
