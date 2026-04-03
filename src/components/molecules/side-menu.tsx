@@ -790,7 +790,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           comment,save comment draft even after going back or
                           closing the app, draft expires after 2 days,
                           notification tap now shows the new msgs in inbox
-                          immediately
+                          immediately,username taken issue on edit username fix
                         </Text>
                       </>
                     )}
@@ -858,7 +858,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           comment,save comment draft even after going back or
                           closing the app, draft expires after 2 days,
                           notification tap now shows the new msgs in inbox
-                          immediately
+                          immediately,username taken issue on edit username fix
                         </Text>
                       </>
                     )}
