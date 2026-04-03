@@ -177,6 +177,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   }, []);
 
   const [text, setText] = useState(initialText);
+  const textRef = useRef(initialText);
   const [inputMode, setInputMode] = useState<InputMode>("keyboard");
   const inputModeRef = useRef<InputMode>("keyboard");
   const [linkName, setLinkName] = useState("");
@@ -197,6 +198,9 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
  const [selectedGifUrl, setSelectedGifUrl] = useState<string | null>(
    initialAttachment?.type === "gif" ? initialAttachment.url : null,
  );
+  const selectedImageUriRef = useRef<string | null>(selectedImageUri);
+  const selectedGifUrlRef = useRef<string | null>(selectedGifUrl);
+  const didSubmitRef = useRef(false);
   const [isMediaLoading, setIsMediaLoading] = useState(false);
   const [showStickerPicker, setShowStickerPicker] = useState(false);
 
@@ -228,6 +232,30 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
 
  const setWasDismissed = useCommentComposeStore((s) => s.setWasDismissed);
 
+  useEffect(() => {
+    textRef.current = text;
+  }, [text]);
+
+  useEffect(() => {
+    selectedImageUriRef.current = selectedImageUri;
+  }, [selectedImageUri]);
+
+  useEffect(() => {
+    selectedGifUrlRef.current = selectedGifUrl;
+  }, [selectedGifUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (!isEditMode && postId && !didSubmitRef.current) {
+        saveDraft(postId, replyToId ?? null, {
+          text: textRef.current,
+          imageUri: selectedImageUriRef.current,
+          gifUrl: selectedGifUrlRef.current,
+        });
+      }
+    };
+  }, [isEditMode, postId, replyToId, saveDraft]);
+
   const replyPreview = useMemo(() => {
     if (!replyToContent) return null;
     return extractImageUrls(replyToContent);
@@ -235,15 +263,8 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
 
  const handleClose = useCallback(() => {
     setWasDismissed(true);
-    if (!isEditMode && postId) {
-      saveDraft(postId, replyToId ?? null, {
-        text,
-        imageUri: selectedImageUri,
-        gifUrl: selectedGifUrl,
-      });
-    }
    router.back();
-  }, [router, setWasDismissed, isEditMode, postId, replyToId, text, selectedImageUri, selectedGifUrl, saveDraft]);
+  }, [router, setWasDismissed]);
 
   const handleSubmit = useCallback(() => {
     if (!canSubmit) return;
@@ -268,6 +289,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
       });
     }
     if (!isEditMode && postId) {
+      didSubmitRef.current = true;
       clearDraft(postId, replyToId ?? null);
     }
     router.back();
