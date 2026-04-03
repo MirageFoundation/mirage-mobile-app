@@ -121,7 +121,7 @@ export const MarkdownContent = memo(function MarkdownContent({
         marginBottom: theme.spacing.xs,
       },
       paragraph: {
-        marginBottom: theme.spacing.xs,
+        marginBottom: theme.spacing.md,
         color: textColor,
       },
       text: {

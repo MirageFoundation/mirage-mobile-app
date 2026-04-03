@@ -307,18 +307,18 @@ export const PostCard = memo(function PostCard({
         </View>
       )}
 
-      {post.appendices && post.appendices.length > 0 && (
-        <View style={[styles.appendicesContainer, { backgroundColor: theme.colors.background.subtle }]}>
-          {post.appendices.map((appendix, idx) => (
-            <View key={idx} style={[styles.appendix, { borderLeftColor: theme.colors.border.default }]}>
+      {post.appendices && post.appendices.length > 0 &&
+        post.appendices.map((appendix, idx) => (
+          <View key={idx} style={[styles.appendicesContainer, { backgroundColor: theme.colors.background.subtle }]}>
+            <View style={[styles.appendix, { borderLeftColor: theme.colors.border.default }]}>
               <Text size="xs" weight="semibold" style={{ color: "#EF4444" }}>
                 @{appendix.agentUsername || appendix.agent.slice(0, 12) + "…"}
               </Text>
               <MarkdownContent content={appendix.text} />
             </View>
-          ))}
-        </View>
-      )}
+          </View>
+        ))
+      }
 
       <PostActions
         likes={likes}
@@ -385,7 +385,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   appendicesContainer: {
     marginTop: theme.spacing.sm,
-    gap: theme.spacing.xs,
+    gap: theme.spacing.md,
     padding: theme.spacing.sm,
     borderRadius: theme.radius.md,
   },
