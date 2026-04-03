@@ -36,13 +36,11 @@ export const getAllowedTagsFromContentTypes = (
   types: ContentType[]
 ): string => {
  const normalized = normalizeContentTypes(types);
- if (normalized.includes("all")) return [...CONTENT_TAGS, "porn"].join(",");
+ if (normalized.includes("all")) return CONTENT_TAGS.join(",");
   if (normalized.length === 0) return "";
 
  const selected = new Set(normalized);
-  const tags = CONTENT_TAGS.filter((tag) => selected.has(tag));
-  if (selected.has("adult")) tags.push("porn" as any);
-  return tags.join(",");
+  return CONTENT_TAGS.filter((tag) => selected.has(tag)).join(",");
 };
 
 export const isAdultContentEnabled = (types: ContentType[]): boolean => {

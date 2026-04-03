@@ -773,19 +773,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          change the ui of new unread msg in inbox, video not
-                          getting uploaded fix, better sentry logs added for
-                          comment posting error video not getting extracted
-                          error, some UI change in inbox msgs, comment failed
-                          error investigated and understood the failure
-                          happening on sticker upload and fixed, edit username
-                          screen UI updated, changing username reflects
-                          immediately,changed ui of edit username button on
-                          profile tab, added edit username option in settings,
-                          added a note for subscriber having anon prefix in
-                          username, porn to adult migration, reduced the number
-                          of videos to play off screen on android to fix the out
-                          of memory crash, double spinner removed from android
+                          migrate content tag to adult all over the app
                         </Text>
                       </>
                     )}
@@ -836,19 +824,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          change the ui of new unread msg in inbox, video not
-                          getting uploaded fix, better sentry logs added for
-                          comment posting error video not getting extracted
-                          error, some UI change in inbox msgs, comment failed
-                          error investigated and understood the failure
-                          happening on sticker upload and fixed, edit username
-                          screen UI updated, changing username reflects
-                          immediately,changed ui of edit username button on
-                          profile tab, added edit username option in settings,
-                          added a note for subscriber having anon prefix in
-                          username, porn to adult migration, reduced the number
-                          of videos to play off screen on android to fix the out
-                          of memory crash, double spinner removed from android
+                          migrate content tag to adult all over the app
                         </Text>
                       </>
                     )}
