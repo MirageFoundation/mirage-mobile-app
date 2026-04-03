@@ -55,6 +55,7 @@ type PostCardMediaProps = {
   mediaList?: ResolvedMedia[];
   isVisible: boolean;
   isFocused?: boolean;
+  isNearVisible?: boolean;
   shouldBlurContent: boolean;
   hasMultipleMedia: boolean;
   extraMediaCount: number;
@@ -100,6 +101,7 @@ export const PostCardMedia = memo(
       mediaList,
       isVisible,
       isFocused = true,
+      isNearVisible,
       shouldBlurContent,
       hasMultipleMedia,
       extraMediaCount,
@@ -480,7 +482,7 @@ export const PostCardMedia = memo(
     const shouldMountNativeVideo =
       isPostDetail ||
       Platform.OS === "ios" ||
-      isVisible;
+      (isNearVisible ?? isVisible);
 
     const shouldAutoStartVideo =
       media?.type === "video" &&

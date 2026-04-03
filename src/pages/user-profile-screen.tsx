@@ -124,6 +124,7 @@ const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
  if (p.awards?.length !== n.awards?.length) return false;
  if (prev.isVisible !== next.isVisible) return false;
  if (prev.isFocused !== next.isFocused) return false;
+ if (prev.isNearVisible !== next.isNearVisible) return false;
  if (prev.screenActive !== next.screenActive) return false;
  if (prev.contentRevealed !== next.contentRevealed) return false;
  return true;
@@ -139,6 +140,7 @@ const PostWrapper = memo(function PostWrapper({
  isOwnProfile,
  isVisible,
  isFocused,
+ isNearVisible,
  screenActive,
  contentRevealed,
  shareUrl,
@@ -158,6 +160,7 @@ const PostWrapper = memo(function PostWrapper({
  isOwnProfile: boolean;
  isVisible?: boolean;
  isFocused?: boolean;
+ isNearVisible?: boolean;
  screenActive?: boolean;
  contentRevealed?: boolean;
  shareUrl: string;
@@ -189,6 +192,7 @@ const PostWrapper = memo(function PostWrapper({
     isOwnPost={isOwnProfile}
     isVisible={isVisible}
     isFocused={isFocused}
+    isNearVisible={isNearVisible}
     screenActive={screenActive}
     contentRevealed={contentRevealed}
     showUrlCard={false}
@@ -820,6 +824,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
 
   const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
   const [visibleVideoPostIds, setVisibleVideoPostIds] = useState<Set<string>>(new Set());
+  const [nearbyVideoPostIds, setNearbyVideoPostIds] = useState<Set<string>>(new Set());
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
   const handleRevealContent = useCallback((postId: string) => {
@@ -846,6 +851,8 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
 
   const pendingProfileViewableRef = useRef<ViewToken[] | null>(null);
   const profileDeferHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const listDataRef = useRef(listData);
+  listDataRef.current = listData;
 
   const flushProfileViewability = () => {
     const items = pendingProfileViewableRef.current;
@@ -855,6 +862,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     );
     if (visibleItems.length === 0) {
       setVisibleVideoPostIds(new Set());
+      setNearbyVideoPostIds(new Set());
       setActiveVideoPostId(null);
       return;
     }
@@ -863,6 +871,22 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     );
     const newVisibleIds = new Set(videoItems.map((item) => item.item.id));
     setVisibleVideoPostIds(newVisibleIds);
+
+    const nearbyIds = new Set(newVisibleIds);
+    const allData = listDataRef.current;
+    if (allData.length > 0 && visibleItems.length > 0) {
+      const indices = visibleItems.map((v) => v.index ?? 0);
+      const minIdx = Math.min(...indices);
+      const maxIdx = Math.max(...indices);
+      const lo = Math.max(0, minIdx - 3);
+      const hi = Math.min(allData.length - 1, maxIdx + 3);
+      for (let i = lo; i <= hi; i++) {
+        const p = allData[i];
+        if (p && typeof p === "object" && "id" in p && postHasPlayableVideo(p)) nearbyIds.add(p.id);
+      }
+    }
+    setNearbyVideoPostIds(nearbyIds);
+
     if (videoItems.length > 0) {
       const sortedIndices = visibleItems
         .map((v) => v.index ?? 0)
@@ -938,6 +962,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         profileDeferHandleRef.current = null;
       }
       setVisibleVideoPostIds(new Set());
+      setNearbyVideoPostIds(new Set());
       setActiveVideoPostId(null);
     },
     onForeground: () => {
@@ -1009,6 +1034,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
              isOwnProfile={isOwnProfile}
              isVisible={visibleVideoPostIds.has(item.id)}
              isFocused={activeVideoPostId === item.id}
+             isNearVisible={nearbyVideoPostIds.has(item.id)}
              screenActive={isFocused}
              contentRevealed={revealedPosts.has(item.id)}
              shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
