@@ -20,7 +20,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useConfig } from "@/src/api/read/hooks/use-parameters";
-import { useUsernameAvailability } from "@/src/api/read/hooks/use-username-resolution";
+import { useAddressFromUsername } from "@/src/api/read/hooks/use-username-resolution";
 import { useUserStatus } from "@/src/api/read";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { setUsername as setUsernameOnChain } from "@/src/api/write";
@@ -92,9 +92,8 @@ export function ChangeUsernameScreen() {
     data: usernameData,
     isLoading: isCheckingUsername,
     isFetched,
-  } = useUsernameAvailability(
+  } = useAddressFromUsername(
     username.length >= minUsernameSize ? username : null,
-    currentUsername,
   );
 
   const validateUsername = useCallback(

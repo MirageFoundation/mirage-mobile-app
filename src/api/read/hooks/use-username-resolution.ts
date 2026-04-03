@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   getAddressFromUsername,
   getUsernameFromAddress,
@@ -19,8 +19,8 @@ export function useAddressFromUsername(username: string | undefined | null) {
     queryKey: queryKeys.addressFromUsername(username!),
     queryFn: () => getAddressFromUsername({ username: username! }),
     enabled: !!username && username.length >= 2,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-    gcTime: 1000 * 60 * 60, // 1 hour
+    staleTime: 0,
+    gcTime: 0,
   });
 }
 
@@ -30,66 +30,17 @@ export function useAddressFromUsername(username: string | undefined | null) {
  *
  * @param username - The username to check availability for
  */
-export function useUsernameAvailability(username: string | undefined | null, currentUsername?: string) {
+export function useUsernameAvailability(username: string | undefined | null) {
   const isEnabled = !!username && username.length >= 2;
-  const safeUsername = username ?? "__disabled__";
-  const anonUsername = `anon-${safeUsername}`;
-  const normalizedCurrent = currentUsername?.toLowerCase();
+  const anonUsername = `anon-${username ?? "__disabled__"}`;
 
-  const results = useQueries({
-    queries: [
-      {
-        queryKey: queryKeys.addressFromUsername(safeUsername),
-        queryFn: () => getAddressFromUsername({ username: safeUsername }),
-        enabled: isEnabled,
-        staleTime: 1000 * 60 * 5,
-        gcTime: 1000 * 60 * 60,
-      },
-      {
-        queryKey: queryKeys.addressFromUsername(anonUsername),
-        queryFn: () => getAddressFromUsername({ username: anonUsername }),
-        enabled: isEnabled,
-        staleTime: 1000 * 60 * 5,
-        gcTime: 1000 * 60 * 60,
-      },
-    ],
+  return useQuery({
+    queryKey: queryKeys.addressFromUsername(anonUsername),
+    queryFn: () => getAddressFromUsername({ username: anonUsername }),
+    enabled: isEnabled,
+    staleTime: 0,
+    gcTime: 0,
   });
-
-  const [regularResult, anonResult] = results;
-
-  const isLoading = regularResult.isLoading || anonResult.isLoading;
-  const isFetched = regularResult.isFetched && anonResult.isFetched;
-  const isError = regularResult.isError || anonResult.isError;
-
-  // Determine which version is taken (for better error messaging)
-  const regularTaken = regularResult.data?.exists === true &&
-    safeUsername.toLowerCase() !== normalizedCurrent;
-  const anonTaken = anonResult.data?.exists === true &&
-    anonUsername.toLowerCase() !== normalizedCurrent;
-
-  const isAvailable = isFetched && !regularTaken && !anonTaken;
-
-  return {
-    isLoading,
-    isFetched,
-    isError,
-    isAvailable,
-    // Combined response for compatibility
-    data: isFetched
-      ? {
-          exists: regularTaken || anonTaken,
-          username: username!,
-          address:
-            regularResult.data?.address ?? anonResult.data?.address ?? null,
-          // Additional info for debugging/messaging
-          regularTaken,
-          anonTaken,
-        }
-      : undefined,
-    // Individual results if needed
-    regularResult,
-    anonResult,
-  };
 }
 
 /**
