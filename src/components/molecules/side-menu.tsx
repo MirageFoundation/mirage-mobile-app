@@ -784,7 +784,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           enabling mature content toggle is necessary to see
                           adult content, both the show mature content toggle and
                           the adult type content should be enabled to see adult
-                          content
+                          content, made the parent comment to be visble on
+                          comment input screen covering 20% of screen height and
+                          can also scroll throught it to see full parent comment
                         </Text>
                       </>
                     )}
