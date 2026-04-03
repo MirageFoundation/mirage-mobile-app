@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 120
+                          update 121
                         </Text>
                         <Text
                           style={{
@@ -773,7 +773,18 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          migrate content tag to adult all over the app
+                          migrate content tag to adult all over the app, added
+                          adult content option in content filter sheet in
+                          settings, enabling mature content toggle will enable
+                          all the content in content filter, disabling the
+                          mature content toggle will disable the adult content
+                          in content filter sheet, selecting the adult content
+                          in content filter sheet while the mature content
+                          toggle is disabled will show a note saying the
+                          enabling mature content toggle is necessary to see
+                          adult content, both the show mature content toggle and
+                          the adult type content should be enabled to see adult
+                          content
                         </Text>
                       </>
                     )}
@@ -814,7 +825,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 120
+                          update 121
                         </Text>
                         <Text
                           style={{
@@ -824,7 +835,18 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          migrate content tag to adult all over the app
+                          migrate content tag to adult all over the app, added
+                          adult content option in content filter sheet in
+                          settings, enabling mature content toggle will enable
+                          all the content in content filter, disabling the
+                          mature content toggle will disable the adult content
+                          in content filter sheet, selecting the adult content
+                          in content filter sheet while the mature content
+                          toggle is disabled will show a note saying the
+                          enabling mature content toggle is necessary to see
+                          adult content, both the show mature content toggle and
+                          the adult type content should be enabled to see adult
+                          content
                         </Text>
                       </>
                     )}
