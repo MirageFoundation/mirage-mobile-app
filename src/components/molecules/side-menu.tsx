@@ -786,7 +786,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           the adult type content should be enabled to see adult
                           content, made the parent comment to be visble on
                           comment input screen covering 20% of screen height and
-                          can also scroll throught it to see full parent comment
+                          can also scroll throught it to see full parent
+                          comment,save comment draft even after going back or
+                          closing the app, draft expires after 2 days
                         </Text>
                       </>
                     )}
