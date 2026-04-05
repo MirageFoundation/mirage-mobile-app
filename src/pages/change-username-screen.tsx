@@ -110,7 +110,7 @@ export function ChangeUsernameScreen() {
     (value: string) => {
       const lower = value.toLowerCase();
       const current = currentUsername.toLowerCase();
-      return lower === current || `anon-${lower}` === current;
+      return lower === current;
     },
     [currentUsername],
   );
