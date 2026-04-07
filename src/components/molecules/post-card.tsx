@@ -7,8 +7,6 @@ import { usePreferencesStore } from "@/src/stores";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   Linking,
-  PixelRatio,
-  Platform,
   Pressable,
   View,
   type StyleProp,
