@@ -11,6 +11,7 @@ export { StatusStep } from "./status-step";
 export { ContentWarningBadge, ContentWarningChip, type ContentWarningType } from "./content-warning-badge";
 export { MediaThumbnail } from "./media-thumbnail";
 export { AwardBadges } from "./award-badges";
+export { RefreshIndicator, IOSRefreshIndicator } from "./refresh-indicator";
 
 // Legacy atoms (from existing codebase)
 export * from "./slot-digit";

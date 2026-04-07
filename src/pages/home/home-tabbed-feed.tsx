@@ -10,11 +10,13 @@ import {
 import type { FlashListRef } from "@shopify/flash-list";
 import type { ReactNode } from "react";
 import {
-  ActivityIndicator,
   InteractionManager,
   Platform,
   RefreshControl,
+  View,
 } from "react-native";
+import { RefreshIndicator, IOSRefreshIndicator } from "@/src/components/atoms/refresh-indicator";
+import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUnistyles } from "react-native-unistyles";
 import * as Sentry from "@sentry/react-native";
@@ -77,7 +79,7 @@ export const HomeTabbedFeed = forwardRef<
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { scrollHandler, registerHomeRefresh, registerFollowingRefresh, showBars } = useScrollAnimationContext();
+  const { scrollHandler, scrollY, registerHomeRefresh, registerFollowingRefresh, showBars } = useScrollAnimationContext();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
@@ -284,6 +286,7 @@ export const HomeTabbedFeed = forwardRef<
     if (isRefreshingRef.current) return;
     isRefreshingRef.current = true;
     if (!options?.silent) {
+      if (Platform.OS === "android") triggerHaptic("light");
       dismissNewPostsRef.current?.();
       setIsRefreshing(true);
       onRefreshingChange?.(true);
@@ -656,24 +659,19 @@ export const HomeTabbedFeed = forwardRef<
   const showHeaderSpinner = isRefreshing && !activeQueryLoading;
   const showQuests = baseFeed === "home" && activeTabIndex === 0;
 
+  const isIOS = Platform.OS === "ios";
+
   const ListHeader = useMemo(() => (
     <>
       {ListHeaderExtra}
-      {showHeaderSpinner && (
-        <Box center p="md">
-          <ActivityIndicator
-            size="small"
-            color={theme.colors.text.subtle}
-          />
-        </Box>
-      )}
+      {!isIOS && showHeaderSpinner && <RefreshIndicator />}
       {showQuests && <QuestsSummaryCard />}
     </>
   ), [
     ListHeaderExtra,
     showHeaderSpinner,
     showQuests,
-    theme.colors.text.subtle,
+    isIOS,
   ]);
 
   const isFetchingNext = activeTabIndex === 0 ? magicQuery.isFetchingNextPage : latestQuery.isFetchingNextPage;
@@ -699,15 +697,15 @@ export const HomeTabbedFeed = forwardRef<
   const refreshControl = useMemo(
     () => (
       <RefreshControl
-        refreshing={Platform.OS === "android" ? false : isRefreshing}
+        refreshing={isIOS ? false : false}
         onRefresh={handleRefresh}
         tintColor="transparent"
         colors={["transparent"]}
         progressBackgroundColor="transparent"
-        progressViewOffset={Platform.OS === "android" ? -10000 : progressViewOffset}
+        progressViewOffset={isIOS ? progressViewOffset : -10000}
       />
     ),
-    [handleRefresh, progressViewOffset, isRefreshing],
+    [handleRefresh, progressViewOffset, isIOS],
   );
 
   const posts = activeTabIndex === 0 ? magicPosts : latestPosts;
@@ -731,19 +729,28 @@ export const HomeTabbedFeed = forwardRef<
   );
 
   return (
-    <HomePostList
-      ref={combinedRefCallback}
-      data={posts}
-      contentContainerStyle={listContentStyle}
-      onScroll={scrollHandler}
-      ListHeaderComponent={ListHeader}
-      ListEmptyComponent={ListEmpty}
-      ListFooterComponent={ListFooter}
-      refreshControl={refreshControl}
-      feedScreen={baseFeed}
-      feedContext={feedContext}
-      onItemVisible={onItemVisible}
-    />
+    <View style={{ flex: 1 }}>
+      <HomePostList
+        ref={combinedRefCallback}
+        data={posts}
+        contentContainerStyle={listContentStyle}
+        onScroll={scrollHandler}
+        ListHeaderComponent={ListHeader}
+        ListEmptyComponent={ListEmpty}
+        ListFooterComponent={ListFooter}
+        refreshControl={refreshControl}
+        feedScreen={baseFeed}
+        feedContext={feedContext}
+        onItemVisible={onItemVisible}
+      />
+      {isIOS && (
+        <IOSRefreshIndicator
+          visible={showHeaderSpinner}
+          topOffset={insets.top + HEADER_HEIGHT + 8}
+          scrollY={scrollY}
+        />
+      )}
+    </View>
   );
 });
 

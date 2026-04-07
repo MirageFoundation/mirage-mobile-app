@@ -8,12 +8,13 @@ import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Platform,
   Pressable,
   RefreshControl,
   View,
 } from "react-native";
+import { RefreshIndicator, IOSRefreshIndicator } from "@/src/components/atoms/refresh-indicator";
+import { useSharedValue, useAnimatedScrollHandler } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import {
@@ -491,6 +492,7 @@ export function TopicFeedScreen() {
   postsLengthRef.current = posts.length;
 
   const handleRefresh = useCallback(async () => {
+    if (Platform.OS === "android") triggerHaptic("light");
     setIsManualRefreshing(true);
     try {
       await refetch();
@@ -577,17 +579,12 @@ export function TopicFeedScreen() {
     );
   }, [isLoading, isError, error, topicName]);
 
+  const isIOS = Platform.OS === "ios";
+
   const ListHeaderComponent = useCallback(() => {
-    if (!isManualRefreshing) return null;
-    return (
-      <Box center p="md">
-        <ActivityIndicator
-          size="small"
-          color={theme.colors.background.emphasis}
-        />
-      </Box>
-    );
-  }, [isManualRefreshing, theme.colors.background.emphasis]);
+    if (isIOS || !isManualRefreshing) return null;
+    return <RefreshIndicator />;
+  }, [isManualRefreshing, isIOS]);
 
   const ListFooterComponent = useCallback(() => {
     if (!isFetchingNextPage) return null;
@@ -595,6 +592,13 @@ export function TopicFeedScreen() {
   }, [isFetchingNextPage]);
 
   const HEADER_HEIGHT = 52;
+
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
 
   const listContentStyle = useMemo(
     () => ({
@@ -608,15 +612,15 @@ export function TopicFeedScreen() {
   const refreshControl = useMemo(
     () => (
       <RefreshControl
-        refreshing={Platform.OS === "android" ? false : isManualRefreshing}
+        refreshing={false}
         onRefresh={handleRefresh}
         tintColor="transparent"
         colors={["transparent"]}
         progressBackgroundColor="transparent"
-        progressViewOffset={Platform.OS === "android" ? -10000 : insets.top + HEADER_HEIGHT}
+        progressViewOffset={isIOS ? insets.top + HEADER_HEIGHT : -10000}
       />
     ),
-    [handleRefresh, insets.top, isManualRefreshing],
+    [handleRefresh, insets.top, isIOS],
   );
 
   const setCurrentUserId = useHomePostCardStore(
@@ -935,7 +939,16 @@ export function TopicFeedScreen() {
         feedScreen="topic"
         feedContext={topicFeedSyncContext}
         onItemVisible={handleItemVisible}
+        onScroll={scrollHandler}
       />
+
+      {isIOS && (
+        <IOSRefreshIndicator
+          visible={isManualRefreshing}
+          topOffset={insets.top + HEADER_HEIGHT + 8}
+          scrollY={scrollY}
+        />
+      )}
 
       <NewPostsButton
         visible={hasNewPosts}
