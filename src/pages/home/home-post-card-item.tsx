@@ -3,7 +3,7 @@ import type { Post } from "@/src/components/molecules";
 import { PostCard } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { logPress } from "@/src/utils/press-logger";
-import { getShareBaseUrl, useTimeTickStore } from "@/src/stores";
+import { getShareBaseUrl } from "@/src/stores";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import {
   useHomePostCardStore,
@@ -66,7 +66,6 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  const shareServer = useShareServer();
  const allowAutoplay = useAllowAutoplay();
   const feedActive = useFeedActive(feedScreen);
-  const timeTick = useTimeTickStore((s) => s.tick);
 
 // Store post data in ref to avoid recreating callbacks
  const postRef = useRef(post);
@@ -219,7 +218,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       };
     }
     return result;
-  }, [post, isFollowing, voteOverride, commentCountOverride, editOverride, timeTick]);
+  }, [post, isFollowing, voteOverride, commentCountOverride, editOverride]);
 
   return (
    <PostCard

@@ -1,5 +1,4 @@
-import { useMemo, useState, useEffect, useCallback, useRef } from "react";
-import { AppState } from "react-native";
+import { memo } from "react";
 import { Text, type TextProps } from "@/src/components/ui/primitives";
 import { useTimeTickStore } from "@/src/stores";
 
@@ -57,52 +56,15 @@ function formatTimeAgo(
   return verbose ? "just now" : "now";
 }
 
-function getRefreshInterval(timestamp: Date | string | number): number {
-  const date = timestamp instanceof Date
-    ? timestamp
-    : new Date(timestamp);
-  const diffInSeconds = Math.floor((Date.now() - date.getTime()) / 1000);
-
-  if (diffInSeconds < 60) return 10_000;
-  if (diffInSeconds < 3600) return 60_000;
-  return 300_000;
-}
-
-function useTick(timestamp: Date | string | number) {
-  const [, setTick] = useState(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useTimeTickStore((s) => s.tick);
-
-  const startTimer = useCallback(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    const ms = getRefreshInterval(timestamp);
-    intervalRef.current = setInterval(() => setTick((t) => t + 1), ms);
-  }, [timestamp]);
-
-  useEffect(() => {
-    startTimer();
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        setTick((t) => t + 1);
-        startTimer();
-      }
-    });
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      sub.remove();
-    };
-  }, [startTimer]);
-}
-
-export const TimeAgo = ({
+export const TimeAgo = memo(function TimeAgo({
   timestamp,
   showSuffix = true,
   verbose = false,
   size = "sm",
   mode = "subtle",
   ...textProps
-}: TimeAgoProps) => {
-  useTick(timestamp);
+}: TimeAgoProps) {
+  useTimeTickStore((s) => s.tick);
   const timeAgoText = formatTimeAgo(timestamp, showSuffix, verbose);
 
   return (
@@ -110,7 +72,7 @@ export const TimeAgo = ({
       {timeAgoText}
     </Text>
   );
-};
+});
 
 /**
  * Hook to get time ago string (useful when you need just the string)
@@ -120,6 +82,6 @@ export const useTimeAgo = (
   options?: { showSuffix?: boolean; verbose?: boolean }
 ): string => {
   const { showSuffix = true, verbose = false } = options ?? {};
-  useTick(timestamp);
+  useTimeTickStore((s) => s.tick);
   return formatTimeAgo(timestamp, showSuffix, verbose);
 };

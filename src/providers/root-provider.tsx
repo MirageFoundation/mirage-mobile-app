@@ -19,6 +19,7 @@ import { initPushNotifications, registerPush } from "@/src/services/push-notific
 import { useAuthStore, usePreferencesStore, useVideoPositionStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
 import { flushPendingRouteAfterAuth } from "@/src/navigation/auth-navigation";
+import { startTimeTicking, stopTimeTicking } from "@/src/stores/time-tick-store";
 import * as Sentry from "@sentry/react-native";
 import { AppState } from "react-native";
 
@@ -48,6 +49,11 @@ export const RootProvider = memo(
     useEffect(() => {
       initInboxNotifications();
       initPushNotifications();
+      startTimeTicking();
+
+      return () => {
+        stopTimeTicking();
+      };
     }, []);
 
     useEffect(() => {
