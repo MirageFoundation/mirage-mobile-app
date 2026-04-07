@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import type { ResolvedMedia } from "./post-card-utils";
+import { getVideoThumbnailUri, type ResolvedMedia } from "./post-card-utils";
 import { Text } from "@/src/components/ui/primitives";
 import { useVideoMuteStore } from "@/src/stores";
 
@@ -24,15 +24,6 @@ const MEDIA_MAX_HEIGHT = 450;
 
 const ASPECT_RATIO_CACHE = new Map<string, number>();
 const GALLERY_LOADED_CACHE = new Set<string>();
-
-function getVideoThumbnailUri(uri?: string): string {
-  if (!uri) return "";
-  if (uri.includes("cloudflarestream.com") || uri.includes("videodelivery.net")) {
-    const match = uri.match(/(?:cloudflarestream\.com|videodelivery\.net)\/([a-zA-Z0-9]+)/);
-    if (match?.[1]) return `https://videodelivery.net/${match[1]}/thumbnails/thumbnail.jpg?time=1s&width=480`;
-  }
-  return "";
-}
 
 function getItemAspectRatio(item: ResolvedMedia): number {
   const cached = ASPECT_RATIO_CACHE.get(item.uri);
@@ -192,7 +183,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
     }
   }, [effectiveMuted]);
 
-  const thumbnailUri = getVideoThumbnailUri(item.uri);
+  const thumbnailUri = getVideoThumbnailUri(item.uri, item.posterUri);
   const showThumbnail = thumbnailUri && !GALLERY_LOADED_CACHE.has(item.uri);
 
   return (

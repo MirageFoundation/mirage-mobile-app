@@ -23,4 +23,5 @@ export { useInboxStore } from "./inbox-store";
 export { useVideoMuteStore } from "./video-mute-store";
 export { useVideoPositionStore, buildVideoPositionKey } from "./video-position-store";
 export { useTimeTickStore } from "./time-tick-store";
+export { useFeedScrollStore, useIsFeedScrolling } from "./feed-scroll-store";
 export { useDeepLinkStore } from "./deep-link-store";

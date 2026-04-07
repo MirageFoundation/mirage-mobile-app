@@ -87,6 +87,7 @@ import {
   useContentModerationStore,
   usePreferencesStore,
   getShareBaseUrl,
+  useFeedScrollStore,
   useSavedPostsStore,
 } from "@/src/stores";
 
@@ -155,6 +156,7 @@ const PostWrapper = memo(function PostWrapper({
  onReport,
  onRevealContent,
   onTopicPress,
+  videoSyncScope,
 }: {
  post: Post;
  isOwnProfile: boolean;
@@ -175,6 +177,7 @@ const PostWrapper = memo(function PostWrapper({
  onReport: (postId: string) => void;
  onRevealContent?: (postId: string) => void;
   onTopicPress: (topic: string) => void;
+  videoSyncScope?: string;
 }) {
  const editOverride = usePostEditStore((s) => s.overrides[post.id]);
  const displayPost = editOverride ? {
@@ -196,6 +199,7 @@ const PostWrapper = memo(function PostWrapper({
     screenActive={screenActive}
     contentRevealed={contentRevealed}
     showUrlCard={false}
+    videoSyncScope={videoSyncScope}
     showFollowButton={false}
     shareUrl={shareUrl}
     onPostPress={onPostPress}
@@ -242,6 +246,10 @@ export function UserProfileScreen() {
 
   const currentUser = useAuthStore((s) => s.user);
   const flatListRef = useRef<FlatList<any>>(null);
+  const userProfileFeedContext = useMemo(() => `profile:user:${id}:posts`, [id]);
+  const setFeedScrolling = useCallback((isScrolling: boolean) => {
+    useFeedScrollStore.getState().setContextScrolling(userProfileFeedContext, isScrolling);
+  }, [userProfileFeedContext]);
 
   const isUsername = id && !id.startsWith("mirage");
   const { data: resolvedAddress, isLoading: isResolvingUsername } =
@@ -1037,6 +1045,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
              isNearVisible={nearbyVideoPostIds.has(item.id)}
              screenActive={isFocused}
              contentRevealed={revealedPosts.has(item.id)}
+             videoSyncScope={userProfileFeedContext}
              shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
              onPostPress={handlePostPress}
              onAuthorPress={handleAuthorPress}
@@ -1201,6 +1210,12 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     [stickyThreshold],
   );
 
+  useEffect(() => {
+    return () => {
+      setFeedScrolling(false);
+    };
+  }, [setFeedScrolling]);
+
   const contentContainerStyle = useMemo(
     () => ({
       paddingTop: headerHeight,
@@ -1269,7 +1284,13 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           bounces={true}
           viewabilityConfig={profileViewabilityConfig}
           onViewableItemsChanged={onProfileViewableItemsChanged}
-          onMomentumScrollEnd={handleProfileMomentumScrollEnd}
+          onScrollBeginDrag={() => setFeedScrolling(true)}
+          onScrollEndDrag={() => setFeedScrolling(false)}
+          onMomentumScrollBegin={() => setFeedScrolling(true)}
+          onMomentumScrollEnd={() => {
+            setFeedScrolling(false);
+            handleProfileMomentumScrollEnd();
+          }}
           extraData={revealedPosts}
         />
       </GestureDetector>

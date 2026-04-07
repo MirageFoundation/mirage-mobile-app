@@ -70,6 +70,7 @@ import {
   useContentModerationStore,
   usePreferencesStore,
   getShareBaseUrl,
+  useFeedScrollStore,
   useSavedPostsStore,
 } from "@/src/stores";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
@@ -88,6 +89,7 @@ const AnimatedFlatList = Animated.createAnimatedComponent(
 );
 
 const HEADER_BAR_HEIGHT = 56;
+const PROFILE_POSTS_FEED_CONTEXT = "profile:self:posts";
 
 const formatMirageBalance = (umirage: number): number => {
   return Math.floor(umirage / 1_000_000);
@@ -139,6 +141,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  onCommentPress,
  onMorePress,
   onTopicPress,
+  videoSyncScope,
 }: {
  post: Post;
  isVisible?: boolean;
@@ -150,6 +153,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  onCommentPress: (postId: string) => void;
  onMorePress: (postId: string) => void;
   onTopicPress: (topic: string) => void;
+  videoSyncScope?: string;
 }) {
  const editOverride = usePostEditStore((s) => s.overrides[post.id]);
  const displayPost = editOverride ? {
@@ -170,6 +174,7 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
     isNearVisible={isNearVisible}
    screenActive={screenActive}
     showUrlCard={false}
+    videoSyncScope={videoSyncScope}
     onPostPress={onPostPress}
     onAuthorPress={onAuthorPress}
     onCommentPress={onCommentPress}
@@ -208,6 +213,9 @@ export function ProfileScreen() {
     useScrollAnimationContext();
 
   const flatListRef = useRef<FlatList<any>>(null);
+  const setFeedScrolling = useCallback((isScrolling: boolean) => {
+    useFeedScrollStore.getState().setContextScrolling(PROFILE_POSTS_FEED_CONTEXT, isScrolling);
+  }, []);
 
   const {
     data: userStatus,
@@ -945,6 +953,7 @@ useEffect(() => {
                isFocused={activeVideoPostId === item.id}
                isNearVisible={nearbyVideoPostIds.has(item.id)}
                screenActive={isFocused}
+               videoSyncScope={PROFILE_POSTS_FEED_CONTEXT}
                onPostPress={handlePostPress}
                onAuthorPress={handleAuthorPress}
                onCommentPress={handlePostPress}
@@ -1079,6 +1088,12 @@ useEffect(() => {
     [stickyThreshold],
   );
 
+  useEffect(() => {
+    return () => {
+      setFeedScrolling(false);
+    };
+  }, [setFeedScrolling]);
+
   const contentContainerStyle = useMemo(
     () => ({
       paddingTop: headerHeight,
@@ -1144,7 +1159,13 @@ useEffect(() => {
           bounces={true}
           viewabilityConfig={profileViewabilityConfig}
           onViewableItemsChanged={onProfileViewableItemsChanged}
-          onMomentumScrollEnd={handleProfileMomentumScrollEnd}
+          onScrollBeginDrag={() => setFeedScrolling(true)}
+          onScrollEndDrag={() => setFeedScrolling(false)}
+          onMomentumScrollBegin={() => setFeedScrolling(true)}
+          onMomentumScrollEnd={() => {
+            setFeedScrolling(false);
+            handleProfileMomentumScrollEnd();
+          }}
         />
       </GestureDetector>
 

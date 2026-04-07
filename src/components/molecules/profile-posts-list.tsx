@@ -2,9 +2,9 @@ import { useInfiniteUserPosts, useUserFollowed } from "@/src/api/read";
 import { transformApiPost } from "@/src/api/read/utils";
 import type { Post as ApiPost } from "@/src/api/types";
 import { Text } from "@/src/components/ui/primitives";
-import { useAuthStore, useContentModerationStore } from "@/src/stores";
+import { useAuthStore, useContentModerationStore, useFeedScrollStore } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
-import { memo, useCallback, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import { ActivityIndicator, FlatList, Pressable, View } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { type Post as UIPost } from "./post-card";
@@ -40,6 +40,7 @@ export const ProfilePostsList = memo(function ProfilePostsList({
   ListEmptyComponent,
 }: ProfilePostsListProps) {
   const { theme } = useUnistyles();
+  const feedContext = useMemo(() => `profile-tabs:${owner}:${type}`, [owner, type]);
 
   // Content moderation - filter out hidden posts/comments
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
@@ -126,6 +127,16 @@ export const ProfilePostsList = memo(function ProfilePostsList({
     refetch();
   }, [refetch]);
 
+  const setFeedScrolling = useCallback((isScrolling: boolean) => {
+    useFeedScrollStore.getState().setContextScrolling(feedContext, isScrolling);
+  }, [feedContext]);
+
+  useEffect(() => {
+    return () => {
+      setFeedScrolling(false);
+    };
+  }, [setFeedScrolling]);
+
   const renderPostItem = useCallback(
     ({ item }: { item: UIPost }) => {
       // Remove content warnings from own posts on profile
@@ -137,6 +148,7 @@ export const ProfilePostsList = memo(function ProfilePostsList({
        <PostCardItem
          post={postWithoutWarnings}
          isOwnPost={true}
+         videoSyncScope={feedContext}
           showUrlCard={false}
          onPostPress={onPostPress}
          onAuthorPress={onAuthorPress}
@@ -145,7 +157,7 @@ export const ProfilePostsList = memo(function ProfilePostsList({
        />
      );
     },
-    [onPostPress, onAuthorPress, handleMorePress]
+    [feedContext, onPostPress, onAuthorPress, handleMorePress]
   );
 
   const renderCommentItem = useCallback(
@@ -200,7 +212,7 @@ export const ProfilePostsList = memo(function ProfilePostsList({
           Something went wrong
         </Text>
         <Text size="sm" mode="subtle" style={styles.errorMessage}>
-          We couldn't load your {type === "submissions" ? "posts" : "comments"}.
+          We couldn&apos;t load your {type === "submissions" ? "posts" : "comments"}.
         </Text>
         <Pressable
           onPress={handleRefresh}
@@ -232,6 +244,10 @@ export const ProfilePostsList = memo(function ProfilePostsList({
         onEndReachedThreshold={0.5}
         ListFooterComponent={ListFooterComponent}
         showsVerticalScrollIndicator={false}
+        onScrollBeginDrag={() => setFeedScrolling(true)}
+        onScrollEndDrag={() => setFeedScrolling(false)}
+        onMomentumScrollBegin={() => setFeedScrolling(true)}
+        onMomentumScrollEnd={() => setFeedScrolling(false)}
         scrollEnabled={false}
         nestedScrollEnabled
       />

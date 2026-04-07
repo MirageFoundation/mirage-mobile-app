@@ -928,7 +928,6 @@ export function TopicFeedScreen() {
         ref={flatListRef}
         data={posts}
         contentContainerStyle={listContentStyle}
-        onScroll={() => {}}
         ListHeaderComponent={ListHeaderComponent}
         ListEmptyComponent={ListEmptyComponent}
         ListFooterComponent={ListFooterComponent}

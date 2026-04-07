@@ -1,7 +1,8 @@
 import * as Network from "expo-network";
 import * as Sentry from "@sentry/react-native";
 import { AppState, type AppStateStatus } from "react-native";
-import { startTransition, useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
+import { create } from "zustand";
 
 export type NetworkType = "wifi" | "cellular" | "unknown" | "none";
 
@@ -12,83 +13,108 @@ type NetworkState = {
   isCellular: boolean;
 };
 
+const INITIAL_STATE: NetworkState = {
+  isConnected: true,
+  networkType: "unknown",
+  isWifi: false,
+  isCellular: false,
+};
+
+const NETWORK_POLL_MS = 10_000;
+
+const useNetworkStateStore = create<NetworkState>(() => INITIAL_STATE);
+
+let isNetworkMonitorStarted = false;
+let networkInterval: ReturnType<typeof setInterval> | null = null;
+let appState: AppStateStatus = AppState.currentState;
+
+function buildNetworkState(networkState: Network.NetworkState): NetworkState {
+  const isConnected = networkState.isConnected ?? false;
+  let networkType: NetworkType = "unknown";
+
+  if (!isConnected) {
+    networkType = "none";
+  } else if (networkState.type === Network.NetworkStateType.WIFI) {
+    networkType = "wifi";
+  } else if (networkState.type === Network.NetworkStateType.CELLULAR) {
+    networkType = "cellular";
+  }
+
+  return {
+    isConnected,
+    networkType,
+    isWifi: networkType === "wifi",
+    isCellular: networkType === "cellular",
+  };
+}
+
+async function checkNetwork() {
+  try {
+    const networkState = await Network.getNetworkStateAsync();
+    const next = buildNetworkState(networkState);
+
+    useNetworkStateStore.setState((prev) => {
+      if (
+        prev.isConnected === next.isConnected &&
+        prev.networkType === next.networkType
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  } catch (error) {
+    Sentry.addBreadcrumb({
+      category: "network",
+      message: "Failed to get network state",
+      data: { error: String(error) },
+      level: "warning",
+    });
+  }
+}
+
+function restartNetworkPolling() {
+  if (networkInterval) {
+    clearInterval(networkInterval);
+    networkInterval = null;
+  }
+
+  if (appState !== "active") return;
+
+  networkInterval = setInterval(() => {
+    void checkNetwork();
+  }, NETWORK_POLL_MS);
+}
+
+function ensureNetworkMonitorStarted() {
+  if (isNetworkMonitorStarted) return;
+  isNetworkMonitorStarted = true;
+  appState = AppState.currentState;
+
+  void checkNetwork();
+  restartNetworkPolling();
+
+  AppState.addEventListener("change", (nextState) => {
+    const prevState = appState;
+    appState = nextState;
+
+    if (prevState !== nextState) {
+      void checkNetwork();
+    }
+
+    restartNetworkPolling();
+  });
+}
+
 /**
  * Hook to monitor network connectivity state
  * Returns information about connection status and type (WiFi vs Cellular)
  */
 export function useNetworkState(): NetworkState {
-  const [state, setState] = useState<NetworkState>({
-    isConnected: true,
-    networkType: "unknown",
-    isWifi: false,
-    isCellular: false,
-  });
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-
   useEffect(() => {
-    let mounted = true;
-
-    const checkNetwork = async () => {
-      try {
-        const networkState = await Network.getNetworkStateAsync();
-
-        if (!mounted) return;
-
-        const isConnected = networkState.isConnected ?? false;
-        let networkType: NetworkType = "unknown";
-
-        if (!isConnected) {
-          networkType = "none";
-        } else if (networkState.type === Network.NetworkStateType.WIFI) {
-          networkType = "wifi";
-        } else if (networkState.type === Network.NetworkStateType.CELLULAR) {
-          networkType = "cellular";
-        }
-
-        const next = {
-          isConnected,
-          networkType,
-          isWifi: networkType === "wifi",
-          isCellular: networkType === "cellular",
-        };
-        startTransition(() => {
-          setState((prev) => {
-            if (
-              prev.isConnected === next.isConnected &&
-              prev.networkType === next.networkType
-            )
-              return prev;
-            return next;
-          });
-        });
-      } catch (error) {
-        Sentry.addBreadcrumb({ category: "network", message: "Failed to get network state", data: { error: String(error) }, level: "warning" });
-      }
-    };
-
-    // Initial check
-    checkNetwork();
-
-    const subscription = AppState.addEventListener("change", (nextState) => {
-      const prevState = appStateRef.current;
-      appStateRef.current = nextState;
-
-      if (prevState !== nextState) {
-        checkNetwork();
-      }
-    });
-
-    // Poll network state periodically (every 10 seconds)
-    const interval = setInterval(checkNetwork, 10000);
-
-    return () => {
-      mounted = false;
-      subscription.remove();
-      clearInterval(interval);
-    };
+    ensureNetworkMonitorStarted();
   }, []);
 
-  return state;
+  return useNetworkStateStore();
 }
 
 /**

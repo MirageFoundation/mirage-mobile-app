@@ -405,10 +405,10 @@ export function InboxScreen() {
             tintColor={theme.colors.primary[500]}
           />
         }
-        removeClippedSubviews={false}
-        maxToRenderPerBatch={10}
-        windowSize={10}
-        initialNumToRender={10}
+        removeClippedSubviews={Platform.OS === "android"}
+        maxToRenderPerBatch={Platform.OS === "android" ? 6 : 8}
+        windowSize={Platform.OS === "android" ? 7 : 9}
+        initialNumToRender={Platform.OS === "android" ? 6 : 8}
       />
     </Box>
   );

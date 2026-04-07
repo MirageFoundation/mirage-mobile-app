@@ -28,10 +28,11 @@ import {
 import { StyleSheet } from "react-native-unistyles";
 import YoutubePlayer from "react-native-youtube-iframe";
 import type { YoutubeIframeRef } from "react-native-youtube-iframe";
-import { extractYouTubeVideoId, type ResolvedMedia } from "./post-card-utils";
+import { extractYouTubeVideoId, getVideoThumbnailUri, type ResolvedMedia } from "./post-card-utils";
 import { MediaGallery } from "./media-gallery";
 import {
   buildVideoPositionKey,
+  useIsFeedScrolling,
   useVideoMuteStore,
   useVideoPositionStore,
 } from "@/src/stores";
@@ -70,15 +71,6 @@ type PostCardMediaProps = {
 
 const MEDIA_ASPECT_RATIO_CACHE = new Map<string, number>();
 const MEDIA_LOADED_CACHE = new Set<string>();
-
-function getVideoThumbnailUri(uri?: string): string {
-  if (!uri) return "";
-  if (uri.includes("cloudflarestream.com") || uri.includes("videodelivery.net")) {
-    const match = uri.match(/(?:cloudflarestream\.com|videodelivery\.net)\/([a-zA-Z0-9]+)/);
-    if (match?.[1]) return `https://videodelivery.net/${match[1]}/thumbnails/thumbnail.jpg?time=1s&width=480`;
-  }
-  return "";
-}
 
 function getMediaAspectRatio(media?: ResolvedMedia): number {
   if (!media) return 16 / 9;
@@ -162,8 +154,9 @@ export const PostCardMedia = memo(
       ? buildVideoPositionKey(media.uri, videoSyncScope)
       : "";
     const shouldLazyMountYouTube = Platform.OS === "android" && !isPostDetail;
-    const videoThumbnailUri = media?.type === "video" ? getVideoThumbnailUri(media.uri) : "";
+    const videoThumbnailUri = media?.type === "video" ? getVideoThumbnailUri(media.uri, media.posterUri) : "";
     const youtubeThumbnailUri = youtubeVideoId ? `https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg` : "";
+    const isFeedScrolling = useIsFeedScrolling(!isPostDetail ? videoSyncScope : undefined);
     const getPosition = useVideoPositionStore((s) => s.getPosition);
     const setPosition = useVideoPositionStore((s) => s.setPosition);
     const lastKnownYouTubeTimeRef = useRef(0);
@@ -339,10 +332,11 @@ export const PostCardMedia = memo(
 
     useEffect(() => {
       const isPlayable = media?.type === "video" || media?.type === "youtube";
+      const canAutoPlayFeedMedia = allowAutoplay && (isPostDetail || isFocused);
       const canAutoPlayCurrentMedia =
         media?.type === "youtube"
-          ? ((Platform.OS === "android" && allowAutoplay) || feedTappedToPlay)
-          : (allowAutoplay || feedTappedToPlay);
+          ? ((Platform.OS === "android" && canAutoPlayFeedMedia) || feedTappedToPlay)
+          : (canAutoPlayFeedMedia || feedTappedToPlay);
       if (!isPlayable || shouldBlurContent) {
         setIsVideoPlaying(false);
         setIsVideoLoading(false);
@@ -396,7 +390,7 @@ export const PostCardMedia = memo(
         setIsVideoLoading(false);
         userInitiatedPlayRef.current = false;
         videoRef.current?.pauseAsync().catch(() => {});
-      } else if (!isVisible) {
+      } else if (!isVisible || (!isPostDetail && !canAutoPlayCurrentMedia)) {
         if (!pauseDelayRef.current) {
           pauseDelayRef.current = setTimeout(() => {
             pauseDelayRef.current = null;
@@ -420,10 +414,12 @@ export const PostCardMedia = memo(
       screenActive,
       resolvedMediaUri,
       feedTappedToPlay,
+      isPostDetail,
+      isFocused,
       saveYouTubePositionSync,
     ]);
 
-    const shouldAutoPlayYouTube = Platform.OS === "android" && allowAutoplay;
+    const shouldAutoPlayYouTube = Platform.OS === "android" && allowAutoplay && (isPostDetail || isFocused);
 
     useEffect(() => {
       if (videoRef.current && media?.type === "video") {
@@ -457,8 +453,24 @@ export const PostCardMedia = memo(
       screenActive &&
       !shouldBlurContent;
 
+    const isMediaCached = !!(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri));
+    const shouldDeferHeavyMedia =
+      Platform.OS === "android" &&
+      !isPostDetail &&
+      !!videoSyncScope &&
+      isFeedScrolling &&
+      !feedTappedToPlay &&
+      !isMediaCached &&
+      (media?.type === "video" || media?.type === "youtube");
+
+    const hasServerAspectRatio = !!(
+      media?.aspectRatio ||
+      (media?.width && media?.height)
+    );
+
     const updateMediaAspectRatioFromSize = useCallback(
       (width?: number, height?: number) => {
+        if (hasServerAspectRatio) return;
         if (!width || !height) return;
         const ratio = width / height;
         if (!Number.isFinite(ratio) || ratio <= 0) return;
@@ -471,7 +483,7 @@ export const PostCardMedia = memo(
         }
         aspectRatioLockedRef.current = true;
       },
-      [resolvedMediaUri],
+      [hasServerAspectRatio, resolvedMediaUri],
     );
 
     const mediaSource = useMemo(
@@ -479,17 +491,17 @@ export const PostCardMedia = memo(
       [resolvedMediaUri],
     );
 
-    const shouldMountNativeVideo =
-      isPostDetail ||
-      Platform.OS === "ios" ||
-      (isNearVisible ?? isVisible);
-
-    const shouldAutoStartVideo =
+    const shouldKeepAndroidFeedVideoMounted =
+      Platform.OS === "android" &&
       media?.type === "video" &&
-      isVisible &&
-      screenActive &&
-      !shouldBlurContent &&
-      (allowAutoplay || feedTappedToPlay);
+      (isFocused || feedTappedToPlay || isVideoPlaying || videoReadyForDisplay);
+
+    const shouldMountNativeVideo =
+      !shouldDeferHeavyMedia && (
+        isPostDetail ||
+        Platform.OS === "ios" ||
+        shouldKeepAndroidFeedVideoMounted
+      );
 
     const handleVideoToggle = useCallback(async () => {
       if (media?.type !== "video") return;
@@ -811,7 +823,7 @@ export const PostCardMedia = memo(
         <View style={[styles.mediaWrapper, mediaWrapperStyle]}>
           {media.type === "youtube" ? (
             <>
-              {shouldLazyMountYouTube && !isVisible ? (
+              {shouldLazyMountYouTube && (!isVisible || shouldDeferHeavyMedia) ? (
                 <Pressable onPress={handleFeedYouTubeTap} style={styles.media}>
                   <Image
                     source={{ uri: youtubeThumbnailUri }}
@@ -1059,6 +1071,13 @@ export const PostCardMedia = memo(
                 }}
               /> : null}
             </Pressable>
+          ) : shouldDeferHeavyMedia ? (
+            <View style={[styles.media, styles.deferredMediaPlaceholder]}>
+              <Ionicons name="image-outline" size={28} color="rgba(255,255,255,0.9)" />
+              <Text size="sm" weight="medium" style={styles.deferredMediaLabel}>
+                Loading image…
+              </Text>
+            </View>
           ) : (
             <Pressable onPress={handleMediaPress} style={styles.media}>
               <Image
