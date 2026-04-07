@@ -775,7 +775,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                         >
                           lots of app optimization, nsfw image not getting
                           extracted from reddit link fix,deep replies not
-                          showing up in commenst fix
+                          showing up in commenst fix, posting comment will
+                          appear at end of the comment list and will scroll us
+                          to end and will highlight the comment for 3 seconds
                         </Text>
                       </>
                     )}
@@ -828,7 +830,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                         >
                           lots of app optimization, nsfw image not getting
                           extracted from reddit link fix,deep replies not
-                          showing up in commenst fix
+                          showing up in commenst fix, posting comment will
+                          appear at end of the comment list and will scroll us
+                          to end and will highlight the comment for 3 seconds
                         </Text>
                       </>
                     )}
