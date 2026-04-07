@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 124
+                          update 125
                         </Text>
                         <Text
                           style={{
@@ -777,7 +777,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           extracted from reddit link fix,deep replies not
                           showing up in commenst fix, posting comment will
                           appear at end of the comment list and will scroll us
-                          to end and will highlight the comment for 3 seconds
+                          to end and will highlight the comment for 3 seconds,
+                          the auto refresh and pull to refresh indicator on top
+                          ui change for all feeds
                         </Text>
                       </>
                     )}
@@ -818,7 +820,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 124
+                          update 125
                         </Text>
                         <Text
                           style={{
@@ -832,7 +834,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           extracted from reddit link fix,deep replies not
                           showing up in commenst fix, posting comment will
                           appear at end of the comment list and will scroll us
-                          to end and will highlight the comment for 3 seconds
+                          to end and will highlight the comment for 3 seconds,
+                          the auto refresh and pull to refresh indicator on top
+                          ui change for all feeds
                         </Text>
                       </>
                     )}
