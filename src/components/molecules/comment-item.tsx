@@ -59,6 +59,7 @@ export type Comment = {
   parentId?: string | null;
   depth?: number;
   awards?: import("@/src/api/types").AwardBadge[];
+  hasMoreReplies?: boolean;
 };
 
 type CommentItemProps = {

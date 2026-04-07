@@ -1,6 +1,7 @@
 import { api } from "../../client";
 import type {
   PostsResponse,
+  PostWithChildren,
   CommentsResponse,
   RootPostIdResponse,
   CommentContextResponse,
@@ -62,13 +63,56 @@ export interface GetCommentsParams {
   address?: string; // Viewer address
 }
 
+const MAX_DEEP_RESOLVE_DEPTH = 3;
+
+function collectTruncated(nodes: PostWithChildren[]): PostWithChildren[] {
+  const result: PostWithChildren[] = [];
+  for (const node of nodes) {
+    if (node.comments > 0 && (!node.children || node.children.length === 0)) {
+      result.push(node);
+    }
+    if (node.children && node.children.length > 0) {
+      result.push(...collectTruncated(node.children));
+    }
+  }
+  return result;
+}
+
+async function resolveDeepComments(
+  nodes: PostWithChildren[],
+  address: string | undefined,
+  depth: number = 0,
+): Promise<void> {
+  if (depth >= MAX_DEEP_RESOLVE_DEPTH) return;
+
+  const truncated = collectTruncated(nodes);
+  if (truncated.length === 0) return;
+
+  await Promise.all(
+    truncated.map(async (node) => {
+      try {
+        const subTree = await api.get<CommentsResponse>("/get_comments", {
+          post_id: node.post_id,
+          address,
+        });
+        node.children = subTree.children;
+      } catch {}
+    }),
+  );
+
+  await resolveDeepComments(nodes, address, depth + 1);
+}
+
 /**
  * Get comment tree for a post
+ * Automatically resolves deeply nested replies that the API truncates
  */
 export async function getComments(
   params: GetCommentsParams
 ): Promise<CommentsResponse> {
-  return api.get<CommentsResponse>("/get_comments", params);
+  const data = await api.get<CommentsResponse>("/get_comments", params);
+  await resolveDeepComments(data.children, params.address);
+  return data;
 }
 
 export interface GetRootPostIdParams {
