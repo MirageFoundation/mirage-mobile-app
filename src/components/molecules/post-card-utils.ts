@@ -24,6 +24,7 @@ export type ResolvedMedia = {
   width?: number;
   height?: number;
   aspectRatio?: number;
+  posterUri?: string;
 };
 
 export type ResolvedPostContent = {
@@ -167,6 +168,38 @@ export function resolveRedgifsVideoUrl(posterUrl: string): string | null {
   }
 }
 
+export function resolveRedgifsPosterUrl(url: string): string | null {
+  try {
+    const parsedUrl = new URL(url);
+    if (!parsedUrl.hostname.includes("redgifs.com")) return null;
+    if (/\.(jpg|jpeg|png|webp|gif)$/i.test(parsedUrl.pathname)) {
+      return url;
+    }
+    return url
+      .replace(/-(mobile|sd|hd)\.(mp4|m4v|webm)$/i, "-poster.jpg")
+      .replace(/\.(mp4|m4v|webm)$/i, "-poster.jpg");
+  } catch {
+    if (!url.includes("redgifs.com")) return null;
+    if (/\.(jpg|jpeg|png|webp|gif)$/i.test(url)) {
+      return url;
+    }
+    return url
+      .replace(/-(mobile|sd|hd)\.(mp4|m4v|webm)$/i, "-poster.jpg")
+      .replace(/\.(mp4|m4v|webm)$/i, "-poster.jpg");
+  }
+}
+
+export function getVideoThumbnailUri(uri?: string, posterUri?: string): string {
+  if (!uri) return "";
+  if (uri.includes("cloudflarestream.com") || uri.includes("videodelivery.net")) {
+    const match = uri.match(/(?:cloudflarestream\.com|videodelivery\.net)\/([a-zA-Z0-9]+)/);
+    if (match?.[1]) return `https://videodelivery.net/${match[1]}/thumbnails/thumbnail.jpg?time=1s&width=480`;
+  }
+  const redgifsPoster = resolveRedgifsPosterUrl(posterUri ?? uri);
+  if (redgifsPoster) return redgifsPoster;
+  return "";
+}
+
 export function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" | "youtube" {
   if (isYouTubeUrl(url)) return "youtube";
   try {
@@ -257,8 +290,22 @@ export function resolvePostContent(
     ? undefined
     : bodyVideoUrl
     ? (getMediaTypeFromUrl(extractedUrl!) === "youtube"
-      ? ({ uri: extractedUrl!, type: "youtube" as const })
-      : ({ uri: bodyVideoUrl, type: "video" as const }))
+      ? ({
+          uri: extractedUrl!,
+          type: "youtube" as const,
+          width: primaryMedia?.width,
+          height: primaryMedia?.height,
+          aspectRatio: primaryMedia?.aspectRatio,
+          posterUri: primaryMedia?.posterUri,
+        })
+      : ({
+          uri: bodyVideoUrl,
+          type: "video" as const,
+          width: primaryMedia?.width,
+          height: primaryMedia?.height,
+          aspectRatio: primaryMedia?.aspectRatio,
+          posterUri: primaryMedia?.posterUri,
+        }))
     : primaryMedia
     ? {
         ...primaryMedia,
@@ -278,7 +325,12 @@ export function resolvePostContent(
     ? resolveRedgifsVideoUrl(resolvedMedia.uri)
     : null;
   const finalMedia = redgifsVideoUrl && resolvedMedia
-    ? { ...resolvedMedia, uri: redgifsVideoUrl, type: "video" as const }
+    ? {
+        ...resolvedMedia,
+        uri: redgifsVideoUrl,
+        type: "video" as const,
+        posterUri: resolvedMedia.posterUri ?? resolvedMedia.uri,
+      }
     : resolvedMedia;
 
   const isBodyUrlRenderedAsMedia = bodyVideoUrl || (extractedUrl && getMediaTypeFromUrl(extractedUrl) === "gif");
@@ -297,6 +349,7 @@ export function resolvePostContent(
             ...m,
             uri: redgifs ?? (m.type === "video" ? normalizeVideoUrl(m.uri) : m.uri),
             type: redgifs ? ("video" as const) : m.type,
+            posterUri: redgifs ? (m.posterUri ?? m.uri) : m.posterUri,
           };
         }),
     hasMultipleMedia: isOgThumbnail ? false : hasMultipleMedia,

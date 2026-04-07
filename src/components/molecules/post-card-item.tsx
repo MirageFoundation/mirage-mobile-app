@@ -16,6 +16,7 @@ type PostCardItemProps = {
   showFollowButton?: boolean;
   showUrlCard?: boolean;
   allowAutoplay?: boolean;
+  videoSyncScope?: string;
  onPostPress?: (postId: string) => void;
   onAuthorPress?: (authorId: string) => void;
   onMorePress?: (postId: string) => void;
@@ -64,6 +65,7 @@ function arePostCardItemPropsEqual(
   if (prevProps.screenActive !== nextProps.screenActive) return false;
   if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
   if (prevProps.contentRevealed !== nextProps.contentRevealed) return false;
+  if (prevProps.videoSyncScope !== nextProps.videoSyncScope) return false;
   return true;
 }
 
@@ -79,6 +81,7 @@ shareUrl,
   showFollowButton = true,
   showUrlCard,
   allowAutoplay,
+  videoSyncScope,
 onPostPress,
   onAuthorPress,
   onMorePress,
@@ -199,6 +202,7 @@ onPostPress,
       showFollowButton={showFollowButton}
      screenActive={screenActive}
      allowAutoplay={allowAutoplay}
+     videoSyncScope={videoSyncScope}
     onPress={handlePostPress}
     onAuthorPress={handleAuthorPress}
      onMorePress={handleMorePress}

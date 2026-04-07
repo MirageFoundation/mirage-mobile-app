@@ -145,12 +145,14 @@ export function transformApiPost(
           const meta = editOverride?.media ? undefined : apiPost.media_meta?.[i];
           const w = meta?.w;
           const h = meta?.h;
+          const type = getMediaTypeFromUrl(url);
           return {
           uri: url,
-          type: getMediaTypeFromUrl(url),
+          type,
             width: w,
             height: h,
             aspectRatio: w && h ? w / h : undefined,
+            posterUri: type === "gif" ? url : undefined,
           };
         })
       : apiPost.thumbnail
@@ -158,6 +160,16 @@ export function transformApiPost(
             {
               uri: apiPost.thumbnail,
               type: getMediaTypeFromUrl(apiPost.thumbnail),
+              width: apiPost.media_meta?.[0]?.w,
+              height: apiPost.media_meta?.[0]?.h,
+              aspectRatio:
+                apiPost.media_meta?.[0]?.w && apiPost.media_meta?.[0]?.h
+                  ? apiPost.media_meta[0].w / apiPost.media_meta[0].h
+                  : undefined,
+              posterUri:
+                getMediaTypeFromUrl(apiPost.thumbnail) === "gif"
+                  ? apiPost.thumbnail
+                  : undefined,
             },
           ]
         : undefined,

@@ -45,6 +45,7 @@ import {
   useContentModerationStore,
   useSavedPostsStore,
   usePreferencesStore,
+  useFeedScrollStore,
   getShareBaseUrl,
   type SavedComment,
 } from "@/src/stores";
@@ -54,6 +55,7 @@ import { MediaPreviewModal } from "@/src/components/molecules/media-preview-moda
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MEDIA_HORIZONTAL_PADDING = 32;
+const SAVED_POSTS_FEED_CONTEXT = "saved:posts";
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
 const IMAGE_URL_REGEX = /^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp))$/i;
@@ -86,7 +88,7 @@ function extractImageUrls(content: string): {
   return { text: textLines.join("\n").trim(), imageUrls };
 }
 
-const CommentImage = memo(({ url, onPress }: { url: string; onPress?: (url: string) => void }) => {
+const CommentImage = memo(function CommentImage({ url, onPress }: { url: string; onPress?: (url: string) => void }) {
   const { theme } = useUnistyles();
   const [hasError, setHasError] = useState(false);
   const [mediaLoaded, setMediaLoaded] = useState(false);
@@ -683,6 +685,7 @@ export function SavedPostsScreen() {
         isVisible={visibleVideoPostIds.has(item.id)}
         isFocused={activeVideoPostId === item.id}
         screenActive={isFocused && activeTab === 0 && currentState === "active"}
+        videoSyncScope={SAVED_POSTS_FEED_CONTEXT}
         isOwnPost={currentUser?.id === item.author.id}
         shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
         showUrlCard={false}
@@ -714,6 +717,16 @@ export function SavedPostsScreen() {
       isFocused,
     ],
   );
+
+  const setFeedScrolling = useCallback((isScrolling: boolean) => {
+    useFeedScrollStore.getState().setContextScrolling(SAVED_POSTS_FEED_CONTEXT, isScrolling);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      setFeedScrolling(false);
+    };
+  }, [setFeedScrolling]);
 
   const renderCommentItem = useCallback(
     ({ item }: { item: SavedComment }) => (
@@ -896,7 +909,13 @@ export function SavedPostsScreen() {
                 initialNumToRender={5}
                 viewabilityConfig={savedPostsViewabilityConfig}
                 onViewableItemsChanged={onSavedPostsViewableItemsChanged}
-                onMomentumScrollEnd={handleSavedPostsMomentumScrollEnd}
+                onScrollBeginDrag={() => setFeedScrolling(true)}
+                onScrollEndDrag={() => setFeedScrolling(false)}
+                onMomentumScrollBegin={() => setFeedScrolling(true)}
+                onMomentumScrollEnd={() => {
+                  setFeedScrolling(false);
+                  handleSavedPostsMomentumScrollEnd();
+                }}
               />
             )
           ) : savedComments.length === 0 ? (

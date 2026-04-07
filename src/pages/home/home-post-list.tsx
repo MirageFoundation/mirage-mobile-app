@@ -20,6 +20,7 @@ import type { Post } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { useAppState } from "@/src/hooks";
 import { HomePostCardItem } from "./home-post-card-item";
+import { useFeedScrollStore } from "@/src/stores";
 import { useHomePostCardStore } from "./home-post-card-store";
 
 const AnimatedFlashList = Animated.createAnimatedComponent(
@@ -31,7 +32,7 @@ const ESTIMATED_ITEM_SIZE = 420;
 type HomePostListProps = {
  data: Post[];
  contentContainerStyle: object;
- onScroll: (event: any) => void;
+ onScroll?: (event: any) => void;
  ListHeaderComponent?: ComponentType<any> | ReactElement | null;
  ListEmptyComponent?: ComponentType<any> | ReactElement | null;
  ListFooterComponent?: ComponentType<any> | ReactElement | null;
@@ -76,12 +77,34 @@ const HomePostListInner = function HomePostListInner(
 
   const pendingViewableRef = useRef<ViewToken[] | null>(null);
   const deferHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollStopHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMomentumScrollingRef = useRef(false);
 
   const cancelDeferredFlush = useCallback(() => {
     if (deferHandleRef.current === null) return;
     clearTimeout(deferHandleRef.current as ReturnType<typeof setTimeout>);
     deferHandleRef.current = null;
   }, []);
+
+  const setFeedScrolling = useCallback((isScrolling: boolean) => {
+    useFeedScrollStore.getState().setContextScrolling(feedContext, isScrolling);
+  }, [feedContext]);
+
+  const cancelScrollStop = useCallback(() => {
+    if (scrollStopHandleRef.current === null) return;
+    clearTimeout(scrollStopHandleRef.current);
+    scrollStopHandleRef.current = null;
+  }, []);
+
+  const scheduleScrollStop = useCallback((delay = 140) => {
+    cancelScrollStop();
+    scrollStopHandleRef.current = setTimeout(() => {
+      scrollStopHandleRef.current = null;
+      if (!isMomentumScrollingRef.current) {
+        setFeedScrolling(false);
+      }
+    }, delay);
+  }, [cancelScrollStop, setFeedScrolling]);
 
   const flushViewability = useCallback(() => {
     const items = pendingViewableRef.current;
@@ -168,11 +191,13 @@ const HomePostListInner = function HomePostListInner(
   useEffect(() => {
     return () => {
       cancelDeferredFlush();
+      cancelScrollStop();
+      setFeedScrolling(false);
       if (itemVisibleTimerRef.current) {
         clearTimeout(itemVisibleTimerRef.current);
       }
     };
-  }, [cancelDeferredFlush]);
+  }, [cancelDeferredFlush, cancelScrollStop, setFeedScrolling]);
 
   useEffect(() => {
     if (data.length !== 0) return;
@@ -207,6 +232,9 @@ const HomePostListInner = function HomePostListInner(
   useAppState({
     onBackground: () => {
       cancelDeferredFlush();
+      cancelScrollStop();
+      isMomentumScrollingRef.current = false;
+      setFeedScrolling(false);
       if (itemVisibleTimerRef.current) {
         clearTimeout(itemVisibleTimerRef.current);
         itemVisibleTimerRef.current = null;
@@ -236,8 +264,26 @@ const HomePostListInner = function HomePostListInner(
     [],
   );
 
+  const handleScrollBeginDrag = useCallback(() => {
+    cancelScrollStop();
+    setFeedScrolling(true);
+  }, [cancelScrollStop, setFeedScrolling]);
+
+  const handleScrollEndDrag = useCallback(() => {
+    scheduleScrollStop();
+  }, [scheduleScrollStop]);
+
+  const handleMomentumScrollBegin = useCallback(() => {
+    cancelScrollStop();
+    isMomentumScrollingRef.current = true;
+    setFeedScrolling(true);
+  }, [cancelScrollStop, setFeedScrolling]);
+
   const handleMomentumScrollEnd = useCallback(() => {
     cancelDeferredFlush();
+    cancelScrollStop();
+    isMomentumScrollingRef.current = false;
+    setFeedScrolling(false);
     if (Platform.OS === "ios") {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -252,7 +298,7 @@ const HomePostListInner = function HomePostListInner(
         });
       }, 50);
     }
-  }, [cancelDeferredFlush, flushViewability]);
+  }, [cancelDeferredFlush, cancelScrollStop, flushViewability, setFeedScrolling]);
 
   return (
     <AnimatedFlashList
@@ -262,9 +308,9 @@ const HomePostListInner = function HomePostListInner(
       keyExtractor={keyExtractor}
       getItemType={getItemType}
       estimatedItemSize={ESTIMATED_ITEM_SIZE}
-      drawDistance={Platform.OS === "android" ? 1500 : 2000}
+      drawDistance={Platform.OS === "android" ? 1500 : 1200}
       onScroll={onScroll}
-      scrollEventThrottle={Platform.OS === "ios" ? 64 : 32}
+      scrollEventThrottle={onScroll ? (Platform.OS === "ios" ? 64 : 32) : undefined}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={contentContainerStyle as any}
       ListHeaderComponent={ListHeaderComponent}
@@ -277,6 +323,9 @@ const HomePostListInner = function HomePostListInner(
       keyboardDismissMode="on-drag"
       viewabilityConfig={viewabilityConfig}
       onViewableItemsChanged={onViewableItemsChanged}
+      onScrollBeginDrag={handleScrollBeginDrag}
+      onScrollEndDrag={handleScrollEndDrag}
+      onMomentumScrollBegin={handleMomentumScrollBegin}
       onMomentumScrollEnd={handleMomentumScrollEnd}
     />
   );
