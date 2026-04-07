@@ -287,6 +287,14 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       }
     }
 
+    if (!imageUrl && !videoUrl && post.url && /\.(jpe?g|png|gif|webp)(\?|$)/i.test(post.url)) {
+      imageUrl = post.url;
+    }
+
+    if (images.length === 0 && imageUrl) {
+      images.push(imageUrl);
+    }
+
     if (videoUrl && !videos.includes(videoUrl)) {
       videos.unshift(videoUrl);
     }
