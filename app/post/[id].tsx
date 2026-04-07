@@ -172,6 +172,8 @@ export default function PostDetailScreen() {
   const [highlightedCommentId, setHighlightedCommentId] = useState<
     string | null
   >(highlight || null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingScrollToEnd = useRef(false);
 
   const [screenActive, setScreenActive] = useState(true);
   const refetchCommentsRef = useRef<((silent?: boolean) => void) | null>(null);
@@ -844,7 +846,7 @@ export default function PostDetailScreen() {
         b.createdAt instanceof Date
           ? b.createdAt.getTime()
           : Number(b.createdAt);
-      return timeB - timeA; // Descending order (latest first)
+      return timeA - timeB; // Ascending order (oldest first)
     });
   }, [
     optimisticTopLevelComments,
@@ -872,6 +874,9 @@ export default function PostDetailScreen() {
   // Scroll to highlighted comment when data loads
   useEffect(() => {
     if (highlightedCommentId && allComments.length > 0 && flatListRef.current) {
+      const isOptimistic = highlightedCommentId.startsWith("optimistic-");
+      if (isOptimistic) return;
+
       // First try to find the comment at top level
       let index = allComments.findIndex((c) => c.id === highlightedCommentId);
 
@@ -882,18 +887,21 @@ export default function PostDetailScreen() {
         );
       }
 
-      if (index !== -1) {
+      if (index !== -1 && index < allComments.length) {
         // Small delay to ensure layout is ready
         setTimeout(() => {
-          flatListRef.current?.scrollToIndex({
-            index,
-            animated: true,
-            viewPosition: 0.1, // Position closer to top to show more of the thread
-          });
+          if (index < (allComments.length ?? 0)) {
+            flatListRef.current?.scrollToIndex({
+              index,
+              animated: true,
+              viewPosition: 0.1,
+            });
+          }
         }, 500);
 
         // Clear highlight after 3 seconds
-        setTimeout(() => {
+        if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+        highlightTimerRef.current = setTimeout(() => {
           setHighlightedCommentId(null);
         }, 3000);
       }
@@ -944,6 +952,13 @@ export default function PostDetailScreen() {
       runOnJS(setIsStickyInteractive)(next);
     },
   );
+
+  const handleContentSizeChange = useCallback(() => {
+    if (pendingScrollToEnd.current) {
+      pendingScrollToEnd.current = false;
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }
+  }, []);
 
   // Animated style for sticky header
   const stickyHeaderAnimatedStyle = useAnimatedStyle(() => {
@@ -1192,9 +1207,14 @@ export default function PostDetailScreen() {
         onOptimisticUpdate: () => {
           if (replyTarget) {
             addReplyOptimisticComment(id, replyTarget.id, optimisticComment);
+            setHighlightedCommentId(optimisticCommentId);
           } else {
             addTopLevelOptimisticComment(id, optimisticComment);
+            setHighlightedCommentId(optimisticCommentId);
+            pendingScrollToEnd.current = true;
           }
+          if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+          highlightTimerRef.current = setTimeout(() => setHighlightedCommentId(null), 3000);
           setLocalPostUpdates((prev) => ({
             ...prev,
             comments: (prev.comments ?? displayPost?.comments ?? 0) + 1,
@@ -1213,6 +1233,12 @@ export default function PostDetailScreen() {
           if (!confirmedCommentId) return;
 
           replaceOptimisticCommentId(id, optimisticCommentId, confirmedCommentId);
+
+          setHighlightedCommentId((prev) =>
+            prev === optimisticCommentId ? confirmedCommentId : prev,
+          );
+          if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+          highlightTimerRef.current = setTimeout(() => setHighlightedCommentId(null), 3000);
 
           setSelectedComment((prev) => {
             if (!prev || prev.id !== optimisticCommentId) return prev;
@@ -2020,6 +2046,7 @@ export default function PostDetailScreen() {
           showsVerticalScrollIndicator={false}
           onScroll={handleScroll}
           scrollEventThrottle={16}
+          onContentSizeChange={handleContentSizeChange}
           refreshControl={
             <RefreshControl
               refreshing={isRefetchingComments}
