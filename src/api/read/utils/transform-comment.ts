@@ -46,6 +46,7 @@ export function transformApiComment(
     parentId: parentId ?? null,
     depth,
     awards: apiComment.awards ?? [],
+    hasMoreReplies: apiComment.comments > 0 && (!apiComment.children || apiComment.children.length === 0),
   };
 }
 

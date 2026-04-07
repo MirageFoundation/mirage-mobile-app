@@ -773,26 +773,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          migrate content tag to adult all over the app, added
-                          adult content option in content filter sheet in
-                          settings, enabling mature content toggle will enable
-                          all the content in content filter, disabling the
-                          mature content toggle will disable the adult content
-                          in content filter sheet, selecting the adult content
-                          in content filter sheet while the mature content
-                          toggle is disabled will show a note saying the
-                          enabling mature content toggle is necessary to see
-                          adult content, both the show mature content toggle and
-                          the adult type content should be enabled to see adult
-                          content, made the parent comment to be visble on
-                          comment input screen covering 20% of screen height and
-                          can also scroll throught it to see full parent
-                          comment,save comment draft even after going back or
-                          closing the app, draft expires after 2 days,
-                          notification tap now shows the new msgs in inbox
-                          immediately,username taken issue on edit username fix,
-                          2 or more agent modified post touching each other fix,
-                          spcae between paragraph increased in markdown
+                          lots of app optimization, nsfw image not getting
+                          extracted from reddit link fix,deep replies not
+                          showing up in commenst fix
                         </Text>
                       </>
                     )}
@@ -843,26 +826,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          migrate content tag to adult all over the app, added
-                          adult content option in content filter sheet in
-                          settings, enabling mature content toggle will enable
-                          all the content in content filter, disabling the
-                          mature content toggle will disable the adult content
-                          in content filter sheet, selecting the adult content
-                          in content filter sheet while the mature content
-                          toggle is disabled will show a note saying the
-                          enabling mature content toggle is necessary to see
-                          adult content, both the show mature content toggle and
-                          the adult type content should be enabled to see adult
-                          content, made the parent comment to be visble on
-                          comment input screen covering 20% of screen height and
-                          can also scroll throught it to see full parent
-                          comment,save comment draft even after going back or
-                          closing the app, draft expires after 2 days,
-                          notification tap now shows the new msgs in inbox
-                          immediately,username taken issue on edit username fix,
-                          2 or more agent modified post touching each other fix,
-                          spcae between paragraph increased in markdown
+                          lots of app optimization, nsfw image not getting
+                          extracted from reddit link fix,deep replies not
+                          showing up in commenst fix
                         </Text>
                       </>
                     )}
