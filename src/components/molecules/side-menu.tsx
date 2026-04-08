@@ -814,7 +814,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           and pull to refresh indicator on top ui change for all
                           feeds, comment thread collapse and expansion made
                           smooth and better, negative vote counts not showing up
-                          in posts and comments fix
+                          in posts and comments fix, optimistic response fix
+                          for votes comments search results, updating votes or
+                          comments of a post will update the count and stuff all
+                          over the app, sometime manually refreshing the feed
+                          shows the new posts banner immediately after the
+                          refresh completed fixed
                         </Text>
                       </>
                     )}
@@ -907,7 +912,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           feeds, comment thread collapse and expansion made
                           smooth and better, negative vote counts not showing up
                           in posts and comments fix, optimistic response fix
-                          for votes comments etc
+                          for votes comments search results, updating votes or
+                          comments of a post will update the count and stuff all
+                          over the app, sometime manually refreshing the feed
+                          shows the new posts banner immediately after the
+                          refresh completed fixed
                         </Text>
                       </>
                     )}
