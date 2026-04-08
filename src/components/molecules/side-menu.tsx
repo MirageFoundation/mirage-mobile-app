@@ -779,7 +779,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           a post will update the count and stuff all over the
                           app, sometime manually refreshing the feed shows the
                           new posts banner immediately after the refresh
-                          completed fixed
+                          completed fixed, the ref link invite link and login
+                          link on ios opens the modal sheet properly when logged
+                          out state
                         </Text>
                       </>
                     )}
@@ -836,7 +838,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           a post will update the count and stuff all over the
                           app, sometime manually refreshing the feed shows the
                           new posts banner immediately after the refresh
-                          completed fixed
+                          completed fixed, the ref link invite link and login
+                          link on ios opens the modal sheet properly when logged
+                          out state
                         </Text>
                       </>
                     )}

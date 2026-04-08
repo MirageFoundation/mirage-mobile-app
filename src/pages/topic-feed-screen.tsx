@@ -64,6 +64,7 @@ import {
   getAllowedTagsFromContentTypes,
   useAuthStore,
   useContentModerationStore,
+  useFeedScrollStore,
   usePreferencesStore,
   useSavedPostsStore,
   useTimeTickStore,
@@ -99,13 +100,20 @@ export function TopicFeedScreen() {
     [],
   );
 
+  const setContextScrolling = useFeedScrollStore((state) => state.setContextScrolling);
+
   const handleSortChange = useCallback((value: "magic" | "newest") => {
     triggerHaptic("light");
+    const oldFeedContext = `topic:${topicName ?? "unknown"}:${sortBy}`;
+    const newFeedContext = `topic:${topicName ?? "unknown"}:${value}`;
+    useHomePostCardStore.getState().setVideoViewability(oldFeedContext, new Set(), null);
+    setContextScrolling(oldFeedContext, false);
+    setContextScrolling(newFeedContext, false);
     setSortBy(value);
     requestAnimationFrame(() => {
       flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
     });
-  }, []);
+  }, [setContextScrolling, sortBy, topicName]);
 
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
@@ -287,7 +295,7 @@ export function TopicFeedScreen() {
   });
 
   const revealedPostsRef = useRef<Set<string>>(new Set());
-  const topicFeedSyncContext = `topic:${topicName ?? "unknown"}`;
+  const topicFeedSyncContext = `topic:${topicName ?? "unknown"}:${sortBy}`;
 
   const handlePostPress = useCallback(
     (postId: string) => {
@@ -929,6 +937,7 @@ export function TopicFeedScreen() {
       </View>
 
       <HomePostList
+        key={topicFeedSyncContext}
         ref={flatListRef}
         data={posts}
         contentContainerStyle={listContentStyle}

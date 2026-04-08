@@ -266,6 +266,7 @@ export const PostCard = memo(function PostCard({
       />
 
       <PostCardMedia
+        key={`${post.id}:${videoSyncScope ?? "default"}:${resolvedContent.resolvedMedia?.uri ?? "none"}`}
         media={resolvedContent.resolvedMedia}
         mediaList={resolvedContent.resolvedMediaList}
         isVisible={isVisible}
