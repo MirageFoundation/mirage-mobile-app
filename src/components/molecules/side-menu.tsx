@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 125
+                          update 126
                         </Text>
                         <Text
                           style={{
@@ -812,7 +812,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           the comment list and will scroll us to end and will
                           highlight the comment for 3 seconds, the auto refresh
                           and pull to refresh indicator on top ui change for all
-                          feeds
+                          feeds, comment thread collapse and expansion made
+                          smooth and better
                         </Text>
                       </>
                     )}
@@ -853,7 +854,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 125
+                          update 126
                         </Text>
                         <Text
                           style={{
@@ -902,7 +903,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           the comment list and will scroll us to end and will
                           highlight the comment for 3 seconds, the auto refresh
                           and pull to refresh indicator on top ui change for all
-                          feeds
+                          feeds, comment thread collapse and expansion made
+                          smooth and better
                         </Text>
                       </>
                     )}
