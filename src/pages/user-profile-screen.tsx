@@ -68,7 +68,7 @@ import { ProfileCommentItem } from "@/src/components/molecules/profile-comment-i
 import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { UserProfileContentAnimated } from "@/src/components/molecules/user-profile-content-animated";
 import { PROFILE_TAB_BAR_HEIGHT } from "@/src/components/molecules/profile-tabs";
-import { Box, Text } from "@/src/components/ui/primitives";
+import { Box } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import {
   useAppState,
@@ -90,6 +90,7 @@ import {
   useFeedScrollStore,
   useSavedPostsStore,
 } from "@/src/stores";
+import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const AnimatedFlatList = Animated.createAnimatedComponent(
@@ -316,23 +317,20 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
  const blockHandler = useBlockHandler({});
  const reportHandler = useReportHandler({});
 
-  const [voteOverrides, setVoteOverrides] = useState<
-    Map<string, { hasLiked: boolean; hasDisliked: boolean; likeDelta: number }>
-  >(new Map());
+  const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
+  const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
 
   const { handleUpvote, handleDownvote } = useVoteHandler({
-    onOptimisticUpdate: (targetId: string, result: VoteResult) => {
-      setVoteOverrides((prev) => {
-        const next = new Map(prev);
-        const existing = prev.get(targetId);
-        next.set(targetId, {
-          hasLiked: result.hasLiked,
-          hasDisliked: result.hasDisliked,
-          likeDelta: (existing?.likeDelta ?? 0) + result.likeDelta,
-        });
-        return next;
+    onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
+      setVoteOverride(targetId, {
+        hasLiked: result.hasLiked,
+        hasDisliked: result.hasDisliked,
+        likes: result.newLikes,
       });
-    },
+    }, [setVoteOverride]),
+    onRollback: useCallback((targetId: string) => {
+      clearVoteOverride(targetId);
+    }, [clearVoteOverride]),
   });
 
   const blockUserMutation = useBlockUser();
@@ -441,28 +439,13 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     [apiPosts, currentUser]
   );
 
-  const postsWithVotes = useMemo(() => {
-    if (voteOverrides.size === 0) return uiPosts;
-    return uiPosts.map((post) => {
-      const override = voteOverrides.get(post.id);
-      if (!override) return post;
-      return {
-        ...post,
-        contentWarnings: undefined,
-        likes: post.likes + override.likeDelta,
-        hasLiked: override.hasLiked,
-        hasDisliked: override.hasDisliked,
-      };
-    });
-  }, [uiPosts, voteOverrides]);
-
  const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
     if (isBlocked || activeTab === 2) {
       return ["header", "tabs"];
     }
-    const posts = activeTab === 0 ? postsWithVotes : apiPosts;
+    const posts = activeTab === 0 ? uiPosts : apiPosts;
     return ["header", "tabs", ...posts];
-  }, [activeTab, postsWithVotes, apiPosts, isBlocked]);
+  }, [activeTab, uiPosts, apiPosts, isBlocked]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -836,7 +819,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
       next.add(postId);
       return next;
     });
-    const post = postsWithVotes.find((p) => p.id === postId);
+    const post = uiPosts.find((p) => p.id === postId);
     if (postHasPlayableVideo(post)) {
       setActiveVideoPostId(postId);
       setVisibleVideoPostIds((prev) => {
@@ -845,7 +828,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         return next;
       });
     }
-  }, [postsWithVotes]);
+  }, [uiPosts]);
 
   const profileViewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 30,

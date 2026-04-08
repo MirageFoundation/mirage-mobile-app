@@ -773,14 +773,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          lots of app optimization, nsfw image not getting
-                          extracted from reddit link fix,deep replies not
-                          showing up in commenst fix, posting comment will
-                          appear at end of the comment list and will scroll us
-                          to end and will highlight the comment for 3 seconds,
-                          the auto refresh and pull to refresh indicator on top
-                          ui change for all feeds, comment thread collapse and
-                          expansion made smooth and better
+                          negative vote counts not showing up in posts and
+                          comments fix
                         </Text>
                       </>
                     )}
@@ -831,14 +825,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          lots of app optimization, nsfw image not getting
-                          extracted from reddit link fix,deep replies not
-                          showing up in commenst fix, posting comment will
-                          appear at end of the comment list and will scroll us
-                          to end and will highlight the comment for 3 seconds,
-                          the auto refresh and pull to refresh indicator on top
-                          ui change for all feeds, comment thread collapse and
-                          expansion made smooth and better
+                          negative vote counts not showing up in posts and
+                          comments fix, optimistic response fix for votes
+                          comments etc
                         </Text>
                       </>
                     )}
