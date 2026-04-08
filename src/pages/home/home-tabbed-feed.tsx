@@ -15,10 +15,11 @@ import {
   RefreshControl,
   View,
 } from "react-native";
-import { RefreshIndicator, IOSRefreshIndicator } from "@/src/components/atoms/refresh-indicator";
+import { IOSRefreshIndicator } from "@/src/components/atoms/refresh-indicator";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useAndroidPullIndicator } from "@/src/hooks/use-android-pull-indicator";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useUnistyles } from "react-native-unistyles";
+import { GestureDetector } from "react-native-gesture-handler";
 import * as Sentry from "@sentry/react-native";
 
 import {
@@ -78,7 +79,6 @@ export const HomeTabbedFeed = forwardRef<
   HomeTabbedFeedRef,
   HomeTabbedFeedProps
 >(({ feedType: baseFeed, activeTabIndex = 0, ListHeaderExtra, onRefreshingChange, onNewPostsChange }, ref) => {
-  const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { scrollHandler, scrollY, registerHomeRefresh, registerFollowingRefresh, showBars } = useScrollAnimationContext();
@@ -97,6 +97,15 @@ export const HomeTabbedFeed = forwardRef<
   const activeListRef = useRef<FlashListRef<Post>>(null);
   const dismissNewPostsRef = useRef<(() => void) | null>(null);
   const handleRefreshRef = useRef<((options?: { fetchAllNew?: boolean; silent?: boolean }) => Promise<void>) | null>(null);
+  const triggerPullRefresh = useCallback(() => {
+    handleRefreshRef.current?.();
+  }, []);
+
+  const { pullDistance, pullGesture } = useAndroidPullIndicator({
+    scrollY,
+    refreshing: isRefreshing,
+    onTriggerRefresh: triggerPullRefresh,
+  });
 
   useEffect(() => {
     if (prevTabIndexRef.current !== activeTabIndex) {
@@ -670,14 +679,11 @@ export const HomeTabbedFeed = forwardRef<
   const ListHeader = useMemo(() => (
     <>
       {ListHeaderExtra}
-      {!isIOS && showHeaderSpinner && <RefreshIndicator />}
       {showQuests && <QuestsSummaryCard />}
     </>
   ), [
     ListHeaderExtra,
-    showHeaderSpinner,
     showQuests,
-    isIOS,
   ]);
 
   const isFetchingNext = activeTabIndex === 0 ? magicQuery.isFetchingNextPage : latestQuery.isFetchingNextPage;
@@ -700,19 +706,20 @@ export const HomeTabbedFeed = forwardRef<
 
   const progressViewOffset = insets.top + HEADER_HEIGHT;
 
-  const refreshControl = useMemo(
-    () => (
+  const refreshControl = useMemo(() => {
+    if (!isIOS) return null;
+
+    return (
       <RefreshControl
-        refreshing={isIOS ? false : false}
+        refreshing={false}
         onRefresh={handleRefresh}
         tintColor="transparent"
         colors={["transparent"]}
         progressBackgroundColor="transparent"
-        progressViewOffset={isIOS ? progressViewOffset : -10000}
+        progressViewOffset={progressViewOffset}
       />
-    ),
-    [handleRefresh, progressViewOffset, isIOS],
-  );
+    );
+  }, [handleRefresh, progressViewOffset, isIOS]);
 
   const posts = activeTabIndex === 0 ? magicPosts : latestPosts;
   const query = activeTabIndex === 0 ? magicQuery : latestQuery;
@@ -759,27 +766,30 @@ export const HomeTabbedFeed = forwardRef<
 
   return (
     <View style={{ flex: 1 }}>
-      <HomePostList
-        key={feedContext}
-        ref={combinedRefCallback}
-        data={posts}
-        contentContainerStyle={listContentStyle}
-        onScroll={scrollHandler}
-        ListHeaderComponent={ListHeader}
-        ListEmptyComponent={ListEmpty}
-        ListFooterComponent={ListFooter}
-        refreshControl={refreshControl}
-        feedScreen={baseFeed}
-        feedContext={feedContext}
-        onItemVisible={onItemVisible}
+      <GestureDetector gesture={pullGesture}>
+        <View style={{ flex: 1 }} collapsable={false}>
+          <HomePostList
+            key={feedContext}
+            ref={combinedRefCallback}
+            data={posts}
+            contentContainerStyle={listContentStyle}
+            onScroll={scrollHandler}
+            ListHeaderComponent={ListHeader}
+            ListEmptyComponent={ListEmpty}
+            ListFooterComponent={ListFooter}
+            refreshControl={refreshControl}
+            feedScreen={baseFeed}
+            feedContext={feedContext}
+            onItemVisible={onItemVisible}
+          />
+        </View>
+      </GestureDetector>
+      <IOSRefreshIndicator
+        visible={showHeaderSpinner}
+        topOffset={insets.top + HEADER_HEIGHT + 8}
+        scrollY={scrollY}
+        pullDistance={pullDistance}
       />
-      {isIOS && (
-        <IOSRefreshIndicator
-          visible={showHeaderSpinner}
-          topOffset={insets.top + HEADER_HEIGHT + 8}
-          scrollY={scrollY}
-        />
-      )}
     </View>
   );
 });

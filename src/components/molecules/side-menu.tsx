@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 127
+                          update 128
                         </Text>
                         <Text
                           style={{
@@ -781,7 +781,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           new posts banner immediately after the refresh
                           completed fixed, the ref link invite link and login
                           link on ios opens the modal sheet properly when logged
-                          out state
+                          out state, audio distortion after video post created
+                          fix, video showing blank placeholder on feed type
+                          change fix, audio distortion or audio mute on feed
+                          type change fix, mess up things happening after video
+                          post created fix, pull to refresh indicator ui
+                          improvement to follow finger gesture on android
                         </Text>
                       </>
                     )}
@@ -822,7 +827,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 127
+                          update 128
                         </Text>
                         <Text
                           style={{
@@ -840,7 +845,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           new posts banner immediately after the refresh
                           completed fixed, the ref link invite link and login
                           link on ios opens the modal sheet properly when logged
-                          out state
+                          out state, audio distortion after video post created
+                          fix, video showing blank placeholder on feed type
+                          change fix, audio distortion or audio mute on feed
+                          type change fix, mess up things happening after video
+                          post created fix, pull to refresh indicator ui
+                          improvement to follow finger gesture on android
                         </Text>
                       </>
                     )}

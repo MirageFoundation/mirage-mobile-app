@@ -6,6 +6,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import type { FlashListRef } from "@shopify/flash-list";
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/hooks/use-router";
+import { useAndroidPullIndicator } from "@/src/hooks/use-android-pull-indicator";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Platform,
@@ -13,9 +14,10 @@ import {
   RefreshControl,
   View,
 } from "react-native";
-import { RefreshIndicator, IOSRefreshIndicator } from "@/src/components/atoms/refresh-indicator";
+import { IOSRefreshIndicator } from "@/src/components/atoms/refresh-indicator";
 import { useSharedValue, useAnimatedScrollHandler } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GestureDetector } from "react-native-gesture-handler";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import {
   Menu,
@@ -589,11 +591,6 @@ export function TopicFeedScreen() {
 
   const isIOS = Platform.OS === "ios";
 
-  const ListHeaderComponent = useCallback(() => {
-    if (isIOS || !isManualRefreshing) return null;
-    return <RefreshIndicator />;
-  }, [isManualRefreshing, isIOS]);
-
   const ListFooterComponent = useCallback(() => {
     if (!isFetchingNextPage) return null;
     return <PostCardSkeletonList count={1} />;
@@ -607,6 +604,11 @@ export function TopicFeedScreen() {
       scrollY.value = event.contentOffset.y;
     },
   });
+  const { pullDistance, pullGesture } = useAndroidPullIndicator({
+    scrollY,
+    refreshing: isManualRefreshing,
+    onTriggerRefresh: handleRefresh,
+  });
 
   const listContentStyle = useMemo(
     () => ({
@@ -617,19 +619,20 @@ export function TopicFeedScreen() {
     [insets.bottom, insets.top, posts.length],
   );
 
-  const refreshControl = useMemo(
-    () => (
+  const refreshControl = useMemo(() => {
+    if (!isIOS) return null;
+
+    return (
       <RefreshControl
         refreshing={false}
         onRefresh={handleRefresh}
         tintColor="transparent"
         colors={["transparent"]}
         progressBackgroundColor="transparent"
-        progressViewOffset={isIOS ? insets.top + HEADER_HEIGHT : -10000}
+        progressViewOffset={insets.top + HEADER_HEIGHT}
       />
-    ),
-    [handleRefresh, insets.top, isIOS],
-  );
+    );
+  }, [handleRefresh, insets.top, isIOS]);
 
   const setCurrentUserId = useHomePostCardStore(
     (state) => state.setCurrentUserId,
@@ -936,28 +939,30 @@ export function TopicFeedScreen() {
         </Pressable>
       </View>
 
-      <HomePostList
-        key={topicFeedSyncContext}
-        ref={flatListRef}
-        data={posts}
-        contentContainerStyle={listContentStyle}
-        ListHeaderComponent={ListHeaderComponent}
-        ListEmptyComponent={ListEmptyComponent}
-        ListFooterComponent={ListFooterComponent}
-        refreshControl={refreshControl}
-        feedScreen="topic"
-        feedContext={topicFeedSyncContext}
-        onItemVisible={handleItemVisible}
-        onScroll={scrollHandler}
-      />
+      <GestureDetector gesture={pullGesture}>
+        <View style={{ flex: 1 }} collapsable={false}>
+          <HomePostList
+            key={topicFeedSyncContext}
+            ref={flatListRef}
+            data={posts}
+            contentContainerStyle={listContentStyle}
+            ListEmptyComponent={ListEmptyComponent}
+            ListFooterComponent={ListFooterComponent}
+            refreshControl={refreshControl}
+            feedScreen="topic"
+            feedContext={topicFeedSyncContext}
+            onItemVisible={handleItemVisible}
+            onScroll={scrollHandler}
+          />
+        </View>
+      </GestureDetector>
 
-      {isIOS && (
-        <IOSRefreshIndicator
-          visible={isManualRefreshing}
-          topOffset={insets.top + HEADER_HEIGHT + 8}
-          scrollY={scrollY}
-        />
-      )}
+      <IOSRefreshIndicator
+        visible={isManualRefreshing}
+        topOffset={insets.top + HEADER_HEIGHT + 8}
+        scrollY={scrollY}
+        pullDistance={pullDistance}
+      />
 
       <NewPostsButton
         visible={hasNewPosts}
