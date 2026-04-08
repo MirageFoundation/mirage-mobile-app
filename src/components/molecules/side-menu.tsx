@@ -774,7 +774,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           weight="light"
                         >
                           negative vote counts not showing up in posts and
-                          comments fix
+                          comments fix, optimistic response fix for votes
+                          comments search results, updating votes or comments of
+                          a post will update the count and stuff all over the
+                          app, sometime manually refreshing the feed shows the
+                          new posts banner immediately after the refresh
+                          completed fixed
                         </Text>
                       </>
                     )}
@@ -827,7 +832,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                         >
                           negative vote counts not showing up in posts and
                           comments fix, optimistic response fix for votes
-                          comments etc
+                          comments search results, updating votes or comments of
+                          a post will update the count and stuff all over the
+                          app, sometime manually refreshing the feed shows the
+                          new posts banner immediately after the refresh
+                          completed fixed
                         </Text>
                       </>
                     )}
