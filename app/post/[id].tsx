@@ -95,6 +95,7 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Animated, {
   Easing,
   FadeInUp,
+  LinearTransition,
   interpolate,
   runOnJS,
   useAnimatedReaction,
@@ -1693,7 +1694,10 @@ export default function PostDetailScreen() {
 
   const renderComment = useCallback(
     ({ item }: { item: Comment }) => (
-      <Animated.View entering={FadeInUp.duration(250).delay(100)}>
+      <Animated.View
+        entering={FadeInUp.duration(250).delay(100)}
+        layout={LinearTransition.duration(250)}
+      >
         <CommentThread
           comment={item}
           currentUserId={currentUser?.id}
