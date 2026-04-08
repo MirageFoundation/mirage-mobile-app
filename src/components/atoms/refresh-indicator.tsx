@@ -178,9 +178,10 @@ type IOSRefreshIndicatorProps = {
   visible: boolean;
   topOffset: number;
   scrollY: SharedValue<number>;
+  pullDistance?: SharedValue<number>;
 };
 
-export function IOSRefreshIndicator({ visible, topOffset, scrollY }: IOSRefreshIndicatorProps) {
+export function IOSRefreshIndicator({ visible, topOffset, scrollY, pullDistance }: IOSRefreshIndicatorProps) {
   const { rt } = useUnistyles();
   const isDark = rt.themeName === "dark";
   const palette = isDark ? DARK_REFRESH_PALETTE : LIGHT_REFRESH_PALETTE;
@@ -201,7 +202,7 @@ export function IOSRefreshIndicator({ visible, topOffset, scrollY }: IOSRefreshI
 
   const progress = useDerivedValue(() => {
     if (isRefreshing.value) return 1;
-    const pull = -scrollY.value;
+    const pull = pullDistance ? pullDistance.value : -scrollY.value;
     if (pull <= 0) return 0;
     return Math.min(pull / PULL_THRESHOLD, 1);
   });
