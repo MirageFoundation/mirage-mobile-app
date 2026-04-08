@@ -36,7 +36,7 @@ export function transformApiComment(
       isNewUser: apiComment.author_is_new ?? apiComment.new_user ?? false,
     },
     content: apiComment.content || apiComment.title || "",
-    likes: Math.max(0, displayPoints),
+    likes: displayPoints,
     dislikes: Math.max(0, -displayPoints),
     hasLiked,
     hasDisliked,

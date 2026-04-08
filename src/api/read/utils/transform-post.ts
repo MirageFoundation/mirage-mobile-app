@@ -174,8 +174,8 @@ export function transformApiPost(
           ]
         : undefined,
     contentWarnings: contentWarnings.length > 0 ? contentWarnings : undefined,
-    likes: Math.max(0, displayPoints), // Display positive points as likes
-    dislikes: Math.max(0, -displayPoints), // Display negative points as dislikes (inverted)
+    likes: displayPoints, // Preserve net score so negative counts render correctly
+    dislikes: Math.max(0, -displayPoints), // Keep negative magnitude available for callers that need it
     comments: apiPost.comments,
     hasLiked,
     hasDisliked,

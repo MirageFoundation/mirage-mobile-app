@@ -45,7 +45,7 @@ export const CommentThread = ({
   showDivider = true,
 }: CommentThreadProps) => {
   const autoCollapseThreshold = usePreferencesStore((s) => s.autoCollapseThreshold);
-  const score = comment.likes - comment.dislikes;
+  const score = comment.likes;
   const shouldAutoCollapse = autoCollapseThreshold !== null && score <= autoCollapseThreshold;
   const [isCollapsed, setIsCollapsed] = useState(shouldAutoCollapse);
 
