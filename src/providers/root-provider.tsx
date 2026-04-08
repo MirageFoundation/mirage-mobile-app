@@ -18,7 +18,10 @@ import { initInboxNotifications } from "@/src/services/inbox-notifications";
 import { initPushNotifications, registerPush } from "@/src/services/push-notifications";
 import { useAuthStore, usePreferencesStore, useVideoPositionStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
-import { flushPendingRouteAfterAuth } from "@/src/navigation/auth-navigation";
+import {
+  flushPendingAuthRoute,
+  flushPendingRouteAfterAuth,
+} from "@/src/navigation/auth-navigation";
 import { startTimeTicking, stopTimeTicking } from "@/src/stores/time-tick-store";
 import * as Sentry from "@sentry/react-native";
 import { AppState } from "react-native";
@@ -66,6 +69,11 @@ export const RootProvider = memo(
     }, []);
 
     const hasSeenAdultPrompt = usePreferencesStore((s) => s.hasSeenAdultPrompt);
+
+    useEffect(() => {
+      const timer = setTimeout(() => flushPendingAuthRoute(), 1000);
+      return () => clearTimeout(timer);
+    }, []);
 
     useEffect(() => {
       if (!isLoggedIn) return;
