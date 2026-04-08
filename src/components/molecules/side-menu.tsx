@@ -813,7 +813,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           highlight the comment for 3 seconds, the auto refresh
                           and pull to refresh indicator on top ui change for all
                           feeds, comment thread collapse and expansion made
-                          smooth and better
+                          smooth and better, negative vote counts not showing up
+                          in posts and comments fix
                         </Text>
                       </>
                     )}
@@ -904,7 +905,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           highlight the comment for 3 seconds, the auto refresh
                           and pull to refresh indicator on top ui change for all
                           feeds, comment thread collapse and expansion made
-                          smooth and better
+                          smooth and better, negative vote counts not showing up
+                          in posts and comments fix, optimistic response fix
+                          for votes comments etc
                         </Text>
                       </>
                     )}

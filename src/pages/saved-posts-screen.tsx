@@ -24,7 +24,6 @@ import {
   type PostOptionsSheetRef,
   CommentOptionsSheet,
   type CommentOptionsSheetRef,
-  type Comment,
 } from "@/src/components/molecules";
 import { PostCardItem } from "@/src/components/molecules/post-card-item";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
@@ -49,6 +48,7 @@ import {
   getShareBaseUrl,
   type SavedComment,
 } from "@/src/stores";
+import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { MediaPreviewModal } from "@/src/components/molecules/media-preview-modal";
@@ -158,12 +158,6 @@ const SAVED_TABS = [
   { key: "posts", label: "Posts" },
   { key: "comments", label: "Comments" },
 ] as const;
-
-type VoteOverride = {
-  hasLiked: boolean;
-  hasDisliked: boolean;
-  likeDelta: number;
-};
 
 const AnimatedTabLabel = ({
   label,
@@ -366,7 +360,6 @@ export function SavedPostsScreen() {
   const commentOptionsSheetRef = useRef<CommentOptionsSheetRef>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [selectedComment, setSelectedComment] = useState<SavedComment | null>(null);
-  const [voteOverrides, setVoteOverrides] = useState<Record<string, VoteOverride>>({});
   const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
   const [visibleVideoPostIds, setVisibleVideoPostIds] = useState<Set<string>>(new Set());
   const [nearbyVideoPostIds, setNearbyVideoPostIds] = useState<Set<string>>(new Set());
@@ -379,6 +372,8 @@ export function SavedPostsScreen() {
   const shareServer = usePreferencesStore((s) => s.shareServer);
   const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
   const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
+  const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
+  const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
 
   const { networkType } = useNetworkState();
 
@@ -389,45 +384,20 @@ export function SavedPostsScreen() {
 
   const { handleUpvote, handleDownvote } = useVoteHandler({
     onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
-      setVoteOverrides((prev) => {
-        const existing = prev[targetId];
-        return {
-          ...prev,
-          [targetId]: {
-            hasLiked: result.hasLiked,
-            hasDisliked: result.hasDisliked,
-            likeDelta: (existing?.likeDelta ?? 0) + result.likeDelta,
-          },
-        };
+      setVoteOverride(targetId, {
+        hasLiked: result.hasLiked,
+        hasDisliked: result.hasDisliked,
+        likes: result.newLikes,
       });
-    }, []),
+    }, [setVoteOverride]),
     onRollback: useCallback((targetId: string) => {
-      setVoteOverrides((prev) => {
-        const next = { ...prev };
-        delete next[targetId];
-        return next;
-      });
-    }, []),
+      clearVoteOverride(targetId);
+    }, [clearVoteOverride]),
   });
 
   const visiblePosts = useMemo(
     () => savedPosts.filter((p) => !hiddenPostIds.has(p.id) && !(p.topic && blockedTopicNames.has(p.topic.toLowerCase()))),
     [savedPosts, hiddenPostIds, blockedTopicNames],
-  );
-
-  const postsWithOverrides = useMemo(
-    () =>
-      visiblePosts.map((post) => {
-        const override = voteOverrides[post.id];
-        if (!override) return post;
-        return {
-          ...post,
-          hasLiked: override.hasLiked,
-          hasDisliked: override.hasDisliked,
-          likes: post.likes + override.likeDelta,
-        };
-      }),
-    [visiblePosts, voteOverrides],
   );
 
   const savedPostsViewabilityConfig = useRef({
@@ -551,11 +521,11 @@ export function SavedPostsScreen() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (postsWithOverrides.length !== 0) return;
+    if (visiblePosts.length !== 0) return;
     setVisibleVideoPostIds(new Set());
     setNearbyVideoPostIds(new Set());
     setActiveVideoPostId(null);
-  }, [postsWithOverrides.length]);
+  }, [visiblePosts.length]);
 
   useEffect(() => {
     return () => {
@@ -610,13 +580,13 @@ export function SavedPostsScreen() {
 
   const handleMorePress = useCallback(
     (postId: string) => {
-      const post = postsWithOverrides.find((p) => p.id === postId);
+      const post = visiblePosts.find((p) => p.id === postId);
       if (post) {
         setSelectedPost(post);
         postOptionsSheetRef.current?.present();
       }
     },
-    [postsWithOverrides],
+    [visiblePosts],
   );
 
   const handleLikePress = useCallback(
@@ -920,11 +890,11 @@ export function SavedPostsScreen() {
       <GestureDetector gesture={swipeGesture}>
         <Animated.View style={[{ flex: 1 }, contentAnimatedStyle]}>
           {activeTab === 0 ? (
-            postsWithOverrides.length === 0 ? (
+            visiblePosts.length === 0 ? (
               renderEmptyState("posts")
             ) : (
               <FlatList
-                data={postsWithOverrides}
+                data={visiblePosts}
                 keyExtractor={postKeyExtractor}
                 renderItem={renderPostItem}
                 contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
