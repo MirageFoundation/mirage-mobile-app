@@ -8,10 +8,10 @@ import {
   type SharedValue,
 } from "react-native-reanimated";
 
-const TOP_TOLERANCE = 2;
-const ACTIVATE_DISTANCE = 4;
-const HORIZONTAL_FAIL_DISTANCE = 12;
-const TRIGGER_DISTANCE = 60;
+const TOP_TOLERANCE = 12;
+const ACTIVATE_DISTANCE = 2;
+const HORIZONTAL_FAIL_DISTANCE = 24;
+const TRIGGER_DISTANCE = 56;
 const MAX_PULL_DISTANCE = 120;
 const RESET_DURATION = 120;
 
@@ -32,13 +32,19 @@ export function useAndroidPullIndicator({
   const refreshingValue = useSharedValue(refreshing);
   const startX = useSharedValue(0);
   const startY = useSharedValue(0);
+  const didTriggerRefresh = useSharedValue(false);
 
   useEffect(() => {
     refreshingValue.value = refreshing;
-    if (!refreshing) {
-      pullDistance.value = withTiming(0, { duration: RESET_DURATION });
+
+    if (refreshing) {
+      pullDistance.value = TRIGGER_DISTANCE;
+      return;
     }
-  }, [pullDistance, refreshing, refreshingValue]);
+
+    didTriggerRefresh.value = false;
+    pullDistance.value = withTiming(0, { duration: RESET_DURATION });
+  }, [didTriggerRefresh, pullDistance, refreshing, refreshingValue]);
 
   const pullGesture = useMemo(
     () => Gesture.Pan()
@@ -48,12 +54,18 @@ export function useAndroidPullIndicator({
       .onTouchesDown((event) => {
         const touch = event.allTouches[0];
         if (!touch) return;
+
         startX.value = touch.absoluteX;
         startY.value = touch.absoluteY;
+
+        if (!refreshingValue.value) {
+          didTriggerRefresh.value = false;
+          pullDistance.value = 0;
+        }
       })
       .onTouchesMove((event, stateManager) => {
         if (refreshingValue.value) {
-          stateManager.fail();
+          pullDistance.value = TRIGGER_DISTANCE;
           return;
         }
 
@@ -62,17 +74,31 @@ export function useAndroidPullIndicator({
 
         const dx = touch.absoluteX - startX.value;
         const dy = touch.absoluteY - startY.value;
+        const isAtTop = scrollY.value <= TOP_TOLERANCE;
+        const isMostlyHorizontal =
+          Math.abs(dx) > HORIZONTAL_FAIL_DISTANCE
+          && Math.abs(dx) > Math.abs(dy) * 1.2;
 
-        if (Math.abs(dx) > HORIZONTAL_FAIL_DISTANCE) {
+        if (isMostlyHorizontal) {
+          pullDistance.value = withTiming(0, { duration: RESET_DURATION });
           stateManager.fail();
           return;
         }
 
-        if (
-          scrollY.value <= TOP_TOLERANCE
-          && dy > ACTIVATE_DISTANCE
-          && dy > Math.abs(dx)
-        ) {
+        if (!isAtTop) {
+          pullDistance.value = 0;
+          stateManager.fail();
+          return;
+        }
+
+        if (dy <= 0) {
+          pullDistance.value = 0;
+          return;
+        }
+
+        pullDistance.value = Math.min(dy, MAX_PULL_DISTANCE);
+
+        if (dy >= ACTIVATE_DISTANCE) {
           stateManager.activate();
         }
       })
@@ -87,11 +113,16 @@ export function useAndroidPullIndicator({
           MAX_PULL_DISTANCE,
         );
       })
-      .onEnd(() => {
-        if (refreshingValue.value) return;
+      .onTouchesUp((_event) => {
+        if (refreshingValue.value) {
+          pullDistance.value = TRIGGER_DISTANCE;
+          return;
+        }
 
-        const shouldRefresh = pullDistance.value >= TRIGGER_DISTANCE;
-        if (shouldRefresh) {
+        if (didTriggerRefresh.value) return;
+
+        if (pullDistance.value >= TRIGGER_DISTANCE) {
+          didTriggerRefresh.value = true;
           pullDistance.value = TRIGGER_DISTANCE;
           runOnJS(onTriggerRefresh)();
           return;
@@ -99,12 +130,30 @@ export function useAndroidPullIndicator({
 
         pullDistance.value = withTiming(0, { duration: RESET_DURATION });
       })
+      .onTouchesCancelled(() => {
+        if (refreshingValue.value || didTriggerRefresh.value) return;
+        pullDistance.value = withTiming(0, { duration: RESET_DURATION });
+      })
       .onFinalize(() => {
-        if (!refreshingValue.value && pullDistance.value < TRIGGER_DISTANCE) {
+        if (refreshingValue.value) {
+          pullDistance.value = TRIGGER_DISTANCE;
+          return;
+        }
+
+        if (!didTriggerRefresh.value) {
           pullDistance.value = withTiming(0, { duration: RESET_DURATION });
         }
       }),
-    [enabled, onTriggerRefresh, pullDistance, refreshingValue, scrollY, startX, startY],
+    [
+      didTriggerRefresh,
+      enabled,
+      onTriggerRefresh,
+      pullDistance,
+      refreshingValue,
+      scrollY,
+      startX,
+      startY,
+    ],
   );
 
   return {
