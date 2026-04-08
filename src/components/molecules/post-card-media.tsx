@@ -308,12 +308,10 @@ export const PostCardMedia = memo(
         media?.type === "video" &&
         !isPostDetail &&
         !globalMuted &&
-        videoReadyForDisplay &&
         screenActive &&
         !shouldBlurContent &&
         isVisible &&
-        isFocused &&
-        isVideoPlaying;
+        isFocused;
 
       if (shouldOwnNativeAudioFocus) {
         if (activeNativeAudioFocus?.id !== nativeAudioFocusIdRef.current) {
@@ -348,12 +346,10 @@ export const PostCardMedia = memo(
       media?.type,
       isPostDetail,
       globalMuted,
-      videoReadyForDisplay,
       screenActive,
       shouldBlurContent,
       isVisible,
       isFocused,
-      isVideoPlaying,
       hasNativeAudioFocus,
       stopNativeVideoPlayback,
     ]);
