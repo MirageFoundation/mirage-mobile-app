@@ -83,6 +83,7 @@ const HomePostListInner = function HomePostListInner(
   const VIDEO_NEARBY_BUFFER = 3;
   const scrollStopHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMomentumScrollingRef = useRef(false);
+  const hasReportedVisibleItemsRef = useRef(false);
 
   const cancelDeferredFlush = useCallback(() => {
     if (deferHandleRef.current === null) return;
@@ -116,9 +117,11 @@ const HomePostListInner = function HomePostListInner(
 
     const visibleItems = items.filter((item) => item.isViewable && item.item?.id);
     if (visibleItems.length === 0) {
+      if (!hasReportedVisibleItemsRef.current) return;
       setVideoViewability(feedScreenRef.current, new Set(), null);
       return;
     }
+    hasReportedVisibleItemsRef.current = true;
     const videoItems = visibleItems.filter(
       (item) => postHasPlayableVideo(item.item)
     );
@@ -219,6 +222,7 @@ const HomePostListInner = function HomePostListInner(
 
   useEffect(() => {
     if (data.length !== 0) return;
+    hasReportedVisibleItemsRef.current = false;
     setVideoViewability(feedContext, new Set(), null);
   }, [data, feedContext, setVideoViewability]);
 
@@ -228,6 +232,7 @@ const HomePostListInner = function HomePostListInner(
     if (prevFeedContextRef.current === feedContext) return;
     prevFeedContextRef.current = feedContext;
     pendingViewableRef.current = null;
+    hasReportedVisibleItemsRef.current = false;
 
     const timer = setTimeout(() => {
       if (pendingViewableRef.current) {

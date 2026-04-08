@@ -130,6 +130,33 @@ export function VideoEditorScreen() {
     }
   }, [trimStart, trimEnd]);
 
+  const stopEditorPlayback = useCallback(async () => {
+    if (!videoRef.current) return;
+
+    try {
+      const status = await videoRef.current.getStatusAsync();
+      if (!status.isLoaded) return;
+
+      await videoRef.current.pauseAsync().catch(() => {});
+      await videoRef.current.setStatusAsync({
+        shouldPlay: false,
+        isMuted: true,
+        positionMillis: trimStart,
+      }).catch(() => {});
+      await videoRef.current.unloadAsync().catch(() => {});
+    } catch {
+      // no-op
+    }
+
+    setIsPlaying(false);
+  }, [trimStart]);
+
+  useEffect(() => {
+    return () => {
+      void stopEditorPlayback();
+    };
+  }, [stopEditorPlayback]);
+
   const updateTrimFromPosition = useCallback((position: number, isLeft: boolean) => {
     const newTime = Math.round((position / TIMELINE_WIDTH) * duration);
     
@@ -189,15 +216,17 @@ export function VideoEditorScreen() {
     return { transform: [{ translateX: position }] };
   });
 
-  const handleClose = useCallback(() => {
+  const handleClose = useCallback(async () => {
     triggerHaptic("selection");
+    await stopEditorPlayback();
     router.back();
-  }, []);
+  }, [stopEditorPlayback]);
 
   const handleNext = useCallback(async () => {
     if (!videoUri) return;
     
     triggerHaptic("medium");
+    await stopEditorPlayback();
     
     let processedUri = videoUri;
     
@@ -251,7 +280,7 @@ export function VideoEditorScreen() {
         },
       });
     }
-  }, [videoUri, videoWidth, videoHeight, trimStart, trimEnd, params.returnTo, params.replacingUri]);
+  }, [videoUri, videoWidth, videoHeight, trimStart, trimEnd, params.returnTo, params.replacingUri, stopEditorPlayback]);
 
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
