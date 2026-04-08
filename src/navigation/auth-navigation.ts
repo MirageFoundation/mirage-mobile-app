@@ -31,6 +31,17 @@ export function navigateWithAuthGuard(
   return target;
 }
 
+export function flushPendingAuthRoute(): boolean {
+  const pendingRoute = useDeepLinkStore.getState().pendingRoute;
+  if (!pendingRoute || !isAuthRoute(pendingRoute)) {
+    return false;
+  }
+
+  useDeepLinkStore.getState().consumePendingRoute();
+  router.push(pendingRoute as any);
+  return true;
+}
+
 export function flushPendingRouteAfterAuth(): boolean {
   if (!useAuthStore.getState().isLoggedIn) {
     return false;

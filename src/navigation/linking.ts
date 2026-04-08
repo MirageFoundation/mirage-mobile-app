@@ -8,6 +8,7 @@ import { useDeepLinkStore } from "@/src/stores/deep-link-store";
 import { setShareScheme } from "@/src/utils/share-scheme";
 
 import {
+  isAuthRoute,
   navigateWithAuthGuard,
   resolveAuthNavigationTarget,
 } from "./auth-navigation";
@@ -133,6 +134,10 @@ export async function redirectSystemPath({
   }
 
   if (isAppRoute(path)) {
+    if (initial && isAuthRoute(path)) {
+      useDeepLinkStore.getState().setPendingRoute(path);
+      return "/(tabs)";
+    }
     return path;
   }
 
@@ -153,6 +158,10 @@ export async function redirectSystemPath({
     }
     if (match.type === "login" && useAuthStore.getState().isLoggedIn) {
       showAlreadyLoggedInForLoginAlert(resolvedRoute);
+      return "/(tabs)";
+    }
+    if (initial && isAuthRoute(resolvedRoute)) {
+      useDeepLinkStore.getState().setPendingRoute(resolvedRoute);
       return "/(tabs)";
     }
     return resolvedRoute;
