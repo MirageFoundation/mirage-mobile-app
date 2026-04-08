@@ -279,7 +279,7 @@ const SavedCommentItem = ({
   onPress: (comment: SavedComment) => void;
 }) => {
   const { theme } = useUnistyles();
-  const displayPoints = comment.likes - (comment.dislikes ?? 0);
+  const displayPoints = comment.likes;
   const hasUpvoted = comment.hasLiked;
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
