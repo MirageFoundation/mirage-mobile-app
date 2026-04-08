@@ -13,6 +13,26 @@ export type SavedComment = Comment & {
   rootPostId?: string;
 };
 
+function normalizeScoreLikeCount<T extends { likes: number; dislikes: number }>(item: T): T {
+  if (item.likes === 0 && item.dislikes > 0) {
+    return {
+      ...item,
+      likes: -item.dislikes,
+    };
+  }
+
+  return item;
+}
+
+function normalizeCommentScores<T extends Comment>(comment: T): T {
+  const normalized = normalizeScoreLikeCount(comment);
+
+  return {
+    ...normalized,
+    replies: normalized.replies?.map((reply) => normalizeCommentScores(reply)),
+  };
+}
+
 interface SavedPostsState {
   savedPosts: SavedPost[];
   savedComments: SavedComment[];
@@ -37,7 +57,7 @@ export const useSavedPostsStore = create<SavedPostsState>()(
         const existing = get().savedPosts.find((p) => p.id === post.id);
         if (existing) return;
         set((state) => ({
-          savedPosts: [{ ...post, savedAt: Date.now() }, ...state.savedPosts],
+          savedPosts: [normalizeScoreLikeCount({ ...post, savedAt: Date.now() }), ...state.savedPosts],
         }));
       },
 
@@ -67,7 +87,7 @@ export const useSavedPostsStore = create<SavedPostsState>()(
         if (existing) return;
         set((state) => ({
           savedComments: [
-            { ...comment, savedAt: Date.now(), rootPostId },
+            normalizeCommentScores({ ...comment, savedAt: Date.now(), rootPostId }),
             ...state.savedComments,
           ],
         }));
@@ -101,6 +121,19 @@ export const useSavedPostsStore = create<SavedPostsState>()(
     {
       name: "saved-posts-storage",
       storage: createJSONStorage(() => mmkvStorage),
+      version: 1,
+      migrate: (persistedState) => {
+        const state = persistedState as {
+          savedPosts?: SavedPost[];
+          savedComments?: SavedComment[];
+        };
+
+        return {
+          ...state,
+          savedPosts: (state.savedPosts ?? []).map((post) => normalizeScoreLikeCount(post)),
+          savedComments: (state.savedComments ?? []).map((comment) => normalizeCommentScores(comment)),
+        };
+      },
     },
   ),
 );
