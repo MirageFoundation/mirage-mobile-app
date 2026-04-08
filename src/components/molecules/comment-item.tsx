@@ -24,6 +24,8 @@ import {
 } from "react-native";
 import Animated, {
   Easing,
+  FadeIn,
+  FadeOut,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -360,16 +362,12 @@ export const CommentItem = ({
     }
   }, [isCollapsed, animationProgress]);
 
-  const animatedContentStyle = useAnimatedStyle(() => {
-    const opacity = animationProgress.value;
 
-    return {
-      opacity,
-      transform: [{ scaleY: animationProgress.value }],
-      height: animationProgress.value === 0 ? 0 : "auto",
-      overflow: "hidden" as const,
-    };
-  });
+
+  const animatedFollowStyle = useAnimatedStyle(() => ({
+    opacity: animationProgress.value,
+    pointerEvents: animationProgress.value === 0 ? "none" : "auto",
+  } as any));
 
   // Calculate indent based on depth (max out at maxDepth)
   const effectiveDepth = Math.min(depth, maxDepth);
@@ -469,9 +467,9 @@ export const CommentItem = ({
       <View style={[styles.contentWrapper, { marginLeft: indentWidth }]}>
         {/* Header: Avatar, Username, Time */}
         <View style={styles.header}>
-          <View style={styles.authorSection}>
-            <View style={styles.authorInfo}>
-              <View style={styles.authorRow}>
+          <View style={[styles.authorSection, isCollapsed && styles.authorSectionCollapsed]}>
+            <View style={[styles.authorInfo, isCollapsed && styles.authorInfoCollapsed]}>
+              <View style={[styles.authorRow, isCollapsed && styles.authorRowCollapsed]}>
                 <Pressable
                   onPress={handleAuthorPress}
                   hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
@@ -501,6 +499,7 @@ export const CommentItem = ({
                     size="md"
                     mode="subtle"
                     numberOfLines={1}
+                    ellipsizeMode="tail"
                     style={styles.collapsedPreview}
                   >
                     {content}
@@ -509,22 +508,29 @@ export const CommentItem = ({
               </View>
             </View>
           </View>
-          {!isCollapsed && (
-            <Pressable onPress={handlePress} style={styles.expandArea} />
-          )}
-          {!isOwnComment && !isCollapsed && (
-            <FollowButton
-              isFollowing={isFollowingAuthor}
-              onPress={onFollowPress}
-              size="sm"
-              loading={isFollowLoading}
-              disabled={isFollowingAuthor}
-            />
+          <View
+            pointerEvents="none"
+            style={[styles.expandArea, isCollapsed && styles.expandAreaCollapsed]}
+          />
+          {!isOwnComment && (
+            <Animated.View style={[styles.followButtonWrapper, animatedFollowStyle]}>
+              <FollowButton
+                isFollowing={isFollowingAuthor}
+                onPress={onFollowPress}
+                size="sm"
+                loading={isFollowLoading}
+                disabled={isFollowingAuthor}
+              />
+            </Animated.View>
           )}
         </View>
 
         {/* Comment content - collapsible */}
-        <Animated.View style={animatedContentStyle}>
+        {!isCollapsed && (
+        <Animated.View
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(120)}
+        >
           <CommentContent content={content} />
 
           {comment.awards && comment.awards.length > 0 && (
@@ -641,6 +647,7 @@ export const CommentItem = ({
             </View>
           </View>
         </Animated.View>
+        )}
       </View>
     </Pressable>
   );
@@ -681,6 +688,10 @@ const styles = StyleSheet.create((theme) => ({
   authorInfo: {
     flexShrink: 0,
   },
+  authorInfoCollapsed: {
+    flex: 1,
+    minWidth: 0,
+  },
   usernameButton: {
     paddingVertical: 2,
     paddingHorizontal: 2,
@@ -693,9 +704,26 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     height: 32,
   },
+  expandAreaCollapsed: {
+    flex: 0,
+    width: theme.spacing.xs,
+  },
+  followButtonWrapper: {
+    justifyContent: "center",
+  },
   collapsedPreview: {
-    flexShrink: 1,
+    flex: 1,
+    minWidth: 0,
     marginLeft: theme.spacing.xs,
+    paddingRight: theme.spacing.sm,
+  },
+  authorSectionCollapsed: {
+    flex: 1,
+    flexShrink: 1,
+  },
+  authorRowCollapsed: {
+    flex: 1,
+    minWidth: 0,
   },
   authorRow: {
     flexDirection: "row",

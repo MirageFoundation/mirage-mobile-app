@@ -2,10 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { usePreferencesStore } from "@/src/stores";
 import { View } from "react-native";
 import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
+  FadeIn,
+  FadeOut,
+  LinearTransition,
 } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
 import { CommentItem, type Comment } from "./comment-item";
@@ -49,7 +48,6 @@ export const CommentThread = ({
   const score = comment.likes - comment.dislikes;
   const shouldAutoCollapse = autoCollapseThreshold !== null && score <= autoCollapseThreshold;
   const [isCollapsed, setIsCollapsed] = useState(shouldAutoCollapse);
-  const [showReplies, setShowReplies] = useState(true);
 
   useEffect(() => {
     setIsCollapsed(shouldAutoCollapse);
@@ -57,33 +55,6 @@ export const CommentThread = ({
 
   const replies = comment.replies ?? [];
   const hasReplies = replies.length > 0;
-
-  const repliesProgress = useSharedValue(1);
-
-  useEffect(() => {
-    if (isCollapsed) {
-      repliesProgress.value = withTiming(0, {
-        duration: 150,
-        easing: Easing.out(Easing.quad),
-      });
-      const timer = setTimeout(() => setShowReplies(false), 160);
-      return () => clearTimeout(timer);
-    } else {
-      setShowReplies(true);
-      repliesProgress.value = withTiming(1, {
-        duration: 200,
-        easing: Easing.out(Easing.cubic),
-      });
-    }
-  }, [isCollapsed, repliesProgress]);
-
-  const repliesAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: repliesProgress.value,
-    transform: [{ scaleY: repliesProgress.value }],
-    height: repliesProgress.value === 0 ? 0 : "auto",
-    overflow: "hidden" as const,
-    transformOrigin: "top",
-  }));
 
   const handleToggleCollapse = useCallback(() => {
     setIsCollapsed((prev) => !prev);
@@ -93,7 +64,7 @@ export const CommentThread = ({
   const isHighlighted = highlightedCommentId === comment.id;
 
   return (
-    <View style={styles.container}>
+    <Animated.View style={styles.container} layout={LinearTransition.duration(250)}>
       <CommentItem
         comment={comment}
         isOwnComment={isOwnComment}
@@ -112,8 +83,12 @@ export const CommentThread = ({
         onMorePress={() => onMorePress?.(comment)}
       />
 
-      {hasReplies && showReplies && (
-        <Animated.View style={[styles.repliesContainer, repliesAnimatedStyle]}>
+      {hasReplies && !isCollapsed && (
+        <Animated.View
+          style={styles.repliesContainer}
+          entering={FadeIn.duration(200)}
+          exiting={FadeOut.duration(120)}
+        >
           {replies.map((reply) => (
             <CommentThread
               key={reply.id}
@@ -137,7 +112,7 @@ export const CommentThread = ({
       )}
 
       {showDivider && depth === 0 && <View style={styles.divider} />}
-    </View>
+    </Animated.View>
   );
 };
 
