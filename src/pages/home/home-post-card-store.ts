@@ -53,6 +53,7 @@ type HomePostCardState = {
  visiblePostIds: Set<string>;
  activeVideoPostIds: Record<string, string | null>;
  visibleVideoPostIds: Record<string, Set<string>>;
+ nearbyVideoPostIds: Record<string, Set<string>>;
  voteOverrides: Record<string, VoteOverride>;
  commentCountOverrides: Record<string, CommentCountOverride>;
  handlers: HomePostCardHandlers;
@@ -71,7 +72,7 @@ type HomePostCardState = {
  setVisiblePostIds: (posts: Set<string>) => void;
  setActiveVideoPostId: (feedScreen: string, postId: string | null) => void;
  setVisibleVideoPostIds: (feedScreen: string, postIds: Set<string>) => void;
- setVideoViewability: (feedScreen: string, visibleIds: Set<string>, activeId: string | null) => void;
+ setVideoViewability: (feedScreen: string, visibleIds: Set<string>, activeId: string | null, nearbyIds?: Set<string>) => void;
  setVoteOverride: (postId: string, override: VoteOverride) => void;
  clearVoteOverride: (postId: string) => void;
  incrementCommentCount: (postId: string, currentComments: number) => void;
@@ -100,6 +101,7 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
  visiblePostIds: emptySet,
  activeVideoPostIds: {},
  visibleVideoPostIds: {},
+ nearbyVideoPostIds: {},
  voteOverrides: {},
  commentCountOverrides: {},
  handlers: {},
@@ -146,10 +148,11 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
      }
      return { visibleVideoPostIds: { ...state.visibleVideoPostIds, [feedScreen]: postIds } };
    }),
- setVideoViewability: (feedScreen, visibleIds, activeId) =>
+ setVideoViewability: (feedScreen, visibleIds, activeId, nearbyIds) =>
    set((state) => {
      const currentVisible = state.visibleVideoPostIds[feedScreen];
      const currentActive = state.activeVideoPostIds[feedScreen];
+     const currentNearby = state.nearbyVideoPostIds[feedScreen];
      let visibleChanged = !currentVisible || currentVisible.size !== visibleIds.size;
      if (!visibleChanged && currentVisible) {
        for (const id of currentVisible) {
@@ -157,10 +160,18 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
        }
      }
      const activeChanged = currentActive !== activeId;
-     if (!visibleChanged && !activeChanged) return state;
+     const effectiveNearby = nearbyIds ?? visibleIds;
+     let nearbyChanged = !currentNearby || currentNearby.size !== effectiveNearby.size;
+     if (!nearbyChanged && currentNearby) {
+       for (const id of currentNearby) {
+         if (!effectiveNearby.has(id)) { nearbyChanged = true; break; }
+       }
+     }
+     if (!visibleChanged && !activeChanged && !nearbyChanged) return state;
      const updates: Partial<HomePostCardState> = {};
      if (visibleChanged) updates.visibleVideoPostIds = { ...state.visibleVideoPostIds, [feedScreen]: visibleIds };
      if (activeChanged) updates.activeVideoPostIds = { ...state.activeVideoPostIds, [feedScreen]: activeId };
+     if (nearbyChanged) updates.nearbyVideoPostIds = { ...state.nearbyVideoPostIds, [feedScreen]: effectiveNearby };
      return updates;
    }),
 setVoteOverride: (postId, override) =>
@@ -244,6 +255,7 @@ setVoteOverride: (postId, override) =>
    visiblePostIds: emptySet,
    activeVideoPostIds: {},
    visibleVideoPostIds: {},
+   nearbyVideoPostIds: {},
    voteOverrides: {},
    commentCountOverrides: {},
    shouldScrollToTop: false,
@@ -264,7 +276,8 @@ export const useVideoVisibility = (postId: string, feedScreen: string) =>
   useHomePostCardStore(
     (state) =>
       ((state.visibleVideoPostIds[feedScreen]?.has(postId) ?? false) ? 2 : 0) |
-      (state.activeVideoPostIds[feedScreen] === postId ? 1 : 0),
+      (state.activeVideoPostIds[feedScreen] === postId ? 1 : 0) |
+      ((state.nearbyVideoPostIds[feedScreen]?.has(postId) ?? false) ? 4 : 0),
   );
 
 export const useIsPostRevealed = (postId: string) =>
