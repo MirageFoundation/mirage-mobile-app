@@ -36,6 +36,8 @@ export type PowActionType =
   | "report"
   | "annotate";
 
+const CONTENT_LOSS_TYPES: Set<PowActionType> = new Set(["comment", "post", "edit", "annotate"]);
+
 export interface PowAction<T = unknown> {
   id: string;
   type: PowActionType;
@@ -371,6 +373,17 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       const msg = String((error as Error)?.message || "");
       if (msg === "pow_cancelled" || isPowCancelled(error)) {
         wasCancelled = true;
+        if (CONTENT_LOSS_TYPES.has(nextAction.type)) {
+          Sentry.captureException(
+            new Error(`PoW cancelled during ${nextAction.type}`),
+            {
+              level: "warning",
+              tags: { action: "pow_cancelled", pow_type: nextAction.type },
+              extra: { actionId: nextAction.id, label: nextAction.label },
+            },
+          );
+        }
+        nextAction.onRollback?.();
       } else {
         const err = error instanceof Error ? error : new Error(String(error));
         const displayMsg = isNetworkError(error)

@@ -117,6 +117,7 @@ export const HomeTabbedFeed = forwardRef<
   const selectedContentTypes = usePreferencesStore(
     (s) => s.selectedContentTypes,
   );
+  const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const hideDownvotedPosts = usePreferencesStore((s) => s.hideDownvotedPosts);
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
@@ -126,8 +127,8 @@ export const HomeTabbedFeed = forwardRef<
   const followedTopics = useHomePostCardStore((s) => s.followedTopics);
 
   const allowedTags = useMemo(
-    () => getAllowedTagsFromContentTypes(selectedContentTypes),
-    [selectedContentTypes],
+    () => getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled),
+    [selectedContentTypes, adultContentEnabled],
   );
 
   const INITIAL_PAGE_SIZE = 10;
@@ -698,11 +699,12 @@ export const HomeTabbedFeed = forwardRef<
   const refreshControl = useMemo(
     () => (
       <RefreshControl
-        refreshing={isRefreshing}
+        refreshing={Platform.OS === "android" ? false : isRefreshing}
         onRefresh={handleRefresh}
         tintColor="transparent"
         colors={["transparent"]}
-        progressViewOffset={progressViewOffset}
+        progressBackgroundColor="transparent"
+        progressViewOffset={Platform.OS === "android" ? -10000 : progressViewOffset}
       />
     ),
     [handleRefresh, progressViewOffset, isRefreshing],

@@ -9,15 +9,15 @@ export type ApiServer = string;
 export type VideoAutoplayNetwork = "always" | "wifi_only" | "never";
 export type ContentType =
   | "sensitive"
-  | "porn"
+  | "adult"
   | "violence"
   | "gore"
   | "death"
   | "none"
   | "all";
 
-const CONTENT_TAGS = ["sensitive", "porn", "violence", "gore", "death"] as const;
-const ADULT_CONTENT_TAGS = ["porn", "violence", "gore", "death"] as const;
+const CONTENT_TAGS = ["sensitive", "adult", "violence", "gore", "death"] as const;
+const ADULT_CONTENT_TAGS = ["adult", "violence", "gore", "death"] as const;
 
 type ContentTag = (typeof CONTENT_TAGS)[number];
 
@@ -33,13 +33,20 @@ const normalizeContentTypes = (types: ContentType[]): ContentType[] => {
 };
 
 export const getAllowedTagsFromContentTypes = (
-  types: ContentType[]
+  types: ContentType[],
+  adultToggleEnabled?: boolean
 ): string => {
  const normalized = normalizeContentTypes(types);
- if (normalized.includes("all")) return CONTENT_TAGS.join(",");
+ if (normalized.includes("all")) {
+   if (adultToggleEnabled === false) {
+     return CONTENT_TAGS.filter((tag) => tag !== "adult").join(",");
+   }
+   return CONTENT_TAGS.join(",");
+ }
   if (normalized.length === 0) return "";
 
  const selected = new Set(normalized);
+  if (!adultToggleEnabled) selected.delete("adult" as any);
   return CONTENT_TAGS.filter((tag) => selected.has(tag)).join(",");
 };
 
@@ -167,49 +174,19 @@ export const usePreferencesStore = create<PreferencesState>()(
       setAdultContent: (enabled) =>
         set((state) => {
           if (enabled) {
-            if (state.selectedContentTypes.includes("all")) {
-              return { adultContentEnabled: true };
-            }
-
-            const baseTypes = state.selectedContentTypes.filter(
-              (type) => type !== "none" && type !== "all"
-            );
-            const nextSet = new Set<ContentType>(baseTypes);
-
-            for (const tag of ADULT_CONTENT_TAGS) {
-              nextSet.add(tag);
-            }
-
-            if (baseTypes.length === 0) {
-              nextSet.add("sensitive");
-            }
-
-            const nextTypes = Array.from(nextSet);
             return {
               adultContentEnabled: true,
-              selectedContentTypes: nextTypes.length ? nextTypes : ["porn"],
+              selectedContentTypes: [...CONTENT_TAGS] as ContentType[],
             };
           }
 
-          if (state.selectedContentTypes.includes("all")) {
-            return {
-              adultContentEnabled: false,
-              selectedContentTypes: ["sensitive"],
-            };
-          }
-
-          const baseTypes = state.selectedContentTypes.filter(
-            (type) => type !== "none" && type !== "all"
-          );
-          const filteredTypes = baseTypes.filter(
-            (type) => !ADULT_CONTENT_TAGS.includes(type as ContentTag)
+          const kept = state.selectedContentTypes.filter(
+            (type) => type !== "adult" && type !== "all" && type !== "none"
           );
 
           return {
             adultContentEnabled: false,
-            selectedContentTypes: filteredTypes.length
-              ? filteredTypes
-              : ["sensitive"],
+            selectedContentTypes: kept.length ? kept : kept,
           };
         }),
       setHasSeenAdultPrompt: () => set({ hasSeenAdultPrompt: true }),
@@ -217,36 +194,18 @@ export const usePreferencesStore = create<PreferencesState>()(
         const normalized = normalizeContentTypes(types);
         set({
           selectedContentTypes: normalized,
-          adultContentEnabled: isAdultContentEnabled(normalized),
         });
       },
      toggleContentType: (type) =>
        set((state) => {
          if (type === "all") {
-           const hasPorn = state.selectedContentTypes.includes("porn");
-           const nonPornTags: ContentType[] = [...CONTENT_TAGS].filter((t) => t !== "porn");
-           if (hasPorn) {
-             return {
-               selectedContentTypes: [...nonPornTags, "porn"],
-               adultContentEnabled: true,
-             };
-           }
            return {
-             selectedContentTypes: nonPornTags,
-             adultContentEnabled: false,
+             selectedContentTypes: [...CONTENT_TAGS] as ContentType[],
            };
          }
         if (type === "none") {
-          const hadPorn = state.selectedContentTypes.includes("porn");
-          if (hadPorn) {
-            return {
-              selectedContentTypes: ["porn"],
-              adultContentEnabled: true,
-            };
-          }
           return {
              selectedContentTypes: [],
-            adultContentEnabled: false,
           };
         }
 
@@ -260,16 +219,8 @@ export const usePreferencesStore = create<PreferencesState>()(
             newTypes = [...newTypes, type];
           }
 
-        if (newTypes.length === 0) {
-          return {
-             selectedContentTypes: [],
-             adultContentEnabled: false,
-           };
-          }
-
           return {
             selectedContentTypes: newTypes,
-            adultContentEnabled: isAdultContentEnabled(newTypes),
           };
         }),
       setBlurSensitiveMedia: (blur) => set({ blurSensitiveMedia: blur }),
@@ -290,8 +241,7 @@ export const usePreferencesStore = create<PreferencesState>()(
    {
      name: "preferences-storage",
       storage: createJSONStorage(() => mmkvStorage),
-      version: 2,
-      version: 3,
+      version: 4,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<PreferencesState>;
         
@@ -313,6 +263,14 @@ export const usePreferencesStore = create<PreferencesState>()(
           state.adultContentEnabled = false;
           state.blurSensitiveMedia = false;
           state.hasSeenAdultPrompt = true;
+        }
+
+        if (version < 4) {
+          if (state.selectedContentTypes) {
+            state.selectedContentTypes = state.selectedContentTypes.map(
+              (t) => (t === ("porn" as ContentType) ? "adult" : t)
+            );
+          }
         }
         
         return state as PreferencesState;

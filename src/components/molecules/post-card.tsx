@@ -34,6 +34,7 @@ type PostCardProps = {
   isVisible?: boolean;
   /** Whether this is the focused video post (for sound) */
   isFocused?: boolean;
+  isNearVisible?: boolean;
   /** Whether to show the follow button (default: true) */
   showFollowButton?: boolean;
   /** Whether the topic is followed */
@@ -92,6 +93,7 @@ function arePostCardPropsEqual(
   if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
   if (prevProps.isVisible !== nextProps.isVisible) return false;
   if (prevProps.isFocused !== nextProps.isFocused) return false;
+  if (prevProps.isNearVisible !== nextProps.isNearVisible) return false;
   if (prevProps.showFollowButton !== nextProps.showFollowButton) return false;
   if (prevProps.isTopicFollowed !== nextProps.isTopicFollowed) return false;
   if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
@@ -113,6 +115,7 @@ export const PostCard = memo(function PostCard({
   isOwnPost = false,
   isVisible = false,
   isFocused,
+  isNearVisible,
   showFollowButton = true,
   isTopicFollowed = false,
   allowAutoplay = true,
@@ -274,6 +277,7 @@ export const PostCard = memo(function PostCard({
         mediaList={resolvedContent.resolvedMediaList}
         isVisible={isVisible}
         isFocused={isFocused ?? isVisible}
+        isNearVisible={isNearVisible ?? isVisible}
         shouldBlurContent={shouldBlurContent}
         hasMultipleMedia={resolvedContent.hasMultipleMedia}
         extraMediaCount={resolvedContent.extraMediaCount}
@@ -307,18 +311,18 @@ export const PostCard = memo(function PostCard({
         </View>
       )}
 
-      {post.appendices && post.appendices.length > 0 && (
-        <View style={[styles.appendicesContainer, { backgroundColor: theme.colors.background.subtle }]}>
-          {post.appendices.map((appendix, idx) => (
-            <View key={idx} style={[styles.appendix, { borderLeftColor: theme.colors.border.default }]}>
+      {post.appendices && post.appendices.length > 0 &&
+        post.appendices.map((appendix, idx) => (
+          <View key={idx} style={[styles.appendicesContainer, { backgroundColor: theme.colors.background.subtle }]}>
+            <View style={[styles.appendix, { borderLeftColor: theme.colors.border.default }]}>
               <Text size="xs" weight="semibold" style={{ color: "#EF4444" }}>
                 @{appendix.agentUsername || appendix.agent.slice(0, 12) + "…"}
               </Text>
               <MarkdownContent content={appendix.text} />
             </View>
-          ))}
-        </View>
-      )}
+          </View>
+        ))
+      }
 
       <PostActions
         likes={likes}
@@ -385,7 +389,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   appendicesContainer: {
     marginTop: theme.spacing.sm,
-    gap: theme.spacing.xs,
+    gap: theme.spacing.md,
     padding: theme.spacing.sm,
     borderRadius: theme.radius.md,
   },

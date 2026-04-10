@@ -1,4 +1,5 @@
 import { Text } from "@/src/components/ui/primitives";
+import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useGiphy } from "@/src/hooks";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
@@ -16,6 +17,7 @@ import { useRouter } from "@/src/hooks/use-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   Image as RNImage,
   Keyboard,
   Platform,
@@ -100,6 +102,9 @@ export default function CommentComposeScreen() {
   const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined);
 const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const setPendingEdit = useCommentComposeStore((s) => s.setPendingEdit);
+  const saveDraft = useCommentComposeStore((s) => s.saveDraft);
+  const getDraft = useCommentComposeStore((s) => s.getDraft);
+  const clearDraft = useCommentComposeStore((s) => s.clearDraft);
 
  const {
    postId,
@@ -141,11 +146,17 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
     return canEditContent(userLevel, parseInt(editCreatedAt, 10));
   }, [isEditMode, editCreatedAt, userLevel]);
 
+  const draft = useMemo(() => {
+    if (!isEditMode && postId) return getDraft(postId, replyToId);
+    return null;
+  }, []);
+
   const initialText = useMemo(() => {
     if (isEditMode && editContent) {
       const { text: extractedText } = extractImageUrls(editContent);
       return extractedText;
     }
+    if (draft) return draft.text;
     return "";
   }, []);
 
@@ -160,10 +171,13 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
         return { type: "image" as const, url };
       }
     }
+    if (draft?.gifUrl) return { type: "gif" as const, url: draft.gifUrl };
+    if (draft?.imageUri) return { type: "image" as const, url: draft.imageUri };
     return null;
   }, []);
 
   const [text, setText] = useState(initialText);
+  const textRef = useRef(initialText);
   const [inputMode, setInputMode] = useState<InputMode>("keyboard");
   const inputModeRef = useRef<InputMode>("keyboard");
   const [linkName, setLinkName] = useState("");
@@ -184,6 +198,9 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
  const [selectedGifUrl, setSelectedGifUrl] = useState<string | null>(
    initialAttachment?.type === "gif" ? initialAttachment.url : null,
  );
+  const selectedImageUriRef = useRef<string | null>(selectedImageUri);
+  const selectedGifUrlRef = useRef<string | null>(selectedGifUrl);
+  const didSubmitRef = useRef(false);
   const [isMediaLoading, setIsMediaLoading] = useState(false);
   const [showStickerPicker, setShowStickerPicker] = useState(false);
 
@@ -214,6 +231,30 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   }, []);
 
  const setWasDismissed = useCommentComposeStore((s) => s.setWasDismissed);
+
+  useEffect(() => {
+    textRef.current = text;
+  }, [text]);
+
+  useEffect(() => {
+    selectedImageUriRef.current = selectedImageUri;
+  }, [selectedImageUri]);
+
+  useEffect(() => {
+    selectedGifUrlRef.current = selectedGifUrl;
+  }, [selectedGifUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (!isEditMode && postId && !didSubmitRef.current) {
+        saveDraft(postId, replyToId ?? null, {
+          text: textRef.current,
+          imageUri: selectedImageUriRef.current,
+          gifUrl: selectedGifUrlRef.current,
+        });
+      }
+    };
+  }, [isEditMode, postId, replyToId, saveDraft]);
 
   const replyPreview = useMemo(() => {
     if (!replyToContent) return null;
@@ -246,6 +287,10 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
         imageUri: selectedImageUri,
         gifUrl: selectedGifUrl,
       });
+    }
+    if (!isEditMode && postId) {
+      didSubmitRef.current = true;
+      clearDraft(postId, replyToId ?? null);
     }
     router.back();
   }, [
@@ -438,15 +483,26 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
            { borderBottomColor: theme.colors.border.subtle },
          ]}
        >
-         <View style={styles.postPreviewInfo}>
-            <Text
-              size="md"
-              weight={replyPreview ? "regular" : "bold"}
-              numberOfLines={2}
-            >
-              {replyPreview ? replyPreview.text || postTitle : postTitle}
-           </Text>
-         </View>
+         <ScrollView
+           style={styles.postPreviewInfo}
+           contentContainerStyle={styles.postPreviewInfoContent}
+           showsVerticalScrollIndicator={false}
+         >
+            {replyPreview ? (
+              <MarkdownContent content={replyPreview.text || postTitle || ""} size="md" />
+            ) : (
+              <>
+                <Text size="md" weight="bold" numberOfLines={2}>
+                  {postTitle}
+                </Text>
+                {postContent ? (
+                  <View style={styles.postPreviewBody}>
+                    <MarkdownContent content={postContent} size="md" />
+                  </View>
+                ) : null}
+              </>
+            )}
+         </ScrollView>
           {replyPreview && replyPreview.imageUrls.length > 0 ? (
             <Image
               source={{ uri: replyPreview.imageUrls[0] }}
@@ -939,14 +995,20 @@ const styles = StyleSheet.create((theme) => ({
   },
   postPreview: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     borderBottomWidth: 1,
   },
   postPreviewInfo: {
     flex: 1,
+    maxHeight: Dimensions.get("window").height * 0.2,
+  },
+  postPreviewInfoContent: {
     gap: 2,
+  },
+  postPreviewBody: {
+    marginTop: theme.spacing.xs,
   },
   postPreviewThumbnail: {
     width: 48,

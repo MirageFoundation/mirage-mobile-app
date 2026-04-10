@@ -56,6 +56,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  const visibility = useVideoVisibility(post.id, feedContext);
  const isVisible = (visibility & 2) !== 0;
  const isFocused = (visibility & 1) !== 0;
+ const isNearVisible = (visibility & 4) !== 0;
  const isFollowing = useIsFollowing(post.author.id);
  const isTopicFollowed = useIsTopicFollowed(post.topic);
  const contentRevealed = useIsPostRevealed(post.id);
@@ -227,6 +228,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
      isOwnPost={isOwnPost}
      isVisible={isVisible}
      isFocused={isFocused}
+     isNearVisible={isNearVisible}
      isTopicFollowed={isTopicFollowed}
       showFollowButton={true}
      showUrlCard={false}

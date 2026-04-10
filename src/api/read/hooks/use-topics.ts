@@ -15,7 +15,8 @@ import { useAuthStore } from "@/src/stores";
 export function useTopics(limit?: number) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
   const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
-  const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes);
+  const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
+  const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
 
   return useQuery({
     queryKey: queryKeys.topics(limit, allowedTags),
@@ -36,7 +37,8 @@ export function useSearchTopics(
   params?: Omit<SearchTopicsParams, "q">
 ) {
   const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
-  const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes);
+  const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
+  const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
 
   return useQuery({
     queryKey: queryKeys.searchTopics(query!, params?.limit, allowedTags),

@@ -20,7 +20,8 @@ export function useDebouncedSearch(
   const [debouncedQuery, setDebouncedQuery] = useState<string | null>(null);
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
   const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
-  const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes);
+  const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
+  const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
 
   // Debounce the query
   useEffect(() => {

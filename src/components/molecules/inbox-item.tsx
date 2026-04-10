@@ -242,7 +242,7 @@ export const InboxItem = memo(function InboxItem({
         </View>
 
         {isDonation && reply.amount != null && reply.amount > 0 && (
-          <Text size="sm" weight="bold" style={styles.donationAmount}>
+          <Text size="sm" style={styles.donationAmount}>
             {formatCompactNumber(reply.amount / 1_000_000)} MIRAGE
           </Text>
         )}
@@ -287,8 +287,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   unreadContainer: {
     backgroundColor: `${theme.colors.primary[500]}08`,
-    borderLeftWidth: 3,
-    borderLeftColor: theme.colors.primary[500],
   },
   unreadDot: {
     position: "absolute",
@@ -318,7 +316,9 @@ const styles = StyleSheet.create((theme) => ({
   donationAmount: {
     marginLeft: 20,
   },
-  replyContent: {},
+  replyContent: {
+    marginLeft: 20,
+  },
   mediaContainer: {
     marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.xs,

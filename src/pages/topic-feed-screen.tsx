@@ -9,6 +9,7 @@ import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   RefreshControl,
   View,
@@ -116,6 +117,7 @@ export function TopicFeedScreen() {
   const selectedContentTypes = usePreferencesStore(
     (s) => s.selectedContentTypes,
   );
+  const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const shareServer = usePreferencesStore((s) => s.shareServer);
   const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
   const videoAutoplayNetwork = usePreferencesStore(
@@ -165,8 +167,8 @@ export function TopicFeedScreen() {
   }, [topicName, isTopicFollowed, handleFollowTopicFromCard]);
 
   const allowedTags = useMemo(
-    () => getAllowedTagsFromContentTypes(selectedContentTypes),
-    [selectedContentTypes],
+    () => getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled),
+    [selectedContentTypes, adultContentEnabled],
   );
 
   const {
@@ -606,13 +608,15 @@ export function TopicFeedScreen() {
   const refreshControl = useMemo(
     () => (
       <RefreshControl
-        refreshing={false}
+        refreshing={Platform.OS === "android" ? false : isManualRefreshing}
         onRefresh={handleRefresh}
         tintColor="transparent"
-        progressViewOffset={insets.top + HEADER_HEIGHT}
+        colors={["transparent"]}
+        progressBackgroundColor="transparent"
+        progressViewOffset={Platform.OS === "android" ? -10000 : insets.top + HEADER_HEIGHT}
       />
     ),
-    [handleRefresh, insets.top],
+    [handleRefresh, insets.top, isManualRefreshing],
   );
 
   const setCurrentUserId = useHomePostCardStore(

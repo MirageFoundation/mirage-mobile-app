@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/react-native";
-import { EvilIcons } from "@expo/vector-icons";
+import { EvilIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useRef, useState } from "react";
 import { Pressable, SectionList, View } from "react-native";
@@ -75,6 +75,8 @@ export function SettingsScreen() {
     theme: themeMode,
     setTheme,
     selectedContentTypes,
+    adultContentEnabled,
+    setAdultContent,
     toggleContentType,
     setSelectedContentTypes,
     blurSensitiveMedia,
@@ -104,21 +106,19 @@ export function SettingsScreen() {
 
   const [showMatureConfirm, setShowMatureConfirm] = useState(false);
 
-  const matureContentEnabled = selectedContentTypes.includes("porn") || selectedContentTypes.includes("all");
-
   const handleMatureToggle = useCallback((value: boolean) => {
     if (value) {
       setShowMatureConfirm(true);
     } else {
-      setSelectedContentTypes([]);
+      setAdultContent(false);
     }
-  }, [setSelectedContentTypes]);
+  }, [setAdultContent]);
 
   const handleConfirmMature = useCallback(() => {
-    setSelectedContentTypes(["sensitive", "porn", "violence", "gore", "death"]);
+    setAdultContent(true);
     setBlurSensitiveMedia(true);
     setShowMatureConfirm(false);
-  }, [setSelectedContentTypes, setBlurSensitiveMedia]);
+  }, [setAdultContent, setBlurSensitiveMedia]);
 
   const handleCancelMature = useCallback(() => {
     setShowMatureConfirm(false);
@@ -169,18 +169,17 @@ const handleApiServerChange = useCallback(
 
   // Get display labels
  const getContentTypeLabel = () => {
-   const filtered = selectedContentTypes.filter((t) => t !== "porn");
-   const NON_PORN_TAGS: string[] = ["sensitive", "violence", "gore", "death"];
-   const allNonPornSelected = NON_PORN_TAGS.every((t) => filtered.includes(t as any));
-   if (allNonPornSelected) return "All";
-    if (filtered.length === 0) return "None";
-   if (filtered.length === 1) {
+   const ALL_TAGS = ["sensitive", "adult", "violence", "gore", "death"];
+   const allSelected = ALL_TAGS.every((t) => selectedContentTypes.includes(t as any));
+   if (allSelected) return "All";
+    if (selectedContentTypes.length === 0) return "None";
+   if (selectedContentTypes.length === 1) {
      return (
-        filtered[0].charAt(0).toUpperCase() +
-        filtered[0].slice(1)
+        selectedContentTypes[0].charAt(0).toUpperCase() +
+        selectedContentTypes[0].slice(1)
       );
     }
-    return `${filtered.length} selected`;
+    return `${selectedContentTypes.length} selected`;
   };
 
   const getCollapseThresholdLabel = () => {
@@ -211,8 +210,32 @@ const handleApiServerChange = useCallback(
     }
   };
 
+  const handleEditUsername = useCallback(() => {
+    triggerHaptic("light");
+    router.push("/change-username");
+  }, [router]);
+
   // Section data
   const sections: Section[] = [
+    {
+      title: "Account",
+      data: [
+        {
+          id: "edit-username",
+          component: (
+            <SettingRow
+              type="value"
+              iconElement={<MaterialCommunityIcons name="account-edit-outline" size={20} color={theme.colors.text.default} />}
+              title="Edit Username"
+              subtitle="Change your display name"
+              rightText=""
+              onPress={handleEditUsername}
+            />
+          ),
+        },
+
+      ],
+    },
     {
       title: "Content",
       data: [
@@ -237,7 +260,7 @@ const handleApiServerChange = useCallback(
               icon="eye-off-outline"
               title="Show Mature Content"
               subtitle="I'm over 18"
-              value={matureContentEnabled}
+              value={adultContentEnabled}
               onValueChange={handleMatureToggle}
             />
           ),
@@ -252,7 +275,7 @@ const handleApiServerChange = useCallback(
               subtitle="Blur mature (18+) images and media"
               value={blurSensitiveMedia}
               onValueChange={handleBlurToggle}
-              disabled={!matureContentEnabled}
+              disabled={!adultContentEnabled}
             />
           ),
         },
@@ -641,6 +664,7 @@ const handleApiServerChange = useCallback(
       <ContentTypeSheet
         ref={contentTypeSheetRef}
         selectedTypes={selectedContentTypes}
+        matureToggleEnabled={adultContentEnabled}
         onToggle={toggleContentType}
       />
 

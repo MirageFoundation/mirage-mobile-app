@@ -367,6 +367,7 @@ export function SavedPostsScreen() {
   const [voteOverrides, setVoteOverrides] = useState<Record<string, VoteOverride>>({});
   const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
   const [visibleVideoPostIds, setVisibleVideoPostIds] = useState<Set<string>>(new Set());
+  const [nearbyVideoPostIds, setNearbyVideoPostIds] = useState<Set<string>>(new Set());
 
   const currentUser = useAuthStore((s) => s.user);
   const savedPosts = useSavedPostsStore((s) => s.savedPosts);
@@ -433,11 +434,14 @@ export function SavedPostsScreen() {
   }).current;
   const pendingSavedPostsViewableRef = useRef<ViewToken[] | null>(null);
   const savedPostsDeferHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const postsWithOverridesRef = useRef(postsWithOverrides);
+  postsWithOverridesRef.current = postsWithOverrides;
 
   const flushSavedPostsViewability = useCallback(() => {
     const items = pendingSavedPostsViewableRef.current;
     if (!items || activeTab !== 0) {
       setVisibleVideoPostIds(new Set());
+      setNearbyVideoPostIds(new Set());
       setActiveVideoPostId(null);
       return;
     }
@@ -447,6 +451,7 @@ export function SavedPostsScreen() {
     );
     if (visibleItems.length === 0) {
       setVisibleVideoPostIds(new Set());
+      setNearbyVideoPostIds(new Set());
       setActiveVideoPostId(null);
       return;
     }
@@ -454,6 +459,21 @@ export function SavedPostsScreen() {
     const videoItems = visibleItems.filter((item) => postHasPlayableVideo(item.item));
     const newVisibleIds = new Set(videoItems.map((item) => item.item.id));
     setVisibleVideoPostIds(newVisibleIds);
+
+    const nearbyIds = new Set(newVisibleIds);
+    const allData = postsWithOverridesRef.current;
+    if (allData.length > 0 && visibleItems.length > 0) {
+      const indices = visibleItems.map((v) => v.index ?? 0);
+      const minIdx = Math.min(...indices);
+      const maxIdx = Math.max(...indices);
+      const lo = Math.max(0, minIdx - 3);
+      const hi = Math.min(allData.length - 1, maxIdx + 3);
+      for (let i = lo; i <= hi; i++) {
+        const p = allData[i];
+        if (p && postHasPlayableVideo(p)) nearbyIds.add(p.id);
+      }
+    }
+    setNearbyVideoPostIds(nearbyIds);
 
     if (videoItems.length > 0) {
       const sortedIndices = visibleItems
@@ -524,12 +544,14 @@ export function SavedPostsScreen() {
   useEffect(() => {
     if (activeTab === 0) return;
     setVisibleVideoPostIds(new Set());
+    setNearbyVideoPostIds(new Set());
     setActiveVideoPostId(null);
   }, [activeTab]);
 
   useEffect(() => {
     if (postsWithOverrides.length !== 0) return;
     setVisibleVideoPostIds(new Set());
+    setNearbyVideoPostIds(new Set());
     setActiveVideoPostId(null);
   }, [postsWithOverrides.length]);
 
@@ -548,6 +570,7 @@ export function SavedPostsScreen() {
         savedPostsDeferHandleRef.current = null;
       }
       setVisibleVideoPostIds(new Set());
+      setNearbyVideoPostIds(new Set());
       setActiveVideoPostId(null);
     },
     onForeground: () => {
@@ -682,6 +705,7 @@ export function SavedPostsScreen() {
         post={item}
         isVisible={visibleVideoPostIds.has(item.id)}
         isFocused={activeVideoPostId === item.id}
+        isNearVisible={nearbyVideoPostIds.has(item.id)}
         screenActive={isFocused && activeTab === 0 && currentState === "active"}
         isOwnPost={currentUser?.id === item.author.id}
         shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
@@ -701,6 +725,7 @@ export function SavedPostsScreen() {
       shareServer,
       allowAutoplay,
       visibleVideoPostIds,
+      nearbyVideoPostIds,
       activeVideoPostId,
       activeTab,
       currentState,

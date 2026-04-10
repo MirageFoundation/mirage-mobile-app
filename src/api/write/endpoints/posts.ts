@@ -21,7 +21,7 @@ import { withPowRetry } from "../utils/retry-pow";
 // Types
 // ============================================
 
-export type ContentTag = "" | "sensitive" | "porn" | "gore" | "violence" | "death";
+export type ContentTag = "" | "sensitive" | "adult" | "gore" | "violence" | "death";
 
 export interface CreatePostInput {
   /** Topic name (required for posts) */

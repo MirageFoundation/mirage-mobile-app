@@ -76,6 +76,10 @@ const HomePostListInner = function HomePostListInner(
 
   const pendingViewableRef = useRef<ViewToken[] | null>(null);
   const deferHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dataRef = useRef(data);
+  dataRef.current = data;
+
+  const VIDEO_NEARBY_BUFFER = 3;
 
   const cancelDeferredFlush = useCallback(() => {
     if (deferHandleRef.current === null) return;
@@ -117,7 +121,21 @@ const HomePostListInner = function HomePostListInner(
       activeId = bestDist <= maxDist ? best.item.id : null;
     }
 
-    setVideoViewability(feedScreenRef.current, visibleVideoIds, activeId);
+    const allData = dataRef.current;
+    const nearbyVideoIds = new Set(visibleVideoIds);
+    if (allData.length > 0 && visibleItems.length > 0) {
+      const indices = visibleItems.map((v) => v.index ?? 0);
+      const minIdx = Math.min(...indices);
+      const maxIdx = Math.max(...indices);
+      const lo = Math.max(0, minIdx - VIDEO_NEARBY_BUFFER);
+      const hi = Math.min(allData.length - 1, maxIdx + VIDEO_NEARBY_BUFFER);
+      for (let i = lo; i <= hi; i++) {
+        const p = allData[i];
+        if (p && postHasPlayableVideo(p)) nearbyVideoIds.add(p.id);
+      }
+    }
+
+    setVideoViewability(feedScreenRef.current, visibleVideoIds, activeId, nearbyVideoIds);
 
     const maxIndex = items.reduce((max, item) => {
       if (item.isViewable && item.index != null && item.index > max) return item.index;
@@ -180,8 +198,6 @@ const HomePostListInner = function HomePostListInner(
   }, [data, feedContext, setVideoViewability]);
 
   const prevFeedContextRef = useRef(feedContext);
-  const dataRef = useRef(data);
-  dataRef.current = data;
 
   useEffect(() => {
     if (prevFeedContextRef.current === feedContext) return;
