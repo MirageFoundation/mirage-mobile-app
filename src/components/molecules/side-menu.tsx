@@ -836,7 +836,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           it into all feed screens and the post detail page,
                           with automatic reporting when the app goes to
                           background. Tested on device — the server is receiving
-                          and accepting the data correctly.
+                          and accepting the data correctly, show username
+                          suggestion when typing @xyz in input
                         </Text>
                       </>
                     )}
@@ -950,7 +951,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           it into all feed screens and the post detail page,
                           with automatic reporting when the app goes to
                           background. Tested on device — the server is receiving
-                          and accepting the data correctly.
+                          and accepting the data correctly, show username
+                          suggestion when typing @xyz in input
                         </Text>
                       </>
                     )}
