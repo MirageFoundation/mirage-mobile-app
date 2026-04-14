@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 129
+                          update 130
                         </Text>
                         <Text
                           style={{
@@ -773,20 +773,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          negative vote counts not showing up in posts and
-                          comments fix, optimistic response fix for votes
-                          comments search results, updating votes or comments of
-                          a post will update the count and stuff all over the
-                          app, sometime manually refreshing the feed shows the
-                          new posts banner immediately after the refresh
-                          completed fixed, the ref link invite link and login
-                          link on ios opens the modal sheet properly when logged
-                          out state, audio distortion after video post created
-                          fix, video showing blank placeholder on feed type
-                          change fix, audio distortion or audio mute on feed
-                          type change fix, mess up things happening after video
-                          post created fix, pull to refresh indicator ui
-                          improvement to follow finger gesture on android
+                          clicking on new msgs in inbox does not show that
+                          comment in post details screen sometime fiexd
                         </Text>
                       </>
                     )}
@@ -827,7 +815,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 129
+                          update 130
                         </Text>
                         <Text
                           style={{
@@ -837,20 +825,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          negative vote counts not showing up in posts and
-                          comments fix, optimistic response fix for votes
-                          comments search results, updating votes or comments of
-                          a post will update the count and stuff all over the
-                          app, sometime manually refreshing the feed shows the
-                          new posts banner immediately after the refresh
-                          completed fixed, the ref link invite link and login
-                          link on ios opens the modal sheet properly when logged
-                          out state, audio distortion after video post created
-                          fix, video showing blank placeholder on feed type
-                          change fix, audio distortion or audio mute on feed
-                          type change fix, mess up things happening after video
-                          post created fix, pull to refresh indicator ui
-                          improvement to follow finger gesture on android
+                          clicking on new msgs in inbox does not show that
+                          comment in post details screen sometime fiexd
                         </Text>
                       </>
                     )}
