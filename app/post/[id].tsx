@@ -217,6 +217,14 @@ export default function PostDetailScreen() {
 
   const isFocused = useIsFocused();
 
+  useEffect(() => {
+    if (highlight && id) {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.comments(id, currentUser?.walletAddress ?? undefined),
+      });
+    }
+  }, []);
+
   // Fetch comments from API
   const {
     data: commentsData,
@@ -872,6 +880,9 @@ export default function PostDetailScreen() {
     [],
   );
 
+  const highlightRetryCount = useRef(0);
+  const MAX_HIGHLIGHT_RETRIES = 3;
+
   // Scroll to highlighted comment when data loads
   useEffect(() => {
     if (highlightedCommentId && allComments.length > 0 && flatListRef.current) {
@@ -889,6 +900,7 @@ export default function PostDetailScreen() {
       }
 
       if (index !== -1 && index < allComments.length) {
+        highlightRetryCount.current = 0;
         // Small delay to ensure layout is ready
         setTimeout(() => {
           if (index < (allComments.length ?? 0)) {
@@ -908,6 +920,26 @@ export default function PostDetailScreen() {
       }
     }
   }, [highlightedCommentId, allComments, findCommentInTree]);
+
+  useEffect(() => {
+    if (
+      !highlight ||
+      !allComments ||
+      isLoadingComments ||
+      isFetchingComments
+    ) return;
+
+    const found = allComments.some((c) => findCommentInTree(c, highlight));
+    if (found || highlightRetryCount.current >= MAX_HIGHLIGHT_RETRIES) return;
+
+    const delay = (highlightRetryCount.current + 1) * 2000;
+    const timer = setTimeout(() => {
+      highlightRetryCount.current += 1;
+      lastCommentsFetchRef.current = 0;
+      refetchCommentsRef.current?.();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [highlight, allComments, isLoadingComments, isFetchingComments, findCommentInTree]);
 
   // Scroll tracking for sticky header
   const [postHeaderHeight, setPostHeaderHeight] = useState(0);
