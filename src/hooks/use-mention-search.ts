@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "@/src/api/client";
+import * as Sentry from "@sentry/react-native";
 
 interface MentionUser {
   username: string;
@@ -89,9 +90,21 @@ export function useMentionSearch(): UseMentionSearchResult {
         );
         if (res && Array.isArray(res.results)) {
           setMentionResults(res.results);
+          Sentry.addBreadcrumb({
+            category: "mention",
+            message: `Search returned ${res.results.length} results`,
+            data: { query: mentionQuery },
+            level: "info",
+          });
         }
-      } catch {
+      } catch (err) {
         setMentionResults([]);
+        Sentry.addBreadcrumb({
+          category: "mention",
+          message: "Username search failed",
+          data: { query: mentionQuery, error: String(err) },
+          level: "warning",
+        });
       } finally {
         setMentionLoading(false);
       }
@@ -119,6 +132,12 @@ export function useMentionSearch(): UseMentionSearchResult {
       setMentionOpen(false);
       setMentionQuery("");
       setMentionResults([]);
+
+      Sentry.addBreadcrumb({
+        category: "mention",
+        message: `Inserted mention @${username}`,
+        level: "info",
+      });
 
       return { newText, newCursorPos };
     },
