@@ -1,4 +1,5 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
+import { markSeen } from "@/src/services/seen-posts";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Sentry from "@sentry/react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -280,6 +281,7 @@ export function TopicFeedScreen() {
   const { handleUpvote, handleDownvote } = useVoteHandler({
     onOptimisticUpdate: useCallback(
       (targetId: string, result: VoteResult) => {
+        markSeen(targetId, "vote");
         setVoteOverride(targetId, {
           hasLiked: result.hasLiked,
           hasDisliked: result.hasDisliked,
@@ -301,6 +303,7 @@ export function TopicFeedScreen() {
 
   const handlePostPress = useCallback(
     (postId: string) => {
+      markSeen(postId, "open");
       const isRevealed = revealedPostsRef.current.has(postId);
       const params = new URLSearchParams({ syncContext: topicFeedSyncContext });
       if (isRevealed) {
@@ -332,6 +335,7 @@ export function TopicFeedScreen() {
 
   const handleCommentPress = useCallback(
     (postId: string) => {
+      markSeen(postId, "open");
       router.push(`/post/${postId}?syncContext=${encodeURIComponent(topicFeedSyncContext)}`);
     },
     [router, topicFeedSyncContext],

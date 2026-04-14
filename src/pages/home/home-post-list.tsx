@@ -22,6 +22,7 @@ import { useAppState } from "@/src/hooks";
 import { HomePostCardItem } from "./home-post-card-item";
 import { useFeedScrollStore } from "@/src/stores";
 import { useHomePostCardStore } from "./home-post-card-store";
+import { recordViewableItems, pauseAllDwellTimers, resumeDwellTimers } from "@/src/services/seen-posts-tracker";
 
 const AnimatedFlashList = Animated.createAnimatedComponent(
   FlashList as ComponentType<any>,
@@ -158,6 +159,11 @@ const HomePostListInner = function HomePostListInner(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       pendingViewableRef.current = viewableItems;
 
+      const viewableIds = viewableItems
+        .filter((v) => v.isViewable && v.item?.id)
+        .map((v) => v.item.id);
+      recordViewableItems(viewableIds);
+
       const currentActive = useHomePostCardStore.getState().activeVideoPostIds[feedScreenRef.current];
       if (currentActive) {
         const stillVisible = viewableItems.some(
@@ -245,9 +251,11 @@ const HomePostListInner = function HomePostListInner(
         itemVisibleTimerRef.current = null;
       }
       setVideoViewability(feedScreenRef.current, new Set(), null);
+      pauseAllDwellTimers();
     },
     onForeground: () => {
       cancelDeferredFlush();
+      resumeDwellTimers();
       if (itemVisibleTimerRef.current) {
         clearTimeout(itemVisibleTimerRef.current);
         itemVisibleTimerRef.current = null;

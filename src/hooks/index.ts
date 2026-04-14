@@ -71,3 +71,4 @@ export {
   usePostDataRefresher,
 } from "./use-post-data-refresher";
 export { useRouter } from "./use-router";
+export { useSeenPostsTracker } from "./use-seen-posts-tracker";

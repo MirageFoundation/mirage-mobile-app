@@ -16,6 +16,7 @@ import { CloudflareErrorToast } from "@/src/components/cloudflare-error-toast";
 import { WalletProvider } from "./wallet-provider";
 import { initInboxNotifications } from "@/src/services/inbox-notifications";
 import { initPushNotifications, registerPush } from "@/src/services/push-notifications";
+import { initSeenPosts, teardownSeenPosts } from "@/src/services/seen-posts";
 import { useAuthStore, usePreferencesStore, useVideoPositionStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
 import {
@@ -52,9 +53,11 @@ export const RootProvider = memo(
     useEffect(() => {
       initInboxNotifications();
       initPushNotifications();
+      initSeenPosts();
       startTimeTicking();
 
       return () => {
+        teardownSeenPosts();
         stopTimeTicking();
       };
     }, []);
