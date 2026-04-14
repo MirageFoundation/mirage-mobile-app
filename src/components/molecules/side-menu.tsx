@@ -828,7 +828,15 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           post created fix, pull to refresh indicator ui
                           improvement to follow finger gesture on android,
                           clicking on new msgs in inbox does not show that
-                          comment in post details screen sometime fiexd
+                          comment in post details screen sometime fiexd, Built a
+                          system that tracks which posts users have seen (by
+                          scrolling past them, tapping, voting, or replying) and
+                          reports them to the server every 3 seconds so the feed
+                          can hide already-seen posts on the next refresh. Wired
+                          it into all feed screens and the post detail page,
+                          with automatic reporting when the app goes to
+                          background. Tested on device — the server is receiving
+                          and accepting the data correctly.
                         </Text>
                       </>
                     )}
@@ -934,7 +942,15 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           post created fix, pull to refresh indicator ui
                           improvement to follow finger gesture on android,
                           clicking on new msgs in inbox does not show that
-                          comment in post details screen sometime fiexd
+                          comment in post details screen sometime fiexd, Built a
+                          system that tracks which posts users have seen (by
+                          scrolling past them, tapping, voting, or replying) and
+                          reports them to the server every 3 seconds so the feed
+                          can hide already-seen posts on the next refresh. Wired
+                          it into all feed screens and the post detail page,
+                          with automatic reporting when the app goes to
+                          background. Tested on device — the server is receiving
+                          and accepting the data correctly.
                         </Text>
                       </>
                     )}
