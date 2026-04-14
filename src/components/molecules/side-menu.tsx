@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 129
+                          update 130
                         </Text>
                         <Text
                           style={{
@@ -826,7 +826,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           type change fix, audio distortion or audio mute on feed
                           type change fix, mess up things happening after video
                           post created fix, pull to refresh indicator ui
-                          improvement to follow finger gesture on android
+                          improvement to follow finger gesture on android,
+                          clicking on new msgs in inbox does not show that
+                          comment in post details screen sometime fiexd
                         </Text>
                       </>
                     )}
@@ -867,7 +869,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 129
+                          update 130
                         </Text>
                         <Text
                           style={{
@@ -930,7 +932,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           type change fix, audio distortion or audio mute on feed
                           type change fix, mess up things happening after video
                           post created fix, pull to refresh indicator ui
-                          improvement to follow finger gesture on android
+                          improvement to follow finger gesture on android,
+                          clicking on new msgs in inbox does not show that
+                          comment in post details screen sometime fiexd
                         </Text>
                       </>
                     )}
