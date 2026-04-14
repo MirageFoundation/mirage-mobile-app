@@ -57,6 +57,8 @@ import { getTierPostLimits, canEditContent } from "@/src/utils/tiers";
 
 import { CommunitySelectionModal } from "./create/community-selection-modal";
 import { StickerPicker } from "@/src/components/molecules/sticker-picker";
+import { MentionSuggestions } from "@/src/components/molecules/mention-suggestions";
+import { useMentionSearch } from "@/src/hooks/use-mention-search";
 
 // Strict URL validation - requires protocol (http:// or https://)
 const URL_REGEX = /^https?:\/\/[^\s<>"{}|\\^`\[\]]+$/i;
@@ -158,6 +160,8 @@ export function CreateScreen() {
   const [showContentWarningModal, setShowContentWarningModal] = useState(false);
   const [selectedContentWarning, setSelectedContentWarning] =
     useState<ContentTag>("");
+
+  const mention = useMentionSearch();
   const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [selectedStickers, setSelectedStickers] = useState<string[]>([]);
 
@@ -1938,7 +1942,12 @@ export function CreateScreen() {
             placeholder="body text (optional)"
             placeholderTextColor={theme.colors.text.subtle}
             value={draft.body}
-            onChangeText={(text) => updateDraft({ body: text })}
+            onChangeText={(text) => {
+              updateDraft({ body: text });
+              setTimeout(() => {
+                mention.detectMention(text, bodySelectionRef.current.start);
+              }, 0);
+            }}
             multiline
             maxLength={tierLimits.maxContentLength}
             textAlignVertical="top"
@@ -1964,97 +1973,118 @@ export function CreateScreen() {
           )}
         </ScrollView>
 
-        <Animated.View
-          style={[
-            styles.mediaBar,
-            {
-              backgroundColor: theme.colors.background.default,
-              paddingBottom: keyboardVisible
-                ? (Platform.OS === "android" ? 0 : 8)
-                : Platform.OS === "android"
-                  ? TAB_BAR_HEIGHT + 24
-                  : insets.bottom + TAB_BAR_HEIGHT + 8,
-            },
-          ]}
-        >
-          <View style={[styles.mediaBarContent, editExpired && { opacity: 0.4 }]} pointerEvents={editExpired ? "none" : "auto"}>
-            <Pressable
-              onPress={handleLinkPress}
-              disabled={editExpired}
-              style={[styles.mediaButton]}
-            >
-              <Feather
-                name="link"
-                size={22}
-                color={theme.colors.text.default}
-              />
-            </Pressable>
+        <MentionSuggestions
+          visible={mention.mentionOpen}
+          loading={mention.mentionLoading}
+          results={mention.mentionResults}
+          query={mention.mentionQuery}
+          onClose={mention.closeMention}
+          onSelect={(username) => {
+            const cursorPos = bodySelectionRef.current.start;
+            const { newText, newCursorPos } = mention.insertMention(
+              username,
+              draft.body,
+              cursorPos,
+            );
+            updateDraft({ body: newText });
+            setBodySelection({ start: newCursorPos, end: newCursorPos });
+            setTimeout(() => setBodySelection(undefined), 50);
+          }}
+        />
 
-            <Pressable
-              onPress={handleImagePress}
-              disabled={hasAttachment && draft.attachmentType !== "image"}
-              style={[
-                styles.mediaButton,
-                hasAttachment &&
-                  draft.attachmentType !== "image" &&
-                  styles.mediaButtonDisabled,
-              ]}
-            >
-              <Feather
-                name="image"
-                size={22}
-                color={
-                  hasAttachment && draft.attachmentType !== "image"
-                    ? theme.colors.text.subtle
-                    : theme.colors.text.default
-                }
-              />
-            </Pressable>
+        {!mention.mentionOpen && (
+          <Animated.View
+            style={[
+              styles.mediaBar,
+              {
+                backgroundColor: theme.colors.background.default,
+                paddingBottom: keyboardVisible
+                  ? (Platform.OS === "android" ? 0 : 8)
+                  : Platform.OS === "android"
+                    ? TAB_BAR_HEIGHT + 24
+                    : insets.bottom + TAB_BAR_HEIGHT + 8,
+              },
+            ]}
+          >
+            <View style={[styles.mediaBarContent, editExpired && { opacity: 0.4 }]} pointerEvents={editExpired ? "none" : "auto"}>
+              <Pressable
+                onPress={handleLinkPress}
+                disabled={editExpired}
+                style={[styles.mediaButton]}
+              >
+                <Feather
+                  name="link"
+                  size={22}
+                  color={theme.colors.text.default}
+                />
+              </Pressable>
 
-            <Pressable
-              onPress={handleVideoPress}
-              disabled={hasAttachment && draft.attachmentType !== "video"}
-              style={[
-                styles.mediaButton,
-                hasAttachment &&
-                  draft.attachmentType !== "video" &&
-                  styles.mediaButtonDisabled,
-              ]}
-            >
-              <Feather
-                name="video"
-                size={22}
-                color={
-                  hasAttachment && draft.attachmentType !== "video"
-                    ? theme.colors.text.subtle
-                    : theme.colors.text.default
-                }
-              />
-            </Pressable>
+              <Pressable
+                onPress={handleImagePress}
+                disabled={hasAttachment && draft.attachmentType !== "image"}
+                style={[
+                  styles.mediaButton,
+                  hasAttachment &&
+                    draft.attachmentType !== "image" &&
+                    styles.mediaButtonDisabled,
+                ]}
+              >
+                <Feather
+                  name="image"
+                  size={22}
+                  color={
+                    hasAttachment && draft.attachmentType !== "image"
+                      ? theme.colors.text.subtle
+                      : theme.colors.text.default
+                  }
+                />
+              </Pressable>
 
-            <Pressable
-              onPress={handleStickerPress}
-              style={styles.mediaButton}
-            >
-              <MaterialCommunityIcons
-                name="sticker-emoji"
-                size={22}
-                color={theme.colors.text.default}
-              />
-            </Pressable>
+              <Pressable
+                onPress={handleVideoPress}
+                disabled={hasAttachment && draft.attachmentType !== "video"}
+                style={[
+                  styles.mediaButton,
+                  hasAttachment &&
+                    draft.attachmentType !== "video" &&
+                    styles.mediaButtonDisabled,
+                ]}
+              >
+                <Feather
+                  name="video"
+                  size={22}
+                  color={
+                    hasAttachment && draft.attachmentType !== "video"
+                      ? theme.colors.text.subtle
+                      : theme.colors.text.default
+                  }
+                />
+              </Pressable>
 
-            <Pressable
-              onPress={handleSpoilerPress}
-              style={styles.mediaButton}
-            >
-              <Feather
-                name="eye-off"
-                size={22}
-                color={theme.colors.text.default}
-              />
-            </Pressable>
-          </View>
-        </Animated.View>
+              <Pressable
+                onPress={handleStickerPress}
+                style={styles.mediaButton}
+              >
+                <MaterialCommunityIcons
+                  name="sticker-emoji"
+                  size={22}
+                  color={theme.colors.text.default}
+                />
+              </Pressable>
+
+              <Pressable
+                onPress={handleSpoilerPress}
+                style={styles.mediaButton}
+              >
+                <Feather
+                  name="eye-off"
+                  size={22}
+                  color={theme.colors.text.default}
+                />
+              </Pressable>
+            </View>
+          </Animated.View>
+        )}
       </KeyboardAvoidingView>
 
       <CommunitySelectionModal

@@ -118,3 +118,5 @@ export {
   type Plan,
   type PlanFeature,
 } from "./subscription";
+
+export { MentionSuggestions } from "./mention-suggestions";
