@@ -837,7 +837,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           with automatic reporting when the app goes to
                           background. Tested on device — the server is receiving
                           and accepting the data correctly, show username
-                          suggestion when typing @xyz in input
+                          suggestion when typing @xyz in input, sentry logs
+                          checked and fixed some issues and better handling for
+                          sentry done
                         </Text>
                       </>
                     )}
@@ -952,7 +954,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           with automatic reporting when the app goes to
                           background. Tested on device — the server is receiving
                           and accepting the data correctly, show username
-                          suggestion when typing @xyz in input
+                          suggestion when typing @xyz in input, sentry logs
+                          checked and fixed some issues and better handling for
+                          sentry done
                         </Text>
                       </>
                     )}
