@@ -1,4 +1,5 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
+import { markSeen } from "@/src/services/seen-posts";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -168,6 +169,7 @@ export function FollowingScreen() {
 
   const { handleUpvote, handleDownvote } = useVoteHandler({
     onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
+      markSeen(targetId, "vote");
       setVoteOverride(targetId, {
         hasLiked: result.hasLiked,
         hasDisliked: result.hasDisliked,
@@ -186,6 +188,7 @@ export function FollowingScreen() {
 
   const handlePostPress = useCallback(
     (postId: string) => {
+      markSeen(postId, "open");
       const isRevealed = revealedPostsRef.current.has(postId);
       const params = new URLSearchParams({ syncContext: currentFeedSyncContext });
       if (isRevealed) {
@@ -211,6 +214,7 @@ export function FollowingScreen() {
 
   const handleCommentPress = useCallback(
     (postId: string) => {
+      markSeen(postId, "open");
       router.push(`/post/${postId}?syncContext=${encodeURIComponent(currentFeedSyncContext)}`);
     },
     [currentFeedSyncContext, router]

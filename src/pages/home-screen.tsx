@@ -1,4 +1,5 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
+import { markSeen } from "@/src/services/seen-posts";
 import * as Sentry from "@sentry/react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect } from "@react-navigation/native";
@@ -249,6 +250,7 @@ export function HomeScreen() {
 
   const { handleUpvote, handleDownvote } = useVoteHandler({
     onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
+      markSeen(targetId, "vote");
       setVoteOverride(targetId, {
         hasLiked: result.hasLiked,
         hasDisliked: result.hasDisliked,
@@ -298,6 +300,7 @@ export function HomeScreen() {
       if (isNavigatingRef.current) return;
       isNavigatingRef.current = true;
       setTimeout(() => { isNavigatingRef.current = false; }, 500);
+      markSeen(postId, "open");
       const isRevealed = revealedPostsRef.current.has(postId);
       const params = new URLSearchParams({ syncContext: currentFeedSyncContext });
       if (isRevealed) {
@@ -460,6 +463,7 @@ export function HomeScreen() {
 
   const handleCommentPress = useCallback(
     (postId: string) => {
+      markSeen(postId, "open");
       router.push(`/post/${postId}?syncContext=${encodeURIComponent(currentFeedSyncContext)}`);
     },
     [currentFeedSyncContext, router]

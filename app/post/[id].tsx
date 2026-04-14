@@ -5,6 +5,7 @@ import {
   useUserFollowed,
   uploadImageAndGetUrl,
 } from "@/src/api/read";
+import { markSeen } from "@/src/services/seen-posts";
 import * as Sentry from "@sentry/react-native";
 import { parseApiError } from "@/src/utils/parse-api-error";
 import { getComments } from "@/src/api/read/endpoints/posts";
@@ -1341,6 +1342,7 @@ export default function PostDetailScreen() {
     const current = useCommentComposeStore.getState().pendingComment;
     if (!current || current.postId !== id) return;
     useCommentComposeStore.getState().clearPendingComment();
+    markSeen(id, "reply");
     handleSubmitComment(current.text, current.imageUri, current.gifUrl);
   }, [pendingComment, id]);
 
