@@ -776,7 +776,16 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           - app opening on create post tab when draft post is
                           there - even the notification opens create post tab
                           while post is drafted - a link not extracting media
-                          from x link fixed
+                          from x link fixed,Updated the apps seen-posts tracking
+                          to match the server spec: No more dedup — repeat views
+                          get reported so seen posts rank lower over time
+                          Smarter visibility — only counts posts actually
+                          visible in the middle of the screen Two auto-triggers
+                          — 3s dwell or 2 quick scroll-bys (glance) Pauses when
+                          backgrounded — timers reset fresh on return Added
+                          monitoring — Sentry breadcrumbs for debugging Cleaned
+                          up unused old code, video trim screen shwing smaller
+                          media height of video from external link shared fixs
                         </Text>
                       </>
                     )}
@@ -830,7 +839,16 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           - app opening on create post tab when draft post is
                           there - even the notification opens create post tab
                           while post is drafted - a link not extracting media
-                          from x link fixed
+                          from x link fixed,Updated the apps seen-posts tracking
+                          to match the server spec: No more dedup — repeat views
+                          get reported so seen posts rank lower over time
+                          Smarter visibility — only counts posts actually
+                          visible in the middle of the screen Two auto-triggers
+                          — 3s dwell or 2 quick scroll-bys (glance) Pauses when
+                          backgrounded — timers reset fresh on return Added
+                          monitoring — Sentry breadcrumbs for debugging Cleaned
+                          up unused old code, video trim screen shwing smaller
+                          media height of video from external link shared fixs
                         </Text>
                       </>
                     )}
