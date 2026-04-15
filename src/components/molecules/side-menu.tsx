@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 130
+                          update 131
                         </Text>
                         <Text
                           style={{
@@ -839,7 +839,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           and accepting the data correctly, show username
                           suggestion when typing @xyz in input, sentry logs
                           checked and fixed some issues and better handling for
-                          sentry done
+                          sentry done, app opening on create post tab when draft
+                          post is there, even the notification opens create post
+                          tab while post is drafted, a link not extracting media
+                          from x link fixed
                         </Text>
                       </>
                     )}
@@ -880,7 +883,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 130
+                          update 131
                         </Text>
                         <Text
                           style={{
@@ -956,7 +959,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           and accepting the data correctly, show username
                           suggestion when typing @xyz in input, sentry logs
                           checked and fixed some issues and better handling for
-                          sentry done
+                          sentry done, app opening on create post tab when draft
+                          post is there, even the notification opens create post
+                          tab while post is drafted, a link not extracting media
+                          from x link fixed
                         </Text>
                       </>
                     )}
