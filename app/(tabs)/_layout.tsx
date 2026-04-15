@@ -15,15 +15,18 @@ import {
 } from "@/src/providers/scroll-animation-context";
 import { useAuthStore, useUIStore } from "@/src/stores";
 import { useInboxStore } from "@/src/stores/inbox-store";
+import { useShareIntentContext } from "expo-share-intent";
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
+import { Tabs, usePathname } from "expo-router";
+import { router } from "@/src/utils/guarded-router";
+import * as Sentry from "@sentry/react-native";
 import {
   Pressable,
   StyleSheet as RNStyleSheet,
   Text,
   View,
 } from "react-native";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -33,6 +36,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { SideMenuProvider } from "@/src/providers/side-menu-provider";
 import { signalTabsReady } from "@/src/services/inbox-notifications";
+
+export const unstable_settings = {
+  initialRouteName: "index",
+};
 
 // Tabs that require authentication
 const PROTECTED_TABS = ["following", "create", "inbox", "profile"];
@@ -291,9 +298,48 @@ function TabsContent() {
 }
 
 export default function TabLayout() {
+  const pathname = usePathname();
+  const { hasShareIntent } = useShareIntentContext();
+  const hasHandledInitialRouteRef = useRef(false);
+
   useEffect(() => {
     signalTabsReady();
   }, []);
+
+  useEffect(() => {
+    if (hasHandledInitialRouteRef.current || !pathname) return;
+
+    const timer = setTimeout(() => {
+      if (hasHandledInitialRouteRef.current) return;
+      hasHandledInitialRouteRef.current = true;
+
+      const shouldRedirectFromCreate = pathname.endsWith("/create") && !hasShareIntent;
+      console.log("[TabLayout] Initial route check:", {
+        pathname,
+        hasShareIntent,
+        shouldRedirectFromCreate,
+      });
+      Sentry.addBreadcrumb({
+        category: "navigation",
+        message: "Initial tab route check",
+        data: { pathname, hasShareIntent, shouldRedirectFromCreate },
+        level: "info",
+      });
+
+      if (shouldRedirectFromCreate) {
+        console.log("[TabLayout] Redirecting stale initial create route to home");
+        Sentry.addBreadcrumb({
+          category: "navigation",
+          message: "Redirecting stale initial create route to home",
+          data: { pathname },
+          level: "info",
+        });
+        router.replace("/(tabs)");
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [pathname, hasShareIntent]);
 
   return (
     <ScrollAnimationProvider>
