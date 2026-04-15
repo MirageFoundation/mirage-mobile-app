@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 130
+                          update 131
                         </Text>
                         <Text
                           style={{
@@ -773,19 +773,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          clicking on new msgs in inbox does not show that
-                          comment in post details screen sometime fiexd, Built a
-                          system that tracks which posts users have seen (by
-                          scrolling past them, tapping, voting, or replying) and
-                          reports them to the server every 3 seconds so the feed
-                          can hide already-seen posts on the next refresh. Wired
-                          it into all feed screens and the post detail page,
-                          with automatic reporting when the app goes to
-                          background. Tested on device — the server is receiving
-                          and accepting the data correctly, show username
-                          suggestion when typing @xyz in input, sentry logs
-                          checked and fixed some issues and better handling for
-                          sentry done
+                          - app opening on create post tab when draft post is
+                          there - even the notification opens create post tab
+                          while post is drafted - a link not extracting media
+                          from x link fixed
                         </Text>
                       </>
                     )}
@@ -826,7 +817,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 130
+                          update 131
                         </Text>
                         <Text
                           style={{
@@ -836,19 +827,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          clicking on new msgs in inbox does not show that
-                          comment in post details screen sometime fiexd, Built a
-                          system that tracks which posts users have seen (by
-                          scrolling past them, tapping, voting, or replying) and
-                          reports them to the server every 3 seconds so the feed
-                          can hide already-seen posts on the next refresh. Wired
-                          it into all feed screens and the post detail page,
-                          with automatic reporting when the app goes to
-                          background. Tested on device — the server is receiving
-                          and accepting the data correctly, show username
-                          suggestion when typing @xyz in input, sentry logs
-                          checked and fixed some issues and better handling for
-                          sentry done
+                          - app opening on create post tab when draft post is
+                          there - even the notification opens create post tab
+                          while post is drafted - a link not extracting media
+                          from x link fixed
                         </Text>
                       </>
                     )}
