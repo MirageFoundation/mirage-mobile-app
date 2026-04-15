@@ -9,6 +9,7 @@ import {
   Linking,
   Pressable,
   View,
+  type LayoutChangeEvent,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
@@ -57,6 +58,7 @@ type PostCardProps = {
   onReport?: () => void;
   onRevealContent?: () => void;
   onMediaPress?: () => void;
+  onLayout?: (event: LayoutChangeEvent) => void;
   contentRevealed?: boolean;
   shareUrl?: string;
   /** Whether to show the URL card/Play Now row (default: true) */
@@ -134,6 +136,7 @@ export const PostCard = memo(function PostCard({
   onReport,
   onRevealContent,
   onMediaPress: onMediaPressProp,
+  onLayout,
   contentRevealed = false,
   shareUrl,
   showUrlCard = true,
@@ -229,6 +232,7 @@ export const PostCard = memo(function PostCard({
   return (
     <Pressable
       ref={containerRef}
+      onLayout={onLayout}
       onPress={handlePress}
       style={[styles.container, style]}
     >
