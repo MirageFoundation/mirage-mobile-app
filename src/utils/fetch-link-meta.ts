@@ -834,6 +834,11 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
                   image = m.thumbnail_url ?? m.url;
                 }
               }
+              const cardImage = tweet.card?.image?.url ?? null;
+              if (cardImage) {
+                images.push(cardImage);
+                if (!image) image = cardImage;
+              }
               if (images.length > 0 && !image) image = images[0];
             }
           }

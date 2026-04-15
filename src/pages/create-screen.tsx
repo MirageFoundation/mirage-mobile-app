@@ -388,10 +388,12 @@ export function CreateScreen() {
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const lastProcessedIntentRef = useRef<string | null>(null);
   const shareTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!hasShareIntent || !shareIntent || isEditMode) return;
 
     if (!isLoggedIn) {
+      lastProcessedIntentRef.current = null;
       resetShareIntent();
       router.replace("/(tabs)/");
       showAuthSheet();
@@ -800,7 +802,10 @@ export function CreateScreen() {
           updateDraft({ body: shareIntent.webUrl!.slice(0, tierLimits.maxContentLength) });
           Sentry.captureException(err, { tags: { feature: "share-intent-meta" } });
         }).finally(() => {
-          if (lastProcessedIntentRef.current === currentIntentKey) setIsProcessingShareLink(false);
+          if (lastProcessedIntentRef.current === currentIntentKey) {
+            lastProcessedIntentRef.current = null;
+            setIsProcessingShareLink(false);
+          }
         });
       }
       if (shareIntent.files?.length && shouldImportSharedFiles) {
@@ -811,6 +816,9 @@ export function CreateScreen() {
           setAttachment("video", file.path);
           startVideoUpload(file.path);
         }
+      }
+      if (!shareIntent.webUrl && lastProcessedIntentRef.current === currentIntentKey) {
+        lastProcessedIntentRef.current = null;
       }
       resetShareIntent();
     }, 50);
