@@ -10,60 +10,77 @@ import {
   type ComponentType,
 } from "react";
 import {
+  Dimensions,
   Platform,
+  type LayoutChangeEvent,
   type ListRenderItem,
   type ViewToken,
 } from "react-native";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
-import Animated from "react-native-reanimated";
+import * as Sentry from "@sentry/react-native";
+import Animated, {
+  runOnJS,
+  useAnimatedScrollHandler,
+  useComposedEventHandler,
+  useSharedValue,
+} from "react-native-reanimated";
 import type { Post } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { useAppState } from "@/src/hooks";
 import { HomePostCardItem } from "./home-post-card-item";
 import { useFeedScrollStore } from "@/src/stores";
 import { useHomePostCardStore } from "./home-post-card-store";
-import { recordViewableItems, pauseAllDwellTimers, resumeDwellTimers } from "@/src/services/seen-posts-tracker";
+import {
+  recordViewableItems,
+  pauseAllDwellTimers,
+  resumeDwellTimers,
+  type SeenPostVisibility,
+} from "@/src/services/seen-posts-tracker";
 
 const AnimatedFlashList = Animated.createAnimatedComponent(
   FlashList as ComponentType<any>,
 );
 
 const ESTIMATED_ITEM_SIZE = 420;
+const ACTIVE_ZONE_TOP_EXCLUDE = 0.08;
+const ACTIVE_ZONE_BOTTOM_EXCLUDE = 0.15;
+const GLANCE_VISIBILITY_PERCENT = 30;
+const DWELL_VISIBILITY_PERCENT = 40;
 
 type HomePostListProps = {
- data: Post[];
- contentContainerStyle: object;
- onScroll?: (event: any) => void;
- ListHeaderComponent?: ComponentType<any> | ReactElement | null;
- ListEmptyComponent?: ComponentType<any> | ReactElement | null;
- ListFooterComponent?: ComponentType<any> | ReactElement | null;
- refreshControl?: ReactElement | null;
- onEndReached?: () => void;
- onEndReachedThreshold?: number;
-  feedScreen: 'home' | 'following' | 'topic';
+  data: Post[];
+  contentContainerStyle: object;
+  onScroll?: (event: any) => void;
+  ListHeaderComponent?: ComponentType<any> | ReactElement | null;
+  ListEmptyComponent?: ComponentType<any> | ReactElement | null;
+  ListFooterComponent?: ComponentType<any> | ReactElement | null;
+  refreshControl?: ReactElement | null;
+  onEndReached?: () => void;
+  onEndReachedThreshold?: number;
+  feedScreen: "home" | "following" | "topic";
   feedContext: string;
- onItemVisible?: (index: number) => void;
+  onItemVisible?: (index: number) => void;
 };
 
 const HomePostListInner = function HomePostListInner(
- {
-   data,
-   contentContainerStyle,
-   onScroll,
-   ListHeaderComponent,
-   ListEmptyComponent,
-   ListFooterComponent,
-   refreshControl,
-   onEndReached,
-   onEndReachedThreshold,
+  {
+    data,
+    contentContainerStyle,
+    onScroll,
+    ListHeaderComponent,
+    ListEmptyComponent,
+    ListFooterComponent,
+    refreshControl,
+    onEndReached,
+    onEndReachedThreshold,
     feedScreen,
     feedContext,
-   onItemVisible,
- }: HomePostListProps,
- ref: Ref<FlashListRef<Post>>
+    onItemVisible,
+  }: HomePostListProps,
+  ref: Ref<FlashListRef<Post>>,
 ) {
   const setVideoViewability = useHomePostCardStore(
-    (state) => state.setVideoViewability
+    (state) => state.setVideoViewability,
   );
   const onItemVisibleRef = useRef(onItemVisible);
   onItemVisibleRef.current = onItemVisible;
@@ -77,10 +94,14 @@ const HomePostListInner = function HomePostListInner(
   }).current;
 
   const pendingViewableRef = useRef<ViewToken[] | null>(null);
+  const postLayoutMapRef = useRef(new Map<string, { y: number; height: number }>());
+  const missingLayoutReportedRef = useRef(new Set<string>());
+  const scrollOffsetRef = useRef(0);
   const deferHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollStopHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMomentumScrollingRef = useRef(false);
   const hasReportedVisibleItemsRef = useRef(false);
+  const lastSeenSyncTs = useSharedValue(0);
 
   const cancelDeferredFlush = useCallback(() => {
     if (deferHandleRef.current === null) return;
@@ -108,19 +129,106 @@ const HomePostListInner = function HomePostListInner(
     }, delay);
   }, [cancelScrollStop, setFeedScrolling]);
 
+  const computeSeenVisibility = useCallback((postId: string): SeenPostVisibility | null => {
+    const layout = postLayoutMapRef.current.get(postId);
+    if (!layout || layout.height <= 0) {
+      if (!missingLayoutReportedRef.current.has(postId)) {
+        missingLayoutReportedRef.current.add(postId);
+        Sentry.addBreadcrumb({
+          category: "seen-posts",
+          message: "Skipped seen visibility sync due to missing post layout",
+          level: "warning",
+          data: {
+            feedContext,
+            feedScreen,
+            postIdPrefix: postId.slice(0, 12),
+          },
+        });
+      }
+      return null;
+    }
+
+    const viewportHeight = Dimensions.get("window").height;
+    const activeZoneTop = viewportHeight * ACTIVE_ZONE_TOP_EXCLUDE;
+    const activeZoneBottom = viewportHeight * (1 - ACTIVE_ZONE_BOTTOM_EXCLUDE);
+    const itemTop = layout.y - scrollOffsetRef.current;
+    const itemBottom = itemTop + layout.height;
+    const visibleHeight = Math.max(
+      0,
+      Math.min(itemBottom, activeZoneBottom) - Math.max(itemTop, activeZoneTop),
+    );
+    const visiblePercent = (visibleHeight / layout.height) * 100;
+
+    return {
+      id: postId,
+      glanceVisible: visiblePercent >= GLANCE_VISIBILITY_PERCENT,
+      dwellVisible: visiblePercent >= DWELL_VISIBILITY_PERCENT,
+    };
+  }, [feedContext, feedScreen]);
+
+  const syncSeenViewability = useCallback((items: ViewToken[], scrollOffset?: number) => {
+    if (typeof scrollOffset === "number") {
+      scrollOffsetRef.current = scrollOffset;
+    }
+
+    const seenVisibility = items
+      .filter((item) => item.isViewable && item.item?.id)
+      .map((item) => computeSeenVisibility(item.item.id))
+      .filter((item): item is SeenPostVisibility => item !== null);
+
+    recordViewableItems(seenVisibility);
+  }, [computeSeenVisibility]);
+
+  const handleTrackedScroll = useCallback((scrollOffset: number) => {
+    scrollOffsetRef.current = scrollOffset;
+    if (pendingViewableRef.current) {
+      syncSeenViewability(pendingViewableRef.current, scrollOffset);
+    }
+  }, [syncSeenViewability]);
+
+  const trackingScrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      const nextOffset = event.contentOffset.y;
+      const timeStamp = Date.now();
+      if (timeStamp - lastSeenSyncTs.value < 80) {
+        return;
+      }
+      lastSeenSyncTs.value = timeStamp;
+      runOnJS(handleTrackedScroll)(nextOffset);
+    },
+  });
+
+  const composedScrollHandler = useComposedEventHandler(
+    onScroll ? [trackingScrollHandler, onScroll as any] : [trackingScrollHandler],
+  );
+
+  const handlePostLayout = useCallback((postId: string, event: LayoutChangeEvent) => {
+    const { y, height } = event.nativeEvent.layout;
+    postLayoutMapRef.current.set(postId, { y, height });
+    missingLayoutReportedRef.current.delete(postId);
+
+    if (pendingViewableRef.current) {
+      syncSeenViewability(pendingViewableRef.current);
+    }
+  }, [syncSeenViewability]);
+
   const flushViewability = useCallback(() => {
     const items = pendingViewableRef.current;
     if (!items) return;
 
+    syncSeenViewability(items);
+
     const visibleItems = items.filter((item) => item.isViewable && item.item?.id);
     if (visibleItems.length === 0) {
       if (!hasReportedVisibleItemsRef.current) return;
+      recordViewableItems([]);
       setVideoViewability(feedScreenRef.current, new Set(), null);
       return;
     }
+
     hasReportedVisibleItemsRef.current = true;
     const videoItems = visibleItems.filter(
-      (item) => postHasPlayableVideo(item.item)
+      (item) => postHasPlayableVideo(item.item),
     );
 
     const visibleVideoIds = new Set(videoItems.map((item) => item.item.id));
@@ -139,7 +247,10 @@ const HomePostListInner = function HomePostListInner(
       let bestDist = Math.abs((best.index ?? 0) - centerIndex);
       for (let i = 1; i < videoItems.length; i++) {
         const d = Math.abs((videoItems[i].index ?? 0) - centerIndex);
-        if (d < bestDist) { best = videoItems[i]; bestDist = d; }
+        if (d < bestDist) {
+          best = videoItems[i];
+          bestDist = d;
+        }
       }
       activeId = bestDist <= maxDist ? best.item.id : null;
     }
@@ -151,23 +262,19 @@ const HomePostListInner = function HomePostListInner(
       return max;
     }, -1);
     if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
-  }, [setVideoViewability]);
+  }, [setVideoViewability, syncSeenViewability]);
 
   const itemVisibleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       pendingViewableRef.current = viewableItems;
-
-      const viewableIds = viewableItems
-        .filter((v) => v.isViewable && v.item?.id)
-        .map((v) => v.item.id);
-      recordViewableItems(viewableIds);
+      syncSeenViewability(viewableItems);
 
       const currentActive = useHomePostCardStore.getState().activeVideoPostIds[feedScreenRef.current];
       if (currentActive) {
         const stillVisible = viewableItems.some(
-          (v) => v.isViewable && v.item?.id === currentActive
+          (v) => v.isViewable && v.item?.id === currentActive,
         );
         if (!stillVisible) {
           useHomePostCardStore.getState().setActiveVideoPostId(feedScreenRef.current, null);
@@ -194,7 +301,7 @@ const HomePostListInner = function HomePostListInner(
           flushViewability();
         }, 150);
       }
-    }
+    },
   ).current;
 
   useEffect(() => {
@@ -202,6 +309,7 @@ const HomePostListInner = function HomePostListInner(
       cancelDeferredFlush();
       cancelScrollStop();
       setFeedScrolling(false);
+      recordViewableItems([]);
       if (itemVisibleTimerRef.current) {
         clearTimeout(itemVisibleTimerRef.current);
       }
@@ -211,8 +319,25 @@ const HomePostListInner = function HomePostListInner(
   useEffect(() => {
     if (data.length !== 0) return;
     hasReportedVisibleItemsRef.current = false;
+    postLayoutMapRef.current.clear();
+    missingLayoutReportedRef.current.clear();
+    recordViewableItems([]);
     setVideoViewability(feedContext, new Set(), null);
   }, [data, feedContext, setVideoViewability]);
+
+  useEffect(() => {
+    const postIds = new Set(data.map((item) => item.id));
+    for (const postId of postLayoutMapRef.current.keys()) {
+      if (!postIds.has(postId)) {
+        postLayoutMapRef.current.delete(postId);
+      }
+    }
+    for (const postId of missingLayoutReportedRef.current) {
+      if (!postIds.has(postId)) {
+        missingLayoutReportedRef.current.delete(postId);
+      }
+    }
+  }, [data]);
 
   const prevFeedContextRef = useRef(feedContext);
   const dataRef = useRef(data);
@@ -223,6 +348,9 @@ const HomePostListInner = function HomePostListInner(
     prevFeedContextRef.current = feedContext;
     pendingViewableRef.current = null;
     hasReportedVisibleItemsRef.current = false;
+    postLayoutMapRef.current.clear();
+    missingLayoutReportedRef.current.clear();
+    recordViewableItems([]);
 
     const timer = setTimeout(() => {
       if (pendingViewableRef.current) {
@@ -232,9 +360,9 @@ const HomePostListInner = function HomePostListInner(
       const currentData = dataRef.current;
       if (currentData.length === 0) return;
       const firstItems = currentData.slice(0, 5);
-      const videoItems = firstItems.filter(item => postHasPlayableVideo(item));
+      const videoItems = firstItems.filter((item) => postHasPlayableVideo(item));
       if (videoItems.length === 0) return;
-      const visibleVideoIds = new Set(videoItems.map(item => item.id));
+      const visibleVideoIds = new Set(videoItems.map((item) => item.id));
       setVideoViewability(feedContext, visibleVideoIds, videoItems[0].id);
     }, 300);
     return () => clearTimeout(timer);
@@ -266,10 +394,17 @@ const HomePostListInner = function HomePostListInner(
     },
   });
 
- const renderItem = useCallback<ListRenderItem<Post>>(
-    ({ item }) => <HomePostCardItem post={item} feedScreen={feedScreen} feedContext={feedContext} />,
-    [feedScreen, feedContext]
- );
+  const renderItem = useCallback<ListRenderItem<Post>>(
+    ({ item }) => (
+      <HomePostCardItem
+        post={item}
+        feedScreen={feedScreen}
+        feedContext={feedContext}
+        onLayout={handlePostLayout}
+      />
+    ),
+    [feedScreen, feedContext, handlePostLayout],
+  );
 
   const keyExtractor = useMemo(() => (item: Post) => item.id, []);
   const getItemType = useCallback(
@@ -322,8 +457,8 @@ const HomePostListInner = function HomePostListInner(
       getItemType={getItemType}
       estimatedItemSize={ESTIMATED_ITEM_SIZE}
       drawDistance={Platform.OS === "android" ? 1500 : 1200}
-      onScroll={onScroll}
-      scrollEventThrottle={onScroll ? (Platform.OS === "ios" ? 64 : 32) : undefined}
+      onScroll={composedScrollHandler}
+      scrollEventThrottle={Platform.OS === "ios" ? 64 : 32}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={contentContainerStyle as any}
       ListHeaderComponent={ListHeaderComponent}

@@ -1,4 +1,5 @@
 import { memo, useCallback, useMemo, useRef, useEffect } from "react";
+import type { LayoutChangeEvent } from "react-native";
 import type { Post } from "@/src/components/molecules";
 import { PostCard } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
@@ -24,6 +25,7 @@ type HomePostCardItemProps = {
  post: Post;
   feedScreen: 'home' | 'following' | 'topic';
   feedContext: string;
+  onLayout?: (postId: string, event: LayoutChangeEvent) => void;
 };
 
 function areHomePostCardItemPropsEqual(
@@ -52,6 +54,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  post,
   feedScreen,
   feedContext,
+  onLayout,
 }: HomePostCardItemProps) {
  const visibility = useVideoVisibility(post.id, feedContext);
  const isVisible = (visibility & 2) !== 0;
@@ -187,6 +190,10 @@ export const HomePostCardItem = memo(function HomePostCardItem({
 
   const editOverride = usePostEditStore((s) => s.overrides[post.id]);
 
+  const handleLayout = useCallback((event: LayoutChangeEvent) => {
+    onLayout?.(post.id, event);
+  }, [onLayout, post.id]);
+
   const displayPost = useMemo(() => {
     let result = { ...post };
     const needsFollowingUpdate = (post.isFollowing ?? false) !== isFollowing;
@@ -249,6 +256,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
      onBlockTopic={handleBlockTopic}
      onReport={handleReport}
     onMediaPress={handlePostPress}
+    onLayout={handleLayout}
     contentRevealed={contentRevealed}
       shareUrl={`${getShareBaseUrl(shareServer)}/p/${post.id}`}
   />

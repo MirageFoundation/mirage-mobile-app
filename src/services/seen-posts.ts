@@ -3,7 +3,6 @@ import * as Sentry from "@sentry/react-native";
 import { api } from "@/src/api/client";
 import { walletService } from "@/src/services/wallet-service";
 import { buildSimpleSignedPayload } from "@/src/api/write/signing/simple-sign";
-import { storage } from "@/src/stores/mmkv-storage";
 
 export type SeenReason = "dwell" | "glance" | "open" | "vote" | "reply";
 
@@ -20,32 +19,17 @@ type SeenPostsResponse = {
 const FLUSH_INTERVAL_MS = 3_000;
 const MAX_BATCH_SIZE = 100;
 const MAX_RETRIES = 2;
-const DEDUP_CAP = 2_000;
-const DEDUP_STORAGE_KEY = "seen_posts_dedup_set";
 
 let buffer: SeenEntry[] = [];
-let dedupSet: Set<string> = new Set();
 let flushTimer: ReturnType<typeof setInterval> | null = null;
 let appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
 let initialized = false;
 
-function loadDedupSet(): void {
-  try {
-    const stored = storage.getString(DEDUP_STORAGE_KEY);
-    if (stored) {
-      const ids: string[] = JSON.parse(stored);
-      dedupSet = new Set(ids.slice(0, DEDUP_CAP));
-    }
-  } catch {
-    dedupSet = new Set();
-  }
-}
-
-function saveDedupSet(): void {
-  try {
-    const ids = Array.from(dedupSet).slice(0, DEDUP_CAP);
-    storage.set(DEDUP_STORAGE_KEY, JSON.stringify(ids));
-  } catch {}
+function summarizeReasons(entries: SeenEntry[]): Partial<Record<SeenReason, number>> {
+  return entries.reduce<Partial<Record<SeenReason, number>>>((summary, entry) => {
+    summary[entry.reason] = (summary[entry.reason] ?? 0) + 1;
+    return summary;
+  }, {});
 }
 
 function normalizePostId(id: string): string {
@@ -56,14 +40,6 @@ export function markSeen(postId: string, reason: SeenReason): void {
   const normalized = normalizePostId(postId);
   if (!normalized) return;
 
-  if (dedupSet.has(normalized)) return;
-
-  if (dedupSet.size >= DEDUP_CAP) {
-    dedupSet.clear();
-    saveDedupSet();
-  }
-
-  dedupSet.add(normalized);
   buffer.push({ id: normalized, reason });
 
   if (!flushTimer) {
@@ -81,7 +57,6 @@ export async function flushSeenBuffer(): Promise<void> {
   }
 
   const address = wallet.address.toLowerCase();
-
   const batch = buffer.splice(0, MAX_BATCH_SIZE);
 
   const signed = buildSimpleSignedPayload(
@@ -98,8 +73,17 @@ export async function flushSeenBuffer(): Promise<void> {
   let retries = 0;
   while (retries <= MAX_RETRIES) {
     try {
-      await api.post<SeenPostsResponse>("/seen_posts", payload);
-      saveDedupSet();
+      const response = await api.post<SeenPostsResponse>("/seen_posts", payload);
+      Sentry.addBreadcrumb({
+        category: "seen-posts",
+        message: `Flushed ${batch.length} seen post entries`,
+        level: "info",
+        data: {
+          batchSize: batch.length,
+          ingested: response.ingested,
+          reasons: summarizeReasons(batch),
+        },
+      });
       return;
     } catch (error: any) {
       retries++;
@@ -114,7 +98,6 @@ export async function flushSeenBuffer(): Promise<void> {
           tags: { feature: "seen-posts", operation: "flush" },
           extra: { batchSize: batch.length, retries: MAX_RETRIES },
         });
-        saveDedupSet();
         return;
       }
     }
@@ -137,6 +120,17 @@ function stopFlushTimer(): void {
 
 function handleAppStateChange(nextState: AppStateStatus): void {
   if (nextState === "background" || nextState === "inactive") {
+    if (buffer.length > 0) {
+      Sentry.addBreadcrumb({
+        category: "seen-posts",
+        message: `Flushing seen posts on app ${nextState}`,
+        level: "info",
+        data: {
+          bufferedEntries: buffer.length,
+          reasons: summarizeReasons(buffer),
+        },
+      });
+    }
     flushSeenBuffer();
   }
 }
@@ -145,22 +139,18 @@ export function initSeenPosts(): void {
   if (initialized) return;
   initialized = true;
 
-  loadDedupSet();
-
   Sentry.addBreadcrumb({
     category: "seen-posts",
-    message: `Initialized with ${dedupSet.size} dedup entries`,
+    message: "Initialized seen posts tracking",
     level: "info",
   });
 
   appStateSubscription = AppState.addEventListener("change", handleAppStateChange);
-
-  startFlushTimer();
 }
 
 export function teardownSeenPosts(): void {
-  stopFlushTimer();
   flushSeenBuffer();
+  stopFlushTimer();
   appStateSubscription?.remove();
   appStateSubscription = null;
   initialized = false;
@@ -168,6 +158,4 @@ export function teardownSeenPosts(): void {
 
 export function resetSeenPosts(): void {
   buffer = [];
-  dedupSet.clear();
-  saveDedupSet();
 }
