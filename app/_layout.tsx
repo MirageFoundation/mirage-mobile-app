@@ -66,7 +66,7 @@ export default Sentry.wrap(function RootLayout() {
   }, [ref]);
 
   return (
-    <ShareIntentProvider options={{ scheme: getShareScheme() || undefined, resetOnBackground: false }}>
+    <ShareIntentProvider options={{ scheme: getShareScheme() || undefined, resetOnBackground: true }}>
     <RootProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
