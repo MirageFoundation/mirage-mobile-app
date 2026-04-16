@@ -783,7 +783,17 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           notification opens the inbox tab but the bottom nav is
                           not visble fix,added sentry logs for better error
                           handling for notifiaction and push token register and
-                          unregister,made the voting quick for subscriber
+                          unregister,made the voting quick for subscriber, mark
+                          post seen not working in following tab fix,sharing
+                          external link to app was not navigating to create post
+                          and sometimes was not even extracting the data from
+                          the link fix and done better fixes for opening create
+                          tab at cold start and at every reload,added save
+                          draft popup to show when crossed on create post tab,
+                          mark post as seen when pressed tap to view,creating
+                          post on android does not scroll to top on home to show
+                          post just created fixed, getting peers and showing it
+                          in node list and switching throught them done,
                         </Text>
                       </>
                     )}
@@ -840,7 +850,17 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           notification opens the inbox tab but the bottom nav is
                           not visble fix,added sentry logs for better error
                           handling for notifiaction and push token register and
-                          unregister,made the voting quick for subscriber
+                          unregister,made the voting quick for subscriber, mark
+                          post seen not working in following tab fix,sharing
+                          external link to app was not navigating to create post
+                          and sometimes was not even extracting the data from
+                          the link fix and done better fixes for opening create
+                          tab at cold start and at every reload,added save
+                          draft popup to show when crossed on create post tab,
+                          mark post as seen when pressed tap to view,creating
+                          post on android does not scroll to top on home to show
+                          post just created fixed, getting peers and showing it
+                          in node list and switching throught them done,
                         </Text>
                       </>
                     )}
