@@ -773,7 +773,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          mark post seen not working in following tab fix
+                          mark post seen not working in following tab
+                          fix,sharing external link to app was not navigating to
+                          create post and sometimes was not even extracting the
+                          data from the link fix and done better fixes for
+                          opening create tab at cold start and at every reload,
+                          mark post as seen when pressed tap to view
                         </Text>
                       </>
                     )}
@@ -824,7 +829,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          mark post seen not working in following tab fix
+                          mark post seen not working in following tab
+                          fix,sharing external link to app was not navigating to
+                          create post and sometimes was not even extracting the
+                          data from the link fix and done better fixes for
+                          opening create tab at cold start and at every reload,
+                          mark post as seen when pressed tap to view
                         </Text>
                       </>
                     )}

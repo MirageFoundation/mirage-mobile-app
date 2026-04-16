@@ -1,4 +1,5 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
+import { markSeen } from "@/src/services/seen-posts";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Sentry from "@sentry/react-native";
 import * as Clipboard from "expo-clipboard";
@@ -814,6 +815,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
   const handleRevealContent = useCallback((postId: string) => {
+    markSeen(postId, "open");
     setRevealedPosts((prev) => {
       const next = new Set(prev);
       next.add(postId);

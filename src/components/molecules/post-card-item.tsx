@@ -7,6 +7,7 @@ import {
   useVoteOverride,
 } from "@/src/pages/home/home-post-card-store";
 import { logPress } from "@/src/utils/press-logger";
+import { markSeen } from "@/src/services/seen-posts";
 
 type PostCardItemProps = {
   post: Post;
@@ -189,6 +190,7 @@ onPostPress,
 
   const handleRevealContent = useCallback(() => {
     logPress({ name: "post_reveal", postId: post.id });
+    markSeen(post.id, "open");
     onRevealContent?.(post.id);
   }, [onRevealContent, post.id]);
 

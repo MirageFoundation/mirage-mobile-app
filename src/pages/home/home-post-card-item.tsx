@@ -4,6 +4,7 @@ import type { Post } from "@/src/components/molecules";
 import { PostCard } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { logPress } from "@/src/utils/press-logger";
+import { markSeen } from "@/src/services/seen-posts";
 import { getShareBaseUrl } from "@/src/stores";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import {
@@ -157,6 +158,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   const handleRevealContent = useCallback(() => {
     const p = postRef.current;
     logPress({ name: "post_reveal", postId: p.id });
+    markSeen(p.id, "open");
     getHandlers().onRevealContent?.(p.id);
     if (postHasPlayableVideo(p)) {
       useHomePostCardStore.getState().setActiveVideoPostId(feedContext, p.id);
