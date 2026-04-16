@@ -2,7 +2,7 @@ import { navigateToEditPost } from "@/src/utils/edit-post";
 import { markSeen } from "@/src/services/seen-posts";
 import * as Sentry from "@sentry/react-native";
 import { useQueryClient } from "@tanstack/react-query";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Platform, View, type AppStateStatus } from "react-native";
@@ -488,12 +488,26 @@ export function HomeScreen() {
     });
   }, []);
 
+  const isHomeFocused = useIsFocused();
   useEffect(() => {
-    if (shouldScrollToTop) {
-      tabbedFeedRef.current?.scrollToTop();
+    if (!shouldScrollToTop) return;
+    // Wait until the Home tab is actually focused before scrolling.
+    // On Android, scroll commands issued to an unfocused FlashList are dropped,
+    // so scrolling before the tab becomes visible (e.g. right after creating a
+    // post from the Create tab) never took effect.
+    if (!isHomeFocused) return;
+    const delay = Platform.OS === "android" ? 150 : 0;
+    const timer = setTimeout(() => {
+      tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
+      if (Platform.OS === "android") {
+        requestAnimationFrame(() => {
+          tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
+        });
+      }
       clearScrollToTop();
-    }
-  }, [shouldScrollToTop, clearScrollToTop]);
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [shouldScrollToTop, isHomeFocused, clearScrollToTop]);
 
   const setCurrentUserId = useHomePostCardStore(
     (state) => state.setCurrentUserId
