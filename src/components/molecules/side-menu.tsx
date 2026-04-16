@@ -47,6 +47,7 @@ import {
 import { useApiServer } from "@/src/providers/api-server-provider";
 import { useToast } from "@/src/providers/toast-provider";
 import { useServerList } from "@/src/hooks/use-server-list";
+import { formatServerLabel } from "@/src/utils/server-label";
 import {
   useUserFollowed,
   useBatchUsernamesFromAddresses,
@@ -336,7 +337,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     const { servers } = useServerList();
     const apiServerOptions = servers.map((s: string) => ({
       value: s,
-      label: s,
+      label: formatServerLabel(s),
     }));
 
     const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
@@ -474,8 +475,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
         if (server === apiServer) return;
         try {
           await switchServer(server);
-          setShareServer(server);
-          toast.success(`Switched to ${server}`);
+          const isHttps = server.startsWith("https://");
+          if (isHttps) {
+            setShareServer(server);
+          }
+          toast.success(`Switched to ${formatServerLabel(server)}`);
           close();
           router.replace("/(tabs)");
         } catch {

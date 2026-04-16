@@ -18,7 +18,8 @@ import { executeWithProgress, useTransactionProgress, useServerList } from "@/sr
 import { walletService } from "@/src/services/wallet-service";
 import { useAuthStore, useUIStore, type ApiServer } from "@/src/stores";
 import { apiClient } from "@/src/api/client";
-import { usePreferencesStore } from "@/src/stores";
+import { usePreferencesStore, getApiBaseUrl } from "@/src/stores";
+import { formatServerLabel } from "@/src/utils/server-label";
 import { useToast } from "@/src/providers/toast-provider";
 import { useQueryClient } from "@tanstack/react-query";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
@@ -92,13 +93,13 @@ export default function UsernameScreen() {
 
   useEffect(() => {
     console.log("[UsernameScreen] activeServer:", activeServer, "savedServer:", savedServer);
-    apiClient.setBaseUrl(`https://${activeServer}`);
+    apiClient.setBaseUrl(getApiBaseUrl(activeServer));
   }, [activeServer]);
 
   useEffect(() => {
     return () => {
       const currentServer = usePreferencesStore.getState().apiServer;
-      apiClient.setBaseUrl(`https://${currentServer}`);
+      apiClient.setBaseUrl(getApiBaseUrl(currentServer));
     };
   }, []);
 
@@ -123,7 +124,7 @@ export default function UsernameScreen() {
     setIsSwitchingNode(true);
     try {
       const newServer = otherServer;
-      apiClient.setBaseUrl(`https://${newServer}`);
+      apiClient.setBaseUrl(getApiBaseUrl(newServer));
       queryClient.removeQueries({ queryKey: queryKeys.nodeConfig() });
       queryClient.removeQueries({ queryKey: queryKeys.config() });
       await queryClient.invalidateQueries();
@@ -131,13 +132,13 @@ export default function UsernameScreen() {
       setActiveServer(newServer as ApiServer);
       setApiServer(newServer as ApiServer);
       setShowRegPopup(false);
-      toast.success(`Switched to ${newServer}`);
+      toast.success(`Switched to ${formatServerLabel(newServer)}`);
       if (!freshNodeConfig.registration_enabled) {
         router.replace("/(tabs)");
       }
     } catch (e) {
       console.error("[UsernameScreen] Failed to switch node:", e);
-      toast.error(`Failed to connect to ${otherServer}`);
+      toast.error(`Failed to connect to ${formatServerLabel(otherServer)}`);
     } finally {
       setIsSwitchingNode(false);
     }
@@ -449,13 +450,17 @@ export default function UsernameScreen() {
 
   const handleClose = useCallback(() => {
     triggerHaptic("selection");
-    apiClient.setBaseUrl(`https://${usePreferencesStore.getState().apiServer}`);
+    apiClient.setBaseUrl(
+      getApiBaseUrl(usePreferencesStore.getState().apiServer)
+    );
     router.back();
   }, [router]);
 
   const handleLogin = useCallback(() => {
     triggerHaptic("selection");
-    apiClient.setBaseUrl(`https://${usePreferencesStore.getState().apiServer}`);
+    apiClient.setBaseUrl(
+      getApiBaseUrl(usePreferencesStore.getState().apiServer)
+    );
     router.replace("/(auth)/login");
   }, [router]);
 
@@ -621,7 +626,7 @@ export default function UsernameScreen() {
               marginRight: 8,
             }}
           >
-            {activeServer}
+            {formatServerLabel(activeServer)}
           </Text>
         </Pressable>
       </View>
@@ -900,7 +905,7 @@ export default function UsernameScreen() {
                     if (!isActive) {
                       setSwitchingServer(server);
                       setActiveServer(server);
-                      apiClient.setBaseUrl(`https://${server}`);
+                      apiClient.setBaseUrl(getApiBaseUrl(server));
                       queryClient.removeQueries({ queryKey: queryKeys.nodeConfig() });
                       queryClient.removeQueries({ queryKey: queryKeys.config() });
                       queryClient.invalidateQueries({ queryKey: queryKeys.nodeConfig() });
@@ -912,18 +917,18 @@ export default function UsernameScreen() {
                           setSwitchingServer(null);
                           setShowServerModal(false);
                           setApiServer(server);
-                          apiClient.setBaseUrl(`https://${server}`);
-                          toast.success(`Switched to ${server}`);
+                          apiClient.setBaseUrl(getApiBaseUrl(server));
+                          toast.success(`Switched to ${formatServerLabel(server)}`);
                           router.back();
                           return;
                         }
                         setApiServer(server);
-                        toast.success(`Switched to ${server}`);
+                        toast.success(`Switched to ${formatServerLabel(server)}`);
                       } catch (e) {
                         console.error("[UsernameScreen] Failed to fetch nodeConfig after switch:", e);
                         setActiveServer(activeServer);
-                        apiClient.setBaseUrl(`https://${activeServer}`);
-                        toast.error(`Failed to connect to ${server}`);
+                        apiClient.setBaseUrl(getApiBaseUrl(activeServer));
+                        toast.error(`Failed to connect to ${formatServerLabel(server)}`);
                       }
                       setSwitchingServer(null);
                     }
@@ -950,7 +955,7 @@ export default function UsernameScreen() {
                       weight={isActive ? "semibold" : "regular"}
                       style={isActive ? { color: theme.colors.primary[500] } : undefined}
                     >
-                      {server}
+                      {formatServerLabel(server)}
                     </Text>
                   </View>
                   {isSwitching && (
@@ -1009,11 +1014,11 @@ export default function UsernameScreen() {
             >
               Account creation is not available on{" "}
               <Text size="md" weight="semibold">
-                {activeServer}
+                {formatServerLabel(activeServer)}
               </Text>
               . Switch to{" "}
               <Text size="md" weight="semibold">
-                {otherServer}
+                {formatServerLabel(otherServer)}
               </Text>{" "}
               to create an account.
             </Text>
@@ -1039,7 +1044,7 @@ export default function UsernameScreen() {
                   <Text
                     style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "600" }}
                   >
-                    Switch to {otherServer}
+                    Switch to {formatServerLabel(otherServer)}
                   </Text>
                 )}
               </LinearGradient>

@@ -23,6 +23,7 @@ import { useToast } from "@/src/providers/toast-provider";
 import { usePreferencesStore, type ThemeMode, type ApiServer, type VideoAutoplayNetwork } from "@/src/stores";
 import { isAdultContentEnabled } from "@/src/stores/preferences-store";
 import { useServerList } from "@/src/hooks/use-server-list";
+import { formatServerLabel } from "@/src/utils/server-label";
 import { runInboxCheckNow, sendTestNotification, resetAndTestInboxNotification, getNotificationDebugInfo } from "@/src/services/inbox-notifications";
 import { useCloudflareErrorStore } from "@/src/stores/cloudflare-error-store";
 import * as Clipboard from "expo-clipboard";
@@ -125,16 +126,6 @@ export function SettingsScreen() {
   }, []);
 
   const { servers } = useServerList();
-  const formatServerLabel = useCallback((server: string): string => {
-    try {
-      const u = new URL(server);
-      const host = u.host;
-      const isHttp = u.protocol === "http:";
-      return isHttp ? `${host} · HTTP` : host;
-    } catch {
-      return server;
-    }
-  }, []);
   const apiServerOptions = servers.map((s) => ({
     value: s,
     label: formatServerLabel(s),
@@ -180,7 +171,7 @@ const handleApiServerChange = useCallback(
         toast.error("Failed to switch server");
       }
     },
-    [switchServer, apiServer, toast, router, setShareServer, formatServerLabel]
+    [switchServer, apiServer, toast, router, setShareServer]
   );
 
   // Get display labels
