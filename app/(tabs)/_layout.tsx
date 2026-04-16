@@ -36,6 +36,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { SideMenuProvider } from "@/src/providers/side-menu-provider";
 import { signalTabsReady } from "@/src/services/inbox-notifications";
+import { isRecentSharePath } from "@/src/navigation/linking";
 
 export const unstable_settings = {
   initialRouteName: "index",
@@ -301,39 +302,43 @@ export default function TabLayout() {
   const pathname = usePathname();
   const { hasShareIntent } = useShareIntentContext();
   const hasHandledInitialRouteRef = useRef(false);
+  const initialShareIntentRef = useRef(hasShareIntent);
 
   useEffect(() => {
     signalTabsReady();
   }, []);
 
+  const prevShareIntentRef = useRef(hasShareIntent);
   useEffect(() => {
-    if (hasShareIntent && !pathname.endsWith("/create")) {
+    const prev = prevShareIntentRef.current;
+    prevShareIntentRef.current = hasShareIntent;
+    // Only navigate on a fresh false->true transition after initial route has settled.
+    if (!hasHandledInitialRouteRef.current) return;
+    if (prev || !hasShareIntent) return;
+    if (!pathname.endsWith("/create")) {
       router.navigate("/(tabs)/create");
     }
-  }, [hasShareIntent]);
+  }, [hasShareIntent, pathname]);
 
   useEffect(() => {
     if (hasHandledInitialRouteRef.current || !pathname) return;
 
-    const timer = setTimeout(() => {
+    const handleInitial = () => {
       if (hasHandledInitialRouteRef.current) return;
       hasHandledInitialRouteRef.current = true;
 
-      const shouldRedirectFromCreate = pathname.endsWith("/create") && !hasShareIntent;
-      console.log("[TabLayout] Initial route check:", {
-        pathname,
-        hasShareIntent,
-        shouldRedirectFromCreate,
-      });
+      const hasInitialShareIntent =
+        initialShareIntentRef.current || hasShareIntent || isRecentSharePath(10_000);
+      const isOnCreate = pathname.endsWith("/create");
+
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Initial tab route check",
-        data: { pathname, hasShareIntent, shouldRedirectFromCreate },
+        data: { pathname, hasInitialShareIntent, isOnCreate },
         level: "info",
       });
 
-      if (shouldRedirectFromCreate) {
-        console.log("[TabLayout] Redirecting stale initial create route to home");
+      if (isOnCreate && !hasInitialShareIntent) {
         Sentry.addBreadcrumb({
           category: "navigation",
           message: "Redirecting stale initial create route to home",
@@ -342,7 +347,9 @@ export default function TabLayout() {
         });
         router.replace("/(tabs)");
       }
-    }, 800);
+    };
+
+    const timer = setTimeout(handleInitial, 800);
 
     return () => clearTimeout(timer);
   }, [pathname, hasShareIntent]);
