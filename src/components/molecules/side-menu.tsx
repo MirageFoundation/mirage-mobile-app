@@ -781,7 +781,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           reload,added save draft popup to show when crossed on
                           create post tab, mark post as seen when pressed tap to
                           view,creating post on android does not scroll to top
-                          on home to show post just created fixed
+                          on home to show post just created fixed, saved post
+                          not working sometimes for some reason will show
+                          fallback UI and added sentry for catching the issue
                         </Text>
                       </>
                     )}
@@ -840,7 +842,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           reload,added save draft popup to show when crossed on
                           create post tab, mark post as seen when pressed tap to
                           view,creating post on android does not scroll to top
-                          on home to show post just created fixed
+                          on home to show post just created fixed, saved post
+                          not working sometimes for some reason will show
+                          fallback UI and added sentry for catching the issue
                         </Text>
                       </>
                     )}
