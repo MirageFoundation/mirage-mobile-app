@@ -135,6 +135,17 @@ function getRepeatedSharePathAgeMs(path: string): number | null {
   return Date.now() - lastHandledAt;
 }
 
+export function getRecentSharePathAgeMs(): number | null {
+  const lastHandledAt = storage.getNumber(LAST_SHARE_PATH_AT_KEY) ?? 0;
+  if (lastHandledAt <= 0) return null;
+  return Date.now() - lastHandledAt;
+}
+
+export function isRecentSharePath(withinMs = 10_000): boolean {
+  const age = getRecentSharePathAgeMs();
+  return age !== null && age >= 0 && age < withinMs;
+}
+
 function shouldSkipRepeatedSharePath(path: string): boolean {
   const ageMs = getRepeatedSharePathAgeMs(path);
   return ageMs !== null && ageMs < REPEATED_SHARE_PATH_TTL_MS;

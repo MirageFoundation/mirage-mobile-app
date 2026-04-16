@@ -49,7 +49,7 @@ import { useToast } from "@/src/providers/toast-provider";
 import { TransactionProgressModal } from "@/src/components/molecules/transaction-progress-modal";
 import { useTransactionProgress } from "@/src/hooks/use-transaction-progress";
 import { getTxStatus } from "@/src/api/read/endpoints/tx";
-import { useDraftStore, type Community } from "@/src/stores/draft-store";
+import { useDraftStore, type Community, type PostDraft } from "@/src/stores/draft-store";
 import { useHomePostCardStore } from "./home/home-post-card-store";
 import { useUserLevel, useAuthStore } from "@/src/stores/auth-store";
 import { useUIStore } from "@/src/stores";
@@ -355,9 +355,23 @@ export function CreateScreen() {
   }, []);
 
   const editInitializedRef = useRef(false);
+  const savedDraftForEditRef = useRef<PostDraft | null>(null);
   useEffect(() => {
     if (!isEditMode || editInitializedRef.current) return;
     editInitializedRef.current = true;
+
+    // Preserve any in-progress create draft so we can restore it after edit flow exits
+    const currentDraft = useDraftStore.getState().draft;
+    const hasExistingCreateDraft =
+      currentDraft.title.trim().length > 0 ||
+      currentDraft.body.trim().length > 0 ||
+      currentDraft.mediaUris.length > 0 ||
+      currentDraft.linkUrl !== null ||
+      currentDraft.community !== null ||
+      currentDraft.attachmentType !== null;
+    savedDraftForEditRef.current = hasExistingCreateDraft ? currentDraft : null;
+
+    clearDraft();
 
     const topic = params.editTopic ?? "general";
     const community: Community = {
@@ -385,6 +399,20 @@ export function CreateScreen() {
       } catch {}
     }
   }, [isEditMode]);
+
+  // On edit-mode unmount: always clear the edit data from the shared draft store,
+  // and restore any previously-in-progress create draft.
+  useEffect(() => {
+    if (!isEditMode) return;
+    return () => {
+      clearDraft();
+      const saved = savedDraftForEditRef.current;
+      if (saved) {
+        useDraftStore.setState({ draft: saved, hasDraft: true });
+      }
+      savedDraftForEditRef.current = null;
+    };
+  }, [isEditMode, clearDraft]);
 
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const lastProcessedIntentRef = useRef<string | null>(null);
