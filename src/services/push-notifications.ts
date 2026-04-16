@@ -432,6 +432,20 @@ export async function unregisterPush(wallet?: MirageWallet | null): Promise<void
   let unregisterRequest: UnregisterPushTokenRequest | null = null;
   let unregisterBaseUrl: string | undefined;
   try {
+    const nodeConfig =
+      queryClient.getQueryData<NodeConfigResponse>(queryKeys.nodeConfig());
+    if (nodeConfig && !nodeConfig.push_notifications_enabled) {
+      console.log(
+        "[PushNotifications] Push not enabled on current node, skipping remote unregister"
+      );
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: "Skipped remote unregister: push disabled on node",
+        level: "info",
+      });
+      return;
+    }
+
     let token = getStoredToken();
     if (!token) {
       console.log("[PushNotifications] No stored push token found for unregister, fetching from Expo");

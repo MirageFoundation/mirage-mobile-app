@@ -125,7 +125,20 @@ export function SettingsScreen() {
   }, []);
 
   const { servers } = useServerList();
-  const apiServerOptions = servers.map((s) => ({ value: s, label: s }));
+  const formatServerLabel = useCallback((server: string): string => {
+    try {
+      const u = new URL(server);
+      const host = u.host;
+      const isHttp = u.protocol === "http:";
+      return isHttp ? `${host} · HTTP` : host;
+    } catch {
+      return server;
+    }
+  }, []);
+  const apiServerOptions = servers.map((s) => ({
+    value: s,
+    label: formatServerLabel(s),
+  }));
 
   // Sheet refs
   const contentTypeSheetRef = useRef<ContentTypeSheetRef>(null);
@@ -156,15 +169,18 @@ const handleApiServerChange = useCallback(
       
       try {
         await switchServer(server);
-        setShareServer(server);
-        toast.success(`Switched to ${server}`);
+        const isHttps = server.startsWith("https://");
+        if (isHttps) {
+          setShareServer(server);
+        }
+        toast.success(`Switched to ${formatServerLabel(server)}`);
         router.replace("/(tabs)");
       } catch (err) {
         Sentry.captureException(err, { tags: { feature: "settings", operation: "switch-server" } });
         toast.error("Failed to switch server");
       }
     },
-    [switchServer, apiServer, toast, router, setShareServer]
+    [switchServer, apiServer, toast, router, setShareServer, formatServerLabel]
   );
 
   // Get display labels
@@ -397,7 +413,7 @@ const handleApiServerChange = useCallback(
               icon="server-outline"
               title="Server"
               subtitle="Server used for API requests and sharing"
-              rightText={apiServer}
+              rightText={formatServerLabel(apiServer)}
               onPress={() => apiServerSheetRef.current?.present()}
             />
           ),

@@ -30,6 +30,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         ITSAppUsesNonExemptEncryption: false,
         UIBackgroundModes: ["fetch", "remote-notification"],
         LSApplicationQueriesSchemes: ["whatsapp", "tg", "instagram", "sms"],
+        NSAppTransportSecurity: {
+          NSAllowsArbitraryLoads: true,
+        },
       },
     },
     android: {
@@ -104,6 +107,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           },
           android: {
             compileSdkVersion: 35,
+            usesCleartextTraffic: true,
           },
         },
       ],
