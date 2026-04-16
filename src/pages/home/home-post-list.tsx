@@ -180,8 +180,8 @@ const HomePostListInner = function HomePostListInner(
       .map((item) => computeSeenVisibility(item.item.id))
       .filter((item): item is SeenPostVisibility => item !== null);
 
-    recordViewableItems(seenVisibility);
-  }, [computeSeenVisibility]);
+    recordViewableItems(seenVisibility, feedContext);
+  }, [computeSeenVisibility, feedContext]);
 
   const handleTrackedScroll = useCallback((scrollOffset: number) => {
     scrollOffsetRef.current = scrollOffset;
@@ -225,7 +225,7 @@ const HomePostListInner = function HomePostListInner(
     const visibleItems = items.filter((item) => item.isViewable && item.item?.id);
     if (visibleItems.length === 0) {
       if (!hasReportedVisibleItemsRef.current) return;
-      recordViewableItems([]);
+      recordViewableItems([], feedContext);
       setVideoViewability(feedScreenRef.current, new Set(), null);
       return;
     }
@@ -327,7 +327,7 @@ const HomePostListInner = function HomePostListInner(
       cancelDeferredFlush();
       cancelScrollStop();
       setFeedScrolling(false);
-      recordViewableItems([]);
+      recordViewableItems([], feedContext);
       if (itemVisibleTimerRef.current) {
         clearTimeout(itemVisibleTimerRef.current);
       }
@@ -339,7 +339,7 @@ const HomePostListInner = function HomePostListInner(
     hasReportedVisibleItemsRef.current = false;
     postLayoutMapRef.current.clear();
     missingLayoutReportedRef.current.clear();
-    recordViewableItems([]);
+    recordViewableItems([], feedContext);
     setVideoViewability(feedContext, new Set(), null);
   }, [data, feedContext, setVideoViewability]);
 
@@ -366,7 +366,7 @@ const HomePostListInner = function HomePostListInner(
     hasReportedVisibleItemsRef.current = false;
     postLayoutMapRef.current.clear();
     missingLayoutReportedRef.current.clear();
-    recordViewableItems([]);
+    recordViewableItems([], feedContext);
 
     const timer = setTimeout(() => {
       if (pendingViewableRef.current) {
@@ -395,11 +395,11 @@ const HomePostListInner = function HomePostListInner(
         itemVisibleTimerRef.current = null;
       }
       setVideoViewability(feedScreenRef.current, new Set(), null);
-      pauseAllDwellTimers();
+      pauseAllDwellTimers(feedContext);
     },
     onForeground: () => {
       cancelDeferredFlush();
-      resumeDwellTimers();
+      resumeDwellTimers(feedContext);
       if (itemVisibleTimerRef.current) {
         clearTimeout(itemVisibleTimerRef.current);
         itemVisibleTimerRef.current = null;
