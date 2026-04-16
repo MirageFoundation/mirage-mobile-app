@@ -780,7 +780,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           opening create tab at cold start and at every
                           reload,added save draft popup to show when crossed on
                           create post tab, mark post as seen when pressed tap to
-                          view
+                          view,creating post on android does not scroll to top
+                          on home to show post just created fixed
                         </Text>
                       </>
                     )}
@@ -838,7 +839,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           opening create tab at cold start and at every
                           reload,added save draft popup to show when crossed on
                           create post tab, mark post as seen when pressed tap to
-                          view
+                          view,creating post on android does not scroll to top
+                          on home to show post just created fixed
                         </Text>
                       </>
                     )}
