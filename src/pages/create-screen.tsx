@@ -58,6 +58,7 @@ import { getTierPostLimits, canEditContent } from "@/src/utils/tiers";
 import { CommunitySelectionModal } from "./create/community-selection-modal";
 import { StickerPicker } from "@/src/components/molecules/sticker-picker";
 import { MentionSuggestions } from "@/src/components/molecules/mention-suggestions";
+import { DraftDiscardPopup } from "@/src/components/molecules/draft-discard-popup";
 import { useMentionSearch } from "@/src/hooks/use-mention-search";
 
 // Strict URL validation - requires protocol (http:// or https://)
@@ -859,12 +860,58 @@ export function CreateScreen() {
     startVideoUpload(params.videoUri);
   }, [params.videoUri, params.originalVideoUri, params.replacingUri, params.videoWidth, params.videoHeight, params.trimStart, params.trimEnd, params.isMuted]);
 
+  const hasDraftContent = useMemo(() => {
+    return (
+      draft.community !== null ||
+      draft.title.trim().length > 0 ||
+      draft.body.trim().length > 0 ||
+      draft.mediaUris.length > 0 ||
+      draft.linkUrl !== null ||
+      draft.attachmentType !== null ||
+      selectedContentWarning !== "" ||
+      selectedStickers.length > 0 ||
+      showLinkInput
+    );
+  }, [draft.community, draft.title, draft.body, draft.mediaUris, draft.linkUrl, draft.attachmentType, selectedContentWarning, selectedStickers, showLinkInput]);
+
+  const [showDraftModal, setShowDraftModal] = useState(false);
+
+  const discardDraftAndClose = useCallback(() => {
+    clearDraft();
+    setShowLinkInput(false);
+    setLinkUrl("");
+    setLinkError(null);
+    removeAttachment();
+    setImageDimensions(null);
+    setSelectedContentWarning("");
+    setSelectedStickers([]);
+    VIDEO_UPLOADS.clear();
+    setVideoUploadState({});
+    VIDEO_META.clear();
+    _handledVideoParam = null;
+    setIsVideoMuted(false);
+    setIsVideoPlaying(false);
+    setShowDraftModal(false);
+    router.back();
+  }, [clearDraft, removeAttachment]);
+
+  const saveDraftAndClose = useCallback(() => {
+    setShowDraftModal(false);
+    router.back();
+  }, []);
+
   const handleClose = useCallback(() => {
     if (isSubmitting) return;
 
     triggerHaptic("selection");
-    router.back();
-  }, [isSubmitting]);
+
+    if (isEditMode || !hasDraftContent) {
+      router.back();
+      return;
+    }
+
+    setShowDraftModal(true);
+  }, [isSubmitting, isEditMode, hasDraftContent]);
 
   const handlePost = useCallback(async () => {
     if (!canPost || isSubmitting) return;
@@ -2211,6 +2258,13 @@ export function CreateScreen() {
           handlePost();
         }}
         autoDismissDelay={500}
+      />
+
+      <DraftDiscardPopup
+        visible={showDraftModal}
+        onSaveDraft={saveDraftAndClose}
+        onDiscard={discardDraftAndClose}
+        onCancel={() => setShowDraftModal(false)}
       />
     </Box>
   );

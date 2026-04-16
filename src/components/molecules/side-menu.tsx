@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 131
+                          update 132
                         </Text>
                         <Text
                           style={{
@@ -773,85 +773,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          migrate content tag to adult all over the app, added
-                          adult content option in content filter sheet in
-                          settings, enabling mature content toggle will enable
-                          all the content in content filter, disabling the
-                          mature content toggle will disable the adult content
-                          in content filter sheet, selecting the adult content
-                          in content filter sheet while the mature content
-                          toggle is disabled will show a note saying the
-                          enabling mature content toggle is necessary to see
-                          adult content, both the show mature content toggle and
-                          the adult type content should be enabled to see adult
-                          content, made the parent comment to be visble on
-                          comment input screen covering 20% of screen height and
-                          can also scroll throught it to see full parent
-                          comment,save comment draft even after going back or
-                          closing the app, draft expires after 2 days,
-                          notification tap now shows the new msgs in inbox
-                          immediately,username taken issue on edit username fix,
-                          2 or more agent modified post touching each other fix,
-                          spcae between paragraph increased in markdown, change
-                          the ui of new unread msg in inbox, video not getting
-                          uploaded fix, better sentry logs added for comment
-                          posting error video not getting extracted error, some
-                          UI change in inbox msgs, comment failed error
-                          investigated and understood the failure happening on
-                          sticker upload and fixed, edit username screen UI
-                          updated, changing username reflects immediately,
-                          changed ui of edit username button on profile tab,
-                          added edit username option in settings, added a note
-                          for subscriber having anon prefix in username, porn to
-                          adult migration, reduced the number of videos to play
-                          off screen on android to fix the out of memory crash,
-                          double spinner removed from android, lots of app
-                          optimization, nsfw image not getting extracted from
-                          reddit link fix,deep replies not showing up in
-                          commenst fix, posting comment will appear at end of
-                          the comment list and will scroll us to end and will
-                          highlight the comment for 3 seconds, the auto refresh
-                          and pull to refresh indicator on top ui change for all
-                          feeds, comment thread collapse and expansion made
-                          smooth and better, negative vote counts not showing up
-                          in posts and comments fix, optimistic response fix
-                          for votes comments search results, updating votes or
-                          comments of a post will update the count and stuff all
-                          over the app, sometime manually refreshing the feed
-                          shows the new posts banner immediately after the
-                          refresh completed fixed, the ref link invite link and
-                          login link on ios opens the modal sheet properly when
-                          logged out state, audio distortion after video post
-                          created fix, video showing blank placeholder on feed
-                          type change fix, audio distortion or audio mute on feed
-                          type change fix, mess up things happening after video
-                          post created fix, pull to refresh indicator ui
-                          improvement to follow finger gesture on android,
-                          clicking on new msgs in inbox does not show that
-                          comment in post details screen sometime fiexd, Built a
-                          system that tracks which posts users have seen (by
-                          scrolling past them, tapping, voting, or replying) and
-                          reports them to the server every 3 seconds so the feed
-                          can hide already-seen posts on the next refresh. Wired
-                          it into all feed screens and the post detail page,
-                          with automatic reporting when the app goes to
-                          background. Tested on device — the server is receiving
-                          and accepting the data correctly, show username
-                          suggestion when typing @xyz in input, sentry logs
-                          checked and fixed some issues and better handling for
-                          sentry done, app opening on create post tab when draft
-                          post is there, even the notification opens create post
-                          tab while post is drafted, a link not extracting media
-                          from x link fixed, Updated the apps seen-posts
-                          tracking to match the server spec: No more dedup —
-                          repeat views get reported so seen posts rank lower over
-                          time, Smarter visibility — only counts posts actually
-                          visible in the middle of the screen, Two auto-triggers
-                          — 3s dwell or 2 quick scroll-bys (glance), Pauses when
-                          backgrounded — timers reset fresh on return, Added
-                          monitoring — Sentry breadcrumbs for debugging, Cleaned
-                          up unused old code, video trim screen shwing smaller
-                          media height of video from external link shared fixs
+                          Nothing
                         </Text>
                       </>
                     )}
@@ -892,7 +814,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 131
+                          update 132
                         </Text>
                         <Text
                           style={{
@@ -902,85 +824,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          migrate content tag to adult all over the app, added
-                          adult content option in content filter sheet in
-                          settings, enabling mature content toggle will enable
-                          all the content in content filter, disabling the
-                          mature content toggle will disable the adult content
-                          in content filter sheet, selecting the adult content
-                          in content filter sheet while the mature content
-                          toggle is disabled will show a note saying the
-                          enabling mature content toggle is necessary to see
-                          adult content, both the show mature content toggle and
-                          the adult type content should be enabled to see adult
-                          content, made the parent comment to be visble on
-                          comment input screen covering 20% of screen height and
-                          can also scroll throught it to see full parent
-                          comment,save comment draft even after going back or
-                          closing the app, draft expires after 2 days,
-                          notification tap now shows the new msgs in inbox
-                          immediately,username taken issue on edit username fix,
-                          2 or more agent modified post touching each other fix,
-                          spcae between paragraph increased in markdown, change
-                          the ui of new unread msg in inbox, video not getting
-                          uploaded fix, better sentry logs added for comment
-                          posting error video not getting extracted error, some
-                          UI change in inbox msgs, comment failed error
-                          investigated and understood the failure happening on
-                          sticker upload and fixed, edit username screen UI
-                          updated, changing username reflects immediately,
-                          changed ui of edit username button on profile tab,
-                          added edit username option in settings, added a note
-                          for subscriber having anon prefix in username, porn to
-                          adult migration, reduced the number of videos to play
-                          off screen on android to fix the out of memory crash,
-                          double spinner removed from android, lots of app
-                          optimization, nsfw image not getting extracted from
-                          reddit link fix,deep replies not showing up in
-                          commenst fix, posting comment will appear at end of
-                          the comment list and will scroll us to end and will
-                          highlight the comment for 3 seconds, the auto refresh
-                          and pull to refresh indicator on top ui change for all
-                          feeds, comment thread collapse and expansion made
-                          smooth and better, negative vote counts not showing up
-                          in posts and comments fix, optimistic response fix
-                          for votes comments search results, updating votes or
-                          comments of a post will update the count and stuff all
-                          over the app, sometime manually refreshing the feed
-                          shows the new posts banner immediately after the
-                          refresh completed fixed, the ref link invite link and
-                          login link on ios opens the modal sheet properly when
-                          logged out state, audio distortion after video post
-                          created fix, video showing blank placeholder on feed
-                          type change fix, audio distortion or audio mute on feed
-                          type change fix, mess up things happening after video
-                          post created fix, pull to refresh indicator ui
-                          improvement to follow finger gesture on android,
-                          clicking on new msgs in inbox does not show that
-                          comment in post details screen sometime fiexd, Built a
-                          system that tracks which posts users have seen (by
-                          scrolling past them, tapping, voting, or replying) and
-                          reports them to the server every 3 seconds so the feed
-                          can hide already-seen posts on the next refresh. Wired
-                          it into all feed screens and the post detail page,
-                          with automatic reporting when the app goes to
-                          background. Tested on device — the server is receiving
-                          and accepting the data correctly, show username
-                          suggestion when typing @xyz in input, sentry logs
-                          checked and fixed some issues and better handling for
-                          sentry done, app opening on create post tab when draft
-                          post is there, even the notification opens create post
-                          tab while post is drafted, a link not extracting media
-                          from x link fixed, Updated the apps seen-posts
-                          tracking to match the server spec: No more dedup —
-                          repeat views get reported so seen posts rank lower over
-                          time, Smarter visibility — only counts posts actually
-                          visible in the middle of the screen, Two auto-triggers
-                          — 3s dwell or 2 quick scroll-bys (glance), Pauses when
-                          backgrounded — timers reset fresh on return, Added
-                          monitoring — Sentry breadcrumbs for debugging, Cleaned
-                          up unused old code, video trim screen shwing smaller
-                          media height of video from external link shared fixs
+                          Nothing
                         </Text>
                       </>
                     )}
