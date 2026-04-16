@@ -65,13 +65,13 @@ export function DraftDiscardPopup({
           <Box
             style={[
               styles.iconContainer,
-              { backgroundColor: theme.colors.warning[500] + "20" },
+              { backgroundColor: theme.colors.brand[500] + "20" },
             ]}
           >
             <Ionicons
               name="document-text-outline"
               size={32}
-              color={theme.colors.warning[500]}
+              color={theme.colors.brand[500]}
             />
           </Box>
 
@@ -94,9 +94,10 @@ export function DraftDiscardPopup({
           <Box gap="sm" style={styles.buttons}>
             <Button
               size="lg"
+              variant="outline"
               rounded="full"
               onPress={handleDiscard}
-              style={[styles.button, { backgroundColor: theme.colors.error[500] + "15" }]}
+              style={styles.button}
             >
               <Button.Text style={{ color: theme.colors.error[500] }}>Discard</Button.Text>
             </Button>
