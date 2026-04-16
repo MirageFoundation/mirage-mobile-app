@@ -307,6 +307,12 @@ export default function TabLayout() {
   }, []);
 
   useEffect(() => {
+    if (hasShareIntent && !pathname.endsWith("/create")) {
+      router.navigate("/(tabs)/create");
+    }
+  }, [hasShareIntent]);
+
+  useEffect(() => {
     if (hasHandledInitialRouteRef.current || !pathname) return;
 
     const timer = setTimeout(() => {
