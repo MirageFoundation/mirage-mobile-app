@@ -777,8 +777,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           fix,sharing external link to app was not navigating to
                           create post and sometimes was not even extracting the
                           data from the link fix and done better fixes for
-                          opening create tab at cold start and at every reload,
-                          mark post as seen when pressed tap to view
+                          opening create tab at cold start and at every
+                          reload,added save draft popup to show when crossed on
+                          create post tab, mark post as seen when pressed tap to
+                          view
                         </Text>
                       </>
                     )}
@@ -833,8 +835,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           fix,sharing external link to app was not navigating to
                           create post and sometimes was not even extracting the
                           data from the link fix and done better fixes for
-                          opening create tab at cold start and at every reload,
-                          mark post as seen when pressed tap to view
+                          opening create tab at cold start and at every
+                          reload,added save draft popup to show when crossed on
+                          create post tab, mark post as seen when pressed tap to
+                          view
                         </Text>
                       </>
                     )}
