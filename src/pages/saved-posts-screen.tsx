@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "@/src/hooks/use-router";
 import { useIsFocused } from "@react-navigation/native";
+import * as Sentry from "@sentry/react-native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Dimensions, FlatList, Platform, Pressable, View, type ViewToken } from "react-native";
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
@@ -395,10 +396,45 @@ export function SavedPostsScreen() {
     }, [clearVoteOverride]),
   });
 
-  const visiblePosts = useMemo(
-    () => savedPosts.filter((p) => !hiddenPostIds.has(p.id) && !(p.topic && blockedTopicNames.has(p.topic.toLowerCase()))),
-    [savedPosts, hiddenPostIds, blockedTopicNames],
-  );
+  const visiblePosts = useMemo(() => {
+    const malformed: string[] = [];
+    const safe = savedPosts.filter((p) => {
+      if (!p || typeof p !== "object" || !p.id || !p.author || !p.author.id || !p.author.username) {
+        malformed.push(p?.id ?? "unknown");
+        return false;
+      }
+      if (hiddenPostIds.has(p.id)) return false;
+      if (p.topic && blockedTopicNames.has(p.topic.toLowerCase())) return false;
+      return true;
+    });
+    if (malformed.length > 0) {
+      Sentry.captureMessage("saved-posts: filtered malformed posts", {
+        level: "warning",
+        tags: { feature: "saved-posts", reason: "malformed-persisted-post" },
+        extra: { malformedIds: malformed, totalSaved: savedPosts.length },
+      });
+    }
+    return safe;
+  }, [savedPosts, hiddenPostIds, blockedTopicNames]);
+
+  const visibleComments = useMemo(() => {
+    const malformed: string[] = [];
+    const safe = savedComments.filter((c) => {
+      if (!c || typeof c !== "object" || !c.id || !c.author || !c.author.username) {
+        malformed.push(c?.id ?? "unknown");
+        return false;
+      }
+      return true;
+    });
+    if (malformed.length > 0) {
+      Sentry.captureMessage("saved-posts: filtered malformed comments", {
+        level: "warning",
+        tags: { feature: "saved-posts", reason: "malformed-persisted-comment" },
+        extra: { malformedIds: malformed, totalSaved: savedComments.length },
+      });
+    }
+    return safe;
+  }, [savedComments]);
 
   const savedPostsViewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 30,
@@ -913,11 +949,11 @@ export function SavedPostsScreen() {
                 }}
               />
             )
-          ) : savedComments.length === 0 ? (
+          ) : visibleComments.length === 0 ? (
             renderEmptyState("comments")
           ) : (
             <FlatList
-              data={savedComments}
+              data={visibleComments}
               keyExtractor={commentKeyExtractor}
               renderItem={renderCommentItem}
               contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
