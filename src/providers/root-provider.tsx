@@ -17,7 +17,7 @@ import { WalletProvider } from "./wallet-provider";
 import { initInboxNotifications } from "@/src/services/inbox-notifications";
 import { initPushNotifications, registerPush } from "@/src/services/push-notifications";
 import { initSeenPosts, teardownSeenPosts } from "@/src/services/seen-posts";
-import { useAuthStore, usePreferencesStore, useVideoPositionStore } from "@/src/stores";
+import { useAuthStore, usePreferencesStore, useSeenPostsFilterStore, useVideoPositionStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
 import {
   flushPendingAuthRoute,
@@ -54,6 +54,7 @@ export const RootProvider = memo(
       initInboxNotifications();
       initPushNotifications();
       initSeenPosts();
+      useSeenPostsFilterStore.getState().activateFilter();
       startTimeTicking();
 
       return () => {

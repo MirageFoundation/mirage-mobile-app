@@ -50,7 +50,6 @@ type HomePostCardState = {
  followedTopics: Set<string>;
  followLoadingUsers: Set<string>;
  revealedPosts: Set<string>;
- visiblePostIds: Set<string>;
  activeVideoPostIds: Record<string, string | null>;
  visibleVideoPostIds: Record<string, Set<string>>;
  voteOverrides: Record<string, VoteOverride>;
@@ -68,7 +67,6 @@ type HomePostCardState = {
  setFollowedTopics: (topics: Set<string>) => void;
  setFollowLoadingUsers: (users: Set<string>) => void;
  setRevealedPosts: (posts: Set<string>) => void;
- setVisiblePostIds: (posts: Set<string>) => void;
  setActiveVideoPostId: (feedScreen: string, postId: string | null) => void;
  setVisibleVideoPostIds: (feedScreen: string, postIds: Set<string>) => void;
  setVideoViewability: (feedScreen: string, visibleIds: Set<string>, activeId: string | null) => void;
@@ -91,13 +89,12 @@ type HomePostCardState = {
 
 const emptySet = new Set<string>();
 
-export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
+export const useHomePostCardStore = create<HomePostCardState>((set) => ({
  currentUserId: undefined,
  followedUsers: emptySet,
  followedTopics: emptySet,
  followLoadingUsers: emptySet,
  revealedPosts: emptySet,
- visiblePostIds: emptySet,
  activeVideoPostIds: {},
  visibleVideoPostIds: {},
  voteOverrides: {},
@@ -115,20 +112,6 @@ export const useHomePostCardStore = create<HomePostCardState>((set, get) => ({
   setFollowedTopics: (topics) => set({ followedTopics: topics }),
   setFollowLoadingUsers: (users) => set({ followLoadingUsers: users }),
   setRevealedPosts: (posts) => set({ revealedPosts: posts }),
-  setVisiblePostIds: (posts) =>
-    set((state) => {
-      if (state.visiblePostIds.size === posts.size) {
-        let allMatch = true;
-        for (const value of state.visiblePostIds) {
-          if (!posts.has(value)) {
-            allMatch = false;
-            break;
-          }
-        }
-        if (allMatch) return state;
-      }
-      return { visiblePostIds: posts };
-    }),
  setActiveVideoPostId: (feedScreen, postId) =>
    set((state) => {
      if (state.activeVideoPostIds[feedScreen] === postId) return state;
@@ -241,7 +224,6 @@ setVoteOverride: (postId, override) =>
    followedTopics: emptySet,
    followLoadingUsers: emptySet,
    revealedPosts: emptySet,
-   visiblePostIds: emptySet,
    activeVideoPostIds: {},
    visibleVideoPostIds: {},
    voteOverrides: {},
@@ -302,4 +284,3 @@ export const useHandlers = () =>
 
 export const useIsTopicDisabled = (topic?: string) =>
   useHomePostCardStore((state) => topic ? state.disabledTopicName === topic : false);
-

@@ -12,6 +12,7 @@ import {
 import {
   Dimensions,
   Platform,
+  AppState,
   type LayoutChangeEvent,
   type ListRenderItem,
   type ViewToken,
@@ -28,7 +29,7 @@ import type { Post } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { useAppState } from "@/src/hooks";
 import { HomePostCardItem } from "./home-post-card-item";
-import { useFeedScrollStore } from "@/src/stores";
+import { useFeedScrollStore, useTimeTickStore } from "@/src/stores";
 import { useHomePostCardStore } from "./home-post-card-store";
 import {
   recordViewableItems,
@@ -36,6 +37,7 @@ import {
   resumeDwellTimers,
   type SeenPostVisibility,
 } from "@/src/services/seen-posts-tracker";
+import { markSeen } from "@/src/services/seen-posts";
 
 const AnimatedFlashList = Animated.createAnimatedComponent(
   FlashList as ComponentType<any>,
@@ -92,6 +94,46 @@ const HomePostListInner = function HomePostListInner(
     viewAreaCoveragePercentThreshold: 20,
     minimumViewTime: 150,
   }).current;
+
+  const dwellMarkedRef = useRef<Set<string>>(new Set());
+  const dwellTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  const clearDwellTimer = useCallback((id: string) => {
+    const t = dwellTimersRef.current.get(id);
+    if (t) {
+      clearTimeout(t);
+      dwellTimersRef.current.delete(id);
+    }
+  }, []);
+
+  const clearAllDwellTimers = useCallback(() => {
+    for (const t of dwellTimersRef.current.values()) clearTimeout(t);
+    dwellTimersRef.current.clear();
+  }, []);
+
+  const scheduleDwell = useCallback((items: ViewToken[]) => {
+    if (AppState.currentState !== "active") return;
+    const visibleIds = new Set<string>();
+    for (const token of items) {
+      if (!token.isViewable) continue;
+      const id = token.item?.id;
+      if (!id) continue;
+      visibleIds.add(id);
+      if (dwellMarkedRef.current.has(id)) continue;
+      if (dwellTimersRef.current.has(id)) continue;
+      const timer = setTimeout(() => {
+        dwellTimersRef.current.delete(id);
+        if (dwellMarkedRef.current.has(id)) return;
+        if (AppState.currentState !== "active") return;
+        dwellMarkedRef.current.add(id);
+        markSeen(id, "dwell");
+      }, 3000);
+      dwellTimersRef.current.set(id, timer);
+    }
+    for (const id of Array.from(dwellTimersRef.current.keys())) {
+      if (!visibleIds.has(id)) clearDwellTimer(id);
+    }
+  }, [clearDwellTimer]);
 
   const pendingViewableRef = useRef<ViewToken[] | null>(null);
   const postLayoutMapRef = useRef(new Map<string, { y: number; height: number }>());
@@ -266,10 +308,14 @@ const HomePostListInner = function HomePostListInner(
 
   const itemVisibleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const scheduleDwellRef = useRef(scheduleDwell);
+  scheduleDwellRef.current = scheduleDwell;
+
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       pendingViewableRef.current = viewableItems;
       syncSeenViewability(viewableItems);
+      scheduleDwellRef.current(viewableItems);
 
       const currentActive = useHomePostCardStore.getState().activeVideoPostIds[feedScreenRef.current];
       if (currentActive) {
@@ -313,8 +359,9 @@ const HomePostListInner = function HomePostListInner(
       if (itemVisibleTimerRef.current) {
         clearTimeout(itemVisibleTimerRef.current);
       }
+      clearAllDwellTimers();
     };
-  }, [cancelDeferredFlush, cancelScrollStop, setFeedScrolling]);
+  }, [cancelDeferredFlush, cancelScrollStop, setFeedScrolling, clearAllDwellTimers]);
 
   useEffect(() => {
     if (data.length !== 0) return;
@@ -380,10 +427,12 @@ const HomePostListInner = function HomePostListInner(
       }
       setVideoViewability(feedScreenRef.current, new Set(), null);
       pauseAllDwellTimers(feedContext);
+      clearAllDwellTimers();
     },
     onForeground: () => {
       cancelDeferredFlush();
       resumeDwellTimers(feedContext);
+      useTimeTickStore.getState().bump();
       if (itemVisibleTimerRef.current) {
         clearTimeout(itemVisibleTimerRef.current);
         itemVisibleTimerRef.current = null;
