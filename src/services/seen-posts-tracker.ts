@@ -254,3 +254,19 @@ export function resumeDwellTimers(trackerKey?: string): void {
     }
   }
 }
+
+export function getVisiblePostIds(trackerKeys?: string[]): string[] {
+  const keys = trackerKeys && trackerKeys.length > 0
+    ? trackerKeys.map((key) => normalizeTrackerKey(key))
+    : Array.from(trackerStateMap.keys());
+
+  const visibleIds = new Set<string>();
+  for (const key of keys) {
+    const trackerState = getTrackerState(key);
+    for (const postId of trackerState.visiblePostIds) {
+      visibleIds.add(postId);
+    }
+  }
+
+  return Array.from(visibleIds);
+}
