@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 132
+                          update 133
                         </Text>
                         <Text
                           style={{
@@ -773,17 +773,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          mark post seen not working in following tab
-                          fix,sharing external link to app was not navigating to
-                          create post and sometimes was not even extracting the
-                          data from the link fix and done better fixes for
-                          opening create tab at cold start and at every
-                          reload,added save draft popup to show when crossed on
-                          create post tab, mark post as seen when pressed tap to
-                          view,creating post on android does not scroll to top
-                          on home to show post just created fixed, saved post
-                          not working sometimes for some reason will show
-                          fallback UI and added sentry for catching the issue
+                          improved seen post
                         </Text>
                       </>
                     )}
@@ -824,7 +814,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 131
+                          update 133
                         </Text>
                         <Text
                           style={{
@@ -834,17 +824,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          mark post seen not working in following tab
-                          fix,sharing external link to app was not navigating to
-                          create post and sometimes was not even extracting the
-                          data from the link fix and done better fixes for
-                          opening create tab at cold start and at every
-                          reload,added save draft popup to show when crossed on
-                          create post tab, mark post as seen when pressed tap to
-                          view,creating post on android does not scroll to top
-                          on home to show post just created fixed, saved post
-                          not working sometimes for some reason will show
-                          fallback UI and added sentry for catching the issue
+                          improved seen post
                         </Text>
                       </>
                     )}
