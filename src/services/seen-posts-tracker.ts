@@ -3,21 +3,24 @@ import * as Sentry from "@sentry/react-native";
 import { markSeen } from "./seen-posts";
 
 const DWELL_THRESHOLD_MS = 3_000;
-const GLANCE_THRESHOLD_MS = 150;
+const GLANCE_THRESHOLD_MS = 250;
 const GLANCE_MIN_EXPOSURES = 2;
+
+type SeenEmitReason = "dwell" | "glance";
 
 export type SeenPostVisibility = {
   id: string;
+  title?: string;
   glanceVisible: boolean;
   dwellVisible: boolean;
 };
 
 type PostExposureState = {
-  exposureCount: number;
+  glanceCount: number;
   dwellTimer: ReturnType<typeof setTimeout> | null;
   glanceTimer: ReturnType<typeof setTimeout> | null;
   glanceQualified: boolean;
-  seen: boolean;
+  markedDuringCurrentExposure: boolean;
 };
 
 type SeenTrackerState = {
@@ -29,7 +32,7 @@ type SeenTrackerState = {
 const trackerStateMap = new Map<string, SeenTrackerState>();
 let trackedSeenEmitCount = 0;
 
-function addSeenEmitBreadcrumb(postId: string, reason: "dwell" | "glance", exposureCount: number): void {
+function addSeenEmitBreadcrumb(postId: string, reason: SeenEmitReason, glanceCount: number): void {
   trackedSeenEmitCount += 1;
   if (trackedSeenEmitCount > 5 && trackedSeenEmitCount % 25 !== 0) return;
 
@@ -39,7 +42,7 @@ function addSeenEmitBreadcrumb(postId: string, reason: "dwell" | "glance", expos
     level: "info",
     data: {
       reason,
-      exposureCount,
+      glanceCount,
       trackedSeenEmitCount,
       postIdPrefix: postId.slice(0, 12),
     },
@@ -73,11 +76,11 @@ function getOrCreate(trackerKey: string, postId: string): PostExposureState {
   let state = trackerState.exposureMap.get(postId);
   if (!state) {
     state = {
-      exposureCount: 0,
+      glanceCount: 0,
       dwellTimer: null,
       glanceTimer: null,
       glanceQualified: false,
-      seen: false,
+      markedDuringCurrentExposure: false,
     };
     trackerState.exposureMap.set(postId, state);
   }
@@ -96,16 +99,23 @@ function clearDwellTimer(state: PostExposureState): void {
   state.dwellTimer = null;
 }
 
-function markPostSeen(trackerKey: string, postId: string, reason: "dwell" | "glance"): void {
-  const trackerState = getTrackerState(trackerKey);
-  const state = trackerState.exposureMap.get(postId);
-  if (!state || state.seen) return;
-
-  state.seen = true;
+function clearAllTimers(state: PostExposureState): void {
   clearGlanceTimer(state);
   clearDwellTimer(state);
-  markSeen(postId, reason);
-  addSeenEmitBreadcrumb(postId, reason, state.exposureCount);
+}
+
+function markPostSeen(trackerKey: string, postId: string, reason: SeenEmitReason): void {
+  const trackerState = getTrackerState(trackerKey);
+  const state = getOrCreate(trackerKey, postId);
+  const glanceCount = state.glanceCount;
+
+  state.markedDuringCurrentExposure = true;
+  state.glanceQualified = false;
+  state.glanceCount = 0;
+  clearAllTimers(state);
+
+  markSeen(postId, reason, trackerState.lastVisibilityMap.get(postId)?.title);
+  addSeenEmitBreadcrumb(postId, reason, glanceCount);
 }
 
 function startGlanceTimer(trackerKey: string, postId: string): void {
@@ -113,10 +123,11 @@ function startGlanceTimer(trackerKey: string, postId: string): void {
 
   const trackerState = getTrackerState(trackerKey);
   const state = getOrCreate(trackerKey, postId);
-  if (state.seen || state.glanceQualified || state.glanceTimer) return;
+  if (state.markedDuringCurrentExposure || state.glanceQualified || state.glanceTimer) return;
 
   state.glanceTimer = setTimeout(() => {
     state.glanceTimer = null;
+    if (AppState.currentState !== "active") return;
     const latestVisibility = trackerState.lastVisibilityMap.get(postId);
     if (!latestVisibility?.glanceVisible) return;
     state.glanceQualified = true;
@@ -128,10 +139,11 @@ function startDwellTimer(trackerKey: string, postId: string): void {
 
   const trackerState = getTrackerState(trackerKey);
   const state = getOrCreate(trackerKey, postId);
-  if (state.seen || state.dwellTimer) return;
+  if (state.markedDuringCurrentExposure || state.dwellTimer) return;
 
   state.dwellTimer = setTimeout(() => {
     state.dwellTimer = null;
+    if (AppState.currentState !== "active") return;
     const latestVisibility = trackerState.lastVisibilityMap.get(postId);
     if (!latestVisibility?.dwellVisible) return;
     markPostSeen(trackerKey, postId, "dwell");
@@ -141,35 +153,17 @@ function startDwellTimer(trackerKey: string, postId: string): void {
 function beginExposure(trackerKey: string, postId: string, visibility: SeenPostVisibility): void {
   const trackerState = getTrackerState(trackerKey);
   const state = getOrCreate(trackerKey, postId);
-  if (state.seen) return;
 
-  trackerState.lastVisibilityMap.set(postId, visibility);
-  startGlanceTimer(trackerKey, postId);
-
-  if (visibility.dwellVisible) {
-    startDwellTimer(trackerKey, postId);
-  }
-}
-
-function updateExposure(trackerKey: string, postId: string, visibility: SeenPostVisibility): void {
-  const trackerState = getTrackerState(trackerKey);
-  const state = getOrCreate(trackerKey, postId);
-  if (state.seen) {
-    trackerState.lastVisibilityMap.set(postId, visibility);
-    return;
-  }
-
+  state.markedDuringCurrentExposure = false;
+  state.glanceQualified = false;
+  clearAllTimers(state);
   trackerState.lastVisibilityMap.set(postId, visibility);
 
-  if (!visibility.glanceVisible) {
-    endExposure(trackerKey, postId);
-    return;
+  if (visibility.glanceVisible) {
+    startGlanceTimer(trackerKey, postId);
   }
-
   if (visibility.dwellVisible) {
     startDwellTimer(trackerKey, postId);
-  } else {
-    clearDwellTimer(state);
   }
 }
 
@@ -180,78 +174,110 @@ function endExposure(trackerKey: string, postId: string): void {
 
   if (!state) return;
 
-  clearGlanceTimer(state);
-  clearDwellTimer(state);
+  clearAllTimers(state);
 
-  if (!state.seen && state.glanceQualified) {
-    state.exposureCount += 1;
-    if (state.exposureCount >= GLANCE_MIN_EXPOSURES) {
+  if (!state.markedDuringCurrentExposure && state.glanceQualified) {
+    const nextGlanceCount = state.glanceCount + 1;
+    state.glanceCount = nextGlanceCount;
+    if (nextGlanceCount >= GLANCE_MIN_EXPOSURES) {
       markPostSeen(trackerKey, postId, "glance");
     }
   }
 
   state.glanceQualified = false;
+  state.markedDuringCurrentExposure = false;
+}
+
+function updateExposure(trackerKey: string, postId: string, visibility: SeenPostVisibility): void {
+  const trackerState = getTrackerState(trackerKey);
+  const state = getOrCreate(trackerKey, postId);
+
+  trackerState.lastVisibilityMap.set(postId, visibility);
+
+  if (!visibility.glanceVisible) {
+    endExposure(trackerKey, postId);
+    return;
+  }
+
+  if (!state.markedDuringCurrentExposure) {
+    startGlanceTimer(trackerKey, postId);
+    if (visibility.dwellVisible) {
+      startDwellTimer(trackerKey, postId);
+    } else {
+      clearDwellTimer(state);
+    }
+  }
 }
 
 export function recordViewableItems(items: SeenPostVisibility[], trackerKey?: string): void {
   const normalizedTrackerKey = normalizeTrackerKey(trackerKey);
   const trackerState = getTrackerState(normalizedTrackerKey);
+  const previousVisiblePostIds = new Set(trackerState.visiblePostIds);
   const nextVisiblePostIds = new Set<string>();
 
   for (const item of items) {
     const postId = normalizePostId(item.id);
-    if (!postId || !item.glanceVisible) continue;
+    if (!postId) continue;
 
     const visibility = {
       id: postId,
+      title: item.title,
       glanceVisible: item.glanceVisible,
       dwellVisible: item.dwellVisible,
     };
 
     nextVisiblePostIds.add(postId);
-
-    if (!trackerState.visiblePostIds.has(postId)) {
+    if (previousVisiblePostIds.has(postId)) {
+      updateExposure(normalizedTrackerKey, postId, visibility);
+    } else {
       beginExposure(normalizedTrackerKey, postId, visibility);
-      continue;
     }
-
-    updateExposure(normalizedTrackerKey, postId, visibility);
   }
 
-  for (const postId of trackerState.visiblePostIds) {
+  for (const postId of previousVisiblePostIds) {
     if (!nextVisiblePostIds.has(postId)) {
       endExposure(normalizedTrackerKey, postId);
     }
   }
 
-  trackerState.visiblePostIds.clear();
-  for (const postId of nextVisiblePostIds) {
-    trackerState.visiblePostIds.add(postId);
+  trackerState.visiblePostIds = nextVisiblePostIds;
+  for (const trackedPostId of Array.from(trackerState.lastVisibilityMap.keys())) {
+    if (!nextVisiblePostIds.has(trackedPostId)) {
+      trackerState.lastVisibilityMap.delete(trackedPostId);
+    }
   }
 }
 
 export function pauseAllDwellTimers(trackerKey?: string): void {
-  const trackerState = getTrackerState(trackerKey);
-  for (const [, state] of trackerState.exposureMap) {
-    clearGlanceTimer(state);
-    clearDwellTimer(state);
-    state.glanceQualified = false;
+  const keys = trackerKey
+    ? [normalizeTrackerKey(trackerKey)]
+    : Array.from(trackerStateMap.keys());
+
+  for (const key of keys) {
+    const trackerState = getTrackerState(key);
+    for (const state of trackerState.exposureMap.values()) {
+      clearAllTimers(state);
+      state.glanceQualified = false;
+      state.markedDuringCurrentExposure = false;
+    }
+    trackerState.lastVisibilityMap.clear();
   }
 }
 
-export function resumeDwellTimers(trackerKey?: string): void {
-  if (AppState.currentState !== "active") return;
+export function resumeDwellTimers(_trackerKey?: string): void {}
 
-  const normalizedTrackerKey = normalizeTrackerKey(trackerKey);
-  const trackerState = getTrackerState(normalizedTrackerKey);
-  for (const postId of trackerState.visiblePostIds) {
-    const visibility = trackerState.lastVisibilityMap.get(postId);
-    if (!visibility?.glanceVisible) continue;
+export function resetSeenPostTracking(trackerKey?: string): void {
+  const keys = trackerKey
+    ? [normalizeTrackerKey(trackerKey)]
+    : Array.from(trackerStateMap.keys());
 
-    startGlanceTimer(normalizedTrackerKey, postId);
-    if (visibility.dwellVisible) {
-      startDwellTimer(normalizedTrackerKey, postId);
+  for (const key of keys) {
+    const trackerState = trackerStateMap.get(key);
+    if (!trackerState) continue;
+    for (const state of trackerState.exposureMap.values()) {
+      clearAllTimers(state);
     }
+    trackerStateMap.delete(key);
   }
 }
 

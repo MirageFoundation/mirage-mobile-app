@@ -3,20 +3,13 @@ import * as Sentry from "@sentry/react-native";
 import { api } from "@/src/api/client";
 import { walletService } from "@/src/services/wallet-service";
 import { buildSimpleSignedPayload } from "@/src/api/write/signing/simple-sign";
-import { useSeenPostsFilterStore } from "@/src/stores/seen-posts-filter-store";
 
 export type SeenReason = "dwell" | "glance" | "open" | "vote" | "reply";
-
-const FILTERED_REASONS: ReadonlySet<SeenReason> = new Set<SeenReason>([
-  "dwell",
-  "open",
-  "vote",
-  "reply",
-]);
 
 type SeenEntry = {
   id: string;
   reason: SeenReason;
+  title?: string;
 };
 
 type SeenPostsResponse = {
@@ -44,15 +37,21 @@ function normalizePostId(id: string): string {
   return id.trim().toLowerCase();
 }
 
-export function markSeen(postId: string, reason: SeenReason): void {
+export function markSeen(postId: string, reason: SeenReason, title?: string): void {
   const normalized = normalizePostId(postId);
   if (!normalized) return;
 
-  if (FILTERED_REASONS.has(reason)) {
-    useSeenPostsFilterStore.getState().addSeen(normalized);
+  const normalizedTitle = title?.trim();
+
+  if (__DEV__) {
+    console.log("[SeenPosts] marked", {
+      id: normalized,
+      reason,
+      title: normalizedTitle || "(untitled)",
+    });
   }
 
-  buffer.push({ id: normalized, reason });
+  buffer.push({ id: normalized, reason, title: normalizedTitle });
 
   if (!flushTimer) {
     startFlushTimer();

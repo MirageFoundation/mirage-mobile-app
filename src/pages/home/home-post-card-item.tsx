@@ -159,7 +159,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   const handleRevealContent = useCallback(() => {
     const p = postRef.current;
     logPress({ name: "post_reveal", postId: p.id });
-    markSeen(p.id, "open");
+    markSeen(p.id, "open", p.title);
     getHandlers().onRevealContent?.(p.id);
     if (postHasPlayableVideo(p)) {
       useHomePostCardStore.getState().setActiveVideoPostId(feedContext, p.id);

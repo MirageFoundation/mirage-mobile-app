@@ -193,9 +193,9 @@ onPostPress,
 
   const handleRevealContent = useCallback(() => {
     logPress({ name: "post_reveal", postId: post.id });
-    markSeen(post.id, "open");
+    markSeen(post.id, "open", post.title);
     onRevealContent?.(post.id);
-  }, [onRevealContent, post.id]);
+  }, [onRevealContent, post.id, post.title]);
 
   const handleBlockUser = useCallback(() => {
     logPress({ name: "post_block_user", postId: post.id });
