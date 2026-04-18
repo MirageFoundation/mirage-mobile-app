@@ -50,7 +50,6 @@ import {
   useContentModerationStore,
   useFeedScrollStore,
   usePreferencesStore,
-  useSeenPostsFilterStore,
   useTimeTickStore,
 } from "@/src/stores";
 import { useQueryClient } from "@tanstack/react-query";
@@ -171,10 +170,6 @@ export const HomeTabbedFeed = forwardRef<
 
   const postEditOverrides = usePostEditStore((s) => s.overrides);
   const transformedPageCacheRef = useRef(new WeakMap<object, Post[]>());
-  const seenFilterExemptIdsRef = useRef({
-    magic: new Set<string>(),
-    newest: new Set<string>(),
-  });
 
   const feedRefreshParamsList = useMemo(() => [
     {
@@ -282,51 +277,37 @@ export const HomeTabbedFeed = forwardRef<
     ],
   );
 
-  const applySeenFilter = useCallback((posts: Post[], key: "magic" | "newest") => {
-    const seenNow = useSeenPostsFilterStore.getState().activeFilterIds;
-    const exemptIds = seenFilterExemptIdsRef.current[key];
-    const filtered = posts.filter((post) => !seenNow.has(post.id) || exemptIds.has(post.id));
-    for (const post of filtered) {
-      exemptIds.add(post.id);
-    }
-    return filtered;
-  }, []);
-
   const magicPosts = useMemo(
     () => {
       const posts = transformPosts(magicQuery.data);
-      const feedPosts = baseFeed !== "following"
+      return baseFeed !== "following"
         ? posts
         : posts.filter(
             (post) =>
               followedUsers.has(post.author.id) ||
               (post.topic && followedTopics.has(post.topic)),
           );
-      return applySeenFilter(feedPosts, "magic");
     },
-    [magicQuery.data, transformPosts, baseFeed, followedUsers, followedTopics, applySeenFilter],
+    [magicQuery.data, transformPosts, baseFeed, followedUsers, followedTopics],
   );
 
   const latestPosts = useMemo(
     () => {
       const posts = transformPosts(latestQuery.data);
-      const feedPosts = baseFeed !== "following"
+      return baseFeed !== "following"
         ? posts
         : posts.filter(
             (post) =>
               followedUsers.has(post.author.id) ||
               (post.topic && followedTopics.has(post.topic)),
           );
-      return applySeenFilter(feedPosts, "newest");
     },
-    [latestQuery.data, transformPosts, baseFeed, followedUsers, followedTopics, applySeenFilter],
+    [latestQuery.data, transformPosts, baseFeed, followedUsers, followedTopics],
   );
 
   const handleRefresh = useCallback(async (options?: { fetchAllNew?: boolean; silent?: boolean }) => {
     if (isRefreshingRef.current) return;
     isRefreshingRef.current = true;
-    useSeenPostsFilterStore.getState().activateFilter();
-    seenFilterExemptIdsRef.current = { magic: new Set<string>(), newest: new Set<string>() };
     transformedPageCacheRef.current = new WeakMap();
     if (!options?.silent) {
       if (Platform.OS === "android") triggerHaptic("light");
@@ -716,12 +697,13 @@ export const HomeTabbedFeed = forwardRef<
 
   const isFetchingNext = activeTabIndex === 0 ? magicQuery.isFetchingNextPage : latestQuery.isFetchingNextPage;
 
+  const activeTabPostsLen = activeTabIndex === 0 ? magicPosts.length : latestPosts.length;
   const ListFooter = useMemo(() => {
-    if (isFetchingNext) {
+    if (isFetchingNext && activeTabPostsLen > 0) {
       return <PostCardSkeleton showMedia={false} showBody={true} />;
     }
     return <Box p="sm" />;
-  }, [isFetchingNext]);
+  }, [isFetchingNext, activeTabPostsLen]);
 
   const listContentStyle = useMemo(
     () => ({
@@ -752,7 +734,6 @@ export const HomeTabbedFeed = forwardRef<
   const posts = activeTabIndex === 0 ? magicPosts : latestPosts;
   const query = activeTabIndex === 0 ? magicQuery : latestQuery;
   const seededFeedContextRef = useRef<string | null>(null);
-  const autoFillAttemptsRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     if (posts.length === 0) {
@@ -776,20 +757,6 @@ export const HomeTabbedFeed = forwardRef<
     );
   }, [feedContext, posts]);
 
-  useEffect(() => {
-    const MIN_VISIBLE_POSTS = 5;
-    if (posts.length >= MIN_VISIBLE_POSTS) {
-      autoFillAttemptsRef.current[feedContext] = 0;
-      return;
-    }
-    if (query.isPending || query.isFetchingNextPage || !query.hasNextPage) return;
-    const attempts = autoFillAttemptsRef.current[feedContext] ?? 0;
-    if (attempts >= 4) return;
-    autoFillAttemptsRef.current[feedContext] = attempts + 1;
-    query.fetchNextPage().catch(() => {
-      autoFillAttemptsRef.current[feedContext] = attempts;
-    });
-  }, [feedContext, posts.length, query]);
   const tabListRef = activeTabIndex === 0 ? magicListRef : latestListRef;
   const combinedRefCallback = useCallback((instance: FlashListRef<Post> | null) => {
     tabListRef.current = instance;
@@ -798,14 +765,15 @@ export const HomeTabbedFeed = forwardRef<
   const onItemVisible =
     activeTabIndex === 0 ? handleMagicItemVisible : handleLatestItemVisible;
 
+  const isStillFetchingInitial = query.isPending;
   const ListEmpty = useMemo(
     () =>
       createListEmptyComponent(
-        query.isPending,
+        isStillFetchingInitial,
         query.isError,
         query.error?.message,
       ),
-    [createListEmptyComponent, query.isPending, query.isError, query.error?.message],
+    [createListEmptyComponent, isStillFetchingInitial, query.isError, query.error?.message],
   );
 
   return (

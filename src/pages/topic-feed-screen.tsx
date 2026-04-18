@@ -70,7 +70,6 @@ import {
   useFeedScrollStore,
   usePreferencesStore,
   useSavedPostsStore,
-  useSeenPostsFilterStore,
   useTimeTickStore,
 } from "@/src/stores";
 import { useNewPostsChecker } from "@/src/hooks/use-new-posts-checker";
@@ -218,7 +217,6 @@ export function TopicFeedScreen() {
   });
 
   const postEditOverrides = usePostEditStore((s) => s.overrides);
-  const seenFilterExemptIdsRef = useRef(new Set<string>());
 
   const posts = useMemo(() => {
     if (!data?.pages) return [];
@@ -242,23 +240,14 @@ export function TopicFeedScreen() {
       return { ...post, title: ov.title, content: ov.content, topic: ov.topic ?? post.topic, media: ov.media ?? post.media };
     });
 
-    const transformedPosts = transformApiPosts(patchedPosts, {
+    return transformApiPosts(patchedPosts, {
       currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined,
-    });
-
-    const seenNow = useSeenPostsFilterStore.getState().activeFilterIds;
-    const exemptIds = seenFilterExemptIdsRef.current;
-    const filtered = transformedPosts.filter(
+    }).filter(
       (post) =>
         !hiddenPostIds.has(post.id) &&
         !blockedUserIds.has(post.author.id) &&
-        !(post.topic && blockedTopicNames.has(post.topic.toLowerCase())) &&
-        (!seenNow.has(post.id) || exemptIds.has(post.id)),
+        !(post.topic && blockedTopicNames.has(post.topic.toLowerCase())),
     );
-    for (const post of filtered) {
-      exemptIds.add(post.id);
-    }
-    return filtered;
   }, [data, hiddenPostIds, blockedUserIds, blockedTopicNames, hideDownvotedPosts, currentUser, postEditOverrides]);
 
   const latestPostTimestamp = useMemo(() => {
@@ -518,12 +507,9 @@ export function TopicFeedScreen() {
   queryRef.current = { hasNextPage, isFetchingNextPage, fetchNextPage };
   const postsLengthRef = useRef(posts.length);
   postsLengthRef.current = posts.length;
-  const autoFillAttemptsRef = useRef(0);
 
   const handleRefresh = useCallback(async () => {
     if (Platform.OS === "android") triggerHaptic("light");
-    useSeenPostsFilterStore.getState().activateFilter();
-    seenFilterExemptIdsRef.current = new Set<string>();
     setIsManualRefreshing(true);
     try {
       await refetch();
@@ -572,20 +558,6 @@ export function TopicFeedScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    const MIN_VISIBLE_POSTS = 5;
-    if (posts.length >= MIN_VISIBLE_POSTS) {
-      autoFillAttemptsRef.current = 0;
-      return;
-    }
-    if (isLoading || isFetchingNextPage || !hasNextPage) return;
-    if (autoFillAttemptsRef.current >= 4) return;
-    autoFillAttemptsRef.current += 1;
-    fetchNextPage().catch(() => {
-      autoFillAttemptsRef.current = Math.max(0, autoFillAttemptsRef.current - 1);
-    });
-  }, [posts.length, isLoading, isFetchingNextPage, hasNextPage, fetchNextPage]);
-
   const ListEmptyComponent = useCallback(() => {
     if (isLoading) {
       return <PostCardSkeletonList count={5} />;
@@ -627,9 +599,9 @@ export function TopicFeedScreen() {
   const isIOS = Platform.OS === "ios";
 
   const ListFooterComponent = useCallback(() => {
-    if (!isFetchingNextPage) return null;
+    if (!isFetchingNextPage || posts.length === 0) return null;
     return <PostCardSkeletonList count={1} />;
-  }, [isFetchingNextPage]);
+  }, [isFetchingNextPage, posts.length]);
 
   const HEADER_HEIGHT = 52;
 
