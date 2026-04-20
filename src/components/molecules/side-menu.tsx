@@ -773,7 +773,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          video upload improvement
+                          video upload improvement, share post link updated to
+                          have extra line after title in shared link, the title
+                          added in shared link in ios, comment text added in
+                          shared comment link in both android and ios
                         </Text>
                       </>
                     )}
@@ -824,7 +827,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          video upload improvement
+                          video upload improvement, share post link updated to
+                          have extra line after title in shared link, the title
+                          added in shared link in ios, comment text added in
+                          shared comment link in both android and ios
                         </Text>
                       </>
                     )}
