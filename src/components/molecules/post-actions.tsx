@@ -11,7 +11,6 @@ import { memo, useRef } from "react";
 import {
   Animated,
   Pressable,
-  Platform,
   Share,
   View,
   type StyleProp,
@@ -215,10 +214,11 @@ export const PostActions = memo(function PostActions({
     // Default native share behavior
     if (shareUrl) {
       try {
+        const shareMessage = shareTitle
+          ? `${shareTitle}\n\n${shareUrl}`
+          : shareUrl;
         await Share.share({
-          ...(Platform.OS === "ios"
-            ? { url: shareUrl }
-            : { message: shareUrl }),
+          message: shareMessage,
           title: shareTitle ?? "",
         });
       } catch {
