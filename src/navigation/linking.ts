@@ -249,6 +249,13 @@ export async function redirectSystemPath({
     return "/(tabs)";
   }
 
+  // /p/<id> can be either a post or a comment. Fire the root-post lookup so
+  // that if the id is actually a comment we replace with the real post and
+  // highlight the target comment (same behavior as in-app handleMirageLink).
+  if (match.type === "post" && match.resourceId) {
+    resolveRootPostForComment(match.resourceId);
+  }
+
   return target;
 }
 
