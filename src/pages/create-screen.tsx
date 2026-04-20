@@ -41,6 +41,7 @@ import {
   uploadImageAndGetUrl,
   uploadVideoAndGetUrl,
 } from "@/src/api/read/hooks/use-upload-media";
+import { consumePendingVideoResult } from "@/src/pages/create/video-editor-screen";
 import { usePost, useEdit, type CreatePostMutationInput } from "@/src/api/write";
 import type { ContentTag, EditPostInput } from "@/src/api/write/endpoints/posts";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
@@ -309,14 +310,42 @@ export function CreateScreen() {
   const screenWidth = Dimensions.get("window").width;
   const selectedCommunity = draft.community;
 
+  const videoUploadsReady = useMemo(() => {
+    if (draft.attachmentType !== "video") return true;
+    if (draft.mediaUris.length === 0) return true;
+    return draft.mediaUris.every((uri) => {
+      const entry = VIDEO_UPLOADS.get(uri);
+      return !!entry && !!entry.url && !entry.uploading && !entry.error;
+    });
+  }, [draft.attachmentType, draft.mediaUris, videoUploadState]);
+
   const canPost = useMemo(() => {
     const hasTitleContent = draft.title.trim().length > 0;
     const hasCommunity = draft.community !== null;
     const videoStillUploading =
       draft.attachmentType === "video" && isUploadingVideo;
+    const videoUploadBroken =
+      draft.attachmentType === "video" &&
+      draft.mediaUris.length > 0 &&
+      !videoUploadsReady;
     const editBlocked = isEditMode && editability && !editability.allowed;
-    return hasTitleContent && hasCommunity && !videoStillUploading && !editBlocked;
-  }, [draft.title, draft.community, draft.attachmentType, isUploadingVideo, isEditMode, editability]);
+    return (
+      hasTitleContent &&
+      hasCommunity &&
+      !videoStillUploading &&
+      !videoUploadBroken &&
+      !editBlocked
+    );
+  }, [
+    draft.title,
+    draft.community,
+    draft.attachmentType,
+    draft.mediaUris.length,
+    isUploadingVideo,
+    videoUploadsReady,
+    isEditMode,
+    editability,
+  ]);
 
   const editExpired = isEditMode && editability !== null && !editability.allowed;
 
@@ -860,33 +889,43 @@ export function CreateScreen() {
     };
   }, [hasShareIntent, shareIntent, isLoggedIn]);
 
-  // Handle video returned from editor
-  useEffect(() => {
-    if (!params.videoUri) return;
-    if (_handledVideoParam === params.videoUri) return;
+  // Handle video returned from editor (via consumePendingVideoResult on focus).
+  // This avoids `router.replace("/(tabs)/create", ...)` which can land on the
+  // wrong tab. The video editor now uses `router.back()` + a shared pending result.
+  useFocusEffect(
+    useCallback(() => {
+      const result = consumePendingVideoResult();
+      if (!result) return;
+      if (_handledVideoParam === result.videoUri) return;
+      _handledVideoParam = result.videoUri;
 
-    _handledVideoParam = params.videoUri;
-    const oldUri = params.replacingUri || null;
-    const origUri = params.originalVideoUri ?? params.videoUri;
-    const w = params.videoWidth ? parseInt(params.videoWidth) : 1920;
-    const h = params.videoHeight ? parseInt(params.videoHeight) : 1080;
-    const ts = params.trimStart ? parseInt(params.trimStart) : 0;
-    const te = params.trimEnd ? parseInt(params.trimEnd) : 0;
-    VIDEO_META.set(params.videoUri, { originalUri: origUri, width: w, height: h, trimStart: ts, trimEnd: te });
+      const oldUri = result.replacingUri || null;
+      const origUri = result.originalVideoUri ?? result.videoUri;
+      VIDEO_META.set(result.videoUri, {
+        originalUri: origUri,
+        width: result.videoWidth,
+        height: result.videoHeight,
+        trimStart: result.trimStart,
+        trimEnd: result.trimEnd,
+      });
 
-    if (oldUri && oldUri !== params.videoUri) {
-      const { replaceMediaUri } = useDraftStore.getState();
-      replaceMediaUri(oldUri, params.videoUri);
-      VIDEO_UPLOADS.delete(oldUri);
-      setVideoUploadState((prev) => { const next = { ...prev }; delete next[oldUri]; return next; });
-      VIDEO_META.delete(oldUri);
-    } else {
-      setAttachment("video", params.videoUri);
-    }
-    setIsVideoMuted(params.isMuted === "1");
-    setIsPreparingVideo(false);
-    startVideoUpload(params.videoUri);
-  }, [params.videoUri, params.originalVideoUri, params.replacingUri, params.videoWidth, params.videoHeight, params.trimStart, params.trimEnd, params.isMuted]);
+      if (oldUri && oldUri !== result.videoUri) {
+        const { replaceMediaUri } = useDraftStore.getState();
+        replaceMediaUri(oldUri, result.videoUri);
+        VIDEO_UPLOADS.delete(oldUri);
+        setVideoUploadState((prev) => {
+          const next = { ...prev };
+          delete next[oldUri];
+          return next;
+        });
+        VIDEO_META.delete(oldUri);
+      } else {
+        setAttachment("video", result.videoUri);
+      }
+      setIsPreparingVideo(false);
+      startVideoUpload(result.videoUri);
+    }, [setAttachment, startVideoUpload])
+  );
 
   const hasDraftContent = useMemo(() => {
     return (
@@ -987,11 +1026,36 @@ export function CreateScreen() {
       }
 
       if (draft.attachmentType === "video") {
-        for (const [uri, entry] of VIDEO_UPLOADS) {
-          if (entry.url) {
-            mediaUrls.push(entry.url);
+        const missing: string[] = [];
+        const videoUrls: string[] = [];
+        for (const uri of draft.mediaUris) {
+          const entry = VIDEO_UPLOADS.get(uri);
+          if (!entry || !entry.url || entry.uploading || entry.error) {
+            missing.push(uri);
+          } else {
+            videoUrls.push(entry.url);
           }
         }
+        if (missing.length > 0) {
+          Sentry.addBreadcrumb({
+            category: "video-upload",
+            message: "Submit blocked: video upload not finalized",
+            level: "error",
+            data: {
+              missingCount: missing.length,
+              totalCount: draft.mediaUris.length,
+            },
+          });
+          toast.error(
+            "Video upload not finished",
+            "One or more videos failed to upload. Please retry or remove them before posting.",
+          );
+          triggerHaptic("error");
+          setIsSubmitting(false);
+          txProgress.reset();
+          return;
+        }
+        mediaUrls.push(...videoUrls);
       }
 
       let content = draft.body;
@@ -1367,6 +1431,7 @@ export function CreateScreen() {
               uri: asset.uri,
               width: asset.width?.toString() ?? "1920",
               height: asset.height?.toString() ?? "1080",
+              returnTo: "/(tabs)/create",
             },
           });
         }, 100);
@@ -1440,6 +1505,7 @@ export function CreateScreen() {
         initialTrimStart: (meta?.trimStart ?? 0).toString(),
         initialTrimEnd: (meta?.trimEnd ?? 0).toString(),
         replacingUri: uri,
+        returnTo: "/(tabs)/create",
       },
     });
   }, []);
