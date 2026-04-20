@@ -152,15 +152,49 @@ export const CommentOptionsSheet = forwardRef<
         const commentId = comment?.id || "";
         const root = rootPostId || "";
         const url = `${getShareBaseUrl(shareServer)}/p/${commentId}`;
-        await Share.share({
-          message: url,
-        });
+        const content = comment?.content?.trim() ?? "";
+        const username = comment?.author?.username ?? "";
+        let preview = "";
+        if (content) {
+          // Cap by explicit newlines (first 2 lines)
+          const lines = content.split(/\r?\n/);
+          let truncatedByLines = false;
+          let text = lines.slice(0, 2).join("\n");
+          if (lines.length > 2) truncatedByLines = true;
+          // Also cap by character length (approx. 2 lines of text)
+          const MAX_CHARS = 100;
+          let truncatedByChars = false;
+          if (text.length > MAX_CHARS) {
+            text = text.slice(0, MAX_CHARS).trimEnd();
+            truncatedByChars = true;
+          }
+          preview =
+            truncatedByLines || truncatedByChars ? `${text}…` : text;
+        }
+        let header = "";
+        if (username && preview) {
+          header = `@${username} commented ${preview}`;
+        } else if (username) {
+          header = `@${username} commented`;
+        } else if (preview) {
+          header = preview;
+        }
+        const message = header ? `${header}\n\n${url}` : url;
+        await Share.share({ message });
       } catch {
         // User cancelled
       }
       dismiss();
       onShare?.();
-    }, [comment?.id, rootPostId, shareServer, dismiss, onShare]);
+    }, [
+      comment?.id,
+      comment?.content,
+      comment?.author?.username,
+      rootPostId,
+      shareServer,
+      dismiss,
+      onShare,
+    ]);
 
     const handleCopyText = useCallback(async () => {
       triggerHaptic("medium");
