@@ -355,9 +355,12 @@ export const PostOptionsSheet = forwardRef<
           }
           case "more": {
             try {
+              const url = getShareUrl();
+              const shareMessage = post?.title
+                ? `${post.title}\n\n${url}`
+                : url;
               await Share.share({
-                message: getShareMessage(),
-                url: getShareUrl(),
+                message: shareMessage,
                 title: post?.title,
               });
             } catch {
@@ -462,11 +465,9 @@ export const PostOptionsSheet = forwardRef<
       triggerHaptic("light");
       dismiss();
       try {
-        await Share.share(
-          Platform.OS === "ios"
-            ? { url: getShareUrl(), title: post?.title }
-            : { message: getShareUrl(), title: post?.title },
-        );
+        const url = getShareUrl();
+        const shareMessage = post?.title ? `${post.title}\n\n${url}` : url;
+        await Share.share({ message: shareMessage, title: post?.title });
       } catch {
       }
     }, [dismiss, getShareUrl, post?.title]);
