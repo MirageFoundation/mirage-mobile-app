@@ -190,6 +190,12 @@ async function flushPendingUnregisters(): Promise<boolean> {
   if (pending.length === 0) return true;
 
   console.log("[PushNotifications] Flushing pending unregisters:", pending.length);
+  Sentry.addBreadcrumb({
+    category: "push-notifications",
+    message: "Flushing pending push unregisters",
+    level: "info",
+    data: { count: pending.length },
+  });
   const remaining: PendingUnregister[] = [];
 
   for (const item of pending) {
@@ -217,6 +223,12 @@ async function flushPendingUnregisters(): Promise<boolean> {
 
   writePendingUnregisters(remaining);
   needsNetworkRetry = remaining.length > 0;
+  Sentry.addBreadcrumb({
+    category: "push-notifications",
+    message: "Pending push unregister flush complete",
+    level: remaining.length > 0 ? "warning" : "info",
+    data: { remaining: remaining.length },
+  });
   return remaining.length === 0;
 }
 
@@ -489,6 +501,7 @@ export async function unregisterPush(wallet?: MirageWallet | null): Promise<void
         category: "push-notifications",
         message: "Push unregister deferred for retry",
         level: "warning",
+        data: { hasToken: !!token, address: w?.address, baseUrl: unregisterBaseUrl },
       });
     } else {
       console.error("[PushNotifications] Unregister failed:", error);
