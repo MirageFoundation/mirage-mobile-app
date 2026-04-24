@@ -15,6 +15,7 @@ import { markRepliesAsNotified } from "@/src/services/inbox-notified-ids";
 import { queryClient } from "@/src/providers/query-provider";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { getNodeConfig } from "@/src/api/read/endpoints/parameters";
+import { apiClient } from "@/src/api/client";
 import type { NodeConfigResponse } from "@/src/api/types";
 import type { MirageWallet } from "@/src/wallet";
 import { useAuthStore } from "@/src/stores/auth-store";
@@ -42,6 +43,7 @@ type PendingUnregister = {
   id: string;
   token: string;
   address: string;
+  baseUrl?: string;
   request: UnregisterPushTokenRequest;
   createdAt: number;
   attempts: number;
@@ -163,10 +165,11 @@ function queuePendingUnregister(item: PendingUnregister): void {
 
 async function postUnregisterWithRetry(
   request: UnregisterPushTokenRequest,
+  baseUrl?: string,
 ): Promise<void> {
   for (let attempt = 0; attempt < UNREGISTER_MAX_RETRIES; attempt++) {
     try {
-      await postUnregisterPushToken(request);
+      await postUnregisterPushToken(request, baseUrl);
       return;
     } catch (error) {
       if (!isRetryablePushError(error) || attempt >= UNREGISTER_MAX_RETRIES - 1) {
@@ -191,7 +194,7 @@ async function flushPendingUnregisters(): Promise<boolean> {
 
   for (const item of pending) {
     try {
-      await postUnregisterWithRetry(item.request);
+      await postUnregisterWithRetry(item.request, item.baseUrl);
       console.log("[PushNotifications] Pending push token unregistered:", item.token);
     } catch (error) {
       const nextItem = {
@@ -415,6 +418,7 @@ export async function unregisterPush(wallet?: MirageWallet | null): Promise<void
   let unregisterToken: string | null = null;
   let unregisterWallet: MirageWallet | null = null;
   let unregisterRequest: UnregisterPushTokenRequest | null = null;
+  let unregisterBaseUrl: string | undefined;
   try {
     let token = getStoredToken();
     if (!token) {
@@ -453,9 +457,10 @@ export async function unregisterPush(wallet?: MirageWallet | null): Promise<void
 
     unregisterToken = token;
     unregisterWallet = w;
+    unregisterBaseUrl = apiClient.getCurrentBaseUrl();
     const request = buildUnregisterPushTokenRequest(w, token);
     unregisterRequest = request;
-    await postUnregisterWithRetry(request);
+    await postUnregisterWithRetry(request, unregisterBaseUrl);
     didUnregister = true;
     console.log("[PushNotifications] Push token unregistered:", token);
     Sentry.addBreadcrumb({
@@ -473,6 +478,7 @@ export async function unregisterPush(wallet?: MirageWallet | null): Promise<void
           id: `${w.address}:${token}`,
           token,
           address: w.address,
+          baseUrl: unregisterBaseUrl,
           request,
           createdAt: Date.now(),
           attempts: 0,
