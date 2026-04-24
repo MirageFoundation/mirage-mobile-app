@@ -42,6 +42,7 @@ export interface PowAction<T = unknown> {
   id: string;
   type: PowActionType;
   label: string;
+  showProgress?: boolean;
   execute: () => Promise<T>;
   onSuccess?: (result: T) => void;
   onError?: (error: Error) => void;
@@ -238,10 +239,11 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
 
     const state = get();
     const needsKick = !isProcessingLock && !state.currentAction;
+    const showProgress = action.showProgress !== false;
 
     set({
       queue: [...state.queue, action as PowAction],
-      totalCount: state.totalCount + 1,
+      totalCount: state.totalCount + (showProgress ? 1 : 0),
       isProcessing: true,
     });
 
@@ -267,7 +269,10 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
         currentAction: null,
         currentProgress: 0,
         isProcessing: state.queue.length > 0,
-        totalCount: Math.max(0, state.totalCount - 1),
+        totalCount: Math.max(
+          0,
+          state.totalCount - (state.currentAction.showProgress === false ? 0 : 1)
+        ),
         lastCompletedAction: null,
       });
       return true;
@@ -276,10 +281,14 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     const idx = state.queue.findIndex((a) => a.id === actionId);
     if (idx !== -1) {
       const newQueue = [...state.queue];
+      const action = newQueue[idx];
       newQueue.splice(idx, 1);
       set({
         queue: newQueue,
-        totalCount: Math.max(0, state.totalCount - 1),
+        totalCount: Math.max(
+          0,
+          state.totalCount - (action?.showProgress === false ? 0 : 1)
+        ),
         isProcessing: newQueue.length > 0 || state.currentAction !== null,
       });
       return true;
@@ -355,18 +364,22 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       level: "info",
       data: { actionId: nextAction.id, type: nextAction.type },
     });
-    set((s) => ({
-      completedCount: s.completedCount + 1,
-      lastError: null,
-      lastCompletedAction: { type: nextAction.type, success: true },
-      successOverlay: { type: nextAction.type, success: true },
-    }));
+    if (nextAction.showProgress !== false) {
+      set((s) => ({
+        completedCount: s.completedCount + 1,
+        lastError: null,
+        lastCompletedAction: { type: nextAction.type, success: true },
+        successOverlay: { type: nextAction.type, success: true },
+      }));
 
-     if (successOverlayTimeout) clearTimeout(successOverlayTimeout);
-     successOverlayTimeout = setTimeout(() => {
-       set({ successOverlay: null });
-       successOverlayTimeout = null;
-     }, SUCCESS_OVERLAY_DURATION_MS);
+      if (successOverlayTimeout) clearTimeout(successOverlayTimeout);
+      successOverlayTimeout = setTimeout(() => {
+        set({ successOverlay: null });
+        successOverlayTimeout = null;
+      }, SUCCESS_OVERLAY_DURATION_MS);
+    } else {
+      set({ lastError: null });
+    }
     } catch (error) {
       currentCancelReject = null;
 
@@ -398,23 +411,27 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
         nextAction.onRollback?.();
         nextAction.onError?.(err);
 
-       set((s) => ({
-         completedCount: s.completedCount + 1,
-         lastError: err,
-         lastCompletedAction: { type: nextAction.type, success: false, errorMessage: displayMsg },
-         successOverlay: { type: nextAction.type, success: false, errorMessage: displayMsg },
-       }));
+       if (nextAction.showProgress !== false) {
+         set((s) => ({
+           completedCount: s.completedCount + 1,
+           lastError: err,
+           lastCompletedAction: { type: nextAction.type, success: false, errorMessage: displayMsg },
+           successOverlay: { type: nextAction.type, success: false, errorMessage: displayMsg },
+         }));
 
-       if (successOverlayTimeout) clearTimeout(successOverlayTimeout);
-       successOverlayTimeout = setTimeout(() => {
-         set({ successOverlay: null });
-         successOverlayTimeout = null;
-       }, SUCCESS_OVERLAY_DURATION_MS);
+         if (successOverlayTimeout) clearTimeout(successOverlayTimeout);
+         successOverlayTimeout = setTimeout(() => {
+           set({ successOverlay: null });
+           successOverlayTimeout = null;
+         }, SUCCESS_OVERLAY_DURATION_MS);
+       } else {
+         set({ lastError: err });
+       }
       }
     } finally {
       if (wasCancelled) {
         const nativeCleanup = executePromise
-          ? executePromise.catch(() => {})
+          ? (executePromise as Promise<unknown>).catch(() => {})
           : Promise.resolve();
         const maxWait = new Promise((r) =>
           setTimeout(r, NATIVE_CLEANUP_TIMEOUT_MS)

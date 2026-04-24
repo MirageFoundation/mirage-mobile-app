@@ -69,21 +69,22 @@ export async function buildSignedEnvelope<
     onPoWProgress,
   } = options;
 
-  const params = await getParameters({ address: wallet.address });
+  const cachedUserLevel = useAuthStore.getState().userLevel;
+  let params: Awaited<ReturnType<typeof getParameters>> | null = null;
 
-  console.log(`[Envelope] Using last_block_hash: ${params.last_block_hash.substring(0, 16)}...`);
+  if (!skipPoW && cachedUserLevel === 0) {
+    params = await getParameters({ address: wallet.address });
 
-  const userLevel = params.user_level ?? useAuthStore.getState().userLevel;
-  let difficulty = params.pow_difficulty;
-  const needsPoW = !skipPoW && userLevel === 0;
-
-  if (!needsPoW) {
-    difficulty = 0;
+    console.log(`[Envelope] Using last_block_hash: ${params.last_block_hash.substring(0, 16)}...`);
   }
+
+  const userLevel = params?.user_level ?? cachedUserLevel;
+  const needsPoW = !skipPoW && userLevel === 0;
+  const difficulty = needsPoW ? params?.pow_difficulty ?? 0 : 0;
 
   const envelopeNonce = generateEnvelopeNonce();
   let timestampMs = Math.max(0, Date.now() - 15000);
-  let effectiveBlockHash = needsPoW ? params.last_block_hash : "";
+  let effectiveBlockHash = needsPoW ? params?.last_block_hash ?? "" : "";
   const lastBlockHashBytes = hexToBytes(effectiveBlockHash);
 
   const envelopeParams: EnvelopeParams = {
@@ -98,6 +99,10 @@ export async function buildSignedEnvelope<
 
   let pow = 0;
   if (needsPoW) {
+    if (!params) {
+      throw new Error("PoW parameters missing");
+    }
+
     const estimatedTime = estimatePoWTime(difficulty, params.pow_base_bits, params.pow_factor) * 1000;
 
     console.log(
