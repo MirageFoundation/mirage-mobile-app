@@ -3,7 +3,12 @@ import * as Network from "expo-network";
 import { AppState, type NativeEventSubscription, Platform } from "react-native";
 import * as Sentry from "@sentry/react-native";
 
-import { registerPushToken, unregisterPushToken } from "@/src/api/write/endpoints/push-token";
+import {
+  buildUnregisterPushTokenRequest,
+  postUnregisterPushToken,
+  registerPushToken,
+  type UnregisterPushTokenRequest,
+} from "@/src/api/write/endpoints/push-token";
 import { walletService } from "@/src/services/wallet-service";
 import { storage } from "@/src/stores/mmkv-storage";
 import { markRepliesAsNotified } from "@/src/services/inbox-notified-ids";
@@ -14,11 +19,15 @@ import type { NodeConfigResponse } from "@/src/api/types";
 import type { MirageWallet } from "@/src/wallet";
 import { useAuthStore } from "@/src/stores/auth-store";
 import { getInbox } from "@/src/api/read/endpoints/inbox";
+import { isRetryable } from "@/src/utils/error-messages";
 
 const PUSH_TOKEN_KEY = "push-token";
 const PUSH_ENABLED_KEY = "push-enabled";
+const PENDING_UNREGISTER_KEY = "push-pending-unregisters";
 const TOKEN_FETCH_MAX_RETRIES = 3;
 const TOKEN_FETCH_BASE_DELAY_MS = 1_000;
+const UNREGISTER_MAX_RETRIES = 3;
+const UNREGISTER_BASE_DELAY_MS = 2_000;
 
 let pushReceivedSubscription: Notifications.Subscription | null = null;
 let appStateSubscription: { remove(): void } | null = null;
@@ -28,6 +37,16 @@ let isRegisteringPush = false;
 let lastRegisterPushAt = 0;
 const REGISTER_PUSH_MIN_INTERVAL_MS = 30_000;
 let unhandledRejectionHandler: ((event: any) => void) | null = null;
+
+type PendingUnregister = {
+  id: string;
+  token: string;
+  address: string;
+  request: UnregisterPushTokenRequest;
+  createdAt: number;
+  attempts: number;
+  lastAttemptAt?: number;
+};
 
 function isKeychainAccessError(error: unknown): boolean {
   if (error instanceof Error) {
@@ -68,6 +87,19 @@ function isOfflineRegistrationError(error: unknown): boolean {
   return false;
 }
 
+function isRetryablePushError(error: unknown): boolean {
+  const status = (error as any)?.response?.status;
+  const errorCode = (error as any)?.response?.data?.error_code;
+  return (
+    isOfflineRegistrationError(error) ||
+    isTransientNetworkError(error) ||
+    status === 503 ||
+    status === 521 ||
+    status === 429 ||
+    (typeof errorCode === "string" && isRetryable(errorCode))
+  );
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -94,6 +126,95 @@ function isPushEnabled(): boolean {
 
 function setPushEnabled(enabled: boolean): void {
   storage.set(PUSH_ENABLED_KEY, enabled ? "true" : "false");
+}
+
+function readPendingUnregisters(): PendingUnregister[] {
+  const raw = storage.getString(PENDING_UNREGISTER_KEY);
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.warn("[PushNotifications] Failed to parse pending unregisters, clearing queue");
+    Sentry.captureException(error, {
+      tags: { feature: "push-notifications", operation: "parse-pending-unregisters" },
+    });
+    storage.remove(PENDING_UNREGISTER_KEY);
+    return [];
+  }
+}
+
+function writePendingUnregisters(items: PendingUnregister[]): void {
+  if (items.length === 0) {
+    storage.remove(PENDING_UNREGISTER_KEY);
+    return;
+  }
+
+  storage.set(PENDING_UNREGISTER_KEY, JSON.stringify(items));
+}
+
+function queuePendingUnregister(item: PendingUnregister): void {
+  const existing = readPendingUnregisters().filter((pending) => pending.id !== item.id);
+  writePendingUnregisters([...existing, item]);
+  needsNetworkRetry = true;
+  console.log("[PushNotifications] Queued pending push unregister for address:", item.address);
+}
+
+async function postUnregisterWithRetry(
+  request: UnregisterPushTokenRequest,
+): Promise<void> {
+  for (let attempt = 0; attempt < UNREGISTER_MAX_RETRIES; attempt++) {
+    try {
+      await postUnregisterPushToken(request);
+      return;
+    } catch (error) {
+      if (!isRetryablePushError(error) || attempt >= UNREGISTER_MAX_RETRIES - 1) {
+        throw error;
+      }
+
+      const backoff = UNREGISTER_BASE_DELAY_MS * Math.pow(2, attempt);
+      console.log(
+        `[PushNotifications] Unregister retry in ${backoff}ms (attempt ${attempt + 1}/${UNREGISTER_MAX_RETRIES})`,
+      );
+      await delay(backoff);
+    }
+  }
+}
+
+async function flushPendingUnregisters(): Promise<boolean> {
+  const pending = readPendingUnregisters();
+  if (pending.length === 0) return true;
+
+  console.log("[PushNotifications] Flushing pending unregisters:", pending.length);
+  const remaining: PendingUnregister[] = [];
+
+  for (const item of pending) {
+    try {
+      await postUnregisterWithRetry(item.request);
+      console.log("[PushNotifications] Pending push token unregistered:", item.token);
+    } catch (error) {
+      const nextItem = {
+        ...item,
+        attempts: item.attempts + 1,
+        lastAttemptAt: Date.now(),
+      };
+
+      if (isRetryablePushError(error)) {
+        remaining.push(nextItem);
+      } else {
+        console.warn("[PushNotifications] Dropping non-retryable pending unregister:", error);
+        Sentry.captureException(error, {
+          tags: { feature: "push-notifications", operation: "pending-unregister-non-retryable" },
+          extra: { address: item.address, attempts: nextItem.attempts },
+        });
+      }
+    }
+  }
+
+  writePendingUnregisters(remaining);
+  needsNetworkRetry = remaining.length > 0;
+  return remaining.length === 0;
 }
 
 async function getExpoPushToken(): Promise<string | null> {
@@ -203,6 +324,18 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
   if (now - lastRegisterPushAt < REGISTER_PUSH_MIN_INTERVAL_MS) return;
   isRegisteringPush = true;
   try {
+    const flushedPendingUnregisters = await flushPendingUnregisters();
+    if (!flushedPendingUnregisters) {
+      console.log("[PushNotifications] Skipping registration until old token unregisters finish");
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: "Skipped registration: pending unregisters remain",
+        level: "warning",
+      });
+      setPushEnabled(false);
+      return;
+    }
+
     const nodeConfig =
       queryClient.getQueryData<NodeConfigResponse>(queryKeys.nodeConfig()) ??
       (await queryClient.fetchQuery<NodeConfigResponse>({
@@ -278,6 +411,10 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
 }
 
 export async function unregisterPush(wallet?: MirageWallet | null): Promise<void> {
+  let didUnregister = false;
+  let unregisterToken: string | null = null;
+  let unregisterWallet: MirageWallet | null = null;
+  let unregisterRequest: UnregisterPushTokenRequest | null = null;
   try {
     let token = getStoredToken();
     if (!token) {
@@ -314,7 +451,12 @@ export async function unregisterPush(wallet?: MirageWallet | null): Promise<void
     }
     console.log("[PushNotifications] Unregistering token for address:", w.address);
 
-    await unregisterPushToken(w, token);
+    unregisterToken = token;
+    unregisterWallet = w;
+    const request = buildUnregisterPushTokenRequest(w, token);
+    unregisterRequest = request;
+    await postUnregisterWithRetry(request);
+    didUnregister = true;
     console.log("[PushNotifications] Push token unregistered:", token);
     Sentry.addBreadcrumb({
       category: "push-notifications",
@@ -322,12 +464,38 @@ export async function unregisterPush(wallet?: MirageWallet | null): Promise<void
       level: "info",
     });
   } catch (error) {
-    console.error("[PushNotifications] Unregister failed:", error);
-    Sentry.captureException(error, {
-      tags: { feature: "push-notifications", operation: "unregister" },
-    });
+    if (isRetryablePushError(error)) {
+      const token = unregisterToken ?? getStoredToken();
+      const w = unregisterWallet ?? wallet ?? null;
+      const request = unregisterRequest ?? (token && w ? buildUnregisterPushTokenRequest(w, token) : null);
+      if (token && w && request) {
+        queuePendingUnregister({
+          id: `${w.address}:${token}`,
+          token,
+          address: w.address,
+          request,
+          createdAt: Date.now(),
+          attempts: 0,
+        });
+      }
+      console.warn("[PushNotifications] Unregister deferred for retry:", error);
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: "Push unregister deferred for retry",
+        level: "warning",
+      });
+    } else {
+      console.error("[PushNotifications] Unregister failed:", error);
+      Sentry.captureException(error, {
+        tags: { feature: "push-notifications", operation: "unregister" },
+      });
+    }
   } finally {
-    console.log("[PushNotifications] Clearing stored push token and disabling push state");
+    console.log(
+      didUnregister
+        ? "[PushNotifications] Clearing stored push token after unregister"
+        : "[PushNotifications] Clearing stored push token and keeping retry queue if needed",
+    );
     clearStoredPushToken();
     setPushEnabled(false);
   }
@@ -360,6 +528,7 @@ function subscribeAppStateForegroundReRegister(): void {
     if (!isPushEnabled() && !needsNetworkRetry) return;
 
     try {
+      await flushPendingUnregisters();
       const wallet = await walletService.getWallet();
       if (!wallet) return;
       await registerPush(wallet);
@@ -379,13 +548,14 @@ function subscribeNetworkRecovery(): void {
   networkSubscription = Network.addNetworkStateListener(async (state) => {
     const isConnected = state.isConnected === true && state.isInternetReachable !== false;
     if (isConnected && !wasConnected && needsNetworkRetry && isAppInForeground()) {
-      console.log("[PushNotifications] Network restored, retrying push registration");
+      console.log("[PushNotifications] Network restored, retrying push cleanup/registration");
       Sentry.addBreadcrumb({
         category: "push-notifications",
-        message: "Network restored — retrying push registration",
+        message: "Network restored — retrying push cleanup/registration",
         level: "info",
       });
       try {
+        await flushPendingUnregisters();
         const wallet = await walletService.getWallet();
         if (!wallet) return;
         await registerPush(wallet);
@@ -432,6 +602,9 @@ export async function initPushNotifications(): Promise<void> {
   subscribePushReceived();
   subscribeAppStateForegroundReRegister();
   subscribeNetworkRecovery();
+  void flushPendingUnregisters().catch((error) => {
+    console.warn("[PushNotifications] Initial pending unregister flush failed:", error);
+  });
 }
 
 export function cleanupPushNotifications(): void {
