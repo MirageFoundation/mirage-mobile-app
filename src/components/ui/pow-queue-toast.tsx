@@ -22,8 +22,11 @@ const TOAST_MAX_WIDTH = Math.round(SCREEN_WIDTH * 0.6);
 const TOAST_STACK_ID = "pow-queue-toast";
 const EMPTY_STATE_DISMISS_DELAY_MS = 400;
 const RESULT_DISPLAY_DURATION_MS = 500;
+const VOTE_RESULT_DISPLAY_DURATION_MS = 250;
 
 type PowPhase = "preparing" | "solving" | "submitting";
+
+const VOTE_ACTION_TYPES = new Set(["upvote", "downvote", "remove_vote"]);
 
 const PHASE_LABEL: Record<PowPhase, string> = {
   preparing: "Preparing…",
@@ -53,7 +56,6 @@ export const PowQueueToast = () => {
   const insets = useSafeAreaInsets();
 
   const {
-    isProcessing,
     currentAction,
     completedCount,
     totalCount,
@@ -89,8 +91,10 @@ export const PowQueueToast = () => {
   const lastHashRateRef = useRef(0);
   const { offset, onLayout } = useTopToastStack(TOAST_STACK_ID, isVisible);
 
-  const hasQueuedOrActiveWork = currentAction !== null || queue.length > 0;
-  const hasPendingWork = isProcessing || hasQueuedOrActiveWork;
+  const visibleCurrentAction = currentAction?.showProgress === false ? null : currentAction;
+  const visibleQueue = queue.filter((action) => action.showProgress !== false);
+  const hasQueuedOrActiveWork = visibleCurrentAction !== null || visibleQueue.length > 0;
+  const hasPendingWork = hasQueuedOrActiveWork;
   const resultAction = lastCompletedAction ?? displayedCompletedAction;
   const immediateResultAction = successOverlay
     ? {
@@ -101,6 +105,11 @@ export const PowQueueToast = () => {
     : null;
   const activeResultAction =
     transientResultAction ?? immediateResultAction ?? resultAction;
+  const isVoteResult =
+    activeResultAction !== null && VOTE_ACTION_TYPES.has(activeResultAction.type);
+  const resultDisplayDurationMs = isVoteResult
+    ? VOTE_RESULT_DISPLAY_DURATION_MS
+    : RESULT_DISPLAY_DURATION_MS;
   const isShowingResult =
     activeResultAction !== null &&
     (
@@ -115,8 +124,8 @@ export const PowQueueToast = () => {
     ? activeResultAction.success
       ? getSuccessLabel(activeResultAction.type as any)
       : activeResultAction.errorMessage || "Failed"
-    : currentAction?.label ||
-      queue[0]?.label ||
+    : visibleCurrentAction?.label ||
+      visibleQueue[0]?.label ||
       (activeResultAction
         ? activeResultAction.success
           ? getSuccessLabel(activeResultAction.type as any)
@@ -195,10 +204,14 @@ export const PowQueueToast = () => {
       clearTimeout(transientResultTimeoutRef.current);
     }
 
+    const durationMs = VOTE_ACTION_TYPES.has(successOverlay.type)
+      ? VOTE_RESULT_DISPLAY_DURATION_MS
+      : RESULT_DISPLAY_DURATION_MS;
+
     transientResultTimeoutRef.current = setTimeout(() => {
       setTransientResultAction(null);
       transientResultTimeoutRef.current = null;
-    }, RESULT_DISPLAY_DURATION_MS);
+    }, durationMs);
 
     return () => {
       if (transientResultTimeoutRef.current) {
@@ -208,7 +221,7 @@ export const PowQueueToast = () => {
   }, [successOverlay]);
 
   useEffect(() => {
-    if (isProcessing && !isVisible) {
+    if (hasPendingWork && !isVisible) {
       setIsVisible(true);
       setElapsedMs(0);
       setHashRate(0);
@@ -216,16 +229,16 @@ export const PowQueueToast = () => {
       powStartedRef.current = false;
       animateIn();
     }
-  }, [isProcessing, isVisible]);
+  }, [hasPendingWork, isVisible]);
 
   useEffect(() => {
-    if (currentAction) {
+    if (visibleCurrentAction) {
       setElapsedMs(0);
       setHashRate(0);
       setPhase("preparing");
       powStartedRef.current = false;
     }
-  }, [currentAction?.id]);
+  }, [visibleCurrentAction]);
 
   useEffect(() => {
     if (!hasPendingWork && isVisible) {
@@ -235,15 +248,14 @@ export const PowQueueToast = () => {
 
       dismissTimeoutRef.current = setTimeout(() => {
         const state = usePowQueueStore.getState();
+        const hasVisibleWork =
+          state.currentAction?.showProgress !== false && state.currentAction !== null ||
+          state.queue.some((action) => action.showProgress !== false);
 
-        if (
-          !state.isProcessing &&
-          !state.currentAction &&
-          state.queue.length === 0
-        ) {
+        if (!hasVisibleWork) {
           animateOut();
         }
-      }, hasActiveResultAction ? RESULT_DISPLAY_DURATION_MS : EMPTY_STATE_DISMISS_DELAY_MS);
+      }, hasActiveResultAction ? resultDisplayDurationMs : EMPTY_STATE_DISMISS_DELAY_MS);
     }
 
     return () => {
@@ -251,7 +263,7 @@ export const PowQueueToast = () => {
         clearTimeout(dismissTimeoutRef.current);
       }
     };
-  }, [hasActiveResultAction, hasPendingWork, isVisible]);
+  }, [hasActiveResultAction, hasPendingWork, isVisible, resultDisplayDurationMs]);
 
   useEffect(() => {
     if (isShowingProcessing && isVisible) {
@@ -385,7 +397,9 @@ export const PowQueueToast = () => {
             <Text style={[styles.phaseText, { color: statColor }]}> 
               {isShowingResult
                 ? activeResultAction?.success
-                  ? "PoW Solved"
+                  ? isVoteResult
+                    ? "Submitted"
+                    : "PoW Solved"
                   : "PoW Failed"
                 : PHASE_LABEL[phase]}
             </Text>
