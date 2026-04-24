@@ -255,46 +255,68 @@ const TabBarItem = ({
   );
 };
 
+function TabNavigationVisibilityReset() {
+  const pathname = usePathname();
+  const { showBars } = useScrollAnimationContext();
+
+  useEffect(() => {
+    showBars();
+    if (pathname.endsWith("/inbox")) {
+      Sentry.addBreadcrumb({
+        category: "navigation",
+        message: "Tab chrome reset on inbox route",
+        level: "info",
+        data: { pathname },
+      });
+    }
+  }, [pathname, showBars]);
+
+  return null;
+}
+
 function TabsContent() {
   return (
-    <Tabs
-      tabBar={(props) => <AnimatedTabBar {...props} />}
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Home",
+    <>
+      <TabNavigationVisibilityReset />
+      <Tabs
+        tabBar={(props) => <AnimatedTabBar {...props} />}
+        screenOptions={{
+          headerShown: false,
         }}
-      />
-      <Tabs.Screen
-        name="following"
-        options={{
-          title: "Following",
-        }}
-      />
-      <Tabs.Screen
-        name="create"
-        options={{
-          title: "Create",
-        }}
-      />
-      <Tabs.Screen
-        name="inbox"
-        options={{
-          title: "Inbox",
-          lazy: false,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profile",
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Home",
+          }}
+        />
+        <Tabs.Screen
+          name="following"
+          options={{
+            title: "Following",
+          }}
+        />
+        <Tabs.Screen
+          name="create"
+          options={{
+            title: "Create",
+          }}
+        />
+        <Tabs.Screen
+          name="inbox"
+          options={{
+            title: "Inbox",
+            lazy: false,
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: "Profile",
+          }}
+        />
+      </Tabs>
+    </>
   );
 }
 

@@ -14,7 +14,7 @@ import { PowQueueToast } from "@/src/components/ui/pow-queue-toast";
 import { NetworkMonitor } from "@/src/components/network-monitor";
 import { CloudflareErrorToast } from "@/src/components/cloudflare-error-toast";
 import { WalletProvider } from "./wallet-provider";
-import { initInboxNotifications } from "@/src/services/inbox-notifications";
+import { cleanupInboxNotificationsForLogout, initInboxNotifications } from "@/src/services/inbox-notifications";
 import { initPushNotifications, registerPush } from "@/src/services/push-notifications";
 import { initSeenPosts, teardownSeenPosts } from "@/src/services/seen-posts";
 import { useAuthStore, usePreferencesStore, useVideoPositionStore } from "@/src/stores";
@@ -86,6 +86,13 @@ export const RootProvider = memo(
     }, [isLoggedIn, hasSeenAdultPrompt]);
 
     useEffect(() => {
+      if (isLoggedIn) return;
+      cleanupInboxNotificationsForLogout().catch((error) => {
+        console.warn("[RootProvider] Failed to cleanup inbox notifications:", error);
+      });
+    }, [isLoggedIn]);
+
+    useEffect(() => {
       if (!walletAddress) return;
 
       if (AppState.currentState !== "active") {
@@ -94,6 +101,8 @@ export const RootProvider = memo(
 
       const timer = setTimeout(() => {
         if (AppState.currentState !== "active") return;
+
+        initInboxNotifications();
 
         walletService.getWallet()
           .then((wallet) => {

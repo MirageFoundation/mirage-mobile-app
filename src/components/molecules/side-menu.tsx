@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 135
+                          update 136
                         </Text>
                         <Text
                           style={{
@@ -773,15 +773,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          video upload improvement, share post link updated to
-                          have extra line after title in shared link, the title
-                          added in shared link in ios, comment text added in
-                          shared comment link in both android and ios,fixed deep
-                          link for comment link because it was not opening that
-                          post detail screen it was commented on and was just
-                          opening that exact comment only so fixed it to open
-                          the comment link in post details screen with
-                          highlighted comment
+                          push notification register and unregister token error
+                          fix
                         </Text>
                       </>
                     )}
@@ -822,7 +815,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 135
+                          update 136
                         </Text>
                         <Text
                           style={{
@@ -832,15 +825,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          video upload improvement, share post link updated to
-                          have extra line after title in shared link, the title
-                          added in shared link in ios, comment text added in
-                          shared comment link in both android and ios,fixed deep
-                          link for comment link because it was not opening that
-                          post detail screen it was commented on and was just
-                          opening that exact comment only so fixed it to open
-                          the comment link in post details screen with
-                          highlighted comment
+                          push notification register and unregister token error
+                          fix
                         </Text>
                       </>
                     )}
