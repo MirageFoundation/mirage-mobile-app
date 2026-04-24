@@ -774,7 +774,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           weight="light"
                         >
                           push notification register and unregister token error
-                          fix
+                          fix,sometimes pressing on the notification does not
+                          navigates to inbox tab fixed, sometimes the
+                          notification opens the inbox tab but the bottom nav is
+                          not visble fix,added sentry logs for better error
+                          handling for notifiaction and push token register and
+                          unregister,made the voting quick for subscriber
                         </Text>
                       </>
                     )}
@@ -826,7 +831,12 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           weight="light"
                         >
                           push notification register and unregister token error
-                          fix
+                          fix,sometimes pressing on the notification does not
+                          navigates to inbox tab fixed, sometimes the
+                          notification opens the inbox tab but the bottom nav is
+                          not visble fix,added sentry logs for better error
+                          handling for notifiaction and push token register and
+                          unregister,made the voting quick for subscriber
                         </Text>
                       </>
                     )}
