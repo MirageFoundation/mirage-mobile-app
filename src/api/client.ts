@@ -119,6 +119,10 @@ class ApiClient {
     this.client.defaults.baseURL = url;
   }
 
+  getCurrentBaseUrl(): string {
+    return this.getBaseUrl();
+  }
+
   /**
    * Get full API URL for a path
    */

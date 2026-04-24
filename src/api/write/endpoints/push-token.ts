@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/react-native";
 
-import { api } from "@/src/api/client";
+import { api, apiClient } from "@/src/api/client";
 import type { MirageWallet } from "@/src/wallet";
 import { buildSimpleSignedPayload } from "../signing/simple-sign";
 
@@ -64,12 +64,20 @@ export function buildUnregisterPushTokenRequest(
 
 export async function postUnregisterPushToken(
   request: UnregisterPushTokenRequest,
+  baseUrl?: string,
 ): Promise<PushTokenResponse> {
-  const response = await api.post<PushTokenResponse>("/core/unregister_push_token", request);
+  const response = baseUrl
+    ? (
+        await apiClient
+          .getInstance()
+          .post<PushTokenResponse>(`${baseUrl}/api/core/unregister_push_token`, request)
+      ).data
+    : await api.post<PushTokenResponse>("/core/unregister_push_token", request);
 
   Sentry.addBreadcrumb({
     category: "push-notifications",
     message: "API: unregister_push_token succeeded",
+    data: baseUrl ? { baseUrl } : undefined,
     level: "info",
   });
   return response;
