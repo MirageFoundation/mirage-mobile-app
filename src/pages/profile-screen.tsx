@@ -60,6 +60,7 @@ import { Box } from "@/src/components/ui/primitives";
 import {
   useAppState,
   useBlockHandler,
+  getBlockConfirmationMessage,
   useDeleteHandler,
   useReportHandler,
   useTabSwipeGesture,
@@ -1213,8 +1214,9 @@ useEffect(() => {
       <ConfirmationPopup
         visible={blockHandler.showConfirmation}
         title={`Block ${blockHandler.pendingBlock?.label || "this post"}?`}
-        message="You won't see this content anymore."
-        description="You can unblock later from settings."
+        message={getBlockConfirmationMessage(
+          blockHandler.pendingBlock?.type ?? "post",
+        )}
         icon="ban-outline"
         confirmText="Block"
         isDestructive

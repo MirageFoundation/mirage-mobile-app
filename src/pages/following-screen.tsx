@@ -32,7 +32,7 @@ import { Box, Text } from "@/src/components/ui/primitives";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
 import { storage } from "@/src/stores";
 
-import { APP_FOREGROUND_REFRESH_THRESHOLD_MS, useAuthGuard, useBlockHandler, useDeleteHandler, useFollowHandler, useReportHandler, useVoteHandler, type VoteResult } from "@/src/hooks";
+import { APP_FOREGROUND_REFRESH_THRESHOLD_MS, useAuthGuard, useBlockHandler, getBlockConfirmationMessage, useDeleteHandler, useFollowHandler, useReportHandler, useVoteHandler, type VoteResult } from "@/src/hooks";
 import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
@@ -586,8 +586,9 @@ export function FollowingScreen() {
       <ConfirmationPopup
         visible={blockHandler.showConfirmation}
         title={`Block ${blockHandler.pendingBlock?.label || "user"}?`}
-        message="You won't see their content anymore."
-        description="You can unblock them later from settings."
+        message={getBlockConfirmationMessage(
+          blockHandler.pendingBlock?.type ?? "post",
+        )}
         icon="ban-outline"
         confirmText="Block"
         isDestructive

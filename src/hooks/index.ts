@@ -1,6 +1,7 @@
 export { useAuthGuard } from "./use-auth-guard";
 export {
   useBlockHandler,
+  getBlockConfirmationMessage,
   type BlockTarget,
   type BlockType,
   type UseBlockHandlerOptions,

@@ -113,7 +113,7 @@ export function ConfirmationPopup({
           <Text
             size="md"
             mode="subtle"
-            weight="semibold"
+            weight="regular"
             style={styles.message}
           >
             {message}

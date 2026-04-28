@@ -40,6 +40,7 @@ import {
   APP_FOREGROUND_REFRESH_THRESHOLD_MS,
   useAuthGuard,
   useBlockHandler,
+  getBlockConfirmationMessage,
   useDeleteHandler,
   useEasUpdate,
   useFollowHandler,
@@ -768,8 +769,9 @@ export function HomeScreen() {
       <ConfirmationPopup
         visible={blockHandler.showConfirmation}
         title={`Block ${blockHandler.pendingBlock?.label || "user"}?`}
-        message="You won't see their content anymore."
-        description="You can unblock them later from settings."
+        message={getBlockConfirmationMessage(
+          blockHandler.pendingBlock?.type ?? "post",
+        )}
         icon="ban-outline"
         confirmText="Block"
         isDestructive

@@ -74,6 +74,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import {
   useAppState,
   useBlockHandler,
+  getBlockConfirmationMessage,
   useDeleteHandler,
   useFollowHandler,
   useReportHandler,
@@ -1331,8 +1332,9 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
       <ConfirmationPopup
         visible={blockHandler.showConfirmation}
         title={`Block ${blockHandler.pendingBlock?.label || "this post"}?`}
-        message="You won't see this content anymore."
-        description="You can unblock later from settings."
+        message={getBlockConfirmationMessage(
+          blockHandler.pendingBlock?.type ?? "post",
+        )}
         icon="ban-outline"
         confirmText="Block"
         isDestructive
@@ -1343,8 +1345,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
       <ConfirmationPopup
         visible={showBlockUserConfirmation}
         title={`Block @${displayUsername || "user"}?`}
-        message="You won't see their posts or comments."
-        description="You can unblock them anytime from their profile."
+        message={getBlockConfirmationMessage("user")}
         icon="ban-outline"
         confirmText="Block"
         isDestructive
