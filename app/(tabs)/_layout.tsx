@@ -39,7 +39,10 @@ import {
   signalTabsReady,
   signalTabsUnmounted,
 } from "@/src/services/inbox-notifications";
-import { isRecentSharePath } from "@/src/navigation/linking";
+import {
+  isRecentCreateDeepLink,
+  isRecentSharePath,
+} from "@/src/navigation/linking";
 
 export const unstable_settings = {
   initialRouteName: "index",
@@ -355,16 +358,23 @@ export default function TabLayout() {
 
       const hasInitialShareIntent =
         initialShareIntentRef.current || hasShareIntent || isRecentSharePath(10_000);
+      const hasInitialCreateIntent =
+        hasInitialShareIntent || isRecentCreateDeepLink();
       const isOnCreate = pathname.endsWith("/create");
 
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Initial tab route check",
-        data: { pathname, hasInitialShareIntent, isOnCreate },
+        data: {
+          pathname,
+          hasInitialCreateIntent,
+          hasInitialShareIntent,
+          isOnCreate,
+        },
         level: "info",
       });
 
-      if (isOnCreate && !hasInitialShareIntent) {
+      if (isOnCreate && !hasInitialCreateIntent) {
         Sentry.addBreadcrumb({
           category: "navigation",
           message: "Redirecting stale initial create route to home",
