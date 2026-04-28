@@ -5,6 +5,7 @@ import {
   useUserFollowed,
   uploadImageAndGetUrl,
 } from "@/src/api/read";
+import { markSeen } from "@/src/services/seen-posts";
 import * as Sentry from "@sentry/react-native";
 import { parseApiError } from "@/src/utils/parse-api-error";
 import { getComments } from "@/src/api/read/endpoints/posts";
@@ -95,6 +96,7 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Animated, {
   Easing,
   FadeInUp,
+  LinearTransition,
   interpolate,
   runOnJS,
   useAnimatedReaction,
@@ -172,6 +174,8 @@ export default function PostDetailScreen() {
   const [highlightedCommentId, setHighlightedCommentId] = useState<
     string | null
   >(highlight || null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingScrollToEnd = useRef(false);
 
   const [screenActive, setScreenActive] = useState(true);
   const refetchCommentsRef = useRef<((silent?: boolean) => void) | null>(null);
@@ -213,6 +217,14 @@ export default function PostDetailScreen() {
   }, []);
 
   const isFocused = useIsFocused();
+
+  useEffect(() => {
+    if (highlight && id) {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.comments(id, currentUser?.walletAddress ?? undefined),
+      });
+    }
+  }, []);
 
   // Fetch comments from API
   const {
@@ -844,7 +856,7 @@ export default function PostDetailScreen() {
         b.createdAt instanceof Date
           ? b.createdAt.getTime()
           : Number(b.createdAt);
-      return timeB - timeA; // Descending order (latest first)
+      return timeA - timeB; // Ascending order (oldest first)
     });
   }, [
     optimisticTopLevelComments,
@@ -869,9 +881,15 @@ export default function PostDetailScreen() {
     [],
   );
 
+  const highlightRetryCount = useRef(0);
+  const MAX_HIGHLIGHT_RETRIES = 3;
+
   // Scroll to highlighted comment when data loads
   useEffect(() => {
     if (highlightedCommentId && allComments.length > 0 && flatListRef.current) {
+      const isOptimistic = highlightedCommentId.startsWith("optimistic-");
+      if (isOptimistic) return;
+
       // First try to find the comment at top level
       let index = allComments.findIndex((c) => c.id === highlightedCommentId);
 
@@ -882,23 +900,47 @@ export default function PostDetailScreen() {
         );
       }
 
-      if (index !== -1) {
+      if (index !== -1 && index < allComments.length) {
+        highlightRetryCount.current = 0;
         // Small delay to ensure layout is ready
         setTimeout(() => {
-          flatListRef.current?.scrollToIndex({
-            index,
-            animated: true,
-            viewPosition: 0.1, // Position closer to top to show more of the thread
-          });
+          if (index < (allComments.length ?? 0)) {
+            flatListRef.current?.scrollToIndex({
+              index,
+              animated: true,
+              viewPosition: 0.1,
+            });
+          }
         }, 500);
 
         // Clear highlight after 3 seconds
-        setTimeout(() => {
+        if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+        highlightTimerRef.current = setTimeout(() => {
           setHighlightedCommentId(null);
         }, 3000);
       }
     }
   }, [highlightedCommentId, allComments, findCommentInTree]);
+
+  useEffect(() => {
+    if (
+      !highlight ||
+      !allComments ||
+      isLoadingComments ||
+      isFetchingComments
+    ) return;
+
+    const found = allComments.some((c) => findCommentInTree(c, highlight));
+    if (found || highlightRetryCount.current >= MAX_HIGHLIGHT_RETRIES) return;
+
+    const delay = (highlightRetryCount.current + 1) * 2000;
+    const timer = setTimeout(() => {
+      highlightRetryCount.current += 1;
+      lastCommentsFetchRef.current = 0;
+      refetchCommentsRef.current?.();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [highlight, allComments, isLoadingComments, isFetchingComments, findCommentInTree]);
 
   // Scroll tracking for sticky header
   const [postHeaderHeight, setPostHeaderHeight] = useState(0);
@@ -944,6 +986,13 @@ export default function PostDetailScreen() {
       runOnJS(setIsStickyInteractive)(next);
     },
   );
+
+  const handleContentSizeChange = useCallback(() => {
+    if (pendingScrollToEnd.current) {
+      pendingScrollToEnd.current = false;
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }
+  }, []);
 
   // Animated style for sticky header
   const stickyHeaderAnimatedStyle = useAnimatedStyle(() => {
@@ -1192,9 +1241,14 @@ export default function PostDetailScreen() {
         onOptimisticUpdate: () => {
           if (replyTarget) {
             addReplyOptimisticComment(id, replyTarget.id, optimisticComment);
+            setHighlightedCommentId(optimisticCommentId);
           } else {
             addTopLevelOptimisticComment(id, optimisticComment);
+            setHighlightedCommentId(optimisticCommentId);
+            pendingScrollToEnd.current = true;
           }
+          if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+          highlightTimerRef.current = setTimeout(() => setHighlightedCommentId(null), 3000);
           setLocalPostUpdates((prev) => ({
             ...prev,
             comments: (prev.comments ?? displayPost?.comments ?? 0) + 1,
@@ -1213,6 +1267,12 @@ export default function PostDetailScreen() {
           if (!confirmedCommentId) return;
 
           replaceOptimisticCommentId(id, optimisticCommentId, confirmedCommentId);
+
+          setHighlightedCommentId((prev) =>
+            prev === optimisticCommentId ? confirmedCommentId : prev,
+          );
+          if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+          highlightTimerRef.current = setTimeout(() => setHighlightedCommentId(null), 3000);
 
           setSelectedComment((prev) => {
             if (!prev || prev.id !== optimisticCommentId) return prev;
@@ -1282,6 +1342,7 @@ export default function PostDetailScreen() {
     const current = useCommentComposeStore.getState().pendingComment;
     if (!current || current.postId !== id) return;
     useCommentComposeStore.getState().clearPendingComment();
+    markSeen(id, "reply");
     handleSubmitComment(current.text, current.imageUri, current.gifUrl);
   }, [pendingComment, id]);
 
@@ -1667,7 +1728,10 @@ export default function PostDetailScreen() {
 
   const renderComment = useCallback(
     ({ item }: { item: Comment }) => (
-      <Animated.View entering={FadeInUp.duration(250).delay(100)}>
+      <Animated.View
+        entering={FadeInUp.duration(250).delay(100)}
+        layout={LinearTransition.duration(250)}
+      >
         <CommentThread
           comment={item}
           currentUserId={currentUser?.id}
@@ -2020,6 +2084,7 @@ export default function PostDetailScreen() {
           showsVerticalScrollIndicator={false}
           onScroll={handleScroll}
           scrollEventThrottle={16}
+          onContentSizeChange={handleContentSizeChange}
           refreshControl={
             <RefreshControl
               refreshing={isRefetchingComments}

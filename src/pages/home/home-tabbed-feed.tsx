@@ -10,13 +10,16 @@ import {
 import type { FlashListRef } from "@shopify/flash-list";
 import type { ReactNode } from "react";
 import {
-  ActivityIndicator,
   InteractionManager,
   Platform,
   RefreshControl,
+  View,
 } from "react-native";
+import { IOSRefreshIndicator } from "@/src/components/atoms/refresh-indicator";
+import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useAndroidPullIndicator } from "@/src/hooks/use-android-pull-indicator";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useUnistyles } from "react-native-unistyles";
+import { GestureDetector } from "react-native-gesture-handler";
 import * as Sentry from "@sentry/react-native";
 
 import {
@@ -25,6 +28,7 @@ import {
   transformApiPosts,
   useInfinitePosts,
 } from "@/src/api";
+import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import {
   PostCardSkeleton,
@@ -44,6 +48,7 @@ import {
   getAllowedTagsFromContentTypes,
   useAuthStore,
   useContentModerationStore,
+  useFeedScrollStore,
   usePreferencesStore,
   useTimeTickStore,
 } from "@/src/stores";
@@ -74,10 +79,10 @@ export const HomeTabbedFeed = forwardRef<
   HomeTabbedFeedRef,
   HomeTabbedFeedProps
 >(({ feedType: baseFeed, activeTabIndex = 0, ListHeaderExtra, onRefreshingChange, onNewPostsChange }, ref) => {
-  const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { scrollHandler, registerHomeRefresh, registerFollowingRefresh, showBars } = useScrollAnimationContext();
+  const { scrollHandler, scrollY, registerHomeRefresh, registerFollowingRefresh, showBars } = useScrollAnimationContext();
+  const setContextScrolling = useFeedScrollStore((state) => state.setContextScrolling);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
@@ -92,11 +97,23 @@ export const HomeTabbedFeed = forwardRef<
   const activeListRef = useRef<FlashListRef<Post>>(null);
   const dismissNewPostsRef = useRef<(() => void) | null>(null);
   const handleRefreshRef = useRef<((options?: { fetchAllNew?: boolean; silent?: boolean }) => Promise<void>) | null>(null);
+  const triggerPullRefresh = useCallback(() => {
+    handleRefreshRef.current?.();
+  }, []);
+
+  const { pullDistance, pullGesture } = useAndroidPullIndicator({
+    scrollY,
+    refreshing: isRefreshing,
+    onTriggerRefresh: triggerPullRefresh,
+  });
 
   useEffect(() => {
     if (prevTabIndexRef.current !== activeTabIndex) {
       const oldFeedContext = `${baseFeed}:${prevTabIndexRef.current === 0 ? "magic" : "latest"}`;
+      const newFeedContext = `${baseFeed}:${activeTabIndex === 0 ? "magic" : "latest"}`;
       useHomePostCardStore.getState().setVideoViewability(oldFeedContext, new Set(), null);
+      setContextScrolling(oldFeedContext, false);
+      setContextScrolling(newFeedContext, false);
 
       prevTabIndexRef.current = activeTabIndex;
       if (activeTabIndex === 1) {
@@ -111,7 +128,7 @@ export const HomeTabbedFeed = forwardRef<
         setTimeout(() => handleRefreshRef.current?.(), 100);
       }
     }
-  }, [activeTabIndex, showBars, baseFeed]);
+  }, [activeTabIndex, showBars, baseFeed, setContextScrolling]);
 
   const currentUser = useAuthStore((s) => s.user);
   const selectedContentTypes = usePreferencesStore(
@@ -171,6 +188,11 @@ export const HomeTabbedFeed = forwardRef<
     }] : []),
   ], [baseFeed, allowedTags, currentUser?.walletAddress, latestTabActivated]);
 
+  const visibleTrackerKeys = useMemo(
+    () => [`${baseFeed}:magic`, `${baseFeed}:latest`],
+    [baseFeed],
+  );
+
   const handleRefreshComplete = useCallback(() => {
     transformedPageCacheRef.current = new WeakMap();
   }, []);
@@ -178,6 +200,7 @@ export const HomeTabbedFeed = forwardRef<
   usePostDataRefresher({
     feedParamsList: feedRefreshParamsList,
     onRefreshComplete: handleRefreshComplete,
+    visibleTrackerKeys,
   });
 
   const applyPostEditOverrides = useCallback(
@@ -257,12 +280,13 @@ export const HomeTabbedFeed = forwardRef<
   const magicPosts = useMemo(
     () => {
       const posts = transformPosts(magicQuery.data);
-      if (baseFeed !== "following") return posts;
-      return posts.filter(
-        (post) =>
-          followedUsers.has(post.author.id) ||
-          (post.topic && followedTopics.has(post.topic)),
-      );
+      return baseFeed !== "following"
+        ? posts
+        : posts.filter(
+            (post) =>
+              followedUsers.has(post.author.id) ||
+              (post.topic && followedTopics.has(post.topic)),
+          );
     },
     [magicQuery.data, transformPosts, baseFeed, followedUsers, followedTopics],
   );
@@ -270,12 +294,13 @@ export const HomeTabbedFeed = forwardRef<
   const latestPosts = useMemo(
     () => {
       const posts = transformPosts(latestQuery.data);
-      if (baseFeed !== "following") return posts;
-      return posts.filter(
-        (post) =>
-          followedUsers.has(post.author.id) ||
-          (post.topic && followedTopics.has(post.topic)),
-      );
+      return baseFeed !== "following"
+        ? posts
+        : posts.filter(
+            (post) =>
+              followedUsers.has(post.author.id) ||
+              (post.topic && followedTopics.has(post.topic)),
+          );
     },
     [latestQuery.data, transformPosts, baseFeed, followedUsers, followedTopics],
   );
@@ -283,7 +308,9 @@ export const HomeTabbedFeed = forwardRef<
   const handleRefresh = useCallback(async (options?: { fetchAllNew?: boolean; silent?: boolean }) => {
     if (isRefreshingRef.current) return;
     isRefreshingRef.current = true;
+    transformedPageCacheRef.current = new WeakMap();
     if (!options?.silent) {
+      if (Platform.OS === "android") triggerHaptic("light");
       dismissNewPostsRef.current?.();
       setIsRefreshing(true);
       onRefreshingChange?.(true);
@@ -656,34 +683,27 @@ export const HomeTabbedFeed = forwardRef<
   const showHeaderSpinner = isRefreshing && !activeQueryLoading;
   const showQuests = baseFeed === "home" && activeTabIndex === 0;
 
+  const isIOS = Platform.OS === "ios";
+
   const ListHeader = useMemo(() => (
     <>
       {ListHeaderExtra}
-      {showHeaderSpinner && (
-        <Box center p="md">
-          <ActivityIndicator
-            size="small"
-            color={theme.colors.text.subtle}
-          />
-        </Box>
-      )}
       {showQuests && <QuestsSummaryCard />}
     </>
   ), [
     ListHeaderExtra,
-    showHeaderSpinner,
     showQuests,
-    theme.colors.text.subtle,
   ]);
 
   const isFetchingNext = activeTabIndex === 0 ? magicQuery.isFetchingNextPage : latestQuery.isFetchingNextPage;
 
+  const activeTabPostsLen = activeTabIndex === 0 ? magicPosts.length : latestPosts.length;
   const ListFooter = useMemo(() => {
-    if (isFetchingNext) {
+    if (isFetchingNext && activeTabPostsLen > 0) {
       return <PostCardSkeleton showMedia={false} showBody={true} />;
     }
     return <Box p="sm" />;
-  }, [isFetchingNext]);
+  }, [isFetchingNext, activeTabPostsLen]);
 
   const listContentStyle = useMemo(
     () => ({
@@ -696,22 +716,47 @@ export const HomeTabbedFeed = forwardRef<
 
   const progressViewOffset = insets.top + HEADER_HEIGHT;
 
-  const refreshControl = useMemo(
-    () => (
+  const refreshControl = useMemo(() => {
+    if (!isIOS) return null;
+
+    return (
       <RefreshControl
-        refreshing={Platform.OS === "android" ? false : isRefreshing}
+        refreshing={false}
         onRefresh={handleRefresh}
         tintColor="transparent"
         colors={["transparent"]}
         progressBackgroundColor="transparent"
-        progressViewOffset={Platform.OS === "android" ? -10000 : progressViewOffset}
+        progressViewOffset={progressViewOffset}
       />
-    ),
-    [handleRefresh, progressViewOffset, isRefreshing],
-  );
+    );
+  }, [handleRefresh, progressViewOffset, isIOS]);
 
   const posts = activeTabIndex === 0 ? magicPosts : latestPosts;
   const query = activeTabIndex === 0 ? magicQuery : latestQuery;
+  const seededFeedContextRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (posts.length === 0) {
+      if (seededFeedContextRef.current === feedContext) {
+        seededFeedContextRef.current = null;
+      }
+      return;
+    }
+
+    if (seededFeedContextRef.current === feedContext) return;
+    seededFeedContextRef.current = feedContext;
+
+    const initialVisiblePosts = posts.slice(0, 5).filter(postHasPlayableVideo);
+    const visibleVideoIds = new Set(initialVisiblePosts.map((post) => post.id));
+    const activeVideoId = initialVisiblePosts[0]?.id ?? null;
+
+    useHomePostCardStore.getState().setVideoViewability(
+      feedContext,
+      visibleVideoIds,
+      activeVideoId,
+    );
+  }, [feedContext, posts]);
+
   const tabListRef = activeTabIndex === 0 ? magicListRef : latestListRef;
   const combinedRefCallback = useCallback((instance: FlashListRef<Post> | null) => {
     tabListRef.current = instance;
@@ -720,30 +765,44 @@ export const HomeTabbedFeed = forwardRef<
   const onItemVisible =
     activeTabIndex === 0 ? handleMagicItemVisible : handleLatestItemVisible;
 
+  const isStillFetchingInitial = query.isPending;
   const ListEmpty = useMemo(
     () =>
       createListEmptyComponent(
-        query.isPending,
+        isStillFetchingInitial,
         query.isError,
         query.error?.message,
       ),
-    [createListEmptyComponent, query.isPending, query.isError, query.error?.message],
+    [createListEmptyComponent, isStillFetchingInitial, query.isError, query.error?.message],
   );
 
   return (
-    <HomePostList
-      ref={combinedRefCallback}
-      data={posts}
-      contentContainerStyle={listContentStyle}
-      onScroll={scrollHandler}
-      ListHeaderComponent={ListHeader}
-      ListEmptyComponent={ListEmpty}
-      ListFooterComponent={ListFooter}
-      refreshControl={refreshControl}
-      feedScreen={baseFeed}
-      feedContext={feedContext}
-      onItemVisible={onItemVisible}
-    />
+    <View style={{ flex: 1 }}>
+      <GestureDetector gesture={pullGesture}>
+        <View style={{ flex: 1 }} collapsable={false}>
+          <HomePostList
+            key={feedContext}
+            ref={combinedRefCallback}
+            data={posts}
+            contentContainerStyle={listContentStyle}
+            onScroll={scrollHandler}
+            ListHeaderComponent={ListHeader}
+            ListEmptyComponent={ListEmpty}
+            ListFooterComponent={ListFooter}
+            refreshControl={refreshControl}
+            feedScreen={baseFeed}
+            feedContext={feedContext}
+            onItemVisible={onItemVisible}
+          />
+        </View>
+      </GestureDetector>
+      <IOSRefreshIndicator
+        visible={showHeaderSpinner}
+        topOffset={insets.top + HEADER_HEIGHT + 8}
+        scrollY={scrollY}
+        pullDistance={pullDistance}
+      />
+    </View>
   );
 });
 

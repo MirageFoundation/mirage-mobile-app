@@ -14,11 +14,16 @@ import { PowQueueToast } from "@/src/components/ui/pow-queue-toast";
 import { NetworkMonitor } from "@/src/components/network-monitor";
 import { CloudflareErrorToast } from "@/src/components/cloudflare-error-toast";
 import { WalletProvider } from "./wallet-provider";
-import { initInboxNotifications } from "@/src/services/inbox-notifications";
+import { cleanupInboxNotificationsForLogout, initInboxNotifications } from "@/src/services/inbox-notifications";
 import { initPushNotifications, registerPush } from "@/src/services/push-notifications";
+import { initSeenPosts, teardownSeenPosts } from "@/src/services/seen-posts";
 import { useAuthStore, usePreferencesStore, useVideoPositionStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
-import { flushPendingRouteAfterAuth } from "@/src/navigation/auth-navigation";
+import {
+  flushPendingAuthRoute,
+  flushPendingRouteAfterAuth,
+} from "@/src/navigation/auth-navigation";
+import { startTimeTicking, stopTimeTicking } from "@/src/stores/time-tick-store";
 import * as Sentry from "@sentry/react-native";
 import { AppState } from "react-native";
 
@@ -48,6 +53,13 @@ export const RootProvider = memo(
     useEffect(() => {
       initInboxNotifications();
       initPushNotifications();
+      initSeenPosts();
+      startTimeTicking();
+
+      return () => {
+        teardownSeenPosts();
+        stopTimeTicking();
+      };
     }, []);
 
     useEffect(() => {
@@ -62,11 +74,23 @@ export const RootProvider = memo(
     const hasSeenAdultPrompt = usePreferencesStore((s) => s.hasSeenAdultPrompt);
 
     useEffect(() => {
+      const timer = setTimeout(() => flushPendingAuthRoute(), 1000);
+      return () => clearTimeout(timer);
+    }, []);
+
+    useEffect(() => {
       if (!isLoggedIn) return;
       if (!hasSeenAdultPrompt) return;
       const timer = setTimeout(() => flushPendingRouteAfterAuth(), 1000);
       return () => clearTimeout(timer);
     }, [isLoggedIn, hasSeenAdultPrompt]);
+
+    useEffect(() => {
+      if (isLoggedIn) return;
+      cleanupInboxNotificationsForLogout().catch((error) => {
+        console.warn("[RootProvider] Failed to cleanup inbox notifications:", error);
+      });
+    }, [isLoggedIn]);
 
     useEffect(() => {
       if (!walletAddress) return;
@@ -77,6 +101,8 @@ export const RootProvider = memo(
 
       const timer = setTimeout(() => {
         if (AppState.currentState !== "active") return;
+
+        initInboxNotifications();
 
         walletService.getWallet()
           .then((wallet) => {

@@ -7,6 +7,17 @@ export type HistoryEntry = Post & {
   viewedAt: number;
 };
 
+function normalizeHistoryEntry(entry: HistoryEntry): HistoryEntry {
+  if (entry.likes === 0 && entry.dislikes > 0) {
+    return {
+      ...entry,
+      likes: -entry.dislikes,
+    };
+  }
+
+  return entry;
+}
+
 const MAX_HISTORY = 100;
 
 interface HistoryState {
@@ -24,7 +35,7 @@ export const useHistoryStore = create<HistoryState>()(
       addEntry: (post: Post) => {
         set((state) => {
           const filtered = state.entries.filter((e) => e.id !== post.id);
-          const updated = [{ ...post, viewedAt: Date.now() }, ...filtered];
+          const updated = [normalizeHistoryEntry({ ...post, viewedAt: Date.now() }), ...filtered];
           return { entries: updated.slice(0, MAX_HISTORY) };
         });
       },
@@ -42,6 +53,17 @@ export const useHistoryStore = create<HistoryState>()(
     {
       name: "history-storage",
       storage: createJSONStorage(() => mmkvStorage),
+      version: 1,
+      migrate: (persistedState) => {
+        const state = persistedState as {
+          entries?: HistoryEntry[];
+        };
+
+        return {
+          ...state,
+          entries: (state.entries ?? []).map((entry) => normalizeHistoryEntry(entry)),
+        };
+      },
     },
   ),
 );

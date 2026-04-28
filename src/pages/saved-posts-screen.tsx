@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "@/src/hooks/use-router";
 import { useIsFocused } from "@react-navigation/native";
+import * as Sentry from "@sentry/react-native";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Dimensions, FlatList, Platform, Pressable, View, type ViewToken } from "react-native";
 import { GestureDetector, Gesture } from "react-native-gesture-handler";
@@ -24,7 +25,6 @@ import {
   type PostOptionsSheetRef,
   CommentOptionsSheet,
   type CommentOptionsSheetRef,
-  type Comment,
 } from "@/src/components/molecules";
 import { PostCardItem } from "@/src/components/molecules/post-card-item";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
@@ -45,15 +45,18 @@ import {
   useContentModerationStore,
   useSavedPostsStore,
   usePreferencesStore,
+  useFeedScrollStore,
   getShareBaseUrl,
   type SavedComment,
 } from "@/src/stores";
+import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { MediaPreviewModal } from "@/src/components/molecules/media-preview-modal";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MEDIA_HORIZONTAL_PADDING = 32;
+const SAVED_POSTS_FEED_CONTEXT = "saved:posts";
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
 const IMAGE_URL_REGEX = /^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp))$/i;
@@ -86,7 +89,7 @@ function extractImageUrls(content: string): {
   return { text: textLines.join("\n").trim(), imageUrls };
 }
 
-const CommentImage = memo(({ url, onPress }: { url: string; onPress?: (url: string) => void }) => {
+const CommentImage = memo(function CommentImage({ url, onPress }: { url: string; onPress?: (url: string) => void }) {
   const { theme } = useUnistyles();
   const [hasError, setHasError] = useState(false);
   const [mediaLoaded, setMediaLoaded] = useState(false);
@@ -156,12 +159,6 @@ const SAVED_TABS = [
   { key: "posts", label: "Posts" },
   { key: "comments", label: "Comments" },
 ] as const;
-
-type VoteOverride = {
-  hasLiked: boolean;
-  hasDisliked: boolean;
-  likeDelta: number;
-};
 
 const AnimatedTabLabel = ({
   label,
@@ -277,7 +274,7 @@ const SavedCommentItem = ({
   onPress: (comment: SavedComment) => void;
 }) => {
   const { theme } = useUnistyles();
-  const displayPoints = comment.likes - (comment.dislikes ?? 0);
+  const displayPoints = comment.likes;
   const hasUpvoted = comment.hasLiked;
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
@@ -364,7 +361,6 @@ export function SavedPostsScreen() {
   const commentOptionsSheetRef = useRef<CommentOptionsSheetRef>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [selectedComment, setSelectedComment] = useState<SavedComment | null>(null);
-  const [voteOverrides, setVoteOverrides] = useState<Record<string, VoteOverride>>({});
   const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
   const [visibleVideoPostIds, setVisibleVideoPostIds] = useState<Set<string>>(new Set());
   const [nearbyVideoPostIds, setNearbyVideoPostIds] = useState<Set<string>>(new Set());
@@ -377,6 +373,8 @@ export function SavedPostsScreen() {
   const shareServer = usePreferencesStore((s) => s.shareServer);
   const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
   const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
+  const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
+  const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
 
   const { networkType } = useNetworkState();
 
@@ -387,46 +385,56 @@ export function SavedPostsScreen() {
 
   const { handleUpvote, handleDownvote } = useVoteHandler({
     onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
-      setVoteOverrides((prev) => {
-        const existing = prev[targetId];
-        return {
-          ...prev,
-          [targetId]: {
-            hasLiked: result.hasLiked,
-            hasDisliked: result.hasDisliked,
-            likeDelta: (existing?.likeDelta ?? 0) + result.likeDelta,
-          },
-        };
+      setVoteOverride(targetId, {
+        hasLiked: result.hasLiked,
+        hasDisliked: result.hasDisliked,
+        likes: result.newLikes,
       });
-    }, []),
+    }, [setVoteOverride]),
     onRollback: useCallback((targetId: string) => {
-      setVoteOverrides((prev) => {
-        const next = { ...prev };
-        delete next[targetId];
-        return next;
-      });
-    }, []),
+      clearVoteOverride(targetId);
+    }, [clearVoteOverride]),
   });
 
-  const visiblePosts = useMemo(
-    () => savedPosts.filter((p) => !hiddenPostIds.has(p.id) && !(p.topic && blockedTopicNames.has(p.topic.toLowerCase()))),
-    [savedPosts, hiddenPostIds, blockedTopicNames],
-  );
+  const visiblePosts = useMemo(() => {
+    const malformed: string[] = [];
+    const safe = savedPosts.filter((p) => {
+      if (!p || typeof p !== "object" || !p.id || !p.author || !p.author.id || !p.author.username) {
+        malformed.push(p?.id ?? "unknown");
+        return false;
+      }
+      if (hiddenPostIds.has(p.id)) return false;
+      if (p.topic && blockedTopicNames.has(p.topic.toLowerCase())) return false;
+      return true;
+    });
+    if (malformed.length > 0) {
+      Sentry.captureMessage("saved-posts: filtered malformed posts", {
+        level: "warning",
+        tags: { feature: "saved-posts", reason: "malformed-persisted-post" },
+        extra: { malformedIds: malformed, totalSaved: savedPosts.length },
+      });
+    }
+    return safe;
+  }, [savedPosts, hiddenPostIds, blockedTopicNames]);
 
-  const postsWithOverrides = useMemo(
-    () =>
-      visiblePosts.map((post) => {
-        const override = voteOverrides[post.id];
-        if (!override) return post;
-        return {
-          ...post,
-          hasLiked: override.hasLiked,
-          hasDisliked: override.hasDisliked,
-          likes: post.likes + override.likeDelta,
-        };
-      }),
-    [visiblePosts, voteOverrides],
-  );
+  const visibleComments = useMemo(() => {
+    const malformed: string[] = [];
+    const safe = savedComments.filter((c) => {
+      if (!c || typeof c !== "object" || !c.id || !c.author || !c.author.username) {
+        malformed.push(c?.id ?? "unknown");
+        return false;
+      }
+      return true;
+    });
+    if (malformed.length > 0) {
+      Sentry.captureMessage("saved-posts: filtered malformed comments", {
+        level: "warning",
+        tags: { feature: "saved-posts", reason: "malformed-persisted-comment" },
+        extra: { malformedIds: malformed, totalSaved: savedComments.length },
+      });
+    }
+    return safe;
+  }, [savedComments]);
 
   const savedPostsViewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 30,
@@ -549,11 +557,11 @@ export function SavedPostsScreen() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (postsWithOverrides.length !== 0) return;
+    if (visiblePosts.length !== 0) return;
     setVisibleVideoPostIds(new Set());
     setNearbyVideoPostIds(new Set());
     setActiveVideoPostId(null);
-  }, [postsWithOverrides.length]);
+  }, [visiblePosts.length]);
 
   useEffect(() => {
     return () => {
@@ -608,13 +616,13 @@ export function SavedPostsScreen() {
 
   const handleMorePress = useCallback(
     (postId: string) => {
-      const post = postsWithOverrides.find((p) => p.id === postId);
+      const post = visiblePosts.find((p) => p.id === postId);
       if (post) {
         setSelectedPost(post);
         postOptionsSheetRef.current?.present();
       }
     },
-    [postsWithOverrides],
+    [visiblePosts],
   );
 
   const handleLikePress = useCallback(
@@ -707,6 +715,7 @@ export function SavedPostsScreen() {
         isFocused={activeVideoPostId === item.id}
         isNearVisible={nearbyVideoPostIds.has(item.id)}
         screenActive={isFocused && activeTab === 0 && currentState === "active"}
+        videoSyncScope={SAVED_POSTS_FEED_CONTEXT}
         isOwnPost={currentUser?.id === item.author.id}
         shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
         showUrlCard={false}
@@ -739,6 +748,16 @@ export function SavedPostsScreen() {
       isFocused,
     ],
   );
+
+  const setFeedScrolling = useCallback((isScrolling: boolean) => {
+    useFeedScrollStore.getState().setContextScrolling(SAVED_POSTS_FEED_CONTEXT, isScrolling);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      setFeedScrolling(false);
+    };
+  }, [setFeedScrolling]);
 
   const renderCommentItem = useCallback(
     ({ item }: { item: SavedComment }) => (
@@ -907,11 +926,11 @@ export function SavedPostsScreen() {
       <GestureDetector gesture={swipeGesture}>
         <Animated.View style={[{ flex: 1 }, contentAnimatedStyle]}>
           {activeTab === 0 ? (
-            postsWithOverrides.length === 0 ? (
+            visiblePosts.length === 0 ? (
               renderEmptyState("posts")
             ) : (
               <FlatList
-                data={postsWithOverrides}
+                data={visiblePosts}
                 keyExtractor={postKeyExtractor}
                 renderItem={renderPostItem}
                 contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
@@ -921,14 +940,20 @@ export function SavedPostsScreen() {
                 initialNumToRender={5}
                 viewabilityConfig={savedPostsViewabilityConfig}
                 onViewableItemsChanged={onSavedPostsViewableItemsChanged}
-                onMomentumScrollEnd={handleSavedPostsMomentumScrollEnd}
+                onScrollBeginDrag={() => setFeedScrolling(true)}
+                onScrollEndDrag={() => setFeedScrolling(false)}
+                onMomentumScrollBegin={() => setFeedScrolling(true)}
+                onMomentumScrollEnd={() => {
+                  setFeedScrolling(false);
+                  handleSavedPostsMomentumScrollEnd();
+                }}
               />
             )
-          ) : savedComments.length === 0 ? (
+          ) : visibleComments.length === 0 ? (
             renderEmptyState("comments")
           ) : (
             <FlatList
-              data={savedComments}
+              data={visibleComments}
               keyExtractor={commentKeyExtractor}
               renderItem={renderCommentItem}
               contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}

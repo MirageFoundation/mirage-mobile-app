@@ -17,8 +17,9 @@ import { useAuthStore, useUIStore } from "@/src/stores";
 import { useInboxStore } from "@/src/stores/inbox-store";
 import { useShareIntentContext } from "expo-share-intent";
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
+import { Tabs, usePathname } from "expo-router";
 import { router } from "@/src/utils/guarded-router";
+import * as Sentry from "@sentry/react-native";
 import {
   Pressable,
   StyleSheet as RNStyleSheet,
@@ -35,6 +36,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { SideMenuProvider } from "@/src/providers/side-menu-provider";
 import { signalTabsReady } from "@/src/services/inbox-notifications";
+import { isRecentSharePath } from "@/src/navigation/linking";
+
+export const unstable_settings = {
+  initialRouteName: "index",
+};
 
 // Tabs that require authentication
 const PROTECTED_TABS = ["following", "create", "inbox", "profile"];
@@ -249,66 +255,126 @@ const TabBarItem = ({
   );
 };
 
+function TabNavigationVisibilityReset() {
+  const pathname = usePathname();
+  const { showBars } = useScrollAnimationContext();
+
+  useEffect(() => {
+    showBars();
+    if (pathname.endsWith("/inbox")) {
+      Sentry.addBreadcrumb({
+        category: "navigation",
+        message: "Tab chrome reset on inbox route",
+        level: "info",
+        data: { pathname },
+      });
+    }
+  }, [pathname, showBars]);
+
+  return null;
+}
+
 function TabsContent() {
   return (
-    <Tabs
-      tabBar={(props) => <AnimatedTabBar {...props} />}
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Home",
+    <>
+      <TabNavigationVisibilityReset />
+      <Tabs
+        tabBar={(props) => <AnimatedTabBar {...props} />}
+        screenOptions={{
+          headerShown: false,
         }}
-      />
-      <Tabs.Screen
-        name="following"
-        options={{
-          title: "Following",
-        }}
-      />
-      <Tabs.Screen
-        name="create"
-        options={{
-          title: "Create",
-        }}
-      />
-      <Tabs.Screen
-        name="inbox"
-        options={{
-          title: "Inbox",
-          lazy: false,
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profile",
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: "Home",
+          }}
+        />
+        <Tabs.Screen
+          name="following"
+          options={{
+            title: "Following",
+          }}
+        />
+        <Tabs.Screen
+          name="create"
+          options={{
+            title: "Create",
+          }}
+        />
+        <Tabs.Screen
+          name="inbox"
+          options={{
+            title: "Inbox",
+            lazy: false,
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: "Profile",
+          }}
+        />
+      </Tabs>
+    </>
   );
 }
 
 export default function TabLayout() {
+  const pathname = usePathname();
   const { hasShareIntent } = useShareIntentContext();
-  const hasNavigatedRef = useRef(false);
+  const hasHandledInitialRouteRef = useRef(false);
+  const initialShareIntentRef = useRef(hasShareIntent);
 
   useEffect(() => {
     signalTabsReady();
   }, []);
 
+  const prevShareIntentRef = useRef(hasShareIntent);
   useEffect(() => {
-    if (hasShareIntent && !hasNavigatedRef.current) {
-      hasNavigatedRef.current = true;
+    const prev = prevShareIntentRef.current;
+    prevShareIntentRef.current = hasShareIntent;
+    // Only navigate on a fresh false->true transition after initial route has settled.
+    if (!hasHandledInitialRouteRef.current) return;
+    if (prev || !hasShareIntent) return;
+    if (!pathname.endsWith("/create")) {
       router.navigate("/(tabs)/create");
     }
-    if (!hasShareIntent) {
-      hasNavigatedRef.current = false;
-    }
-  }, [hasShareIntent]);
+  }, [hasShareIntent, pathname]);
+
+  useEffect(() => {
+    if (hasHandledInitialRouteRef.current || !pathname) return;
+
+    const handleInitial = () => {
+      if (hasHandledInitialRouteRef.current) return;
+      hasHandledInitialRouteRef.current = true;
+
+      const hasInitialShareIntent =
+        initialShareIntentRef.current || hasShareIntent || isRecentSharePath(10_000);
+      const isOnCreate = pathname.endsWith("/create");
+
+      Sentry.addBreadcrumb({
+        category: "navigation",
+        message: "Initial tab route check",
+        data: { pathname, hasInitialShareIntent, isOnCreate },
+        level: "info",
+      });
+
+      if (isOnCreate && !hasInitialShareIntent) {
+        Sentry.addBreadcrumb({
+          category: "navigation",
+          message: "Redirecting stale initial create route to home",
+          data: { pathname },
+          level: "info",
+        });
+        router.replace("/(tabs)");
+      }
+    };
+
+    const timer = setTimeout(handleInitial, 800);
+
+    return () => clearTimeout(timer);
+  }, [pathname, hasShareIntent]);
 
   return (
     <ScrollAnimationProvider>

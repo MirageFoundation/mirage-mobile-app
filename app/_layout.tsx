@@ -14,6 +14,24 @@ const navigationIntegration = Sentry.reactNavigationIntegration({
   enableTimeToInitialDisplay: true,
 });
 
+function isKnownHandledError(event: Sentry.ErrorEvent): boolean {
+  const message = event.exception?.values?.[0]?.value?.toLowerCase() ?? '';
+  if (
+    message.includes('getregistrationinfoasync') ||
+    message.includes('keychain access failed') ||
+    message.includes('user interaction is not allowed')
+  ) {
+    return true;
+  }
+  if (
+    message.includes('performhapticsasync') ||
+    message.includes('a haptics engine is not available')
+  ) {
+    return true;
+  }
+  return false;
+}
+
 Sentry.init({
   dsn: 'https://34f3ac8d124f7b5edbbb02ff36ac1a2b@o4510907183595520.ingest.us.sentry.io/4510907185496064',
 
@@ -31,6 +49,11 @@ Sentry.init({
   ],
 
   enableAutoPerformanceTracing: true,
+
+  beforeSend(event) {
+    if (isKnownHandledError(event)) return null;
+    return event;
+  },
 });
 
 export default Sentry.wrap(function RootLayout() {
@@ -43,7 +66,7 @@ export default Sentry.wrap(function RootLayout() {
   }, [ref]);
 
   return (
-    <ShareIntentProvider options={{ scheme: getShareScheme() || undefined, resetOnBackground: false }}>
+    <ShareIntentProvider options={{ scheme: getShareScheme() || undefined, resetOnBackground: true }}>
     <RootProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />

@@ -54,8 +54,8 @@ export function VideoEditorScreen() {
   const params = useLocalSearchParams<{ uri: string; width?: string; height?: string; initialTrimStart?: string; initialTrimEnd?: string; replacingUri?: string; returnTo?: string }>();
   
   const videoUri = params.uri;
-  const videoWidth = params.width ? parseInt(params.width) : 1920;
-  const videoHeight = params.height ? parseInt(params.height) : 1080;
+  const initialVideoWidth = params.width ? parseInt(params.width) : 1920;
+  const initialVideoHeight = params.height ? parseInt(params.height) : 1080;
   
   const videoRef = useRef<Video>(null);
   
@@ -63,6 +63,10 @@ export function VideoEditorScreen() {
   const [duration, setDuration] = useState(0);
   const [currentPosition, setCurrentPosition] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [resolvedVideoSize, setResolvedVideoSize] = useState({
+    width: initialVideoWidth,
+    height: initialVideoHeight,
+  });
   
   const initialTrimStartMs = params.initialTrimStart ? parseInt(params.initialTrimStart) : 0;
   const initialTrimEndMs = params.initialTrimEnd ? parseInt(params.initialTrimEnd) : 0;
@@ -75,7 +79,10 @@ export function VideoEditorScreen() {
   const leftTrimPosition = useSharedValue(0);
   const rightTrimPosition = useSharedValue(TIMELINE_WIDTH);
   
-  const aspectRatio = videoWidth / videoHeight;
+  const aspectRatio =
+    resolvedVideoSize.width > 0 && resolvedVideoSize.height > 0
+      ? resolvedVideoSize.width / resolvedVideoSize.height
+      : 16 / 9;
   const videoDisplayHeight = Math.min(SCREEN_WIDTH / aspectRatio, 400);
 
   useEffect(() => {
@@ -129,6 +136,33 @@ export function VideoEditorScreen() {
       await videoRef.current.playAsync();
     }
   }, [trimStart, trimEnd]);
+
+  const stopEditorPlayback = useCallback(async () => {
+    if (!videoRef.current) return;
+
+    try {
+      const status = await videoRef.current.getStatusAsync();
+      if (!status.isLoaded) return;
+
+      await videoRef.current.pauseAsync().catch(() => {});
+      await videoRef.current.setStatusAsync({
+        shouldPlay: false,
+        isMuted: true,
+        positionMillis: trimStart,
+      }).catch(() => {});
+      await videoRef.current.unloadAsync().catch(() => {});
+    } catch {
+      // no-op
+    }
+
+    setIsPlaying(false);
+  }, [trimStart]);
+
+  useEffect(() => {
+    return () => {
+      void stopEditorPlayback();
+    };
+  }, [stopEditorPlayback]);
 
   const updateTrimFromPosition = useCallback((position: number, isLeft: boolean) => {
     const newTime = Math.round((position / TIMELINE_WIDTH) * duration);
@@ -189,15 +223,17 @@ export function VideoEditorScreen() {
     return { transform: [{ translateX: position }] };
   });
 
-  const handleClose = useCallback(() => {
+  const handleClose = useCallback(async () => {
     triggerHaptic("selection");
+    await stopEditorPlayback();
     router.back();
-  }, []);
+  }, [stopEditorPlayback]);
 
   const handleNext = useCallback(async () => {
     if (!videoUri) return;
     
     triggerHaptic("medium");
+    await stopEditorPlayback();
     
     let processedUri = videoUri;
     
@@ -230,8 +266,8 @@ export function VideoEditorScreen() {
       _pendingVideoResult = {
         videoUri: processedUri,
         originalVideoUri: videoUri,
-        videoWidth: videoWidth,
-        videoHeight: videoHeight,
+        videoWidth: resolvedVideoSize.width,
+        videoHeight: resolvedVideoSize.height,
         trimStart,
         trimEnd,
         replacingUri: params.replacingUri ?? "",
@@ -243,15 +279,15 @@ export function VideoEditorScreen() {
         params: {
           videoUri: processedUri,
           originalVideoUri: videoUri,
-          videoWidth: videoWidth.toString(),
-          videoHeight: videoHeight.toString(),
+          videoWidth: resolvedVideoSize.width.toString(),
+          videoHeight: resolvedVideoSize.height.toString(),
           trimStart: trimStart.toString(),
           trimEnd: trimEnd.toString(),
           replacingUri: params.replacingUri ?? "",
         },
       });
     }
-  }, [videoUri, videoWidth, videoHeight, trimStart, trimEnd, params.returnTo, params.replacingUri]);
+  }, [videoUri, resolvedVideoSize.height, resolvedVideoSize.width, trimStart, trimEnd, params.returnTo, params.replacingUri, stopEditorPlayback]);
 
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -316,6 +352,12 @@ export function VideoEditorScreen() {
               shouldPlay={false}
               isLooping={false}
               onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+              onReadyForDisplay={(event) => {
+                const { width, height } = event.naturalSize ?? {};
+                if (!width || !height) return;
+                if (width === resolvedVideoSize.width && height === resolvedVideoSize.height) return;
+                setResolvedVideoSize({ width, height });
+              }}
             />
             
             {/* Play/Pause overlay */}

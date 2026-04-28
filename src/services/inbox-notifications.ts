@@ -45,13 +45,45 @@ let _tabsReadyPromise: Promise<void> = new Promise<void>((resolve) => {
 });
 
 export function signalTabsReady(): void {
+  Sentry.addBreadcrumb({
+    category: "notifications",
+    message: "Tabs navigator is ready for notification navigation",
+    level: "info",
+  });
   _tabsReadyResolve?.();
 }
 
 function waitForTabsReady(timeoutMs = 5000): Promise<void> {
+  let didSettle = false;
   return Promise.race([
-    _tabsReadyPromise,
-    new Promise<void>((resolve) => setTimeout(resolve, timeoutMs)),
+    _tabsReadyPromise.then(() => {
+      if (didSettle) return;
+      didSettle = true;
+      Sentry.addBreadcrumb({
+        category: "notifications",
+        message: "Tabs ready before inbox notification navigation",
+        level: "info",
+      });
+    }),
+    new Promise<void>((resolve) =>
+      setTimeout(() => {
+        if (!didSettle) {
+          didSettle = true;
+          Sentry.captureMessage(
+            "Inbox notification navigation continued before tabs ready",
+            {
+              level: "warning",
+              tags: {
+                feature: "inbox-notifications",
+                operation: "wait-tabs-ready",
+              },
+              extra: { timeoutMs },
+            },
+          );
+        }
+        resolve();
+      }, timeoutMs),
+    ),
   ]);
 }
 
@@ -351,6 +383,17 @@ async function performInboxCheck(
 
     const inbox = await fetchAndSeedInboxCache(walletAddress, 50);
 
+    if (useAuthStore.getState().walletAddress !== walletAddress) {
+      console.log("[InboxNotifications] Wallet changed during check, skipping notification");
+      Sentry.addBreadcrumb({
+        category: "inbox-notifications",
+        message: "Wallet changed during inbox check; skipped notification scheduling",
+        level: "info",
+        data: { trigger },
+      });
+      return BackgroundFetch.BackgroundFetchResult.NoData;
+    }
+
     console.log("[InboxNotifications] Fetched replies:", inbox.replies?.length ?? 0);
 
     if (!inbox.replies || inbox.replies.length === 0) {
@@ -394,6 +437,17 @@ async function performInboxCheck(
     }
 
     for (const reply of unreadReplies) {
+      if (useAuthStore.getState().walletAddress !== walletAddress) {
+        console.log("[InboxNotifications] Wallet changed before scheduling, stopping notification loop");
+        Sentry.addBreadcrumb({
+          category: "inbox-notifications",
+          message: "Wallet changed before local notification scheduling",
+          level: "info",
+          data: { trigger, unreadCount: unreadReplies.length },
+        });
+        return BackgroundFetch.BackgroundFetchResult.NoData;
+      }
+
       notifiedIds.add(reply.reply_id);
       saveNotifiedIds(notifiedIds);
 
@@ -515,7 +569,6 @@ function subscribeAppState(): void {
   }
 }
 
-const STALE_NOTIFICATION_MS = 24 * 60 * 60_000;
 const HANDLED_NOTIFICATION_IDS_KEY = "inbox-handled-notification-ids";
 
 function getHandledNotificationIds(): Set<string> {
@@ -540,13 +593,48 @@ function handleNotificationResponse(
   if (!response) return;
   try {
     const notificationId = response.notification?.request?.identifier;
-    if (!notificationId) return;
+    if (!notificationId) {
+      Sentry.captureMessage("Inbox notification response missing notification id", {
+        level: "warning",
+        tags: {
+          feature: "inbox-notifications",
+          operation: "notification-response",
+        },
+        extra: { actionIdentifier: response.actionIdentifier },
+      });
+      return;
+    }
+    Sentry.addBreadcrumb({
+      category: "notifications",
+      message: "Inbox notification response received",
+      level: "info",
+      data: {
+        notificationId,
+        actionIdentifier: response.actionIdentifier,
+        appState: AppState.currentState,
+      },
+    });
     const handledNotificationIds = getHandledNotificationIds();
     if (handledNotificationIds.has(notificationId)) {
       console.log("[InboxNotifications] Already handled notification:", notificationId);
+      Sentry.addBreadcrumb({
+        category: "notifications",
+        message: "Inbox notification response already handled",
+        level: "info",
+        data: { notificationId },
+      });
       return;
     }
     const notificationData = response.notification?.request?.content?.data;
+    if (!useAuthStore.getState().walletAddress) {
+      console.log("[InboxNotifications] Ignoring notification response while logged out");
+      Sentry.addBreadcrumb({
+        category: "inbox-notifications",
+        message: "Ignored notification response while logged out",
+        level: "info",
+      });
+      return;
+    }
     const previewReply = buildPreviewReplyFromNotification(response.notification);
     const replyId =
       previewReply?.reply_id ??
@@ -558,15 +646,17 @@ function handleNotificationResponse(
       (typeof notificationData?.rootPostId === "string"
         ? notificationData.rootPostId
         : null);
-    const responseDate = response.notification?.date;
-    if (responseDate) {
-      const dateMs = responseDate < 1e12 ? responseDate * 1000 : responseDate;
-      const ageMs = Date.now() - dateMs;
-      if (ageMs > STALE_NOTIFICATION_MS) {
-        console.log("[InboxNotifications] Ignoring stale notification response, age:", ageMs);
-        return;
-      }
-    }
+    Sentry.addBreadcrumb({
+      category: "notifications",
+      message: "Inbox notification target resolved",
+      level: "info",
+      data: {
+        notificationId,
+        hasPreviewReply: !!previewReply,
+        hasReplyId: !!replyId,
+        hasRootPostId: !!rootPostId,
+      },
+    });
     handledNotificationIds.add(notificationId);
     saveHandledNotificationIds(handledNotificationIds);
     useInboxStore.getState().setNotificationTarget({
@@ -583,8 +673,23 @@ function handleNotificationResponse(
     const navigateToInbox = async () => {
       void prefetchInbox().catch((error) => {
         console.warn("[InboxNotifications] Failed to prefetch inbox before navigation:", error);
+        Sentry.addBreadcrumb({
+          category: "notifications",
+          message: "Inbox prefetch before notification navigation failed",
+          level: "warning",
+          data: {
+            notificationId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
       });
       await waitForTabsReady();
+      Sentry.addBreadcrumb({
+        category: "navigation",
+        message: "Dispatching inbox notification navigation",
+        level: "info",
+        data: { notificationId, hasReplyId: !!replyId },
+      });
       router.navigate({
         pathname: "/(tabs)/inbox",
         params: {
@@ -593,15 +698,53 @@ function handleNotificationResponse(
         },
       });
     };
+    const runNavigateToInbox = () => {
+      void navigateToInbox().catch((error) => {
+        console.error("[InboxNotifications] Failed to navigate from notification:", error);
+        Sentry.captureException(error, {
+          tags: { action: "notification_navigate" },
+        });
+      });
+    };
     if (AppState.currentState !== "active") {
+      Sentry.addBreadcrumb({
+        category: "navigation",
+        message: "Deferring inbox notification navigation until app active",
+        level: "info",
+        data: { notificationId, appState: AppState.currentState },
+      });
+      let didNavigate = false;
+      const navigateOnce = () => {
+        if (didNavigate) return;
+        didNavigate = true;
+        sub.remove();
+        Sentry.addBreadcrumb({
+          category: "navigation",
+          message: "Starting deferred inbox notification navigation",
+          level: "info",
+          data: { notificationId, appState: AppState.currentState },
+        });
+        runNavigateToInbox();
+      };
       const sub = AppState.addEventListener("change", (state) => {
         if (state === "active") {
-          sub.remove();
-          navigateToInbox();
+          navigateOnce();
         }
       });
+
+      setTimeout(() => {
+        if (AppState.currentState === "active") {
+          Sentry.addBreadcrumb({
+            category: "navigation",
+            message: "Using inbox notification active-state fallback",
+            level: "info",
+            data: { notificationId },
+          });
+          navigateOnce();
+        }
+      }, 1_000);
     } else {
-      navigateToInbox();
+      runNavigateToInbox();
     }
   } catch (error) {
     console.error("[InboxNotifications] Failed to navigate from notification:", error);
@@ -661,6 +804,16 @@ TaskManager.defineTask(TASK_NAME, async () => {
 
 export async function initInboxNotifications(): Promise<void> {
   if (isInboxNotificationsInitialized || isInitializingInboxNotifications) {
+    return;
+  }
+
+  if (!useAuthStore.getState().walletAddress) {
+    console.log("[InboxNotifications] No wallet, skipping notification init");
+    Sentry.addBreadcrumb({
+      category: "inbox-notifications",
+      message: "Skipped inbox notification init: no wallet",
+      level: "info",
+    });
     return;
   }
 
@@ -756,6 +909,65 @@ export async function initInboxNotifications(): Promise<void> {
   }
 }
 
+export async function cleanupInboxNotificationsForLogout(): Promise<void> {
+  Sentry.addBreadcrumb({
+    category: "inbox-notifications",
+    message: "Cleaning up inbox notifications for logout",
+    level: "info",
+    data: {
+      hadForegroundPolling: foregroundInterval !== null,
+      hadAppStateSubscription: appStateSubscription !== null,
+      hadSignalSubscription: unsubscribeInboxSignals !== null,
+      hadResponseSubscription: notificationResponseSubscription !== null,
+    },
+  });
+
+  stopForegroundPolling();
+  appStateSubscription?.remove();
+  appStateSubscription = null;
+  unsubscribeInboxSignals?.();
+  unsubscribeInboxSignals = null;
+  notificationResponseSubscription?.remove();
+  notificationResponseSubscription = null;
+  deferredInitSubscription?.remove();
+  deferredInitSubscription = null;
+  isInboxNotificationsInitialized = false;
+  isInitializingInboxNotifications = false;
+
+  try {
+    const isRegistered = await TaskManager.isTaskRegisteredAsync(TASK_NAME);
+    if (isRegistered) {
+      await BackgroundFetch.unregisterTaskAsync(TASK_NAME);
+    }
+    Sentry.addBreadcrumb({
+      category: "inbox-notifications",
+      message: "Inbox background fetch cleanup complete",
+      level: "info",
+      data: { wasRegistered: isRegistered },
+    });
+  } catch (error) {
+    console.warn("[InboxNotifications] Failed to unregister background fetch:", error);
+    Sentry.captureException(error, {
+      tags: { feature: "inbox-notifications", operation: "logout-background-fetch-cleanup" },
+    });
+  }
+
+  try {
+    await Notifications.dismissAllNotificationsAsync();
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    Sentry.addBreadcrumb({
+      category: "inbox-notifications",
+      message: "Cleared delivered and scheduled notifications on logout",
+      level: "info",
+    });
+  } catch (error) {
+    console.warn("[InboxNotifications] Failed to clear notifications on logout:", error);
+    Sentry.captureException(error, {
+      tags: { feature: "inbox-notifications", operation: "logout-notification-cleanup" },
+    });
+  }
+}
+
 export async function runInboxCheckNow(): Promise<void> {
   console.log("[InboxNotifications] Manual check triggered");
   const result = await runInboxCheck("manual");
@@ -783,7 +995,7 @@ export async function sendTestNotification(): Promise<void> {
 
 export async function resetAndTestInboxNotification(): Promise<void> {
   console.log("[InboxNotifications] Resetting seeded data and running check...");
-  storage.remove(NOTIFIED_IDS_KEY);
+  saveInboxNotifiedIds(new Set());
   storage.remove(LAST_CHECK_KEY);
   storage.set(SEEDED_KEY, "true");
   const result = await runInboxCheck("manual");

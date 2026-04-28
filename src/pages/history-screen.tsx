@@ -2,7 +2,7 @@ import { navigateToEditPost } from "@/src/utils/edit-post";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "@/src/hooks/use-router";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -25,17 +25,14 @@ import {
   useContentModerationStore,
   useSavedPostsStore,
   usePreferencesStore,
+  useFeedScrollStore,
   getShareBaseUrl,
 } from "@/src/stores";
 import { useHistoryStore, type HistoryEntry } from "@/src/stores/history-store";
+import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
-
-type VoteOverride = {
-  hasLiked: boolean;
-  hasDisliked: boolean;
-  likeDelta: number;
-};
+const HISTORY_FEED_CONTEXT = "history:posts";
 
 export function HistoryScreen() {
   const { theme } = useUnistyles();
@@ -46,7 +43,6 @@ export function HistoryScreen() {
 
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [voteOverrides, setVoteOverrides] = useState<Record<string, VoteOverride>>({});
 
   const currentUser = useAuthStore((s) => s.user);
   const entries = useHistoryStore((s) => s.entries);
@@ -54,48 +50,25 @@ export function HistoryScreen() {
   const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const shareServer = usePreferencesStore((s) => s.shareServer);
+  const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
+  const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
 
   const { handleUpvote, handleDownvote } = useVoteHandler({
     onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
-      setVoteOverrides((prev) => {
-        const existing = prev[targetId];
-        return {
-          ...prev,
-          [targetId]: {
-            hasLiked: result.hasLiked,
-            hasDisliked: result.hasDisliked,
-            likeDelta: (existing?.likeDelta ?? 0) + result.likeDelta,
-          },
-        };
+      setVoteOverride(targetId, {
+        hasLiked: result.hasLiked,
+        hasDisliked: result.hasDisliked,
+        likes: result.newLikes,
       });
-    }, []),
+    }, [setVoteOverride]),
     onRollback: useCallback((targetId: string) => {
-      setVoteOverrides((prev) => {
-        const next = { ...prev };
-        delete next[targetId];
-        return next;
-      });
-    }, []),
+      clearVoteOverride(targetId);
+    }, [clearVoteOverride]),
   });
 
   const visibleEntries = useMemo(
     () => entries.filter((e) => !hiddenPostIds.has(e.id)),
     [entries, hiddenPostIds],
-  );
-
-  const entriesWithOverrides = useMemo(
-    () =>
-      visibleEntries.map((entry) => {
-        const override = voteOverrides[entry.id];
-        if (!override) return entry;
-        return {
-          ...entry,
-          hasLiked: override.hasLiked,
-          hasDisliked: override.hasDisliked,
-          likes: entry.likes + override.likeDelta,
-        };
-      }),
-    [visibleEntries, voteOverrides],
   );
 
   const handlePostPress = useCallback(
@@ -114,13 +87,13 @@ export function HistoryScreen() {
 
   const handleMorePress = useCallback(
     (postId: string) => {
-      const post = entriesWithOverrides.find((p) => p.id === postId);
+      const post = visibleEntries.find((p) => p.id === postId);
       if (post) {
         setSelectedPost(post);
         postOptionsSheetRef.current?.present();
       }
     },
-    [entriesWithOverrides],
+    [visibleEntries],
   );
 
   const handleLikePress = useCallback(
@@ -187,6 +160,7 @@ export function HistoryScreen() {
         post={item}
         isOwnPost={currentUser?.id === item.author.id}
         shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
+        videoSyncScope={HISTORY_FEED_CONTEXT}
         showUrlCard={false}
         onPostPress={handlePostPress}
         onAuthorPress={handleAuthorPress}
@@ -210,6 +184,16 @@ export function HistoryScreen() {
 
   const keyExtractor = useCallback((item: HistoryEntry) => item.id, []);
 
+  const setFeedScrolling = useCallback((isScrolling: boolean) => {
+    useFeedScrollStore.getState().setContextScrolling(HISTORY_FEED_CONTEXT, isScrolling);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      setFeedScrolling(false);
+    };
+  }, [setFeedScrolling]);
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background.default }]}>
       <View
@@ -232,7 +216,7 @@ export function HistoryScreen() {
         <Text size="lg" weight="bold">
           History
         </Text>
-        {entriesWithOverrides.length > 0 ? (
+        {visibleEntries.length > 0 ? (
           <Pressable onPress={handleClearAll} style={styles.clearButton}>
             <Text size="md" style={{ color: theme.colors.text.subtle }}>
               Clear
@@ -245,7 +229,7 @@ export function HistoryScreen() {
 
       <View style={[styles.headerDivider, { backgroundColor: theme.colors.border.subtle }]} />
 
-      {entriesWithOverrides.length === 0 ? (
+      {visibleEntries.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Image
             source={emptyInfoImage}
@@ -261,11 +245,15 @@ export function HistoryScreen() {
         </View>
       ) : (
         <FlatList
-          data={entriesWithOverrides}
+          data={visibleEntries}
           keyExtractor={keyExtractor}
           renderItem={renderPostItem}
           contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
           showsVerticalScrollIndicator={false}
+          onScrollBeginDrag={() => setFeedScrolling(true)}
+          onScrollEndDrag={() => setFeedScrolling(false)}
+          onMomentumScrollBegin={() => setFeedScrolling(true)}
+          onMomentumScrollEnd={() => setFeedScrolling(false)}
         />
       )}
 

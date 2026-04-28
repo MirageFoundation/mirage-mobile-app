@@ -894,7 +894,11 @@ export function AnnotateScreen() {
                           <View style={[styles.uploadedBadge, !isNetworkOnline && { backgroundColor: "rgba(234,179,8,0.85)" }]}>
                             <ActivityIndicator size="small" color="#fff" />
                             <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
-                              {isNetworkOnline ? "Uploading…" : "Low connectivity…"}
+                              {!isNetworkOnline
+                                ? "Low connectivity…"
+                                : upload.progress >= 98
+                                  ? "Processing…"
+                                  : "Uploading…"}
                             </Text>
                           </View>
                         )}

@@ -287,6 +287,14 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       }
     }
 
+    if (!imageUrl && !videoUrl && post.url && /\.(jpe?g|png|gif|webp)(\?|$)/i.test(post.url)) {
+      imageUrl = post.url;
+    }
+
+    if (images.length === 0 && imageUrl) {
+      images.push(imageUrl);
+    }
+
     if (videoUrl && !videos.includes(videoUrl)) {
       videos.unshift(videoUrl);
     }
@@ -825,6 +833,11 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
                 if (!image && (m.thumbnail_url || m.url)) {
                   image = m.thumbnail_url ?? m.url;
                 }
+              }
+              const cardImage = tweet.card?.image?.url ?? null;
+              if (cardImage) {
+                images.push(cardImage);
+                if (!image) image = cardImage;
               }
               if (images.length > 0 && !image) image = images[0];
             }

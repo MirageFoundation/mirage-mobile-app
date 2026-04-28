@@ -41,6 +41,7 @@ import {
   uploadImageAndGetUrl,
   uploadVideoAndGetUrl,
 } from "@/src/api/read/hooks/use-upload-media";
+import { consumePendingVideoResult } from "@/src/pages/create/video-editor-screen";
 import { usePost, useEdit, type CreatePostMutationInput } from "@/src/api/write";
 import type { ContentTag, EditPostInput } from "@/src/api/write/endpoints/posts";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
@@ -49,7 +50,7 @@ import { useToast } from "@/src/providers/toast-provider";
 import { TransactionProgressModal } from "@/src/components/molecules/transaction-progress-modal";
 import { useTransactionProgress } from "@/src/hooks/use-transaction-progress";
 import { getTxStatus } from "@/src/api/read/endpoints/tx";
-import { useDraftStore, type Community } from "@/src/stores/draft-store";
+import { useDraftStore, type Community, type PostDraft } from "@/src/stores/draft-store";
 import { useHomePostCardStore } from "./home/home-post-card-store";
 import { useUserLevel, useAuthStore } from "@/src/stores/auth-store";
 import { useUIStore } from "@/src/stores";
@@ -57,6 +58,9 @@ import { getTierPostLimits, canEditContent } from "@/src/utils/tiers";
 
 import { CommunitySelectionModal } from "./create/community-selection-modal";
 import { StickerPicker } from "@/src/components/molecules/sticker-picker";
+import { MentionSuggestions } from "@/src/components/molecules/mention-suggestions";
+import { DraftDiscardPopup } from "@/src/components/molecules/draft-discard-popup";
+import { useMentionSearch } from "@/src/hooks/use-mention-search";
 
 // Strict URL validation - requires protocol (http:// or https://)
 const URL_REGEX = /^https?:\/\/[^\s<>"{}|\\^`\[\]]+$/i;
@@ -158,6 +162,8 @@ export function CreateScreen() {
   const [showContentWarningModal, setShowContentWarningModal] = useState(false);
   const [selectedContentWarning, setSelectedContentWarning] =
     useState<ContentTag>("");
+
+  const mention = useMentionSearch();
   const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [selectedStickers, setSelectedStickers] = useState<string[]>([]);
 
@@ -304,14 +310,42 @@ export function CreateScreen() {
   const screenWidth = Dimensions.get("window").width;
   const selectedCommunity = draft.community;
 
+  const videoUploadsReady = useMemo(() => {
+    if (draft.attachmentType !== "video") return true;
+    if (draft.mediaUris.length === 0) return true;
+    return draft.mediaUris.every((uri) => {
+      const entry = VIDEO_UPLOADS.get(uri);
+      return !!entry && !!entry.url && !entry.uploading && !entry.error;
+    });
+  }, [draft.attachmentType, draft.mediaUris, videoUploadState]);
+
   const canPost = useMemo(() => {
     const hasTitleContent = draft.title.trim().length > 0;
     const hasCommunity = draft.community !== null;
     const videoStillUploading =
       draft.attachmentType === "video" && isUploadingVideo;
+    const videoUploadBroken =
+      draft.attachmentType === "video" &&
+      draft.mediaUris.length > 0 &&
+      !videoUploadsReady;
     const editBlocked = isEditMode && editability && !editability.allowed;
-    return hasTitleContent && hasCommunity && !videoStillUploading && !editBlocked;
-  }, [draft.title, draft.community, draft.attachmentType, isUploadingVideo, isEditMode, editability]);
+    return (
+      hasTitleContent &&
+      hasCommunity &&
+      !videoStillUploading &&
+      !videoUploadBroken &&
+      !editBlocked
+    );
+  }, [
+    draft.title,
+    draft.community,
+    draft.attachmentType,
+    draft.mediaUris.length,
+    isUploadingVideo,
+    videoUploadsReady,
+    isEditMode,
+    editability,
+  ]);
 
   const editExpired = isEditMode && editability !== null && !editability.allowed;
 
@@ -350,9 +384,23 @@ export function CreateScreen() {
   }, []);
 
   const editInitializedRef = useRef(false);
+  const savedDraftForEditRef = useRef<PostDraft | null>(null);
   useEffect(() => {
     if (!isEditMode || editInitializedRef.current) return;
     editInitializedRef.current = true;
+
+    // Preserve any in-progress create draft so we can restore it after edit flow exits
+    const currentDraft = useDraftStore.getState().draft;
+    const hasExistingCreateDraft =
+      currentDraft.title.trim().length > 0 ||
+      currentDraft.body.trim().length > 0 ||
+      currentDraft.mediaUris.length > 0 ||
+      currentDraft.linkUrl !== null ||
+      currentDraft.community !== null ||
+      currentDraft.attachmentType !== null;
+    savedDraftForEditRef.current = hasExistingCreateDraft ? currentDraft : null;
+
+    clearDraft();
 
     const topic = params.editTopic ?? "general";
     const community: Community = {
@@ -381,13 +429,29 @@ export function CreateScreen() {
     }
   }, [isEditMode]);
 
+  // On edit-mode unmount: always clear the edit data from the shared draft store,
+  // and restore any previously-in-progress create draft.
+  useEffect(() => {
+    if (!isEditMode) return;
+    return () => {
+      clearDraft();
+      const saved = savedDraftForEditRef.current;
+      if (saved) {
+        useDraftStore.setState({ draft: saved, hasDraft: true });
+      }
+      savedDraftForEditRef.current = null;
+    };
+  }, [isEditMode, clearDraft]);
+
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const lastProcessedIntentRef = useRef<string | null>(null);
   const shareTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!hasShareIntent || !shareIntent || isEditMode) return;
 
     if (!isLoggedIn) {
+      lastProcessedIntentRef.current = null;
       resetShareIntent();
       router.replace("/(tabs)/");
       showAuthSheet();
@@ -796,7 +860,10 @@ export function CreateScreen() {
           updateDraft({ body: shareIntent.webUrl!.slice(0, tierLimits.maxContentLength) });
           Sentry.captureException(err, { tags: { feature: "share-intent-meta" } });
         }).finally(() => {
-          if (lastProcessedIntentRef.current === currentIntentKey) setIsProcessingShareLink(false);
+          if (lastProcessedIntentRef.current === currentIntentKey) {
+            lastProcessedIntentRef.current = null;
+            setIsProcessingShareLink(false);
+          }
         });
       }
       if (shareIntent.files?.length && shouldImportSharedFiles) {
@@ -807,6 +874,9 @@ export function CreateScreen() {
           setAttachment("video", file.path);
           startVideoUpload(file.path);
         }
+      }
+      if (!shareIntent.webUrl && lastProcessedIntentRef.current === currentIntentKey) {
+        lastProcessedIntentRef.current = null;
       }
       resetShareIntent();
     }, 50);
@@ -819,40 +889,96 @@ export function CreateScreen() {
     };
   }, [hasShareIntent, shareIntent, isLoggedIn]);
 
-  // Handle video returned from editor
-  useEffect(() => {
-    if (!params.videoUri) return;
-    if (_handledVideoParam === params.videoUri) return;
+  // Handle video returned from editor (via consumePendingVideoResult on focus).
+  // This avoids `router.replace("/(tabs)/create", ...)` which can land on the
+  // wrong tab. The video editor now uses `router.back()` + a shared pending result.
+  useFocusEffect(
+    useCallback(() => {
+      const result = consumePendingVideoResult();
+      if (!result) return;
+      if (_handledVideoParam === result.videoUri) return;
+      _handledVideoParam = result.videoUri;
 
-    _handledVideoParam = params.videoUri;
-    const oldUri = params.replacingUri || null;
-    const origUri = params.originalVideoUri ?? params.videoUri;
-    const w = params.videoWidth ? parseInt(params.videoWidth) : 1920;
-    const h = params.videoHeight ? parseInt(params.videoHeight) : 1080;
-    const ts = params.trimStart ? parseInt(params.trimStart) : 0;
-    const te = params.trimEnd ? parseInt(params.trimEnd) : 0;
-    VIDEO_META.set(params.videoUri, { originalUri: origUri, width: w, height: h, trimStart: ts, trimEnd: te });
+      const oldUri = result.replacingUri || null;
+      const origUri = result.originalVideoUri ?? result.videoUri;
+      VIDEO_META.set(result.videoUri, {
+        originalUri: origUri,
+        width: result.videoWidth,
+        height: result.videoHeight,
+        trimStart: result.trimStart,
+        trimEnd: result.trimEnd,
+      });
 
-    if (oldUri && oldUri !== params.videoUri) {
-      const { replaceMediaUri } = useDraftStore.getState();
-      replaceMediaUri(oldUri, params.videoUri);
-      VIDEO_UPLOADS.delete(oldUri);
-      setVideoUploadState((prev) => { const next = { ...prev }; delete next[oldUri]; return next; });
-      VIDEO_META.delete(oldUri);
-    } else {
-      setAttachment("video", params.videoUri);
-    }
-    setIsVideoMuted(params.isMuted === "1");
-    setIsPreparingVideo(false);
-    startVideoUpload(params.videoUri);
-  }, [params.videoUri, params.originalVideoUri, params.replacingUri, params.videoWidth, params.videoHeight, params.trimStart, params.trimEnd, params.isMuted]);
+      if (oldUri && oldUri !== result.videoUri) {
+        const { replaceMediaUri } = useDraftStore.getState();
+        replaceMediaUri(oldUri, result.videoUri);
+        VIDEO_UPLOADS.delete(oldUri);
+        setVideoUploadState((prev) => {
+          const next = { ...prev };
+          delete next[oldUri];
+          return next;
+        });
+        VIDEO_META.delete(oldUri);
+      } else {
+        setAttachment("video", result.videoUri);
+      }
+      setIsPreparingVideo(false);
+      startVideoUpload(result.videoUri);
+    }, [setAttachment, startVideoUpload])
+  );
+
+  const hasDraftContent = useMemo(() => {
+    return (
+      draft.community !== null ||
+      draft.title.trim().length > 0 ||
+      draft.body.trim().length > 0 ||
+      draft.mediaUris.length > 0 ||
+      draft.linkUrl !== null ||
+      draft.attachmentType !== null ||
+      selectedContentWarning !== "" ||
+      selectedStickers.length > 0 ||
+      showLinkInput
+    );
+  }, [draft.community, draft.title, draft.body, draft.mediaUris, draft.linkUrl, draft.attachmentType, selectedContentWarning, selectedStickers, showLinkInput]);
+
+  const [showDraftModal, setShowDraftModal] = useState(false);
+
+  const discardDraftAndClose = useCallback(() => {
+    clearDraft();
+    setShowLinkInput(false);
+    setLinkUrl("");
+    setLinkError(null);
+    removeAttachment();
+    setImageDimensions(null);
+    setSelectedContentWarning("");
+    setSelectedStickers([]);
+    VIDEO_UPLOADS.clear();
+    setVideoUploadState({});
+    VIDEO_META.clear();
+    _handledVideoParam = null;
+    setIsVideoMuted(false);
+    setIsVideoPlaying(false);
+    setShowDraftModal(false);
+    router.back();
+  }, [clearDraft, removeAttachment]);
+
+  const saveDraftAndClose = useCallback(() => {
+    setShowDraftModal(false);
+    router.back();
+  }, []);
 
   const handleClose = useCallback(() => {
     if (isSubmitting) return;
 
     triggerHaptic("selection");
-    router.back();
-  }, [isSubmitting]);
+
+    if (isEditMode || !hasDraftContent) {
+      router.back();
+      return;
+    }
+
+    setShowDraftModal(true);
+  }, [isSubmitting, isEditMode, hasDraftContent]);
 
   const handlePost = useCallback(async () => {
     if (!canPost || isSubmitting) return;
@@ -900,11 +1026,36 @@ export function CreateScreen() {
       }
 
       if (draft.attachmentType === "video") {
-        for (const [uri, entry] of VIDEO_UPLOADS) {
-          if (entry.url) {
-            mediaUrls.push(entry.url);
+        const missing: string[] = [];
+        const videoUrls: string[] = [];
+        for (const uri of draft.mediaUris) {
+          const entry = VIDEO_UPLOADS.get(uri);
+          if (!entry || !entry.url || entry.uploading || entry.error) {
+            missing.push(uri);
+          } else {
+            videoUrls.push(entry.url);
           }
         }
+        if (missing.length > 0) {
+          Sentry.addBreadcrumb({
+            category: "video-upload",
+            message: "Submit blocked: video upload not finalized",
+            level: "error",
+            data: {
+              missingCount: missing.length,
+              totalCount: draft.mediaUris.length,
+            },
+          });
+          toast.error(
+            "Video upload not finished",
+            "One or more videos failed to upload. Please retry or remove them before posting.",
+          );
+          triggerHaptic("error");
+          setIsSubmitting(false);
+          txProgress.reset();
+          return;
+        }
+        mediaUrls.push(...videoUrls);
       }
 
       let content = draft.body;
@@ -1280,6 +1431,7 @@ export function CreateScreen() {
               uri: asset.uri,
               width: asset.width?.toString() ?? "1920",
               height: asset.height?.toString() ?? "1080",
+              returnTo: "/(tabs)/create",
             },
           });
         }, 100);
@@ -1353,6 +1505,7 @@ export function CreateScreen() {
         initialTrimStart: (meta?.trimStart ?? 0).toString(),
         initialTrimEnd: (meta?.trimEnd ?? 0).toString(),
         replacingUri: uri,
+        returnTo: "/(tabs)/create",
       },
     });
   }, []);
@@ -1417,7 +1570,11 @@ export function CreateScreen() {
                   <View style={[styles.uploadedBadge, !isNetworkOnline && { backgroundColor: "rgba(234,179,8,0.85)" }]}>
                     <ActivityIndicator size="small" color="#fff" />
                     <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
-                      {isNetworkOnline ? "Uploading…" : "Low connectivity…"}
+                      {!isNetworkOnline
+                        ? "Low connectivity…"
+                        : upload.progress >= 98
+                          ? "Processing…"
+                          : "Uploading…"}
                     </Text>
                   </View>
                 )}
@@ -1934,7 +2091,12 @@ export function CreateScreen() {
             placeholder="body text (optional)"
             placeholderTextColor={theme.colors.text.subtle}
             value={draft.body}
-            onChangeText={(text) => updateDraft({ body: text })}
+            onChangeText={(text) => {
+              updateDraft({ body: text });
+              setTimeout(() => {
+                mention.detectMention(text, bodySelectionRef.current.start);
+              }, 0);
+            }}
             multiline
             maxLength={tierLimits.maxContentLength}
             textAlignVertical="top"
@@ -1960,97 +2122,118 @@ export function CreateScreen() {
           )}
         </ScrollView>
 
-        <Animated.View
-          style={[
-            styles.mediaBar,
-            {
-              backgroundColor: theme.colors.background.default,
-              paddingBottom: keyboardVisible
-                ? (Platform.OS === "android" ? 0 : 8)
-                : Platform.OS === "android"
-                  ? TAB_BAR_HEIGHT + 24
-                  : insets.bottom + TAB_BAR_HEIGHT + 8,
-            },
-          ]}
-        >
-          <View style={[styles.mediaBarContent, editExpired && { opacity: 0.4 }]} pointerEvents={editExpired ? "none" : "auto"}>
-            <Pressable
-              onPress={handleLinkPress}
-              disabled={editExpired}
-              style={[styles.mediaButton]}
-            >
-              <Feather
-                name="link"
-                size={22}
-                color={theme.colors.text.default}
-              />
-            </Pressable>
+        <MentionSuggestions
+          visible={mention.mentionOpen}
+          loading={mention.mentionLoading}
+          results={mention.mentionResults}
+          query={mention.mentionQuery}
+          onClose={mention.closeMention}
+          onSelect={(username) => {
+            const cursorPos = bodySelectionRef.current.start;
+            const { newText, newCursorPos } = mention.insertMention(
+              username,
+              draft.body,
+              cursorPos,
+            );
+            updateDraft({ body: newText });
+            setBodySelection({ start: newCursorPos, end: newCursorPos });
+            setTimeout(() => setBodySelection(undefined), 50);
+          }}
+        />
 
-            <Pressable
-              onPress={handleImagePress}
-              disabled={hasAttachment && draft.attachmentType !== "image"}
-              style={[
-                styles.mediaButton,
-                hasAttachment &&
-                  draft.attachmentType !== "image" &&
-                  styles.mediaButtonDisabled,
-              ]}
-            >
-              <Feather
-                name="image"
-                size={22}
-                color={
-                  hasAttachment && draft.attachmentType !== "image"
-                    ? theme.colors.text.subtle
-                    : theme.colors.text.default
-                }
-              />
-            </Pressable>
+        {!mention.mentionOpen && (
+          <Animated.View
+            style={[
+              styles.mediaBar,
+              {
+                backgroundColor: theme.colors.background.default,
+                paddingBottom: keyboardVisible
+                  ? (Platform.OS === "android" ? 0 : 8)
+                  : Platform.OS === "android"
+                    ? TAB_BAR_HEIGHT + 24
+                    : insets.bottom + TAB_BAR_HEIGHT + 8,
+              },
+            ]}
+          >
+            <View style={[styles.mediaBarContent, editExpired && { opacity: 0.4 }]} pointerEvents={editExpired ? "none" : "auto"}>
+              <Pressable
+                onPress={handleLinkPress}
+                disabled={editExpired}
+                style={[styles.mediaButton]}
+              >
+                <Feather
+                  name="link"
+                  size={22}
+                  color={theme.colors.text.default}
+                />
+              </Pressable>
 
-            <Pressable
-              onPress={handleVideoPress}
-              disabled={hasAttachment && draft.attachmentType !== "video"}
-              style={[
-                styles.mediaButton,
-                hasAttachment &&
-                  draft.attachmentType !== "video" &&
-                  styles.mediaButtonDisabled,
-              ]}
-            >
-              <Feather
-                name="video"
-                size={22}
-                color={
-                  hasAttachment && draft.attachmentType !== "video"
-                    ? theme.colors.text.subtle
-                    : theme.colors.text.default
-                }
-              />
-            </Pressable>
+              <Pressable
+                onPress={handleImagePress}
+                disabled={hasAttachment && draft.attachmentType !== "image"}
+                style={[
+                  styles.mediaButton,
+                  hasAttachment &&
+                    draft.attachmentType !== "image" &&
+                    styles.mediaButtonDisabled,
+                ]}
+              >
+                <Feather
+                  name="image"
+                  size={22}
+                  color={
+                    hasAttachment && draft.attachmentType !== "image"
+                      ? theme.colors.text.subtle
+                      : theme.colors.text.default
+                  }
+                />
+              </Pressable>
 
-            <Pressable
-              onPress={handleStickerPress}
-              style={styles.mediaButton}
-            >
-              <MaterialCommunityIcons
-                name="sticker-emoji"
-                size={22}
-                color={theme.colors.text.default}
-              />
-            </Pressable>
+              <Pressable
+                onPress={handleVideoPress}
+                disabled={hasAttachment && draft.attachmentType !== "video"}
+                style={[
+                  styles.mediaButton,
+                  hasAttachment &&
+                    draft.attachmentType !== "video" &&
+                    styles.mediaButtonDisabled,
+                ]}
+              >
+                <Feather
+                  name="video"
+                  size={22}
+                  color={
+                    hasAttachment && draft.attachmentType !== "video"
+                      ? theme.colors.text.subtle
+                      : theme.colors.text.default
+                  }
+                />
+              </Pressable>
 
-            <Pressable
-              onPress={handleSpoilerPress}
-              style={styles.mediaButton}
-            >
-              <Feather
-                name="eye-off"
-                size={22}
-                color={theme.colors.text.default}
-              />
-            </Pressable>
-          </View>
-        </Animated.View>
+              <Pressable
+                onPress={handleStickerPress}
+                style={styles.mediaButton}
+              >
+                <MaterialCommunityIcons
+                  name="sticker-emoji"
+                  size={22}
+                  color={theme.colors.text.default}
+                />
+              </Pressable>
+
+              <Pressable
+                onPress={handleSpoilerPress}
+                style={styles.mediaButton}
+              >
+                <Feather
+                  name="eye-off"
+                  size={22}
+                  color={theme.colors.text.default}
+                />
+              </Pressable>
+            </View>
+          </Animated.View>
+        )}
       </KeyboardAvoidingView>
 
       <CommunitySelectionModal
@@ -2169,6 +2352,13 @@ export function CreateScreen() {
           handlePost();
         }}
         autoDismissDelay={500}
+      />
+
+      <DraftDiscardPopup
+        visible={showDraftModal}
+        onSaveDraft={saveDraftAndClose}
+        onDiscard={discardDraftAndClose}
+        onCancel={() => setShowDraftModal(false)}
       />
     </Box>
   );

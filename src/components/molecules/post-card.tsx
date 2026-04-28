@@ -3,14 +3,13 @@ import { Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { logPress } from "@/src/utils/press-logger";
 import { setLastPressedPostY } from "@/src/utils/post-transition";
-import { usePreferencesStore, useTimeTickStore } from "@/src/stores";
+import { usePreferencesStore } from "@/src/stores";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   Linking,
-  PixelRatio,
-  Platform,
   Pressable,
   View,
+  type LayoutChangeEvent,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
@@ -59,6 +58,7 @@ type PostCardProps = {
   onReport?: () => void;
   onRevealContent?: () => void;
   onMediaPress?: () => void;
+  onLayout?: (event: LayoutChangeEvent) => void;
   contentRevealed?: boolean;
   shareUrl?: string;
   /** Whether to show the URL card/Play Now row (default: true) */
@@ -136,6 +136,7 @@ export const PostCard = memo(function PostCard({
   onReport,
   onRevealContent,
   onMediaPress: onMediaPressProp,
+  onLayout,
   contentRevealed = false,
   shareUrl,
   showUrlCard = true,
@@ -167,7 +168,6 @@ export const PostCard = memo(function PostCard({
   } = post;
 
   const blurSensitiveMedia = usePreferencesStore((s) => s.blurSensitiveMedia);
-  const timeTick = useTimeTickStore((s) => s.tick);
   const shouldBlurContent = blurSensitiveMedia && !!contentWarnings?.length && !contentRevealed;
 
   const resolvedContent = useMemo(
@@ -232,6 +232,7 @@ export const PostCard = memo(function PostCard({
   return (
     <Pressable
       ref={containerRef}
+      onLayout={onLayout}
       onPress={handlePress}
       style={[styles.container, style]}
     >
@@ -239,7 +240,6 @@ export const PostCard = memo(function PostCard({
         author={author}
         topic={topic}
         createdAt={createdAt}
-        timeRefreshKey={timeTick}
         isOwnPost={isOwnPost}
         isFollowing={isFollowing}
         isTopicFollowed={isTopicFollowed}
@@ -273,6 +273,7 @@ export const PostCard = memo(function PostCard({
       />
 
       <PostCardMedia
+        key={`${post.id}:${videoSyncScope ?? "default"}:${resolvedContent.resolvedMedia?.uri ?? "none"}`}
         media={resolvedContent.resolvedMedia}
         mediaList={resolvedContent.resolvedMediaList}
         isVisible={isVisible}

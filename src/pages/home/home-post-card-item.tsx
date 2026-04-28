@@ -1,9 +1,11 @@
 import { memo, useCallback, useMemo, useRef, useEffect } from "react";
+import type { LayoutChangeEvent } from "react-native";
 import type { Post } from "@/src/components/molecules";
 import { PostCard } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { logPress } from "@/src/utils/press-logger";
-import { getShareBaseUrl, useTimeTickStore } from "@/src/stores";
+import { markSeen } from "@/src/services/seen-posts";
+import { getShareBaseUrl } from "@/src/stores";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import {
   useHomePostCardStore,
@@ -24,6 +26,7 @@ type HomePostCardItemProps = {
  post: Post;
   feedScreen: 'home' | 'following' | 'topic';
   feedContext: string;
+  onLayout?: (postId: string, event: LayoutChangeEvent) => void;
 };
 
 function areHomePostCardItemPropsEqual(
@@ -52,6 +55,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  post,
   feedScreen,
   feedContext,
+  onLayout,
 }: HomePostCardItemProps) {
  const visibility = useVideoVisibility(post.id, feedContext);
  const isVisible = (visibility & 2) !== 0;
@@ -67,7 +71,6 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  const shareServer = useShareServer();
  const allowAutoplay = useAllowAutoplay();
   const feedActive = useFeedActive(feedScreen);
-  const timeTick = useTimeTickStore((s) => s.tick);
 
 // Store post data in ref to avoid recreating callbacks
  const postRef = useRef(post);
@@ -156,6 +159,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   const handleRevealContent = useCallback(() => {
     const p = postRef.current;
     logPress({ name: "post_reveal", postId: p.id });
+    markSeen(p.id, "open", p.title);
     getHandlers().onRevealContent?.(p.id);
     if (postHasPlayableVideo(p)) {
       useHomePostCardStore.getState().setActiveVideoPostId(feedContext, p.id);
@@ -189,6 +193,10 @@ export const HomePostCardItem = memo(function HomePostCardItem({
 
   const editOverride = usePostEditStore((s) => s.overrides[post.id]);
 
+  const handleLayout = useCallback((event: LayoutChangeEvent) => {
+    onLayout?.(post.id, event);
+  }, [onLayout, post.id]);
+
   const displayPost = useMemo(() => {
     let result = { ...post };
     const needsFollowingUpdate = (post.isFollowing ?? false) !== isFollowing;
@@ -220,7 +228,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       };
     }
     return result;
-  }, [post, isFollowing, voteOverride, commentCountOverride, editOverride, timeTick]);
+  }, [post, isFollowing, voteOverride, commentCountOverride, editOverride]);
 
   return (
    <PostCard
@@ -252,6 +260,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
      onBlockTopic={handleBlockTopic}
      onReport={handleReport}
     onMediaPress={handlePostPress}
+    onLayout={handleLayout}
     contentRevealed={contentRevealed}
       shareUrl={`${getShareBaseUrl(shareServer)}/p/${post.id}`}
   />

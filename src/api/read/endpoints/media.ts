@@ -349,6 +349,7 @@ export interface UploadVideoResult {
   url: string;
   uid: string;
   streamCustomer: string;
+  thumbnailUrl: string;
 }
 
 export function getVideoUrl(uploadResponse: VideoUploadResponse): string {
@@ -489,12 +490,14 @@ export async function uploadVideo(
   }
 
   const finalUrl = getVideoUrl(uploadResponse);
+  const thumbnailUrl = getVideoThumbnailUrl(uploadResponse);
   console.log("[VideoUpload] Final URL:", finalUrl);
 
   return {
     url: finalUrl,
     uid: uploadResponse.uid,
     streamCustomer: uploadResponse.streamCustomer,
+    thumbnailUrl,
   };
 }
 

@@ -31,6 +31,8 @@ import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { StickerPicker } from "@/src/components/molecules/sticker-picker";
+import { MentionSuggestions } from "@/src/components/molecules/mention-suggestions";
+import { useMentionSearch } from "@/src/hooks/use-mention-search";
 import { MEME_STICKERS } from "@/src/data/stickers";
 import { useUserLevel } from "@/src/stores/auth-store";
 import { canEditContent, getTierPostLimits } from "@/src/utils/tiers";
@@ -203,6 +205,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const didSubmitRef = useRef(false);
   const [isMediaLoading, setIsMediaLoading] = useState(false);
   const [showStickerPicker, setShowStickerPicker] = useState(false);
+  const mention = useMentionSearch();
 
   const hasAttachment = selectedImageUri !== null || selectedGifUrl !== null;
   const attachmentUrl = selectedImageUri || selectedGifUrl;
@@ -710,7 +713,12 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
                 placeholder="Comment"
                 placeholderTextColor={theme.colors.text.subtle}
                 value={text}
-                onChangeText={setText}
+                onChangeText={(val) => {
+                  setText(val);
+                  setTimeout(() => {
+                    mention.detectMention(val, selectionRef.current.start);
+                  }, 0);
+                }}
                 multiline
                 maxLength={effectiveMaxLength}
                 autoFocus={!editExpired}
@@ -737,6 +745,26 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
             </>
           )}
         </ScrollView>
+
+        <MentionSuggestions
+          visible={mention.mentionOpen}
+          loading={mention.mentionLoading}
+          results={mention.mentionResults}
+          query={mention.mentionQuery}
+          onClose={mention.closeMention}
+          onSelect={(username) => {
+            const cursorPos = selectionRef.current.start;
+            const { newText, newCursorPos } = mention.insertMention(
+              username,
+              text,
+              cursorPos,
+            );
+            setText(newText);
+            textRef.current = newText;
+            setSelection({ start: newCursorPos, end: newCursorPos });
+            setTimeout(() => setSelection(undefined), 50);
+          }}
+        />
 
         {/* GIF section */}
         {inputMode === "gif" && (
@@ -843,6 +871,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
         )}
 
         {/* Icon buttons bar */}
+        {!mention.mentionOpen && (
        <View
          style={[
            styles.toolbar,
@@ -939,6 +968,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
             </Pressable>
           </View>
         </View>
+        )}
       </View>
       <StickerPicker
         visible={showStickerPicker}

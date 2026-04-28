@@ -32,7 +32,10 @@ export function useNewPostsChecker({
   const [newPostAvatars, setNewPostAvatars] = useState<NewPostAvatar[]>([]);
   const [newPostCount, setNewPostCount] = useState(0);
   const baselineTimestampRef = useRef<number | null>(null);
+  const latestPostTimestampRef = useRef<number | null>(latestPostTimestamp);
+  latestPostTimestampRef.current = latestPostTimestamp;
   const hasNewPostsRef = useRef(false);
+  const checkGenerationRef = useRef(0);
   const isFocused = useIsFocused();
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
 
@@ -52,15 +55,17 @@ export function useNewPostsChecker({
   });
 
   useEffect(() => {
+    checkGenerationRef.current += 1;
     hasNewPostsRef.current = false;
     setHasNewPosts(false);
     setNewPostAvatars([]);
     setNewPostCount(0);
-    baselineTimestampRef.current = latestPostTimestamp;
+    baselineTimestampRef.current = latestPostTimestampRef.current;
   }, [feed, by, topic]);
 
   const checkForNewPosts = useCallback(async () => {
     if (baselineTimestampRef.current == null) return;
+    const checkGeneration = checkGenerationRef.current;
     try {
       const result = await getPosts({
         limit: 10,
@@ -72,7 +77,10 @@ export function useNewPostsChecker({
         page: 1,
       });
 
-      const baseline = baselineTimestampRef.current!;
+      if (checkGenerationRef.current !== checkGeneration) return;
+
+      const baseline = baselineTimestampRef.current;
+      if (baseline == null) return;
       const newerPosts = result.posts.filter((p) => p.timestamp > baseline);
 
       if (newerPosts.length > 0) {
@@ -110,6 +118,7 @@ export function useNewPostsChecker({
   });
 
   const dismiss = useCallback(() => {
+    checkGenerationRef.current += 1;
     hasNewPostsRef.current = false;
     setHasNewPosts(false);
     setNewPostAvatars([]);
@@ -118,6 +127,7 @@ export function useNewPostsChecker({
   }, []);
 
   const resetBaseline = useCallback((newTimestamp: number | null) => {
+    checkGenerationRef.current += 1;
     hasNewPostsRef.current = false;
     setHasNewPosts(false);
     setNewPostAvatars([]);

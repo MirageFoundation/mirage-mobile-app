@@ -4,10 +4,12 @@ import { Alert } from "react-native";
 
 import { getRootPostId } from "@/src/api/read/endpoints/posts";
 import { useAuthStore, usePreferencesStore } from "@/src/stores";
+import { storage } from "@/src/stores/mmkv-storage";
 import { useDeepLinkStore } from "@/src/stores/deep-link-store";
 import { setShareScheme } from "@/src/utils/share-scheme";
 
 import {
+  isAuthRoute,
   navigateWithAuthGuard,
   resolveAuthNavigationTarget,
 } from "./auth-navigation";
@@ -116,6 +118,48 @@ function isTabRoute(route: string): boolean {
   return route.startsWith("/(tabs)");
 }
 
+const LAST_SHARE_PATH_KEY = "last-share-path";
+const LAST_SHARE_PATH_AT_KEY = "last-share-path-at";
+const REPEATED_SHARE_PATH_TTL_MS = 2 * 60_000;
+
+function isShareIntentPath(path: string): boolean {
+  return path.includes("dataUrl=") && path.includes("ShareKey");
+}
+
+function getRepeatedSharePathAgeMs(path: string): number | null {
+  const lastPath = storage.getString(LAST_SHARE_PATH_KEY);
+  const lastHandledAt = storage.getNumber(LAST_SHARE_PATH_AT_KEY) ?? 0;
+
+  if (lastPath !== path || lastHandledAt <= 0) return null;
+
+  return Date.now() - lastHandledAt;
+}
+
+export function getRecentSharePathAgeMs(): number | null {
+  const lastHandledAt = storage.getNumber(LAST_SHARE_PATH_AT_KEY) ?? 0;
+  if (lastHandledAt <= 0) return null;
+  return Date.now() - lastHandledAt;
+}
+
+export function isRecentSharePath(withinMs = 10_000): boolean {
+  const age = getRecentSharePathAgeMs();
+  return age !== null && age >= 0 && age < withinMs;
+}
+
+function shouldSkipRepeatedSharePath(path: string): boolean {
+  const ageMs = getRepeatedSharePathAgeMs(path);
+  return ageMs !== null && ageMs < REPEATED_SHARE_PATH_TTL_MS;
+}
+
+function summarizeSharePath(path: string): string {
+  return path.length > 160 ? `${path.slice(0, 157)}...` : path;
+}
+
+function rememberSharePath(path: string): void {
+  storage.set(LAST_SHARE_PATH_KEY, path);
+  storage.set(LAST_SHARE_PATH_AT_KEY, Date.now());
+}
+
 export async function redirectSystemPath({
   path,
   initial,
@@ -128,11 +172,43 @@ export async function redirectSystemPath({
     setShareScheme(scheme);
   }
 
-  if (path.includes("dataUrl=") && path.includes("ShareKey")) {
+  if (isShareIntentPath(path)) {
+    const repeatedSharePathAgeMs = getRepeatedSharePathAgeMs(path);
+
+    if (shouldSkipRepeatedSharePath(path)) {
+      Sentry.addBreadcrumb({
+        category: "share-intent",
+        message: "Skipping repeated stale share launch path",
+        data: {
+          initial,
+          ageMs: repeatedSharePathAgeMs,
+          path: summarizeSharePath(path),
+        },
+        level: "info",
+      });
+      return "/(tabs)";
+    }
+
+    Sentry.addBreadcrumb({
+      category: "share-intent",
+      message: "Routing share launch path to create",
+      data: {
+        initial,
+        repeatedSharePathAgeMs,
+        path: summarizeSharePath(path),
+      },
+      level: "info",
+    });
+
+    rememberSharePath(path);
     return "/(tabs)/create";
   }
 
   if (isAppRoute(path)) {
+    if (initial && isAuthRoute(path)) {
+      useDeepLinkStore.getState().setPendingRoute(path);
+      return "/(tabs)";
+    }
     return path;
   }
 
@@ -155,6 +231,10 @@ export async function redirectSystemPath({
       showAlreadyLoggedInForLoginAlert(resolvedRoute);
       return "/(tabs)";
     }
+    if (initial && isAuthRoute(resolvedRoute)) {
+      useDeepLinkStore.getState().setPendingRoute(resolvedRoute);
+      return "/(tabs)";
+    }
     return resolvedRoute;
   }
 
@@ -167,6 +247,13 @@ export async function redirectSystemPath({
   if (initial && !isTabRoute(target)) {
     useDeepLinkStore.getState().setPendingRoute(target);
     return "/(tabs)";
+  }
+
+  // /p/<id> can be either a post or a comment. Fire the root-post lookup so
+  // that if the id is actually a comment we replace with the real post and
+  // highlight the target comment (same behavior as in-app handleMirageLink).
+  if (match.type === "post" && match.resourceId) {
+    resolveRootPostForComment(match.resourceId);
   }
 
   return target;

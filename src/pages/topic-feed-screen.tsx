@@ -1,4 +1,5 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
+import { markSeen } from "@/src/services/seen-posts";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Sentry from "@sentry/react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -6,15 +7,18 @@ import { useFocusEffect } from "@react-navigation/native";
 import type { FlashListRef } from "@shopify/flash-list";
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/hooks/use-router";
+import { useAndroidPullIndicator } from "@/src/hooks/use-android-pull-indicator";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Platform,
   Pressable,
   RefreshControl,
   View,
 } from "react-native";
+import { IOSRefreshIndicator } from "@/src/components/atoms/refresh-indicator";
+import { useSharedValue, useAnimatedScrollHandler } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GestureDetector } from "react-native-gesture-handler";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import {
   Menu,
@@ -63,6 +67,7 @@ import {
   getAllowedTagsFromContentTypes,
   useAuthStore,
   useContentModerationStore,
+  useFeedScrollStore,
   usePreferencesStore,
   useSavedPostsStore,
   useTimeTickStore,
@@ -98,13 +103,20 @@ export function TopicFeedScreen() {
     [],
   );
 
+  const setContextScrolling = useFeedScrollStore((state) => state.setContextScrolling);
+
   const handleSortChange = useCallback((value: "magic" | "newest") => {
     triggerHaptic("light");
+    const oldFeedContext = `topic:${topicName ?? "unknown"}:${sortBy}`;
+    const newFeedContext = `topic:${topicName ?? "unknown"}:${value}`;
+    useHomePostCardStore.getState().setVideoViewability(oldFeedContext, new Set(), null);
+    setContextScrolling(oldFeedContext, false);
+    setContextScrolling(newFeedContext, false);
     setSortBy(value);
     requestAnimationFrame(() => {
       flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
     });
-  }, []);
+  }, [setContextScrolling, sortBy, topicName]);
 
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
@@ -194,9 +206,14 @@ export function TopicFeedScreen() {
     limit: 10,
     address: currentUser?.walletAddress,
   }], [topicName, sortBy, allowedTags, currentUser?.walletAddress]);
+  const visibleTrackerKeys = useMemo(
+    () => [`topic:${topicName ?? "unknown"}:${sortBy}`],
+    [topicName, sortBy],
+  );
 
   usePostDataRefresher({
     feedParamsList: feedRefreshParamsList,
+    visibleTrackerKeys,
   });
 
   const postEditOverrides = usePostEditStore((s) => s.overrides);
@@ -223,11 +240,9 @@ export function TopicFeedScreen() {
       return { ...post, title: ov.title, content: ov.content, topic: ov.topic ?? post.topic, media: ov.media ?? post.media };
     });
 
-    const transformedPosts = transformApiPosts(patchedPosts, {
+    return transformApiPosts(patchedPosts, {
       currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : undefined,
-    });
-
-    return transformedPosts.filter(
+    }).filter(
       (post) =>
         !hiddenPostIds.has(post.id) &&
         !blockedUserIds.has(post.author.id) &&
@@ -269,6 +284,7 @@ export function TopicFeedScreen() {
   const { handleUpvote, handleDownvote } = useVoteHandler({
     onOptimisticUpdate: useCallback(
       (targetId: string, result: VoteResult) => {
+        markSeen(targetId, "vote");
         setVoteOverride(targetId, {
           hasLiked: result.hasLiked,
           hasDisliked: result.hasDisliked,
@@ -286,10 +302,11 @@ export function TopicFeedScreen() {
   });
 
   const revealedPostsRef = useRef<Set<string>>(new Set());
-  const topicFeedSyncContext = `topic:${topicName ?? "unknown"}`;
+  const topicFeedSyncContext = `topic:${topicName ?? "unknown"}:${sortBy}`;
 
   const handlePostPress = useCallback(
     (postId: string) => {
+      markSeen(postId, "open");
       const isRevealed = revealedPostsRef.current.has(postId);
       const params = new URLSearchParams({ syncContext: topicFeedSyncContext });
       if (isRevealed) {
@@ -321,6 +338,7 @@ export function TopicFeedScreen() {
 
   const handleCommentPress = useCallback(
     (postId: string) => {
+      markSeen(postId, "open");
       router.push(`/post/${postId}?syncContext=${encodeURIComponent(topicFeedSyncContext)}`);
     },
     [router, topicFeedSyncContext],
@@ -491,6 +509,7 @@ export function TopicFeedScreen() {
   postsLengthRef.current = posts.length;
 
   const handleRefresh = useCallback(async () => {
+    if (Platform.OS === "android") triggerHaptic("light");
     setIsManualRefreshing(true);
     try {
       await refetch();
@@ -577,24 +596,26 @@ export function TopicFeedScreen() {
     );
   }, [isLoading, isError, error, topicName]);
 
-  const ListHeaderComponent = useCallback(() => {
-    if (!isManualRefreshing) return null;
-    return (
-      <Box center p="md">
-        <ActivityIndicator
-          size="small"
-          color={theme.colors.background.emphasis}
-        />
-      </Box>
-    );
-  }, [isManualRefreshing, theme.colors.background.emphasis]);
+  const isIOS = Platform.OS === "ios";
 
   const ListFooterComponent = useCallback(() => {
-    if (!isFetchingNextPage) return null;
+    if (!isFetchingNextPage || posts.length === 0) return null;
     return <PostCardSkeletonList count={1} />;
-  }, [isFetchingNextPage]);
+  }, [isFetchingNextPage, posts.length]);
 
   const HEADER_HEIGHT = 52;
+
+  const scrollY = useSharedValue(0);
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
+  const { pullDistance, pullGesture } = useAndroidPullIndicator({
+    scrollY,
+    refreshing: isManualRefreshing,
+    onTriggerRefresh: handleRefresh,
+  });
 
   const listContentStyle = useMemo(
     () => ({
@@ -605,19 +626,20 @@ export function TopicFeedScreen() {
     [insets.bottom, insets.top, posts.length],
   );
 
-  const refreshControl = useMemo(
-    () => (
+  const refreshControl = useMemo(() => {
+    if (!isIOS) return null;
+
+    return (
       <RefreshControl
-        refreshing={Platform.OS === "android" ? false : isManualRefreshing}
+        refreshing={false}
         onRefresh={handleRefresh}
         tintColor="transparent"
         colors={["transparent"]}
         progressBackgroundColor="transparent"
-        progressViewOffset={Platform.OS === "android" ? -10000 : insets.top + HEADER_HEIGHT}
+        progressViewOffset={insets.top + HEADER_HEIGHT}
       />
-    ),
-    [handleRefresh, insets.top, isManualRefreshing],
-  );
+    );
+  }, [handleRefresh, insets.top, isIOS]);
 
   const setCurrentUserId = useHomePostCardStore(
     (state) => state.setCurrentUserId,
@@ -924,18 +946,29 @@ export function TopicFeedScreen() {
         </Pressable>
       </View>
 
-      <HomePostList
-        ref={flatListRef}
-        data={posts}
-        contentContainerStyle={listContentStyle}
-        onScroll={() => {}}
-        ListHeaderComponent={ListHeaderComponent}
-        ListEmptyComponent={ListEmptyComponent}
-        ListFooterComponent={ListFooterComponent}
-        refreshControl={refreshControl}
-        feedScreen="topic"
-        feedContext={topicFeedSyncContext}
-        onItemVisible={handleItemVisible}
+      <GestureDetector gesture={pullGesture}>
+        <View style={{ flex: 1 }} collapsable={false}>
+          <HomePostList
+            key={topicFeedSyncContext}
+            ref={flatListRef}
+            data={posts}
+            contentContainerStyle={listContentStyle}
+            ListEmptyComponent={ListEmptyComponent}
+            ListFooterComponent={ListFooterComponent}
+            refreshControl={refreshControl}
+            feedScreen="topic"
+            feedContext={topicFeedSyncContext}
+            onItemVisible={handleItemVisible}
+            onScroll={scrollHandler}
+          />
+        </View>
+      </GestureDetector>
+
+      <IOSRefreshIndicator
+        visible={isManualRefreshing}
+        topOffset={insets.top + HEADER_HEIGHT + 8}
+        scrollY={scrollY}
+        pullDistance={pullDistance}
       />
 
       <NewPostsButton

@@ -1,4 +1,5 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
+import { markSeen } from "@/src/services/seen-posts";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Sentry from "@sentry/react-native";
 import * as Clipboard from "expo-clipboard";
@@ -68,7 +69,7 @@ import { ProfileCommentItem } from "@/src/components/molecules/profile-comment-i
 import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { UserProfileContentAnimated } from "@/src/components/molecules/user-profile-content-animated";
 import { PROFILE_TAB_BAR_HEIGHT } from "@/src/components/molecules/profile-tabs";
-import { Box, Text } from "@/src/components/ui/primitives";
+import { Box } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import {
   useAppState,
@@ -87,8 +88,10 @@ import {
   useContentModerationStore,
   usePreferencesStore,
   getShareBaseUrl,
+  useFeedScrollStore,
   useSavedPostsStore,
 } from "@/src/stores";
+import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const AnimatedFlatList = Animated.createAnimatedComponent(
@@ -155,6 +158,7 @@ const PostWrapper = memo(function PostWrapper({
  onReport,
  onRevealContent,
   onTopicPress,
+  videoSyncScope,
 }: {
  post: Post;
  isOwnProfile: boolean;
@@ -175,6 +179,7 @@ const PostWrapper = memo(function PostWrapper({
  onReport: (postId: string) => void;
  onRevealContent?: (postId: string) => void;
   onTopicPress: (topic: string) => void;
+  videoSyncScope?: string;
 }) {
  const editOverride = usePostEditStore((s) => s.overrides[post.id]);
  const displayPost = editOverride ? {
@@ -196,6 +201,7 @@ const PostWrapper = memo(function PostWrapper({
     screenActive={screenActive}
     contentRevealed={contentRevealed}
     showUrlCard={false}
+    videoSyncScope={videoSyncScope}
     showFollowButton={false}
     shareUrl={shareUrl}
     onPostPress={onPostPress}
@@ -242,6 +248,10 @@ export function UserProfileScreen() {
 
   const currentUser = useAuthStore((s) => s.user);
   const flatListRef = useRef<FlatList<any>>(null);
+  const userProfileFeedContext = useMemo(() => `profile:user:${id}:posts`, [id]);
+  const setFeedScrolling = useCallback((isScrolling: boolean) => {
+    useFeedScrollStore.getState().setContextScrolling(userProfileFeedContext, isScrolling);
+  }, [userProfileFeedContext]);
 
   const isUsername = id && !id.startsWith("mirage");
   const { data: resolvedAddress, isLoading: isResolvingUsername } =
@@ -312,23 +322,20 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
  const blockHandler = useBlockHandler({});
  const reportHandler = useReportHandler({});
 
-  const [voteOverrides, setVoteOverrides] = useState<
-    Map<string, { hasLiked: boolean; hasDisliked: boolean; likeDelta: number }>
-  >(new Map());
+  const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
+  const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
 
   const { handleUpvote, handleDownvote } = useVoteHandler({
-    onOptimisticUpdate: (targetId: string, result: VoteResult) => {
-      setVoteOverrides((prev) => {
-        const next = new Map(prev);
-        const existing = prev.get(targetId);
-        next.set(targetId, {
-          hasLiked: result.hasLiked,
-          hasDisliked: result.hasDisliked,
-          likeDelta: (existing?.likeDelta ?? 0) + result.likeDelta,
-        });
-        return next;
+    onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
+      setVoteOverride(targetId, {
+        hasLiked: result.hasLiked,
+        hasDisliked: result.hasDisliked,
+        likes: result.newLikes,
       });
-    },
+    }, [setVoteOverride]),
+    onRollback: useCallback((targetId: string) => {
+      clearVoteOverride(targetId);
+    }, [clearVoteOverride]),
   });
 
   const blockUserMutation = useBlockUser();
@@ -437,28 +444,13 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     [apiPosts, currentUser]
   );
 
-  const postsWithVotes = useMemo(() => {
-    if (voteOverrides.size === 0) return uiPosts;
-    return uiPosts.map((post) => {
-      const override = voteOverrides.get(post.id);
-      if (!override) return post;
-      return {
-        ...post,
-        contentWarnings: undefined,
-        likes: post.likes + override.likeDelta,
-        hasLiked: override.hasLiked,
-        hasDisliked: override.hasDisliked,
-      };
-    });
-  }, [uiPosts, voteOverrides]);
-
  const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
     if (isBlocked || activeTab === 2) {
       return ["header", "tabs"];
     }
-    const posts = activeTab === 0 ? postsWithVotes : apiPosts;
+    const posts = activeTab === 0 ? uiPosts : apiPosts;
     return ["header", "tabs", ...posts];
-  }, [activeTab, postsWithVotes, apiPosts, isBlocked]);
+  }, [activeTab, uiPosts, apiPosts, isBlocked]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -828,12 +820,13 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
   const handleRevealContent = useCallback((postId: string) => {
+    markSeen(postId, "open");
     setRevealedPosts((prev) => {
       const next = new Set(prev);
       next.add(postId);
       return next;
     });
-    const post = postsWithVotes.find((p) => p.id === postId);
+    const post = uiPosts.find((p) => p.id === postId);
     if (postHasPlayableVideo(post)) {
       setActiveVideoPostId(postId);
       setVisibleVideoPostIds((prev) => {
@@ -842,7 +835,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         return next;
       });
     }
-  }, [postsWithVotes]);
+  }, [uiPosts]);
 
   const profileViewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 30,
@@ -1037,6 +1030,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
              isNearVisible={nearbyVideoPostIds.has(item.id)}
              screenActive={isFocused}
              contentRevealed={revealedPosts.has(item.id)}
+             videoSyncScope={userProfileFeedContext}
              shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
              onPostPress={handlePostPress}
              onAuthorPress={handleAuthorPress}
@@ -1201,6 +1195,12 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     [stickyThreshold],
   );
 
+  useEffect(() => {
+    return () => {
+      setFeedScrolling(false);
+    };
+  }, [setFeedScrolling]);
+
   const contentContainerStyle = useMemo(
     () => ({
       paddingTop: headerHeight,
@@ -1269,7 +1269,13 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           bounces={true}
           viewabilityConfig={profileViewabilityConfig}
           onViewableItemsChanged={onProfileViewableItemsChanged}
-          onMomentumScrollEnd={handleProfileMomentumScrollEnd}
+          onScrollBeginDrag={() => setFeedScrolling(true)}
+          onScrollEndDrag={() => setFeedScrolling(false)}
+          onMomentumScrollBegin={() => setFeedScrolling(true)}
+          onMomentumScrollEnd={() => {
+            setFeedScrolling(false);
+            handleProfileMomentumScrollEnd();
+          }}
           extraData={revealedPosts}
         />
       </GestureDetector>

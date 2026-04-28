@@ -38,7 +38,6 @@ type PostCardHeaderProps = {
   author: PostAuthor;
   topic?: string;
   createdAt: Date | string | number;
-  timeRefreshKey?: number;
   isOwnPost: boolean;
   isFollowing?: boolean;
   isTopicFollowed?: boolean;
@@ -57,7 +56,6 @@ export const PostCardHeader = memo(function PostCardHeader({
   author,
   topic,
   createdAt,
-  timeRefreshKey = 0,
   isOwnPost,
   isFollowing,
   isTopicFollowed,
@@ -181,7 +179,6 @@ export const PostCardHeader = memo(function PostCardHeader({
             </Text>
           )}
           <TimeAgo
-            key={`${String(createdAt)}-${timeRefreshKey}`}
             timestamp={createdAt}
             showSuffix={false}
             size="md"
