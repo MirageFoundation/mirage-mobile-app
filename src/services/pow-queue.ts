@@ -19,7 +19,9 @@ import { AppState, InteractionManager } from "react-native";
 import * as Sentry from "@sentry/react-native";
 import * as Network from "expo-network";
 import { getApiErrorMessage } from "@/src/utils/parse-api-error";
+import { canSkipPoWForUser } from "@/src/utils/pow-eligibility";
 import { cancelPow, isPowCancelled } from "@/src/wallet";
+import { useAuthStore } from "@/src/stores/auth-store";
 
 export type PowActionType =
   | "upvote"
@@ -43,6 +45,7 @@ export interface PowAction<T = unknown> {
   type: PowActionType;
   label: string;
   showProgress?: boolean;
+  forcePoW?: boolean;
   execute: () => Promise<T>;
   onSuccess?: (result: T) => void;
   onError?: (error: Error) => void;
@@ -58,8 +61,8 @@ export interface PowQueueState {
   totalCount: number;
   currentProgress: number;
   lastError: Error | null;
- lastCompletedAction: { type: PowActionType; success: boolean; errorMessage?: string } | null;
-  successOverlay: { type: PowActionType; success: boolean; errorMessage?: string } | null;
+ lastCompletedAction: { type: PowActionType; success: boolean; errorMessage?: string; skippedPoW?: boolean } | null;
+  successOverlay: { type: PowActionType; success: boolean; errorMessage?: string; skippedPoW?: boolean } | null;
 }
 
 export interface PowQueueActions {
@@ -74,8 +77,6 @@ export interface PowQueueActions {
 
 type PowQueueStore = PowQueueState & PowQueueActions;
 
-const RESULT_DISPLAY_DELAY_MS = 800;
-const SUCCESS_SYNC_DELAY_MS = 500;
 const NATIVE_CLEANUP_TIMEOUT_MS = 500;
 const SUCCESS_OVERLAY_DURATION_MS = 500;
 const MAX_NETWORK_RETRIES = 3;
@@ -158,6 +159,8 @@ let isProcessingLock = false;
 let currentCancelReject: ((reason?: unknown) => void) | null = null;
 let successOverlayTimeout: ReturnType<typeof setTimeout> | null = null;
 
+const immediateActions = new Map<string, (reason?: unknown) => void>();
+
 const isNetworkError = (error: unknown): boolean =>
   (error as any)?.code === "ERR_NETWORK" ||
   (error as any)?.message === "Network Error";
@@ -223,6 +226,81 @@ const executeWithNetworkRetry = async <T>(
   throw lastError;
 };
 
+const executeImmediately = async <T>(action: PowAction<T>): Promise<void> => {
+  let cancelReject: (reason?: unknown) => void = () => {};
+  const cancelPromise = new Promise<never>((_, reject) => {
+    cancelReject = reject;
+  });
+  cancelPromise.catch(() => {});
+  immediateActions.set(action.id, cancelReject);
+
+  try {
+    const result = await executeWithNetworkRetry(action.execute, cancelPromise);
+
+    if (!immediateActions.has(action.id)) {
+      return;
+    }
+
+    action.onSuccess?.(result);
+    usePowQueueStore.setState({
+      lastError: null,
+      lastCompletedAction: { type: action.type, success: true, skippedPoW: true },
+      successOverlay: { type: action.type, success: true, skippedPoW: true },
+    });
+
+    if (successOverlayTimeout) clearTimeout(successOverlayTimeout);
+    successOverlayTimeout = setTimeout(() => {
+      usePowQueueStore.setState({ successOverlay: null, lastCompletedAction: null });
+      successOverlayTimeout = null;
+    }, SUCCESS_OVERLAY_DURATION_MS);
+
+    Sentry.addBreadcrumb({
+      category: "pow",
+      message: `${action.type} completed immediately without PoW`,
+      level: "info",
+      data: { actionId: action.id, type: action.type },
+    });
+  } catch (error) {
+    const msg = String((error as Error)?.message || "");
+    if (msg === "pow_cancelled" || isPowCancelled(error)) {
+      return;
+    }
+
+    const err = error instanceof Error ? error : new Error(String(error));
+    if (!isNetworkError(error)) {
+      Sentry.captureException(err, {
+        tags: { action: "pow_action_immediate", pow_type: action.type },
+        extra: { actionId: action.id, label: action.label },
+      });
+    }
+    action.onRollback?.();
+    action.onError?.(err);
+    usePowQueueStore.setState({
+      lastError: err,
+      lastCompletedAction: {
+        type: action.type,
+        success: false,
+        errorMessage: isNetworkError(error) ? "No internet connection" : getApiErrorMessage(error),
+        skippedPoW: true,
+      },
+      successOverlay: {
+        type: action.type,
+        success: false,
+        errorMessage: isNetworkError(error) ? "No internet connection" : getApiErrorMessage(error),
+        skippedPoW: true,
+      },
+    });
+
+    if (successOverlayTimeout) clearTimeout(successOverlayTimeout);
+    successOverlayTimeout = setTimeout(() => {
+      usePowQueueStore.setState({ successOverlay: null, lastCompletedAction: null });
+      successOverlayTimeout = null;
+    }, SUCCESS_OVERLAY_DURATION_MS);
+  } finally {
+    immediateActions.delete(action.id);
+  }
+};
+
 export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   queue: [],
   currentAction: null,
@@ -236,6 +314,12 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
 
   enqueue: <T>(action: PowAction<T>) => {
     action.onOptimisticUpdate?.();
+
+    const { userLevel, user } = useAuthStore.getState();
+    if (!action.forcePoW && canSkipPoWForUser(userLevel, user?.tier)) {
+      void executeImmediately(action);
+      return;
+    }
 
     const state = get();
     const needsKick = !isProcessingLock && !state.currentAction;
@@ -255,6 +339,13 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   },
 
   cancelAction: (actionId: string): boolean => {
+    const immediateCancel = immediateActions.get(actionId);
+    if (immediateCancel) {
+      immediateActions.delete(actionId);
+      immediateCancel(new Error("pow_cancelled"));
+      return true;
+    }
+
     const state = get();
 
     if (state.currentAction?.id === actionId) {
@@ -470,6 +561,8 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   reset: () => {
     isProcessingLock = false;
     currentCancelReject = null;
+    immediateActions.forEach((reject) => reject(new Error("pow_cancelled")));
+    immediateActions.clear();
     set({
       queue: [],
       currentAction: null,

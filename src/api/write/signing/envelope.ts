@@ -11,6 +11,7 @@ import {
 import * as Sentry from "@sentry/react-native";
 import { getParameters } from "@/src/api/read/endpoints/parameters";
 import { useAuthStore } from "@/src/stores";
+import { canSkipPoWForUser } from "@/src/utils/pow-eligibility";
 
 import { canonSignedWithPow } from "./canonical";
 import type {
@@ -30,6 +31,8 @@ export interface BuildEnvelopeOptions<
   baseBuilder: (params: EnvelopeParams & TPayload) => Uint8Array;
   payloadFields: TPayload;
   skipPoW?: boolean;
+  requireBlockHash?: boolean;
+  forcePoW?: boolean;
   onPoWProgress?: PoWProgressCallback;
 }
 
@@ -66,25 +69,35 @@ export async function buildSignedEnvelope<
     baseBuilder,
     payloadFields,
     skipPoW = false,
+    requireBlockHash = false,
+    forcePoW = false,
     onPoWProgress,
   } = options;
 
-  const cachedUserLevel = useAuthStore.getState().userLevel;
+  const authState = useAuthStore.getState();
+  const cachedUserLevel = authState.userLevel;
+  const cachedTier = authState.user?.tier;
+  const cachedUserCanSkipPoW = canSkipPoWForUser(cachedUserLevel, cachedTier);
   let params: Awaited<ReturnType<typeof getParameters>> | null = null;
 
-  if (!skipPoW && cachedUserLevel === 0) {
+  if (!skipPoW && (!cachedUserCanSkipPoW || requireBlockHash || forcePoW)) {
     params = await getParameters({ address: wallet.address });
 
     console.log(`[Envelope] Using last_block_hash: ${params.last_block_hash.substring(0, 16)}...`);
+
+    if (params.user_level !== cachedUserLevel) {
+      useAuthStore.getState().setUserLevel(params.user_level);
+    }
   }
 
   const userLevel = params?.user_level ?? cachedUserLevel;
-  const needsPoW = !skipPoW && userLevel === 0;
-  const difficulty = needsPoW ? params?.pow_difficulty ?? 0 : 0;
+  const userCanSkipPoW = canSkipPoWForUser(userLevel, cachedTier);
+  const needsPoW = !skipPoW && (forcePoW || !userCanSkipPoW);
+  const difficulty = needsPoW ? (userCanSkipPoW ? 0 : params?.pow_difficulty ?? 0) : 0;
 
   const envelopeNonce = generateEnvelopeNonce();
   let timestampMs = Math.max(0, Date.now() - 15000);
-  let effectiveBlockHash = needsPoW ? params?.last_block_hash ?? "" : "";
+  let effectiveBlockHash = needsPoW || requireBlockHash || forcePoW ? params?.last_block_hash ?? "" : "";
   const lastBlockHashBytes = hexToBytes(effectiveBlockHash);
 
   const envelopeParams: EnvelopeParams = {
@@ -222,7 +235,7 @@ export async function buildSignedEnvelope<
       }
     }
   } else {
-    console.log(`[PoW] Skipping PoW (skipPoW=${skipPoW}, userLevel=${userLevel})`);
+    console.log(`[PoW] Skipping PoW (skipPoW=${skipPoW}, userLevel=${userLevel}, tier=${cachedTier ?? "unknown"})`);
   }
 
   console.log("[Envelope] Building signed bytes...");
@@ -270,7 +283,7 @@ export async function buildEnvelopeWithParams<
     userLevel,
   } = options;
 
-  const needsPoW = !skipPoW && userLevel === 0;
+  const needsPoW = !skipPoW && !canSkipPoWForUser(userLevel);
   let difficulty = powDifficulty;
   if (!needsPoW) {
     difficulty = 0;

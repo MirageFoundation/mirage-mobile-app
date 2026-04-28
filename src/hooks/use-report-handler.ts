@@ -78,6 +78,7 @@ export function useReportHandler(
         id: actionId,
         type: "report",
         label,
+        forcePoW: true,
         execute: async () => {
           return reportMutation.mutateAsync({
             target: targetId,
