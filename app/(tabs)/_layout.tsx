@@ -35,7 +35,10 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { SideMenuProvider } from "@/src/providers/side-menu-provider";
-import { signalTabsReady } from "@/src/services/inbox-notifications";
+import {
+  signalTabsReady,
+  signalTabsUnmounted,
+} from "@/src/services/inbox-notifications";
 import { isRecentSharePath } from "@/src/navigation/linking";
 
 export const unstable_settings = {
@@ -328,6 +331,7 @@ export default function TabLayout() {
 
   useEffect(() => {
     signalTabsReady();
+    return () => signalTabsUnmounted();
   }, []);
 
   const prevShareIntentRef = useRef(hasShareIntent);

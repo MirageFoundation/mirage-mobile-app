@@ -2,7 +2,7 @@ import * as Notifications from "expo-notifications";
 import * as BackgroundFetch from "expo-background-fetch";
 import * as TaskManager from "expo-task-manager";
 import { AppState, Platform } from "react-native";
-import { router } from "@/src/utils/guarded-router";
+import { router } from "expo-router";
 import type { InfiniteData } from "@tanstack/react-query";
 
 import * as Sentry from "@sentry/react-native";
@@ -39,12 +39,40 @@ let deferredInitSubscription: { remove(): void } | null = null;
 let isInboxNotificationsInitialized = false;
 let isInitializingInboxNotifications = false;
 
+let _rootLayoutReadyResolve: (() => void) | null = null;
+let _rootLayoutReadyPromise: Promise<void> = new Promise<void>((resolve) => {
+  _rootLayoutReadyResolve = resolve;
+});
+let _isRootLayoutReady = false;
+
 let _tabsReadyResolve: (() => void) | null = null;
 let _tabsReadyPromise: Promise<void> = new Promise<void>((resolve) => {
   _tabsReadyResolve = resolve;
 });
+let _areTabsReady = false;
+
+export function signalRootLayoutReady(): void {
+  if (_isRootLayoutReady) return;
+  _isRootLayoutReady = true;
+  Sentry.addBreadcrumb({
+    category: "notifications",
+    message: "Root layout is ready for notification navigation",
+    level: "info",
+  });
+  _rootLayoutReadyResolve?.();
+}
+
+export function signalRootLayoutUnmounted(): void {
+  if (!_isRootLayoutReady) return;
+  _isRootLayoutReady = false;
+  _rootLayoutReadyPromise = new Promise<void>((resolve) => {
+    _rootLayoutReadyResolve = resolve;
+  });
+}
 
 export function signalTabsReady(): void {
+  if (_areTabsReady) return;
+  _areTabsReady = true;
   Sentry.addBreadcrumb({
     category: "notifications",
     message: "Tabs navigator is ready for notification navigation",
@@ -53,15 +81,23 @@ export function signalTabsReady(): void {
   _tabsReadyResolve?.();
 }
 
+export function signalTabsUnmounted(): void {
+  if (!_areTabsReady) return;
+  _areTabsReady = false;
+  _tabsReadyPromise = new Promise<void>((resolve) => {
+    _tabsReadyResolve = resolve;
+  });
+}
+
 function waitForTabsReady(timeoutMs = 5000): Promise<void> {
   let didSettle = false;
   return Promise.race([
-    _tabsReadyPromise.then(() => {
+    Promise.all([_rootLayoutReadyPromise, _tabsReadyPromise]).then(() => {
       if (didSettle) return;
       didSettle = true;
       Sentry.addBreadcrumb({
         category: "notifications",
-        message: "Tabs ready before inbox notification navigation",
+        message: "Navigation tree ready before inbox notification navigation",
         level: "info",
       });
     }),
@@ -570,6 +606,7 @@ function subscribeAppState(): void {
 }
 
 const HANDLED_NOTIFICATION_IDS_KEY = "inbox-handled-notification-ids";
+const handledNotificationIdsInFlight = new Set<string>();
 
 function getHandledNotificationIds(): Set<string> {
   const raw = storage.getString(HANDLED_NOTIFICATION_IDS_KEY);
@@ -615,7 +652,10 @@ function handleNotificationResponse(
       },
     });
     const handledNotificationIds = getHandledNotificationIds();
-    if (handledNotificationIds.has(notificationId)) {
+    if (
+      handledNotificationIds.has(notificationId) ||
+      handledNotificationIdsInFlight.has(notificationId)
+    ) {
       console.log("[InboxNotifications] Already handled notification:", notificationId);
       Sentry.addBreadcrumb({
         category: "notifications",
@@ -634,6 +674,11 @@ function handleNotificationResponse(
         level: "info",
       });
       return;
+    }
+    handledNotificationIdsInFlight.add(notificationId);
+    if (handledNotificationIdsInFlight.size > 50) {
+      const oldestId = handledNotificationIdsInFlight.values().next().value;
+      if (oldestId) handledNotificationIdsInFlight.delete(oldestId);
     }
     const previewReply = buildPreviewReplyFromNotification(response.notification);
     const replyId =
@@ -657,8 +702,6 @@ function handleNotificationResponse(
         hasRootPostId: !!rootPostId,
       },
     });
-    handledNotificationIds.add(notificationId);
-    saveHandledNotificationIds(handledNotificationIds);
     useInboxStore.getState().setNotificationTarget({
       notificationId,
       replyId,
@@ -697,9 +740,12 @@ function handleNotificationResponse(
           replyId: replyId ?? undefined,
         },
       });
+      handledNotificationIds.add(notificationId);
+      saveHandledNotificationIds(handledNotificationIds);
     };
     const runNavigateToInbox = () => {
       void navigateToInbox().catch((error) => {
+        handledNotificationIdsInFlight.delete(notificationId);
         console.error("[InboxNotifications] Failed to navigate from notification:", error);
         Sentry.captureException(error, {
           tags: { action: "notification_navigate" },

@@ -9,6 +9,10 @@ import * as Sentry from '@sentry/react-native';
 import { useEffect } from "react";
 import { getShareScheme } from "@/src/utils/share-scheme";
 import { useForceUpdate } from "@/src/hooks/use-force-update";
+import {
+  signalRootLayoutReady,
+  signalRootLayoutUnmounted,
+} from "@/src/services/inbox-notifications";
 
 const navigationIntegration = Sentry.reactNavigationIntegration({
   enableTimeToInitialDisplay: true,
@@ -60,9 +64,11 @@ export default Sentry.wrap(function RootLayout() {
   const ref = useNavigationContainerRef();
   const { reason: forceUpdateReason, remoteVersion, isRequired } = useForceUpdate();
   useEffect(() => {
+    signalRootLayoutReady();
     if (ref?.current) {
       navigationIntegration.registerNavigationContainer(ref);
     }
+    return () => signalRootLayoutUnmounted();
   }, [ref]);
 
   return (
