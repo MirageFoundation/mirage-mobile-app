@@ -269,10 +269,37 @@ export function usePostDataRefresher(options: UsePostDataRefresherOptions) {
     }
   }, [queryClient, feedParamsList, userPostsParams, onRefreshComplete, visibleTrackerKeys]);
 
+  const refreshVisiblePostMetadata = useCallback(async () => {
+    if (!visibleTrackerKeys?.length) {
+      await refreshPostMetadata();
+      return;
+    }
+
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
+    if (followUpSyncTimerRef.current) {
+      clearTimeout(followUpSyncTimerRef.current);
+      followUpSyncTimerRef.current = null;
+    }
+
+    try {
+      const address = feedParamsList?.find((params) => !!params.address)?.address ?? userPostsParams?.address;
+      await refreshVisibleRootMetadata(queryClient, address, visibleTrackerKeys);
+      followUpSyncTimerRef.current = setTimeout(() => {
+        refreshVisibleRootMetadata(queryClient, address, visibleTrackerKeys).catch(() => {});
+        followUpSyncTimerRef.current = null;
+      }, 700);
+      onRefreshComplete?.();
+    } catch {
+    } finally {
+      isRefreshingRef.current = false;
+    }
+  }, [queryClient, feedParamsList, userPostsParams, onRefreshComplete, refreshPostMetadata, visibleTrackerKeys]);
+
   useAppState({
     onForeground: () => {
       wasBackgroundedRef.current = true;
-      refreshPostMetadata();
+      refreshVisiblePostMetadata();
     },
     staleThreshold: 0,
   });

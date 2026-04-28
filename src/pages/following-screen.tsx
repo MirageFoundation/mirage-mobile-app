@@ -32,7 +32,7 @@ import { Box, Text } from "@/src/components/ui/primitives";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
 import { storage } from "@/src/stores";
 
-import { useAuthGuard, useBlockHandler, useDeleteHandler, useFollowHandler, useReportHandler, useVoteHandler, type VoteResult } from "@/src/hooks";
+import { APP_FOREGROUND_REFRESH_THRESHOLD_MS, useAuthGuard, useBlockHandler, useDeleteHandler, useFollowHandler, useReportHandler, useVoteHandler, type VoteResult } from "@/src/hooks";
 import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
@@ -98,7 +98,7 @@ export function FollowingScreen() {
         backgroundTimeRef.current = null;
         storage.remove("app_was_backgrounded");
         useTimeTickStore.getState().bump();
-        if (duration >= 2 * 60 * 60 * 1000) {
+        if (duration >= APP_FOREGROUND_REFRESH_THRESHOLD_MS) {
           setTimeout(async () => {
             showBars();
             tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });

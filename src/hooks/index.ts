@@ -59,6 +59,7 @@ export {
   type NetworkType,
 } from "./use-network-state";
 export {
+  APP_FOREGROUND_REFRESH_THRESHOLD_MS,
   useAppState,
   type AppStateInfo,
 } from "./use-app-state";

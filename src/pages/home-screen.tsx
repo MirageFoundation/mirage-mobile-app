@@ -37,6 +37,7 @@ import { Box, Text } from "@/src/components/ui/primitives";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
 import { storage } from "@/src/stores";
 import {
+  APP_FOREGROUND_REFRESH_THRESHOLD_MS,
   useAuthGuard,
   useBlockHandler,
   useDeleteHandler,
@@ -119,7 +120,7 @@ export function HomeScreen() {
         backgroundTimeRef.current = null;
         storage.remove("app_was_backgrounded");
         useTimeTickStore.getState().bump();
-        if (duration >= 2 * 60 * 60 * 1000) {
+        if (duration >= APP_FOREGROUND_REFRESH_THRESHOLD_MS) {
           isAutoRefreshingRef.current = true;
           setHasNewPosts(false);
           setTimeout(async () => {
@@ -159,7 +160,7 @@ export function HomeScreen() {
     if (wasBackgrounded) {
       const lastForeground = Number(storage.getString("app_last_foreground_time") ?? "0");
       const elapsed = Date.now() - lastForeground;
-      if (elapsed >= 2 * 60 * 60 * 1000) {
+      if (elapsed >= APP_FOREGROUND_REFRESH_THRESHOLD_MS) {
         isAutoRefreshingRef.current = true;
         setHasNewPosts(false);
         const timer = setTimeout(async () => {
