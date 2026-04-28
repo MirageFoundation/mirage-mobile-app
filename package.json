@@ -1,7 +1,7 @@
 {
   "name": "mirage",
   "main": "index.ts",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "scripts": {
     "start": "expo start",
     "postinstall": "patch-package",

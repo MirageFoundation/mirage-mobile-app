@@ -23,6 +23,7 @@ import { useToast } from "@/src/providers/toast-provider";
 import { usePreferencesStore, type ThemeMode, type ApiServer, type VideoAutoplayNetwork } from "@/src/stores";
 import { isAdultContentEnabled } from "@/src/stores/preferences-store";
 import { useServerList } from "@/src/hooks/use-server-list";
+import { formatServerLabel } from "@/src/utils/server-label";
 import { runInboxCheckNow, sendTestNotification, resetAndTestInboxNotification, getNotificationDebugInfo } from "@/src/services/inbox-notifications";
 import { useCloudflareErrorStore } from "@/src/stores/cloudflare-error-store";
 import * as Clipboard from "expo-clipboard";
@@ -125,7 +126,10 @@ export function SettingsScreen() {
   }, []);
 
   const { servers } = useServerList();
-  const apiServerOptions = servers.map((s) => ({ value: s, label: s }));
+  const apiServerOptions = servers.map((s) => ({
+    value: s,
+    label: formatServerLabel(s),
+  }));
 
   // Sheet refs
   const contentTypeSheetRef = useRef<ContentTypeSheetRef>(null);
@@ -156,8 +160,11 @@ const handleApiServerChange = useCallback(
       
       try {
         await switchServer(server);
-        setShareServer(server);
-        toast.success(`Switched to ${server}`);
+        const isHttps = server.startsWith("https://");
+        if (isHttps) {
+          setShareServer(server);
+        }
+        toast.success(`Switched to ${formatServerLabel(server)}`);
         router.replace("/(tabs)");
       } catch (err) {
         Sentry.captureException(err, { tags: { feature: "settings", operation: "switch-server" } });
@@ -397,7 +404,7 @@ const handleApiServerChange = useCallback(
               icon="server-outline"
               title="Server"
               subtitle="Server used for API requests and sharing"
-              rightText={apiServer}
+              rightText={formatServerLabel(apiServer)}
               onPress={() => apiServerSheetRef.current?.present()}
             />
           ),

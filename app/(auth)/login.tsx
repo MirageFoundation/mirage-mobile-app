@@ -5,8 +5,9 @@ import { RecoveryPhraseInput } from "@/src/components/molecules";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useServerList } from "@/src/hooks/use-server-list";
-import { useAuthStore, useUIStore, usePreferencesStore, type ApiServer } from "@/src/stores";
+import { useAuthStore, useUIStore, usePreferencesStore, getApiBaseUrl, type ApiServer } from "@/src/stores";
 import { apiClient } from "@/src/api/client";
+import { formatServerLabel } from "@/src/utils/server-label";
 import { useToast } from "@/src/providers/toast-provider";
 import { isValidMnemonic } from "@/src/wallet";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
@@ -58,7 +59,7 @@ export default function LoginScreen() {
   const [nodeConfigData, setNodeConfigData] = useState<{ registration_enabled: boolean } | null>(null);
 
   useEffect(() => {
-    apiClient.setBaseUrl(`https://${activeServer}`);
+    apiClient.setBaseUrl(getApiBaseUrl(activeServer));
     getNodeConfig()
       .then((config) => setNodeConfigData(config))
       .catch(() => setNodeConfigData(null));
@@ -67,13 +68,15 @@ export default function LoginScreen() {
   useEffect(() => {
     return () => {
       const currentServer = usePreferencesStore.getState().apiServer;
-      apiClient.setBaseUrl(`https://${currentServer}`);
+      apiClient.setBaseUrl(getApiBaseUrl(currentServer));
     };
   }, []);
 
   const handleBack = useCallback(() => {
     triggerHaptic("selection");
-    apiClient.setBaseUrl(`https://${usePreferencesStore.getState().apiServer}`);
+    apiClient.setBaseUrl(
+      getApiBaseUrl(usePreferencesStore.getState().apiServer)
+    );
     router.back();
   }, [router]);
 
@@ -214,7 +217,7 @@ export default function LoginScreen() {
               marginRight: 8,
             }}
           >
-            {activeServer}
+            {formatServerLabel(activeServer)}
           </Text>
         </Pressable>
       </View>
@@ -314,15 +317,15 @@ export default function LoginScreen() {
                     if (!isActive) {
                       setSwitchingServer(server);
                       try {
-                        apiClient.setBaseUrl(`https://${server}`);
+                        apiClient.setBaseUrl(getApiBaseUrl(server));
                         queryClient.clear();
                         await getNodeConfig();
                         setActiveServer(server);
                         setApiServer(server);
-                        toast.success(`Switched to ${server}`);
+                        toast.success(`Switched to ${formatServerLabel(server)}`);
                       } catch (e) {
-                        apiClient.setBaseUrl(`https://${activeServer}`);
-                        toast.error(`Failed to connect to ${server}`);
+                        apiClient.setBaseUrl(getApiBaseUrl(activeServer));
+                        toast.error(`Failed to connect to ${formatServerLabel(server)}`);
                       } finally {
                         setSwitchingServer(null);
                       }
@@ -350,7 +353,7 @@ export default function LoginScreen() {
                       weight={isActive ? "semibold" : "regular"}
                       style={isActive ? { color: theme.colors.primary[500] } : undefined}
                     >
-                      {server}
+                      {formatServerLabel(server)}
                     </Text>
                   </View>
                   {isSwitching && (
@@ -403,11 +406,13 @@ export default function LoginScreen() {
             >
               Account creation is not available on{" "}
               <Text size="md" weight="semibold">
-                {activeServer}
+                {formatServerLabel(activeServer)}
               </Text>
               . Switch to{" "}
               <Text size="md" weight="semibold">
-                {servers.find((s) => s !== activeServer) ?? servers[0]}
+                {formatServerLabel(
+                  servers.find((s) => s !== activeServer) ?? servers[0]
+                )}
               </Text>{" "}
               to create an account.
             </Text>
@@ -416,20 +421,20 @@ export default function LoginScreen() {
                 const target = servers.find((s) => s !== activeServer) ?? servers[0];
                 setIsSwitchingReg(true);
                 try {
-                  apiClient.setBaseUrl(`https://${target}`);
+                  apiClient.setBaseUrl(getApiBaseUrl(target));
                   queryClient.clear();
                   const config = await getNodeConfig();
                   setActiveServer(target);
                   setApiServer(target);
                   setNodeConfigData(config);
                   setShowRegPopup(false);
-                  toast.success(`Switched to ${target}`);
+                  toast.success(`Switched to ${formatServerLabel(target)}`);
                   if (config.registration_enabled) {
                     router.replace("/(auth)/username");
                   }
                 } catch (e) {
-                  apiClient.setBaseUrl(`https://${activeServer}`);
-                  toast.error(`Failed to connect to ${target}`);
+                  apiClient.setBaseUrl(getApiBaseUrl(activeServer));
+                  toast.error(`Failed to connect to ${formatServerLabel(target)}`);
                 } finally {
                   setIsSwitchingReg(false);
                 }
@@ -452,7 +457,9 @@ export default function LoginScreen() {
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <Text style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "600" }}>
-                    Switch to {servers.find((s) => s !== activeServer) ?? servers[0]}
+                    Switch to {formatServerLabel(
+                      servers.find((s) => s !== activeServer) ?? servers[0]
+                    )}
                   </Text>
                 )}
               </LinearGradient>

@@ -58,11 +58,16 @@ export const isAdultContentEnabled = (types: ContentType[]): boolean => {
   );
 };
 
+const hasScheme = (value: string): boolean =>
+  /^https?:\/\//i.test(value);
+
 export const getShareBaseUrl = (server: ShareServer): string => {
+  if (hasScheme(server)) return server;
   return `https://${server}`;
 };
 
 export const getApiBaseUrl = (server: ApiServer): string => {
+  if (hasScheme(server)) return server;
   return `https://${server}`;
 };
 
@@ -153,10 +158,10 @@ export const usePreferencesStore = create<PreferencesState>()(
       peopleBeforeShowMore: 5,
 
       // Sharing
-      shareServer: "mirage.talk",
+      shareServer: "https://mirage.talk",
 
       // API Server
-      apiServer: "mirage.talk",
+      apiServer: "https://mirage.talk",
 
      // Video
      autoPlayVideos: true,
@@ -241,7 +246,7 @@ export const usePreferencesStore = create<PreferencesState>()(
    {
      name: "preferences-storage",
       storage: createJSONStorage(() => mmkvStorage),
-      version: 4,
+      version: 5,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<PreferencesState>;
         
@@ -270,6 +275,15 @@ export const usePreferencesStore = create<PreferencesState>()(
             state.selectedContentTypes = state.selectedContentTypes.map(
               (t) => (t === ("porn" as ContentType) ? "adult" : t)
             );
+          }
+        }
+
+        if (version < 5) {
+          if (state.apiServer && !/^https?:\/\//i.test(state.apiServer)) {
+            state.apiServer = `https://${state.apiServer}`;
+          }
+          if (state.shareServer && !/^https?:\/\//i.test(state.shareServer)) {
+            state.shareServer = `https://${state.shareServer}`;
           }
         }
         

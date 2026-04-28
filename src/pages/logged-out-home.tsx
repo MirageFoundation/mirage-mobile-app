@@ -21,9 +21,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useToast } from "@/src/providers/toast-provider";
 import { apiClient } from "@/src/api/client";
 import { useQueryClient } from "@tanstack/react-query";
-import { usePreferencesStore, type ApiServer } from "@/src/stores";
+import { usePreferencesStore, getApiBaseUrl, type ApiServer } from "@/src/stores";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useServerList } from "@/src/hooks/use-server-list";
+import { formatServerLabel } from "@/src/utils/server-label";
 import {
   HEADER_HEIGHT,
   TAB_BAR_HEIGHT,
@@ -72,7 +73,7 @@ export function LoggedOutHome() {
     try {
       const newServer = otherServer;
       console.log("[LoggedOutHome] Switching server to:", newServer);
-      apiClient.setBaseUrl(`https://${newServer}`);
+      apiClient.setBaseUrl(getApiBaseUrl(newServer));
       queryClient.clear();
       await queryClient.invalidateQueries();
 
@@ -80,7 +81,7 @@ export function LoggedOutHome() {
 
       setApiServer(newServer);
       setShowRegPopup(false);
-      toast.success(`Switched to ${newServer}`);
+      toast.success(`Switched to ${formatServerLabel(newServer)}`);
 
       if (result.data?.registration_enabled) {
         router.push("/(auth)/username");
@@ -119,7 +120,7 @@ export function LoggedOutHome() {
               marginRight: 8,
             }}
           >
-            {apiServer}
+            {formatServerLabel(apiServer)}
           </Text>
         </Pressable>
       </View>
@@ -350,11 +351,11 @@ export function LoggedOutHome() {
             >
               Account creation is not available on{" "}
               <Text size="md" weight="semibold">
-                {apiServer}
+                {formatServerLabel(apiServer)}
               </Text>
               . Switch to{" "}
               <Text size="md" weight="semibold">
-                {otherServer}
+                {formatServerLabel(otherServer)}
               </Text>{" "}
               to create an account.
             </Text>
@@ -375,7 +376,7 @@ export function LoggedOutHome() {
                   <Text
                     style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "600" }}
                   >
-                    Switch to {otherServer}
+                    Switch to {formatServerLabel(otherServer)}
                   </Text>
                 )}
               </LinearGradient>
@@ -423,16 +424,16 @@ export function LoggedOutHome() {
                     if (!isActive) {
                       setSwitchingServer(server);
                       try {
-                        apiClient.setBaseUrl(`https://${server}`);
+                        apiClient.setBaseUrl(getApiBaseUrl(server));
                         queryClient.clear();
                         await queryClient.invalidateQueries();
                         await refetchNodeConfig();
                         setApiServer(server);
-                        toast.success(`Switched to ${server}`);
+                        toast.success(`Switched to ${formatServerLabel(server)}`);
                       } catch (e) {
                         Sentry.captureException(e, { tags: { feature: "logged-out-home", operation: "switch-server" } });
-                        apiClient.setBaseUrl(`https://${apiServer}`);
-                        toast.error(`Failed to connect to ${server}`);
+                        apiClient.setBaseUrl(getApiBaseUrl(apiServer));
+                        toast.error(`Failed to connect to ${formatServerLabel(server)}`);
                       } finally {
                         setSwitchingServer(null);
                       }
@@ -460,7 +461,7 @@ export function LoggedOutHome() {
                       weight={isActive ? "semibold" : "regular"}
                       style={isActive ? { color: theme.colors.primary[500] } : undefined}
                     >
-                      {server}
+                      {formatServerLabel(server)}
                     </Text>
                   </View>
                   {isSwitchingThis && (

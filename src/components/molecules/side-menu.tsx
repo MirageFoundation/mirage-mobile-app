@@ -47,6 +47,7 @@ import {
 import { useApiServer } from "@/src/providers/api-server-provider";
 import { useToast } from "@/src/providers/toast-provider";
 import { useServerList } from "@/src/hooks/use-server-list";
+import { formatServerLabel } from "@/src/utils/server-label";
 import {
   useUserFollowed,
   useBatchUsernamesFromAddresses,
@@ -336,7 +337,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     const { servers } = useServerList();
     const apiServerOptions = servers.map((s: string) => ({
       value: s,
-      label: s,
+      label: formatServerLabel(s),
     }));
 
     const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
@@ -474,8 +475,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
         if (server === apiServer) return;
         try {
           await switchServer(server);
-          setShareServer(server);
-          toast.success(`Switched to ${server}`);
+          const isHttps = server.startsWith("https://");
+          if (isHttps) {
+            setShareServer(server);
+          }
+          toast.success(`Switched to ${formatServerLabel(server)}`);
           close();
           router.replace("/(tabs)");
         } catch {
@@ -779,7 +783,20 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           notification opens the inbox tab but the bottom nav is
                           not visble fix,added sentry logs for better error
                           handling for notifiaction and push token register and
-                          unregister,made the voting quick for subscriber
+                          unregister,made the voting quick for subscriber, mark
+                          post seen not working in following tab fix,sharing
+                          external link to app was not navigating to create post
+                          and sometimes was not even extracting the data from
+                          the link fix and done better fixes for opening create
+                          tab at cold start and at every reload,added save
+                          draft popup to show when crossed on create post tab,
+                          mark post as seen when pressed tap to view,creating
+                          post on android does not scroll to top on home to show
+                          post just created fixed, saved post not working
+                          sometimes for some reason will show fallback UI and
+                          added sentry for catching the issue,getting peers and
+                          showing it in node list and switching throught them
+                          done
                         </Text>
                       </>
                     )}
@@ -836,7 +853,20 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           notification opens the inbox tab but the bottom nav is
                           not visble fix,added sentry logs for better error
                           handling for notifiaction and push token register and
-                          unregister,made the voting quick for subscriber
+                          unregister,made the voting quick for subscriber, mark
+                          post seen not working in following tab fix,sharing
+                          external link to app was not navigating to create post
+                          and sometimes was not even extracting the data from
+                          the link fix and done better fixes for opening create
+                          tab at cold start and at every reload,added save
+                          draft popup to show when crossed on create post tab,
+                          mark post as seen when pressed tap to view,creating
+                          post on android does not scroll to top on home to show
+                          post just created fixed, saved post not working
+                          sometimes for some reason will show fallback UI and
+                          added sentry for catching the issue,getting peers and
+                          showing it in node list and switching throught them
+                          done
                         </Text>
                       </>
                     )}

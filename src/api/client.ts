@@ -8,7 +8,7 @@ import { isRetryable, isMaybeRetryable } from "@/src/utils/error-messages";
 
 const DEFAULT_NODES = [
   "https://mirage.talk",
-  "https://mirage.talk", // fallback
+  "https://mirage.vote", // fallback
 ];
 
 const MAX_CONCURRENT_REQUESTS = 6;
@@ -117,6 +117,15 @@ class ApiClient {
     this.nodeList = [url, ...DEFAULT_NODES.filter((n) => n !== url)];
     this.currentNodeIndex = 0;
     this.client.defaults.baseURL = url;
+    const isHttp = url.startsWith("http://");
+    Sentry.addBreadcrumb({
+      category: "api",
+      message: "API base URL changed",
+      level: "info",
+      data: { url, scheme: isHttp ? "http" : "https" },
+    });
+    Sentry.setTag("api_node", url);
+    Sentry.setTag("api_node_scheme", isHttp ? "http" : "https");
   }
 
   getCurrentBaseUrl(): string {
