@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 137
+                          update 138
                         </Text>
                         <Text
                           style={{
@@ -773,7 +773,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          Nothing
+                          made users identicon use bech32 address as seed
+                          everywhere
                         </Text>
                       </>
                     )}
@@ -814,7 +815,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 137
+                          update 138
                         </Text>
                         <Text
                           style={{
@@ -824,7 +825,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          Nothing
+                          made users identicon use bech32 address as seed
+                          everywhere
                         </Text>
                       </>
                     )}

@@ -1192,7 +1192,9 @@ export default function PostDetailScreen() {
         author: {
           id: currentUser.id,
           username: currentUser.username ?? "you",
-          avatarSeed: currentUser.username ?? currentUser.id,
+          // Seed with the bech32 address so the identicon stays stable
+          // across username changes (matches transform-post/comment).
+          avatarSeed: currentUser.walletAddress ?? currentUser.id,
         },
         content: optimisticContent,
         likes: 1,

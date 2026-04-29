@@ -29,8 +29,14 @@ export default function Avatar({
 
   const imgSource = useMemo(() => {
     if (source) return source;
+    // Convention: callers should pass the user's `mirage1…` bech32
+    // address as seed so the identicon stays stable across username
+    // changes. Mirrors web `utils/avatar.js`.
+    const safeSeed = encodeURIComponent(
+      seed === null || seed === undefined ? "default" : String(seed) || "default",
+    );
     return {
-      url: `https://api.dicebear.com/9.x/identicon/svg?seed=${seed}`,
+      url: `https://api.dicebear.com/9.x/identicon/svg?seed=${safeSeed}`,
     };
   }, [source, seed]);
 

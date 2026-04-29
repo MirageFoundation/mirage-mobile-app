@@ -10,7 +10,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { StyleSheet } from "react-native-unistyles";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import type { NewPostAvatar } from "@/src/hooks/use-new-posts-checker";
@@ -18,6 +18,10 @@ import type { NewPostAvatar } from "@/src/hooks/use-new-posts-checker";
 const GRADIENT_COLORS = ["rgb(102, 126, 234)", "rgb(118, 75, 162)"] as const;
 const AVATAR_SIZE = 22;
 const AVATAR_OVERLAP = 8;
+// 20% inner halo around the identicon glyph — matches the Avatar atom
+// `paddingRatio` default so the new-posts banner has the same visual
+// language as every other identicon surface.
+const AVATAR_PADDING = Math.round(AVATAR_SIZE * 0.2);
 
 type NewPostsButtonProps = {
   visible: boolean;
@@ -38,7 +42,6 @@ export const NewPostsButton = ({
   newPostCount = 0,
   loading = false,
 }: NewPostsButtonProps) => {
-  const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const translateY = useSharedValue(-60);
   const opacity = useSharedValue(0);
@@ -102,16 +105,18 @@ export const NewPostsButton = ({
                   {
                     left: index * (AVATAR_SIZE - AVATAR_OVERLAP),
                     zIndex: displayAvatars.length - index,
-                    borderColor: theme.colors.primary[500],
                   },
                 ]}
               >
                 <Image
                   source={{
-                    uri: `https://api.dicebear.com/9.x/identicon/png?seed=${avatar.username}&size=${AVATAR_SIZE * 2}`,
+                    // Seed with the bech32 address (userId) so the
+                    // identicon is stable across username changes.
+                    uri: `https://api.dicebear.com/9.x/identicon/png?seed=${encodeURIComponent(avatar.userId || "default")}&size=${AVATAR_SIZE * 2}`,
                   }}
                   style={styles.avatarImage}
                   cachePolicy="memory-disk"
+                  contentFit="contain"
                 />
               </View>
             ))}
@@ -125,7 +130,7 @@ export const NewPostsButton = ({
   );
 };
 
-const styles = StyleSheet.create((theme) => ({
+const styles = StyleSheet.create((theme, rt) => ({
   container: {
     position: "absolute",
     alignSelf: "center",
@@ -159,11 +164,24 @@ const styles = StyleSheet.create((theme) => ({
     height: AVATAR_SIZE,
     borderRadius: AVATAR_SIZE / 2,
     borderWidth: 1.5,
+    // Light theme: white border so the avatar reads against the
+    // purple gradient. Dark theme keeps the original light primary
+    // border.
+    borderColor:
+      rt.themeName === "light" ? "#fff" : theme.colors.primary[500],
     overflow: "hidden",
-    backgroundColor: theme.colors.background.subtle,
+    // Light theme: use a slightly darker halo so the identicon's
+    // 20% padding reads against the (near-white) wrapper bg. Dark
+    // theme keeps the original `background.subtle`.
+    backgroundColor:
+      rt.themeName === "light"
+        ? theme.colors.background.emphasis
+        : theme.colors.background.subtle,
+    padding: AVATAR_PADDING,
   },
   avatarImage: {
     width: "100%",
     height: "100%",
+    backgroundColor: "transparent",
   },
 }));

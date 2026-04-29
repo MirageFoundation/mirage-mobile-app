@@ -133,7 +133,10 @@ export function transformApiPost(
       username: currentUser && currentUser.id === apiPost.user_id && currentUser.username && apiPost.username === apiPost.user_id
         ? currentUser.username
         : apiPost.username,
-      avatarSeed: apiPost.username,
+      // Seed with the bech32 address (user_id) so the identicon stays
+      // stable across username changes. Matches the web app's
+      // `utils/avatar.js` policy.
+      avatarSeed: apiPost.user_id,
       level: apiPost.author_level ?? apiPost.user_level ?? apiPost.level,
       isNewUser: apiPost.author_is_new ?? apiPost.new_user ?? false,
     },

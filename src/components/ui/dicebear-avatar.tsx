@@ -21,9 +21,12 @@ export default function DicebearAvatar({
   ...props
 }: DicebearAvatarProps) {
   const dicebearUrl = useMemo(() => {
+    // Convention: callers should pass the user's `mirage1…` bech32
+    // address as seed so the identicon stays stable across username
+    // changes. Mirrors web `utils/avatar.js`.
     const s = seed || fallback;
     if (!s) return undefined;
-    return `https://api.dicebear.com/9.x/${variant}/png?seed=${s}`;
+    return `https://api.dicebear.com/9.x/${variant}/png?seed=${encodeURIComponent(s)}`;
   }, [seed, fallback, variant]);
 
   return (

@@ -31,7 +31,10 @@ export function transformApiComment(
     author: {
       id: apiComment.user_id,
       username: apiComment.username,
-      avatarSeed: apiComment.username, // Use username as seed for DiceBear
+      // Seed with the bech32 address (user_id) so the identicon stays
+      // stable across username changes. Matches the web app's
+      // `utils/avatar.js` policy.
+      avatarSeed: apiComment.user_id,
       level: apiComment.author_level ?? apiComment.user_level ?? apiComment.level,
       isNewUser: apiComment.author_is_new ?? apiComment.new_user ?? false,
     },
