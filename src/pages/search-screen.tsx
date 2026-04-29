@@ -35,6 +35,7 @@ import {
 } from "@/src/api/read";
 import type { Post, TopicInfo, UserInfo } from "@/src/api/types";
 import { getUsernameColor } from "@/src/utils/tiers";
+import { Avatar } from "@/src/components/atoms";
 import { TimeAgo } from "@/src/components/atoms/time-ago";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
@@ -686,6 +687,7 @@ export function SearchScreen() {
               pressed && { opacity: 0.7 },
             ]}
           >
+            <Avatar size="sm" seed={item.address} rounded="full" />
             <View style={styles.userResultContent}>
               <View style={styles.userResultNameRow}>
                 <Text
