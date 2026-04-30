@@ -776,7 +776,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           made users identicon use bech32 address as seed
                           everywhere, added space of like 20% around
                           identicons,UI improvements in avatar in new post
-                          banner
+                          banner,add identicons in search results under users
+                          tab,add identicon in mention search list, change UI of
+                          thread to match the website default theme UI
                         </Text>
                       </>
                     )}
@@ -831,7 +833,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           everywhere, added space of like 20% around
                           identicons,UI improvements in avatar in new post
                           banner,add identicons in search results under users
-                          tab,add identicon in mention search list
+                          tab,add identicon in mention search list, change UI of
+                          thread to match the website default theme UI
                         </Text>
                       </>
                     )}

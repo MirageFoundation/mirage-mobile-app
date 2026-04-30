@@ -3,7 +3,7 @@ import {
   UpvoteFilledIcon,
 } from "@/assets/figma-icons";
 import { AwardBadges } from "@/src/components/atoms/award-badges";
-import { TimeAgo, FollowButton } from "@/src/components/atoms";
+import { TimeAgo, FollowButton, Avatar } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
@@ -37,6 +37,59 @@ import { getUsernameColor } from "@/src/utils/tiers";
 const UPVOTE_COLOR = "#22C55E"; // Green for upvote
 const DOWNVOTE_COLOR = "#EF4444"; // Red for downvote
 const NEW_USER_COLOR = "rgb(94,194,106)";
+
+/* ------------------------------------------------------------------
+ * Reddit-style avatar-anchored threading geometry.
+ *
+ * Ported 1:1 from the web `default` theme's `ViewPostView.js`.
+ * Each non-root comment renders a 22px DiceBear identicon avatar
+ * inline at the start of its meta row. Three connector layers are
+ * drawn as absolutely-positioned `View`s on the comment row:
+ *
+ *   1. Ancestor rails — full-height vertical lines at each ancestor
+ *      depth where this comment is NOT the last child of that
+ *      ancestor's subtree (so the line continues through siblings
+ *      and forms one unbroken thread).
+ *   2. J-curve elbow — drops from the parent avatar's vertical
+ *      center, curves right, lands at this comment's avatar left
+ *      edge. Drawn for every depth >= 1 (i.e. every nested reply).
+ *   3. Own spine — vertical line from this comment's avatar center
+ *      down to the row bottom; only when the comment has children
+ *      and is not collapsed.
+ *
+ * Geometry (matches web mobile breakpoints):
+ *   avatarLeft(d)   = BASE_LEFT + d * INDENT
+ *   contentLeft(d)  = avatarLeft(d) + AVATAR + GAP   (d >= 0)
+ *   railX(d)        = avatarLeft(d - 1) + AVATAR / 2 (d >= 1)
+ *
+ * Avatar center y = paddingTop + AVATAR / 2.
+ * ------------------------------------------------------------------ */
+const COMMENT_BASE_LEFT = 16;
+const COMMENT_INDENT = 22;
+const COMMENT_AVATAR_SIZE = 22;
+const COMMENT_CONTENT_GAP = 6;
+const COMMENT_RAIL_WIDTH = 1;
+const COMMENT_PADDING_TOP_EXPANDED = 10;
+const COMMENT_PADDING_TOP_COLLAPSED = 8;
+const COMMENT_AVATAR_CENTER_Y_EXPANDED =
+  COMMENT_PADDING_TOP_EXPANDED + COMMENT_AVATAR_SIZE / 2; // 21
+const COMMENT_AVATAR_CENTER_Y_COLLAPSED =
+  COMMENT_PADDING_TOP_COLLAPSED + COMMENT_AVATAR_SIZE / 2; // 19
+
+function commentAvatarLeftPx(depth: number): number {
+  const d = Math.max(depth, 0);
+  return COMMENT_BASE_LEFT + d * COMMENT_INDENT;
+}
+
+function commentContentLeftPx(depth: number): number {
+  return commentAvatarLeftPx(depth) + COMMENT_AVATAR_SIZE + COMMENT_CONTENT_GAP;
+}
+
+function commentRailXPx(depth: number): number {
+  // Parent avatar center column.
+  const d = Math.max(depth, 1);
+  return commentAvatarLeftPx(d - 1) + COMMENT_AVATAR_SIZE / 2;
+}
 
 export type CommentAuthor = {
   id: string;
@@ -95,6 +148,20 @@ type CommentItemProps = {
   depth?: number;
   /** Maximum depth before collapsing visually */
   maxDepth?: number;
+  /**
+   * Ancestor rail depths to draw through this comment's row. A depth
+   * `K` means a 1px vertical rail should run the full row height at
+   * the column belonging to the ancestor at depth `K` (because that
+   * ancestor still has un-rendered siblings further down). Computed
+   * by `CommentThread`.
+   */
+  activeDepths?: number[];
+  /**
+   * Whether this comment has children. Drives the "own spine" — a
+   * 1px vertical line dropping from this avatar's center down to the
+   * row bottom so the thread continues into the next reply.
+   */
+  hasChildren?: boolean;
   /** Custom style */
   style?: StyleProp<ViewStyle>;
 };
@@ -225,6 +292,7 @@ const CommentImage = memo(({
     </View>
   );
 });
+CommentImage.displayName = "CommentImage";
 const commentImageStyles = StyleSheet.create((theme) => ({
   mediaContainer: {
     marginTop: theme.spacing.sm,
@@ -306,6 +374,7 @@ const CommentContent = memo(({ content }: { content: string }) => {
     </>
   );
 });
+CommentContent.displayName = "CommentContent";
 
 export const CommentItem = ({
   comment,
@@ -323,6 +392,8 @@ export const CommentItem = ({
   isCollapsed = false,
   depth = 0,
   maxDepth = 4,
+  activeDepths,
+  hasChildren = false,
   style,
 }: CommentItemProps) => {
   const { theme } = useUnistyles();
@@ -369,9 +440,24 @@ export const CommentItem = ({
     pointerEvents: animationProgress.value === 0 ? "none" : "auto",
   } as any));
 
-  // Calculate indent based on depth (max out at maxDepth)
+  // Avatar-anchored threading geometry. `depth` is 0-indexed (0 =
+  // top-level comment). We cap at `maxDepth` so visually indented
+  // sub-threads don't drift off-screen on long chains.
   const effectiveDepth = Math.min(depth, maxDepth);
-  const indentWidth = effectiveDepth * 16;
+  const contentLeft = commentContentLeftPx(effectiveDepth);
+  const avatarLeft = commentAvatarLeftPx(effectiveDepth);
+  const avatarCenterY = isCollapsed
+    ? COMMENT_AVATAR_CENTER_Y_COLLAPSED
+    : COMMENT_AVATAR_CENTER_Y_EXPANDED;
+  const paddingTop = isCollapsed
+    ? COMMENT_PADDING_TOP_COLLAPSED
+    : COMMENT_PADDING_TOP_EXPANDED;
+  const railColor = theme.colors.border.subtle;
+  const avatarSeed = comment.author.avatarSeed || comment.author.id || comment.author.username || "anon";
+  const ancestorRailDepths = (activeDepths || []).filter(
+    (d) => d >= 0 && d < effectiveDepth,
+  );
+  const hasImmediateParentRail = ancestorRailDepths.includes(effectiveDepth - 1);
 
   const handlePress = useCallback(() => {
     triggerHaptic("light");
@@ -453,20 +539,95 @@ export const CommentItem = ({
   return (
     <Pressable
       onPress={handlePress}
-      style={[styles.container, highlightStyle, style]}
+      style={[
+        styles.container,
+        { paddingTop, paddingLeft: contentLeft },
+        highlightStyle,
+        style,
+      ]}
     >
-      {/* Thread line for nested comments */}
-      {depth > 0 && (
-        <View style={[styles.threadLineContainer, { width: indentWidth }]}>
-          {Array.from({ length: effectiveDepth }).map((_, i) => (
-            <View key={i} style={[styles.threadLine, { left: i * 16 + 8 }]} />
-          ))}
-        </View>
+      {/* Layer 1 — ancestor rails. One 1px vertical line per ancestor
+         depth where this comment is NOT the last child of that
+         ancestor's subtree, drawn full-height so the line tiles
+         seamlessly across consecutive sibling rows. The J-curve is
+         painted above these rails, so shared parent columns stay
+         continuous without visually doubling. */}
+      {ancestorRailDepths.map((d) => (
+        <View
+          key={`anc-${d}`}
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: commentAvatarLeftPx(d) + COMMENT_AVATAR_SIZE / 2,
+            width: COMMENT_RAIL_WIDTH,
+            backgroundColor: railColor,
+          }}
+        />
+      ))}
+
+      {/* Layer 2 — elbow connector. The parent column is already
+         drawn by ancestor rails for non-last siblings, so only draw
+         our own vertical drop when that rail is absent. The horizontal
+         segment overlaps the parent rail by 1px and reaches the
+         avatar edge so there is no visible gap on either side. */}
+      {effectiveDepth >= 1 && (
+        <>
+          {!hasImmediateParentRail && (
+            <View
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                top: 0,
+                left: commentRailXPx(effectiveDepth),
+                width: COMMENT_RAIL_WIDTH,
+                height: avatarCenterY,
+                backgroundColor: railColor,
+              }}
+            />
+          )}
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              top: avatarCenterY,
+              left: commentRailXPx(effectiveDepth),
+              width: avatarLeft - commentRailXPx(effectiveDepth) + COMMENT_RAIL_WIDTH,
+              height: COMMENT_RAIL_WIDTH,
+              backgroundColor: railColor,
+            }}
+          />
+        </>
       )}
 
-      <View style={[styles.contentWrapper, { marginLeft: indentWidth }]}>
+      {/* Layer 3 — own spine. Drops from this comment's avatar
+         center down to the row bottom so descendants visually
+         continue the thread. Only drawn when expanded with
+         children. */}
+      {hasChildren && !isCollapsed && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: avatarCenterY,
+            bottom: 0,
+            left: avatarLeft + COMMENT_AVATAR_SIZE / 2,
+            width: COMMENT_RAIL_WIDTH,
+            backgroundColor: railColor,
+          }}
+        />
+      )}
+
+      <View style={styles.contentWrapper}>
         {/* Header: Avatar, Username, Time */}
         <View style={styles.header}>
+          {/* Inline DiceBear identicon avatar — pulled left into the
+             gutter via negative marginLeft so its left edge lands at
+             `avatarLeft`, exactly where the J-curve elbow terminates. */}
+          <View style={styles.avatarWrapper} pointerEvents="none">
+            <Avatar seed={avatarSeed} size={COMMENT_AVATAR_SIZE} />
+          </View>
           <View style={[styles.authorSection, isCollapsed && styles.authorSectionCollapsed]}>
             <View style={[styles.authorInfo, isCollapsed && styles.authorInfoCollapsed]}>
               <View style={[styles.authorRow, isCollapsed && styles.authorRowCollapsed]}>
@@ -655,30 +816,35 @@ export const CommentItem = ({
 
 const styles = StyleSheet.create((theme) => ({
   container: {
-    flexDirection: "row",
-    paddingBottom: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.md,
-  },
-  threadLineContainer: {
-    position: "absolute",
-    top: theme.spacing.sm + 2,
-    bottom: 0,
-    left: theme.spacing.md,
-  },
-  threadLine: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    width: 1.5,
-    backgroundColor: theme.colors.border.subtle,
-    borderRadius: 1,
+    /* paddingTop / paddingLeft are applied inline since they are
+       depth- and collapse-state-dependent. paddingRight gives the
+       right gutter for action buttons; paddingBottom matches the
+       web mobile rhythm (0.6rem ≈ 10px expanded, 0.4rem ≈ 7px
+       collapsed — we use a single value here for simplicity). */
+    position: "relative",
+    paddingRight: theme.spacing.md,
+    paddingBottom: theme.spacing.sm + 2,
   },
   contentWrapper: {
     flex: 1,
+    minWidth: 0,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  /* Pull the avatar back into the gutter so its left edge lands at
+     `commentAvatarLeftPx` (= the column the J-curve elbow terminates
+     at). The negative margin equals AVATAR + GAP so the username
+     text starts at the same x as the body content below. */
+  avatarWrapper: {
+    width: COMMENT_AVATAR_SIZE,
+    height: COMMENT_AVATAR_SIZE,
+    marginLeft: -(COMMENT_AVATAR_SIZE + COMMENT_CONTENT_GAP),
+    marginRight: COMMENT_CONTENT_GAP,
+    flexShrink: 0,
+    alignSelf: "center",
+    zIndex: 2,
   },
   authorSection: {
     flexDirection: "row",
