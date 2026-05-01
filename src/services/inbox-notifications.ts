@@ -607,6 +607,9 @@ function subscribeAppState(): void {
 
 const HANDLED_NOTIFICATION_IDS_KEY = "inbox-handled-notification-ids";
 const handledNotificationIdsInFlight = new Set<string>();
+const deferredNotificationResponseRetries = new Map<string, number>();
+const DEFERRED_NOTIFICATION_RESPONSE_MAX_RETRIES = 12;
+const DEFERRED_NOTIFICATION_RESPONSE_RETRY_MS = 500;
 
 function getHandledNotificationIds(): Set<string> {
   const raw = storage.getString(HANDLED_NOTIFICATION_IDS_KEY);
@@ -622,6 +625,63 @@ function saveHandledNotificationIds(ids: Set<string>): void {
   const arr = Array.from(ids);
   const trimmed = arr.length > 50 ? arr.slice(arr.length - 50) : arr;
   storage.set(HANDLED_NOTIFICATION_IDS_KEY, JSON.stringify(trimmed));
+}
+
+function deferNotificationResponseUntilWallet(
+  response: Notifications.NotificationResponse,
+  notificationId: string,
+): void {
+  const attempt = (deferredNotificationResponseRetries.get(notificationId) ?? 0) + 1;
+  deferredNotificationResponseRetries.set(notificationId, attempt);
+
+  Sentry.addBreadcrumb({
+    category: "inbox-notifications",
+    message: "Deferring notification response until wallet is ready",
+    level: "info",
+    data: {
+      notificationId,
+      attempt,
+      appState: AppState.currentState,
+    },
+  });
+
+  if (attempt > DEFERRED_NOTIFICATION_RESPONSE_MAX_RETRIES) {
+    deferredNotificationResponseRetries.delete(notificationId);
+    Sentry.captureMessage("Inbox notification response dropped before wallet ready", {
+      level: "warning",
+      tags: {
+        feature: "inbox-notifications",
+        operation: "deferred-notification-response",
+      },
+      extra: {
+        notificationId,
+        appState: AppState.currentState,
+      },
+    });
+    return;
+  }
+
+  setTimeout(() => {
+    if (!useAuthStore.getState().walletAddress) {
+      deferNotificationResponseUntilWallet(response, notificationId);
+      return;
+    }
+
+    deferredNotificationResponseRetries.delete(notificationId);
+    Sentry.captureMessage("Inbox notification response resumed after wallet ready", {
+      level: "info",
+      tags: {
+        feature: "inbox-notifications",
+        operation: "deferred-notification-response",
+      },
+      extra: {
+        notificationId,
+        attempt,
+        appState: AppState.currentState,
+      },
+    });
+    handleNotificationResponse(response);
+  }, DEFERRED_NOTIFICATION_RESPONSE_RETRY_MS);
 }
 
 function handleNotificationResponse(
@@ -667,14 +727,17 @@ function handleNotificationResponse(
     }
     const notificationData = response.notification?.request?.content?.data;
     if (!useAuthStore.getState().walletAddress) {
-      console.log("[InboxNotifications] Ignoring notification response while logged out");
+      console.log("[InboxNotifications] Deferring notification response until wallet is ready");
       Sentry.addBreadcrumb({
         category: "inbox-notifications",
-        message: "Ignored notification response while logged out",
+        message: "Notification response received before wallet is ready",
         level: "info",
+        data: { notificationId, appState: AppState.currentState },
       });
+      deferNotificationResponseUntilWallet(response, notificationId);
       return;
     }
+    deferredNotificationResponseRetries.delete(notificationId);
     handledNotificationIdsInFlight.add(notificationId);
     if (handledNotificationIdsInFlight.size > 50) {
       const oldestId = handledNotificationIdsInFlight.values().next().value;
@@ -740,6 +803,18 @@ function handleNotificationResponse(
           replyId: replyId ?? undefined,
         },
       });
+      Sentry.captureMessage("Inbox notification navigation dispatched", {
+        level: "info",
+        tags: {
+          feature: "inbox-notifications",
+          operation: "notification-navigate",
+        },
+        extra: {
+          notificationId,
+          hasReplyId: !!replyId,
+          appState: AppState.currentState,
+        },
+      });
       handledNotificationIds.add(notificationId);
       saveHandledNotificationIds(handledNotificationIds);
     };
@@ -802,13 +877,42 @@ function handleNotificationResponse(
 
 function subscribeNotificationResponses(): void {
   if (notificationResponseSubscription) return;
+  Sentry.addBreadcrumb({
+    category: "inbox-notifications",
+    message: "Subscribing to notification responses",
+    level: "info",
+    data: {
+      appState: AppState.currentState,
+      hasWallet: !!useAuthStore.getState().walletAddress,
+    },
+  });
   notificationResponseSubscription =
     Notifications.addNotificationResponseReceivedListener((response) => {
+      Sentry.addBreadcrumb({
+        category: "inbox-notifications",
+        message: "Live notification response listener fired",
+        level: "info",
+        data: {
+          appState: AppState.currentState,
+          hasWallet: !!useAuthStore.getState().walletAddress,
+          notificationId: response.notification?.request?.identifier,
+        },
+      });
       handleNotificationResponse(response);
     });
 
   Notifications.getLastNotificationResponseAsync()
     .then((response) => {
+      Sentry.addBreadcrumb({
+        category: "inbox-notifications",
+        message: "Checked last notification response",
+        level: "info",
+        data: {
+          hasResponse: !!response,
+          appState: AppState.currentState,
+          hasWallet: !!useAuthStore.getState().walletAddress,
+        },
+      });
       handleNotificationResponse(response);
     })
     .catch((error) => {
@@ -854,11 +958,13 @@ export async function initInboxNotifications(): Promise<void> {
   }
 
   if (!useAuthStore.getState().walletAddress) {
+    subscribeNotificationResponses();
     console.log("[InboxNotifications] No wallet, skipping notification init");
     Sentry.addBreadcrumb({
       category: "inbox-notifications",
-      message: "Skipped inbox notification init: no wallet",
+      message: "Subscribed notification responses before wallet hydration",
       level: "info",
+      data: { appState: AppState.currentState },
     });
     return;
   }
