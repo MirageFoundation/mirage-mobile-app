@@ -442,8 +442,8 @@ export function SavedPostsScreen() {
   }).current;
   const pendingSavedPostsViewableRef = useRef<ViewToken[] | null>(null);
   const savedPostsDeferHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const postsWithOverridesRef = useRef(postsWithOverrides);
-  postsWithOverridesRef.current = postsWithOverrides;
+  const postsWithOverridesRef = useRef(visiblePosts);
+  postsWithOverridesRef.current = visiblePosts;
 
   const flushSavedPostsViewability = useCallback(() => {
     const items = pendingSavedPostsViewableRef.current;
