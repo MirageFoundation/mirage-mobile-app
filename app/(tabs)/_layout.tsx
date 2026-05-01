@@ -382,6 +382,32 @@ export default function TabLayout() {
           level: "info",
         });
         router.replace("/(tabs)");
+        return;
+      }
+
+      if (hasInitialShareIntent && !isOnCreate) {
+        Sentry.addBreadcrumb({
+          category: "navigation",
+          message: "Routing initial share intent to create tab",
+          data: {
+            pathname,
+            hasShareIntent,
+            hadInitialShareIntent: initialShareIntentRef.current,
+            detectedRecentSharePath: isRecentSharePath(10_000),
+          },
+          level: "info",
+        });
+        Sentry.captureMessage("Android share intent initial route recovery", {
+          level: "info",
+          tags: { feature: "share-intent", operation: "initial-route-recovery" },
+          extra: {
+            pathname,
+            hasShareIntent,
+            hadInitialShareIntent: initialShareIntentRef.current,
+            detectedRecentSharePath: isRecentSharePath(10_000),
+          },
+        });
+        router.replace("/(tabs)/create");
       }
     };
 
