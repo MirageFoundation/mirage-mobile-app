@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 140
+                          update 141
                         </Text>
                         <Text
                           style={{
@@ -773,12 +773,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          made users identicon use bech32 address as seed
-                          everywhere, added space of like 20% around
-                          identicons,UI improvements in avatar in new post
-                          banner,add identicons in search results under users
-                          tab,add identicon in mention search list, change UI of
-                          thread to match the website default theme UI
+                          saved post not working fix,sharing external link to
+                          app whnen killed is not extracting the meta and is not
+                          navigating to create post on android fixed,
+                          notification not opening inbox when app is killed
+                          fixed
                         </Text>
                       </>
                     )}
@@ -819,7 +818,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 140
+                          update 141
                         </Text>
                         <Text
                           style={{
@@ -829,12 +828,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          made users identicon use bech32 address as seed
-                          everywhere, added space of like 20% around
-                          identicons,UI improvements in avatar in new post
-                          banner,add identicons in search results under users
-                          tab,add identicon in mention search list, change UI of
-                          thread to match the website default theme UI
+                          saved post not working fix,sharing external link to
+                          app whnen killed is not extracting the meta and is not
+                          navigating to create post on android fixed,
+                          notification not opening inbox when app is killed
+                          fixed
                         </Text>
                       </>
                     )}
