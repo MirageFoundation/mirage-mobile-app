@@ -777,7 +777,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           app whnen killed is not extracting the meta and is not
                           navigating to create post on android fixed,
                           notification not opening inbox when app is killed
-                          fixed
+                          fixed, identicon container shape changed to square
                         </Text>
                       </>
                     )}
@@ -832,7 +832,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           app whnen killed is not extracting the meta and is not
                           navigating to create post on android fixed,
                           notification not opening inbox when app is killed
-                          fixed
+                          fixed, identicon container shape changed to square
                         </Text>
                       </>
                     )}
