@@ -8,7 +8,12 @@ function guard<T extends (...args: any[]) => any>(fn: T): T {
     const now = Date.now();
     if (now - lastNavTime < GUARD_MS) return;
     lastNavTime = now;
-    return fn(...args);
+    try {
+      return fn(...args);
+    } catch (error) {
+      lastNavTime = 0;
+      throw error;
+    }
   }) as T;
 }
 

@@ -140,7 +140,7 @@ function SkeletonBox({
 function UserRowSkeleton() {
   return (
     <View style={styles.row}>
-      <SkeletonBox width={40} height={40} borderRadius={20} />
+      <SkeletonBox width={40} height={40} borderRadius={4} />
       <SkeletonBox width={140} height={16} style={{ marginLeft: 12 }} />
     </View>
   );
@@ -157,7 +157,7 @@ function TopicRowSkeleton() {
 function ModeratorRowSkeleton() {
   return (
     <View style={styles.row}>
-      <SkeletonBox width={40} height={40} borderRadius={20} />
+      <SkeletonBox width={40} height={40} borderRadius={4} />
       <View style={{ marginLeft: 12, gap: 6 }}>
         <SkeletonBox width={140} height={16} />
         <SkeletonBox width={80} height={12} />
@@ -276,7 +276,7 @@ function UserRow({
 
   return (
     <Pressable onPress={() => onPress(address)} style={styles.row}>
-      <Avatar size="sm" seed={address} rounded="full" />
+      <Avatar size="sm" seed={address} rounded="sm" />
       <Text
         size="md"
         weight="medium"
@@ -337,7 +337,7 @@ function ModeratorRow({
 
   return (
     <Pressable onPress={() => onPress(address)} style={styles.row}>
-      <Avatar size="sm" seed={address} rounded="full" />
+      <Avatar size="sm" seed={address} rounded="sm" />
       <Box style={{ marginLeft: 12, flex: 1 }}>
         <Text
           size="md"

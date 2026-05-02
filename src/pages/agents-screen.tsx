@@ -74,7 +74,7 @@ function AgentCard({
     >
       <View style={styles.agentHeader}>
         <Avatar
-          seed={agent.username || agent.address}
+          seed={agent.address || agent.username}
           size={44}
           source={agent.avatar ? { uri: agent.avatar } : undefined}
         />

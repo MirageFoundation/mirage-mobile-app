@@ -1,6 +1,7 @@
 import { RootProvider } from "@/src/providers/root-provider";
 import { Stack, useNavigationContainerRef } from "expo-router";
 import { ShareIntentProvider } from "expo-share-intent";
+import ExpoShareIntentModule from "expo-share-intent/build/ExpoShareIntentModule";
 import { AuthSheet } from "@/src/components/molecules";
 import { ForceUpdatePopup } from "@/src/components/molecules/force-update-popup";
 import { ThemedStatusBar } from "@/src/components/ui/themed-status-bar";
@@ -9,6 +10,10 @@ import * as Sentry from '@sentry/react-native';
 import { useEffect } from "react";
 import { getShareScheme } from "@/src/utils/share-scheme";
 import { useForceUpdate } from "@/src/hooks/use-force-update";
+import {
+  signalRootLayoutReady,
+  signalRootLayoutUnmounted,
+} from "@/src/services/inbox-notifications";
 
 const navigationIntegration = Sentry.reactNavigationIntegration({
   enableTimeToInitialDisplay: true,
@@ -56,17 +61,56 @@ Sentry.init({
   },
 });
 
+function AndroidShareIntentColdStartRefresh() {
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    const timer = setTimeout(() => {
+      try {
+        const result = ExpoShareIntentModule?.getShareIntent("");
+        Sentry.addBreadcrumb({
+          category: "share-intent",
+          message: "Android cold-start share refresh requested",
+          data: {
+            hasNativeModule: !!ExpoShareIntentModule,
+            hasResult: !!result,
+            resultType: typeof result,
+          },
+          level: "info",
+        });
+      } catch (error) {
+        Sentry.addBreadcrumb({
+          category: "share-intent",
+          message: "Android cold-start share refresh failed",
+          data: { error: String(error) },
+          level: "warning",
+        });
+        Sentry.captureException(error, {
+          tags: { feature: "share-intent", operation: "android-cold-start-refresh" },
+        });
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  return null;
+}
+
 export default Sentry.wrap(function RootLayout() {
   const ref = useNavigationContainerRef();
   const { reason: forceUpdateReason, remoteVersion, isRequired } = useForceUpdate();
   useEffect(() => {
+    signalRootLayoutReady();
     if (ref?.current) {
       navigationIntegration.registerNavigationContainer(ref);
     }
+    return () => signalRootLayoutUnmounted();
   }, [ref]);
 
   return (
     <ShareIntentProvider options={{ scheme: getShareScheme() || undefined, resetOnBackground: true }}>
+    <AndroidShareIntentColdStartRefresh />
     <RootProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />

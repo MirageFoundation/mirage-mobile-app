@@ -1,6 +1,7 @@
 export { useAuthGuard } from "./use-auth-guard";
 export {
   useBlockHandler,
+  getBlockConfirmationMessage,
   type BlockTarget,
   type BlockType,
   type UseBlockHandlerOptions,
@@ -59,6 +60,7 @@ export {
   type NetworkType,
 } from "./use-network-state";
 export {
+  APP_FOREGROUND_REFRESH_THRESHOLD_MS,
   useAppState,
   type AppStateInfo,
 } from "./use-app-state";

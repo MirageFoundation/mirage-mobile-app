@@ -10,6 +10,7 @@ import Animated, {
   SlideInDown,
 } from "react-native-reanimated";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { Avatar } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import { Feather } from "@expo/vector-icons";
 
@@ -171,20 +172,7 @@ export function MentionSuggestions({
               onPress={() => onSelect(item.username)}
             >
               <View style={styles.itemLeft}>
-                <View
-                  style={[
-                    styles.avatar,
-                    { backgroundColor: theme.colors.brand[500] + "18" },
-                  ]}
-                >
-                  <Text
-                    size="xs"
-                    weight="bold"
-                    style={{ color: theme.colors.brand[500] }}
-                  >
-                    {item.username[0]?.toUpperCase()}
-                  </Text>
-                </View>
+                <Avatar size={34} seed={item.address || item.username} rounded="sm" />
                 <View style={styles.itemText}>
                   <Text
                     size="sm"
@@ -278,12 +266,5 @@ const styles = StyleSheet.create((theme) => ({
   },
   itemText: {
     flex: 1,
-  },
-  avatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
   },
 }));

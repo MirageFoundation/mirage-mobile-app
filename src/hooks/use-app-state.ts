@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 
+export const APP_FOREGROUND_REFRESH_THRESHOLD_MS = 2 * 60 * 60 * 1000;
+
 export type AppStateInfo = {
   currentState: AppStateStatus;
   previousState: AppStateStatus | null;

@@ -51,6 +51,8 @@ export async function report(
         target,
         reason,
       },
+      requireBlockHash: true,
+      forcePoW: true,
       onPoWProgress,
     });
 

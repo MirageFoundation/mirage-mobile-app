@@ -207,8 +207,8 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
             size={80}
             seed={avatarSeed || username}
             source={avatarUrl ? { uri: avatarUrl } : undefined}
-            rounded="full"
-            bordered
+            rounded="sm"
+            paddingRatio={0.12}
           />
 
           <Box mt="sm">
@@ -386,9 +386,15 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
   );
 });
 
-const styles = StyleSheet.create((theme) => ({
+const styles = StyleSheet.create((theme, rt) => ({
   container: {
     width: "100%",
+  },
+  profileAvatar: {
+    backgroundColor:
+      rt.themeName === "light" ? "#FFFFFF" : theme.colors.background.subtle,
+    borderWidth: 0.5,
+    borderColor: theme.colors.border.default,
   },
   gradientContent: {
     ...StyleSheet.absoluteFillObject,

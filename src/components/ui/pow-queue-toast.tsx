@@ -22,7 +22,7 @@ const TOAST_MAX_WIDTH = Math.round(SCREEN_WIDTH * 0.6);
 const TOAST_STACK_ID = "pow-queue-toast";
 const EMPTY_STATE_DISMISS_DELAY_MS = 400;
 const RESULT_DISPLAY_DURATION_MS = 500;
-const VOTE_RESULT_DISPLAY_DURATION_MS = 250;
+const VOTE_RESULT_DISPLAY_DURATION_MS = 500;
 
 type PowPhase = "preparing" | "solving" | "submitting";
 
@@ -76,6 +76,7 @@ export const PowQueueToast = () => {
     type: string;
     success: boolean;
     errorMessage?: string;
+    skippedPoW?: boolean;
     elapsedMs: number;
     hashRate: number;
   } | null>(null);
@@ -221,7 +222,7 @@ export const PowQueueToast = () => {
   }, [successOverlay]);
 
   useEffect(() => {
-    if (hasPendingWork && !isVisible) {
+    if ((hasPendingWork || successOverlay) && !isVisible) {
       setIsVisible(true);
       setElapsedMs(0);
       setHashRate(0);
@@ -229,7 +230,7 @@ export const PowQueueToast = () => {
       powStartedRef.current = false;
       animateIn();
     }
-  }, [hasPendingWork, isVisible]);
+  }, [hasPendingWork, isVisible, successOverlay]);
 
   useEffect(() => {
     if (visibleCurrentAction) {
@@ -397,10 +398,12 @@ export const PowQueueToast = () => {
             <Text style={[styles.phaseText, { color: statColor }]}> 
               {isShowingResult
                 ? activeResultAction?.success
-                  ? isVoteResult
+                  ? isVoteResult || activeResultAction.skippedPoW
                     ? "Submitted"
                     : "PoW Solved"
-                  : "PoW Failed"
+                  : activeResultAction?.skippedPoW
+                    ? "Failed"
+                    : "PoW Failed"
                 : PHASE_LABEL[phase]}
             </Text>
           )}

@@ -47,6 +47,7 @@ import { Box, Text } from "@/src/components/ui/primitives";
 import {
   useAuthGuard,
   useBlockHandler,
+  getBlockConfirmationMessage,
   useDeleteHandler,
   useReportHandler,
   useVoteHandler,
@@ -1191,7 +1192,9 @@ export default function PostDetailScreen() {
         author: {
           id: currentUser.id,
           username: currentUser.username ?? "you",
-          avatarSeed: currentUser.username ?? currentUser.id,
+          // Seed with the bech32 address so the identicon stays stable
+          // across username changes (matches transform-post/comment).
+          avatarSeed: currentUser.walletAddress ?? currentUser.id,
         },
         content: optimisticContent,
         likes: 1,
@@ -2267,8 +2270,9 @@ export default function PostDetailScreen() {
         <ConfirmationPopup
           visible={blockHandler.showConfirmation}
           title={`Block ${blockHandler.pendingBlock?.label || "user"}?`}
-          message="You won't see their content anymore."
-          description="You can unblock them later from settings."
+          message={getBlockConfirmationMessage(
+            blockHandler.pendingBlock?.type ?? "post",
+          )}
           icon="ban-outline"
           confirmText="Block"
           isDestructive
@@ -2331,7 +2335,7 @@ const styles = StyleSheet.create((theme) => ({
   skeletonAvatar: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: theme.radius.sm,
   },
   skeletonHeaderText: {
     marginLeft: theme.spacing.sm,

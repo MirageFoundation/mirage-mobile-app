@@ -120,7 +120,9 @@ function isTabRoute(route: string): boolean {
 
 const LAST_SHARE_PATH_KEY = "last-share-path";
 const LAST_SHARE_PATH_AT_KEY = "last-share-path-at";
+const LAST_CREATE_DEEP_LINK_AT_KEY = "last-create-deep-link-at";
 const REPEATED_SHARE_PATH_TTL_MS = 2 * 60_000;
+const RECENT_CREATE_DEEP_LINK_TTL_MS = 60_000;
 
 function isShareIntentPath(path: string): boolean {
   return path.includes("dataUrl=") && path.includes("ShareKey");
@@ -146,6 +148,16 @@ export function isRecentSharePath(withinMs = 10_000): boolean {
   return age !== null && age >= 0 && age < withinMs;
 }
 
+export function isRecentCreateDeepLink(
+  withinMs = RECENT_CREATE_DEEP_LINK_TTL_MS,
+): boolean {
+  const lastHandledAt = storage.getNumber(LAST_CREATE_DEEP_LINK_AT_KEY) ?? 0;
+  if (lastHandledAt <= 0) return false;
+
+  const age = Date.now() - lastHandledAt;
+  return age >= 0 && age < withinMs;
+}
+
 function shouldSkipRepeatedSharePath(path: string): boolean {
   const ageMs = getRepeatedSharePathAgeMs(path);
   return ageMs !== null && ageMs < REPEATED_SHARE_PATH_TTL_MS;
@@ -158,6 +170,16 @@ function summarizeSharePath(path: string): string {
 function rememberSharePath(path: string): void {
   storage.set(LAST_SHARE_PATH_KEY, path);
   storage.set(LAST_SHARE_PATH_AT_KEY, Date.now());
+}
+
+function rememberCreateDeepLink(path: string): void {
+  storage.set(LAST_CREATE_DEEP_LINK_AT_KEY, Date.now());
+  Sentry.addBreadcrumb({
+    category: "deep-link",
+    message: "Routing create deep link to create tab",
+    data: { path: summarizeSharePath(path) },
+    level: "info",
+  });
 }
 
 export async function redirectSystemPath({
@@ -247,6 +269,10 @@ export async function redirectSystemPath({
   if (initial && !isTabRoute(target)) {
     useDeepLinkStore.getState().setPendingRoute(target);
     return "/(tabs)";
+  }
+
+  if (match.type === "create") {
+    rememberCreateDeepLink(path);
   }
 
   // /p/<id> can be either a post or a comment. Fire the root-post lookup so

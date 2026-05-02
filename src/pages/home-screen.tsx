@@ -37,8 +37,10 @@ import { Box, Text } from "@/src/components/ui/primitives";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
 import { storage } from "@/src/stores";
 import {
+  APP_FOREGROUND_REFRESH_THRESHOLD_MS,
   useAuthGuard,
   useBlockHandler,
+  getBlockConfirmationMessage,
   useDeleteHandler,
   useEasUpdate,
   useFollowHandler,
@@ -119,7 +121,7 @@ export function HomeScreen() {
         backgroundTimeRef.current = null;
         storage.remove("app_was_backgrounded");
         useTimeTickStore.getState().bump();
-        if (duration >= 2 * 60 * 60 * 1000) {
+        if (duration >= APP_FOREGROUND_REFRESH_THRESHOLD_MS) {
           isAutoRefreshingRef.current = true;
           setHasNewPosts(false);
           setTimeout(async () => {
@@ -159,7 +161,7 @@ export function HomeScreen() {
     if (wasBackgrounded) {
       const lastForeground = Number(storage.getString("app_last_foreground_time") ?? "0");
       const elapsed = Date.now() - lastForeground;
-      if (elapsed >= 2 * 60 * 60 * 1000) {
+      if (elapsed >= APP_FOREGROUND_REFRESH_THRESHOLD_MS) {
         isAutoRefreshingRef.current = true;
         setHasNewPosts(false);
         const timer = setTimeout(async () => {
@@ -767,8 +769,9 @@ export function HomeScreen() {
       <ConfirmationPopup
         visible={blockHandler.showConfirmation}
         title={`Block ${blockHandler.pendingBlock?.label || "user"}?`}
-        message="You won't see their content anymore."
-        description="You can unblock them later from settings."
+        message={getBlockConfirmationMessage(
+          blockHandler.pendingBlock?.type ?? "post",
+        )}
         icon="ban-outline"
         confirmText="Block"
         isDestructive

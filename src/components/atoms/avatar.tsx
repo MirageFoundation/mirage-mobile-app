@@ -17,7 +17,13 @@ const AVATAR_SIZES: Record<AvatarSize, number> = {
 type AvatarProps = Omit<ImageProps, "source"> & {
   /** Size preset or custom number */
   size?: AvatarSize | number;
-  /** Seed for DiceBear avatar generation */
+  /**
+   * Seed for DiceBear avatar generation.
+   *
+   * Convention: pass the user's `mirage1…` bech32 address so the avatar
+   * stays stable across username changes. Mirrors the policy enforced
+   * in the web app's `utils/avatar.js`.
+   */
   seed?: string;
   /** Custom image source (overrides seed) */
   source?: ImageProps["source"];
@@ -27,21 +33,37 @@ type AvatarProps = Omit<ImageProps, "source"> & {
   bordered?: boolean;
   /** DiceBear style variant */
   variant?: "bottts" | "avataaars" | "identicon" | "shapes" | "thumbs";
+  /**
+   * Inner padding around the identicon glyph as a fraction of `size`.
+   * Defaults to `0.2` (20%) so the identicon has a balanced halo of
+   * background inside the circle. Mirrors the web `UserAvatar`
+   * `paddingRatio` knob. Only applied when no custom `source` is
+   * provided (i.e. when rendering a DiceBear identicon).
+   */
+  paddingRatio?: number;
+  /** Custom style for the outer container (overrides bg/border) */
+  containerStyle?: import("react-native").StyleProp<import("react-native").ViewStyle>;
 };
 
 export const Avatar = ({
   size = "md",
   seed,
   source,
-  rounded = "full",
+  rounded = "sm",
   bordered = false,
   variant = "identicon",
+  paddingRatio = 0.2,
   style,
+  containerStyle,
   ...imageProps
 }: AvatarProps) => {
   const resolvedSize = typeof size === "number" ? size : AVATAR_SIZES[size];
 
-  const stableSeed = seed ?? "default";
+  // Match web utils/avatar.js: do NOT lowercase/trim — pass the seed
+  // verbatim, only URL-encode it so unsafe characters don't break the
+  // request. Empty string falls back to "default".
+  const rawSeed = seed === null || seed === undefined ? "" : String(seed);
+  const stableSeed = encodeURIComponent(rawSeed || "default");
 
   const imageSource = useMemo(
     () =>
@@ -53,25 +75,42 @@ export const Avatar = ({
 
   styles.useVariants({ rounded, bordered });
 
+  // Only inset the identicon when we generated the source ourselves.
+  // Custom `source` images (avatars, agent banners) should fill the
+  // circle as they did before.
+  const innerPadding = source
+    ? 0
+    : Math.round(resolvedSize * Math.max(0, paddingRatio));
+
   return (
     <View
-      style={[styles.container, { width: resolvedSize, height: resolvedSize }]}
+      style={[
+        styles.container,
+        {
+          width: resolvedSize,
+          height: resolvedSize,
+          padding: innerPadding,
+        },
+        containerStyle,
+      ]}
     >
       <Image
         source={imageSource}
-        style={[styles.image, style]}
+        style={[styles.image, source ? null : styles.identiconImage, style]}
         cachePolicy="memory-disk"
-        contentFit="cover"
+        contentFit={source ? "cover" : "contain"}
         {...imageProps}
       />
     </View>
   );
 };
 
-const styles = StyleSheet.create((theme) => ({
+const styles = StyleSheet.create((theme, rt) => ({
   container: {
     overflow: "hidden",
     backgroundColor: theme.colors.background.subtle,
+    borderWidth: rt.themeName === "light" ? 0.5 : 0,
+    borderColor: theme.colors.border.default,
 
     variants: {
       rounded: {
@@ -86,14 +125,17 @@ const styles = StyleSheet.create((theme) => ({
           borderWidth: 0.5,
           borderColor: theme.colors.border.default,
         },
-        false: {
-          borderWidth: 0,
-        },
+        false: {},
       },
     },
   },
   image: {
     width: "100%",
     height: "100%",
+  },
+  // DiceBear identicons are transparent SVG/PNGs — `contain` keeps the
+  // glyph within the inset padding without cropping.
+  identiconImage: {
+    backgroundColor: "transparent",
   },
 }));

@@ -211,7 +211,7 @@ const FollowedUserItem = ({
         pressed && { opacity: 0.7 },
       ]}
     >
-      <Avatar size="sm" seed={address} rounded="full" />
+      <Avatar size="sm" seed={address} rounded="sm" />
       <Text
         style={{ color: theme.colors.text.default, flex: 1, marginLeft: 10 }}
         size="md"
@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 136
+                          update 144
                         </Text>
                         <Text
                           style={{
@@ -773,7 +773,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          Nothing
+                          saved post not working fix,sharing external link to
+                          app whnen killed is not extracting the meta and is not
+                          navigating to create post on android fixed,
+                          notification not opening inbox when app is killed
+                          fixed, identicon container shape changed to square
                         </Text>
                       </>
                     )}
@@ -814,7 +818,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 136
+                          update 144
                         </Text>
                         <Text
                           style={{
@@ -824,7 +828,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          Nothing
+                          saved post not working fix,sharing external link to
+                          app whnen killed is not extracting the meta and is not
+                          navigating to create post on android fixed,
+                          notification not opening inbox when app is killed
+                          fixed, identicon container shape changed to square
                         </Text>
                       </>
                     )}
