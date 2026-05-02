@@ -335,7 +335,7 @@ function AuthorPreferenceItem({
           {rank}
         </Text>
       </View>
-      <Avatar size="sm" seed={user} rounded="full" />
+      <Avatar size="sm" seed={user} rounded="sm" />
       <View style={{ flex: 1, marginLeft: 8 }}>
         <Text
           size="md"
@@ -381,7 +381,7 @@ function SimilarUserItem({ user }: { user: SimilarUser }) {
         { borderBottomColor: theme.colors.border.subtle },
       ]}
     >
-      <Avatar size="sm" seed={user.address} rounded="full" />
+      <Avatar size="sm" seed={user.address} rounded="sm" />
       <View style={{ flex: 1, marginLeft: 12 }}>
         <Text
           size="md"

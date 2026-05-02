@@ -47,7 +47,7 @@ export const Avatar = ({
   size = "md",
   seed,
   source,
-  rounded = "full",
+  rounded = "sm",
   bordered = false,
   variant = "identicon",
   paddingRatio = 0.2,

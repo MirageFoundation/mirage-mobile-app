@@ -276,7 +276,7 @@ function UserRow({
 
   return (
     <Pressable onPress={() => onPress(address)} style={styles.row}>
-      <Avatar size="sm" seed={address} rounded="full" />
+      <Avatar size="sm" seed={address} rounded="sm" />
       <Text
         size="md"
         weight="medium"
@@ -337,7 +337,7 @@ function ModeratorRow({
 
   return (
     <Pressable onPress={() => onPress(address)} style={styles.row}>
-      <Avatar size="sm" seed={address} rounded="full" />
+      <Avatar size="sm" seed={address} rounded="sm" />
       <Box style={{ marginLeft: 12, flex: 1 }}>
         <Text
           size="md"

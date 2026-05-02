@@ -162,7 +162,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     position: "absolute",
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,
-    borderRadius: AVATAR_SIZE / 2,
+    borderRadius: theme.radius.sm,
     borderWidth: 1.5,
     // Light theme: white border so the avatar reads against the
     // purple gradient. Dark theme keeps the original light primary

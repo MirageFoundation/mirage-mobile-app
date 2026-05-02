@@ -187,7 +187,8 @@ export const UserProfileContentAnimated = memo(
               size={80}
               seed={avatarSeed || username}
               source={avatarUrl ? { uri: avatarUrl } : undefined}
-              rounded="full"
+              rounded="sm"
+              paddingRatio={0.12}
               bordered
             />
 

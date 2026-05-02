@@ -211,7 +211,7 @@ const FollowedUserItem = ({
         pressed && { opacity: 0.7 },
       ]}
     >
-      <Avatar size="sm" seed={address} rounded="full" />
+      <Avatar size="sm" seed={address} rounded="sm" />
       <Text
         style={{ color: theme.colors.text.default, flex: 1, marginLeft: 10 }}
         size="md"

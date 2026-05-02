@@ -687,7 +687,7 @@ export function SearchScreen() {
               pressed && { opacity: 0.7 },
             ]}
           >
-            <Avatar size="sm" seed={item.address} rounded="full" />
+            <Avatar size="sm" seed={item.address} rounded="sm" />
             <View style={styles.userResultContent}>
               <View style={styles.userResultNameRow}>
                 <Text

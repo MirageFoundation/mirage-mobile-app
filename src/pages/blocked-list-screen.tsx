@@ -165,7 +165,7 @@ function BlockedUserRow({
       onPress={() => router.push(`/user/${address}`)}
       style={styles.row}
     >
-      <Avatar size="md" seed={address} rounded="full" />
+      <Avatar size="md" seed={address} rounded="sm" />
       <Text
         size="md"
         weight="medium"

@@ -172,7 +172,7 @@ export function MentionSuggestions({
               onPress={() => onSelect(item.username)}
             >
               <View style={styles.itemLeft}>
-                <Avatar size={34} seed={item.address || item.username} rounded="full" />
+                <Avatar size={34} seed={item.address || item.username} rounded="sm" />
                 <View style={styles.itemText}>
                   <Text
                     size="sm"

@@ -42,7 +42,7 @@ export default function Avatar({
 
   return (
     <Box
-      rounded="xl"
+      rounded={rounded === "full" ? "full" : rounded === "none" ? "none" : rounded}
       style={[styles.imageContainer, dynamicStyles.imageContainer]}
     >
       <Image

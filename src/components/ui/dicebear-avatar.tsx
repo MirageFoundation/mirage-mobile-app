@@ -15,7 +15,7 @@ export default function DicebearAvatar({
   seed,
   variant = "identicon",
   size = 42,
-  rounded = "full",
+  rounded = "sm",
   border = "thin",
   fallback,
   ...props
