@@ -12,7 +12,7 @@ Repo: https://github.com/MirageFoundation/mirage-mobile-app.git
 Builds:
   - versionName: 1.0.13
     versionCode: 1013
-    commit: c3f6f0295a78856b7ef88f3239b47770b8277a2d
+    commit: d235605a57839c30256c96ed626fb0d034882fcb
     sudo:
       - sysctl fs.inotify.max_user_watches=524288
       - curl -Lo bun.zip https://github.com/oven-sh/bun/releases/download/bun-v1.3.8/bun-linux-x64.zip
