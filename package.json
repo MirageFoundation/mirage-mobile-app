@@ -9,6 +9,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "prebuild:fdroid": "EXPO_PUBLIC_FDROID=true expo prebuild --platform android --no-install",
     "lint": "expo lint"
   },
   "dependencies": {

@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
 import * as Sentry from "@sentry/react-native";
+import { IS_FDROID_BUILD } from "@/src/config/build-flags";
 
 const VERSION_CONFIG_URL =
   "https://raw.githubusercontent.com/mesonalirajput/mirage-remote-config/main/app-version.json";
@@ -49,7 +50,7 @@ export function useForceUpdate() {
   const hasChecked = useRef(false);
 
   useEffect(() => {
-    if (__DEV__ || hasChecked.current) return;
+    if (__DEV__ || IS_FDROID_BUILD || hasChecked.current) return;
     hasChecked.current = true;
 
     (async () => {

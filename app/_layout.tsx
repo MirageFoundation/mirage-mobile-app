@@ -14,6 +14,7 @@ import {
   signalRootLayoutReady,
   signalRootLayoutUnmounted,
 } from "@/src/services/inbox-notifications";
+import { IS_FDROID_BUILD } from "@/src/config/build-flags";
 
 const navigationIntegration = Sentry.reactNavigationIntegration({
   enableTimeToInitialDisplay: true,
@@ -38,22 +39,26 @@ function isKnownHandledError(event: Sentry.ErrorEvent): boolean {
 }
 
 Sentry.init({
-  dsn: 'https://34f3ac8d124f7b5edbbb02ff36ac1a2b@o4510907183595520.ingest.us.sentry.io/4510907185496064',
+  dsn: IS_FDROID_BUILD
+    ? undefined
+    : 'https://34f3ac8d124f7b5edbbb02ff36ac1a2b@o4510907183595520.ingest.us.sentry.io/4510907185496064',
 
-  enabled: !__DEV__,
+  enabled: !__DEV__ && !IS_FDROID_BUILD,
 
-  sendDefaultPii: true,
+  sendDefaultPii: !IS_FDROID_BUILD,
 
-  tracesSampleRate: 0.2,
+  tracesSampleRate: IS_FDROID_BUILD ? 0 : 0.2,
 
   replaysSessionSampleRate: 0,
-  replaysOnErrorSampleRate: 1,
-  integrations: [
-    Sentry.mobileReplayIntegration(),
-    navigationIntegration,
-  ],
+  replaysOnErrorSampleRate: IS_FDROID_BUILD ? 0 : 1,
+  integrations: IS_FDROID_BUILD
+    ? []
+    : [
+        Sentry.mobileReplayIntegration(),
+        navigationIntegration,
+      ],
 
-  enableAutoPerformanceTracing: true,
+  enableAutoPerformanceTracing: !IS_FDROID_BUILD,
 
   beforeSend(event) {
     if (isKnownHandledError(event)) return null;
@@ -102,7 +107,7 @@ export default Sentry.wrap(function RootLayout() {
   const { reason: forceUpdateReason, remoteVersion, isRequired } = useForceUpdate();
   useEffect(() => {
     signalRootLayoutReady();
-    if (ref?.current) {
+    if (!IS_FDROID_BUILD && ref?.current) {
       navigationIntegration.registerNavigationContainer(ref);
     }
     return () => signalRootLayoutUnmounted();

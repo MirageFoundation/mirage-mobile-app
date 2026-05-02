@@ -1,0 +1,36 @@
+Categories:
+  - Internet
+License: GPL-3.0-or-later
+AuthorName: Mirage Foundation
+WebSite: https://mirage.talk
+SourceCode: https://github.com/MirageFoundation/mirage-mobile-app
+IssueTracker: https://github.com/MirageFoundation/mirage-mobile-app/issues
+
+RepoType: git
+Repo: https://github.com/MirageFoundation/mirage-mobile-app.git
+
+Builds:
+  - versionName: 1.0.13
+    versionCode: 1013
+    commit: c3f6f0295a78856b7ef88f3239b47770b8277a2d
+    sudo:
+      - sysctl fs.inotify.max_user_watches=524288
+      - curl -Lo bun.zip https://github.com/oven-sh/bun/releases/download/bun-v1.3.8/bun-linux-x64.zip
+      - echo "0322b17f0722da76a64298aad498225aedcbf6df1008a1dee45e16ecb226a3f1  bun.zip" | sha256sum -c -
+      - unzip bun.zip
+      - install -m 0755 bun-linux-x64/bun /usr/local/bin/bun
+    init:
+      - bun install --frozen-lockfile
+    prebuild:
+      - EXPO_PUBLIC_FDROID=true bunx expo prebuild --platform android --no-install
+    build:
+      - cd android/app
+      - gradle assembleRelease
+    output: android/app/build/outputs/apk/release/app-release.apk
+    scandelete:
+      - node_modules/
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: 1.0.13
+CurrentVersionCode: 1013

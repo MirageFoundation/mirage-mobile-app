@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { InteractionManager } from "react-native";
 import * as Updates from "expo-updates";
 import * as Sentry from "@sentry/react-native";
+import { IS_FDROID_BUILD } from "@/src/config/build-flags";
 
 export type EasUpdateStatus = "idle" | "available" | "installing" | "error";
 
@@ -10,7 +11,7 @@ export function useEasUpdate() {
   const hasChecked = useRef(false);
 
   useEffect(() => {
-    if (__DEV__ || hasChecked.current) return;
+    if (__DEV__ || IS_FDROID_BUILD || hasChecked.current) return;
     hasChecked.current = true;
 
     (async () => {
@@ -25,6 +26,8 @@ export function useEasUpdate() {
   }, []);
 
   const install = useCallback(async () => {
+    if (IS_FDROID_BUILD) return;
+
     setStatus("installing");
     try {
       await Updates.fetchUpdateAsync();
