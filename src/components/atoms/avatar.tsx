@@ -41,6 +41,8 @@ type AvatarProps = Omit<ImageProps, "source"> & {
    * provided (i.e. when rendering a DiceBear identicon).
    */
   paddingRatio?: number;
+  /** Custom style for the outer container (overrides bg/border) */
+  containerStyle?: import("react-native").StyleProp<import("react-native").ViewStyle>;
 };
 
 export const Avatar = ({
@@ -52,6 +54,7 @@ export const Avatar = ({
   variant = "identicon",
   paddingRatio = 0.2,
   style,
+  containerStyle,
   ...imageProps
 }: AvatarProps) => {
   const resolvedSize = typeof size === "number" ? size : AVATAR_SIZES[size];
@@ -88,6 +91,7 @@ export const Avatar = ({
           height: resolvedSize,
           padding: innerPadding,
         },
+        containerStyle,
       ]}
     >
       <Image
@@ -101,10 +105,12 @@ export const Avatar = ({
   );
 };
 
-const styles = StyleSheet.create((theme) => ({
+const styles = StyleSheet.create((theme, rt) => ({
   container: {
     overflow: "hidden",
     backgroundColor: theme.colors.background.subtle,
+    borderWidth: rt.themeName === "light" ? 0.5 : 0,
+    borderColor: theme.colors.border.default,
 
     variants: {
       rounded: {
@@ -119,9 +125,7 @@ const styles = StyleSheet.create((theme) => ({
           borderWidth: 0.5,
           borderColor: theme.colors.border.default,
         },
-        false: {
-          borderWidth: 0,
-        },
+        false: {},
       },
     },
   },
