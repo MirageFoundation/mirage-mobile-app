@@ -124,7 +124,7 @@ function SectionSkeleton() {
             key={i}
             style={{ flexDirection: "row", alignItems: "center", gap: 12 }}
           >
-            <SkeletonBox width={36} height={36} borderRadius={18} />
+            <SkeletonBox width={36} height={36} borderRadius={4} />
             <View style={{ flex: 1, gap: 4 }}>
               <SkeletonBox width={100} height={14} />
               <SkeletonBox width={60} height={12} />

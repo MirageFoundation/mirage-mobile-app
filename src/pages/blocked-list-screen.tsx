@@ -79,7 +79,7 @@ function SkeletonBox({
 function UserRowSkeleton() {
   return (
     <View style={styles.row}>
-      <SkeletonBox width={40} height={40} borderRadius={20} />
+      <SkeletonBox width={40} height={40} borderRadius={4} />
       <SkeletonBox width={140} height={16} style={{ marginLeft: 12 }} />
       <View style={{ flex: 1 }} />
       <SkeletonBox width={70} height={28} borderRadius={14} />

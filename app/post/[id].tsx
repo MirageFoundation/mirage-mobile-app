@@ -2335,7 +2335,7 @@ const styles = StyleSheet.create((theme) => ({
   skeletonAvatar: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: theme.radius.sm,
   },
   skeletonHeaderText: {
     marginLeft: theme.spacing.sm,
