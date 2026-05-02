@@ -763,7 +763,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 142
+                          update 143
                         </Text>
                         <Text
                           style={{
@@ -818,7 +818,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 142
+                          update 143
                         </Text>
                         <Text
                           style={{
