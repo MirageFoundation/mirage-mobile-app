@@ -89,7 +89,6 @@ export const PostCardSkeleton = ({
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.authorSection}>
-          <SkeletonBox width={36} height={36} borderRadius={theme.radius.sm} />
           <View style={styles.authorInfo}>
             <SkeletonBox width={100} height={14} />
           </View>
