@@ -41,7 +41,12 @@ app-example
 # generated native folders
 /ios
 /android
-!/fastlane/metadata/android/
+
+# keep F-Droid/Fastlane Android metadata tracked
+!fastlane/
+!fastlane/metadata/
+!fastlane/metadata/android/
+!fastlane/metadata/android/**
 .agi
 external
 reference
