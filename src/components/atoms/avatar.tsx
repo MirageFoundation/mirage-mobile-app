@@ -35,10 +35,9 @@ type AvatarProps = Omit<ImageProps, "source"> & {
   variant?: "bottts" | "avataaars" | "identicon" | "shapes" | "thumbs";
   /**
    * Inner padding around the identicon glyph as a fraction of `size`.
-   * Defaults to `0.2` (20%) so the identicon has a balanced halo of
-   * background inside the circle. Mirrors the web `UserAvatar`
-   * `paddingRatio` knob. Only applied when no custom `source` is
-   * provided (i.e. when rendering a DiceBear identicon).
+   * Defaults to `0` so the identicon fills the avatar edge-to-edge.
+   * Only applied when no custom `source` is provided (i.e. when
+   * rendering a DiceBear identicon).
    */
   paddingRatio?: number;
   /** Custom style for the outer container (overrides bg/border) */
@@ -52,7 +51,7 @@ export const Avatar = ({
   rounded = "sm",
   bordered = false,
   variant = "identicon",
-  paddingRatio = 0.2,
+  paddingRatio = 0,
   style,
   containerStyle,
   ...imageProps
@@ -68,7 +67,7 @@ export const Avatar = ({
   const imageSource = useMemo(
     () =>
       source ?? {
-        uri: `https://api.dicebear.com/9.x/${variant}/png?seed=${stableSeed}&size=${resolvedSize * 2}`,
+        uri: `https://api.dicebear.com/9.x/${variant}/png?seed=${stableSeed}&size=${resolvedSize * 2}&scale=100`,
       },
     [source, variant, stableSeed, resolvedSize],
   );
@@ -89,16 +88,28 @@ export const Avatar = ({
         {
           width: resolvedSize,
           height: resolvedSize,
-          padding: innerPadding,
         },
         containerStyle,
       ]}
     >
       <Image
         source={imageSource}
-        style={[styles.image, source ? null : styles.identiconImage, style]}
+        style={[
+          styles.image,
+          styles.imageRounded,
+          source ? null : styles.identiconImage,
+          innerPadding > 0
+            ? {
+                top: innerPadding,
+                left: innerPadding,
+                right: innerPadding,
+                bottom: innerPadding,
+              }
+            : null,
+          style,
+        ]}
         cachePolicy="memory-disk"
-        contentFit={source ? "cover" : "contain"}
+        contentFit="cover"
         {...imageProps}
       />
     </View>
@@ -130,8 +141,26 @@ const styles = StyleSheet.create((theme, rt) => ({
     },
   },
   image: {
-    width: "100%",
-    height: "100%",
+    position: "absolute",
+    // Extend under the container's border so the avatar visually
+    // touches the border edge with no gap. The container's
+    // `overflow: hidden` + matching borderRadius clip the image
+    // cleanly along the rounded outer edge.
+    top: -1,
+    left: -1,
+    right: -1,
+    bottom: -1,
+  },
+  imageRounded: {
+    variants: {
+      rounded: {
+        none: { borderRadius: 0 },
+        sm: { borderRadius: theme.radius.sm },
+        md: { borderRadius: theme.radius.md },
+        lg: { borderRadius: theme.radius.lg },
+        full: { borderRadius: theme.radius.full },
+      },
+    },
   },
   // DiceBear identicons are transparent SVG/PNGs — `contain` keeps the
   // glyph within the inset padding without cropping.

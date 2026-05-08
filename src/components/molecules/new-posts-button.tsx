@@ -112,7 +112,7 @@ export const NewPostsButton = ({
                   source={{
                     // Seed with the bech32 address (userId) so the
                     // identicon is stable across username changes.
-                    uri: `https://api.dicebear.com/9.x/identicon/png?seed=${encodeURIComponent(avatar.userId || "default")}&size=${AVATAR_SIZE * 2}`,
+                    uri: `https://api.dicebear.com/9.x/identicon/png?seed=${encodeURIComponent(avatar.userId || "default")}&size=${AVATAR_SIZE * 2}&scale=100`,
                   }}
                   style={styles.avatarImage}
                   cachePolicy="memory-disk"

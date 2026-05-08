@@ -26,7 +26,7 @@ export default function DicebearAvatar({
     // changes. Mirrors web `utils/avatar.js`.
     const s = seed || fallback;
     if (!s) return undefined;
-    return `https://api.dicebear.com/9.x/${variant}/png?seed=${encodeURIComponent(s)}`;
+    return `https://api.dicebear.com/9.x/${variant}/png?seed=${encodeURIComponent(s)}&scale=100`;
   }, [seed, fallback, variant]);
 
   return (
