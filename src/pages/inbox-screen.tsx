@@ -255,6 +255,17 @@ export function InboxScreen() {
         return;
       }
 
+      Sentry.addBreadcrumb({
+        category: "inbox",
+        message: "Inbox reply opened post detail",
+        level: "info",
+        data: {
+          replyId: reply.reply_id,
+          rootPostId: reply.root_post_id,
+          parentId: reply.parent_id,
+          type: reply.type ?? "reply",
+        },
+      });
       routerRef.current.push(`/post/${reply.root_post_id}?highlight=${reply.reply_id}`);
     },
     [markReplyAsRead],

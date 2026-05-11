@@ -181,13 +181,23 @@ export default function PostDetailScreen() {
   const pendingScrollToEnd = useRef(false);
   const currentScrollYRef = useRef(0);
   const preciseScrollTargetRef = useRef<string | null>(null);
+  const missingHighlightReportedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     highlightRetryCount.current = 0;
     preciseScrollTargetRef.current = null;
+    missingHighlightReportedRef.current = null;
+    if (highlight) {
+      Sentry.addBreadcrumb({
+        category: "post-detail",
+        message: "Post detail highlight target updated",
+        level: "info",
+        data: { postId: id, highlight },
+      });
+    }
     setHighlightedCommentId(highlight || null);
-  }, [highlight]);
+  }, [highlight, id]);
 
   const [screenActive, setScreenActive] = useState(true);
   const refetchCommentsRef = useRef<((silent?: boolean) => void) | null>(null);
@@ -913,6 +923,18 @@ export default function PostDetailScreen() {
 
       if (index !== -1 && index < allComments.length) {
         highlightRetryCount.current = 0;
+        Sentry.addBreadcrumb({
+          category: "post-detail",
+          message: "Highlighted comment thread located",
+          level: "info",
+          data: {
+            postId: id,
+            highlight: highlightedCommentId,
+            topLevelIndex: index,
+            matchedTopLevel: allComments[index]?.id === highlightedCommentId,
+            commentCount: allComments.length,
+          },
+        });
         // Small delay to ensure layout is ready
         setTimeout(() => {
           if (index < (allComments.length ?? 0)) {
@@ -932,7 +954,7 @@ export default function PostDetailScreen() {
         }, 6000);
       }
     }
-  }, [highlightedCommentId, allComments, findCommentInTree]);
+  }, [highlightedCommentId, allComments, findCommentInTree, id]);
 
   useEffect(() => {
     if (
@@ -943,16 +965,44 @@ export default function PostDetailScreen() {
     ) return;
 
     const found = allComments.some((c) => findCommentInTree(c, highlight));
-    if (found || highlightRetryCount.current >= MAX_HIGHLIGHT_RETRIES) return;
+    if (found) return;
+    if (highlightRetryCount.current >= MAX_HIGHLIGHT_RETRIES) {
+      if (missingHighlightReportedRef.current !== highlight) {
+        missingHighlightReportedRef.current = highlight;
+        Sentry.captureMessage("Post detail highlight comment not found", {
+          level: "warning",
+          tags: { feature: "inbox-highlight" },
+          extra: {
+            postId: id,
+            highlight,
+            topLevelCommentCount: allComments.length,
+            retryCount: highlightRetryCount.current,
+            isLoadingComments,
+            isFetchingComments,
+          },
+        });
+      }
+      return;
+    }
 
     const delay = (highlightRetryCount.current + 1) * 2000;
     const timer = setTimeout(() => {
       highlightRetryCount.current += 1;
+      Sentry.addBreadcrumb({
+        category: "post-detail",
+        message: "Retrying comments fetch for missing highlight",
+        level: "info",
+        data: {
+          postId: id,
+          highlight,
+          retryCount: highlightRetryCount.current,
+        },
+      });
       lastCommentsFetchRef.current = 0;
       refetchCommentsRef.current?.();
     }, delay);
     return () => clearTimeout(timer);
-  }, [highlight, allComments, isLoadingComments, isFetchingComments, findCommentInTree]);
+  }, [highlight, allComments, isLoadingComments, isFetchingComments, findCommentInTree, id]);
 
   // Scroll tracking for sticky header
   const [postHeaderHeight, setPostHeaderHeight] = useState(0);
@@ -1007,10 +1057,29 @@ export default function PostDetailScreen() {
           const delta = y - desiredY;
           if (Math.abs(delta) < 24) {
             preciseScrollTargetRef.current = targetKey;
+            Sentry.addBreadcrumb({
+              category: "post-detail",
+              message: "Highlighted comment already near target position",
+              level: "info",
+              data: { postId: id, highlight: highlightedCommentId, y, delta },
+            });
             return;
           }
 
           preciseScrollTargetRef.current = targetKey;
+          Sentry.addBreadcrumb({
+            category: "post-detail",
+            message: "Adjusted scroll to highlighted comment",
+            level: "info",
+            data: {
+              postId: id,
+              highlight: highlightedCommentId,
+              y,
+              height,
+              delta,
+              currentScrollY: currentScrollYRef.current,
+            },
+          });
           flatListRef.current?.scrollToOffset({
             offset: Math.max(0, currentScrollYRef.current + delta),
             animated: true,
@@ -1018,7 +1087,7 @@ export default function PostDetailScreen() {
         });
       }, 900);
     },
-    [highlightedCommentId, insets.top],
+    [highlightedCommentId, insets.top, id],
   );
 
   useAnimatedReaction(
