@@ -49,6 +49,18 @@ const MOCK_USER: User = {
   followerCount: 128,
 };
 
+function addAuthBootstrapBreadcrumb(
+  message: string,
+  data?: Record<string, unknown>,
+) {
+  Sentry.addBreadcrumb({
+    category: "auth-bootstrap",
+    message,
+    level: "info",
+    data,
+  });
+}
+
 // ============================================
 // Auth State
 // ============================================
@@ -142,7 +154,9 @@ export const useAuthStore = create<AuthState>()(
           }
 
           if (!hasWalletResult) {
+            addAuthBootstrapBreadcrumb("Anonymous startup bootstrap started");
             await primeBootstrap(queryClient);
+            addAuthBootstrapBreadcrumb("Anonymous startup bootstrap finished");
 
             const prefs = usePreferencesStore.getState();
             const allowedTags =
@@ -175,9 +189,12 @@ export const useAuthStore = create<AuthState>()(
             Sentry.setUser({
               id: metadata.address,
             });
+            addAuthBootstrapBreadcrumb("Logged-in startup bootstrap gating enabled", {
+              hasUsername: metadata.hasUsername,
+            });
             set({
               isLoggedIn: true,
-            isBootstrapping: true,
+              isBootstrapping: true,
               walletAddress: metadata.address,
               publicKeyBase64: metadata.publicKeyBase64,
               hasUsername: metadata.hasUsername,
@@ -192,6 +209,9 @@ export const useAuthStore = create<AuthState>()(
             });
 
             const bootstrapResponse = await primeBootstrap(queryClient, metadata.address);
+            addAuthBootstrapBreadcrumb("Logged-in startup bootstrap finished", {
+              usedUserStatusFromBootstrap: Boolean(bootstrapResponse?.user_status),
+            });
 
             const prefs2 = usePreferencesStore.getState();
             const allowedTags =
@@ -250,8 +270,17 @@ export const useAuthStore = create<AuthState>()(
                   message: "Failed to fetch user status",
                   level: "warning",
                 });
+                Sentry.captureException(apiError, {
+                  tags: {
+                    feature: "auth-bootstrap",
+                    operation: "startup-user-status",
+                  },
+                });
               })
-              .finally(() => set({ isBootstrapping: false }));
+              .finally(() => {
+                addAuthBootstrapBreadcrumb("Logged-in startup bootstrap gating disabled");
+                set({ isBootstrapping: false });
+              });
 
             return;
           }
@@ -326,6 +355,9 @@ export const useAuthStore = create<AuthState>()(
             message: "Wallet imported successfully",
             level: "info",
           });
+          addAuthBootstrapBreadcrumb("Import bootstrap gating enabled", {
+            hasUsername: metadata.hasUsername,
+          });
           set({
             isLoggedIn: true,
             isBootstrapping: true,
@@ -341,6 +373,9 @@ export const useAuthStore = create<AuthState>()(
             },
           });
           const bootstrapResponse = await primeBootstrap(queryClient, metadata.address);
+          addAuthBootstrapBreadcrumb("Import bootstrap finished", {
+            usedUserStatusFromBootstrap: Boolean(bootstrapResponse?.user_status),
+          });
           const userStatus =
             bootstrapResponse?.user_status ??
             (await getUserStatus({ address: metadata.address }));
@@ -389,6 +424,8 @@ export const useAuthStore = create<AuthState>()(
 
         walletService.confirmWallet();
 
+        addAuthBootstrapBreadcrumb("New wallet bootstrap gating enabled");
+
         set({
           isLoggedIn: true,
           isBootstrapping: true,
@@ -431,8 +468,18 @@ export const useAuthStore = create<AuthState>()(
               },
             });
           })
-          .catch(() => {})
-          .finally(() => set({ isBootstrapping: false }));
+          .catch((error) => {
+            Sentry.captureException(error, {
+              tags: {
+                feature: "auth-bootstrap",
+                operation: "new-wallet-user-status",
+              },
+            });
+          })
+          .finally(() => {
+            addAuthBootstrapBreadcrumb("New wallet bootstrap gating disabled");
+            set({ isBootstrapping: false });
+          });
       },
 
       logout: async () => {
@@ -453,6 +500,7 @@ export const useAuthStore = create<AuthState>()(
           message: "User logged out",
           level: "info",
         });
+        addAuthBootstrapBreadcrumb("Logout anonymous bootstrap gating enabled");
         set({
           user: null,
           isLoggedIn: false,
@@ -472,8 +520,18 @@ export const useAuthStore = create<AuthState>()(
         usePreferencesStore.setState({ ageVerified: false });
         useDraftStore.getState().clearDraft();
         primeBootstrap(queryClient)
-          .catch(() => {})
-          .finally(() => set({ isBootstrapping: false }));
+          .catch((error) => {
+            Sentry.captureException(error, {
+              tags: {
+                feature: "auth-bootstrap",
+                operation: "logout-anonymous-bootstrap",
+              },
+            });
+          })
+          .finally(() => {
+            addAuthBootstrapBreadcrumb("Logout anonymous bootstrap gating disabled");
+            set({ isBootstrapping: false });
+          });
       },
 
       // ============================================

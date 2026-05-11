@@ -1,5 +1,6 @@
 import { Image, type ImageProps } from "expo-image";
-import { useMemo } from "react";
+import * as Sentry from "@sentry/react-native";
+import { useCallback, useMemo } from "react";
 import { View } from "react-native";
 import Svg, { Rect } from "react-native-svg";
 import { StyleSheet } from "react-native-unistyles";
@@ -108,6 +109,24 @@ export const Avatar = ({
   const identiconColor = IDENTICON_COLORS[seedHash % IDENTICON_COLORS.length];
   const identiconBackground = `${identiconColor}22`;
 
+  const handleImageError = useCallback<NonNullable<ImageProps["onError"]>>(
+    (event) => {
+      Sentry.addBreadcrumb({
+        category: "avatar",
+        message: "Custom avatar image failed to load",
+        level: "warning",
+        data: {
+          hasSeed: Boolean(rawSeed),
+          size: resolvedSize,
+          sourceType: typeof source,
+        },
+      });
+
+      imageProps.onError?.(event);
+    },
+    [imageProps, rawSeed, resolvedSize, source],
+  );
+
   styles.useVariants({ rounded, bordered });
 
   return (
@@ -128,6 +147,7 @@ export const Avatar = ({
           cachePolicy="memory-disk"
           contentFit="cover"
           {...imageProps}
+          onError={handleImageError}
         />
       ) : (
         <Svg

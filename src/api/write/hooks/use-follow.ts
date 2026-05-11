@@ -17,11 +17,24 @@ import type { PoWProgress, WriteResponse } from "../signing";
 import * as Sentry from "@sentry/react-native";
 import { parseApiError } from "@/src/utils/parse-api-error";
 
+const addFollowBreadcrumb = (
+  operation: string,
+  data?: Record<string, unknown>,
+) => {
+  Sentry.addBreadcrumb({
+    category: "follow",
+    message: operation,
+    level: "info",
+    data,
+  });
+};
+
 const markPostsStaleWithoutRefetch = (queryClient: ReturnType<typeof useQueryClient>) => {
   queryClient.invalidateQueries({
     queryKey: ["posts"],
     refetchType: "none",
   });
+  addFollowBreadcrumb("Posts marked stale without active refetch");
 };
 
 // ============================================
