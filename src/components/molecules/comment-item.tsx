@@ -401,9 +401,9 @@ export const CommentItem = ({
   const { author, content, likes, hasLiked, hasDisliked, createdAt } = comment;
 
   const usernameColorStyle = useMemo(() => {
+    if (author.isNewUser) return { color: NEW_USER_COLOR };
     const tierColor = author.level != null ? getUsernameColor(author.level) : undefined;
     if (tierColor) return { color: tierColor };
-    if (author.isNewUser && (!author.level || author.level === 0)) return { color: NEW_USER_COLOR };
     return undefined;
   }, [author.level, author.isNewUser]);
 

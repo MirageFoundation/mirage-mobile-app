@@ -231,14 +231,14 @@ function SearchPostResult({
               size="sm"
               weight="medium"
               numberOfLines={1}
-              style={(item.level ?? item.author_level ?? item.user_level)
-                ? {
-                    color: getUsernameColor(
-                      item.level ?? item.author_level ?? item.user_level ?? 0,
-                    ),
-                  }
-                : (item.new_user ?? item.author_is_new)
-                  ? { color: "rgb(94,194,106)" }
+              style={(item.new_user ?? item.author_is_new)
+                ? { color: "rgb(94,194,106)" }
+                : (item.level ?? item.author_level ?? item.user_level)
+                  ? {
+                      color: getUsernameColor(
+                        item.level ?? item.author_level ?? item.user_level ?? 0,
+                      ),
+                    }
                   : { color: textSubtleColor }}
             >
               @{item.username || "anonymous"}
@@ -693,7 +693,7 @@ export function SearchScreen() {
                 <Text
                   size="md"
                   weight="medium"
-                  style={item.level ? { color: getUsernameColor(item.level) } : item.user_is_new ? { color: "rgb(94,194,106)" } : undefined}
+                  style={item.user_is_new ? { color: "rgb(94,194,106)" } : item.level ? { color: getUsernameColor(item.level) } : undefined}
                 >
                   @{item.username}
                 </Text>
