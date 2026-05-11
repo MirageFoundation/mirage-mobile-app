@@ -71,6 +71,7 @@ type AuthState = {
   // Loading state
   isInitializing: boolean;
   isCreatingWallet: boolean;
+  isBootstrapping: boolean;
 
   // Actions - Initialization
   initializeWallet: () => Promise<void>;
@@ -109,6 +110,7 @@ export const useAuthStore = create<AuthState>()(
       recoveryPhrase: null,
       isInitializing: true,
       isCreatingWallet: false,
+      isBootstrapping: false,
 
       // ============================================
       // Initialization
@@ -175,6 +177,7 @@ export const useAuthStore = create<AuthState>()(
             });
             set({
               isLoggedIn: true,
+            isBootstrapping: true,
               walletAddress: metadata.address,
               publicKeyBase64: metadata.publicKeyBase64,
               hasUsername: metadata.hasUsername,
@@ -247,11 +250,13 @@ export const useAuthStore = create<AuthState>()(
                   message: "Failed to fetch user status",
                   level: "warning",
                 });
-              });
+              })
+              .finally(() => set({ isBootstrapping: false }));
 
             return;
           }
         } catch (error) {
+          set({ isBootstrapping: false });
           console.error("[AuthStore] Failed to initialize wallet:", error);
           Sentry.captureException(error, {
             tags: { action: "wallet_init" },
@@ -323,6 +328,7 @@ export const useAuthStore = create<AuthState>()(
           });
           set({
             isLoggedIn: true,
+            isBootstrapping: true,
             walletAddress: metadata.address,
             publicKeyBase64: metadata.publicKeyBase64,
             hasUsername: metadata.hasUsername,
@@ -334,44 +340,43 @@ export const useAuthStore = create<AuthState>()(
               tier: "Free",
             },
           });
-          primeBootstrap(queryClient, metadata.address)
-            .then((bootstrapResponse) =>
-              bootstrapResponse?.user_status ?? getUserStatus({ address: metadata.address })
-            )
-            .then((userStatus) => {
-              queryClient.setQueryData(
-                queryKeys.userStatus(metadata.address),
-                userStatus,
-              );
+          const bootstrapResponse = await primeBootstrap(queryClient, metadata.address);
+          const userStatus =
+            bootstrapResponse?.user_status ??
+            (await getUserStatus({ address: metadata.address }));
 
-              const newUserLevel = userStatus.user_level;
-              const newHasUsername = !!userStatus.username;
-              const newTier = getTierName(userStatus.user_level);
+          queryClient.setQueryData(
+            queryKeys.userStatus(metadata.address),
+            userStatus,
+          );
 
-              if (userStatus.username) {
-                walletService.updateMetadata({ hasUsername: true });
-              }
+          const newUserLevel = userStatus.user_level;
+          const newHasUsername = !!userStatus.username;
+          const newTier = getTierName(userStatus.user_level);
 
-              set({
-                hasUsername: newHasUsername,
-                userLevel: newUserLevel,
-                user: {
-                  id: metadata.address,
-                  username: userStatus.username,
-                  walletAddress: metadata.address,
-                  tier: newTier,
-                },
-              });
-            })
-            .catch(() => {});
+          if (userStatus.username) {
+            walletService.updateMetadata({ hasUsername: true });
+          }
+
+          set({
+            hasUsername: newHasUsername,
+            userLevel: newUserLevel,
+            user: {
+              id: metadata.address,
+              username: userStatus.username,
+              walletAddress: metadata.address,
+              tier: newTier,
+            },
+          });
         } catch (error) {
+          set({ isBootstrapping: false });
           console.error("[AuthStore] Failed to import wallet:", error);
           Sentry.captureException(error, {
             tags: { action: "wallet_import" },
           });
           throw error;
         } finally {
-          set({ isCreatingWallet: false });
+          set({ isCreatingWallet: false, isBootstrapping: false });
         }
       },
 
@@ -386,6 +391,7 @@ export const useAuthStore = create<AuthState>()(
 
         set({
           isLoggedIn: true,
+          isBootstrapping: true,
           hasOnboarded: true,
           recoveryPhrase: null,
           user: {
@@ -425,7 +431,8 @@ export const useAuthStore = create<AuthState>()(
               },
             });
           })
-          .catch(() => {});
+          .catch(() => {})
+          .finally(() => set({ isBootstrapping: false }));
       },
 
       logout: async () => {
@@ -453,6 +460,7 @@ export const useAuthStore = create<AuthState>()(
           publicKeyBase64: null,
           userLevel: 0,
           hasUsername: false,
+          isBootstrapping: true,
           hasOnboarded: false,
           recoveryPhrase: null,
         });
@@ -463,7 +471,9 @@ export const useAuthStore = create<AuthState>()(
         usePreferencesStore.setState({ hasSeenAdultPrompt: false });
         usePreferencesStore.setState({ ageVerified: false });
         useDraftStore.getState().clearDraft();
-        primeBootstrap(queryClient).catch(() => {});
+        primeBootstrap(queryClient)
+          .catch(() => {})
+          .finally(() => set({ isBootstrapping: false }));
       },
 
       // ============================================

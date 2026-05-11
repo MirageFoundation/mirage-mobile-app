@@ -42,7 +42,7 @@ export const GiftSubscriptionSheet = forwardRef<
   const toast = useToast();
   const [isPresented, setIsPresented] = useState(false);
 
-  const { data: userStatus } = useUserStatus();
+  const { data: userStatus } = useUserStatus({ enabled: isPresented });
   const { data: chainConfig } = useChainConfig({ enabled: isPresented });
   const giftSubMutation = useGiftSubscription();
 

@@ -18,11 +18,12 @@ export function useParameters() {
 /** @deprecated Use useChainConfig instead */
 export function useConfig(options?: { enabled?: boolean }) {
  const isInitializing = useAuthStore((s) => s.isInitializing);
+ const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
 
  return useQuery({
   queryKey: queryKeys.config(),
   queryFn: () => getChainConfig(),
-  enabled: !isInitializing && (options?.enabled ?? true),
+  enabled: !isInitializing && !isBootstrapping && (options?.enabled ?? true),
   staleTime: 1000 * 60 * 5,
   gcTime: 1000 * 60 * 60 * 24,
  });
@@ -30,11 +31,12 @@ export function useConfig(options?: { enabled?: boolean }) {
 
 export function useChainConfig(options?: { enabled?: boolean }) {
  const isInitializing = useAuthStore((s) => s.isInitializing);
+ const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
 
  return useQuery({
   queryKey: queryKeys.config(),
   queryFn: () => getChainConfig(),
-  enabled: !isInitializing && (options?.enabled ?? true),
+  enabled: !isInitializing && !isBootstrapping && (options?.enabled ?? true),
   staleTime: 1000 * 60 * 5,
   gcTime: 1000 * 60 * 60 * 24,
  });
@@ -42,11 +44,12 @@ export function useChainConfig(options?: { enabled?: boolean }) {
 
 export function useNodeConfig() {
  const isInitializing = useAuthStore((s) => s.isInitializing);
+ const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
 
  return useQuery({
   queryKey: queryKeys.nodeConfig(),
   queryFn: () => getNodeConfig(),
-  enabled: !isInitializing,
+  enabled: !isInitializing && !isBootstrapping,
   staleTime: 1000 * 60 * 60 * 24,
   gcTime: 1000 * 60 * 60 * 24,
  });

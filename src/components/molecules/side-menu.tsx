@@ -350,7 +350,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       }
     }, [isLoggedIn]);
 
-    const { data: userStatus } = useUserStatus();
+    const { data: userStatus } = useUserStatus({ enabled: visible });
     const balance = userStatus?.balance
       ? Math.floor(userStatus.balance / 1_000_000)
       : 0;

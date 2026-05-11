@@ -8,9 +8,13 @@ import {
 } from "../endpoints/rewards";
 import { useAuthStore } from "@/src/stores";
 
-export function useRewardSummary(params?: Omit<GetRewardSummaryParams, "address">) {
+export function useRewardSummary(
+  params?: Omit<GetRewardSummaryParams, "address">,
+  options?: { enabled?: boolean },
+) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
   const isInitializing = useAuthStore((s) => s.isInitializing);
+  const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
   const queryClient = useQueryClient();
 
   return useQuery({
@@ -28,7 +32,11 @@ export function useRewardSummary(params?: Omit<GetRewardSummaryParams, "address"
       }
       return data;
     },
-    enabled: !!walletAddress && !isInitializing,
+    enabled:
+      !!walletAddress &&
+      !isInitializing &&
+      !isBootstrapping &&
+      (options?.enabled ?? true),
     staleTime: 1000 * 60,
     gcTime: 1000 * 60 * 5,
   });

@@ -10,14 +10,19 @@ import { useAuthStore } from "@/src/stores";
  * staleTime: 30 seconds
  * Invalidate after write mutations
  */
-export function useUserStatus() {
+export function useUserStatus(options?: { enabled?: boolean }) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
   const isInitializing = useAuthStore((s) => s.isInitializing);
+  const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
 
   return useQuery({
     queryKey: queryKeys.userStatus(walletAddress!),
     queryFn: () => getUserStatus({ address: walletAddress! }),
-    enabled: !!walletAddress && !isInitializing,
+    enabled:
+      !!walletAddress &&
+      !isInitializing &&
+      !isBootstrapping &&
+      (options?.enabled ?? true),
     staleTime: 1000 * 30, // 30 seconds
     gcTime: 1000 * 60 * 60, // 1 hour
   });

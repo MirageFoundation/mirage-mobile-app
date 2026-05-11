@@ -64,6 +64,7 @@ export function useBatchUsernamesFromAddresses(
   options?: { enabled?: boolean },
 ) {
   const isInitializing = useAuthStore((s) => s.isInitializing);
+  const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
   const stableKey = addresses.slice().sort().join(",");
   return useQuery({
     queryKey: ["batchUsernames", stableKey],
@@ -72,7 +73,11 @@ export function useBatchUsernamesFromAddresses(
       const resp = await bulkGetUsernameFromAddress(addresses);
       return resp.map ?? {};
     },
-    enabled: !isInitializing && addresses.length > 0 && (options?.enabled ?? true),
+    enabled:
+      !isInitializing &&
+      !isBootstrapping &&
+      addresses.length > 0 &&
+      (options?.enabled ?? true),
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 60,
   });

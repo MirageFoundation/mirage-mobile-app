@@ -1,7 +1,6 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { markSeen } from "@/src/services/seen-posts";
 import * as Sentry from "@sentry/react-native";
-import { useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -13,7 +12,6 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import {
   useUserFollowed,
 } from "@/src/api";
-import { queryKeys } from "@/src/api/read/query-keys";
 
 import {
 AdultContentPopup,
@@ -576,18 +574,6 @@ export function HomeScreen() {
         }
       };
     }, [setActiveFeedScreen, setDisabledTopicName]),
-  );
-
-  const queryClient = useQueryClient();
-
-  useFocusEffect(
-    useCallback(() => {
-      if (currentUser?.walletAddress) {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.rewardSummary(currentUser.walletAddress),
-        });
-      }
-    }, [queryClient, currentUser?.walletAddress]),
   );
 
   const handlersRef = useRef({

@@ -125,7 +125,7 @@ export const AwardPickerSheet = forwardRef<
     const [selectedType, setSelectedType] = useState<string | null>(null);
     const [isSending, setIsSending] = useState(false);
     const { data: awardConfigs } = useAwardConfigs({ enabled: isPresented });
-    const { data: userStatus } = useUserStatus();
+    const { data: userStatus } = useUserStatus({ enabled: isPresented });
     const giveAwardMutation = useGiveAward();
 
     const present = useCallback(() => {
