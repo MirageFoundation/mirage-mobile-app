@@ -17,6 +17,7 @@ import {
 AdultContentPopup,
 ConfirmationPopup,
 FeedHeader,
+ModerationReminderCard,
 NewPostsButton,
 type Post,
  PostOptionsSheet,
@@ -63,6 +64,9 @@ import {
   useTimeTickStore,
 } from "@/src/stores";
 import { LoggedOutHome } from "./logged-out-home";
+
+const MODERATION_REMINDER_MIN_AGE_MS = 10 * 60 * 1000;
+const MODERATION_REMINDER_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function HomeScreen() {
   const { theme } = useUnistyles();
@@ -218,11 +222,30 @@ export function HomeScreen() {
   const setHasSeenAdultPrompt = usePreferencesStore(
     (s) => s.setHasSeenAdultPrompt
   );
+  const adultPromptDismissedAt = usePreferencesStore(
+    (s) => s.adultPromptDismissedAt
+  );
+  const setAdultPromptDismissedAt = usePreferencesStore(
+    (s) => s.setAdultPromptDismissedAt
+  );
+  const moderationReminderUnderstoodByUser = usePreferencesStore(
+    (s) => s.moderationReminderUnderstoodByUser
+  );
+  const moderationReminderSnoozedUntilByUser = usePreferencesStore(
+    (s) => s.moderationReminderSnoozedUntilByUser
+  );
+  const dismissModerationReminder = usePreferencesStore(
+    (s) => s.dismissModerationReminder
+  );
+  const snoozeModerationReminder = usePreferencesStore(
+    (s) => s.snoozeModerationReminder
+  );
   const setAdultContent = usePreferencesStore((s) => s.setAdultContent);
   const shareServer = usePreferencesStore((s) => s.shareServer);
   const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
   const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
   const currentUser = useAuthStore((s) => s.user);
+  const timeTick = useTimeTickStore((s) => s.tick);
 
   const isInitializing = useAuthStore((s) => s.isInitializing);
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
@@ -242,6 +265,73 @@ export function HomeScreen() {
   const { handleFollowUser: handleFollowPress, handleFollowTopic: handleFollowTopicFromCard } = useFollowHandler({});
 
   const showAdultPopup = !!currentUser && !hasSeenAdultPrompt;
+
+  useEffect(() => {
+    if (!currentUser || !hasSeenAdultPrompt || showAdultPopup) return;
+    if (adultPromptDismissedAt > 0) return;
+    setAdultPromptDismissedAt(Date.now());
+  }, [
+    adultPromptDismissedAt,
+    currentUser,
+    hasSeenAdultPrompt,
+    setAdultPromptDismissedAt,
+    showAdultPopup,
+  ]);
+
+  const currentUserId = currentUser?.id ?? "";
+  const moderationReminderUnderstood = currentUserId
+    ? moderationReminderUnderstoodByUser[currentUserId] === true
+    : false;
+  const moderationReminderSnoozedUntil = currentUserId
+    ? moderationReminderSnoozedUntilByUser[currentUserId] ?? 0
+    : 0;
+  void timeTick;
+  const nowMs = Date.now();
+  const adultPromptAgeMs = adultPromptDismissedAt > 0
+    ? nowMs - adultPromptDismissedAt
+    : 0;
+  const showModerationReminder = !!currentUserId
+    && hasSeenAdultPrompt
+    && !showAdultPopup
+    && adultPromptDismissedAt > 0
+    && adultPromptAgeMs >= MODERATION_REMINDER_MIN_AGE_MS
+    && !moderationReminderUnderstood
+    && moderationReminderSnoozedUntil <= nowMs;
+
+  const handleChooseModerationAgents = useCallback(() => {
+    if (!currentUserId) return;
+    dismissModerationReminder(currentUserId);
+    router.push("/agents");
+  }, [currentUserId, dismissModerationReminder, router]);
+
+  const handleDismissModerationReminder = useCallback(() => {
+    if (!currentUserId) return;
+    dismissModerationReminder(currentUserId);
+  }, [currentUserId, dismissModerationReminder]);
+
+  const handleSnoozeModerationReminder = useCallback(() => {
+    if (!currentUserId) return;
+    snoozeModerationReminder(
+      currentUserId,
+      Date.now() + MODERATION_REMINDER_SNOOZE_MS
+    );
+  }, [currentUserId, snoozeModerationReminder]);
+
+  const moderationReminderHeader = useMemo(() => {
+    if (!showModerationReminder) return null;
+    return (
+      <ModerationReminderCard
+        onChooseAgents={handleChooseModerationAgents}
+        onUnderstand={handleDismissModerationReminder}
+        onRemindLater={handleSnoozeModerationReminder}
+      />
+    );
+  }, [
+    handleChooseModerationAgents,
+    handleDismissModerationReminder,
+    handleSnoozeModerationReminder,
+    showModerationReminder,
+  ]);
 
   const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
   const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
@@ -275,22 +365,24 @@ export function HomeScreen() {
   const handleEnableAdultContent = useCallback(() => {
     setAdultContent(true);
     setHasSeenAdultPrompt();
+    setAdultPromptDismissedAt(Date.now());
     Sentry.addBreadcrumb({
       category: "content_filter",
       message: "iOS: Adult content enabled via popup",
       level: "info",
     });
-  }, [setAdultContent, setHasSeenAdultPrompt]);
+  }, [setAdultContent, setAdultPromptDismissedAt, setHasSeenAdultPrompt]);
 
   const handleDeclineAdultContent = useCallback(() => {
     setAdultContent(false);
     setHasSeenAdultPrompt();
+    setAdultPromptDismissedAt(Date.now());
     Sentry.addBreadcrumb({
       category: "content_filter",
       message: "iOS: Adult content declined via popup",
       level: "info",
     });
-  }, [setAdultContent, setHasSeenAdultPrompt]);
+  }, [setAdultContent, setAdultPromptDismissedAt, setHasSeenAdultPrompt]);
 
   const revealedPostsRef = useRef<Set<string>>(new Set());
   const isNavigatingRef = useRef(false);
@@ -660,6 +752,7 @@ export function HomeScreen() {
         ref={tabbedFeedRef}
         feedType="home"
         activeTabIndex={feedTabIndex}
+        ListHeaderExtra={moderationReminderHeader}
         onNewPostsChange={handleNewPostsChange}
       />
 
