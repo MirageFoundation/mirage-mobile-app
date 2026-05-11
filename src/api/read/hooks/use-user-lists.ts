@@ -14,13 +14,14 @@ import { useAuthStore } from "@/src/stores";
  */
 export function useUserFollowed() {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const isInitializing = useAuthStore((s) => s.isInitializing);
 
   return useQuery({
     queryKey: queryKeys.userFollowed(walletAddress!),
     queryFn: () => getUserFollowed({ address: walletAddress! }),
-    enabled: !!walletAddress,
-    staleTime: 1000 * 60, // 1 minute
-    gcTime: 1000 * 60 * 60, // 1 hour
+    enabled: !!walletAddress && !isInitializing,
+    staleTime: 1000 * 60 * 60 * 24, // 24 hours
+    gcTime: 1000 * 60 * 60 * 24, // 24 hours
   });
 }
 
@@ -32,7 +33,7 @@ export function useUserFollowedByAddress(address: string | undefined | null) {
     queryKey: queryKeys.userFollowed(address!),
     queryFn: () => getUserFollowed({ address: address! }),
     enabled: !!address,
-    staleTime: 1000 * 60, // 1 minute
+    staleTime: 1000 * 60 * 60 * 24, // 24 hours
   });
 }
 
@@ -42,11 +43,12 @@ export function useUserFollowedByAddress(address: string | undefined | null) {
  */
 export function useUserBlocked() {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const isInitializing = useAuthStore((s) => s.isInitializing);
 
   return useQuery({
     queryKey: queryKeys.userBlocked(walletAddress!),
     queryFn: () => getUserBlocked({ address: walletAddress! }),
-    enabled: !!walletAddress,
+    enabled: !!walletAddress && !isInitializing,
     staleTime: 1000 * 60, // 1 minute
     gcTime: 1000 * 60 * 60, // 1 hour
   });

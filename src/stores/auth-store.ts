@@ -7,15 +7,17 @@ import { getUserStatus } from "@/src/api/read/endpoints/users";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { queryClient } from "@/src/providers/query-provider";
 import { getPosts } from "@/src/api/read/endpoints/posts";
-import { usePreferencesStore } from "./preferences-store";
-import { getAllowedTagsFromContentTypes } from "./preferences-store";
-import type { WalletMetadata } from "@/src/wallet";
+import {
+  getAllowedTagsFromContentTypes,
+  usePreferencesStore,
+} from "./preferences-store";
 import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 import { useContentModerationStore } from "./content-moderation-store";
 import { useInboxStore } from "./inbox-store";
 import { useDraftStore } from "./draft-store";
 import { getTierName } from "@/src/utils/tiers";
 import { unregisterPush } from "@/src/services/push-notifications";
+import { primeBootstrap } from "@/src/services/bootstrap";
 
 // ============================================
 // Types
@@ -138,6 +140,8 @@ export const useAuthStore = create<AuthState>()(
           }
 
           if (!hasWalletResult) {
+            await primeBootstrap(queryClient);
+
             const prefs = usePreferencesStore.getState();
             const allowedTags =
               getAllowedTagsFromContentTypes(prefs.selectedContentTypes, prefs.adultContentEnabled) || undefined;
@@ -182,8 +186,9 @@ export const useAuthStore = create<AuthState>()(
                 walletAddress: metadata.address,
                 tier: "Free",
               },
-              isInitializing: false,
             });
+
+            const bootstrapResponse = await primeBootstrap(queryClient, metadata.address);
 
             const prefs2 = usePreferencesStore.getState();
             const allowedTags =
@@ -202,7 +207,11 @@ export const useAuthStore = create<AuthState>()(
               initialPageParam: 1,
             });
 
-            getUserStatus({ address: metadata.address })
+            set({ isInitializing: false });
+
+            Promise.resolve(
+              bootstrapResponse?.user_status ?? getUserStatus({ address: metadata.address })
+            )
               .then((userStatus) => {
                 queryClient.setQueryData(
                   queryKeys.userStatus(metadata.address),
@@ -325,6 +334,36 @@ export const useAuthStore = create<AuthState>()(
               tier: "Free",
             },
           });
+          primeBootstrap(queryClient, metadata.address)
+            .then((bootstrapResponse) =>
+              bootstrapResponse?.user_status ?? getUserStatus({ address: metadata.address })
+            )
+            .then((userStatus) => {
+              queryClient.setQueryData(
+                queryKeys.userStatus(metadata.address),
+                userStatus,
+              );
+
+              const newUserLevel = userStatus.user_level;
+              const newHasUsername = !!userStatus.username;
+              const newTier = getTierName(userStatus.user_level);
+
+              if (userStatus.username) {
+                walletService.updateMetadata({ hasUsername: true });
+              }
+
+              set({
+                hasUsername: newHasUsername,
+                userLevel: newUserLevel,
+                user: {
+                  id: metadata.address,
+                  username: userStatus.username,
+                  walletAddress: metadata.address,
+                  tier: newTier,
+                },
+              });
+            })
+            .catch(() => {});
         } catch (error) {
           console.error("[AuthStore] Failed to import wallet:", error);
           Sentry.captureException(error, {
@@ -337,7 +376,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       confirmWalletCreation: async () => {
-        const { walletAddress, publicKeyBase64, user } = get();
+        const { walletAddress, user } = get();
 
         if (!walletAddress) {
           throw new Error("No wallet to confirm");
@@ -356,6 +395,37 @@ export const useAuthStore = create<AuthState>()(
             tier: "Free",
           },
         });
+
+        primeBootstrap(queryClient, walletAddress)
+          .then((bootstrapResponse) =>
+            bootstrapResponse?.user_status ?? getUserStatus({ address: walletAddress })
+          )
+          .then((userStatus) => {
+            queryClient.setQueryData(
+              queryKeys.userStatus(walletAddress),
+              userStatus,
+            );
+
+            const newUserLevel = userStatus.user_level;
+            const newHasUsername = !!userStatus.username;
+            const newTier = getTierName(userStatus.user_level);
+
+            if (userStatus.username) {
+              walletService.updateMetadata({ hasUsername: true });
+            }
+
+            set({
+              hasUsername: newHasUsername,
+              userLevel: newUserLevel,
+              user: {
+                id: walletAddress,
+                username: userStatus.username,
+                walletAddress,
+                tier: newTier,
+              },
+            });
+          })
+          .catch(() => {});
       },
 
       logout: async () => {
@@ -393,6 +463,7 @@ export const useAuthStore = create<AuthState>()(
         usePreferencesStore.setState({ hasSeenAdultPrompt: false });
         usePreferencesStore.setState({ ageVerified: false });
         useDraftStore.getState().clearDraft();
+        primeBootstrap(queryClient).catch(() => {});
       },
 
       // ============================================

@@ -2,6 +2,10 @@
 export { getParameters, getConfig, getChainConfig, getNodeConfig } from "./parameters";
 export type { GetParametersParams } from "./parameters";
 
+// Bootstrap
+export { getBootstrap } from "./bootstrap";
+export type { BootstrapParams, BootstrapResponse } from "./bootstrap";
+
 // Users
 export {
   getUserStatus,

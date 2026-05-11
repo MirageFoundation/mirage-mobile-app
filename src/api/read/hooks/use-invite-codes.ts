@@ -5,11 +5,12 @@ import { useAuthStore } from "@/src/stores";
 
 export function useInviteCodes() {
   const address = useAuthStore((s) => s.user?.walletAddress);
+  const isInitializing = useAuthStore((s) => s.isInitializing);
 
   return useQuery({
     queryKey: queryKeys.inviteCodes(address ?? ""),
     queryFn: () => getInviteCodes({ address: address! }),
-    enabled: !!address,
+    enabled: !!address && !isInitializing,
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 30,
   });

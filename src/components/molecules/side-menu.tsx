@@ -368,7 +368,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
         ? allFollowedUsers
         : allFollowedUsers.slice(0, peopleBeforeShowMore);
     const { data: usernameMap } =
-      useBatchUsernamesFromAddresses(allFollowedUsers);
+      useBatchUsernamesFromAddresses(allFollowedUsers, { enabled: visible });
     const followedTopics =
       topicsBeforeShowMore === -1
         ? allFollowedTopics

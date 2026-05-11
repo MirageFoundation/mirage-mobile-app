@@ -49,7 +49,7 @@ export function LoggedOutHome() {
   const [modalServers, setModalServers] = useState<string[]>([]);
 
   const totalUsers = stats?.registered_users;
-  const activeToday = stats?.active_24h;
+  const activeUsers = stats?.active_7d ?? stats?.active_24h;
   const postsToday = stats?.posts_24h;
 
   const otherServer = servers.find((s) => s !== apiServer) ?? servers[0];
@@ -232,9 +232,9 @@ export function LoggedOutHome() {
                       { color: isDark ? "#6EE7B7" : "#059669" },
                     ]}
                   >
-                    {activeToday != null ? activeToday.toLocaleString() : "-"}
+                    {activeUsers != null ? activeUsers.toLocaleString() : "-"}
                   </Text>
-                  <Text style={styles.statLabel}>ACTIVE (24H)</Text>
+                  <Text style={styles.statLabel}>ACTIVE (7D)</Text>
                 </View>
 
                 <View

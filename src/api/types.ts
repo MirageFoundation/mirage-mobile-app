@@ -389,7 +389,8 @@ export interface TxStatusResponse {
 export interface WelcomeStatsResponse {
   registered_users: number;
   posts_24h: number;
-  active_24h: number;
+  active_7d: number;
+  active_24h?: number;
 }
 
 export interface DifficultyHistory {

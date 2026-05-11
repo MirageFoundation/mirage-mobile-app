@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "../query-keys";
-import { getParameters, getConfig, getChainConfig, getNodeConfig } from "../endpoints/parameters";
+import { getParameters, getChainConfig, getNodeConfig } from "../endpoints/parameters";
 import { useAuthStore } from "@/src/stores";
 
 export function useParameters() {
@@ -16,29 +16,38 @@ export function useParameters() {
 }
 
 /** @deprecated Use useChainConfig instead */
-export function useConfig() {
+export function useConfig(options?: { enabled?: boolean }) {
+ const isInitializing = useAuthStore((s) => s.isInitializing);
+
  return useQuery({
   queryKey: queryKeys.config(),
   queryFn: () => getChainConfig(),
+  enabled: !isInitializing && (options?.enabled ?? true),
   staleTime: 1000 * 60 * 5,
   gcTime: 1000 * 60 * 60 * 24,
  });
 }
 
-export function useChainConfig() {
+export function useChainConfig(options?: { enabled?: boolean }) {
+ const isInitializing = useAuthStore((s) => s.isInitializing);
+
  return useQuery({
   queryKey: queryKeys.config(),
   queryFn: () => getChainConfig(),
+  enabled: !isInitializing && (options?.enabled ?? true),
   staleTime: 1000 * 60 * 5,
   gcTime: 1000 * 60 * 60 * 24,
  });
 }
 
 export function useNodeConfig() {
+ const isInitializing = useAuthStore((s) => s.isInitializing);
+
  return useQuery({
   queryKey: queryKeys.nodeConfig(),
   queryFn: () => getNodeConfig(),
-  staleTime: 1000 * 60 * 5,
+  enabled: !isInitializing,
+  staleTime: 1000 * 60 * 60 * 24,
   gcTime: 1000 * 60 * 60 * 24,
  });
 }

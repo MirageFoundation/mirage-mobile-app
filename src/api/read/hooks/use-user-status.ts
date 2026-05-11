@@ -12,11 +12,12 @@ import { useAuthStore } from "@/src/stores";
  */
 export function useUserStatus() {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const isInitializing = useAuthStore((s) => s.isInitializing);
 
   return useQuery({
     queryKey: queryKeys.userStatus(walletAddress!),
     queryFn: () => getUserStatus({ address: walletAddress! }),
-    enabled: !!walletAddress,
+    enabled: !!walletAddress && !isInitializing,
     staleTime: 1000 * 30, // 30 seconds
     gcTime: 1000 * 60 * 60, // 1 hour
   });

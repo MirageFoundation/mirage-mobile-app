@@ -40,9 +40,10 @@ export const GiftSubscriptionSheet = forwardRef<
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const toast = useToast();
+  const [isPresented, setIsPresented] = useState(false);
 
   const { data: userStatus } = useUserStatus();
-  const { data: chainConfig } = useChainConfig();
+  const { data: chainConfig } = useChainConfig({ enabled: isPresented });
   const giftSubMutation = useGiftSubscription();
 
   const [isSending, setIsSending] = useState(false);
@@ -72,6 +73,7 @@ export const GiftSubscriptionSheet = forwardRef<
   }, [chainConfig]);
 
   const present = useCallback(() => {
+    setIsPresented(true);
     setIsSending(false);
     giftSubMutation.reset();
     bottomSheetRef.current?.present();
@@ -85,7 +87,10 @@ export const GiftSubscriptionSheet = forwardRef<
 
   const handleSheetChanges = useCallback(
     (index: number) => {
-      if (index === -1) onDismiss?.();
+      if (index === -1) {
+        setIsPresented(false);
+        onDismiss?.();
+      }
     },
     [onDismiss],
   );

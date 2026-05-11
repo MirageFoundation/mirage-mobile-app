@@ -7,6 +7,7 @@ import {
   type GetUsersParams,
 } from "../endpoints/users";
 import { queryKeys } from "../query-keys";
+import { useAuthStore } from "@/src/stores";
 
 /**
  * Resolve username to address
@@ -58,7 +59,11 @@ export function useUsernameFromAddress(address: string | undefined | null) {
   });
 }
 
-export function useBatchUsernamesFromAddresses(addresses: string[]) {
+export function useBatchUsernamesFromAddresses(
+  addresses: string[],
+  options?: { enabled?: boolean },
+) {
+  const isInitializing = useAuthStore((s) => s.isInitializing);
   const stableKey = addresses.slice().sort().join(",");
   return useQuery({
     queryKey: ["batchUsernames", stableKey],
@@ -67,7 +72,7 @@ export function useBatchUsernamesFromAddresses(addresses: string[]) {
       const resp = await bulkGetUsernameFromAddress(addresses);
       return resp.map ?? {};
     },
-    enabled: addresses.length > 0,
+    enabled: !isInitializing && addresses.length > 0 && (options?.enabled ?? true),
     staleTime: 1000 * 60 * 5,
     gcTime: 1000 * 60 * 60,
   });
