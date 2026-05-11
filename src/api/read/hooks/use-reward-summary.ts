@@ -13,6 +13,8 @@ export function useRewardSummary(
   options?: { enabled?: boolean },
 ) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const hasOnboarded = useAuthStore((s) => s.hasOnboarded);
   const isInitializing = useAuthStore((s) => s.isInitializing);
   const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
   const queryClient = useQueryClient();
@@ -34,6 +36,8 @@ export function useRewardSummary(
     },
     enabled:
       !!walletAddress &&
+      isLoggedIn &&
+      hasOnboarded &&
       !isInitializing &&
       !isBootstrapping &&
       (options?.enabled ?? true),

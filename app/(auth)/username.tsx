@@ -395,7 +395,7 @@ export default function UsernameScreen() {
 
       setTimeout(() => {
         txProgress.hideModal();
-        router.replace({
+        router.push({
           pathname: "/(auth)/recovery-phrase",
           params: { username: `anon-${username}` },
         });

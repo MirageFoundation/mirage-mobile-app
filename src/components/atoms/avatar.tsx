@@ -1,6 +1,7 @@
 import { Image, type ImageProps } from "expo-image";
 import { useMemo } from "react";
 import { View } from "react-native";
+import Svg, { Rect } from "react-native-svg";
 import { StyleSheet } from "react-native-unistyles";
 
 type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "xxl";
@@ -13,6 +14,45 @@ const AVATAR_SIZES: Record<AvatarSize, number> = {
   xl: 64,
   xxl: 80,
 };
+
+const IDENTICON_COLORS = [
+  "#ef4444",
+  "#f97316",
+  "#eab308",
+  "#22c55e",
+  "#14b8a6",
+  "#06b6d4",
+  "#3b82f6",
+  "#8b5cf6",
+  "#d946ef",
+  "#ec4899",
+];
+
+function hashSeed(seed: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function buildIdenticonCells(seed: string) {
+  let hash = hashSeed(seed);
+  const cells: { x: number; y: number }[] = [];
+
+  for (let y = 0; y < 5; y += 1) {
+    for (let x = 0; x < 3; x += 1) {
+      hash = Math.imul(hash ^ (x + y * 5 + 1), 1103515245) + 12345;
+      if ((hash >>> 0) % 2 === 0) {
+        cells.push({ x, y });
+        if (x !== 2) cells.push({ x: 4 - x, y });
+      }
+    }
+  }
+
+  return cells;
+}
 
 type AvatarProps = Omit<ImageProps, "source"> & {
   /** Size preset or custom number */
@@ -50,36 +90,25 @@ export const Avatar = ({
   source,
   rounded = "sm",
   bordered = false,
-  variant = "identicon",
-  paddingRatio = 0,
+  variant: _variant = "identicon",
+  paddingRatio: _paddingRatio = 0,
   style,
   containerStyle,
   ...imageProps
 }: AvatarProps) => {
   const resolvedSize = typeof size === "number" ? size : AVATAR_SIZES[size];
 
-  // Match web utils/avatar.js: do NOT lowercase/trim — pass the seed
-  // verbatim, only URL-encode it so unsafe characters don't break the
-  // request. Empty string falls back to "default".
+  // Keep the same seed policy as web: do NOT lowercase/trim. We render
+  // the generated identicon locally so avatars are not blank when the
+  // DiceBear CDN is slow or unreachable.
   const rawSeed = seed === null || seed === undefined ? "" : String(seed);
-  const stableSeed = encodeURIComponent(rawSeed || "default");
-
-  const imageSource = useMemo(
-    () =>
-      source ?? {
-        uri: `https://api.dicebear.com/9.x/${variant}/png?seed=${stableSeed}&size=${resolvedSize * 2}&scale=100`,
-      },
-    [source, variant, stableSeed, resolvedSize],
-  );
+  const stableSeed = rawSeed || "default";
+  const seedHash = useMemo(() => hashSeed(stableSeed), [stableSeed]);
+  const identiconCells = useMemo(() => buildIdenticonCells(stableSeed), [stableSeed]);
+  const identiconColor = IDENTICON_COLORS[seedHash % IDENTICON_COLORS.length];
+  const identiconBackground = `${identiconColor}22`;
 
   styles.useVariants({ rounded, bordered });
-
-  // Only inset the identicon when we generated the source ourselves.
-  // Custom `source` images (avatars, agent banners) should fill the
-  // circle as they did before.
-  const innerPadding = source
-    ? 0
-    : Math.round(resolvedSize * Math.max(0, paddingRatio));
 
   return (
     <View
@@ -92,26 +121,34 @@ export const Avatar = ({
         containerStyle,
       ]}
     >
-      <Image
-        source={imageSource}
-        style={[
-          styles.image,
-          styles.imageRounded,
-          source ? null : styles.identiconImage,
-          innerPadding > 0
-            ? {
-                top: innerPadding,
-                left: innerPadding,
-                right: innerPadding,
-                bottom: innerPadding,
-              }
-            : null,
-          style,
-        ]}
-        cachePolicy="memory-disk"
-        contentFit="cover"
-        {...imageProps}
-      />
+      {source ? (
+        <Image
+          source={source}
+          style={[styles.image, styles.imageRounded, style]}
+          cachePolicy="memory-disk"
+          contentFit="cover"
+          {...imageProps}
+        />
+      ) : (
+        <Svg
+          width={resolvedSize + 2}
+          height={resolvedSize + 2}
+          viewBox="0 0 5 5"
+          style={[styles.svg, style]}
+        >
+          <Rect x="0" y="0" width="5" height="5" fill={identiconBackground} />
+          {identiconCells.map((cell) => (
+            <Rect
+              key={`${cell.x}-${cell.y}`}
+              x={cell.x}
+              y={cell.y}
+              width="1"
+              height="1"
+              fill={identiconColor}
+            />
+          ))}
+        </Svg>
+      )}
     </View>
   );
 };
@@ -162,9 +199,13 @@ const styles = StyleSheet.create((theme, rt) => ({
       },
     },
   },
-  // DiceBear identicons are transparent SVG/PNGs — `contain` keeps the
-  // glyph within the inset padding without cropping.
-  identiconImage: {
-    backgroundColor: "transparent",
+  svg: {
+    position: "absolute",
+    // Match `styles.image`: bleed under the light-theme border so the
+    // generated identicon visually touches the avatar edge.
+    top: -1,
+    left: -1,
+    right: -1,
+    bottom: -1,
   },
 }));

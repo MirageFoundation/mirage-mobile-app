@@ -56,7 +56,7 @@ useEffect(() => {
       triggerHaptic("success");
      const currentServer = usePreferencesStore.getState().apiServer;
      apiClient.setBaseUrl(getApiBaseUrl(currentServer));
-      router.dismissAll();
+      router.dismissTo("/(tabs)");
     } catch (error) {
       console.error("[RecoveryPhrase] Failed to confirm wallet:", error);
       triggerHaptic("error");
