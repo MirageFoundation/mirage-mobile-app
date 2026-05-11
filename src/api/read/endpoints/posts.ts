@@ -152,9 +152,16 @@ export async function getCommentContext(
  * Adjusts for viewer's own vote weight
  */
 export function calculateDisplayPoints(post: {
-  points: number;
-  user_weight: number;
-  user_vote: number;
+  points?: number;
+  user_weight?: number;
+  user_vote?: number;
 }): number {
-  return Math.round(post.points - post.user_weight + post.user_vote);
+  const points = Number.isFinite(post.points) ? (post.points as number) : 0;
+  const userWeight = Number.isFinite(post.user_weight)
+    ? (post.user_weight as number)
+    : 0;
+  const userVote = Number.isFinite(post.user_vote)
+    ? (post.user_vote as number)
+    : 0;
+  return Math.round(points - userWeight + userVote);
 }

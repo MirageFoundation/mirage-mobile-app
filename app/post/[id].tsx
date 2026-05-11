@@ -1,4 +1,5 @@
 import {
+  transformApiComment,
   transformApiComments,
   transformApiPost,
   useComments,
@@ -8,7 +9,7 @@ import {
 import { markSeen } from "@/src/services/seen-posts";
 import * as Sentry from "@sentry/react-native";
 import { parseApiError } from "@/src/utils/parse-api-error";
-import { getComments } from "@/src/api/read/endpoints/posts";
+import { getCommentContext, getComments } from "@/src/api/read/endpoints/posts";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { LinearGradient } from "expo-linear-gradient";
 import { getGradientColor } from "@/src/components/molecules/profile-header";
@@ -85,6 +86,7 @@ import { useRouter } from "@/src/hooks/use-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
+  ActivityIndicator,
   LayoutChangeEvent,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -110,14 +112,15 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { getLastPressedPostY } from "@/src/utils/post-transition";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import type { PostsResponse, Post as ApiPost } from "@/src/api/types";
+import type { PostsResponse, Post as ApiPost, PostWithChildren } from "@/src/api/types";
 
 export default function PostDetailScreen() {
-  const { id, highlight, reveal, syncContext } = useLocalSearchParams<{
+  const { id, highlight, reveal, syncContext, depth } = useLocalSearchParams<{
     id: string;
     highlight?: string;
     reveal?: string;
     syncContext?: string;
+    depth?: string;
   }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -265,6 +268,90 @@ export default function PostDetailScreen() {
   }, [commentsError]);
 
   const isPostNotFound = commentsApiError?.errorCode === "post_not_found" || commentsApiError?.httpStatus === 404;
+
+  const isViewingComment = useMemo(() => {
+    const root = commentsData?.root;
+    if (!root?.post_id || !root.root_post_id) return false;
+    return root.root_post_id.toLowerCase() !== root.post_id.toLowerCase();
+  }, [commentsData?.root]);
+
+  const actualRootPostId = useMemo(() => {
+    const root = commentsData?.root;
+    if (!root?.post_id) return null;
+    return isViewingComment ? root.root_post_id : root.post_id;
+  }, [commentsData?.root, isViewingComment]);
+
+  const focusedCommentId = isViewingComment ? commentsData?.root?.post_id : null;
+  const [actualRootPost, setActualRootPost] = useState<PostWithChildren | null>(null);
+  const [contextComments, setContextComments] = useState<ApiPost[]>([]);
+  const [isLoadingContext, setIsLoadingContext] = useState(false);
+
+  const contextDepth = useMemo(() => {
+    if (!depth) return 0;
+    const parsed = Number(depth);
+    if (!Number.isInteger(parsed) || parsed < 0) return 0;
+    return Math.min(parsed, 5);
+  }, [depth]);
+
+  useEffect(() => {
+    if (!isViewingComment || !actualRootPostId) {
+      setActualRootPost(null);
+      return;
+    }
+
+    const address = currentUser?.walletAddress ?? undefined;
+    getComments({ post_id: actualRootPostId, address })
+      .then((data) => setActualRootPost(data.root))
+      .catch((error) => {
+        Sentry.addBreadcrumb({
+          category: "comments",
+          message: "Failed to load focused comment root post",
+          data: { actualRootPostId, error: String(error) },
+          level: "warning",
+        });
+      });
+  }, [isViewingComment, actualRootPostId, currentUser?.walletAddress]);
+
+  useEffect(() => {
+    if (!focusedCommentId || contextDepth <= 0) {
+      setContextComments([]);
+      setIsLoadingContext(false);
+      return;
+    }
+
+    const address = currentUser?.walletAddress ?? undefined;
+    setIsLoadingContext(true);
+    queryClient
+      .fetchQuery({
+        queryKey: queryKeys.commentContext(focusedCommentId, contextDepth),
+        queryFn: () =>
+          getCommentContext({
+            comment_id: focusedCommentId,
+            address,
+            max_depth: contextDepth,
+          }),
+        staleTime: 1000 * 60,
+      })
+      .then((data) => {
+        setContextComments([...data.context].reverse());
+        setIsLoadingContext(false);
+      })
+      .catch((error) => {
+        setIsLoadingContext(false);
+        Sentry.addBreadcrumb({
+          category: "comments",
+          message: "Failed to load focused comment context",
+          data: { focusedCommentId, error: String(error) },
+          level: "warning",
+        });
+      });
+  }, [focusedCommentId, contextDepth, currentUser?.walletAddress, queryClient]);
+
+  useEffect(() => {
+    if (focusedCommentId && !highlight) {
+      setHighlightedCommentId(focusedCommentId);
+    }
+  }, [focusedCommentId, highlight]);
 
   useEffect(() => {
     if (isFetchingComments) lastCommentsFetchRef.current = Date.now();
@@ -577,6 +664,7 @@ export default function PostDetailScreen() {
 
   const cachedFeedPost = useMemo(() => {
     if (!id) return null;
+    const targetId = actualRootPostId ?? id;
 
     const cachedQueries = queryClient.getQueriesData<InfiniteData<PostsResponse>>({
       queryKey: ["posts"],
@@ -584,7 +672,7 @@ export default function PostDetailScreen() {
 
     for (const [, queryData] of cachedQueries) {
       const matchedPost = queryData?.pages?.flatMap((page) => page.posts).find(
-        (candidate) => candidate.post_id === id,
+        (candidate) => candidate.post_id === targetId,
       );
       if (matchedPost) {
         return matchedPost;
@@ -592,9 +680,12 @@ export default function PostDetailScreen() {
     }
 
     return null;
-  }, [id, queryClient]);
+  }, [id, actualRootPostId, queryClient]);
 
-  const resolvedRootPost = commentsData?.root ?? cachedFeedPost;
+  const resolvedRootPost =
+    isViewingComment
+      ? actualRootPost ?? cachedFeedPost ?? commentsData?.root
+      : commentsData?.root ?? cachedFeedPost;
 
   // Transform API post and comments to UI format
   const post = useMemo(() => {
@@ -610,14 +701,62 @@ export default function PostDetailScreen() {
 
   const comments = useMemo(() => {
     if (!commentsData?.children) return [];
+    if (isViewingComment && commentsData.root) {
+      // While the parent context is still loading, hide the focused
+      // thread so the empty-state skeleton can render. Prevents the
+      // focused comment from popping in alone before parents arrive.
+      if (contextDepth > 0 && isLoadingContext) return [];
+      const contextRootId = actualRootPostId?.toLowerCase();
+      const context = contextComments
+        .filter((comment) => comment.post_id.toLowerCase() !== contextRootId)
+        .map((comment) =>
+          transformApiComment(
+            { ...comment, children: [] } as PostWithChildren,
+            null,
+            0,
+          ),
+        );
+      const focused = {
+        ...transformApiComment(commentsData.root, actualRootPostId, 0),
+        isFocusedComment: true,
+        replies: transformApiComments(commentsData.children),
+      };
+
+      // Build a nested parent-chain so the existing CommentThread rail
+      // logic draws a single connected thread from the oldest parent
+      // down to the focused comment, just like the web app.
+      let thread: Comment = focused;
+      for (let index = context.length - 1; index >= 0; index -= 1) {
+        thread = {
+          ...context[index],
+          isFocusedContext: true,
+          replies: [thread],
+          replyCount: Math.max(context[index].replyCount ?? 0, 1),
+        };
+      }
+      return [{ ...thread, isFocusedContext: true }];
+    }
     return transformApiComments(commentsData.children);
-  }, [commentsData]);
+  }, [
+    commentsData,
+    isViewingComment,
+    actualRootPostId,
+    contextComments,
+    contextDepth,
+    isLoadingContext,
+  ]);
 
   // Local state for optimistic updates
   const [localPostUpdates, setLocalPostUpdates] = useState<Partial<Post>>({});
   const [localTopicFollowed, setLocalTopicFollowed] = useState<boolean | null>(
     null,
   );
+  const [threadActionLoading, setThreadActionLoading] = useState<
+    "context" | "full" | null
+  >(null);
+  useEffect(() => {
+    setThreadActionLoading(null);
+  }, [id]);
   const optimisticTopLevelComments = useOptimisticTopLevelComments(id);
   const optimisticReplyComments = useOptimisticReplyComments(id);
   const addTopLevelOptimisticComment = usePostCommentOptimisticStore(
@@ -907,6 +1046,9 @@ export default function PostDetailScreen() {
 
   // Scroll to highlighted comment when data loads
   useEffect(() => {
+    // While context is still loading, defer — we'll run again once
+    // the focused chain is built and the focused comment exists.
+    if (focusedCommentId && contextDepth > 0 && isLoadingContext) return;
     if (highlightedCommentId && allComments.length > 0 && flatListRef.current) {
       const isOptimistic = highlightedCommentId.startsWith("optimistic-");
       if (isOptimistic) return;
@@ -935,16 +1077,27 @@ export default function PostDetailScreen() {
             commentCount: allComments.length,
           },
         });
+        // In focused-context view, the entire parent chain is a single
+        // top-level FlatList item ending with the focused comment, so
+        // scrolling to the item lands on the oldest parent. Scroll to
+        // end instead so the focused comment is in view.
+        const isFocusedChain =
+          focusedCommentId && contextDepth > 0 &&
+          allComments[index]?.id !== highlightedCommentId;
         // Small delay to ensure layout is ready
         setTimeout(() => {
           if (index < (allComments.length ?? 0)) {
+            if (isFocusedChain) {
+              flatListRef.current?.scrollToEnd({ animated: true });
+              return;
+            }
             flatListRef.current?.scrollToIndex({
               index,
               animated: true,
               viewPosition: 0.1,
             });
           }
-        }, 500);
+        }, 600);
 
         // Keep the highlight visible long enough for expanded nested threads
         // to finish layout/animation after inbox navigation.
@@ -954,7 +1107,7 @@ export default function PostDetailScreen() {
         }, 6000);
       }
     }
-  }, [highlightedCommentId, allComments, findCommentInTree, id]);
+  }, [highlightedCommentId, allComments, findCommentInTree, id, focusedCommentId, contextDepth, isLoadingContext]);
 
   useEffect(() => {
     if (
@@ -1285,8 +1438,11 @@ export default function PostDetailScreen() {
         return;
       }
 
-      const parentId = replyingTo?.id ?? id;
-      const replyingToUsername = replyingTo?.author.username;
+      const implicitReplyTarget =
+        !replyingTo && isViewingComment && commentsData?.root
+          ? transformApiComment(commentsData.root)
+          : null;
+      const parentId = replyingTo?.id ?? implicitReplyTarget?.id ?? id;
 
       const optimisticMediaUrl = imageUri || gifUrl || null;
       let optimisticContent = text;
@@ -1313,10 +1469,10 @@ export default function PostDetailScreen() {
         hasDisliked: false,
         createdAt: new Date(),
         replyCount: 0,
-        parentId: replyingTo?.id ?? null,
+        parentId,
       };
 
-      const replyTarget = replyingTo;
+      const replyTarget = replyingTo ?? implicitReplyTarget;
       const capturedImageUri = imageUri;
       const capturedGifUrl = gifUrl;
       const capturedText = text;
@@ -1817,6 +1973,97 @@ export default function PostDetailScreen() {
           videoSyncScope={videoSyncScope}
         />
         <View style={styles.divider} />
+        {focusedCommentId && actualRootPostId ? (
+          <View style={styles.threadReminder}>
+            <View style={styles.threadReminderHeader}>
+              <Ionicons
+                name="chatbubbles-outline"
+                size={14}
+                color={theme.colors.text.subtle}
+              />
+              <Text size="xs" mode="subtle" weight="medium" style={styles.threadReminderTitle}>
+                Viewing a single comment&apos;s thread
+              </Text>
+            </View>
+            <View style={styles.threadReminderActions}>
+              {contextDepth <= 0 ? (
+                <Pressable
+                  onPress={() => {
+                    if (threadActionLoading) return;
+                    setThreadActionLoading("context");
+                    router.push(`/post/${focusedCommentId}?depth=5`);
+                    setTimeout(() => setThreadActionLoading(null), 1500);
+                  }}
+                  disabled={threadActionLoading !== null}
+                  style={({ pressed }) => [
+                    styles.threadReminderButton,
+                    pressed && styles.threadReminderButtonPressed,
+                    threadActionLoading === "context" && styles.threadReminderButtonActive,
+                  ]}
+                >
+                  {threadActionLoading === "context" ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={theme.colors.text.default}
+                    />
+                  ) : (
+                    <Ionicons
+                      name="arrow-up-outline"
+                      size={14}
+                      color={theme.colors.text.default}
+                    />
+                  )}
+                  <Text size="xs" weight="semibold">
+                    Recent context
+                  </Text>
+                </Pressable>
+              ) : null}
+              <Pressable
+                onPress={() => {
+                  if (threadActionLoading) return;
+                  setThreadActionLoading("full");
+                  // Seed the destination's comments cache so its
+                  // post header renders immediately and only the
+                  // comments area shows a skeleton.
+                  const address = currentUser?.walletAddress ?? undefined;
+                  if (actualRootPost) {
+                    queryClient.setQueryData(
+                      queryKeys.comments(actualRootPostId, address),
+                      { root: actualRootPost, children: [] },
+                    );
+                    queryClient.invalidateQueries({
+                      queryKey: queryKeys.comments(actualRootPostId, address),
+                    });
+                  }
+                  router.push(`/post/${actualRootPostId}`);
+                  setTimeout(() => setThreadActionLoading(null), 1500);
+                }}
+                disabled={threadActionLoading !== null}
+                style={({ pressed }) => [
+                  styles.threadReminderButton,
+                  pressed && styles.threadReminderButtonPressed,
+                  threadActionLoading === "full" && styles.threadReminderButtonActive,
+                ]}
+              >
+                {threadActionLoading === "full" ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={theme.colors.text.default}
+                  />
+                ) : (
+                  <Ionicons
+                    name="list-outline"
+                    size={14}
+                    color={theme.colors.text.default}
+                  />
+                )}
+                <Text size="xs" weight="semibold">
+                  Full thread
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
       </Animated.View>
     );
   }, [
@@ -1837,6 +2084,15 @@ export default function PostDetailScreen() {
     theme.colors.background.subtle,
     handlePostHeaderLayout,
     postEnteringStyle,
+    focusedCommentId,
+    actualRootPostId,
+    contextDepth,
+    router,
+    threadActionLoading,
+    theme.colors.text.default,
+    theme.colors.text.subtle,
+    currentUser?.walletAddress,
+    queryClient,
   ]);
 
   const renderComment = useCallback(
@@ -1847,6 +2103,7 @@ export default function PostDetailScreen() {
       >
         <CommentThread
           comment={item}
+          depth={item.depth ?? 0}
           currentUserId={currentUser?.id}
           highlightedCommentId={highlightedCommentId}
           onAuthorPress={(authorId) => {
@@ -1865,6 +2122,7 @@ export default function PostDetailScreen() {
           onFollowPress={handleFollowCommentAuthor}
           onHighlightedLayout={handleHighlightedCommentLayout}
           showDivider={true}
+          focusedContextMode={false}
         />
       </Animated.View>
     ),
@@ -1990,7 +2248,11 @@ export default function PostDetailScreen() {
 
   const renderEmptyComments = useCallback(() => {
     // Show loading skeletons
-    if (isLoadingComments) {
+    if (
+      isLoadingComments ||
+      isLoadingContext ||
+      (isFetchingComments && (commentsData?.children?.length ?? 0) === 0)
+    ) {
       return (
         <View>
           {/* Render multiple skeleton comments */}
@@ -2075,7 +2337,10 @@ export default function PostDetailScreen() {
     );
   }, [
     isLoadingComments,
+    isLoadingContext,
     isCommentsError,
+    isFetchingComments,
+    commentsData,
     refetchComments,
     renderCommentSkeleton,
     theme.colors.text.subtle,
@@ -2111,7 +2376,7 @@ export default function PostDetailScreen() {
             mode="subtle"
             style={{ marginTop: 4, textAlign: "center" }}
           >
-            This post may have been deleted or doesn't exist.
+            This post may have been deleted or does not exist.
           </Text>
           <Pressable
             onPress={() => router.back()}
@@ -2243,7 +2508,7 @@ export default function PostDetailScreen() {
         <CommentOptionsSheet
           ref={optionsSheetRef}
           comment={selectedComment}
-          rootPostId={id}
+          rootPostId={actualRootPostId ?? id}
           isOwnComment={currentUser?.id === selectedComment?.author.id}
           isFollowingAuthor={
             selectedComment?.author.id
@@ -2253,7 +2518,7 @@ export default function PostDetailScreen() {
           isSaved={selectedComment ? savedComments.some((c) => c.id === selectedComment.id) : false}
           onSave={() => {
             if (!selectedComment) return;
-            const saved = useSavedPostsStore.getState().toggleSaveComment(selectedComment, id);
+            const saved = useSavedPostsStore.getState().toggleSaveComment(selectedComment, actualRootPostId ?? id);
             toast.success(
               saved ? "Comment saved" : "Comment unsaved",
               saved ? "You can find it in your saved items." : "Removed from saved items.",
@@ -2438,6 +2703,52 @@ const styles = StyleSheet.create((theme) => ({
   divider: {
     height: 5,
     backgroundColor: theme.colors.background.subtle,
+  },
+  threadReminder: {
+    marginHorizontal: theme.spacing.md,
+    marginVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.background.subtle,
+    borderLeftWidth: 3,
+    borderLeftColor: theme.colors.primary[500],
+    gap: theme.spacing.sm,
+  },
+  threadReminderHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+  },
+  threadReminderTitle: {
+    flexShrink: 1,
+  },
+  threadReminderActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.xs,
+  },
+  threadReminderButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 6,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border.default,
+    backgroundColor: theme.colors.background.default,
+    minHeight: 30,
+  },
+  threadReminderButtonPressed: {
+    opacity: 0.7,
+  },
+  threadReminderButtonActive: {
+    opacity: 0.6,
+  },
+  threadReminderLink: {
+    color: theme.colors.primary[500],
+    textDecorationLine: "underline",
   },
   // Skeleton styles
   skeletonHeader: {

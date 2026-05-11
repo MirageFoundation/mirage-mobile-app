@@ -50,6 +50,7 @@ type CommentThreadProps = {
   onFollowPress?: (authorId: string, isCurrentlyFollowing: boolean) => void;
   onHighlightedLayout?: (event: LayoutChangeEvent) => void;
   showDivider?: boolean;
+  focusedContextMode?: boolean;
 };
 
 export const CommentThread = ({
@@ -70,6 +71,7 @@ export const CommentThread = ({
   onFollowPress,
   onHighlightedLayout,
   showDivider = true,
+  focusedContextMode = false,
 }: CommentThreadProps) => {
   const autoCollapseThreshold = usePreferencesStore(
     (s) => s.autoCollapseThreshold,
@@ -157,15 +159,22 @@ export const CommentThread = ({
         >
           {replies.map((reply, idx) => {
             const replyIsLast = idx === replies.length - 1;
-            // Each child inherits our `activeDepths` always. If THIS
-            // child is not the last sibling, our own column (depth)
-            // must also run through that child's subtree so the rail
-            // reaches the next sibling below — this is what makes a
-            // parent with multiple children connect through its first
-            // child to the next one.
-            const replyActiveDepths = replyIsLast
-              ? activeDepths
-              : [...activeDepths, depth];
+            // Once we descend past the focused comment, its actual
+            // replies render as a normal thread, not parent chain.
+            const childInFocusedContext =
+              focusedContextMode && !comment.isFocusedComment;
+            // Normal threads inherit ancestor rails through non-last
+            // siblings so sibling subtrees stay connected. Focused
+            // comment context is a single parent chain (like web), so
+            // each child only needs ONE ancestor rail at its immediate
+            // parent's column — drawn full row height — to guarantee
+            // an unbroken vertical line across the parent→child row
+            // boundary at every depth.
+            const replyActiveDepths = childInFocusedContext
+              ? [depth]
+              : replyIsLast
+                ? activeDepths
+                : [...activeDepths, depth];
             return (
               <CommentThread
                 key={reply.id}
@@ -186,6 +195,7 @@ export const CommentThread = ({
                 onFollowPress={onFollowPress}
                 onHighlightedLayout={onHighlightedLayout}
                 showDivider={false}
+                focusedContextMode={childInFocusedContext}
               />
             );
           })}

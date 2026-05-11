@@ -111,7 +111,7 @@ export function mapMiragePathToRoute(
       return {
         type: "post",
         hostname: "",
-        route: `/post/${resourceId}`,
+        route: `/post/${resourceId}${search || ""}`,
         requiresAuth: true,
         resourceId,
       };

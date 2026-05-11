@@ -114,6 +114,8 @@ export type Comment = {
   replyCount?: number;
   parentId?: string | null;
   depth?: number;
+  isFocusedContext?: boolean;
+  isFocusedComment?: boolean;
   awards?: import("@/src/api/types").AwardBadge[];
   hasMoreReplies?: boolean;
 };
@@ -165,6 +167,8 @@ type CommentItemProps = {
   hasChildren?: boolean;
   /** Called when the highlighted comment row lays out. */
   onHighlightedLayout?: (event: LayoutChangeEvent) => void;
+  /** Hide reddit-style connector rails for web-style focused contexts. */
+  hideThreadRails?: boolean;
   /** Custom style */
   style?: StyleProp<ViewStyle>;
 };
@@ -394,10 +398,11 @@ export const CommentItem = ({
   onMorePress,
   isCollapsed = false,
   depth = 0,
-  maxDepth = 4,
+  maxDepth = 20,
   activeDepths,
   hasChildren = false,
   onHighlightedLayout,
+  hideThreadRails = false,
   style,
 }: CommentItemProps) => {
   const { theme } = useUnistyles();
@@ -459,7 +464,7 @@ export const CommentItem = ({
   const railColor = theme.colors.border.subtle;
   const avatarSeed = comment.author.avatarSeed || comment.author.id || comment.author.username || "anon";
   const ancestorRailDepths = (activeDepths || []).filter(
-    (d) => d >= 0 && d < effectiveDepth,
+    (d) => d >= 0 && d < depth,
   );
   const hasImmediateParentRail = ancestorRailDepths.includes(effectiveDepth - 1);
 
@@ -557,15 +562,17 @@ export const CommentItem = ({
          seamlessly across consecutive sibling rows. The J-curve is
          painted above these rails, so shared parent columns stay
          continuous without visually doubling. */}
-      {ancestorRailDepths.map((d) => (
+      {!hideThreadRails && ancestorRailDepths.map((d) => (
         <View
           key={`anc-${d}`}
           pointerEvents="none"
           style={{
             position: "absolute",
-            top: 0,
-            bottom: 0,
-            left: commentAvatarLeftPx(d) + COMMENT_AVATAR_SIZE / 2,
+            top: -1,
+            bottom: -1,
+            left:
+              commentAvatarLeftPx(Math.min(d, maxDepth)) +
+              COMMENT_AVATAR_SIZE / 2,
             width: COMMENT_RAIL_WIDTH,
             backgroundColor: railColor,
           }}
@@ -577,7 +584,7 @@ export const CommentItem = ({
          our own vertical drop when that rail is absent. The horizontal
          segment overlaps the parent rail by 1px and reaches the
          avatar edge so there is no visible gap on either side. */}
-      {effectiveDepth >= 1 && (
+      {!hideThreadRails && effectiveDepth >= 1 && (
         <>
           {!hasImmediateParentRail && (
             <View
@@ -610,7 +617,7 @@ export const CommentItem = ({
          center down to the row bottom so descendants visually
          continue the thread. Only drawn when expanded with
          children. */}
-      {hasChildren && !isCollapsed && (
+      {!hideThreadRails && hasChildren && !isCollapsed && (
         <View
           pointerEvents="none"
           style={{
