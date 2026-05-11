@@ -31,8 +31,18 @@ type CommentThreadProps = {
   currentUserId?: string | null;
   highlightedCommentId?: string | null;
   onAuthorPress?: (authorId: string) => void;
-  onLikePress?: (commentId: string, hasLiked: boolean, hasDisliked: boolean, likes: number) => void;
-  onDislikePress?: (commentId: string, hasLiked: boolean, hasDisliked: boolean, likes: number) => void;
+  onLikePress?: (
+    commentId: string,
+    hasLiked: boolean,
+    hasDisliked: boolean,
+    likes: number,
+  ) => void;
+  onDislikePress?: (
+    commentId: string,
+    hasLiked: boolean,
+    hasDisliked: boolean,
+    likes: number,
+  ) => void;
   onReplyPress?: (comment: Comment) => void;
   onMorePress?: (comment: Comment) => void;
   followedUsers?: string[];
@@ -45,7 +55,7 @@ type CommentThreadProps = {
 export const CommentThread = ({
   comment,
   depth = 0,
-  maxDepth = 4,
+  maxDepth = 20,
   activeDepths = EMPTY_DEPTHS,
   isLastChild = true,
   currentUserId,
@@ -61,9 +71,12 @@ export const CommentThread = ({
   onHighlightedLayout,
   showDivider = true,
 }: CommentThreadProps) => {
-  const autoCollapseThreshold = usePreferencesStore((s) => s.autoCollapseThreshold);
+  const autoCollapseThreshold = usePreferencesStore(
+    (s) => s.autoCollapseThreshold,
+  );
   const score = comment.likes;
-  const shouldAutoCollapse = autoCollapseThreshold !== null && score <= autoCollapseThreshold;
+  const shouldAutoCollapse =
+    autoCollapseThreshold !== null && score <= autoCollapseThreshold;
   const [isCollapsed, setIsCollapsed] = useState(shouldAutoCollapse);
   const replies = comment.replies ?? [];
   const hasReplies = replies.length > 0;
@@ -92,14 +105,22 @@ export const CommentThread = ({
   const isHighlighted = highlightedCommentId === comment.id;
 
   return (
-    <Animated.View style={styles.container} layout={LinearTransition.duration(250)}>
+    <Animated.View
+      style={styles.container}
+      layout={LinearTransition.duration(250)}
+    >
       <CommentItem
         comment={comment}
         isOwnComment={isOwnComment}
         isHighlighted={isHighlighted}
         isFollowingAuthor={followedUsers.includes(comment.author.id)}
         isFollowLoading={followLoadingUsers.has(comment.author.id)}
-        onFollowPress={() => onFollowPress?.(comment.author.id, followedUsers.includes(comment.author.id))}
+        onFollowPress={() =>
+          onFollowPress?.(
+            comment.author.id,
+            followedUsers.includes(comment.author.id),
+          )
+        }
         depth={depth}
         maxDepth={maxDepth}
         activeDepths={activeDepths}
@@ -107,8 +128,22 @@ export const CommentThread = ({
         isCollapsed={isCollapsed}
         onPress={handleToggleCollapse}
         onAuthorPress={() => onAuthorPress?.(comment.author.id)}
-        onLikePress={() => onLikePress?.(comment.id, comment.hasLiked ?? false, comment.hasDisliked ?? false, comment.likes)}
-        onDislikePress={() => onDislikePress?.(comment.id, comment.hasLiked ?? false, comment.hasDisliked ?? false, comment.likes)}
+        onLikePress={() =>
+          onLikePress?.(
+            comment.id,
+            comment.hasLiked ?? false,
+            comment.hasDisliked ?? false,
+            comment.likes,
+          )
+        }
+        onDislikePress={() =>
+          onDislikePress?.(
+            comment.id,
+            comment.hasLiked ?? false,
+            comment.hasDisliked ?? false,
+            comment.likes,
+          )
+        }
         onReplyPress={() => onReplyPress?.(comment)}
         onMorePress={() => onMorePress?.(comment)}
         onHighlightedLayout={onHighlightedLayout}
