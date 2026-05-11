@@ -19,6 +19,7 @@ import {
   Pressable,
   Animated as RNAnimated,
   View,
+  type LayoutChangeEvent,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
@@ -162,6 +163,8 @@ type CommentItemProps = {
    * row bottom so the thread continues into the next reply.
    */
   hasChildren?: boolean;
+  /** Called when the highlighted comment row lays out. */
+  onHighlightedLayout?: (event: LayoutChangeEvent) => void;
   /** Custom style */
   style?: StyleProp<ViewStyle>;
 };
@@ -394,6 +397,7 @@ export const CommentItem = ({
   maxDepth = 4,
   activeDepths,
   hasChildren = false,
+  onHighlightedLayout,
   style,
 }: CommentItemProps) => {
   const { theme } = useUnistyles();
@@ -539,6 +543,7 @@ export const CommentItem = ({
   return (
     <Pressable
       onPress={handlePress}
+      onLayout={isHighlighted ? onHighlightedLayout : undefined}
       style={[
         styles.container,
         { paddingTop, paddingLeft: contentLeft },

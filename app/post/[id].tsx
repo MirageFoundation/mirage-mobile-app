@@ -91,6 +91,7 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  UIManager,
   View,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
@@ -176,7 +177,17 @@ export default function PostDetailScreen() {
     string | null
   >(highlight || null);
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const highlightRetryCount = useRef(0);
   const pendingScrollToEnd = useRef(false);
+  const currentScrollYRef = useRef(0);
+  const preciseScrollTargetRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightRetryCount.current = 0;
+    preciseScrollTargetRef.current = null;
+    setHighlightedCommentId(highlight || null);
+  }, [highlight]);
 
   const [screenActive, setScreenActive] = useState(true);
   const refetchCommentsRef = useRef<((silent?: boolean) => void) | null>(null);
@@ -882,7 +893,6 @@ export default function PostDetailScreen() {
     [],
   );
 
-  const highlightRetryCount = useRef(0);
   const MAX_HIGHLIGHT_RETRIES = 3;
 
   // Scroll to highlighted comment when data loads
@@ -914,11 +924,12 @@ export default function PostDetailScreen() {
           }
         }, 500);
 
-        // Clear highlight after 3 seconds
+        // Keep the highlight visible long enough for expanded nested threads
+        // to finish layout/animation after inbox navigation.
         if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
         highlightTimerRef.current = setTimeout(() => {
           setHighlightedCommentId(null);
-        }, 3000);
+        }, 6000);
       }
     }
   }, [highlightedCommentId, allComments, findCommentInTree]);
@@ -959,6 +970,7 @@ export default function PostDetailScreen() {
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const scrollY = event.nativeEvent.contentOffset.y;
+      currentScrollYRef.current = scrollY;
       // Show sticky header when scrolled past post header (with some buffer)
       const threshold = postHeaderHeight - 50;
 
@@ -978,6 +990,35 @@ export default function PostDetailScreen() {
       setIsVideoVisible((prev) => prev === videoVisible ? prev : videoVisible);
     },
     [postHeaderHeight, stickyHeaderVisible],
+  );
+
+  const handleHighlightedCommentLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      if (!highlightedCommentId) return;
+      const target = event.nativeEvent.target;
+      const targetKey = `${highlightedCommentId}:${target}`;
+
+      setTimeout(() => {
+        UIManager.measureInWindow(target, (_x, y, _width, height) => {
+          if (preciseScrollTargetRef.current === targetKey) return;
+          if (height <= 0) return;
+
+          const desiredY = insets.top + 72;
+          const delta = y - desiredY;
+          if (Math.abs(delta) < 24) {
+            preciseScrollTargetRef.current = targetKey;
+            return;
+          }
+
+          preciseScrollTargetRef.current = targetKey;
+          flatListRef.current?.scrollToOffset({
+            offset: Math.max(0, currentScrollYRef.current + delta),
+            animated: true,
+          });
+        });
+      }, 900);
+    },
+    [highlightedCommentId, insets.top],
   );
 
   useAnimatedReaction(
@@ -1753,6 +1794,7 @@ export default function PostDetailScreen() {
           followedUsers={followedUsers}
           followLoadingUsers={followLoadingUsers}
           onFollowPress={handleFollowCommentAuthor}
+          onHighlightedLayout={handleHighlightedCommentLayout}
           showDivider={true}
         />
       </Animated.View>
@@ -1767,6 +1809,7 @@ export default function PostDetailScreen() {
       followedUsers,
       followLoadingUsers,
       handleFollowCommentAuthor,
+      handleHighlightedCommentLayout,
     ],
   );
 

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePreferencesStore } from "@/src/stores";
-import { View } from "react-native";
+import { View, type LayoutChangeEvent } from "react-native";
 import Animated, {
   FadeIn,
   FadeOut,
@@ -38,6 +38,7 @@ type CommentThreadProps = {
   followedUsers?: string[];
   followLoadingUsers?: Set<string>;
   onFollowPress?: (authorId: string, isCurrentlyFollowing: boolean) => void;
+  onHighlightedLayout?: (event: LayoutChangeEvent) => void;
   showDivider?: boolean;
 };
 
@@ -57,19 +58,31 @@ export const CommentThread = ({
   followedUsers = [],
   followLoadingUsers = EMPTY_LOADING_SET,
   onFollowPress,
+  onHighlightedLayout,
   showDivider = true,
 }: CommentThreadProps) => {
   const autoCollapseThreshold = usePreferencesStore((s) => s.autoCollapseThreshold);
   const score = comment.likes;
   const shouldAutoCollapse = autoCollapseThreshold !== null && score <= autoCollapseThreshold;
   const [isCollapsed, setIsCollapsed] = useState(shouldAutoCollapse);
-
-  useEffect(() => {
-    setIsCollapsed(shouldAutoCollapse);
-  }, [autoCollapseThreshold]);
-
   const replies = comment.replies ?? [];
   const hasReplies = replies.length > 0;
+  const containsHighlightedComment = useMemo(() => {
+    if (!highlightedCommentId) return false;
+    const containsComment = (target: Comment): boolean => {
+      if (target.id === highlightedCommentId) return true;
+      return target.replies?.some(containsComment) ?? false;
+    };
+    return containsComment(comment);
+  }, [comment, highlightedCommentId]);
+
+  useEffect(() => {
+    if (containsHighlightedComment) {
+      setIsCollapsed(false);
+      return;
+    }
+    setIsCollapsed(shouldAutoCollapse);
+  }, [containsHighlightedComment, shouldAutoCollapse]);
 
   const handleToggleCollapse = useCallback(() => {
     setIsCollapsed((prev) => !prev);
@@ -98,6 +111,7 @@ export const CommentThread = ({
         onDislikePress={() => onDislikePress?.(comment.id, comment.hasLiked ?? false, comment.hasDisliked ?? false, comment.likes)}
         onReplyPress={() => onReplyPress?.(comment)}
         onMorePress={() => onMorePress?.(comment)}
+        onHighlightedLayout={onHighlightedLayout}
       />
 
       {hasReplies && !isCollapsed && (
@@ -135,6 +149,7 @@ export const CommentThread = ({
                 followedUsers={followedUsers}
                 followLoadingUsers={followLoadingUsers}
                 onFollowPress={onFollowPress}
+                onHighlightedLayout={onHighlightedLayout}
                 showDivider={false}
               />
             );
