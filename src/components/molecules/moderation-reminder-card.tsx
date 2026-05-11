@@ -138,7 +138,7 @@ export function ModerationReminderCard({
 const styles = StyleSheet.create((theme) => ({
   container: {
     padding: theme.spacing.md,
-    borderWidth: 1,
+    borderBottomWidth: 0.5,
     overflow: "hidden",
   },
   header: {

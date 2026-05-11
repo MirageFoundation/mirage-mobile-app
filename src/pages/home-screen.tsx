@@ -837,6 +837,11 @@ export function HomeScreen() {
         feedType={feedTabIndex === 0 ? "magic" : "latest"}
         feedOptions={FEED_OPTIONS}
         onFeedTypeChange={handleFeedTypeChange}
+        borderBottomColor={
+          showModerationReminder
+            ? `${theme.colors.error[500]}40`
+            : undefined
+        }
       />
 
       <HomeTabbedFeed

@@ -31,6 +31,7 @@ type FeedHeaderProps = {
   feedType?: string;
   feedOptions?: FeedOption[];
   onFeedTypeChange?: (value: string) => void;
+  borderBottomColor?: string;
 };
 
 export const FeedHeader = ({
@@ -42,6 +43,7 @@ export const FeedHeader = ({
   feedType,
   feedOptions,
   onFeedTypeChange,
+  borderBottomColor,
 }: FeedHeaderProps) => {
   const insets = useSafeAreaInsets();
   const { theme, rt } = useUnistyles();
@@ -68,7 +70,12 @@ export const FeedHeader = ({
 
   return (
     <Animated.View
-      style={[styles.container, { paddingTop: insets.top }, animatedStyle]}
+      style={[
+        styles.container,
+        { paddingTop: insets.top },
+        borderBottomColor ? { borderBottomColor } : null,
+        animatedStyle,
+      ]}
     >
       <View style={styles.content}>
         <View style={[styles.leftSection, !onMenuPress && { paddingLeft: 12 }]}>
