@@ -213,13 +213,25 @@ export const PowQueueToast = () => {
       setTransientResultAction(null);
       transientResultTimeoutRef.current = null;
     }, durationMs);
+    // NOTE: deliberately no cleanup that clears the timeout here.
+    // The store clears `successOverlay` ~500ms after success, which re-runs
+    // this effect. If cleanup cleared the timer, the timer would be killed
+    // before it could reset `transientResultAction`, leaving the toast stuck
+    // on the previous success state until the NEXT action succeeds (which
+    // on free tier with PoW can be many seconds away). The timer is reset
+    // on the next non-null `successOverlay` (above), and on unmount via
+    // the dedicated unmount-only effect below.
+  }, [successOverlay]);
 
+  // Clear the transient-result timeout on unmount only.
+  useEffect(() => {
     return () => {
       if (transientResultTimeoutRef.current) {
         clearTimeout(transientResultTimeoutRef.current);
+        transientResultTimeoutRef.current = null;
       }
     };
-  }, [successOverlay]);
+  }, []);
 
   useEffect(() => {
     if ((hasPendingWork || successOverlay) && !isVisible) {
