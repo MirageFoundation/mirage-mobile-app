@@ -160,7 +160,7 @@ export const UserProfileContent = ({
             seed={avatarSeed || username}
             source={avatarUrl ? { uri: avatarUrl } : undefined}
             rounded="sm"
-            paddingRatio={0.12}
+            paddingRatio={0}
           />
 
           <Box mt="sm">
