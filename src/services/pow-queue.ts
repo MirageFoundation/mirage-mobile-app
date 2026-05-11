@@ -81,6 +81,11 @@ const NATIVE_CLEANUP_TIMEOUT_MS = 500;
 const SUCCESS_OVERLAY_DURATION_MS = 500;
 const MAX_NETWORK_RETRIES = 3;
 const NETWORK_RETRY_BACKOFF_MS = 2000;
+const PAUSED_SENTINEL = "pow_paused";
+const STALE_BLOCK_HASH_CODES = new Set([
+  "invalid_last_block_hash",
+  "insufficient_pow_precheck",
+]);
 
 let actionIdCounter = 0;
 
@@ -159,11 +164,74 @@ let isProcessingLock = false;
 let currentCancelReject: ((reason?: unknown) => void) | null = null;
 let successOverlayTimeout: ReturnType<typeof setTimeout> | null = null;
 
-const immediateActions = new Map<string, (reason?: unknown) => void>();
+const immediateActions = new Map<
+  string,
+  { reject: (reason?: unknown) => void; action: PowAction }
+>();
+
+let isPausedByAppState = AppState.currentState !== "active";
+let appStateSubscription: ReturnType<typeof AppState.addEventListener> | null =
+  null;
 
 const isNetworkError = (error: unknown): boolean =>
   (error as any)?.code === "ERR_NETWORK" ||
   (error as any)?.message === "Network Error";
+
+const isStaleBlockHashError = (error: unknown): boolean => {
+  const code = (error as any)?.response?.data?.error_code;
+  if (typeof code === "string" && STALE_BLOCK_HASH_CODES.has(code)) return true;
+  const msg = String((error as Error)?.message || "");
+  return /invalid\s*last\s*block\s*hash/i.test(msg);
+};
+
+
+function setupPowQueueAppStateHandling(): void {
+  if (appStateSubscription) return;
+  isPausedByAppState = AppState.currentState !== "active";
+  appStateSubscription = AppState.addEventListener("change", (nextState) => {
+    if (nextState.match(/inactive|background/)) {
+      if (isPausedByAppState) return;
+      isPausedByAppState = true;
+      Sentry.addBreadcrumb({
+        category: "pow",
+        message: "App backgrounded, pausing PoW queue",
+        level: "info",
+      });
+      // Tear down the currently-running PoW computation. The action will be
+      // re-prepended to the queue from the catch block in processNext.
+      try {
+        cancelPow();
+      } catch {}
+      if (currentCancelReject) {
+        currentCancelReject(new Error(PAUSED_SENTINEL));
+        currentCancelReject = null;
+      }
+      // Same for any in-flight skip-PoW actions.
+      immediateActions.forEach(({ reject }) => {
+        reject(new Error(PAUSED_SENTINEL));
+      });
+      immediateActions.clear();
+    } else if (nextState === "active") {
+      if (!isPausedByAppState) return;
+      isPausedByAppState = false;
+      Sentry.addBreadcrumb({
+        category: "pow",
+        message: "App foregrounded, resuming PoW queue",
+        level: "info",
+      });
+      const store = usePowQueueStore.getState();
+      if (
+        !isProcessingLock &&
+        !store.currentAction &&
+        store.queue.length > 0
+      ) {
+        InteractionManager.runAfterInteractions(() => {
+          setTimeout(() => usePowQueueStore.getState().processNext(), 16);
+        });
+      }
+    }
+  });
+}
 
 const waitForConnectivity = (): Promise<void> => {
   return new Promise((resolve) => {
@@ -210,12 +278,17 @@ const executeWithNetworkRetry = async <T>(
     } catch (error) {
       const msg = String((error as Error)?.message || "");
       if (msg === "pow_cancelled" || isPowCancelled(error)) throw error;
-      if (!isNetworkError(error)) throw error;
+      if (msg === PAUSED_SENTINEL) throw error;
+      const stale = isStaleBlockHashError(error);
+      const net = isNetworkError(error);
+      if (!stale && !net) throw error;
       lastError = error;
       if (attempt < MAX_NETWORK_RETRIES) {
         Sentry.addBreadcrumb({
           category: "pow",
-          message: `Network error, waiting for connectivity (attempt ${attempt + 1}/${MAX_NETWORK_RETRIES})`,
+          message: stale
+            ? `Stale block hash, retrying with fresh params (attempt ${attempt + 1}/${MAX_NETWORK_RETRIES})`
+            : `Network error, waiting for connectivity (attempt ${attempt + 1}/${MAX_NETWORK_RETRIES})`,
           level: "warning",
         });
         await waitForConnectivity();
@@ -232,7 +305,7 @@ const executeImmediately = async <T>(action: PowAction<T>): Promise<void> => {
     cancelReject = reject;
   });
   cancelPromise.catch(() => {});
-  immediateActions.set(action.id, cancelReject);
+  immediateActions.set(action.id, { reject: cancelReject, action: action as PowAction });
 
   try {
     const result = await executeWithNetworkRetry(action.execute, cancelPromise);
@@ -263,6 +336,21 @@ const executeImmediately = async <T>(action: PowAction<T>): Promise<void> => {
   } catch (error) {
     const msg = String((error as Error)?.message || "");
     if (msg === "pow_cancelled" || isPowCancelled(error)) {
+      return;
+    }
+    if (msg === PAUSED_SENTINEL) {
+      // App went to background mid-flight: re-enqueue as a regular queued action
+      // so it gets retried (with a fresh signed envelope) when we come back.
+      Sentry.addBreadcrumb({
+        category: "pow",
+        message: `${action.type} paused (app backgrounded), will resume`,
+        level: "info",
+        data: { actionId: action.id, type: action.type },
+      });
+      const state = usePowQueueStore.getState();
+      usePowQueueStore.setState({
+        queue: [action as PowAction, ...state.queue],
+      });
       return;
     }
 
@@ -339,10 +427,10 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   },
 
   cancelAction: (actionId: string): boolean => {
-    const immediateCancel = immediateActions.get(actionId);
-    if (immediateCancel) {
+    const immediateEntry = immediateActions.get(actionId);
+    if (immediateEntry) {
       immediateActions.delete(actionId);
-      immediateCancel(new Error("pow_cancelled"));
+      immediateEntry.reject(new Error("pow_cancelled"));
       return true;
     }
 
@@ -419,6 +507,15 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       return;
     }
 
+    // Don't start a new action while the app is backgrounded — PoW workers
+    // will be suspended, the signed envelope's last_block_hash will go stale,
+    // and the network round-trip will fail with `invalid_last_block_hash`.
+    // We'll be re-kicked by the AppState 'active' subscription.
+    if (isPausedByAppState || AppState.currentState !== "active") {
+      set({ isProcessing: true });
+      return;
+    }
+
     isProcessingLock = true;
 
     const [nextAction, ...remainingQueue] = state.queue;
@@ -475,7 +572,25 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       currentCancelReject = null;
 
       const msg = String((error as Error)?.message || "");
-      if (msg === "pow_cancelled" || isPowCancelled(error)) {
+      if (msg === PAUSED_SENTINEL) {
+        // App went to background while this action was in flight.
+        // Re-prepend it to the queue so we retry from scratch (with a fresh
+        // last_block_hash) once we're foregrounded again. The optimistic UI
+        // update was already applied at enqueue time, so we deliberately
+        // skip onRollback/onError here.
+        wasCancelled = true;
+        Sentry.addBreadcrumb({
+          category: "pow",
+          message: `${nextAction.type} paused (app backgrounded), will resume`,
+          level: "info",
+          data: { actionId: nextAction.id, type: nextAction.type },
+        });
+        set((s) => ({
+          queue: [nextAction, ...s.queue],
+          currentAction: null,
+          currentProgress: 0,
+        }));
+      } else if (msg === "pow_cancelled" || isPowCancelled(error)) {
         wasCancelled = true;
         if (CONTENT_LOSS_TYPES.has(nextAction.type)) {
           Sentry.captureException(
@@ -561,7 +676,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   reset: () => {
     isProcessingLock = false;
     currentCancelReject = null;
-    immediateActions.forEach((reject) => reject(new Error("pow_cancelled")));
+    immediateActions.forEach(({ reject }) => reject(new Error("pow_cancelled")));
     immediateActions.clear();
     set({
       queue: [],
@@ -611,3 +726,7 @@ export const usePowQueue = () => {
    successOverlay: store.successOverlay,
  };
 };
+
+// Wire up app-foreground/background pause-resume for the PoW queue.
+// This must run after the store is defined.
+setupPowQueueAppStateHandling();

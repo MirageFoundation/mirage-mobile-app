@@ -28,6 +28,8 @@ const SEED_TIMESTAMP_KEY = "inbox-seed-timestamp";
 const FETCH_INTERVAL_SECONDS = 15 * 60;
 const FOREGROUND_INTERVAL_MS = FETCH_INTERVAL_SECONDS * 1000;
 const SIGNAL_THROTTLE_MS = 15_000;
+const INBOX_NAVIGATION_MAX_ATTEMPTS = 4;
+const INBOX_NAVIGATION_RETRY_MS = 1_000;
 
 let isCheckInFlight = false;
 let lastSignalCheckAt = 0;
@@ -89,24 +91,25 @@ export function signalTabsUnmounted(): void {
   });
 }
 
-function waitForTabsReady(timeoutMs = 5000): Promise<void> {
+function waitForTabsReady(timeoutMs = 5000): Promise<boolean> {
   let didSettle = false;
   return Promise.race([
     Promise.all([_rootLayoutReadyPromise, _tabsReadyPromise]).then(() => {
-      if (didSettle) return;
+      if (didSettle) return true;
       didSettle = true;
       Sentry.addBreadcrumb({
         category: "notifications",
         message: "Navigation tree ready before inbox notification navigation",
         level: "info",
       });
+      return true;
     }),
-    new Promise<void>((resolve) =>
+    new Promise<boolean>((resolve) =>
       setTimeout(() => {
         if (!didSettle) {
           didSettle = true;
           Sentry.captureMessage(
-            "Inbox notification navigation continued before tabs ready",
+            "Inbox notification navigation delayed until tabs ready",
             {
               level: "warning",
               tags: {
@@ -117,7 +120,7 @@ function waitForTabsReady(timeoutMs = 5000): Promise<void> {
             },
           );
         }
-        resolve();
+        resolve(false);
       }, timeoutMs),
     ),
   ]);
@@ -242,6 +245,40 @@ function normalizeInboxReplyType(value: unknown): InboxReply["type"] {
     default:
       return "reply";
   }
+}
+
+function getNotificationData(
+  response: Notifications.NotificationResponse,
+): Record<string, unknown> {
+  return (response.notification?.request?.content?.data ?? {}) as Record<string, unknown>;
+}
+
+function getNotificationDataKeys(data: Record<string, unknown>): string[] {
+  return Object.keys(data).slice(0, 20);
+}
+
+function getInboxNotificationResponseId(
+  response: Notifications.NotificationResponse,
+  data: Record<string, unknown>,
+): string | null {
+  const requestId = toOptionalString(response.notification?.request?.identifier);
+  if (requestId) return requestId;
+
+  const explicitNotificationId = toOptionalString(data.notificationId);
+  if (explicitNotificationId) return explicitNotificationId;
+
+  const replyId = toOptionalString(data.replyId);
+  if (replyId) return `inbox-reply:${replyId}`;
+
+  const snapshot = data.inboxReply;
+  if (snapshot && typeof snapshot === "object") {
+    const snapshotReplyId = toOptionalString(
+      (snapshot as Record<string, unknown>).reply_id,
+    );
+    if (snapshotReplyId) return `inbox-reply:${snapshotReplyId}`;
+  }
+
+  return null;
 }
 
 function buildPreviewReplyFromNotification(
@@ -689,7 +726,8 @@ function handleNotificationResponse(
 ): void {
   if (!response) return;
   try {
-    const notificationId = response.notification?.request?.identifier;
+    const notificationData = getNotificationData(response);
+    const notificationId = getInboxNotificationResponseId(response, notificationData);
     if (!notificationId) {
       Sentry.captureMessage("Inbox notification response missing notification id", {
         level: "warning",
@@ -697,7 +735,15 @@ function handleNotificationResponse(
           feature: "inbox-notifications",
           operation: "notification-response",
         },
-        extra: { actionIdentifier: response.actionIdentifier },
+        extra: {
+          actionIdentifier: response.actionIdentifier,
+          hasNotification: !!response.notification,
+          hasRequest: !!response.notification?.request,
+          dataKeys: getNotificationDataKeys(notificationData),
+          replyId: toOptionalString(notificationData.replyId),
+          rootPostId: toOptionalString(notificationData.rootPostId),
+          hasInboxReply: !!notificationData.inboxReply,
+        },
       });
       return;
     }
@@ -725,7 +771,6 @@ function handleNotificationResponse(
       });
       return;
     }
-    const notificationData = response.notification?.request?.content?.data;
     if (!useAuthStore.getState().walletAddress) {
       console.log("[InboxNotifications] Deferring notification response until wallet is ready");
       Sentry.addBreadcrumb({
@@ -776,20 +821,57 @@ function handleNotificationResponse(
       if (!address) return;
       await fetchAndSeedInboxCache(address, 25);
     };
-    const navigateToInbox = async () => {
-      void prefetchInbox().catch((error) => {
-        console.warn("[InboxNotifications] Failed to prefetch inbox before navigation:", error);
-        Sentry.addBreadcrumb({
-          category: "notifications",
-          message: "Inbox prefetch before notification navigation failed",
-          level: "warning",
-          data: {
-            notificationId,
-            error: error instanceof Error ? error.message : String(error),
-          },
+    const navigateToInbox = async (attempt = 1) => {
+      if (attempt === 1) {
+        void prefetchInbox().catch((error) => {
+          console.warn("[InboxNotifications] Failed to prefetch inbox before navigation:", error);
+          Sentry.addBreadcrumb({
+            category: "notifications",
+            message: "Inbox prefetch before notification navigation failed",
+            level: "warning",
+            data: {
+              notificationId,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
         });
-      });
-      await waitForTabsReady();
+      }
+      const areTabsReady = await waitForTabsReady();
+      if (!areTabsReady) {
+        if (attempt >= INBOX_NAVIGATION_MAX_ATTEMPTS) {
+          handledNotificationIdsInFlight.delete(notificationId);
+          Sentry.captureMessage("Inbox notification navigation dropped before tabs ready", {
+            level: "warning",
+            tags: {
+              feature: "inbox-notifications",
+              operation: "notification-navigate",
+            },
+            extra: {
+              notificationId,
+              attempts: attempt,
+              appState: AppState.currentState,
+            },
+          });
+          return;
+        }
+
+        Sentry.addBreadcrumb({
+          category: "navigation",
+          message: "Retrying inbox notification navigation after tabs wait timeout",
+          level: "warning",
+          data: { notificationId, attempt, appState: AppState.currentState },
+        });
+        setTimeout(() => {
+          void navigateToInbox(attempt + 1).catch((error) => {
+            handledNotificationIdsInFlight.delete(notificationId);
+            console.error("[InboxNotifications] Failed to navigate from notification:", error);
+            Sentry.captureException(error, {
+              tags: { action: "notification_navigate" },
+            });
+          });
+        }, INBOX_NAVIGATION_RETRY_MS);
+        return;
+      }
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Dispatching inbox notification navigation",

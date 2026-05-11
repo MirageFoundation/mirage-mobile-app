@@ -124,9 +124,9 @@ export const PostCardHeader = memo(function PostCardHeader({
     [theme.colors.text.subtle],
   );
   const usernameColorStyle = useMemo(() => {
+    if (author.isNewUser) return { color: NEW_USER_COLOR };
     const tierColor = author.level != null ? getUsernameColor(author.level) : undefined;
     if (tierColor) return { color: tierColor };
-    if (author.isNewUser && (!author.level || author.level === 0)) return { color: NEW_USER_COLOR };
     return { color: theme.colors.text.subtle };
   }, [author.level, author.isNewUser, theme.colors.text.subtle]);
   const followingBgStyle = useMemo(
