@@ -88,7 +88,7 @@ export const Avatar = ({
   size = "md",
   seed,
   source,
-  rounded = "sm",
+  rounded = "none",
   bordered = false,
   variant: _variant = "identicon",
   paddingRatio: _paddingRatio = 0,
@@ -131,8 +131,8 @@ export const Avatar = ({
         />
       ) : (
         <Svg
-          width={resolvedSize + 2}
-          height={resolvedSize + 2}
+          width={resolvedSize}
+          height={resolvedSize}
           viewBox="0 0 5 5"
           style={[styles.svg, style]}
         >
@@ -157,16 +157,15 @@ const styles = StyleSheet.create((theme, rt) => ({
   container: {
     overflow: "hidden",
     backgroundColor: theme.colors.background.subtle,
-    borderWidth: rt.themeName === "light" ? 0.5 : 0,
-    borderColor: theme.colors.border.default,
+    borderWidth: 0,
 
     variants: {
       rounded: {
         none: { borderRadius: 0 },
-        sm: { borderRadius: theme.radius.sm },
-        md: { borderRadius: theme.radius.md },
-        lg: { borderRadius: theme.radius.lg },
-        full: { borderRadius: theme.radius.full },
+        sm: { borderRadius: 0 },
+        md: { borderRadius: 0 },
+        lg: { borderRadius: 0 },
+        full: { borderRadius: 0 },
       },
       bordered: {
         true: {
@@ -178,34 +177,25 @@ const styles = StyleSheet.create((theme, rt) => ({
     },
   },
   image: {
-    position: "absolute",
-    // Extend under the container's border so the avatar visually
-    // touches the border edge with no gap. The container's
-    // `overflow: hidden` + matching borderRadius clip the image
-    // cleanly along the rounded outer edge.
-    top: -1,
-    left: -1,
-    right: -1,
-    bottom: -1,
+    width: "100%",
+    height: "100%",
   },
   imageRounded: {
     variants: {
       rounded: {
         none: { borderRadius: 0 },
-        sm: { borderRadius: theme.radius.sm },
-        md: { borderRadius: theme.radius.md },
-        lg: { borderRadius: theme.radius.lg },
-        full: { borderRadius: theme.radius.full },
+        sm: { borderRadius: 0 },
+        md: { borderRadius: 0 },
+        lg: { borderRadius: 0 },
+        full: { borderRadius: 0 },
       },
     },
   },
   svg: {
     position: "absolute",
-    // Match `styles.image`: bleed under the light-theme border so the
-    // generated identicon visually touches the avatar edge.
-    top: -1,
-    left: -1,
-    right: -1,
-    bottom: -1,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
 }));
