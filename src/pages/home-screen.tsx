@@ -265,11 +265,22 @@ export function HomeScreen() {
   const { handleFollowUser: handleFollowPress, handleFollowTopic: handleFollowTopicFromCard } = useFollowHandler({});
 
   const showAdultPopup = !!currentUser && !hasSeenAdultPrompt;
+  const moderationReminderShownForRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!currentUser || !hasSeenAdultPrompt || showAdultPopup) return;
     if (adultPromptDismissedAt > 0) return;
-    setAdultPromptDismissedAt(Date.now());
+    const dismissedAt = Date.now();
+    setAdultPromptDismissedAt(dismissedAt);
+    Sentry.addBreadcrumb({
+      category: "moderation_reminder",
+      message: "Adult prompt dismissal timestamp backfilled",
+      level: "info",
+      data: {
+        userId: currentUser.id,
+        dismissedAt,
+      },
+    });
   }, [
     adultPromptDismissedAt,
     currentUser,
@@ -298,22 +309,70 @@ export function HomeScreen() {
     && !moderationReminderUnderstood
     && moderationReminderSnoozedUntil <= nowMs;
 
+  useEffect(() => {
+    if (!showModerationReminder || !currentUserId) {
+      moderationReminderShownForRef.current = null;
+      return;
+    }
+
+    if (moderationReminderShownForRef.current === currentUserId) return;
+    moderationReminderShownForRef.current = currentUserId;
+
+    Sentry.addBreadcrumb({
+      category: "moderation_reminder",
+      message: "Moderation reminder shown",
+      level: "info",
+      data: {
+        userId: currentUserId,
+        adultPromptAgeMs,
+        snoozedUntil: moderationReminderSnoozedUntil,
+      },
+    });
+  }, [
+    adultPromptAgeMs,
+    currentUserId,
+    moderationReminderSnoozedUntil,
+    showModerationReminder,
+  ]);
+
   const handleChooseModerationAgents = useCallback(() => {
     if (!currentUserId) return;
+    Sentry.addBreadcrumb({
+      category: "moderation_reminder",
+      message: "Choose agents pressed",
+      level: "info",
+      data: { userId: currentUserId },
+    });
     dismissModerationReminder(currentUserId);
     router.push("/agents");
   }, [currentUserId, dismissModerationReminder, router]);
 
   const handleDismissModerationReminder = useCallback(() => {
     if (!currentUserId) return;
+    Sentry.addBreadcrumb({
+      category: "moderation_reminder",
+      message: "Moderation reminder dismissed",
+      level: "info",
+      data: { userId: currentUserId },
+    });
     dismissModerationReminder(currentUserId);
   }, [currentUserId, dismissModerationReminder]);
 
   const handleSnoozeModerationReminder = useCallback(() => {
     if (!currentUserId) return;
+    const snoozedUntil = Date.now() + MODERATION_REMINDER_SNOOZE_MS;
+    Sentry.addBreadcrumb({
+      category: "moderation_reminder",
+      message: "Moderation reminder snoozed",
+      level: "info",
+      data: {
+        userId: currentUserId,
+        snoozedUntil,
+      },
+    });
     snoozeModerationReminder(
       currentUserId,
-      Date.now() + MODERATION_REMINDER_SNOOZE_MS
+      snoozedUntil
     );
   }, [currentUserId, snoozeModerationReminder]);
 
@@ -363,26 +422,58 @@ export function HomeScreen() {
   });
 
   const handleEnableAdultContent = useCallback(() => {
+    const dismissedAt = Date.now();
     setAdultContent(true);
     setHasSeenAdultPrompt();
-    setAdultPromptDismissedAt(Date.now());
+    setAdultPromptDismissedAt(dismissedAt);
     Sentry.addBreadcrumb({
       category: "content_filter",
       message: "iOS: Adult content enabled via popup",
       level: "info",
     });
-  }, [setAdultContent, setAdultPromptDismissedAt, setHasSeenAdultPrompt]);
+    Sentry.addBreadcrumb({
+      category: "moderation_reminder",
+      message: "Adult prompt dismissed before reminder timer",
+      level: "info",
+      data: {
+        action: "enabled_adult_content",
+        userId: currentUserId,
+        dismissedAt,
+      },
+    });
+  }, [
+    currentUserId,
+    setAdultContent,
+    setAdultPromptDismissedAt,
+    setHasSeenAdultPrompt,
+  ]);
 
   const handleDeclineAdultContent = useCallback(() => {
+    const dismissedAt = Date.now();
     setAdultContent(false);
     setHasSeenAdultPrompt();
-    setAdultPromptDismissedAt(Date.now());
+    setAdultPromptDismissedAt(dismissedAt);
     Sentry.addBreadcrumb({
       category: "content_filter",
       message: "iOS: Adult content declined via popup",
       level: "info",
     });
-  }, [setAdultContent, setAdultPromptDismissedAt, setHasSeenAdultPrompt]);
+    Sentry.addBreadcrumb({
+      category: "moderation_reminder",
+      message: "Adult prompt dismissed before reminder timer",
+      level: "info",
+      data: {
+        action: "declined_adult_content",
+        userId: currentUserId,
+        dismissedAt,
+      },
+    });
+  }, [
+    currentUserId,
+    setAdultContent,
+    setAdultPromptDismissedAt,
+    setHasSeenAdultPrompt,
+  ]);
 
   const revealedPostsRef = useRef<Set<string>>(new Set());
   const isNavigatingRef = useRef(false);
