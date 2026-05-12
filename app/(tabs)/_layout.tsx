@@ -363,11 +363,20 @@ export default function TabLayout() {
   useEffect(() => {
     const prev = prevShareIntentRef.current;
     prevShareIntentRef.current = hasShareIntent;
-    // Only navigate on a fresh false->true transition after initial route has settled.
-    if (!hasHandledInitialRouteRef.current) return;
-    if (prev || !hasShareIntent) return;
+    if (!hasShareIntent) return;
     if (!pathname.endsWith("/create")) {
-      router.navigate("/(tabs)/create");
+      Sentry.addBreadcrumb({
+        category: "navigation",
+        message: "Forcing share intent to create tab",
+        level: "info",
+        data: {
+          pathname,
+          hadPreviousShareIntent: prev,
+          hasHandledInitialRoute: hasHandledInitialRouteRef.current,
+          isNotificationNavigationActive: isInboxNotificationNavigationActive(),
+        },
+      });
+      router.replace("/(tabs)/create");
     }
   }, [hasShareIntent, pathname]);
 

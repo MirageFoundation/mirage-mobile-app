@@ -284,6 +284,16 @@ function getNotificationDataKeys(data: Record<string, unknown>): string[] {
   return Object.keys(data).slice(0, 20);
 }
 
+function isAndroidShareIntentNotificationData(data: Record<string, unknown>): boolean {
+  const keys = Object.keys(data);
+  return keys.some((key) =>
+    key === "android.intent.extra.TEXT" ||
+    key === "android.intent.extra.STREAM" ||
+    key === "android.intent.extra.SUBJECT" ||
+    key.startsWith("android.intent.extra.")
+  );
+}
+
 function getFallbackInboxNotificationResponseId(
   response: Notifications.NotificationResponse,
   data: Record<string, unknown>,
@@ -773,6 +783,23 @@ function handleNotificationResponse(
   if (!response) return;
   try {
     const notificationData = getNotificationData(response);
+    if (isAndroidShareIntentNotificationData(notificationData)) {
+      Sentry.addBreadcrumb({
+        category: "inbox-notifications",
+        message: "Ignoring Android share intent in notification response handler",
+        level: "info",
+        data: {
+          source,
+          actionIdentifier: response.actionIdentifier,
+          requestIdentifier: response.notification?.request?.identifier,
+          notificationDate: response.notification?.date,
+          dataKeys: getNotificationDataKeys(notificationData),
+          hasSharedText: !!toOptionalString(notificationData["android.intent.extra.TEXT"]),
+          ...getNavigationReadinessDebugData(),
+        },
+      });
+      return;
+    }
     const notificationId = getInboxNotificationResponseId(response, notificationData);
     markInboxNotificationNavigationActive();
     Sentry.addBreadcrumb({
