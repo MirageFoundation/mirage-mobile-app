@@ -1982,42 +1982,60 @@ export default function PostDetailScreen() {
                 color={theme.colors.text.subtle}
               />
               <Text size="xs" mode="subtle" weight="medium" style={styles.threadReminderTitle}>
-                Viewing a single comment&apos;s thread
+                You&apos;re viewing single comment&apos;s thread
               </Text>
             </View>
             <View style={styles.threadReminderActions}>
-              {contextDepth <= 0 ? (
-                <Pressable
-                  onPress={() => {
-                    if (threadActionLoading) return;
-                    setThreadActionLoading("context");
-                    router.push(`/post/${focusedCommentId}?depth=5`);
-                    setTimeout(() => setThreadActionLoading(null), 1500);
-                  }}
-                  disabled={threadActionLoading !== null}
-                  style={({ pressed }) => [
-                    styles.threadReminderButton,
-                    pressed && styles.threadReminderButtonPressed,
-                    threadActionLoading === "context" && styles.threadReminderButtonActive,
-                  ]}
-                >
-                  {threadActionLoading === "context" ? (
-                    <ActivityIndicator
-                      size="small"
-                      color={theme.colors.text.default}
-                    />
-                  ) : (
-                    <Ionicons
-                      name="arrow-up-outline"
-                      size={14}
-                      color={theme.colors.text.default}
-                    />
-                  )}
-                  <Text size="xs" weight="semibold">
-                    Recent context
-                  </Text>
-                </Pressable>
-              ) : null}
+              {(() => {
+                const contextDone = contextDepth > 0;
+                const contextDisabled =
+                  contextDone || threadActionLoading !== null;
+                return (
+                  <View style={styles.threadReminderButtonSlot}>
+                  <Pressable
+                    onPress={() => {
+                      if (contextDisabled) return;
+                      setThreadActionLoading("context");
+                      router.push(`/post/${focusedCommentId}?depth=5`);
+                      setTimeout(() => setThreadActionLoading(null), 1500);
+                    }}
+                    disabled={contextDisabled}
+                    style={({ pressed }) => [
+                      styles.threadReminderButton,
+                      pressed && styles.threadReminderButtonPressed,
+                      threadActionLoading === "context" &&
+                        styles.threadReminderButtonActive,
+                      contextDone && styles.threadReminderButtonDisabled,
+                    ]}
+                  >
+                    {threadActionLoading === "context" ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={theme.colors.text.default}
+                      />
+                    ) : (
+                      <Ionicons
+                        name={contextDone ? "checkmark-outline" : "arrow-up-outline"}
+                        size={14}
+                        color={
+                          contextDone
+                            ? theme.colors.text.subtle
+                            : theme.colors.text.default
+                        }
+                      />
+                    )}
+                    <Text
+                      size="xs"
+                      weight="semibold"
+                      mode={contextDone ? "subtle" : undefined}
+                    >
+                      Recent context
+                    </Text>
+                  </Pressable>
+                  </View>
+                );
+              })()}
+              <View style={styles.threadReminderButtonSlot}>
               <Pressable
                 onPress={() => {
                   if (threadActionLoading) return;
@@ -2061,6 +2079,7 @@ export default function PostDetailScreen() {
                   Full thread
                 </Text>
               </Pressable>
+              </View>
             </View>
           </View>
         ) : null}
@@ -2725,26 +2744,40 @@ const styles = StyleSheet.create((theme) => ({
   },
   threadReminderActions: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.spacing.xs,
+    alignItems: "stretch",
+    gap: theme.spacing.sm,
+    width: "100%",
+  },
+  threadReminderButtonSlot: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: "50%",
+    minWidth: 0,
+    maxWidth: "50%",
   },
   threadReminderButton: {
+    width: "100%",
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
     paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 6,
-    borderRadius: theme.radius.sm,
+    paddingVertical: 8,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: theme.colors.border.default,
     backgroundColor: theme.colors.background.default,
-    minHeight: 30,
+    minHeight: 36,
   },
   threadReminderButtonPressed: {
     opacity: 0.7,
   },
   threadReminderButtonActive: {
     opacity: 0.6,
+  },
+  threadReminderButtonDisabled: {
+    opacity: 0.5,
+    backgroundColor: theme.colors.background.subtle,
   },
   threadReminderLink: {
     color: theme.colors.primary[500],
