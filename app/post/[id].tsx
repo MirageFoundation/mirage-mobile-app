@@ -185,12 +185,14 @@ export default function PostDetailScreen() {
   const currentScrollYRef = useRef(0);
   const preciseScrollTargetRef = useRef<string | null>(null);
   const missingHighlightReportedRef = useRef<string | null>(null);
+  const suppressedHighlightScrollRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     highlightRetryCount.current = 0;
     preciseScrollTargetRef.current = null;
     missingHighlightReportedRef.current = null;
+    suppressedHighlightScrollRef.current = null;
     if (highlight) {
       Sentry.addBreadcrumb({
         category: "post-detail",
@@ -1052,6 +1054,7 @@ export default function PostDetailScreen() {
     if (highlightedCommentId && allComments.length > 0 && flatListRef.current) {
       const isOptimistic = highlightedCommentId.startsWith("optimistic-");
       if (isOptimistic) return;
+      if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
 
       // First try to find the comment at top level
       let index = allComments.findIndex((c) => c.id === highlightedCommentId);
@@ -1198,6 +1201,7 @@ export default function PostDetailScreen() {
   const handleHighlightedCommentLayout = useCallback(
     (event: LayoutChangeEvent) => {
       if (!highlightedCommentId) return;
+      if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
       const target = event.nativeEvent.target;
       const targetKey = `${highlightedCommentId}:${target}`;
 
@@ -1508,6 +1512,7 @@ export default function PostDetailScreen() {
           });
         },
         onOptimisticUpdate: () => {
+          suppressedHighlightScrollRef.current = null;
           if (replyTarget) {
             addReplyOptimisticComment(id, replyTarget.id, optimisticComment);
             setHighlightedCommentId(optimisticCommentId);
@@ -1536,6 +1541,7 @@ export default function PostDetailScreen() {
           if (!confirmedCommentId) return;
 
           replaceOptimisticCommentId(id, optimisticCommentId, confirmedCommentId);
+          suppressedHighlightScrollRef.current = confirmedCommentId;
 
           setHighlightedCommentId((prev) =>
             prev === optimisticCommentId ? confirmedCommentId : prev,
