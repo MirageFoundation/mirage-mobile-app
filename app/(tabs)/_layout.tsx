@@ -36,6 +36,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { SideMenuProvider } from "@/src/providers/side-menu-provider";
 import {
+  isInboxNotificationNavigationActive,
   signalTabsReady,
   signalTabsUnmounted,
 } from "@/src/services/inbox-notifications";
@@ -331,6 +332,11 @@ export default function TabLayout() {
   const { hasShareIntent } = useShareIntentContext();
   const hasHandledInitialRouteRef = useRef(false);
   const initialShareIntentRef = useRef(hasShareIntent);
+  const latestPathnameRef = useRef(pathname);
+
+  useEffect(() => {
+    latestPathnameRef.current = pathname;
+  }, [pathname]);
 
   useEffect(() => {
     signalTabsReady();
@@ -360,25 +366,39 @@ export default function TabLayout() {
         initialShareIntentRef.current || hasShareIntent || isRecentSharePath(10_000);
       const hasInitialCreateIntent =
         hasInitialShareIntent || isRecentCreateDeepLink();
-      const isOnCreate = pathname.endsWith("/create");
+      const currentPathname = latestPathnameRef.current || pathname;
+      const isOnCreate = currentPathname.endsWith("/create");
+      const isOnInbox = currentPathname.endsWith("/inbox");
+      const isNotificationNavigationActive = isInboxNotificationNavigationActive();
 
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Initial tab route check",
         data: {
-          pathname,
+          pathname: currentPathname,
           hasInitialCreateIntent,
           hasInitialShareIntent,
           isOnCreate,
+          isNotificationNavigationActive,
         },
         level: "info",
       });
 
       if (isOnCreate && !hasInitialCreateIntent) {
+        if (isOnInbox || isNotificationNavigationActive) {
+          Sentry.addBreadcrumb({
+            category: "navigation",
+            message: "Skipped stale create redirect during notification navigation",
+            data: { pathname: currentPathname, isNotificationNavigationActive },
+            level: "info",
+          });
+          return;
+        }
+
         Sentry.addBreadcrumb({
           category: "navigation",
           message: "Redirecting stale initial create route to home",
-          data: { pathname },
+          data: { pathname: currentPathname },
           level: "info",
         });
         router.replace("/(tabs)");
@@ -390,7 +410,7 @@ export default function TabLayout() {
           category: "navigation",
           message: "Routing initial share intent to create tab",
           data: {
-            pathname,
+            pathname: currentPathname,
             hasShareIntent,
             hadInitialShareIntent: initialShareIntentRef.current,
             detectedRecentSharePath: isRecentSharePath(10_000),
@@ -401,7 +421,7 @@ export default function TabLayout() {
           level: "info",
           tags: { feature: "share-intent", operation: "initial-route-recovery" },
           extra: {
-            pathname,
+            pathname: currentPathname,
             hasShareIntent,
             hadInitialShareIntent: initialShareIntentRef.current,
             detectedRecentSharePath: isRecentSharePath(10_000),

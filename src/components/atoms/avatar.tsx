@@ -1,8 +1,8 @@
 import { Image, type ImageProps } from "expo-image";
 import * as Sentry from "@sentry/react-native";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
-import Svg, { Rect } from "react-native-svg";
+import { SvgXml } from "react-native-svg";
 import { StyleSheet } from "react-native-unistyles";
 
 type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "xxl";
@@ -16,57 +16,52 @@ const AVATAR_SIZES: Record<AvatarSize, number> = {
   xxl: 80,
 };
 
-const IDENTICON_COLORS = [
-  "#ef4444",
-  "#f97316",
-  "#eab308",
-  "#22c55e",
-  "#14b8a6",
-  "#06b6d4",
-  "#3b82f6",
-  "#8b5cf6",
-  "#d946ef",
-  "#ec4899",
-];
+/**
+ * DiceBear identicon URL — kept byte-compatible with the web app's
+ * `web/frontend/src/utils/avatar.js`:
+ *   - Same DiceBear major version (9.x)
+ *   - Same style (`identicon`)
+ *   - SVG output (resolution-independent; same as web)
+ *   - Raw seed (no lowercase / trim); only `encodeURIComponent` for URL safety
+ *   - Default fallback seed: "default"
+ *
+ * Identical URL = identical identicon across web and mobile for the
+ * same user.
+ */
+const DICEBEAR_BASE = "https://api.dicebear.com/9.x";
 
-function hashSeed(seed: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash ^= seed.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
+function buildDicebearSvgUrl(seed: string | undefined) {
+  const rawSeed = seed === null || seed === undefined ? "" : String(seed);
+  const safeSeed = encodeURIComponent(rawSeed || "default");
+  return `${DICEBEAR_BASE}/identicon/svg?seed=${safeSeed}`;
 }
 
-function buildIdenticonCells(seed: string) {
-  // xorshift32 PRNG seeded from the FNV-1a hash of `seed`. xorshift
-  // mixes all bits well, so consecutive samples vary across the whole
-  // word — sampling the high bit gives a balanced ~50/50 fill that
-  // differs noticeably between seeds.
-  let state = hashSeed(seed) || 0x9e3779b9;
-  const next = () => {
-    state ^= state << 13;
-    state ^= state >>> 17;
-    state ^= state << 5;
-    return state >>> 0;
-  };
-  // Burn a few rounds so the first samples aren't correlated with the
-  // raw FNV output.
-  next();
-  next();
-  next();
+// In-memory SVG cache so each seed is fetched at most once per app
+// session. Keyed by URL — survives unmount/remount of any Avatar.
+const svgCache = new Map<string, string>();
+const inflight = new Map<string, Promise<string>>();
 
-  const cells: { x: number; y: number }[] = [];
-  for (let y = 0; y < 5; y += 1) {
-    for (let x = 0; x < 3; x += 1) {
-      if ((next() >>> 31) === 1) {
-        cells.push({ x, y });
-        if (x !== 2) cells.push({ x: 4 - x, y });
-      }
+async function fetchDicebearSvg(url: string): Promise<string> {
+  const cached = svgCache.get(url);
+  if (cached) return cached;
+
+  const existing = inflight.get(url);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      svgCache.set(url, text);
+      return text;
+    } finally {
+      inflight.delete(url);
     }
-  }
+  })();
 
-  return cells;
+  inflight.set(url, promise);
+  return promise;
 }
 
 type AvatarProps = Omit<ImageProps, "source"> & {
@@ -86,13 +81,13 @@ type AvatarProps = Omit<ImageProps, "source"> & {
   rounded?: "none" | "sm" | "md" | "lg" | "full";
   /** Show border around avatar */
   bordered?: boolean;
-  /** DiceBear style variant */
+  /** DiceBear style variant (kept for API compat; only `identicon` is used) */
   variant?: "bottts" | "avataaars" | "identicon" | "shapes" | "thumbs";
   /**
-   * Inner padding around the DiceBear identicon glyph as a fraction of
+   * Inner padding around the DiceBear identicon as a fraction of
    * `size`. The identicon renders transparently on top of the circular
-   * container's tinted background. Only applied when no custom
-   * `source` is provided.
+   * container's background. Only applied when no custom `source` is
+   * provided.
    */
   paddingRatio?: number;
   /** Custom style for the outer container (overrides bg/border) */
@@ -113,24 +108,14 @@ export const Avatar = ({
 }: AvatarProps) => {
   const resolvedSize = typeof size === "number" ? size : AVATAR_SIZES[size];
 
-  // Keep the same seed policy as web: do NOT lowercase/trim. We render
-  // the generated identicon locally so avatars are not blank when the
-  // DiceBear CDN is slow or unreachable.
-  const rawSeed = seed === null || seed === undefined ? "" : String(seed);
-  const stableSeed = rawSeed || "default";
-  const seedHash = useMemo(() => hashSeed(stableSeed), [stableSeed]);
-  const identiconCells = useMemo(() => buildIdenticonCells(stableSeed), [stableSeed]);
-  const identiconColor = IDENTICON_COLORS[seedHash % IDENTICON_COLORS.length];
-  const identiconBackground = `${identiconColor}22`;
-
   const handleImageError = useCallback<NonNullable<ImageProps["onError"]>>(
     (event) => {
       Sentry.addBreadcrumb({
         category: "avatar",
-        message: "Custom avatar image failed to load",
+        message: "Avatar image failed to load",
         level: "warning",
         data: {
-          hasSeed: Boolean(rawSeed),
+          hasSeed: Boolean(seed),
           size: resolvedSize,
           sourceType: typeof source,
         },
@@ -138,19 +123,58 @@ export const Avatar = ({
 
       imageProps.onError?.(event);
     },
-    [imageProps, rawSeed, resolvedSize, source],
+    [imageProps, seed, resolvedSize, source],
   );
 
   styles.useVariants({ rounded, bordered });
 
-  // Identicon is a 5×5 square. To fit it fully inside the circle and
-  // leave breathing room, inset by at least the geometric minimum
-  // (1 - 1/√2)/2 ≈ 14.6% of the diameter.
+  // Identicon image is a square. The geometric minimum to inscribe a
+  // square fully inside a circle is (1 - 1/√2)/2 ≈ 14.6% of the
+  // diameter; we use `paddingRatio` (with that floor) so the identicon
+  // sits comfortably inside the circular container.
   const requestedInset = Math.round(resolvedSize * paddingRatio);
   const minInsetForCircle = Math.ceil(resolvedSize * (1 - 1 / Math.SQRT2) / 2);
   const identiconInset = Math.max(requestedInset, minInsetForCircle);
   const innerSize = Math.max(1, resolvedSize - identiconInset * 2);
-  const isIdenticon = !source;
+
+  const svgUrl = useMemo(
+    () => (source ? null : buildDicebearSvgUrl(seed)),
+    [source, seed],
+  );
+
+  // Synchronously read from cache so cached identicons render on the
+  // first frame with no flicker; otherwise fetch and stash.
+  const [svgXml, setSvgXml] = useState<string | null>(() =>
+    svgUrl ? svgCache.get(svgUrl) ?? null : null,
+  );
+
+  useEffect(() => {
+    if (!svgUrl) {
+      setSvgXml(null);
+      return;
+    }
+    const cached = svgCache.get(svgUrl);
+    if (cached) {
+      setSvgXml(cached);
+      return;
+    }
+    let cancelled = false;
+    fetchDicebearSvg(svgUrl)
+      .then((xml) => {
+        if (!cancelled) setSvgXml(xml);
+      })
+      .catch((error) => {
+        Sentry.addBreadcrumb({
+          category: "avatar",
+          message: "Failed to fetch DiceBear SVG",
+          level: "warning",
+          data: { url: svgUrl, error: String(error) },
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [svgUrl]);
 
   return (
     <View
@@ -160,9 +184,6 @@ export const Avatar = ({
           width: resolvedSize,
           height: resolvedSize,
         },
-        // Tint the circular container with the seed color so the
-        // identicon sits on a colored disc instead of its own square.
-        isIdenticon ? { backgroundColor: identiconBackground } : null,
         containerStyle,
       ]}
     >
@@ -186,24 +207,15 @@ export const Avatar = ({
               left: identiconInset,
             },
           ]}
+          pointerEvents="none"
         >
-          <Svg
-            width={innerSize}
-            height={innerSize}
-            viewBox="0 0 5 5"
-            style={style}
-          >
-            {identiconCells.map((cell) => (
-              <Rect
-                key={`${cell.x}-${cell.y}`}
-                x={cell.x}
-                y={cell.y}
-                width="1"
-                height="1"
-                fill={identiconColor}
-              />
-            ))}
-          </Svg>
+          {svgXml ? (
+            <SvgXml
+              xml={svgXml}
+              width={innerSize}
+              height={innerSize}
+            />
+          ) : null}
         </View>
       )}
     </View>

@@ -28,8 +28,8 @@ const SEED_TIMESTAMP_KEY = "inbox-seed-timestamp";
 const FETCH_INTERVAL_SECONDS = 15 * 60;
 const FOREGROUND_INTERVAL_MS = FETCH_INTERVAL_SECONDS * 1000;
 const SIGNAL_THROTTLE_MS = 15_000;
-const INBOX_NAVIGATION_MAX_ATTEMPTS = 4;
-const INBOX_NAVIGATION_RETRY_MS = 1_000;
+const INBOX_NAVIGATION_READY_TIMEOUT_MS = 3_000;
+const INBOX_NOTIFICATION_NAVIGATION_ACTIVE_MS = 10_000;
 
 let isCheckInFlight = false;
 let lastSignalCheckAt = 0;
@@ -40,6 +40,7 @@ let notificationResponseSubscription: Notifications.Subscription | null = null;
 let deferredInitSubscription: { remove(): void } | null = null;
 let isInboxNotificationsInitialized = false;
 let isInitializingInboxNotifications = false;
+let lastInboxNotificationNavigationAt = 0;
 
 let _rootLayoutReadyResolve: (() => void) | null = null;
 let _rootLayoutReadyPromise: Promise<void> = new Promise<void>((resolve) => {
@@ -81,6 +82,14 @@ export function signalTabsReady(): void {
     level: "info",
   });
   _tabsReadyResolve?.();
+}
+
+export function isInboxNotificationNavigationActive(): boolean {
+  return Date.now() - lastInboxNotificationNavigationAt < INBOX_NOTIFICATION_NAVIGATION_ACTIVE_MS;
+}
+
+function markInboxNotificationNavigationActive(): void {
+  lastInboxNotificationNavigationAt = Date.now();
 }
 
 export function signalTabsUnmounted(): void {
@@ -257,18 +266,27 @@ function getNotificationDataKeys(data: Record<string, unknown>): string[] {
   return Object.keys(data).slice(0, 20);
 }
 
+function getFallbackInboxNotificationResponseId(
+  response: Notifications.NotificationResponse,
+  data: Record<string, unknown>,
+): string {
+  const notificationDate = response.notification?.date ?? Date.now();
+  const dataKeys = getNotificationDataKeys(data).join(",") || "no-data";
+  return `inbox-notification:${response.actionIdentifier}:${notificationDate}:${dataKeys}`;
+}
+
 function getInboxNotificationResponseId(
   response: Notifications.NotificationResponse,
   data: Record<string, unknown>,
-): string | null {
-  const requestId = toOptionalString(response.notification?.request?.identifier);
-  if (requestId) return requestId;
-
+): string {
   const explicitNotificationId = toOptionalString(data.notificationId);
   if (explicitNotificationId) return explicitNotificationId;
 
   const replyId = toOptionalString(data.replyId);
   if (replyId) return `inbox-reply:${replyId}`;
+
+  const rootPostId = toOptionalString(data.rootPostId);
+  if (rootPostId) return `inbox-root:${rootPostId}`;
 
   const snapshot = data.inboxReply;
   if (snapshot && typeof snapshot === "object") {
@@ -278,7 +296,10 @@ function getInboxNotificationResponseId(
     if (snapshotReplyId) return `inbox-reply:${snapshotReplyId}`;
   }
 
-  return null;
+  const requestId = toOptionalString(response.notification?.request?.identifier);
+  if (requestId) return requestId;
+
+  return getFallbackInboxNotificationResponseId(response, data);
 }
 
 function buildPreviewReplyFromNotification(
@@ -531,19 +552,10 @@ async function performInboxCheck(
             title: getNotificationTitle(reply),
             body: getNotificationBody(reply),
             data: {
+              notificationType: "inbox",
               rootPostId: reply.root_post_id,
               replyId: reply.reply_id,
-              replyOwner: reply.reply_owner,
-              replyUsername: reply.reply_username,
-              replyAuthorLevel: reply.reply_author_level,
-              replyContent: reply.reply_content,
-              parentId: reply.parent_id,
-              parentContent: reply.parent_content,
-              parentOwner: reply.parent_owner,
               type: reply.type,
-              awardType: reply.award_type,
-              amount: reply.amount,
-              inboxReply: reply,
             },
             ...(Platform.OS === "android" && {
               categoryIdentifier: "inbox",
@@ -728,25 +740,7 @@ function handleNotificationResponse(
   try {
     const notificationData = getNotificationData(response);
     const notificationId = getInboxNotificationResponseId(response, notificationData);
-    if (!notificationId) {
-      Sentry.captureMessage("Inbox notification response missing notification id", {
-        level: "warning",
-        tags: {
-          feature: "inbox-notifications",
-          operation: "notification-response",
-        },
-        extra: {
-          actionIdentifier: response.actionIdentifier,
-          hasNotification: !!response.notification,
-          hasRequest: !!response.notification?.request,
-          dataKeys: getNotificationDataKeys(notificationData),
-          replyId: toOptionalString(notificationData.replyId),
-          rootPostId: toOptionalString(notificationData.rootPostId),
-          hasInboxReply: !!notificationData.inboxReply,
-        },
-      });
-      return;
-    }
+    markInboxNotificationNavigationActive();
     Sentry.addBreadcrumb({
       category: "notifications",
       message: "Inbox notification response received",
@@ -821,56 +815,28 @@ function handleNotificationResponse(
       if (!address) return;
       await fetchAndSeedInboxCache(address, 25);
     };
-    const navigateToInbox = async (attempt = 1) => {
-      if (attempt === 1) {
-        void prefetchInbox().catch((error) => {
-          console.warn("[InboxNotifications] Failed to prefetch inbox before navigation:", error);
-          Sentry.addBreadcrumb({
-            category: "notifications",
-            message: "Inbox prefetch before notification navigation failed",
-            level: "warning",
-            data: {
-              notificationId,
-              error: error instanceof Error ? error.message : String(error),
-            },
-          });
+    const navigateToInbox = async () => {
+      markInboxNotificationNavigationActive();
+      void prefetchInbox().catch((error) => {
+        console.warn("[InboxNotifications] Failed to prefetch inbox before navigation:", error);
+        Sentry.addBreadcrumb({
+          category: "notifications",
+          message: "Inbox prefetch before notification navigation failed",
+          level: "warning",
+          data: {
+            notificationId,
+            error: error instanceof Error ? error.message : String(error),
+          },
         });
-      }
-      const areTabsReady = await waitForTabsReady();
+      });
+      const areTabsReady = await waitForTabsReady(INBOX_NAVIGATION_READY_TIMEOUT_MS);
       if (!areTabsReady) {
-        if (attempt >= INBOX_NAVIGATION_MAX_ATTEMPTS) {
-          handledNotificationIdsInFlight.delete(notificationId);
-          Sentry.captureMessage("Inbox notification navigation dropped before tabs ready", {
-            level: "warning",
-            tags: {
-              feature: "inbox-notifications",
-              operation: "notification-navigate",
-            },
-            extra: {
-              notificationId,
-              attempts: attempt,
-              appState: AppState.currentState,
-            },
-          });
-          return;
-        }
-
         Sentry.addBreadcrumb({
           category: "navigation",
-          message: "Retrying inbox notification navigation after tabs wait timeout",
+          message: "Proceeding with inbox notification navigation after tabs wait timeout",
           level: "warning",
-          data: { notificationId, attempt, appState: AppState.currentState },
+          data: { notificationId, appState: AppState.currentState },
         });
-        setTimeout(() => {
-          void navigateToInbox(attempt + 1).catch((error) => {
-            handledNotificationIdsInFlight.delete(notificationId);
-            console.error("[InboxNotifications] Failed to navigate from notification:", error);
-            Sentry.captureException(error, {
-              tags: { action: "notification_navigate" },
-            });
-          });
-        }, INBOX_NAVIGATION_RETRY_MS);
-        return;
       }
       Sentry.addBreadcrumb({
         category: "navigation",
