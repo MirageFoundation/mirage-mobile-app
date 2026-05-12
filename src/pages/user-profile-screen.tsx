@@ -1182,7 +1182,6 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     const isSticky = scrollY.value >= stickyThreshold;
     return {
       opacity: isSticky ? 1 : 0,
-      pointerEvents: isSticky ? "auto" : "none",
     } as any;
   });
 
@@ -1238,6 +1237,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           },
           stickyTabsAnimatedStyle,
         ]}
+        pointerEvents={isTabsSticky ? "auto" : "none"}
       >
         <ProfileTabBar
           activeTab={activeTab}

@@ -1075,7 +1075,6 @@ useEffect(() => {
     const isSticky = scrollY.value >= stickyThreshold;
     return {
       opacity: isSticky ? 1 : 0,
-      pointerEvents: isSticky ? "auto" : "none",
     } as any;
   });
 
@@ -1127,6 +1126,7 @@ useEffect(() => {
           },
           stickyTabsAnimatedStyle,
         ]}
+        pointerEvents={isTabsSticky ? "auto" : "none"}
       >
         <ProfileTabBar
           activeTab={activeTab}

@@ -13,6 +13,10 @@ import {
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const TAB_COUNT = 3;
 const VELOCITY_THRESHOLD = 500;
+// Higher threshold prevents accidental Pan activation that swallows
+// child Pressable taps (likes, comments, share, etc.) on Android.
+const HORIZONTAL_ACTIVATION = 30;
+const VERTICAL_FAIL = 12;
 
 export function useTabSwipeGesture({
   onTabChange,
@@ -40,8 +44,8 @@ export function useTabSwipeGesture({
   );
 
   const swipeGesture = Gesture.Pan()
-    .activeOffsetX([-15, 15])
-    .failOffsetY([-10, 10])
+    .activeOffsetX([-HORIZONTAL_ACTIVATION, HORIZONTAL_ACTIVATION])
+    .failOffsetY([-VERTICAL_FAIL, VERTICAL_FAIL])
     .onStart(() => {
       startTab.value = Math.round(animatedIndex.value);
       isGestureActive.value = true;
