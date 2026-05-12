@@ -3,6 +3,7 @@ import {
   cancelPow,
   getPowProgress,
 } from "react-native-argon2-turbo";
+import * as Sentry from "@sentry/react-native";
 
 import { bytesToHex } from "./crypto";
 import { difficultyFactor, checkPowTarget } from "./pow";
@@ -64,6 +65,30 @@ function computeEffectiveBits(powDifficulty: number, powBaseBits: number, powFac
 // ============================================
 
 const MAX_NATIVE_RETRIES = 8;
+const MAX_POW_COMPUTE_TIME_MS = 60_000;
+const POW_TIMEOUT_ERROR_MESSAGE = "Transaction did not work. Please try again.";
+
+function reportPowTimeout(
+  reason: string,
+  input: PoWInput,
+  elapsedMs: number,
+  attempts: number,
+  retry: number,
+): void {
+  Sentry.captureMessage("PoW computation timed out", {
+    level: "warning",
+    tags: { feature: "pow", operation: "compute_pow_timeout" },
+    extra: {
+      reason,
+      elapsedMs,
+      attempts,
+      retry,
+      powDifficulty: input.powDifficulty,
+      powBaseBits: input.powBaseBits,
+      powFactor: input.powFactor,
+    },
+  });
+}
 
 export async function computePoW(
   input: PoWInput,
@@ -96,19 +121,48 @@ export async function computePoW(
 
   try {
     for (let retry = 0; retry < MAX_NATIVE_RETRIES; retry++) {
+      const elapsedMs = Date.now() - overallStart;
+      const remainingMs = MAX_POW_COMPUTE_TIME_MS - elapsedMs;
+      if (remainingMs <= 0) {
+        cancelPow();
+        reportPowTimeout("pre_native_call_limit", input, elapsedMs, totalAttempts, retry);
+        throw new Error(POW_TIMEOUT_ERROR_MESSAGE);
+      }
+
       const startNonce = Math.floor(Math.random() * 0xffffffff);
-      const result = await computePowNative({
-        base: baseHex,
-        salt: saltHex,
-        difficulty: effectiveBits,
-        startNonce,
-        maxAttempts,
-        timeoutMs: 60000,
-        iterations: ARGON2_TIME_COST,
-        memory: ARGON2_MEMORY_COST,
-        parallelism: ARGON2_PARALLELISM,
-        hashLength: ARGON2_OUTPUT_LENGTH,
-      } as any);
+      let result: Awaited<ReturnType<typeof computePowNative>>;
+      try {
+        result = await computePowNative({
+          base: baseHex,
+          salt: saltHex,
+          difficulty: effectiveBits,
+          startNonce,
+          maxAttempts,
+          timeoutMs: remainingMs,
+          iterations: ARGON2_TIME_COST,
+          memory: ARGON2_MEMORY_COST,
+          parallelism: ARGON2_PARALLELISM,
+          hashLength: ARGON2_OUTPUT_LENGTH,
+        } as any);
+      } catch (error) {
+        const msg = String((error as Error)?.message || error || "");
+        if (
+          Date.now() - overallStart >= MAX_POW_COMPUTE_TIME_MS ||
+          /timeout|timed\s*out/i.test(msg)
+        ) {
+          const elapsedAfterErrorMs = Date.now() - overallStart;
+          cancelPow();
+          reportPowTimeout(
+            "native_timeout_or_limit",
+            input,
+            elapsedAfterErrorMs,
+            totalAttempts,
+            retry,
+          );
+          throw new Error(POW_TIMEOUT_ERROR_MESSAGE);
+        }
+        throw error;
+      }
 
       const nonce = result.nonce < 0 ? (result.nonce >>> 0) : result.nonce;
       const digest = hexToUint8Array(result.digest);
@@ -121,6 +175,19 @@ export async function computePoW(
           `[PoW Turbo] Found! nonce=${nonce}, attempts=${totalAttempts}, time=${computeTimeMs}ms, rate=${hashRate} h/s`
         );
         return { pow: nonce, digest, computeTimeMs, attempts: totalAttempts };
+      }
+
+      if (Date.now() - overallStart >= MAX_POW_COMPUTE_TIME_MS) {
+        const elapsedAfterResultMs = Date.now() - overallStart;
+        cancelPow();
+        reportPowTimeout(
+          "post_native_result_limit",
+          input,
+          elapsedAfterResultMs,
+          totalAttempts,
+          retry,
+        );
+        throw new Error(POW_TIMEOUT_ERROR_MESSAGE);
       }
 
       console.log(`[PoW Turbo] Native result failed JS target check (attempt ${retry + 1}/${MAX_NATIVE_RETRIES}), retrying...`);

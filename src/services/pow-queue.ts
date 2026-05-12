@@ -177,6 +177,9 @@ const isNetworkError = (error: unknown): boolean =>
   (error as any)?.code === "ERR_NETWORK" ||
   (error as any)?.message === "Network Error";
 
+const isPowTimeoutError = (error: unknown): boolean =>
+  String((error as Error)?.message || "") === "Transaction did not work. Please try again.";
+
 const isStaleBlockHashError = (error: unknown): boolean => {
   const code = (error as any)?.response?.data?.error_code;
   if (typeof code === "string" && STALE_BLOCK_HASH_CODES.has(code)) return true;
@@ -527,6 +530,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
    });
 
     let wasCancelled = false;
+    let needsNativeCleanup = false;
     let executePromise: Promise<unknown> | null = null;
 
     const cancelPromise = new Promise<never>((_, reject) => {
@@ -604,13 +608,32 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
         }
         nextAction.onRollback?.();
       } else {
-        const err = error instanceof Error ? error : new Error(String(error));
-        const displayMsg = isNetworkError(error)
+        const didTimeout = isPowTimeoutError(error);
+        const err = didTimeout
+          ? new Error("Transaction did not work. Please try again.")
+          : error instanceof Error ? error : new Error(String(error));
+        needsNativeCleanup = needsNativeCleanup || didTimeout;
+        const displayMsg = didTimeout
+          ? "Transaction did not work. Please try again."
+          : isNetworkError(error)
           ? "No internet connection"
           : getApiErrorMessage(error);
-        if (!isNetworkError(error) && !isPowCancelled(error)) {
+        if (!isNetworkError(error) && !isPowCancelled(error) && !isPowTimeoutError(error)) {
           Sentry.captureException(err, {
             tags: { action: "pow_action", pow_type: nextAction.type },
+            extra: { actionId: nextAction.id, label: nextAction.label },
+          });
+        }
+        if (isPowTimeoutError(error)) {
+          Sentry.addBreadcrumb({
+            category: "pow",
+            message: `${nextAction.type} PoW timed out`,
+            level: "warning",
+            data: { actionId: nextAction.id, type: nextAction.type },
+          });
+          Sentry.captureMessage("Queued PoW action timed out", {
+            level: "warning",
+            tags: { action: "pow_action_timeout", pow_type: nextAction.type },
             extra: { actionId: nextAction.id, label: nextAction.label },
           });
         }
@@ -635,7 +658,8 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
        }
       }
     } finally {
-      if (wasCancelled) {
+      if (wasCancelled || needsNativeCleanup) {
+        set({ currentAction: null, currentProgress: 0 });
         const nativeCleanup = executePromise
           ? (executePromise as Promise<unknown>).catch(() => {})
           : Promise.resolve();
