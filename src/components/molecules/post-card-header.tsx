@@ -50,6 +50,7 @@ type PostCardHeaderProps = {
   topicDisabled?: boolean;
   directFollowUser?: boolean;
   showMoreButton?: boolean;
+  disabled?: boolean;
 };
 
 export const PostCardHeader = memo(function PostCardHeader({
@@ -68,6 +69,7 @@ export const PostCardHeader = memo(function PostCardHeader({
   topicDisabled = false,
   directFollowUser = false,
   showMoreButton = false,
+  disabled = false,
 }: PostCardHeaderProps) {
   const { theme } = useUnistyles();
 
@@ -90,29 +92,34 @@ export const PostCardHeader = memo(function PostCardHeader({
   );
 
   const handleAuthorPress = useCallback(() => {
+    if (disabled) return;
     triggerHaptic("selection");
     onAuthorPress?.();
-  }, [onAuthorPress]);
+  }, [disabled, onAuthorPress]);
 
   const handleTopicPress = useCallback(() => {
+    if (disabled) return;
     triggerHaptic("selection");
     onTopicPress?.();
-  }, [onTopicPress]);
+  }, [disabled, onTopicPress]);
 
   const handleMorePress = useCallback(() => {
+    if (disabled) return;
     triggerHaptic("selection");
     onMorePress?.();
-  }, [onMorePress]);
+  }, [disabled, onMorePress]);
 
   const handleFollowUser = useCallback(() => {
+    if (disabled) return;
     triggerHaptic("medium");
     onFollowUser?.();
-  }, [onFollowUser]);
+  }, [disabled, onFollowUser]);
 
   const handleFollowTopic = useCallback(() => {
+    if (disabled) return;
     triggerHaptic("medium");
     onFollowTopic?.();
-  }, [onFollowTopic]);
+  }, [disabled, onFollowTopic]);
 
   const { displayTopic, showUsername } = useMemo(
     () => getTopicUsernameDisplay(topic, author.username),

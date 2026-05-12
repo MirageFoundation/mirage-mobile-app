@@ -42,5 +42,6 @@ export type Post = {
   optimisticError?: string;
   optimisticActionId?: string;
   optimisticDraft?: PostDraft;
+  optimisticVideoPreviewUntil?: number;
   appendices?: { agent: string; agentUsername?: string; text: string }[];
 };

@@ -191,6 +191,7 @@ export function transformApiPost(
     optimisticError: apiPost.optimistic_error,
     optimisticActionId: apiPost.optimistic_action_id,
     optimisticDraft: apiPost.optimistic_draft,
+    optimisticVideoPreviewUntil: apiPost.optimistic_video_preview_until,
     appendices: apiPost.appendices?.map((a) => ({
       agent: a.agent,
       agentUsername: a.agent_username,

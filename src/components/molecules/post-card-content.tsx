@@ -15,6 +15,7 @@ type PostCardContentProps = {
   contentWarnings?: ContentWarningType[];
   /** Whether to show the URL card/Play Now row (default: true) */
   showUrlCard?: boolean;
+  disabled?: boolean;
   onRevealContent?: () => void;
   onPlayNowPress?: () => void;
 };
@@ -27,6 +28,7 @@ export const PostCardContent = memo(function PostCardContent({
   shouldBlurContent,
   contentWarnings,
   showUrlCard = true,
+  disabled = false,
   onRevealContent,
   onPlayNowPress,
 }: PostCardContentProps) {
@@ -69,7 +71,7 @@ export const PostCardContent = memo(function PostCardContent({
               {displayDomain}
             </Text>
           </View>
-          <Pressable onPress={onPlayNowPress} style={styles.playNowButton}>
+          <Pressable onPress={disabled ? undefined : onPlayNowPress} disabled={disabled} style={styles.playNowButton}>
             <Text size="sm" weight="semibold" style={styles.playNowText}>
               Play Now
             </Text>

@@ -63,6 +63,7 @@ type PostCardMediaProps = {
   extraMediaCount: number;
   allowAutoplay?: boolean;
   screenActive?: boolean;
+  disabled?: boolean;
   onRevealContent?: () => void;
   onMediaPress?: () => void;
   onGalleryMediaPress?: (index: number) => void;
@@ -166,6 +167,7 @@ export const PostCardMedia = memo(
       extraMediaCount,
       allowAutoplay = true,
       screenActive = true,
+      disabled = false,
       onRevealContent,
       onMediaPress,
       onGalleryMediaPress,
@@ -211,6 +213,7 @@ export const PostCardMedia = memo(
     const videoErrorRetryCountRef = useRef(0);
     const videoProcessingPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const videoProcessingStartedAtRef = useRef<number | null>(null);
+    const videoProcessingAttemptsRef = useRef(0);
     const focusRecoveryRetryCountRef = useRef(0);
 
     const aspectRatioLockedRef = useRef(false);
@@ -734,6 +737,7 @@ export const PostCardMedia = memo(
     const handleFeedVideoTap = useCallback(
       (event: GestureResponderEvent) => {
         event.stopPropagation?.();
+        if (disabled) return;
         if (isPostDetail) return;
         if (shouldBlurContent) {
           onRevealContent?.();
@@ -748,12 +752,13 @@ export const PostCardMedia = memo(
         saveVideoPositionFresh();
         onMediaPress?.();
       },
-      [isPostDetail, shouldBlurContent, onRevealContent, allowAutoplay, isVideoPlaying, feedTappedToPlay, handleVideoToggle, onMediaPress, saveVideoPositionFresh],
+      [disabled, isPostDetail, shouldBlurContent, onRevealContent, allowAutoplay, isVideoPlaying, feedTappedToPlay, handleVideoToggle, onMediaPress, saveVideoPositionFresh],
     );
 
     const handleFeedYouTubeTap = useCallback(
       (event: GestureResponderEvent) => {
         event.stopPropagation?.();
+        if (disabled) return;
         if (isPostDetail) return;
         if (shouldBlurContent) {
           onRevealContent?.();
@@ -766,7 +771,7 @@ export const PostCardMedia = memo(
         triggerHaptic("selection");
         onMediaPress?.();
       },
-      [isPostDetail, shouldBlurContent, onRevealContent, shouldAutoPlayYouTube, isVideoPlaying, feedTappedToPlay, onMediaPress],
+      [disabled, isPostDetail, shouldBlurContent, onRevealContent, shouldAutoPlayYouTube, isVideoPlaying, feedTappedToPlay, onMediaPress],
     );
 
     const resolvedMediaUriForCacheRef = useRef(media?.uri);
@@ -891,6 +896,7 @@ export const PostCardMedia = memo(
     const handleMediaPress = useCallback(
       (event: GestureResponderEvent) => {
         event.stopPropagation?.();
+        if (disabled) return;
         if (shouldBlurContent) {
           onRevealContent?.();
           return;
@@ -899,7 +905,7 @@ export const PostCardMedia = memo(
         saveVideoPosition();
         onMediaPress?.();
       },
-      [shouldBlurContent, onRevealContent, onMediaPress, saveVideoPosition],
+      [disabled, shouldBlurContent, onRevealContent, onMediaPress, saveVideoPosition],
     );
 
     const isCloudflareVideo =
@@ -986,6 +992,7 @@ export const PostCardMedia = memo(
             setMediaLoaded(false);
             setVideoReadyForDisplay(false);
             setVideoPlaybackPrepared(false);
+            videoProcessingAttemptsRef.current = 0;
             setMediaRetryKey((k) => k + 1);
             return;
           }
@@ -1003,9 +1010,14 @@ export const PostCardMedia = memo(
           return;
         }
 
+        const nextDelay = Math.min(
+          CLOUD_FLARE_PROCESSING_POLL_INTERVAL_MS * (videoProcessingAttemptsRef.current + 1),
+          10000,
+        );
+        videoProcessingAttemptsRef.current += 1;
         videoProcessingPollTimeoutRef.current = setTimeout(() => {
           void poll();
-        }, CLOUD_FLARE_PROCESSING_POLL_INTERVAL_MS);
+        }, nextDelay);
       };
 
       void poll();
@@ -1479,13 +1491,13 @@ export const PostCardMedia = memo(
                 weight="semibold"
                 style={{ color: "#fff", marginTop: 8 }}
               >
-                {isRedgifsVideo ? "Loading video..." : "Video processing..."}
+                {isRedgifsVideo ? "Loading video..." : "Video is still processing."}
               </Text>
               <Text
                 size="xs"
                 style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}
               >
-                {isRedgifsVideo ? "Retrying..." : "This may take a few moments"}
+                {isRedgifsVideo ? "Retrying..." : "It may take a few moments."}
               </Text>
             </View>
           )}
@@ -1607,6 +1619,15 @@ const styles = StyleSheet.create((theme) => ({
     width: "100%",
     height: "100%",
     borderRadius: theme.radius.md,
+  },
+  deferredMediaPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.background.subtle,
+  },
+  deferredMediaLabel: {
+    marginTop: theme.spacing.xs,
+    color: theme.colors.text.subtle,
   },
   playOverlay: {
     ...StyleSheet.absoluteFillObject,

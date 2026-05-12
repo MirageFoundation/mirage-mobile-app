@@ -95,6 +95,7 @@ function arePostCardPropsEqual(
   if (prevPost.optimisticStatus !== nextPost.optimisticStatus) return false;
   if (prevPost.optimisticError !== nextPost.optimisticError) return false;
   if (prevPost.optimisticActionId !== nextPost.optimisticActionId) return false;
+  if (prevPost.optimisticVideoPreviewUntil !== nextPost.optimisticVideoPreviewUntil) return false;
 
   if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
   if (prevProps.isVisible !== nextProps.isVisible) return false;
@@ -235,6 +236,10 @@ export const PostCard = memo(function PostCard({
     !!post.optimisticActionId &&
     isOptimisticPostQueued &&
     currentPowActionId !== post.optimisticActionId;
+  const disablePostInteractions = !!post.optimisticStatus && post.optimisticStatus !== "success";
+  const forceVisibleMedia =
+    post.optimisticStatus === "success" ||
+    (!!post.optimisticVideoPreviewUntil && post.optimisticVideoPreviewUntil > Date.now());
   const optimisticCardStyle = post.optimisticStatus
     ? {
         marginTop: -1,
@@ -291,6 +296,7 @@ export const PostCard = memo(function PostCard({
       ref={containerRef}
       onLayout={onLayout}
       onPress={handlePress}
+      disabled={disablePostInteractions}
       style={[styles.container, optimisticCardStyle, style]}
     >
       <PostCardHeader
@@ -301,14 +307,15 @@ export const PostCard = memo(function PostCard({
         isFollowing={isFollowing}
         isTopicFollowed={isTopicFollowed}
         showFollowButton={showFollowButton}
-        onAuthorPress={onAuthorPress}
-        onTopicPress={topicDisabled ? undefined : onTopicPress}
+        onAuthorPress={disablePostInteractions ? undefined : onAuthorPress}
+        onTopicPress={disablePostInteractions || topicDisabled ? undefined : onTopicPress}
         topicDisabled={topicDisabled}
-        onFollowUser={onFollowUser}
-        onFollowTopic={onFollowTopic}
-        onMorePress={onMorePress}
+        onFollowUser={disablePostInteractions ? undefined : onFollowUser}
+        onFollowTopic={disablePostInteractions ? undefined : onFollowTopic}
+        onMorePress={disablePostInteractions ? undefined : onMorePress}
         directFollowUser={directFollowUser}
         showMoreButton={showMoreButton || isOwnPost}
+        disabled={disablePostInteractions}
       />
 
       {post.awards && post.awards.length > 0 && (
@@ -378,27 +385,29 @@ export const PostCard = memo(function PostCard({
         shouldBlurContent={shouldBlurContent}
         contentWarnings={contentWarnings}
         showUrlCard={showUrlCard}
-        onRevealContent={onRevealContent}
-        onPlayNowPress={handlePlayNowPress}
+        disabled={disablePostInteractions}
+        onRevealContent={disablePostInteractions ? undefined : onRevealContent}
+        onPlayNowPress={disablePostInteractions ? undefined : handlePlayNowPress}
       />
 
       <PostCardMedia
         key={`${post.id}:${videoSyncScope ?? "default"}:${resolvedContent.resolvedMedia?.uri ?? "none"}`}
         media={resolvedContent.resolvedMedia}
         mediaList={resolvedContent.resolvedMediaList}
-        isVisible={isVisible}
-        isFocused={isFocused ?? isVisible}
-        isNearVisible={isNearVisible ?? isVisible}
+        isVisible={forceVisibleMedia || isVisible}
+        isFocused={forceVisibleMedia || (isFocused ?? isVisible)}
+        isNearVisible={forceVisibleMedia || (isNearVisible ?? isVisible)}
         shouldBlurContent={shouldBlurContent}
         hasMultipleMedia={resolvedContent.hasMultipleMedia}
         extraMediaCount={resolvedContent.extraMediaCount}
         allowAutoplay={allowAutoplay}
         screenActive={screenActive && !showMediaPreview}
-        onRevealContent={onRevealContent}
-        onMediaPress={handleMediaPress}
+        disabled={disablePostInteractions}
+        onRevealContent={disablePostInteractions ? undefined : onRevealContent}
+        onMediaPress={disablePostInteractions ? undefined : handleMediaPress}
         isPostDetail={isPostDetail}
         videoSyncScope={videoSyncScope}
-        onGalleryMediaPress={handleGalleryMediaPress}
+        onGalleryMediaPress={disablePostInteractions ? undefined : handleGalleryMediaPress}
       />
 
       {bodyText && !shouldBlurContent && (
@@ -441,21 +450,22 @@ export const PostCard = memo(function PostCard({
         comments={comments}
         hasLiked={hasLiked}
         hasDisliked={hasDisliked}
-        onLikePress={onLikePress}
-        onDislikePress={onDislikePress}
-        onCommentPress={onCommentPress}
-        onSharePress={onSharePress}
+        onLikePress={disablePostInteractions ? undefined : onLikePress}
+        onDislikePress={disablePostInteractions ? undefined : onDislikePress}
+        onCommentPress={disablePostInteractions ? undefined : onCommentPress}
+        onSharePress={disablePostInteractions ? undefined : onSharePress}
         shareUrl={shareUrl}
         shareTitle={title}
         isOwnPost={isOwnPost}
         authorUsername={author.username}
-        onBlockUser={onBlockUser}
-        onBlockPost={onBlockPost}
-        onBlockTopic={onBlockTopic}
+        onBlockUser={disablePostInteractions ? undefined : onBlockUser}
+        onBlockPost={disablePostInteractions ? undefined : onBlockPost}
+        onBlockTopic={disablePostInteractions ? undefined : onBlockTopic}
         topic={post.topic}
-        onReport={onReport}
+        onReport={disablePostInteractions ? undefined : onReport}
         hideCommentAction={hideCommentAction}
         style={styles.actions}
+        disabled={disablePostInteractions}
       />
 
       <MediaPreviewModal

@@ -238,6 +238,7 @@ export interface Post {
   optimistic_error?: string;
   optimistic_action_id?: string;
   optimistic_draft?: import("@/src/stores/draft-store").PostDraft;
+  optimistic_video_preview_until?: number;
   appendices?: { agent: string; agent_username?: string; text: string }[];
 }
 

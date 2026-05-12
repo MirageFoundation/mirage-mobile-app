@@ -103,6 +103,8 @@ const CONTENT_WARNING_OPTIONS: { value: ContentTag; label: string }[] = [
 
 type VideoUploadEntry = { url: string | null; uploading: boolean; progress: number; error: string | null; isServerError?: boolean; sessionId?: number };
 const VIDEO_UPLOADS = new Map<string, VideoUploadEntry>();
+type ImageUploadEntry = { url: string | null; uploading: boolean; error: string | null; isServerError?: boolean; promise?: Promise<string> };
+const IMAGE_UPLOADS = new Map<string, ImageUploadEntry>();
 
 type VideoMeta = { originalUri: string; width: number; height: number; trimStart: number; trimEnd: number };
 const VIDEO_META = new Map<string, VideoMeta>();
@@ -194,9 +196,25 @@ export function CreateScreen() {
   });
   const videoUploadStateRef = useRef(setVideoUploadState);
   videoUploadStateRef.current = setVideoUploadState;
+  const [imageUploadState, setImageUploadState] = useState<
+    Record<string, { uploading: boolean; done: boolean; error: string | null }>
+  >(() => {
+    const init: Record<string, { uploading: boolean; done: boolean; error: string | null }> = {};
+    for (const [uri, entry] of IMAGE_UPLOADS) {
+      init[uri] = {
+        uploading: entry.uploading,
+        done: !!entry.url,
+        error: entry.error,
+      };
+    }
+    return init;
+  });
+  const imageUploadStateRef = useRef(setImageUploadState);
+  imageUploadStateRef.current = setImageUploadState;
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isProcessingShareLink, setIsProcessingShareLink] = useState(false);
+  const [isPreparingImages, setIsPreparingImages] = useState(false);
   const [isPreparingVideo, setIsPreparingVideo] = useState(false);
   const [isNetworkOnline, setIsNetworkOnline] = useState(true);
   const navigatedToEditorRef = useRef(false);
@@ -235,6 +253,87 @@ export function CreateScreen() {
   }, [videoUploadState]);
 
   const hasFailedUploads = failedVideoUploads.length > 0;
+
+  const failedImageUploads = useMemo(() => {
+    return Object.entries(imageUploadState)
+      .filter(([, v]) => v.error)
+      .map(([uri, v]) => ({ uri, error: v.error! }));
+  }, [imageUploadState]);
+
+  const hasFailedImageUploads = failedImageUploads.length > 0;
+  const imageUploadToastShownRef = useRef(false);
+
+  const isUploadingImage = useMemo(() => {
+    return Object.values(imageUploadState).some((v) => v.uploading);
+  }, [imageUploadState]);
+
+  const imageUploadsReady = useMemo(() => {
+    if (draft.attachmentType !== "image") return true;
+    if (draft.mediaUris.length === 0) return true;
+    return draft.mediaUris.every((uri) => {
+      const entry = IMAGE_UPLOADS.get(uri);
+      return !!entry && !!entry.url && !entry.uploading && !entry.error;
+    });
+  }, [draft.attachmentType, draft.mediaUris, imageUploadState]);
+
+  const startImageUpload = useCallback((uri: string, silent = false) => {
+    const existing = IMAGE_UPLOADS.get(uri);
+    if (existing?.uploading || existing?.url) return existing.promise;
+
+    const promise = uploadImageAndGetUrl(uri)
+      .then((url) => {
+        IMAGE_UPLOADS.set(uri, { url, uploading: false, error: null });
+        imageUploadStateRef.current((prev) => ({
+          ...prev,
+          [uri]: { uploading: false, done: true, error: null },
+        }));
+        imageUploadToastShownRef.current = false;
+        return url;
+      })
+      .catch((error) => {
+        const status = (error as any)?.response?.status ?? (error as any)?.status;
+        const responseText = (error as any)?.responseText ?? (error as any)?.response?.data?.error ?? "";
+        const isUnsupportedFormat = status === 422 && String(responseText).includes("decoding");
+        const msg = isUnsupportedFormat
+          ? "This image format isn't supported. Try a different photo."
+          : error instanceof Error ? error.message : "Upload failed";
+        const isServerError = !!status && status >= 400;
+        IMAGE_UPLOADS.set(uri, { url: null, uploading: false, error: msg, isServerError });
+        imageUploadStateRef.current((prev) => ({
+          ...prev,
+          [uri]: { uploading: false, done: false, error: msg },
+        }));
+        if (!silent && !imageUploadToastShownRef.current) {
+          imageUploadToastShownRef.current = true;
+          toast.error("Image upload failed", msg);
+        }
+        throw error;
+      });
+
+    IMAGE_UPLOADS.set(uri, { url: null, uploading: true, error: null, isServerError: false, promise });
+    imageUploadStateRef.current((prev) => ({
+      ...prev,
+      [uri]: { uploading: true, done: false, error: null },
+    }));
+    return promise;
+  }, [toast]);
+
+  const getUploadedImageUrls = useCallback(async (uris: string[]) => {
+    const urls = await Promise.all(
+      uris.map(async (uri) => {
+        const entry = IMAGE_UPLOADS.get(uri);
+        if (entry?.url) return entry.url;
+        if (entry?.promise) return entry.promise;
+        return startImageUpload(uri, true) ?? uploadImageAndGetUrl(uri);
+      }),
+    );
+    return urls;
+  }, [startImageUpload]);
+
+  const resetImageUploads = useCallback(() => {
+    IMAGE_UPLOADS.clear();
+    setImageUploadState({});
+  }, []);
 
   const videoUploadToastShownRef = useRef(false);
   const videoUploadDraftDebugRef = useRef({
@@ -410,8 +509,11 @@ export function CreateScreen() {
   }, [getVideoUploadDebugData, toast]);
 
   useEffect(() => {
-    return () => resetVideoUploads();
-  }, [resetVideoUploads]);
+    return () => {
+      resetVideoUploads();
+      resetImageUploads();
+    };
+  }, [resetVideoUploads, resetImageUploads]);
 
   useEffect(() => {
     if (!hasFailedUploads) return;
@@ -443,6 +545,32 @@ export function CreateScreen() {
     return () => sub.remove();
   }, [hasFailedUploads, startVideoUpload]);
 
+  useEffect(() => {
+    if (!hasFailedImageUploads) return;
+    let retryScheduled = false;
+    const retryImages = () => {
+      const toRetry = [...IMAGE_UPLOADS.entries()]
+        .filter(([, e]) => !!e.error && !e.isServerError)
+        .map(([uri]) => uri);
+      toRetry.forEach((uri) => startImageUpload(uri, true)?.catch(() => {}));
+    };
+    const sub = Network.addNetworkStateListener((event) => {
+      if (retryScheduled) return;
+      if (event.isConnected && event.isInternetReachable !== false) {
+        retryScheduled = true;
+        setTimeout(retryImages, 1500);
+      }
+    });
+    Network.getNetworkStateAsync().then((state) => {
+      if (retryScheduled) return;
+      if (state.isConnected && state.isInternetReachable !== false) {
+        retryScheduled = true;
+        setTimeout(retryImages, 3000);
+      }
+    });
+    return () => sub.remove();
+  }, [hasFailedImageUploads, startImageUpload]);
+
   const queryClient = useQueryClient();
   const txProgress = useTransactionProgress();
   const postMutation = usePost({ onPoWProgress: txProgress.updatePoWProgress });
@@ -470,12 +598,20 @@ export function CreateScreen() {
       draft.attachmentType === "video" &&
       draft.mediaUris.length > 0 &&
       !videoUploadsReady;
+    const imageStillUploading =
+      draft.attachmentType === "image" && isUploadingImage;
+    const imageUploadBroken =
+      draft.attachmentType === "image" &&
+      draft.mediaUris.length > 0 &&
+      !imageUploadsReady;
     const editBlocked = isEditMode && editability && !editability.allowed;
     return (
       hasTitleContent &&
       hasCommunity &&
       !videoStillUploading &&
       !videoUploadBroken &&
+      !imageStillUploading &&
+      !imageUploadBroken &&
       !editBlocked
     );
   }, [
@@ -485,6 +621,8 @@ export function CreateScreen() {
     draft.mediaUris.length,
     isUploadingVideo,
     videoUploadsReady,
+    isUploadingImage,
+    imageUploadsReady,
     isEditMode,
     editability,
   ]);
@@ -666,6 +804,7 @@ export function CreateScreen() {
     setSelectedContentWarning("");
     setSelectedStickers([]);
     resetVideoUploads();
+    resetImageUploads();
     VIDEO_META.clear();
     _handledVideoParam = null;
     setIsVideoMuted(false);
@@ -1003,6 +1142,7 @@ export function CreateScreen() {
                     if (arrayBuffer.byteLength > 500) {
                       destFile.write(new Uint8Array(arrayBuffer));
                       setAttachment("image", destFile.uri);
+                      startImageUpload(destFile.uri, true)?.catch(() => {});
                       mediaCount++;
                     }
                   }
@@ -1045,6 +1185,7 @@ export function CreateScreen() {
         const file = shareIntent.files[0];
         if (file.mimeType?.startsWith("image/")) {
           setAttachment("image", file.path);
+          startImageUpload(file.path, true)?.catch(() => {});
         } else if (file.mimeType?.startsWith("video/")) {
           setAttachment("video", file.path);
           startVideoUpload(file.path);
@@ -1062,7 +1203,7 @@ export function CreateScreen() {
         shareTimeoutRef.current = null;
       }
     };
-  }, [hasShareIntent, shareIntent, isLoggedIn]);
+  }, [hasShareIntent, shareIntent, isLoggedIn, resetImageUploads, startImageUpload]);
 
   // Handle video returned from editor (via consumePendingVideoResult on focus).
   // This avoids `router.replace("/(tabs)/create", ...)` which can land on the
@@ -1128,13 +1269,14 @@ export function CreateScreen() {
     setSelectedContentWarning("");
     setSelectedStickers([]);
     resetVideoUploads();
+    resetImageUploads();
     VIDEO_META.clear();
     _handledVideoParam = null;
     setIsVideoMuted(false);
     setIsVideoPlaying(false);
     setShowDraftModal(false);
     router.back();
-  }, [clearDraft, removeAttachment, resetVideoUploads]);
+  }, [clearDraft, removeAttachment, resetVideoUploads, resetImageUploads]);
 
   const saveDraftAndClose = useCallback(() => {
     setShowDraftModal(false);
@@ -1178,11 +1320,9 @@ export function CreateScreen() {
         mediaUrls.push(...selectedStickers);
       }
 
-      if (draft.attachmentType === "image" && draft.mediaUris.length > 0) {
+      if (isEditMode && draft.attachmentType === "image" && draft.mediaUris.length > 0) {
         try {
-          const uploads = await Promise.all(
-            draft.mediaUris.map((uri) => uploadImageAndGetUrl(uri))
-          );
+          const uploads = await getUploadedImageUrls(draft.mediaUris);
           mediaUrls.push(...uploads);
         } catch (error) {
           Sentry.addBreadcrumb({ category: "image-upload", message: "Image upload failed", data: { error: String(error) }, level: "error" });
@@ -1285,6 +1425,10 @@ export function CreateScreen() {
         const optimisticId = `optimistic-post-${Date.now()}`;
         const optimisticDraft: PostDraft = { ...draft };
         const actionId = generateActionId();
+        const optimisticPreviewMediaUrls =
+          (draft.attachmentType === "image" || draft.attachmentType === "video") && draft.mediaUris.length > 0
+            ? draft.mediaUris
+            : undefined;
         const postInput: CreatePostMutationInput = {
           topic,
           title: draft.title.trim(),
@@ -1295,13 +1439,31 @@ export function CreateScreen() {
           optimisticActionId: actionId,
           optimisticMediaUrl: mediaUrls[0] ?? undefined,
           optimisticMediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+          optimisticPreviewMediaUrls,
           optimisticDraft,
         };
         usePowQueueStore.getState().enqueue({
           id: actionId,
           type: "post",
           label: getActionLabel("post"),
-          execute: () => postMutation.mutateAsync(postInput),
+          execute: async () => {
+            let uploadedMediaUrls = mediaUrls;
+            if (draft.attachmentType === "image" && draft.mediaUris.length > 0) {
+              try {
+                const uploads = await getUploadedImageUrls(draft.mediaUris);
+                uploadedMediaUrls = [...mediaUrls, ...uploads];
+              } catch (error) {
+                Sentry.addBreadcrumb({ category: "image-upload", message: "Image upload failed", data: { error: String(error) }, level: "error" });
+                throw error;
+              }
+            }
+            return postMutation.mutateAsync({
+              ...postInput,
+              media: uploadedMediaUrls.length > 0 ? uploadedMediaUrls : undefined,
+              optimisticMediaUrl: uploadedMediaUrls[0] ?? postInput.optimisticMediaUrl,
+              optimisticMediaUrls: uploadedMediaUrls.length > 0 ? uploadedMediaUrls : postInput.optimisticMediaUrls,
+            });
+          },
           onOptimisticUpdate: () => {
             upsertHomePost(
               queryClient,
@@ -1329,6 +1491,7 @@ export function CreateScreen() {
         setLinkError(null);
         setImageDimensions(null);
         resetVideoUploads();
+        resetImageUploads();
         VIDEO_META.clear();
         _handledVideoParam = null;
         setIsVideoMuted(false);
@@ -1559,24 +1722,33 @@ export function CreateScreen() {
     if (hasAttachment && draft.attachmentType !== "image") return;
     triggerHaptic("selection");
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: false,
-      quality: 0.8,
-      allowsMultipleSelection: true,
-      selectionLimit: 10 - draft.mediaUris.length,
-    });
+    try {
+      setIsPreparingImages(true);
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 0.8,
+        allowsMultipleSelection: true,
+        selectionLimit: 10 - draft.mediaUris.length,
+      });
 
-    if (!result.canceled && result.assets[0]) {
-      for (const asset of result.assets) {
-        setAttachment("image", asset.uri);
+      if (!result.canceled && result.assets[0]) {
+        for (const asset of result.assets) {
+          setAttachment("image", asset.uri);
+          startImageUpload(asset.uri, true)?.catch(() => {});
+        }
+        const lastAsset = result.assets[result.assets.length - 1];
+        if (lastAsset.width && lastAsset.height) {
+          setImageDimensions({ width: lastAsset.width, height: lastAsset.height });
+        }
       }
-      const lastAsset = result.assets[result.assets.length - 1];
-      if (lastAsset.width && lastAsset.height) {
-        setImageDimensions({ width: lastAsset.width, height: lastAsset.height });
-      }
+    } catch (err) {
+      Sentry.captureException(err, { tags: { feature: "create-post", operation: "image-picker" } });
+      toast.error("Couldn't load images", "Try different photos or re-download them from iCloud");
+    } finally {
+      setIsPreparingImages(false);
     }
-  }, [hasAttachment, draft.attachmentType, draft.mediaUris.length, setAttachment]);
+  }, [hasAttachment, draft.attachmentType, draft.mediaUris.length, setAttachment, startImageUpload, toast]);
 
   const handleVideoPress = useCallback(async () => {
     if (hasAttachment && draft.attachmentType !== "video") return;
@@ -1662,9 +1834,10 @@ export function CreateScreen() {
     removeAttachment();
     setImageDimensions(null);
     resetVideoUploads();
+    resetImageUploads();
     setIsVideoMuted(false);
     setIsVideoPlaying(false);
-  }, [removeAttachment, resetVideoUploads]);
+  }, [removeAttachment, resetVideoUploads, resetImageUploads]);
 
   const handleRemoveVideo = useCallback((uri: string) => {
     triggerHaptic("selection");
@@ -1860,7 +2033,7 @@ export function CreateScreen() {
           </View>
         </View>
       )}
-      {isPreparingVideo && (
+      {(isPreparingVideo || isPreparingImages) && (
         <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 100, backgroundColor: "rgba(0, 0, 0, 0.5)", justifyContent: "center", alignItems: "center" }}>
           <ActivityIndicator size="large" color="#fff" />
         </View>
@@ -2182,36 +2355,95 @@ export function CreateScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}
               >
-                {draft.mediaUris.map((uri, index) => (
-                  <View key={uri} style={[styles.videoPlayerWrapper, { height: 200, width: 200 }]}>
-                    <Image
-                      source={{ uri }}
-                      style={[styles.videoPlayer, { resizeMode: "cover" }]}
-                    />
-                    <View style={styles.mediaTypeBadge}>
-                      <Feather name="image" size={12} color="#fff" />
-                    </View>
-                    {!editExpired && (
-                      <Pressable
-                        onPress={() => {
-                          const { removeMediaUri } = useDraftStore.getState();
-                          removeMediaUri(uri);
-                        }}
-                        style={styles.videoRemoveButton}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                      >
-                        <View style={styles.removeButtonInner}>
-                          <Feather name="x" size={18} color="#fff" />
+                {draft.mediaUris.map((uri) => {
+                  const upload = imageUploadState[uri];
+                  return (
+                    <View key={uri} style={[styles.videoPlayerWrapper, { height: 200, width: 200 }]}>
+                      <Image
+                        source={{ uri }}
+                        style={[styles.videoPlayer, { resizeMode: "cover" }]}
+                      />
+                      <View style={styles.mediaTypeBadge}>
+                        <Feather name="image" size={12} color="#fff" />
+                      </View>
+
+                      {upload?.uploading && (
+                        <View style={[styles.uploadedBadge, !isNetworkOnline && { backgroundColor: "rgba(234,179,8,0.85)" }]}>
+                          <ActivityIndicator size="small" color="#fff" />
+                          <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
+                            {!isNetworkOnline ? "Low connectivity…" : "Uploading…"}
+                          </Text>
                         </View>
-                      </Pressable>
-                    )}
-                  </View>
-                ))}
+                      )}
+
+                      {upload && !upload.uploading && upload.done && (
+                        <View style={styles.uploadedBadge}>
+                          <Feather name="check" size={12} color="#fff" />
+                          <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
+                            Uploaded
+                          </Text>
+                        </View>
+                      )}
+
+                      {upload?.error && (
+                        <Pressable
+                          onPress={() => startImageUpload(uri)?.catch(() => {})}
+                          style={[styles.uploadedBadge, { backgroundColor: "rgba(220,50,50,0.8)" }]}
+                        >
+                          <Feather name="refresh-cw" size={12} color="#fff" />
+                          <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
+                            Retry
+                          </Text>
+                        </Pressable>
+                      )}
+
+                      {!editExpired && (
+                        <Pressable
+                          onPress={() => {
+                            const { removeMediaUri } = useDraftStore.getState();
+                            removeMediaUri(uri);
+                            IMAGE_UPLOADS.delete(uri);
+                            setImageUploadState((prev) => { const next = { ...prev }; delete next[uri]; return next; });
+                          }}
+                          style={styles.videoRemoveButton}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <View style={styles.removeButtonInner}>
+                            <Feather name="x" size={18} color="#fff" />
+                          </View>
+                        </Pressable>
+                      )}
+                    </View>
+                  );
+                })}
               </ScrollView>
             </Animated.View>
           )}
 
           {renderVideoPreview()}
+
+          {isUploadingImage && (
+            <Animated.View
+              entering={FadeIn.duration(200)}
+              exiting={FadeOut.duration(200)}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                marginTop: 8,
+                marginHorizontal: 4,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                borderRadius: 10,
+                backgroundColor: theme.colors.warning[500] + "15",
+                gap: 8,
+              }}
+            >
+              <Feather name="alert-triangle" size={14} color={theme.colors.warning[500]} />
+              <Text size="xs" style={{ color: theme.colors.warning[500], flex: 1 }}>
+                Please don't leave the app while images are uploading
+              </Text>
+            </Animated.View>
+          )}
 
           {isUploadingVideo && (
             <Animated.View

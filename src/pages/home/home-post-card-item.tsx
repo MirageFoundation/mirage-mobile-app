@@ -50,6 +50,7 @@ function areHomePostCardItemPropsEqual(
  if (prev.optimisticStatus !== next.optimisticStatus) return false;
  if (prev.optimisticError !== next.optimisticError) return false;
  if (prev.optimisticActionId !== next.optimisticActionId) return false;
+ if (prev.optimisticVideoPreviewUntil !== next.optimisticVideoPreviewUntil) return false;
   if (prevProps.feedScreen !== nextProps.feedScreen) return false;
   if (prevProps.feedContext !== nextProps.feedContext) return false;
  return true;

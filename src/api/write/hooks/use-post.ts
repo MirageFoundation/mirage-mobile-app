@@ -33,6 +33,7 @@ import {
 import type { PoWProgress } from "../signing";
 import * as Sentry from "@sentry/react-native";
 import type { PostDraft } from "@/src/stores/draft-store";
+import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 
 // ============================================
 // Types
@@ -47,6 +48,7 @@ export type CreatePostMutationInput = CreatePostInput & {
   optimisticActionId?: string;
   optimisticMediaUrl?: string | null;
   optimisticMediaUrls?: string[];
+  optimisticPreviewMediaUrls?: string[];
   optimisticDraft?: PostDraft;
 };
 
@@ -105,6 +107,15 @@ export const buildOptimisticPost = (
   const mediaUrl =
     input.optimisticMediaUrl?.trim() || fallbackMediaUrl || null;
   const postId = txHash ?? input.optimisticId ?? `local-${Date.now()}`;
+  const shouldUsePreviewMedia =
+    (status === "pending" || status === "success") &&
+    !!input.optimisticPreviewMediaUrls?.length;
+  const media = shouldUsePreviewMedia
+    ? input.optimisticPreviewMediaUrls
+    : input.optimisticMediaUrls ?? (mediaUrl ? [mediaUrl] : []);
+  const thumbnail = shouldUsePreviewMedia
+    ? input.optimisticPreviewMediaUrls?.[0] ?? mediaUrl ?? ""
+    : mediaUrl ?? "";
 
   return {
     post_id: postId,
@@ -118,8 +129,8 @@ export const buildOptimisticPost = (
     content: input.content,
     tag: input.tag ?? "",
     edited_at: 0,
-    thumbnail: mediaUrl ?? "",
-    media: input.optimisticMediaUrls ?? (mediaUrl ? [mediaUrl] : []),
+    thumbnail,
+    media,
     points: 0,
     comments: 0,
     user_vote: 1,
@@ -127,6 +138,9 @@ export const buildOptimisticPost = (
     optimistic_status: status,
     optimistic_action_id: input.optimisticActionId,
     optimistic_draft: input.optimisticDraft,
+    optimistic_video_preview_until: input.optimisticPreviewMediaUrls?.length
+      ? Date.now() + 45000
+      : undefined,
   };
 };
 
@@ -220,6 +234,7 @@ const replaceOrUpdateOptimisticPost = (
   optimisticId: string,
   nextPost: ApiPost,
 ) => {
+  const nextPostId = nextPost.post_id;
   updateQueriesWithReducer(queryClient, ["posts"], (data) => {
     if (!data) return { nextData: data, didUpdate: false };
     const replace = (post: ApiPost) =>
@@ -242,6 +257,74 @@ const replaceOrUpdateOptimisticPost = (
       if (post.post_id !== optimisticId) return post;
       didUpdate = true;
       return replace(post);
+    });
+    return { nextData: didUpdate ? { ...singleData, posts } : data, didUpdate };
+  });
+
+  useHomePostCardStore.setState((state) => {
+    const replaceId = (id: string | null | undefined) =>
+      id === optimisticId ? nextPostId : id ?? null;
+    const replaceSet = (ids?: Set<string>) => {
+      if (!ids?.has(optimisticId)) return ids;
+      const next = new Set(ids);
+      next.delete(optimisticId);
+      next.add(nextPostId);
+      return next;
+    };
+
+    const activeVideoPostIds = Object.fromEntries(
+      Object.entries(state.activeVideoPostIds).map(([screen, id]) => [screen, replaceId(id)]),
+    );
+    const visibleVideoPostIds = Object.fromEntries(
+      Object.entries(state.visibleVideoPostIds).map(([screen, ids]) => [screen, replaceSet(ids) ?? ids]),
+    );
+    const nearbyVideoPostIds = Object.fromEntries(
+      Object.entries(state.nearbyVideoPostIds).map(([screen, ids]) => [screen, replaceSet(ids) ?? ids]),
+    );
+
+    return {
+      activeVideoPostIds,
+      visibleVideoPostIds,
+      nearbyVideoPostIds,
+    };
+  });
+};
+
+const preserveLocalPreviewMedia = (
+  queryClient: QueryClient,
+  postId: string,
+  previewMediaUrls: string[],
+) => {
+  if (!previewMediaUrls.length) return;
+  updateQueriesWithReducer(queryClient, ["posts"], (data) => {
+    if (!data) return { nextData: data, didUpdate: false };
+    const preserve = (post: ApiPost) =>
+      post.post_id === postId
+        ? {
+            ...post,
+            thumbnail: previewMediaUrls[0] ?? post.thumbnail,
+            media: previewMediaUrls,
+            optimistic_video_preview_until: Date.now() + 45000,
+          }
+        : post;
+    if (isInfinitePostsData(data)) {
+      let didUpdate = false;
+      const pages = data.pages.map((page) => {
+        const posts = page.posts.map((post) => {
+          if (post.post_id !== postId) return post;
+          didUpdate = true;
+          return preserve(post);
+        });
+        return didUpdate ? { ...page, posts } : page;
+      });
+      return { nextData: didUpdate ? { ...data, pages } : data, didUpdate };
+    }
+    const singleData = data as PostsResponse;
+    let didUpdate = false;
+    const posts = singleData.posts.map((post) => {
+      if (post.post_id !== postId) return post;
+      didUpdate = true;
+      return preserve(post);
     });
     return { nextData: didUpdate ? { ...singleData, posts } : data, didUpdate };
   });
@@ -558,7 +641,7 @@ export function usePost(options: UsePostOptions = {}) {
   return useMutation({
     mutationFn: async (input: CreatePostMutationInput) => {
       const wallet = await getWallet();
-      const { optimisticId, optimisticActionId, optimisticMediaUrl, optimisticMediaUrls, optimisticDraft, ...postInput } = input;
+      const { optimisticId, optimisticActionId, optimisticMediaUrl, optimisticMediaUrls, optimisticPreviewMediaUrls, optimisticDraft, ...postInput } = input;
       return createPost(wallet, postInput, options.onPoWProgress);
     },
     onSuccess: (data, input) => {
@@ -571,12 +654,52 @@ export function usePost(options: UsePostOptions = {}) {
 
       if (input.optimisticId) {
         replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, optimisticPost);
+        if (input.optimisticPreviewMediaUrls?.length) {
+          preserveLocalPreviewMedia(queryClient, optimisticPost.post_id, input.optimisticPreviewMediaUrls);
+          [1000, 2500, 5000, 10000, 20000, 45000].forEach((delay) => {
+            setTimeout(() => {
+              preserveLocalPreviewMedia(queryClient, optimisticPost.post_id, input.optimisticPreviewMediaUrls ?? []);
+            }, delay);
+          });
+        }
         setTimeout(() => {
+          if (input.optimisticPreviewMediaUrls?.length) {
+            useHomePostCardStore.setState((state) => {
+              const screen = state.activeFeedScreen;
+              if (!screen) return state;
+              const visible = new Set(state.visibleVideoPostIds[screen] ?? []);
+              const nearby = new Set(state.nearbyVideoPostIds[screen] ?? []);
+              visible.add(optimisticPost.post_id);
+              nearby.add(optimisticPost.post_id);
+              return {
+                activeVideoPostIds: {
+                  ...state.activeVideoPostIds,
+                  [screen]: optimisticPost.post_id,
+                },
+                visibleVideoPostIds: {
+                  ...state.visibleVideoPostIds,
+                  [screen]: visible,
+                },
+                nearbyVideoPostIds: {
+                  ...state.nearbyVideoPostIds,
+                  [screen]: nearby,
+                },
+              };
+            });
+          }
           updateQueriesWithReducer(queryClient, ["posts"], (queryData) => {
             if (!queryData) return { nextData: queryData, didUpdate: false };
             const clearStatus = (post: ApiPost) =>
               post.post_id === optimisticPost.post_id
-                ? { ...post, optimistic_status: undefined, optimistic_error: undefined, optimistic_draft: undefined }
+                ? {
+                    ...post,
+                    optimistic_status: undefined,
+                    optimistic_error: undefined,
+                    optimistic_draft: undefined,
+                    optimistic_video_preview_until: input.optimisticPreviewMediaUrls?.length
+                      ? Date.now() + 45000
+                      : post.optimistic_video_preview_until,
+                  }
                 : post;
             if (isInfinitePostsData(queryData)) {
               let didUpdate = false;
