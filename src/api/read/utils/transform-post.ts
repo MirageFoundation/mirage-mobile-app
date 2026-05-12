@@ -187,6 +187,10 @@ export function transformApiPost(
     awards: apiPost.awards ?? [],
     agentEdited: apiPost.agent_edited ?? false,
     agentEditsMeta: apiPost.agent_edits_meta,
+    optimisticStatus: apiPost.optimistic_status,
+    optimisticError: apiPost.optimistic_error,
+    optimisticActionId: apiPost.optimistic_action_id,
+    optimisticDraft: apiPost.optimistic_draft,
     appendices: apiPost.appendices?.map((a) => ({
       agent: a.agent,
       agentUsername: a.agent_username,

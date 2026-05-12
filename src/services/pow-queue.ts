@@ -161,6 +161,7 @@ export const getSuccessLabel = (type: PowActionType): string => {
 };
 
 let isProcessingLock = false;
+let isWaitingForConnectivity = false;
 let currentCancelReject: ((reason?: unknown) => void) | null = null;
 let successOverlayTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -238,19 +239,23 @@ function setupPowQueueAppStateHandling(): void {
 
 const waitForConnectivity = (): Promise<void> => {
   return new Promise((resolve) => {
+    let resolved = false;
     const check = async () => {
       const appActive = AppState.currentState === "active";
       const net = await Network.getNetworkStateAsync();
-      if (appActive && net.isConnected) {
+      if (appActive && net.isConnected && net.isInternetReachable !== false) {
+        resolved = true;
         resolve();
         return;
       }
       const subs: { remove: () => void }[] = [];
       const cleanup = () => subs.forEach((s) => s.remove());
       const recheck = async () => {
+        if (resolved) return;
         const a = AppState.currentState === "active";
         const n = await Network.getNetworkStateAsync();
-        if (a && n.isConnected) {
+        if (a && n.isConnected && n.isInternetReachable !== false) {
+          resolved = true;
           cleanup();
           resolve();
         }
@@ -260,7 +265,7 @@ const waitForConnectivity = (): Promise<void> => {
         await recheck();
         if (AppState.currentState === "active") {
           const n = await Network.getNetworkStateAsync();
-          if (n.isConnected) clearInterval(interval);
+          if (n.isConnected && n.isInternetReachable !== false) clearInterval(interval);
         }
       }, 3000);
       subs.push({ remove: () => clearInterval(interval) });
@@ -519,6 +524,24 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       return;
     }
 
+    try {
+      const networkState = await Network.getNetworkStateAsync();
+      if (!networkState.isConnected || networkState.isInternetReachable === false) {
+        set({ isProcessing: true });
+        if (!isWaitingForConnectivity) {
+          isWaitingForConnectivity = true;
+          waitForConnectivity().then(() => {
+            isWaitingForConnectivity = false;
+            get().processNext();
+          });
+        }
+        return;
+      }
+    } catch {
+      // If the network probe itself fails, continue and let the API layer
+      // surface a normal network error/retry path.
+    }
+
     isProcessingLock = true;
 
     const [nextAction, ...remainingQueue] = state.queue;
@@ -699,6 +722,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
 
   reset: () => {
     isProcessingLock = false;
+    isWaitingForConnectivity = false;
     currentCancelReject = null;
     immediateActions.forEach(({ reject }) => reject(new Error("pow_cancelled")));
     immediateActions.clear();

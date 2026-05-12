@@ -8,9 +8,9 @@ import { sanitizeTopicName } from "@/src/utils/topic-validation";
 import { trimToMaxDuration } from "@/src/utils/video-processing";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
-import { getApiErrorMessage } from "@/src/utils/parse-api-error";
+import { getApiErrorMessage, parseApiError } from "@/src/utils/parse-api-error";
 import { isPowCancelled } from "@/src/wallet";
-import { waitForQueueDrain, usePowQueueStore } from "@/src/services/pow-queue";
+import { generateActionId, getActionLabel, waitForQueueDrain, usePowQueueStore } from "@/src/services/pow-queue";
 import { Audio, ResizeMode, Video } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import { Paths, File as ExpoFile } from "expo-file-system";
@@ -43,13 +43,13 @@ import {
 } from "@/src/api/read/hooks/use-upload-media";
 import { consumePendingVideoResult } from "@/src/pages/create/video-editor-screen";
 import { usePost, useEdit, type CreatePostMutationInput } from "@/src/api/write";
+import { buildOptimisticPost, markOptimisticPostError, upsertHomePost } from "@/src/api/write/hooks/use-post";
 import type { ContentTag, EditPostInput } from "@/src/api/write/endpoints/posts";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useToast } from "@/src/providers/toast-provider";
 import { TransactionProgressModal } from "@/src/components/molecules/transaction-progress-modal";
 import { useTransactionProgress } from "@/src/hooks/use-transaction-progress";
-import { getTxStatus } from "@/src/api/read/endpoints/tx";
 import { useDraftStore, type Community, type PostDraft } from "@/src/stores/draft-store";
 import { useHomePostCardStore } from "./home/home-post-card-store";
 import { useUserLevel, useAuthStore } from "@/src/stores/auth-store";
@@ -83,6 +83,16 @@ function looksLikeUrlWithoutProtocol(text: string): boolean {
   );
 }
 
+function getPostFailureDetails(error: unknown): string {
+  const parsed = parseApiError(error);
+  const backendMessage = (error as any)?.response?.data?.error;
+  const message = typeof backendMessage === "string" && backendMessage.trim().length > 0
+    ? backendMessage.trim()
+    : parsed.message;
+
+  return parsed.errorCode ? `${parsed.errorCode}: ${message}` : message;
+}
+
 const CONTENT_WARNING_OPTIONS: { value: ContentTag; label: string }[] = [
   { value: "sensitive", label: "Sensitive" },
   { value: "adult", label: "Adult" },
@@ -105,6 +115,7 @@ export function CreateScreen() {
   const insets = useSafeAreaInsets();
   const userLevel = useUserLevel();
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const currentUser = useAuthStore((s) => s.user);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
   const tierLimits = useMemo(() => getTierPostLimits(userLevel), [userLevel]);
 
@@ -1149,12 +1160,14 @@ export function CreateScreen() {
 
     Keyboard.dismiss();
     setIsSubmitting(true);
-    txProgress.startTransaction();
+    if (isEditMode) {
+      txProgress.startTransaction();
+    }
     triggerHaptic("medium");
 
     try {
       const powState = usePowQueueStore.getState();
-      if (powState.isProcessing || powState.queue.length > 0 || powState.currentAction) {
+      if (isEditMode && (powState.isProcessing || powState.queue.length > 0 || powState.currentAction)) {
         txProgress.setPhase("waiting");
         await waitForQueueDrain();
       }
@@ -1269,16 +1282,62 @@ export function CreateScreen() {
         });
         result = await editMutation.mutateAsync(editInput);
       } else {
+        const optimisticId = `optimistic-post-${Date.now()}`;
+        const optimisticDraft: PostDraft = { ...draft };
+        const actionId = generateActionId();
         const postInput: CreatePostMutationInput = {
           topic,
           title: draft.title.trim(),
           content: content,
           tag: selectedContentWarning,
           media: mediaUrls.length > 0 ? mediaUrls : undefined,
+          optimisticId,
+          optimisticActionId: actionId,
           optimisticMediaUrl: mediaUrls[0] ?? undefined,
           optimisticMediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+          optimisticDraft,
         };
-        result = await postMutation.mutateAsync(postInput);
+        usePowQueueStore.getState().enqueue({
+          id: actionId,
+          type: "post",
+          label: getActionLabel("post"),
+          execute: () => postMutation.mutateAsync(postInput),
+          onOptimisticUpdate: () => {
+            upsertHomePost(
+              queryClient,
+              buildOptimisticPost(
+                undefined,
+                postInput,
+                currentUser?.walletAddress ?? currentUser?.id ?? null,
+                currentUser?.username,
+                "pending",
+              ),
+            );
+          },
+          onError: (err) => {
+            const toastMessage = getApiErrorMessage(err);
+            const postErrorDetails = getPostFailureDetails(err);
+            markOptimisticPostError(queryClient, optimisticId, postErrorDetails);
+            toast.error("Post wasn't created", toastMessage);
+          },
+        });
+
+        setSelectedContentWarning("");
+        setSelectedStickers([]);
+        setShowLinkInput(false);
+        setLinkUrl("");
+        setLinkError(null);
+        setImageDimensions(null);
+        resetVideoUploads();
+        VIDEO_META.clear();
+        _handledVideoParam = null;
+        setIsVideoMuted(false);
+        clearDraft();
+        setIsSubmitting(false);
+        triggerScrollToTop();
+        useHomePostCardStore.getState().setSkipNextRefresh(true);
+        router.replace("/");
+        return;
       }
 
       if (isEditMode) {
@@ -1367,43 +1426,6 @@ export function CreateScreen() {
           txProgress.hideModal();
           router.back();
         }, 500);
-      } else {
-        txProgress.setPhase("confirming");
-        let confirmed = false;
-        if (result?.tx_hash) {
-          for (let i = 0; i < 30; i++) {
-            await new Promise((r) => setTimeout(r, 2000));
-            try {
-              const status = await getTxStatus({ hash: result.tx_hash });
-              if (status.found && status.indexed) {
-                confirmed = true;
-                break;
-              }
-            } catch {}
-          }
-        }
-
-        txProgress.setSuccess(result?.tx_hash);
-
-        setSelectedContentWarning("");
-        setSelectedStickers([]);
-        setShowLinkInput(false);
-        setLinkUrl("");
-        setLinkError(null);
-        setImageDimensions(null);
-        resetVideoUploads();
-        VIDEO_META.clear();
-        _handledVideoParam = null;
-        setIsVideoMuted(false);
-        clearDraft();
-        setIsSubmitting(false);
-        triggerScrollToTop();
-
-        setTimeout(() => {
-          txProgress.hideModal();
-          useHomePostCardStore.getState().setSkipNextRefresh(true);
-          router.replace("/(tabs)/");
-        }, 500);
       }
     } catch (error) {
       setIsSubmitting(false);
@@ -1454,6 +1476,7 @@ export function CreateScreen() {
     router,
     txProgress,
     queryClient,
+    currentUser,
   ]);
 
   const handleCommunitySelect = useCallback(

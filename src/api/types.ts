@@ -234,6 +234,10 @@ export interface Post {
   awards?: AwardBadge[];
   agent_edited?: boolean;
   agent_edits_meta?: Record<string, string>;
+  optimistic_status?: "pending" | "success" | "error";
+  optimistic_error?: string;
+  optimistic_action_id?: string;
+  optimistic_draft?: import("@/src/stores/draft-store").PostDraft;
   appendices?: { agent: string; agent_username?: string; text: string }[];
 }
 

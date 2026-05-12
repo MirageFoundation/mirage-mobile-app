@@ -32,6 +32,7 @@ import {
 } from "../endpoints/posts";
 import type { PoWProgress } from "../signing";
 import * as Sentry from "@sentry/react-native";
+import type { PostDraft } from "@/src/stores/draft-store";
 
 // ============================================
 // Types
@@ -42,8 +43,11 @@ export interface UsePostOptions {
 }
 
 export type CreatePostMutationInput = CreatePostInput & {
+  optimisticId?: string;
+  optimisticActionId?: string;
   optimisticMediaUrl?: string | null;
   optimisticMediaUrls?: string[];
+  optimisticDraft?: PostDraft;
 };
 
 const MEDIA_URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
@@ -89,17 +93,18 @@ const getFirstMediaUrl = (content: string): string | null => {
   return null;
 };
 
-const buildOptimisticPost = (
+export const buildOptimisticPost = (
   txHash: string | undefined,
   input: CreatePostMutationInput,
   address: string | null,
   username: string | null | undefined,
+  status: ApiPost["optimistic_status"] = "success",
 ): ApiPost => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const fallbackMediaUrl = getFirstMediaUrl(input.content);
   const mediaUrl =
     input.optimisticMediaUrl?.trim() || fallbackMediaUrl || null;
-  const postId = txHash ?? `local-${Date.now()}`;
+  const postId = txHash ?? input.optimisticId ?? `local-${Date.now()}`;
 
   return {
     post_id: postId,
@@ -119,7 +124,127 @@ const buildOptimisticPost = (
     comments: 0,
     user_vote: 1,
     user_weight: 0,
+    optimistic_status: status,
+    optimistic_action_id: input.optimisticActionId,
+    optimistic_draft: input.optimisticDraft,
   };
+};
+
+export const upsertHomePost = (queryClient: QueryClient, optimisticPost: ApiPost) => {
+  const postQueries = queryClient.getQueriesData({ queryKey: ["posts"] });
+  postQueries.forEach(([queryKey, queryData]) => {
+    if (!queryData) return;
+    const filters = queryKey[1] as PostFilters | undefined;
+    if (filters?.feed !== "home") return;
+
+    if (
+      typeof queryData === "object" &&
+      queryData !== null &&
+      "pages" in queryData
+    ) {
+      const dataWithPages = queryData as {
+        pages: PostsResponse[];
+        pageParams: unknown[];
+      };
+      const [firstPage, ...rest] = dataWithPages.pages;
+      if (!firstPage) return;
+      if (firstPage.posts.some((post) => post.post_id === optimisticPost.post_id)) {
+        return;
+      }
+
+      queryClient.setQueryData(queryKey, {
+        ...dataWithPages,
+        pages: [
+          {
+            ...firstPage,
+            posts: [optimisticPost, ...firstPage.posts],
+            total: firstPage.total + 1,
+          },
+          ...rest,
+        ],
+      });
+    } else {
+      const dataSingle = queryData as PostsResponse;
+      if (dataSingle.posts.some((post) => post.post_id === optimisticPost.post_id)) {
+        return;
+      }
+      queryClient.setQueryData(queryKey, {
+        ...dataSingle,
+        posts: [optimisticPost, ...dataSingle.posts],
+        total: dataSingle.total + 1,
+      });
+    }
+  });
+};
+
+export const removeOptimisticPostFromCache = (queryClient: QueryClient, postId: string) => {
+  updateQueriesWithReducer(queryClient, ["posts"], (data) => removePostFromPostsData(data, postId));
+};
+
+export const markOptimisticPostError = (
+  queryClient: QueryClient,
+  postId: string,
+  errorMessage: string,
+) => {
+  updateQueriesWithReducer(queryClient, ["posts"], (data) => {
+    if (!data) return { nextData: data, didUpdate: false };
+    const markError = (post: ApiPost) =>
+      post.post_id === postId
+        ? { ...post, optimistic_status: "error" as const, optimistic_error: errorMessage }
+        : post;
+    if (isInfinitePostsData(data)) {
+      let didUpdate = false;
+      const pages = data.pages.map((page) => {
+        const posts = page.posts.map((post) => {
+          if (post.post_id !== postId) return post;
+          didUpdate = true;
+          return markError(post);
+        });
+        return didUpdate ? { ...page, posts } : page;
+      });
+      return { nextData: didUpdate ? { ...data, pages } : data, didUpdate };
+    }
+    const singleData = data as PostsResponse;
+    let didUpdate = false;
+    const posts = singleData.posts.map((post) => {
+      if (post.post_id !== postId) return post;
+      didUpdate = true;
+      return markError(post);
+    });
+    return { nextData: didUpdate ? { ...singleData, posts } : data, didUpdate };
+  });
+};
+
+const replaceOrUpdateOptimisticPost = (
+  queryClient: QueryClient,
+  optimisticId: string,
+  nextPost: ApiPost,
+) => {
+  updateQueriesWithReducer(queryClient, ["posts"], (data) => {
+    if (!data) return { nextData: data, didUpdate: false };
+    const replace = (post: ApiPost) =>
+      post.post_id === optimisticId ? nextPost : post;
+    if (isInfinitePostsData(data)) {
+      let didUpdate = false;
+      const pages = data.pages.map((page) => {
+        const posts = page.posts.map((post) => {
+          if (post.post_id !== optimisticId) return post;
+          didUpdate = true;
+          return replace(post);
+        });
+        return didUpdate ? { ...page, posts } : page;
+      });
+      return { nextData: didUpdate ? { ...data, pages } : data, didUpdate };
+    }
+    const singleData = data as PostsResponse;
+    let didUpdate = false;
+    const posts = singleData.posts.map((post) => {
+      if (post.post_id !== optimisticId) return post;
+      didUpdate = true;
+      return replace(post);
+    });
+    return { nextData: didUpdate ? { ...singleData, posts } : data, didUpdate };
+  });
 };
 
 const buildOptimisticComment = (
@@ -433,7 +558,7 @@ export function usePost(options: UsePostOptions = {}) {
   return useMutation({
     mutationFn: async (input: CreatePostMutationInput) => {
       const wallet = await getWallet();
-      const { optimisticMediaUrl, optimisticMediaUrls, ...postInput } = input;
+      const { optimisticId, optimisticActionId, optimisticMediaUrl, optimisticMediaUrls, optimisticDraft, ...postInput } = input;
       return createPost(wallet, postInput, options.onPoWProgress);
     },
     onSuccess: (data, input) => {
@@ -444,50 +569,40 @@ export function usePost(options: UsePostOptions = {}) {
         username,
       );
 
-      const postQueries = queryClient.getQueriesData({ queryKey: ["posts"] });
-      postQueries.forEach(([queryKey, queryData]) => {
-        if (!queryData) return;
-        const filters = queryKey[1] as PostFilters | undefined;
-        if (filters?.feed !== "home") return;
-
-        if (
-          typeof queryData === "object" &&
-          queryData !== null &&
-          "pages" in queryData
-        ) {
-          const dataWithPages = queryData as {
-            pages: PostsResponse[];
-            pageParams: unknown[];
-          };
-          const [firstPage, ...rest] = dataWithPages.pages;
-          if (!firstPage) return;
-          if (firstPage.posts.some((post) => post.post_id === optimisticPost.post_id)) {
-            return;
-          }
-
-          queryClient.setQueryData(queryKey, {
-            ...dataWithPages,
-            pages: [
-              {
-                ...firstPage,
-                posts: [optimisticPost, ...firstPage.posts],
-                total: firstPage.total + 1,
-              },
-              ...rest,
-            ],
+      if (input.optimisticId) {
+        replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, optimisticPost);
+        setTimeout(() => {
+          updateQueriesWithReducer(queryClient, ["posts"], (queryData) => {
+            if (!queryData) return { nextData: queryData, didUpdate: false };
+            const clearStatus = (post: ApiPost) =>
+              post.post_id === optimisticPost.post_id
+                ? { ...post, optimistic_status: undefined, optimistic_error: undefined, optimistic_draft: undefined }
+                : post;
+            if (isInfinitePostsData(queryData)) {
+              let didUpdate = false;
+              const pages = queryData.pages.map((page) => {
+                const posts = page.posts.map((post) => {
+                  if (post.post_id !== optimisticPost.post_id) return post;
+                  didUpdate = true;
+                  return clearStatus(post);
+                });
+                return didUpdate ? { ...page, posts } : page;
+              });
+              return { nextData: didUpdate ? { ...queryData, pages } : queryData, didUpdate };
+            }
+            const singleData = queryData as PostsResponse;
+            let didUpdate = false;
+            const posts = singleData.posts.map((post) => {
+              if (post.post_id !== optimisticPost.post_id) return post;
+              didUpdate = true;
+              return clearStatus(post);
+            });
+            return { nextData: didUpdate ? { ...singleData, posts } : queryData, didUpdate };
           });
-        } else {
-          const dataSingle = queryData as PostsResponse;
-          if (dataSingle.posts.some((post) => post.post_id === optimisticPost.post_id)) {
-            return;
-          }
-          queryClient.setQueryData(queryKey, {
-            ...dataSingle,
-            posts: [optimisticPost, ...dataSingle.posts],
-            total: dataSingle.total + 1,
-          });
-        }
-      });
+        }, 2000);
+      } else {
+        upsertHomePost(queryClient, optimisticPost);
+      }
 
       // Keep the newly created post visible immediately in Home feeds.
       // Magic is reconciled back to backend ordering on refresh / new-posts reload.

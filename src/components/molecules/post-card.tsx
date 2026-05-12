@@ -4,7 +4,9 @@ import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { logPress } from "@/src/utils/press-logger";
 import { setLastPressedPostY } from "@/src/utils/post-transition";
 import { usePreferencesStore } from "@/src/stores";
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { usePowQueueStore } from "@/src/services/pow-queue";
+import { useNetworkState } from "@/src/hooks/use-network-state";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Linking,
   Pressable,
@@ -58,6 +60,7 @@ type PostCardProps = {
   onReport?: () => void;
   onRevealContent?: () => void;
   onMediaPress?: () => void;
+  onOptimisticRetryPress?: () => void;
   onLayout?: (event: LayoutChangeEvent) => void;
   contentRevealed?: boolean;
   shareUrl?: string;
@@ -89,6 +92,9 @@ function arePostCardPropsEqual(
   if (prevPost.hasDisliked !== nextPost.hasDisliked) return false;
   if (prevPost.awards?.length !== nextPost.awards?.length) return false;
   if (prevPost.isFollowing !== nextPost.isFollowing) return false;
+  if (prevPost.optimisticStatus !== nextPost.optimisticStatus) return false;
+  if (prevPost.optimisticError !== nextPost.optimisticError) return false;
+  if (prevPost.optimisticActionId !== nextPost.optimisticActionId) return false;
 
   if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
   if (prevProps.isVisible !== nextProps.isVisible) return false;
@@ -106,6 +112,7 @@ function arePostCardPropsEqual(
   if (prevProps.showMoreButton !== nextProps.showMoreButton) return false;
   if (prevProps.isPostDetail !== nextProps.isPostDetail) return false;
   if (prevProps.videoSyncScope !== nextProps.videoSyncScope) return false;
+  if (prevProps.onOptimisticRetryPress !== nextProps.onOptimisticRetryPress) return false;
 
   return true;
 }
@@ -136,6 +143,7 @@ export const PostCard = memo(function PostCard({
   onReport,
   onRevealContent,
   onMediaPress: onMediaPressProp,
+  onOptimisticRetryPress,
   onLayout,
   contentRevealed = false,
   shareUrl,
@@ -209,12 +217,60 @@ export const PostCard = memo(function PostCard({
   }, [onMediaPressProp]);
 
   const { theme } = useUnistyles();
+  const currentPowActionId = usePowQueueStore((state) => state.currentAction?.id);
+  const isOptimisticPostQueued = usePowQueueStore((state) =>
+    post.optimisticActionId
+      ? state.queue.some((action) => action.id === post.optimisticActionId)
+      : false,
+  );
+  const { isConnected } = useNetworkState();
+  const isOptimisticPostOffline = post.optimisticStatus === "pending" && !isConnected;
+  const optimisticStatusColor = post.optimisticStatus === "error" || isOptimisticPostOffline
+    ? theme.colors.error[500]
+    : post.optimisticStatus === "success"
+    ? theme.colors.success[500]
+    : theme.colors.warning[500];
+  const isOptimisticPostWaitingForQueue =
+    post.optimisticStatus === "pending" &&
+    !!post.optimisticActionId &&
+    isOptimisticPostQueued &&
+    currentPowActionId !== post.optimisticActionId;
+  const optimisticCardStyle = post.optimisticStatus
+    ? {
+        backgroundColor: optimisticStatusColor + "08",
+        borderTopColor: optimisticStatusColor + "40",
+        borderBottomColor: optimisticStatusColor + "40",
+        borderTopWidth: 2,
+        borderBottomWidth: 2,
+      }
+    : null;
+  const optimisticErrorText = post.optimisticError
+    ? post.optimisticError.startsWith("Post failed")
+      ? post.optimisticError
+      : `Post failed. ${post.optimisticError}`
+    : "Post failed.";
   const MAX_BODY_LENGTH = 700;
   const bodyText = resolvedContent.bodyWithoutUrl ?? "";
   const isTruncated = bodyText.length > MAX_BODY_LENGTH;
   const truncatedBody = isTruncated
     ? bodyText.slice(0, MAX_BODY_LENGTH)
     : bodyText;
+  const previousOptimisticStatusRef = useRef<typeof post.optimisticStatus>(undefined);
+
+  useEffect(() => {
+    const previousStatus = previousOptimisticStatusRef.current;
+    const nextStatus = post.optimisticStatus;
+
+    if (previousStatus !== nextStatus) {
+      if (nextStatus === "success") {
+        triggerHaptic("success");
+      } else if (nextStatus === "error") {
+        triggerHaptic("error");
+      }
+    }
+
+    previousOptimisticStatusRef.current = nextStatus;
+  }, [post.optimisticStatus]);
 
   const handleCloseMediaPreview = useCallback(() => {
     setShowMediaPreview(false);
@@ -234,7 +290,7 @@ export const PostCard = memo(function PostCard({
       ref={containerRef}
       onLayout={onLayout}
       onPress={handlePress}
-      style={[styles.container, style]}
+      style={[styles.container, optimisticCardStyle, style]}
     >
       <PostCardHeader
         author={author}
@@ -258,6 +314,59 @@ export const PostCard = memo(function PostCard({
         <View style={styles.awardBadgesRow}>
           <AwardBadges awards={post.awards} size="sm" />
         </View>
+      )}
+
+      {post.optimisticStatus && (
+        <View
+          style={[
+            styles.optimisticBadge,
+            post.optimisticStatus === "error" || isOptimisticPostOffline
+              ? styles.optimisticBadgeError
+              : post.optimisticStatus === "success"
+              ? styles.optimisticBadgeSuccess
+              : styles.optimisticBadgePending,
+          ]}
+        >
+          <Ionicons
+            name={
+              post.optimisticStatus === "error"
+                ? "alert-circle"
+                : post.optimisticStatus === "success"
+                ? "checkmark-circle"
+                : isOptimisticPostOffline
+                ? "cloud-offline-outline"
+                : "time-outline"
+            }
+            size={14}
+            color={optimisticStatusColor}
+          />
+          <Text
+            size="xs"
+            weight="semibold"
+            style={{ color: optimisticStatusColor }}
+          >
+            {post.optimisticStatus === "error"
+              ? optimisticErrorText
+              : post.optimisticStatus === "success"
+              ? "Successfully posted."
+              : isOptimisticPostOffline
+              ? "Waiting for internet connection before publishing your post."
+              : isOptimisticPostWaitingForQueue
+              ? "Waiting for other actions to finish before publishing your post."
+              : "Finalizing your post on the network. This can take a few moments."}
+          </Text>
+        </View>
+      )}
+      {post.optimisticStatus === "error" && onOptimisticRetryPress && (
+        <Pressable
+          onPress={onOptimisticRetryPress}
+          hitSlop={8}
+          style={styles.optimisticRetryButton}
+        >
+          <Text size="xs" weight="bold" style={styles.optimisticRetryText}>
+            Try posting again
+          </Text>
+        </Pressable>
       )}
 
       <PostCardContent
@@ -378,6 +487,42 @@ const styles = StyleSheet.create((theme) => ({
   awardBadgesRow: {
     marginVertical: theme.spacing.xs,
     paddingLeft: 2,
+  },
+  optimisticBadge: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+  },
+  optimisticBadgePending: {
+    backgroundColor: theme.colors.warning[500] + "15",
+    borderColor: theme.colors.warning[500] + "40",
+  },
+  optimisticBadgeSuccess: {
+    backgroundColor: theme.colors.success[500] + "15",
+    borderColor: theme.colors.success[500] + "40",
+  },
+  optimisticBadgeError: {
+    backgroundColor: theme.colors.error[500] + "15",
+    borderColor: theme.colors.error[500] + "40",
+  },
+  optimisticRetryButton: {
+    alignSelf: "flex-start",
+    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radius.sm,
+    backgroundColor: theme.colors.error[500],
+  },
+  optimisticRetryText: {
+    color: "#FFFFFF",
   },
   agentBadge: {
     flexDirection: "row",
