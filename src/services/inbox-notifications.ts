@@ -30,6 +30,7 @@ const FOREGROUND_INTERVAL_MS = FETCH_INTERVAL_SECONDS * 1000;
 const SIGNAL_THROTTLE_MS = 15_000;
 const INBOX_NAVIGATION_READY_TIMEOUT_MS = 3_000;
 const INBOX_NOTIFICATION_NAVIGATION_ACTIVE_MS = 10_000;
+const SHARE_INTENT_NAVIGATION_ACTIVE_MS = 15_000;
 
 let isCheckInFlight = false;
 let lastSignalCheckAt = 0;
@@ -41,6 +42,7 @@ let deferredInitSubscription: { remove(): void } | null = null;
 let isInboxNotificationsInitialized = false;
 let isInitializingInboxNotifications = false;
 let lastInboxNotificationNavigationAt = 0;
+let lastShareIntentNavigationAt = 0;
 
 let _rootLayoutReadyResolve: (() => void) | null = null;
 let _rootLayoutReadyPromise: Promise<void> = new Promise<void>((resolve) => {
@@ -92,6 +94,20 @@ function markInboxNotificationNavigationActive(): void {
   lastInboxNotificationNavigationAt = Date.now();
 }
 
+export function markShareIntentNavigationActive(reason = "share-intent"): void {
+  lastShareIntentNavigationAt = Date.now();
+  Sentry.addBreadcrumb({
+    category: "share-intent",
+    message: "Share intent navigation marked active",
+    level: "info",
+    data: { reason },
+  });
+}
+
+export function isShareIntentNavigationActive(): boolean {
+  return Date.now() - lastShareIntentNavigationAt < SHARE_INTENT_NAVIGATION_ACTIVE_MS;
+}
+
 function getNavigationReadinessDebugData(): Record<string, unknown> {
   return {
     isRootLayoutReady: _isRootLayoutReady,
@@ -101,6 +117,7 @@ function getNavigationReadinessDebugData(): Record<string, unknown> {
     isInboxNotificationsInitialized,
     isInitializingInboxNotifications,
     hasNotificationResponseSubscription: !!notificationResponseSubscription,
+    isShareIntentNavigationActive: isShareIntentNavigationActive(),
   };
 }
 
@@ -784,6 +801,7 @@ function handleNotificationResponse(
   try {
     const notificationData = getNotificationData(response);
     if (isAndroidShareIntentNotificationData(notificationData)) {
+      markShareIntentNavigationActive("android-intent-extra-in-notification-response");
       Sentry.addBreadcrumb({
         category: "inbox-notifications",
         message: "Ignoring Android share intent in notification response handler",
@@ -798,6 +816,23 @@ function handleNotificationResponse(
           ...getNavigationReadinessDebugData(),
         },
       });
+      return;
+    }
+    if (source === "last-response" && isShareIntentNavigationActive()) {
+      Sentry.addBreadcrumb({
+        category: "inbox-notifications",
+        message: "Ignoring stale last notification response during share intent",
+        level: "info",
+        data: {
+          source,
+          actionIdentifier: response.actionIdentifier,
+          requestIdentifier: response.notification?.request?.identifier,
+          notificationDate: response.notification?.date,
+          dataKeys: getNotificationDataKeys(notificationData),
+          ...getNavigationReadinessDebugData(),
+        },
+      });
+      void Notifications.clearLastNotificationResponseAsync?.().catch(() => undefined);
       return;
     }
     const notificationId = getInboxNotificationResponseId(response, notificationData);
@@ -944,6 +979,7 @@ function handleNotificationResponse(
       });
       handledNotificationIds.add(notificationId);
       saveHandledNotificationIds(handledNotificationIds);
+      void Notifications.clearLastNotificationResponseAsync?.().catch(() => undefined);
     };
     const runNavigateToInbox = () => {
       void navigateToInbox().catch((error) => {

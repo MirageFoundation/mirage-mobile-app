@@ -11,6 +11,7 @@ import { useEffect } from "react";
 import { getShareScheme } from "@/src/utils/share-scheme";
 import { useForceUpdate } from "@/src/hooks/use-force-update";
 import {
+  markShareIntentNavigationActive,
   signalRootLayoutReady,
   signalRootLayoutUnmounted,
 } from "@/src/services/inbox-notifications";
@@ -73,12 +74,26 @@ function AndroidShareIntentColdStartRefresh() {
     const timer = setTimeout(() => {
       try {
         const result = ExpoShareIntentModule?.getShareIntent("");
+        const resultRecord = result && typeof result === "object"
+          ? result as Record<string, unknown>
+          : null;
+        const hasSharePayload = !!(
+          resultRecord && (
+            typeof resultRecord.text === "string" ||
+            typeof resultRecord.webUrl === "string" ||
+            (Array.isArray(resultRecord.files) && resultRecord.files.length > 0)
+          )
+        );
+        if (hasSharePayload) {
+          markShareIntentNavigationActive("android-cold-start-refresh");
+        }
         Sentry.addBreadcrumb({
           category: "share-intent",
           message: "Android cold-start share refresh requested",
           data: {
             hasNativeModule: !!ExpoShareIntentModule,
             hasResult: !!result,
+            hasSharePayload,
             resultType: typeof result,
           },
           level: "info",

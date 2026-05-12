@@ -37,6 +37,8 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { SideMenuProvider } from "@/src/providers/side-menu-provider";
 import {
   isInboxNotificationNavigationActive,
+  isShareIntentNavigationActive,
+  markShareIntentNavigationActive,
   signalTabsReady,
   signalTabsUnmounted,
 } from "@/src/services/inbox-notifications";
@@ -364,6 +366,7 @@ export default function TabLayout() {
     const prev = prevShareIntentRef.current;
     prevShareIntentRef.current = hasShareIntent;
     if (!hasShareIntent) return;
+    markShareIntentNavigationActive("tabs-share-intent");
     if (!pathname.endsWith("/create")) {
       Sentry.addBreadcrumb({
         category: "navigation",
@@ -388,13 +391,17 @@ export default function TabLayout() {
       hasHandledInitialRouteRef.current = true;
 
       const hasInitialShareIntent =
-        initialShareIntentRef.current || hasShareIntent || isRecentSharePath(10_000);
+        initialShareIntentRef.current ||
+        hasShareIntent ||
+        isRecentSharePath(60_000) ||
+        isShareIntentNavigationActive();
       const hasInitialCreateIntent =
         hasInitialShareIntent || isRecentCreateDeepLink();
       const currentPathname = latestPathnameRef.current || pathname;
       const isOnCreate = currentPathname.endsWith("/create");
       const isOnInbox = currentPathname.endsWith("/inbox");
       const isNotificationNavigationActive = isInboxNotificationNavigationActive();
+      const isShareNavigationActive = isShareIntentNavigationActive();
 
       Sentry.addBreadcrumb({
         category: "navigation",
@@ -405,16 +412,21 @@ export default function TabLayout() {
           hasInitialShareIntent,
           isOnCreate,
           isNotificationNavigationActive,
+          isShareNavigationActive,
         },
         level: "info",
       });
 
       if (isOnCreate && !hasInitialCreateIntent) {
-        if (isOnInbox || isNotificationNavigationActive) {
+        if (isOnInbox || isNotificationNavigationActive || isShareNavigationActive) {
           Sentry.addBreadcrumb({
             category: "navigation",
-            message: "Skipped stale create redirect during notification navigation",
-            data: { pathname: currentPathname, isNotificationNavigationActive },
+            message: "Skipped stale create redirect during active route intent",
+            data: {
+              pathname: currentPathname,
+              isNotificationNavigationActive,
+              isShareNavigationActive,
+            },
             level: "info",
           });
           return;

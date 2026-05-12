@@ -64,6 +64,8 @@ import {
   useDeleteHandler,
   useReportHandler,
   useTabSwipeGesture,
+  useVoteHandler,
+  type VoteResult,
 } from "@/src/hooks";
 import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
 import {
@@ -74,6 +76,7 @@ import {
   useFeedScrollStore,
   useSavedPostsStore,
 } from "@/src/stores";
+import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import { useEdit } from "@/src/api/write";
 import { useToast } from "@/src/providers/toast-provider";
@@ -137,10 +140,13 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  isFocused,
  isNearVisible,
  screenActive,
+  shareUrl,
  onPostPress,
  onAuthorPress,
  onCommentPress,
  onMorePress,
+  onLikePress,
+  onDislikePress,
   onTopicPress,
   videoSyncScope,
 }: {
@@ -149,10 +155,23 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  isFocused?: boolean;
  isNearVisible?: boolean;
  screenActive?: boolean;
+  shareUrl?: string;
  onPostPress: (postId: string) => void;
  onAuthorPress: (authorId: string) => void;
  onCommentPress: (postId: string) => void;
  onMorePress: (postId: string) => void;
+  onLikePress: (
+    postId: string,
+    currentlyLiked: boolean,
+    currentlyDisliked: boolean,
+    currentLikes: number
+  ) => void;
+  onDislikePress: (
+    postId: string,
+    currentlyLiked: boolean,
+    currentlyDisliked: boolean,
+    currentLikes: number
+  ) => void;
   onTopicPress: (topic: string) => void;
   videoSyncScope?: string;
 }) {
@@ -176,10 +195,13 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
    screenActive={screenActive}
     showUrlCard={false}
     videoSyncScope={videoSyncScope}
+     shareUrl={shareUrl}
     onPostPress={onPostPress}
     onAuthorPress={onAuthorPress}
     onCommentPress={onCommentPress}
     onMorePress={onMorePress}
+    onLikePress={onLikePress}
+    onDislikePress={onDislikePress}
    onTopicPress={onTopicPress}
    />
  );
@@ -260,6 +282,22 @@ export function ProfileScreen() {
   });
   const blockHandler = useBlockHandler({});
   const reportHandler = useReportHandler({});
+
+  const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
+  const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
+
+  const { handleUpvote, handleDownvote } = useVoteHandler({
+    onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
+      setVoteOverride(targetId, {
+        hasLiked: result.hasLiked,
+        hasDisliked: result.hasDisliked,
+        likes: result.newLikes,
+      });
+    }, [setVoteOverride]),
+    onRollback: useCallback((targetId: string) => {
+      clearVoteOverride(targetId);
+    }, [clearVoteOverride]),
+  });
 
  const toast = useToast();
  const pendingEdit = useCommentComposeStore((s) => s.pendingEdit);
@@ -955,10 +993,13 @@ useEffect(() => {
                isNearVisible={nearbyVideoPostIds.has(item.id)}
                screenActive={isFocused}
                videoSyncScope={PROFILE_POSTS_FEED_CONTEXT}
+               shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
                onPostPress={handlePostPress}
                onAuthorPress={handleAuthorPress}
                onCommentPress={handlePostPress}
                onMorePress={handlePostMorePress}
+               onLikePress={handleUpvote}
+               onDislikePress={handleDownvote}
                onTopicPress={handleTopicPress}
               />
             </Animated.View>
@@ -997,11 +1038,14 @@ useEffect(() => {
         handleAuthorPress,
         handlePostMorePress,
        handleCommentPress,
+      handleUpvote,
+      handleDownvote,
       contentAnimatedStyle,
       animatedTabIndex,
       postsWithoutWarnings,
       activeVideoPostId,
       isFocused,
+      shareServer,
       ],
     );
 
