@@ -237,6 +237,7 @@ export const PostCard = memo(function PostCard({
     currentPowActionId !== post.optimisticActionId;
   const optimisticCardStyle = post.optimisticStatus
     ? {
+        marginTop: -1,
         backgroundColor: optimisticStatusColor + "08",
         borderTopColor: optimisticStatusColor + "40",
         borderBottomColor: optimisticStatusColor + "40",
