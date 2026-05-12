@@ -1634,13 +1634,14 @@ export function CreateScreen() {
                   alignItems: "center",
                   justifyContent: "center",
                   borderWidth: 1,
-                  borderColor: "rgba(255,255,255,0.2)",
+                  backgroundColor: theme.colors.background.subtle,
+                  borderColor: theme.colors.border.default,
                   borderStyle: "dashed",
                 },
               ]}
             >
-              <Feather name="plus" size={32} color="rgba(255,255,255,0.5)" />
-              <Text size="xs" style={{ color: "rgba(255,255,255,0.5)", marginTop: 4 }}>
+              <Feather name="plus" size={32} color={theme.colors.text.subtle} />
+              <Text size="xs" style={{ color: theme.colors.text.subtle, marginTop: 4 }}>
                 Add video
               </Text>
             </Pressable>

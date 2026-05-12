@@ -341,8 +341,10 @@ export function VideoEditorScreen() {
           </Button>
         </View>
 
+        <View style={[styles.headerDivider, { backgroundColor: theme.colors.border.default }]} />
+
         {/* Video Preview */}
-        <View style={styles.videoContainer}>
+        <View style={[styles.videoContainer, { backgroundColor: theme.colors.background.base }]}>
           <Pressable onPress={handlePlayPause} style={styles.videoWrapper}>
             <Video
               ref={videoRef}
@@ -404,7 +406,7 @@ export function VideoEditorScreen() {
               
               {/* Playhead */}
               <Animated.View style={[styles.playhead, playheadStyle]}>
-                <View style={[styles.playheadLine, { backgroundColor: theme.colors.text.default }]} />
+                <View style={[styles.playheadLine, { backgroundColor: theme.colors.brand[500] }]} />
               </Animated.View>
               
               {/* Left trim handle */}
@@ -473,11 +475,14 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
+  headerDivider: {
+    height: StyleSheet.hairlineWidth,
+    width: "100%",
+  },
   videoContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#000",
   },
   videoWrapper: {
     width: "100%",
