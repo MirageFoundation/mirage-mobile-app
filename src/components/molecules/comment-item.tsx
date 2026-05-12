@@ -67,7 +67,7 @@ const NEW_USER_COLOR = "rgb(94,194,106)";
  * ------------------------------------------------------------------ */
 const COMMENT_BASE_LEFT = 16;
 const COMMENT_INDENT = 22;
-const COMMENT_AVATAR_SIZE = 18;
+const COMMENT_AVATAR_SIZE = 22;
 const COMMENT_CONTENT_GAP = 6;
 const COMMENT_RAIL_WIDTH = 1;
 const COMMENT_PADDING_TOP_EXPANDED = 10;
@@ -638,7 +638,11 @@ export const CommentItem = ({
              gutter via negative marginLeft so its left edge lands at
              `avatarLeft`, exactly where the J-curve elbow terminates. */}
           <View style={styles.avatarWrapper} pointerEvents="none">
-            <Avatar seed={avatarSeed} size={COMMENT_AVATAR_SIZE} />
+            <Avatar
+              seed={avatarSeed}
+              size={COMMENT_AVATAR_SIZE}
+              containerStyle={styles.commentAvatarContainer}
+            />
           </View>
           <View style={[styles.authorSection, isCollapsed && styles.authorSectionCollapsed]}>
             <View style={[styles.authorInfo, isCollapsed && styles.authorInfoCollapsed]}>
@@ -826,7 +830,7 @@ export const CommentItem = ({
   );
 };
 
-const styles = StyleSheet.create((theme) => ({
+const styles = StyleSheet.create((theme, rt) => ({
   container: {
     /* paddingTop / paddingLeft are applied inline since they are
        depth- and collapse-state-dependent. paddingRight gives the
@@ -857,6 +861,10 @@ const styles = StyleSheet.create((theme) => ({
     flexShrink: 0,
     alignSelf: "center",
     zIndex: 2,
+  },
+  commentAvatarContainer: {
+    backgroundColor:
+      rt.themeName === "light" ? "#FFFFFF" : theme.colors.background.subtle,
   },
   authorSection: {
     flexDirection: "row",

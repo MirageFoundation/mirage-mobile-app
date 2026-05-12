@@ -214,7 +214,11 @@ const styles = StyleSheet.create((theme, rt) => ({
   container: {
     overflow: "hidden",
     backgroundColor: theme.colors.background.subtle,
-    borderWidth: 0,
+    // In light theme, draw a subtle hairline border around every
+    // avatar so it reads against light backgrounds. Dark theme stays
+    // borderless unless `bordered` is explicitly set.
+    borderWidth: rt.themeName === "light" ? StyleSheet.hairlineWidth : 0,
+    borderColor: theme.colors.border.default,
 
     variants: {
       rounded: {
