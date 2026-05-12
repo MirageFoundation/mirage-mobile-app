@@ -92,9 +92,27 @@ function markInboxNotificationNavigationActive(): void {
   lastInboxNotificationNavigationAt = Date.now();
 }
 
+function getNavigationReadinessDebugData(): Record<string, unknown> {
+  return {
+    isRootLayoutReady: _isRootLayoutReady,
+    areTabsReady: _areTabsReady,
+    appState: AppState.currentState,
+    hasWallet: !!useAuthStore.getState().walletAddress,
+    isInboxNotificationsInitialized,
+    isInitializingInboxNotifications,
+    hasNotificationResponseSubscription: !!notificationResponseSubscription,
+  };
+}
+
 export function signalTabsUnmounted(): void {
   if (!_areTabsReady) return;
   _areTabsReady = false;
+  Sentry.addBreadcrumb({
+    category: "notifications",
+    message: "Tabs navigator unmounted for notification navigation",
+    level: "info",
+    data: getNavigationReadinessDebugData(),
+  });
   _tabsReadyPromise = new Promise<void>((resolve) => {
     _tabsReadyResolve = resolve;
   });
@@ -125,7 +143,7 @@ function waitForTabsReady(timeoutMs = 5000): Promise<boolean> {
                 feature: "inbox-notifications",
                 operation: "wait-tabs-ready",
               },
-              extra: { timeoutMs },
+              extra: { timeoutMs, ...getNavigationReadinessDebugData() },
             },
           );
         }
@@ -272,6 +290,21 @@ function getFallbackInboxNotificationResponseId(
 ): string {
   const notificationDate = response.notification?.date ?? Date.now();
   const dataKeys = getNotificationDataKeys(data).join(",") || "no-data";
+  Sentry.addBreadcrumb({
+    category: "inbox-notifications",
+    message: "Using fallback inbox notification response id",
+    level: "warning",
+    data: {
+      actionIdentifier: response.actionIdentifier,
+      requestIdentifier: response.notification?.request?.identifier,
+      notificationDate,
+      dataKeys: getNotificationDataKeys(data),
+      hasNotificationType: !!data.notificationType,
+      hasReplyId: !!toOptionalString(data.replyId),
+      hasRootPostId: !!toOptionalString(data.rootPostId),
+      hasInboxReply: !!data.inboxReply,
+    },
+  });
   return `inbox-notification:${response.actionIdentifier}:${notificationDate}:${dataKeys}`;
 }
 
@@ -690,7 +723,7 @@ function deferNotificationResponseUntilWallet(
     data: {
       notificationId,
       attempt,
-      appState: AppState.currentState,
+      ...getNavigationReadinessDebugData(),
     },
   });
 
@@ -704,7 +737,7 @@ function deferNotificationResponseUntilWallet(
       },
       extra: {
         notificationId,
-        appState: AppState.currentState,
+        ...getNavigationReadinessDebugData(),
       },
     });
     return;
@@ -726,15 +759,16 @@ function deferNotificationResponseUntilWallet(
       extra: {
         notificationId,
         attempt,
-        appState: AppState.currentState,
+        ...getNavigationReadinessDebugData(),
       },
     });
-    handleNotificationResponse(response);
+    handleNotificationResponse(response, "wallet-deferred");
   }, DEFERRED_NOTIFICATION_RESPONSE_RETRY_MS);
 }
 
 function handleNotificationResponse(
-  response: Notifications.NotificationResponse | null
+  response: Notifications.NotificationResponse | null,
+  source: "live-listener" | "last-response" | "wallet-deferred" = "live-listener",
 ): void {
   if (!response) return;
   try {
@@ -747,8 +781,17 @@ function handleNotificationResponse(
       level: "info",
       data: {
         notificationId,
+        source,
         actionIdentifier: response.actionIdentifier,
         appState: AppState.currentState,
+        notificationDate: response.notification?.date,
+        requestIdentifier: response.notification?.request?.identifier,
+        dataKeys: getNotificationDataKeys(notificationData),
+        hasNotificationType: !!notificationData.notificationType,
+        hasReplyId: !!toOptionalString(notificationData.replyId),
+        hasRootPostId: !!toOptionalString(notificationData.rootPostId),
+        hasInboxReply: !!notificationData.inboxReply,
+        ...getNavigationReadinessDebugData(),
       },
     });
     const handledNotificationIds = getHandledNotificationIds();
@@ -771,7 +814,7 @@ function handleNotificationResponse(
         category: "inbox-notifications",
         message: "Notification response received before wallet is ready",
         level: "info",
-        data: { notificationId, appState: AppState.currentState },
+        data: { notificationId, source, ...getNavigationReadinessDebugData() },
       });
       deferNotificationResponseUntilWallet(response, notificationId);
       return;
@@ -835,14 +878,20 @@ function handleNotificationResponse(
           category: "navigation",
           message: "Proceeding with inbox notification navigation after tabs wait timeout",
           level: "warning",
-          data: { notificationId, appState: AppState.currentState },
+          data: { notificationId, ...getNavigationReadinessDebugData() },
         });
       }
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Dispatching inbox notification navigation",
         level: "info",
-        data: { notificationId, hasReplyId: !!replyId },
+        data: {
+          notificationId,
+          hasReplyId: !!replyId,
+          hasRootPostId: !!rootPostId,
+          areTabsReady,
+          ...getNavigationReadinessDebugData(),
+        },
       });
       router.navigate({
         pathname: "/(tabs)/inbox",
@@ -860,7 +909,10 @@ function handleNotificationResponse(
         extra: {
           notificationId,
           hasReplyId: !!replyId,
+          hasRootPostId: !!rootPostId,
+          areTabsReady,
           appState: AppState.currentState,
+          ...getNavigationReadinessDebugData(),
         },
       });
       handledNotificationIds.add(notificationId);
@@ -929,10 +981,7 @@ function subscribeNotificationResponses(): void {
     category: "inbox-notifications",
     message: "Subscribing to notification responses",
     level: "info",
-    data: {
-      appState: AppState.currentState,
-      hasWallet: !!useAuthStore.getState().walletAddress,
-    },
+    data: getNavigationReadinessDebugData(),
   });
   notificationResponseSubscription =
     Notifications.addNotificationResponseReceivedListener((response) => {
@@ -941,12 +990,13 @@ function subscribeNotificationResponses(): void {
         message: "Live notification response listener fired",
         level: "info",
         data: {
-          appState: AppState.currentState,
-          hasWallet: !!useAuthStore.getState().walletAddress,
           notificationId: response.notification?.request?.identifier,
+          notificationDate: response.notification?.date,
+          dataKeys: getNotificationDataKeys(getNotificationData(response)),
+          ...getNavigationReadinessDebugData(),
         },
       });
-      handleNotificationResponse(response);
+      handleNotificationResponse(response, "live-listener");
     });
 
   Notifications.getLastNotificationResponseAsync()
@@ -957,11 +1007,13 @@ function subscribeNotificationResponses(): void {
         level: "info",
         data: {
           hasResponse: !!response,
-          appState: AppState.currentState,
-          hasWallet: !!useAuthStore.getState().walletAddress,
+          notificationId: response?.notification?.request?.identifier,
+          notificationDate: response?.notification?.date,
+          dataKeys: response ? getNotificationDataKeys(getNotificationData(response)) : [],
+          ...getNavigationReadinessDebugData(),
         },
       });
-      handleNotificationResponse(response);
+      handleNotificationResponse(response, "last-response");
     })
     .catch((error) => {
       console.error(

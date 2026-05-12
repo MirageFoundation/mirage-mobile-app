@@ -333,14 +333,30 @@ export default function TabLayout() {
   const hasHandledInitialRouteRef = useRef(false);
   const initialShareIntentRef = useRef(hasShareIntent);
   const latestPathnameRef = useRef(pathname);
+  const latestShareIntentRef = useRef(hasShareIntent);
 
   useEffect(() => {
     latestPathnameRef.current = pathname;
-  }, [pathname]);
+    latestShareIntentRef.current = hasShareIntent;
+  }, [pathname, hasShareIntent]);
 
   useEffect(() => {
+    Sentry.addBreadcrumb({
+      category: "navigation",
+      message: "Tabs layout mounted",
+      level: "info",
+      data: { pathname: latestPathnameRef.current, hasShareIntent: latestShareIntentRef.current },
+    });
     signalTabsReady();
-    return () => signalTabsUnmounted();
+    return () => {
+      Sentry.addBreadcrumb({
+        category: "navigation",
+        message: "Tabs layout unmounted",
+        level: "info",
+        data: { pathname: latestPathnameRef.current, hasShareIntent: latestShareIntentRef.current },
+      });
+      signalTabsUnmounted();
+    };
   }, []);
 
   const prevShareIntentRef = useRef(hasShareIntent);

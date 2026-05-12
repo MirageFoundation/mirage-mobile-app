@@ -91,7 +91,7 @@ const CONTENT_WARNING_OPTIONS: { value: ContentTag; label: string }[] = [
   { value: "death", label: "Death" },
 ];
 
-type VideoUploadEntry = { url: string | null; uploading: boolean; progress: number; error: string | null; isServerError?: boolean };
+type VideoUploadEntry = { url: string | null; uploading: boolean; progress: number; error: string | null; isServerError?: boolean; sessionId?: number };
 const VIDEO_UPLOADS = new Map<string, VideoUploadEntry>();
 
 type VideoMeta = { originalUri: string; width: number; height: number; trimStart: number; trimEnd: number };
@@ -189,6 +189,8 @@ export function CreateScreen() {
   const [isPreparingVideo, setIsPreparingVideo] = useState(false);
   const [isNetworkOnline, setIsNetworkOnline] = useState(true);
   const navigatedToEditorRef = useRef(false);
+  const videoUploadSessionRef = useRef(0);
+  const videoUploadControllersRef = useRef(new Map<string, AbortController>());
 
   useEffect(() => {
     Network.getNetworkStateAsync().then((state) => {
@@ -224,26 +226,123 @@ export function CreateScreen() {
   const hasFailedUploads = failedVideoUploads.length > 0;
 
   const videoUploadToastShownRef = useRef(false);
+  const videoUploadDraftDebugRef = useRef({
+    attachmentType: draft.attachmentType,
+    mediaUris: draft.mediaUris,
+  });
+  videoUploadDraftDebugRef.current = {
+    attachmentType: draft.attachmentType,
+    mediaUris: draft.mediaUris,
+  };
+
+  const getVideoUploadDebugData = useCallback((uri: string, sessionId?: number) => ({
+    fileName: uri.split("/").pop() ?? uri,
+    sessionId,
+    activeSessionId: videoUploadSessionRef.current,
+    isCurrentDraftMedia: videoUploadDraftDebugRef.current.mediaUris.includes(uri),
+    attachmentType: videoUploadDraftDebugRef.current.attachmentType,
+  }), []);
+
+  const resetVideoUploads = useCallback(() => {
+    const nextSessionId = videoUploadSessionRef.current + 1;
+    const activeUploadCount = videoUploadControllersRef.current.size;
+    Sentry.addBreadcrumb({
+      category: "video-upload",
+      message: "Resetting video upload session",
+      level: "info",
+      data: {
+        previousSessionId: videoUploadSessionRef.current,
+        nextSessionId,
+        activeUploadCount,
+        trackedUploadCount: VIDEO_UPLOADS.size,
+        attachmentType: videoUploadDraftDebugRef.current.attachmentType,
+        mediaCount: videoUploadDraftDebugRef.current.mediaUris.length,
+      },
+    });
+    videoUploadSessionRef.current += 1;
+    for (const controller of videoUploadControllersRef.current.values()) {
+      controller.abort();
+    }
+    videoUploadControllersRef.current.clear();
+    VIDEO_UPLOADS.clear();
+    setVideoUploadState({});
+    videoUploadToastShownRef.current = false;
+  }, []);
 
   const startVideoUpload = useCallback((uri: string, silent = false) => {
-    VIDEO_UPLOADS.set(uri, { url: null, uploading: true, progress: 0, error: null });
+    const sessionId = videoUploadSessionRef.current;
+    if (videoUploadControllersRef.current.has(uri)) {
+      Sentry.addBreadcrumb({
+        category: "video-upload",
+        message: "Aborting previous upload for same URI",
+        level: "info",
+        data: getVideoUploadDebugData(uri, sessionId),
+      });
+      videoUploadControllersRef.current.get(uri)?.abort();
+    }
+    const controller = new AbortController();
+    videoUploadControllersRef.current.set(uri, controller);
+    Sentry.addBreadcrumb({
+      category: "video-upload",
+      message: "Starting create video upload",
+      level: "info",
+      data: {
+        ...getVideoUploadDebugData(uri, sessionId),
+        silent,
+      },
+    });
+    VIDEO_UPLOADS.set(uri, { url: null, uploading: true, progress: 0, error: null, sessionId });
     videoUploadStateRef.current((prev) => ({
       ...prev,
       [uri]: { progress: 0, uploading: true, done: false, error: null },
     }));
     uploadVideoAndGetUrl(uri, (progress) => {
+      if (videoUploadSessionRef.current !== sessionId) {
+        Sentry.addBreadcrumb({
+          category: "video-upload",
+          message: "Ignored stale video upload progress",
+          level: "info",
+          data: {
+            ...getVideoUploadDebugData(uri, sessionId),
+            progress,
+          },
+        });
+        return;
+      }
       const clamped = Math.min(100, Math.max(0, progress));
       const entry = VIDEO_UPLOADS.get(uri);
-      if (entry) {
+      if (entry?.sessionId === sessionId) {
         VIDEO_UPLOADS.set(uri, { ...entry, progress: clamped });
       }
       videoUploadStateRef.current((prev) => ({
         ...prev,
         [uri]: { ...prev[uri], progress: clamped },
       }));
-    })
+    }, controller.signal)
       .then((url) => {
-        VIDEO_UPLOADS.set(uri, { url, uploading: false, progress: 100, error: null });
+        if (videoUploadSessionRef.current !== sessionId) {
+          Sentry.addBreadcrumb({
+            category: "video-upload",
+            message: "Ignored stale video upload success",
+            level: "info",
+            data: {
+              ...getVideoUploadDebugData(uri, sessionId),
+              hasUrl: !!url,
+            },
+          });
+          return;
+        }
+        videoUploadControllersRef.current.delete(uri);
+        Sentry.addBreadcrumb({
+          category: "video-upload",
+          message: "Create video upload succeeded",
+          level: "info",
+          data: {
+            ...getVideoUploadDebugData(uri, sessionId),
+            hasUrl: !!url,
+          },
+        });
+        VIDEO_UPLOADS.set(uri, { url, uploading: false, progress: 100, error: null, sessionId });
         videoUploadStateRef.current((prev) => ({
           ...prev,
           [uri]: { progress: 100, uploading: false, done: true, error: null },
@@ -252,24 +351,56 @@ export function CreateScreen() {
         triggerHaptic("success");
       })
       .catch((err) => {
-        Sentry.addBreadcrumb({ category: "video-upload", message: "Video upload failed", data: { error: String(err) }, level: "error" });
+        if (videoUploadSessionRef.current !== sessionId || controller.signal.aborted) {
+          Sentry.addBreadcrumb({
+            category: "video-upload",
+            message: controller.signal.aborted
+              ? "Ignored aborted video upload failure"
+              : "Ignored stale video upload failure",
+            level: "info",
+            data: {
+              ...getVideoUploadDebugData(uri, sessionId),
+              error: err instanceof Error ? err.message : String(err),
+            },
+          });
+          return;
+        }
+        videoUploadControllersRef.current.delete(uri);
+        const status = err?.response?.status ?? err?.status;
+        const serverError = err?.response?.data?.error ?? err?.responseText;
         const msg = err?.response?.data?.error_code ? getApiErrorMessage(err) : (err instanceof Error ? err.message : "Upload failed");
-        const isServerError = !!err?.response?.status && err.response.status >= 400;
-        VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg, isServerError });
+        const isServerError = !!status && status >= 400;
+        Sentry.addBreadcrumb({
+          category: "video-upload",
+          message: "Create video upload failed",
+          data: {
+            ...getVideoUploadDebugData(uri, sessionId),
+            error: err instanceof Error ? err.message : String(err),
+            status,
+            responseText: err?.responseText,
+            serverError,
+            isServerError,
+            silent,
+          },
+          level: "error",
+        });
+        VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg, isServerError, sessionId });
         videoUploadStateRef.current((prev) => ({
           ...prev,
           [uri]: { progress: 0, uploading: false, done: false, error: msg },
         }));
         if (!silent && !videoUploadToastShownRef.current) {
           videoUploadToastShownRef.current = true;
-          const serverError = err?.response?.data?.error;
-          const status = err?.response?.status;
           const title = serverError ? `${serverError} (${status})` : "Video upload failed";
           toast.error(title, serverError ? "Please try again" : msg);
         }
         triggerHaptic("error");
       });
-  }, [toast]);
+  }, [getVideoUploadDebugData, toast]);
+
+  useEffect(() => {
+    return () => resetVideoUploads();
+  }, [resetVideoUploads]);
 
   useEffect(() => {
     if (!hasFailedUploads) return;
@@ -491,8 +622,7 @@ export function CreateScreen() {
     setImageDimensions(null);
     setSelectedContentWarning("");
     setSelectedStickers([]);
-    VIDEO_UPLOADS.clear();
-    setVideoUploadState({});
+    resetVideoUploads();
     VIDEO_META.clear();
     _handledVideoParam = null;
     setIsVideoMuted(false);
@@ -952,15 +1082,14 @@ export function CreateScreen() {
     setImageDimensions(null);
     setSelectedContentWarning("");
     setSelectedStickers([]);
-    VIDEO_UPLOADS.clear();
-    setVideoUploadState({});
+    resetVideoUploads();
     VIDEO_META.clear();
     _handledVideoParam = null;
     setIsVideoMuted(false);
     setIsVideoPlaying(false);
     setShowDraftModal(false);
     router.back();
-  }, [clearDraft, removeAttachment]);
+  }, [clearDraft, removeAttachment, resetVideoUploads]);
 
   const saveDraftAndClose = useCallback(() => {
     setShowDraftModal(false);
@@ -1192,8 +1321,7 @@ export function CreateScreen() {
         setLinkUrl("");
         setLinkError(null);
         setImageDimensions(null);
-        VIDEO_UPLOADS.clear();
-        setVideoUploadState({});
+        resetVideoUploads();
         VIDEO_META.clear();
         _handledVideoParam = null;
         setIsVideoMuted(false);
@@ -1229,8 +1357,7 @@ export function CreateScreen() {
         setLinkUrl("");
         setLinkError(null);
         setImageDimensions(null);
-        VIDEO_UPLOADS.clear();
-        setVideoUploadState({});
+        resetVideoUploads();
         VIDEO_META.clear();
         _handledVideoParam = null;
         setIsVideoMuted(false);
@@ -1477,16 +1604,17 @@ export function CreateScreen() {
     triggerHaptic("selection");
     removeAttachment();
     setImageDimensions(null);
-    VIDEO_UPLOADS.clear();
-    setVideoUploadState({});
+    resetVideoUploads();
     setIsVideoMuted(false);
     setIsVideoPlaying(false);
-  }, [removeAttachment]);
+  }, [removeAttachment, resetVideoUploads]);
 
   const handleRemoveVideo = useCallback((uri: string) => {
     triggerHaptic("selection");
     const { removeMediaUri } = useDraftStore.getState();
     removeMediaUri(uri);
+    videoUploadControllersRef.current.get(uri)?.abort();
+    videoUploadControllersRef.current.delete(uri);
     VIDEO_UPLOADS.delete(uri);
     setVideoUploadState((prev) => { const next = { ...prev }; delete next[uri]; return next; });
     VIDEO_META.delete(uri);
@@ -1513,11 +1641,10 @@ export function CreateScreen() {
   const handleCancelVideoUpload = useCallback(() => {
     triggerHaptic("selection");
     removeAttachment();
-    VIDEO_UPLOADS.clear();
-    setVideoUploadState({});
+    resetVideoUploads();
     setIsVideoMuted(false);
     setIsVideoPlaying(false);
-  }, [removeAttachment]);
+  }, [removeAttachment, resetVideoUploads]);
 
   const handleToggleVideoMute = useCallback(() => {
     triggerHaptic("selection");

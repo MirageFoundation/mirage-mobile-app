@@ -52,6 +52,7 @@ function isNetworkError(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error);
   return msg.includes("Network") ||
     msg.includes("network") ||
+    msg.includes("Upload aborted") ||
     msg.includes("timed out") ||
     msg.includes("no result") ||
     (error as any)?.code === "ERR_NETWORK";
@@ -433,7 +434,10 @@ export async function uploadVideoToSignedUrl(
     }
   };
 
-  return withRetry(uploadFn, { label: "video-upload", signal });
+  // Cloudflare Stream signed upload URLs are single-use. If the client times
+  // out after Cloudflare already accepted the file, retrying this same URL can
+  // fail later with "Video already uploaded" and surface stale errors.
+  return withRetry(uploadFn, { label: "video-upload", maxRetries: 0, signal });
 }
 
 export async function uploadVideo(
