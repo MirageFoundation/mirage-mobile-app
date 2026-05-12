@@ -39,13 +39,27 @@ function hashSeed(seed: string) {
 }
 
 function buildIdenticonCells(seed: string) {
-  let hash = hashSeed(seed);
-  const cells: { x: number; y: number }[] = [];
+  // xorshift32 PRNG seeded from the FNV-1a hash of `seed`. xorshift
+  // mixes all bits well, so consecutive samples vary across the whole
+  // word — sampling the high bit gives a balanced ~50/50 fill that
+  // differs noticeably between seeds.
+  let state = hashSeed(seed) || 0x9e3779b9;
+  const next = () => {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return state >>> 0;
+  };
+  // Burn a few rounds so the first samples aren't correlated with the
+  // raw FNV output.
+  next();
+  next();
+  next();
 
+  const cells: { x: number; y: number }[] = [];
   for (let y = 0; y < 5; y += 1) {
     for (let x = 0; x < 3; x += 1) {
-      hash = Math.imul(hash ^ (x + y * 5 + 1), 1103515245) + 12345;
-      if ((hash >>> 0) % 2 === 0) {
+      if ((next() >>> 31) === 1) {
         cells.push({ x, y });
         if (x !== 2) cells.push({ x: 4 - x, y });
       }
@@ -68,17 +82,17 @@ type AvatarProps = Omit<ImageProps, "source"> & {
   seed?: string;
   /** Custom image source (overrides seed) */
   source?: ImageProps["source"];
-  /** Border radius preset */
+  /** Border radius preset (all values render a circular avatar) */
   rounded?: "none" | "sm" | "md" | "lg" | "full";
   /** Show border around avatar */
   bordered?: boolean;
   /** DiceBear style variant */
   variant?: "bottts" | "avataaars" | "identicon" | "shapes" | "thumbs";
   /**
-   * Inner padding around the identicon glyph as a fraction of `size`.
-   * Defaults to `0` so the identicon fills the avatar edge-to-edge.
-   * Only applied when no custom `source` is provided (i.e. when
-   * rendering a DiceBear identicon).
+   * Inner padding around the DiceBear identicon glyph as a fraction of
+   * `size`. The identicon renders transparently on top of the circular
+   * container's tinted background. Only applied when no custom
+   * `source` is provided.
    */
   paddingRatio?: number;
   /** Custom style for the outer container (overrides bg/border) */
@@ -92,7 +106,7 @@ export const Avatar = ({
   rounded = "none",
   bordered = false,
   variant: _variant = "identicon",
-  paddingRatio: _paddingRatio = 0,
+  paddingRatio = 0.18,
   style,
   containerStyle,
   ...imageProps
@@ -129,6 +143,15 @@ export const Avatar = ({
 
   styles.useVariants({ rounded, bordered });
 
+  // Identicon is a 5×5 square. To fit it fully inside the circle and
+  // leave breathing room, inset by at least the geometric minimum
+  // (1 - 1/√2)/2 ≈ 14.6% of the diameter.
+  const requestedInset = Math.round(resolvedSize * paddingRatio);
+  const minInsetForCircle = Math.ceil(resolvedSize * (1 - 1 / Math.SQRT2) / 2);
+  const identiconInset = Math.max(requestedInset, minInsetForCircle);
+  const innerSize = Math.max(1, resolvedSize - identiconInset * 2);
+  const isIdenticon = !source;
+
   return (
     <View
       style={[
@@ -137,6 +160,9 @@ export const Avatar = ({
           width: resolvedSize,
           height: resolvedSize,
         },
+        // Tint the circular container with the seed color so the
+        // identicon sits on a colored disc instead of its own square.
+        isIdenticon ? { backgroundColor: identiconBackground } : null,
         containerStyle,
       ]}
     >
@@ -150,24 +176,35 @@ export const Avatar = ({
           onError={handleImageError}
         />
       ) : (
-        <Svg
-          width={resolvedSize}
-          height={resolvedSize}
-          viewBox="0 0 5 5"
-          style={[styles.svg, style]}
+        <View
+          style={[
+            styles.identiconWrapper,
+            {
+              width: innerSize,
+              height: innerSize,
+              top: identiconInset,
+              left: identiconInset,
+            },
+          ]}
         >
-          <Rect x="0" y="0" width="5" height="5" fill={identiconBackground} />
-          {identiconCells.map((cell) => (
-            <Rect
-              key={`${cell.x}-${cell.y}`}
-              x={cell.x}
-              y={cell.y}
-              width="1"
-              height="1"
-              fill={identiconColor}
-            />
-          ))}
-        </Svg>
+          <Svg
+            width={innerSize}
+            height={innerSize}
+            viewBox="0 0 5 5"
+            style={style}
+          >
+            {identiconCells.map((cell) => (
+              <Rect
+                key={`${cell.x}-${cell.y}`}
+                x={cell.x}
+                y={cell.y}
+                width="1"
+                height="1"
+                fill={identiconColor}
+              />
+            ))}
+          </Svg>
+        </View>
       )}
     </View>
   );
@@ -181,11 +218,11 @@ const styles = StyleSheet.create((theme, rt) => ({
 
     variants: {
       rounded: {
-        none: { borderRadius: 0 },
-        sm: { borderRadius: 0 },
-        md: { borderRadius: 0 },
-        lg: { borderRadius: 0 },
-        full: { borderRadius: 0 },
+        none: { borderRadius: 9999 },
+        sm: { borderRadius: 9999 },
+        md: { borderRadius: 9999 },
+        lg: { borderRadius: 9999 },
+        full: { borderRadius: 9999 },
       },
       bordered: {
         true: {
@@ -203,19 +240,16 @@ const styles = StyleSheet.create((theme, rt) => ({
   imageRounded: {
     variants: {
       rounded: {
-        none: { borderRadius: 0 },
-        sm: { borderRadius: 0 },
-        md: { borderRadius: 0 },
-        lg: { borderRadius: 0 },
-        full: { borderRadius: 0 },
+        none: { borderRadius: 9999 },
+        sm: { borderRadius: 9999 },
+        md: { borderRadius: 9999 },
+        lg: { borderRadius: 9999 },
+        full: { borderRadius: 9999 },
       },
     },
   },
-  svg: {
+  identiconWrapper: {
     position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    backgroundColor: "transparent",
   },
 }));
