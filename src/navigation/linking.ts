@@ -179,7 +179,7 @@ export async function redirectSystemPath({
     if (shouldSkipRepeatedSharePath(path)) {
       Sentry.addBreadcrumb({
         category: "share-intent",
-        message: "Skipping repeated stale share launch path",
+        message: "Routing repeated share launch path to create",
         data: {
           initial,
           ageMs: repeatedSharePathAgeMs,
@@ -187,7 +187,8 @@ export async function redirectSystemPath({
         },
         level: "info",
       });
-      return "/(tabs)";
+      rememberSharePath(path);
+      return "/(tabs)/create";
     }
 
     Sentry.addBreadcrumb({

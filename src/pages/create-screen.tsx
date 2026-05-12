@@ -598,7 +598,17 @@ export function CreateScreen() {
       shareTimeoutRef.current = null;
     }
     const currentIntentKey = intentKey;
-    const shouldImportSharedFiles = !shareIntent.webUrl;
+    const extractSharedUrl = (value?: string | null) => {
+      if (!value) return null;
+      const match = value.match(/https?:\/\/[^\s<>()]+/i);
+      if (!match) return null;
+      return match[0]
+        .replace(/[\])}.,!?;:'"\u201d\u2019]+$/u, "")
+        .trim();
+    };
+    const sharedTextUrl = extractSharedUrl(shareIntent.text);
+    const sharedUrl = extractSharedUrl(shareIntent.webUrl) ?? sharedTextUrl;
+    const shouldImportSharedFiles = !sharedUrl;
 
     console.log("[CreateScreen] Share intent received:", {
       type: shareIntent.type,
@@ -610,9 +620,31 @@ export function CreateScreen() {
     Sentry.addBreadcrumb({
       category: "share-intent",
       message: "Processing share intent",
-      data: { type: shareIntent.type, webUrl: shareIntent.webUrl, hasText: !!shareIntent.text, fileCount: shareIntent.files?.length ?? 0 },
+      data: {
+        type: shareIntent.type,
+        webUrl: shareIntent.webUrl,
+        sharedUrl,
+        extractedUrlFromText: !!sharedTextUrl,
+        hasText: !!shareIntent.text,
+        textLength: shareIntent.text?.length ?? 0,
+        fileCount: shareIntent.files?.length ?? 0,
+      },
       level: "info",
     });
+
+    if (!sharedUrl && (shareIntent.webUrl || shareIntent.text)) {
+      Sentry.captureMessage("Share intent URL extraction failed", {
+        level: "warning",
+        tags: { feature: "share-intent", operation: "url-extraction" },
+        extra: {
+          type: shareIntent.type,
+          webUrl: shareIntent.webUrl,
+          textPreview: shareIntent.text?.slice(0, 300),
+          textLength: shareIntent.text?.length ?? 0,
+          fileCount: shareIntent.files?.length ?? 0,
+        },
+      });
+    }
 
     clearDraft();
     setShowLinkInput(false);
@@ -628,7 +660,7 @@ export function CreateScreen() {
     setIsVideoMuted(false);
     setIsVideoPlaying(false);
 
-    const redditMatch = (shareIntent.webUrl ?? shareIntent.text ?? "").match(/reddit\.com\/r\/([^/]+)/i);
+    const redditMatch = (sharedUrl ?? shareIntent.text ?? "").match(/reddit\.com\/r\/([^/]+)/i);
     if (redditMatch) {
       const topicName = sanitizeTopicName(redditMatch[1]);
       if (topicName.length >= 2) {
@@ -646,15 +678,15 @@ export function CreateScreen() {
 
     shareTimeoutRef.current = setTimeout(() => {
       if (lastProcessedIntentRef.current !== currentIntentKey) return;
-      if (shareIntent.text && !shareIntent.webUrl) {
+      if (shareIntent.text && !sharedUrl) {
         updateDraft({ body: shareIntent.text.slice(0, tierLimits.maxContentLength) });
       }
-      if (shareIntent.webUrl) {
+      if (sharedUrl) {
         setIsProcessingShareLink(true);
-        fetchLinkMeta(shareIntent.webUrl).then(async (meta) => {
+        fetchLinkMeta(sharedUrl).then(async (meta) => {
           if (lastProcessedIntentRef.current !== currentIntentKey) return;
           console.log("[CreateScreen] Link meta extracted:", {
-            url: shareIntent.webUrl,
+            url: sharedUrl,
             title: meta.title,
             description: meta.description,
             domain: meta.domain,
@@ -774,7 +806,7 @@ export function CreateScreen() {
             Sentry.addBreadcrumb({
               category: "share-intent",
               message: "No video URLs found in link meta, using images",
-              data: { domain: meta.domain, imageCount: meta.images.length, sharedUrl: shareIntent.webUrl },
+              data: { domain: meta.domain, imageCount: meta.images.length, sharedUrl },
               level: "info",
             });
           }
@@ -932,7 +964,7 @@ export function CreateScreen() {
                 videoUrls: videosToDownload.slice(0, 3),
                 videoCount: videosToDownload.length,
                 imageCount: meta.images?.length ?? 0,
-                sharedUrl: shareIntent.webUrl,
+                sharedUrl,
               },
             });
           }
@@ -977,7 +1009,7 @@ export function CreateScreen() {
 
           if (!videoDownloaded && videosToDownload.length > 0) {
             const currentBody = useDraftStore.getState().draft.body;
-            const link = shareIntent.webUrl!;
+            const link = sharedUrl;
             const newBody = (currentBody ? `${currentBody}\n\n${link}` : link).slice(0, tierLimits.maxContentLength);
             updateDraft({ body: newBody });
           }
@@ -987,14 +1019,16 @@ export function CreateScreen() {
           }
         }).catch((err: any) => {
           if (lastProcessedIntentRef.current !== currentIntentKey) return;
-          updateDraft({ body: shareIntent.webUrl!.slice(0, tierLimits.maxContentLength) });
+          updateDraft({ body: sharedUrl.slice(0, tierLimits.maxContentLength) });
           Sentry.captureException(err, { tags: { feature: "share-intent-meta" } });
         }).finally(() => {
           if (lastProcessedIntentRef.current === currentIntentKey) {
             lastProcessedIntentRef.current = null;
             setIsProcessingShareLink(false);
+            resetShareIntent();
           }
         });
+        return;
       }
       if (shareIntent.files?.length && shouldImportSharedFiles) {
         const file = shareIntent.files[0];
@@ -1005,7 +1039,7 @@ export function CreateScreen() {
           startVideoUpload(file.path);
         }
       }
-      if (!shareIntent.webUrl && lastProcessedIntentRef.current === currentIntentKey) {
+      if (!sharedUrl && lastProcessedIntentRef.current === currentIntentKey) {
         lastProcessedIntentRef.current = null;
       }
       resetShareIntent();

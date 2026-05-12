@@ -129,7 +129,7 @@ export default Sentry.wrap(function RootLayout() {
   }, [ref]);
 
   return (
-    <ShareIntentProvider options={{ scheme: getShareScheme() || undefined, resetOnBackground: true }}>
+    <ShareIntentProvider options={{ scheme: getShareScheme() || undefined, resetOnBackground: false }}>
     <AndroidShareIntentColdStartRefresh />
     <RootProvider>
       <Stack screenOptions={{ headerShown: false }}>

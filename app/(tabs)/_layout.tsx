@@ -362,12 +362,21 @@ export default function TabLayout() {
   }, []);
 
   const prevShareIntentRef = useRef(hasShareIntent);
+  const hasForcedShareIntentRouteRef = useRef(false);
   useEffect(() => {
     const prev = prevShareIntentRef.current;
     prevShareIntentRef.current = hasShareIntent;
-    if (!hasShareIntent) return;
+    if (!hasShareIntent) {
+      hasForcedShareIntentRouteRef.current = false;
+      return;
+    }
     markShareIntentNavigationActive("tabs-share-intent");
-    if (!pathname.endsWith("/create")) {
+    if (pathname.endsWith("/create")) {
+      hasForcedShareIntentRouteRef.current = true;
+      return;
+    }
+    if (!hasForcedShareIntentRouteRef.current) {
+      hasForcedShareIntentRouteRef.current = true;
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Forcing share intent to create tab",
@@ -377,9 +386,17 @@ export default function TabLayout() {
           hadPreviousShareIntent: prev,
           hasHandledInitialRoute: hasHandledInitialRouteRef.current,
           isNotificationNavigationActive: isInboxNotificationNavigationActive(),
+          hasForcedShareIntentRoute: hasForcedShareIntentRouteRef.current,
         },
       });
       router.replace("/(tabs)/create");
+    } else {
+      Sentry.addBreadcrumb({
+        category: "navigation",
+        message: "Skipped repeated share intent create redirect",
+        level: "info",
+        data: { pathname, hadPreviousShareIntent: prev },
+      });
     }
   }, [hasShareIntent, pathname]);
 
