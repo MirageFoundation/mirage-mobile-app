@@ -278,10 +278,43 @@ export function CreateScreen() {
 
   const startImageUpload = useCallback((uri: string, silent = false) => {
     const existing = IMAGE_UPLOADS.get(uri);
-    if (existing?.uploading || existing?.url) return existing.promise;
+    if (existing?.uploading || existing?.url) {
+      Sentry.addBreadcrumb({
+        category: "image-upload",
+        message: existing.uploading ? "Reusing in-flight image upload" : "Using completed image upload",
+        level: "info",
+        data: {
+          fileName: uri.split("/").pop() ?? uri,
+          hasUrl: !!existing.url,
+          silent,
+        },
+      });
+      return existing.promise;
+    }
+
+    Sentry.addBreadcrumb({
+      category: "image-upload",
+      message: "Starting create image upload",
+      level: "info",
+      data: {
+        fileName: uri.split("/").pop() ?? uri,
+        silent,
+        isCurrentDraftMedia: draft.mediaUris.includes(uri),
+        attachmentType: draft.attachmentType,
+      },
+    });
 
     const promise = uploadImageAndGetUrl(uri)
       .then((url) => {
+        Sentry.addBreadcrumb({
+          category: "image-upload",
+          message: "Create image upload succeeded",
+          level: "info",
+          data: {
+            fileName: uri.split("/").pop() ?? uri,
+            hasUrl: !!url,
+          },
+        });
         IMAGE_UPLOADS.set(uri, { url, uploading: false, error: null });
         imageUploadStateRef.current((prev) => ({
           ...prev,
@@ -298,6 +331,22 @@ export function CreateScreen() {
           ? "This image format isn't supported. Try a different photo."
           : error instanceof Error ? error.message : "Upload failed";
         const isServerError = !!status && status >= 400;
+        Sentry.captureException(error, {
+          tags: {
+            feature: "create-post",
+            operation: "image-upload",
+            serverError: String(isServerError),
+            unsupportedFormat: String(isUnsupportedFormat),
+          },
+          extra: {
+            fileName: uri.split("/").pop() ?? uri,
+            status,
+            responseText,
+            silent,
+            isCurrentDraftMedia: draft.mediaUris.includes(uri),
+            attachmentType: draft.attachmentType,
+          },
+        });
         IMAGE_UPLOADS.set(uri, { url: null, uploading: false, error: msg, isServerError });
         imageUploadStateRef.current((prev) => ({
           ...prev,
@@ -316,7 +365,7 @@ export function CreateScreen() {
       [uri]: { uploading: true, done: false, error: null },
     }));
     return promise;
-  }, [toast]);
+  }, [draft.attachmentType, draft.mediaUris, toast]);
 
   const getUploadedImageUrls = useCallback(async (uris: string[]) => {
     const urls = await Promise.all(
@@ -331,6 +380,16 @@ export function CreateScreen() {
   }, [startImageUpload]);
 
   const resetImageUploads = useCallback(() => {
+    if (IMAGE_UPLOADS.size > 0) {
+      Sentry.addBreadcrumb({
+        category: "image-upload",
+        message: "Resetting image uploads",
+        level: "info",
+        data: {
+          trackedUploadCount: IMAGE_UPLOADS.size,
+        },
+      });
+    }
     IMAGE_UPLOADS.clear();
     setImageUploadState({});
   }, []);
@@ -552,6 +611,14 @@ export function CreateScreen() {
       const toRetry = [...IMAGE_UPLOADS.entries()]
         .filter(([, e]) => !!e.error && !e.isServerError)
         .map(([uri]) => uri);
+      if (toRetry.length > 0) {
+        Sentry.addBreadcrumb({
+          category: "image-upload",
+          message: "Retrying failed image uploads after network recovery",
+          level: "info",
+          data: { retryCount: toRetry.length },
+        });
+      }
       toRetry.forEach((uri) => startImageUpload(uri, true)?.catch(() => {}));
     };
     const sub = Network.addNetworkStateListener((event) => {
@@ -1447,6 +1514,18 @@ export function CreateScreen() {
           type: "post",
           label: getActionLabel("post"),
           execute: async () => {
+            Sentry.addBreadcrumb({
+              category: "create-post",
+              message: "Executing queued create post action",
+              level: "info",
+              data: {
+                optimisticId,
+                actionId,
+                attachmentType: draft.attachmentType,
+                mediaCount: draft.mediaUris.length,
+                hasOptimisticPreview: !!optimisticPreviewMediaUrls?.length,
+              },
+            });
             let uploadedMediaUrls = mediaUrls;
             if (draft.attachmentType === "image" && draft.mediaUris.length > 0) {
               try {
@@ -1465,6 +1544,17 @@ export function CreateScreen() {
             });
           },
           onOptimisticUpdate: () => {
+            Sentry.addBreadcrumb({
+              category: "create-post",
+              message: "Inserted optimistic post into home feed",
+              level: "info",
+              data: {
+                optimisticId,
+                actionId,
+                attachmentType: draft.attachmentType,
+                mediaCount: draft.mediaUris.length,
+              },
+            });
             upsertHomePost(
               queryClient,
               buildOptimisticPost(
@@ -1479,6 +1569,20 @@ export function CreateScreen() {
           onError: (err) => {
             const toastMessage = getApiErrorMessage(err);
             const postErrorDetails = getPostFailureDetails(err);
+            Sentry.captureException(err, {
+              tags: {
+                feature: "create-post",
+                operation: "queued-create-post",
+              },
+              extra: {
+                optimisticId,
+                actionId,
+                attachmentType: draft.attachmentType,
+                mediaCount: draft.mediaUris.length,
+                toastMessage,
+                postErrorDetails,
+              },
+            });
             markOptimisticPostError(queryClient, optimisticId, postErrorDetails);
             toast.error("Post wasn't created", toastMessage);
           },

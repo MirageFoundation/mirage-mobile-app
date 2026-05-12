@@ -527,6 +527,17 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     try {
       const networkState = await Network.getNetworkStateAsync();
       if (!networkState.isConnected || networkState.isInternetReachable === false) {
+        Sentry.addBreadcrumb({
+          category: "pow",
+          message: "PoW queue waiting for connectivity before starting action",
+          level: "info",
+          data: {
+            queueLength: state.queue.length,
+            currentActionType: state.queue[0]?.type,
+            isConnected: networkState.isConnected,
+            isInternetReachable: networkState.isInternetReachable,
+          },
+        });
         set({ isProcessing: true });
         if (!isWaitingForConnectivity) {
           isWaitingForConnectivity = true;
@@ -537,7 +548,13 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
         }
         return;
       }
-    } catch {
+    } catch (error) {
+      Sentry.addBreadcrumb({
+        category: "pow",
+        message: "PoW queue network probe failed before action start",
+        level: "warning",
+        data: { error: String(error) },
+      });
       // If the network probe itself fails, continue and let the API layer
       // surface a normal network error/retry path.
     }

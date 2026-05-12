@@ -3,6 +3,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import axios from "axios";
+import * as Sentry from "@sentry/react-native";
 import { Audio, AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
 import {
@@ -981,6 +982,15 @@ export const PostCardMedia = memo(
           if (cancelled) return;
 
           if (ready) {
+            Sentry.addBreadcrumb({
+              category: "post-media",
+              message: "Cloudflare video manifest became ready",
+              level: "info",
+              data: {
+                uri: resolvedMediaUri,
+                attempts: videoProcessingAttemptsRef.current,
+              },
+            });
             videoProcessingStartedAtRef.current = null;
             if (videoProcessingPollTimeoutRef.current) {
               clearTimeout(videoProcessingPollTimeoutRef.current);
@@ -1005,6 +1015,18 @@ export const PostCardMedia = memo(
           videoProcessingStartedAtRef.current &&
           Date.now() - videoProcessingStartedAtRef.current >= CLOUD_FLARE_PROCESSING_MAX_WAIT_MS
         ) {
+          Sentry.captureMessage("Cloudflare video manifest was not ready before timeout", {
+            level: "warning",
+            tags: {
+              feature: "post-media",
+              operation: "cloudflare-video-processing",
+            },
+            extra: {
+              uri: resolvedMediaUri,
+              attempts: videoProcessingAttemptsRef.current,
+              maxWaitMs: CLOUD_FLARE_PROCESSING_MAX_WAIT_MS,
+            },
+          });
           videoProcessingStartedAtRef.current = null;
           setIsVideoProcessing(false);
           return;
@@ -1324,6 +1346,21 @@ export const PostCardMedia = memo(
                     mediaSource.uri?.includes("cloudflarestream.com") ||
                     mediaSource.uri?.includes("videodelivery.net");
                   const isRedgifs = mediaSource.uri?.includes("redgifs.com");
+                  Sentry.captureMessage("Post video playback error", {
+                    level: isCloudflare || isRedgifs ? "warning" : "error",
+                    tags: {
+                      feature: "post-media",
+                      operation: "video-playback",
+                      retryable: String(isCloudflare || isRedgifs),
+                    },
+                    extra: {
+                      uri: mediaSource.uri,
+                      error,
+                      isCloudflare,
+                      isRedgifs,
+                      retryCount: videoErrorRetryCountRef.current,
+                    },
+                  });
                   if (isCloudflare || isRedgifs) {
                     videoErrorRetryCountRef.current += 1;
                     if (videoErrorRetryRef.current) {

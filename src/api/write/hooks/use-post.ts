@@ -645,6 +645,18 @@ export function usePost(options: UsePostOptions = {}) {
       return createPost(wallet, postInput, options.onPoWProgress);
     },
     onSuccess: (data, input) => {
+      Sentry.addBreadcrumb({
+        category: "create-post",
+        message: "Create post mutation succeeded",
+        level: "info",
+        data: {
+          txHash: data?.tx_hash,
+          optimisticId: input.optimisticId,
+          optimisticActionId: input.optimisticActionId,
+          mediaCount: input.media?.length ?? 0,
+          hasPreviewMedia: !!input.optimisticPreviewMediaUrls?.length,
+        },
+      });
       const optimisticPost = buildOptimisticPost(
         data?.tx_hash,
         input,
@@ -653,8 +665,27 @@ export function usePost(options: UsePostOptions = {}) {
       );
 
       if (input.optimisticId) {
+        Sentry.addBreadcrumb({
+          category: "create-post",
+          message: "Replacing optimistic post with confirmed post",
+          level: "info",
+          data: {
+            optimisticId: input.optimisticId,
+            confirmedPostId: optimisticPost.post_id,
+            hasPreviewMedia: !!input.optimisticPreviewMediaUrls?.length,
+          },
+        });
         replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, optimisticPost);
         if (input.optimisticPreviewMediaUrls?.length) {
+          Sentry.addBreadcrumb({
+            category: "create-post",
+            message: "Preserving local media preview after post success",
+            level: "info",
+            data: {
+              postId: optimisticPost.post_id,
+              previewCount: input.optimisticPreviewMediaUrls.length,
+            },
+          });
           preserveLocalPreviewMedia(queryClient, optimisticPost.post_id, input.optimisticPreviewMediaUrls);
           [1000, 2500, 5000, 10000, 20000, 45000].forEach((delay) => {
             setTimeout(() => {
