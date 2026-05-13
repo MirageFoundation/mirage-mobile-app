@@ -113,8 +113,69 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { getLastPressedPostY } from "@/src/utils/post-transition";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import type { CommentsResponse, PostsResponse, Post as ApiPost, PostWithChildren } from "@/src/api/types";
+import MediaPostDetailScreen from "@/src/pages/post/media-post-detail-screen";
+import {
+  getMediaTypeFromUrl,
+  extractFirstUrl,
+} from "@/src/components/molecules/post-card-utils";
 
 export default function PostDetailScreen() {
+  const params = useLocalSearchParams<{
+    id: string;
+    highlight?: string;
+    depth?: string;
+  }>();
+  const queryClient = useQueryClient();
+  const currentUserWallet = useAuthStore((s) => s.user?.walletAddress);
+
+  // Branch to the immersive MediaPostDetailScreen when the cached post
+  // has image/video/gif media and we're not viewing a single-comment
+  // thread (highlight / depth). Fall through to the legacy layout
+  // (text + first-class comment thread) otherwise.
+  const cachedRoot = useMemo(() => {
+    if (!params.id) return null;
+    const commentsRoot = queryClient.getQueryData<CommentsResponse>(
+      queryKeys.comments(params.id, currentUserWallet ?? undefined),
+    );
+    if (commentsRoot?.root) return commentsRoot.root;
+    const cachedQueries = queryClient.getQueriesData<InfiniteData<PostsResponse>>({
+      queryKey: ["posts"],
+    });
+    for (const [, queryData] of cachedQueries) {
+      const matched = queryData?.pages
+        ?.flatMap((page) => page.posts)
+        .find((p) => p.post_id === params.id);
+      if (matched) return matched as ApiPost;
+    }
+    return null;
+  }, [params.id, currentUserWallet, queryClient]);
+
+  const hasImmersiveMedia = useMemo(() => {
+    if (!cachedRoot) return false;
+    // ApiPost.media is string[] (URIs); resolve type from URL.
+    const media = (cachedRoot as any).media as string[] | undefined;
+    const thumbnail = (cachedRoot as any).thumbnail as string | undefined;
+    const body = (cachedRoot as any).body as string | undefined;
+    // Some posts have a video/gif URL embedded inside the body rather
+    // than in the media array (e.g. cloudflarestream, redgifs, .mp4).
+    const bodyUri = extractFirstUrl(body) ?? undefined;
+    const firstUri =
+      media && media.length > 0 ? media[0] : thumbnail ?? bodyUri;
+    if (!firstUri) return false;
+    const t = getMediaTypeFromUrl(firstUri);
+    return t === "image" || t === "video" || t === "gif";
+  }, [cachedRoot]);
+
+  const useImmersive = hasImmersiveMedia && !params.highlight && !params.depth;
+
+  if (useImmersive) {
+    return <MediaPostDetailScreen />;
+  }
+
+  return <LegacyPostDetailScreen />;
+}
+
+function LegacyPostDetailScreen() {
   const { id, highlight, reveal, syncContext, depth } = useLocalSearchParams<{
     id: string;
     highlight?: string;

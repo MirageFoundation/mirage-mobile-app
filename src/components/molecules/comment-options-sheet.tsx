@@ -268,7 +268,7 @@ export const CommentOptionsSheet = forwardRef<
 
           {/* Menu Items */}
           <View style={styles.menuList}>
-            {!isOwnComment && (
+            {comment && !isOwnComment && (
               <MenuItem
                 iconName={
                   isFollowingAuthor
@@ -305,7 +305,7 @@ export const CommentOptionsSheet = forwardRef<
               onPress={handleCopyText}
             />
 
-            {!isOwnComment && onGiveAward && (
+            {comment && !isOwnComment && onGiveAward && (
               <MenuItem
                 iconName="gift-outline"
                 title="Give Award"
@@ -313,7 +313,7 @@ export const CommentOptionsSheet = forwardRef<
               />
             )}
 
-            {!isOwnComment && onGiftMirage && (
+            {comment && !isOwnComment && onGiftMirage && (
               <MenuItem
                 iconName="cash-outline"
                 title="Gift Mirage"
@@ -321,7 +321,7 @@ export const CommentOptionsSheet = forwardRef<
               />
             )}
 
-            {!isOwnComment && onGiftSubscription && (
+            {comment && !isOwnComment && onGiftSubscription && (
               <MenuItem
                 iconName="diamond-outline"
                 title="Gift Subscription"
@@ -329,7 +329,7 @@ export const CommentOptionsSheet = forwardRef<
               />
             )}
 
-            {!isOwnComment && (
+            {comment && !isOwnComment && (
               <MenuItem
                 iconName="ban-outline"
                 title="Block comment"
@@ -338,7 +338,7 @@ export const CommentOptionsSheet = forwardRef<
               />
             )}
 
-            {!isOwnComment && (
+            {comment && !isOwnComment && (
               <MenuItem
                 iconName="ban-outline"
                 title={`Block @${comment?.author.username}`}
@@ -347,7 +347,7 @@ export const CommentOptionsSheet = forwardRef<
               />
             )}
 
-            {!isOwnComment && (
+            {comment && !isOwnComment && (
               <MenuItem
                 iconName="flag-outline"
                 title="Report"
@@ -356,7 +356,7 @@ export const CommentOptionsSheet = forwardRef<
               />
             )}
 
-            {isOwnComment && (
+            {comment && isOwnComment && (
               <MenuItem
                 iconComponent={Feather}
                 iconName="edit-2"
@@ -365,7 +365,7 @@ export const CommentOptionsSheet = forwardRef<
               />
             )}
 
-            {isOwnComment && (
+            {comment && isOwnComment && (
               <MenuItem
                 iconComponent={Feather}
                 iconName="trash-2"

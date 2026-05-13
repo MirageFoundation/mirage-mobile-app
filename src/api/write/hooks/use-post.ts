@@ -871,17 +871,17 @@ export function useComment(options: UsePostOptions = {}) {
     onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: ["comments"],
-        refetchType: "inactive",
+        refetchType: "active",
       });
       queryClient.invalidateQueries({
         queryKey: ["posts"],
-        refetchType: "inactive",
+        refetchType: "active",
       });
 
       if (address) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.userPosts(address),
-          refetchType: "inactive",
+          refetchType: "active",
         });
       }
     },

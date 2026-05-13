@@ -11,7 +11,6 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { getComments } from "@/src/api/read/endpoints/posts";
 import { useInfiniteInbox } from "@/src/api/read/hooks/use-inbox";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { triggerHaptic } from "@/src/components/utils/haptics";
@@ -202,45 +201,6 @@ export function InboxScreen() {
       markRepliesAsNotified(visibleReplies.map((r) => r.reply_id));
     }
   }, [visibleReplies]);
-
-  useEffect(() => {
-    if (!walletAddress || visibleReplies.length === 0) return;
-
-    const rootPostIds = Array.from(
-      new Set(
-        visibleReplies
-          .map((reply) => reply.root_post_id)
-          .filter((rootPostId): rootPostId is string => !!rootPostId),
-      ),
-    ).slice(0, 10);
-
-    for (const rootPostId of rootPostIds) {
-      void queryClient.fetchQuery({
-        queryKey: queryKeys.comments(rootPostId, walletAddress),
-        queryFn: () =>
-          getComments({
-            post_id: rootPostId,
-            address: walletAddress,
-          }),
-        staleTime: 1000 * 30,
-      }).then((commentsData) => {
-        const mediaUrls = [
-          ...(commentsData.root.media ?? []),
-          commentsData.root.thumbnail,
-        ].filter((url): url is string => !!url);
-        if (mediaUrls.length > 0) {
-          void ExpoImage.prefetch(mediaUrls, "memory-disk");
-        }
-      }).catch((error) => {
-        Sentry.addBreadcrumb({
-          category: "inbox",
-          message: "Failed to prefetch inbox root post",
-          level: "warning",
-          data: { rootPostId, error: String(error) },
-        });
-      });
-    }
-  }, [queryClient, visibleReplies, walletAddress]);
 
   useEffect(() => {
     if (!activeNotificationId) {
