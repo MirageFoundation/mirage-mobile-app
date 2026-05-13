@@ -2011,7 +2011,7 @@ export default function PostDetailScreen() {
                     onPress={() => {
                       if (contextDisabled) return;
                       setThreadActionLoading("context");
-                      router.push(`/post/${focusedCommentId}?depth=5`);
+                      router.replace(`/post/${focusedCommentId}?depth=5`);
                       setTimeout(() => setThreadActionLoading(null), 1500);
                     }}
                     disabled={contextDisabled}
@@ -2068,7 +2068,7 @@ export default function PostDetailScreen() {
                       queryKey: queryKeys.comments(actualRootPostId, address),
                     });
                   }
-                  router.push(`/post/${actualRootPostId}`);
+                  router.replace(`/post/${actualRootPostId}`);
                   setTimeout(() => setThreadActionLoading(null), 1500);
                 }}
                 disabled={threadActionLoading !== null}
