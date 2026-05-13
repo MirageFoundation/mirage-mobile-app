@@ -9,7 +9,7 @@
       "distribution": "internal",
       "ios": {
         "simulator": true,
-        "image": "macos-sonoma-14.6-xcode-16.1"
+        "image": "sdk-54"
       },
       "env": {
         "EXPO_PUBLIC_ENV": "dev"
@@ -44,7 +44,7 @@
       "autoIncrement": true,
       "channel": "production",
       "ios": {
-        "image": "macos-sonoma-14.6-xcode-16.1",
+        "image": "sdk-54",
         "node": "24.4.0"
       },
       "android": {
