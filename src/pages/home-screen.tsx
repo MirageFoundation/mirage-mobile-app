@@ -241,7 +241,7 @@ export function HomeScreen() {
     (s) => s.snoozeModerationReminder
   );
   const setAdultContent = usePreferencesStore((s) => s.setAdultContent);
-  const shareServer = usePreferencesStore((s) => s.shareServer);
+  const shareServer = usePreferencesStore((s) => s.apiServer);
   const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
   const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
   const currentUser = useAuthStore((s) => s.user);

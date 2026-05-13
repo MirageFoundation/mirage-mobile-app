@@ -226,7 +226,7 @@ export function ProfileScreen() {
   const router = useRouter();
   const isFocused = useIsFocused();
   const user = useAuthStore((s) => s.user);
-  const shareServer = usePreferencesStore((s) => s.shareServer);
+  const shareServer = usePreferencesStore((s) => s.apiServer);
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { theme } = useUnistyles();

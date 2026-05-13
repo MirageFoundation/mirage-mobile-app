@@ -370,7 +370,7 @@ export function SavedPostsScreen() {
   const savedComments = useSavedPostsStore((s) => s.savedComments);
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedTopicNames = useContentModerationStore((s) => s.blockedTopicNames);
-  const shareServer = usePreferencesStore((s) => s.shareServer);
+  const shareServer = usePreferencesStore((s) => s.apiServer);
   const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
   const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
   const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);

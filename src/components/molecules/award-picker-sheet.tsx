@@ -24,7 +24,7 @@ import axios from "axios";
 
 type AwardPickerSheetProps = {
   targetId: string;
-  targetType: "post" | "comment";
+  targetType: "post" | "comment" | "user";
   isOwnContent?: boolean;
   onDismiss?: () => void;
   onSuccess?: () => void;

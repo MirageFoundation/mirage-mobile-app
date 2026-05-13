@@ -61,6 +61,12 @@ import {
   UserProfileMenuSheet,
   UserProfileMenuSheetRef,
   ProfileAboutTab,
+  AwardPickerSheet,
+  type AwardPickerSheetRef,
+  GiftMirageSheet,
+  type GiftMirageSheetRef,
+  GiftSubscriptionSheet,
+  type GiftSubscriptionSheetRef,
 } from "@/src/components/molecules";
 import { PostCardItem } from "@/src/components/molecules/post-card-item";
 import { PostCardSkeletonList } from "@/src/components/molecules/post-card-skeleton";
@@ -244,7 +250,7 @@ export function UserProfileScreen() {
   const { height: windowHeight } = useWindowDimensions();
   const { theme } = useUnistyles();
   const queryClient = useQueryClient();
-  const shareServer = usePreferencesStore((s) => s.shareServer);
+  const shareServer = usePreferencesStore((s) => s.apiServer);
   const toast = useToast();
 
   const currentUser = useAuthStore((s) => s.user);
@@ -288,6 +294,9 @@ export function UserProfileScreen() {
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
   const userMenuSheetRef = useRef<UserProfileMenuSheetRef>(null);
+  const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
+  const giftMirageSheetRef = useRef<GiftMirageSheetRef>(null);
+  const giftSubscriptionSheetRef = useRef<GiftSubscriptionSheetRef>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [showReportUserSheet, setShowReportUserSheet] = useState(false);
 
@@ -583,6 +592,59 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     triggerHaptic("success");
     toast.success("Profile link copied");
   }, [shareServer, username, toast]);
+
+  const handleShareProfile = useCallback(async () => {
+    try {
+      const profileUrl = `${getShareBaseUrl(shareServer)}/u/${username}`;
+      await Share.share({
+        message: `Check out @${username} on Mirage!`,
+        url: profileUrl,
+      });
+    } catch (error) {
+      Sentry.addBreadcrumb({
+        category: "user-profile",
+        message: "Share profile failed",
+        data: { error: String(error) },
+        level: "warning",
+      });
+      Sentry.captureException(error, {
+        tags: { feature: "user-profile", operation: "share-profile" },
+      });
+    }
+  }, [shareServer, username]);
+
+  const handleGiveAwardToUser = useCallback(() => {
+    if (!userAddress || isOwnProfile) return;
+    Sentry.addBreadcrumb({
+      category: "user-profile",
+      message: "Open give-award sheet",
+      data: { target: userAddress },
+      level: "info",
+    });
+    setTimeout(() => awardPickerSheetRef.current?.present(), 300);
+  }, [userAddress, isOwnProfile]);
+
+  const handleGiftMirageToUser = useCallback(() => {
+    if (!userAddress || isOwnProfile) return;
+    Sentry.addBreadcrumb({
+      category: "user-profile",
+      message: "Open gift-mirage sheet",
+      data: { target: userAddress },
+      level: "info",
+    });
+    setTimeout(() => giftMirageSheetRef.current?.present(), 300);
+  }, [userAddress, isOwnProfile]);
+
+  const handleGiftSubscriptionToUser = useCallback(() => {
+    if (!userAddress || isOwnProfile) return;
+    Sentry.addBreadcrumb({
+      category: "user-profile",
+      message: "Open gift-subscription sheet",
+      data: { target: userAddress },
+      level: "info",
+    });
+    setTimeout(() => giftSubscriptionSheetRef.current?.present(), 300);
+  }, [userAddress, isOwnProfile]);
 
   const handleReportUserSubmit = useCallback(
     (reason: string) => {
@@ -1287,13 +1349,39 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           username={displayUsername ?? undefined}
           isFollowing={isFollowing}
           isBlocked={isBlocked}
+          isOwnProfile={isOwnProfile}
           onFollow={handleFollow}
           onUnfollow={handleUnfollow}
           onBlock={handleRequestBlockUser}
           onUnblock={handleUnblockUser}
           onReport={handleReportUser}
           onCopyProfileLink={handleCopyProfileLink}
+          onShare={handleShareProfile}
+          onGiveAward={handleGiveAwardToUser}
+          onGiftMirage={handleGiftMirageToUser}
+          onGiftSubscription={handleGiftSubscriptionToUser}
         />
+      )}
+
+      {!isOwnProfile && userAddress && (
+        <>
+          <AwardPickerSheet
+            ref={awardPickerSheetRef}
+            targetId={userAddress}
+            targetType="user"
+            isOwnContent={false}
+          />
+          <GiftMirageSheet
+            ref={giftMirageSheetRef}
+            recipientAddress={userAddress}
+            recipientUsername={displayUsername ?? "user"}
+          />
+          <GiftSubscriptionSheet
+            ref={giftSubscriptionSheetRef}
+            recipientAddress={userAddress}
+            recipientUsername={displayUsername ?? "user"}
+          />
+        </>
       )}
 
       <PostOptionsSheet

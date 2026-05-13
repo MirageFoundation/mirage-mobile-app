@@ -131,7 +131,7 @@ export function TopicFeedScreen() {
     (s) => s.selectedContentTypes,
   );
   const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
-  const shareServer = usePreferencesStore((s) => s.shareServer);
+  const shareServer = usePreferencesStore((s) => s.apiServer);
   const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
   const videoAutoplayNetwork = usePreferencesStore(
     (s) => s.videoAutoplayNetwork,

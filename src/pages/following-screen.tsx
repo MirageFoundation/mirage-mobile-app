@@ -59,7 +59,7 @@ export function FollowingScreen() {
   const { showBars } = useScrollAnimationContext();
 
   const currentUser = useAuthStore((s) => s.user);
-  const shareServer = usePreferencesStore((s) => s.shareServer);
+  const shareServer = usePreferencesStore((s) => s.apiServer);
 
   const [hasNewPosts, setHasNewPosts] = useState(false);
   const [newPostAvatars, setNewPostAvatars] = useState<{ userId: string; username: string }[]>([]);

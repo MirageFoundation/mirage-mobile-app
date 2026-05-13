@@ -158,7 +158,7 @@ export default function PostDetailScreen() {
 
   const currentUser = useAuthStore((s) => s.user);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
-  const shareServer = usePreferencesStore((s) => s.shareServer);
+  const shareServer = usePreferencesStore((s) => s.apiServer);
   const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const savedComments = useSavedPostsStore((s) => s.savedComments);
   const optionsSheetRef = useRef<CommentOptionsSheetRef>(null);

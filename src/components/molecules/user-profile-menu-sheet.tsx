@@ -16,12 +16,17 @@ type UserProfileMenuSheetProps = {
   username?: string;
   isFollowing?: boolean;
   isBlocked?: boolean;
+  isOwnProfile?: boolean;
   onFollow?: () => void;
   onUnfollow?: () => void;
   onBlock?: () => void;
   onUnblock?: () => void;
   onReport?: () => void;
   onCopyProfileLink?: () => void;
+  onShare?: () => void;
+  onGiveAward?: () => void;
+  onGiftMirage?: () => void;
+  onGiftSubscription?: () => void;
   onDismiss?: () => void;
 };
 
@@ -68,12 +73,17 @@ export const UserProfileMenuSheet = forwardRef<
       username,
       isFollowing = false,
       isBlocked = false,
+      isOwnProfile = false,
       onFollow,
       onUnfollow,
       onBlock,
       onUnblock,
       onReport,
       onCopyProfileLink,
+      onShare,
+      onGiveAward,
+      onGiftMirage,
+      onGiftSubscription,
       onDismiss,
     },
     ref,
@@ -148,6 +158,30 @@ export const UserProfileMenuSheet = forwardRef<
       onCopyProfileLink?.();
     }, [dismiss, onCopyProfileLink]);
 
+    const handleShare = useCallback(() => {
+      triggerHaptic("light");
+      dismiss();
+      onShare?.();
+    }, [dismiss, onShare]);
+
+    const handleGiveAward = useCallback(() => {
+      triggerHaptic("medium");
+      dismiss();
+      onGiveAward?.();
+    }, [dismiss, onGiveAward]);
+
+    const handleGiftMirage = useCallback(() => {
+      triggerHaptic("medium");
+      dismiss();
+      onGiftMirage?.();
+    }, [dismiss, onGiftMirage]);
+
+    const handleGiftSubscription = useCallback(() => {
+      triggerHaptic("medium");
+      dismiss();
+      onGiftSubscription?.();
+    }, [dismiss, onGiftSubscription]);
+
     return (
       <BottomSheetModal
         ref={bottomSheetRef}
@@ -198,6 +232,38 @@ export const UserProfileMenuSheet = forwardRef<
               title={isFollowing ? "Unfollow" : "Follow"}
               onPress={handleFollow}
             />
+
+            {!isOwnProfile && onGiveAward && (
+              <MenuItem
+                iconName="gift-outline"
+                title="Give Award"
+                onPress={handleGiveAward}
+              />
+            )}
+
+            {!isOwnProfile && onGiftMirage && (
+              <MenuItem
+                iconName="cash-outline"
+                title="Gift Mirage"
+                onPress={handleGiftMirage}
+              />
+            )}
+
+            {!isOwnProfile && onGiftSubscription && (
+              <MenuItem
+                iconName="diamond-outline"
+                title="Gift Subscription"
+                onPress={handleGiftSubscription}
+              />
+            )}
+
+            {onShare && (
+              <MenuItem
+                iconName="share-outline"
+                title="Share Profile"
+                onPress={handleShare}
+              />
+            )}
 
             <MenuItem
               iconName="link-outline"
