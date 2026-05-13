@@ -1,5 +1,5 @@
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
-import React, { memo, useEffect } from "react";
+import React, { memo, useEffect, useRef } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { MenuProvider } from "react-native-popup-menu";
@@ -49,6 +49,7 @@ export const RootProvider = memo(
   ({ children }: { children: React.ReactNode }) => {
     const walletAddress = useAuthStore((s) => s.walletAddress);
     const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+    const hadLoggedInSessionRef = useRef(isLoggedIn);
 
     useEffect(() => {
       initInboxNotifications();
@@ -86,7 +87,12 @@ export const RootProvider = memo(
     }, [isLoggedIn, hasSeenAdultPrompt]);
 
     useEffect(() => {
-      if (isLoggedIn) return;
+      if (isLoggedIn) {
+        hadLoggedInSessionRef.current = true;
+        return;
+      }
+      if (!hadLoggedInSessionRef.current) return;
+      hadLoggedInSessionRef.current = false;
       cleanupInboxNotificationsForLogout().catch((error) => {
         console.warn("[RootProvider] Failed to cleanup inbox notifications:", error);
       });

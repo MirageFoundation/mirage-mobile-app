@@ -207,7 +207,34 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
     }
 
     const raw = await res.text();
-    const data = JSON.parse(raw);
+    if (!raw.trim()) {
+      console.log("[fetchRedditVideo] JSON fetch returned empty body:", { jsonUrl });
+      Sentry.captureMessage("Reddit JSON returned empty body", {
+        level: "warning",
+        tags: { feature: "share-intent", domain: "reddit.com" },
+        extra: { jsonUrl, originalUrl: url, resolvedUrl },
+      });
+      return {};
+    }
+
+    let data: unknown;
+    try {
+      data = JSON.parse(raw);
+    } catch (parseErr) {
+      console.log("[fetchRedditVideo] JSON parse failed:", { jsonUrl, error: String(parseErr) });
+      Sentry.captureMessage("Reddit JSON parse failed", {
+        level: "warning",
+        tags: { feature: "share-intent", domain: "reddit.com" },
+        extra: {
+          jsonUrl,
+          originalUrl: url,
+          resolvedUrl,
+          rawPreview: raw.slice(0, 300),
+          error: String(parseErr),
+        },
+      });
+      return {};
+    }
 
     const listing = Array.isArray(data) ? data[0] : data;
     const post = listing?.data?.children?.[0]?.data;

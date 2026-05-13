@@ -101,7 +101,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name,
     slug,
-    version: "1.0.13",
+    version: "1.0.14",
     orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: scheme,
@@ -127,7 +127,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       },
       package: bundleIdentifier,
       versionCode: 1013,
-      ...(isFdroidBuild ? {} : { googleServicesFile: process.env.GOOGLE_SERVICES_JSON }),
+      ...(isFdroidBuild
+        ? {}
+        : { googleServicesFile: process.env.GOOGLE_SERVICES_JSON }),
       edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
       softwareKeyboardLayoutMode: "resize",

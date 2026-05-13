@@ -717,8 +717,11 @@ function subscribeAppState(): void {
 const HANDLED_NOTIFICATION_IDS_KEY = "inbox-handled-notification-ids";
 const handledNotificationIdsInFlight = new Set<string>();
 const deferredNotificationResponseRetries = new Map<string, number>();
-const DEFERRED_NOTIFICATION_RESPONSE_MAX_RETRIES = 12;
+const deferredNotificationResponses = new Map<string, Notifications.NotificationResponse>();
+const deferredNotificationResponseReceivedAt = new Map<string, number>();
+let unsubscribeDeferredNotificationWalletWatcher: (() => void) | null = null;
 const DEFERRED_NOTIFICATION_RESPONSE_RETRY_MS = 500;
+const DEFERRED_NOTIFICATION_RESPONSE_MAX_AGE_MS = 5 * 60_000;
 
 function getHandledNotificationIds(): Set<string> {
   const raw = storage.getString(HANDLED_NOTIFICATION_IDS_KEY);
@@ -736,12 +739,53 @@ function saveHandledNotificationIds(ids: Set<string>): void {
   storage.set(HANDLED_NOTIFICATION_IDS_KEY, JSON.stringify(trimmed));
 }
 
+function clearDeferredNotificationResponse(notificationId: string): void {
+  deferredNotificationResponseRetries.delete(notificationId);
+  deferredNotificationResponses.delete(notificationId);
+  deferredNotificationResponseReceivedAt.delete(notificationId);
+}
+
+function flushDeferredNotificationResponses(reason: string): void {
+  if (!useAuthStore.getState().walletAddress) return;
+  for (const [notificationId, response] of Array.from(deferredNotificationResponses.entries())) {
+    clearDeferredNotificationResponse(notificationId);
+    Sentry.captureMessage("Inbox notification response resumed after wallet ready", {
+      level: "info",
+      tags: {
+        feature: "inbox-notifications",
+        operation: "deferred-notification-response",
+      },
+      extra: {
+        notificationId,
+        reason,
+        ...getNavigationReadinessDebugData(),
+      },
+    });
+    handleNotificationResponse(response, "wallet-deferred");
+  }
+}
+
+function ensureDeferredNotificationWalletWatcher(): void {
+  if (unsubscribeDeferredNotificationWalletWatcher) return;
+  unsubscribeDeferredNotificationWalletWatcher = useAuthStore.subscribe((state) => {
+    if (!state.walletAddress) return;
+    flushDeferredNotificationResponses("wallet-store-ready");
+  });
+}
+
 function deferNotificationResponseUntilWallet(
   response: Notifications.NotificationResponse,
   notificationId: string,
 ): void {
+  ensureDeferredNotificationWalletWatcher();
+  deferredNotificationResponses.set(notificationId, response);
+  if (!deferredNotificationResponseReceivedAt.has(notificationId)) {
+    deferredNotificationResponseReceivedAt.set(notificationId, Date.now());
+  }
   const attempt = (deferredNotificationResponseRetries.get(notificationId) ?? 0) + 1;
   deferredNotificationResponseRetries.set(notificationId, attempt);
+  const receivedAt = deferredNotificationResponseReceivedAt.get(notificationId) ?? Date.now();
+  const ageMs = Date.now() - receivedAt;
 
   Sentry.addBreadcrumb({
     category: "inbox-notifications",
@@ -750,13 +794,14 @@ function deferNotificationResponseUntilWallet(
     data: {
       notificationId,
       attempt,
+      ageMs,
       ...getNavigationReadinessDebugData(),
     },
   });
 
-  if (attempt > DEFERRED_NOTIFICATION_RESPONSE_MAX_RETRIES) {
-    deferredNotificationResponseRetries.delete(notificationId);
-    Sentry.captureMessage("Inbox notification response dropped before wallet ready", {
+  if (ageMs > DEFERRED_NOTIFICATION_RESPONSE_MAX_AGE_MS) {
+    clearDeferredNotificationResponse(notificationId);
+    Sentry.captureMessage("Inbox notification response expired before wallet ready", {
       level: "warning",
       tags: {
         feature: "inbox-notifications",
@@ -764,6 +809,8 @@ function deferNotificationResponseUntilWallet(
       },
       extra: {
         notificationId,
+        attempt,
+        ageMs,
         ...getNavigationReadinessDebugData(),
       },
     });
@@ -776,20 +823,7 @@ function deferNotificationResponseUntilWallet(
       return;
     }
 
-    deferredNotificationResponseRetries.delete(notificationId);
-    Sentry.captureMessage("Inbox notification response resumed after wallet ready", {
-      level: "info",
-      tags: {
-        feature: "inbox-notifications",
-        operation: "deferred-notification-response",
-      },
-      extra: {
-        notificationId,
-        attempt,
-        ...getNavigationReadinessDebugData(),
-      },
-    });
-    handleNotificationResponse(response, "wallet-deferred");
+    flushDeferredNotificationResponses("retry-timer");
   }, DEFERRED_NOTIFICATION_RESPONSE_RETRY_MS);
 }
 
@@ -1246,6 +1280,11 @@ export async function cleanupInboxNotificationsForLogout(): Promise<void> {
   notificationResponseSubscription = null;
   deferredInitSubscription?.remove();
   deferredInitSubscription = null;
+  unsubscribeDeferredNotificationWalletWatcher?.();
+  unsubscribeDeferredNotificationWalletWatcher = null;
+  deferredNotificationResponseRetries.clear();
+  deferredNotificationResponses.clear();
+  deferredNotificationResponseReceivedAt.clear();
   isInboxNotificationsInitialized = false;
   isInitializingInboxNotifications = false;
 

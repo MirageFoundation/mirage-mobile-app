@@ -17,6 +17,8 @@ import { Paths, File as ExpoFile } from "expo-file-system";
 import { useLocalSearchParams } from "expo-router";
 import { router } from "@/src/utils/guarded-router";
 import { useShareIntentContext } from "expo-share-intent";
+import ExpoShareIntentModule from "expo-share-intent/build/ExpoShareIntentModule";
+import { getLastSharePath, isRecentSharePath } from "@/src/navigation/linking";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Network from "expo-network";
 import {
@@ -792,7 +794,30 @@ export function CreateScreen() {
 
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const lastProcessedIntentRef = useRef<string | null>(null);
+  const shareIntentRecoveryPathRef = useRef<string | null>(null);
   const shareTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (hasShareIntent || isEditMode) return;
+    if (!isRecentSharePath(60_000)) return;
+    const sharePath = getLastSharePath();
+    if (!sharePath || sharePath === shareIntentRecoveryPathRef.current) return;
+    shareIntentRecoveryPathRef.current = sharePath;
+    console.log("[CreateScreen] Recovering share intent from launch path");
+    Sentry.addBreadcrumb({
+      category: "share-intent",
+      message: "Recovering share intent from launch path",
+      data: { pathPreview: sharePath.slice(0, 160) },
+      level: "info",
+    });
+    try {
+      ExpoShareIntentModule?.getShareIntent(sharePath);
+    } catch (error) {
+      Sentry.captureException(error, {
+        tags: { feature: "share-intent", operation: "create-screen-recovery" },
+      });
+    }
+  }, [hasShareIntent, isEditMode]);
 
   useEffect(() => {
     if (!hasShareIntent || !shareIntent || isEditMode) return;
@@ -800,7 +825,7 @@ export function CreateScreen() {
     if (!isLoggedIn) {
       lastProcessedIntentRef.current = null;
       resetShareIntent();
-      router.replace("/(tabs)/");
+      router.replace("/(tabs)");
       showAuthSheet();
       return;
     }
@@ -893,6 +918,12 @@ export function CreateScreen() {
       }
     }
 
+    if (sharedUrl) {
+      updateDraft({
+        body: sharedUrl.slice(0, tierLimits.maxContentLength),
+      });
+    }
+
     shareTimeoutRef.current = setTimeout(() => {
       if (lastProcessedIntentRef.current !== currentIntentKey) return;
       if (shareIntent.text && !sharedUrl) {
@@ -900,6 +931,7 @@ export function CreateScreen() {
       }
       if (sharedUrl) {
         setIsProcessingShareLink(true);
+        console.log("[CreateScreen] Fetching link meta:", sharedUrl);
         fetchLinkMeta(sharedUrl).then(async (meta) => {
           if (lastProcessedIntentRef.current !== currentIntentKey) return;
           console.log("[CreateScreen] Link meta extracted:", {
@@ -1001,9 +1033,6 @@ export function CreateScreen() {
 
           if (meta.externalUrl) {
             console.log("[CreateScreen] External link detected:", meta.externalUrl);
-            setShowLinkInput(true);
-            setLinkUrl(meta.externalUrl);
-            updateDraft({ linkUrl: meta.externalUrl });
           }
 
           let videoDownloaded = false;
@@ -1233,11 +1262,13 @@ export function CreateScreen() {
           }
 
           if (meta.externalUrl) {
-            updateDraft({ linkUrl: meta.externalUrl });
+            console.log("[CreateScreen] Keeping external link out of link input:", meta.externalUrl);
           }
         }).catch((err: any) => {
           if (lastProcessedIntentRef.current !== currentIntentKey) return;
-          updateDraft({ body: sharedUrl.slice(0, tierLimits.maxContentLength) });
+          updateDraft({
+            body: sharedUrl.slice(0, tierLimits.maxContentLength),
+          });
           Sentry.captureException(err, { tags: { feature: "share-intent-meta" } });
         }).finally(() => {
           if (lastProcessedIntentRef.current === currentIntentKey) {
@@ -1265,7 +1296,7 @@ export function CreateScreen() {
     }, 50);
 
     return () => {
-      if (shareTimeoutRef.current) {
+      if (shareTimeoutRef.current && lastProcessedIntentRef.current !== currentIntentKey) {
         clearTimeout(shareTimeoutRef.current);
         shareTimeoutRef.current = null;
       }

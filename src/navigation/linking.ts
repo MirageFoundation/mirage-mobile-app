@@ -127,6 +127,10 @@ export function isRecentSharePath(withinMs = 10_000): boolean {
   return age !== null && age >= 0 && age < withinMs;
 }
 
+export function getLastSharePath(): string | null {
+  return storage.getString(LAST_SHARE_PATH_KEY) ?? null;
+}
+
 export function isRecentCreateDeepLink(
   withinMs = RECENT_CREATE_DEEP_LINK_TTL_MS,
 ): boolean {
