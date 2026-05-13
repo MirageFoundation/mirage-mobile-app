@@ -19,6 +19,13 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       organization: "mirage-q4",
     },
   ];
+  const notificationsPlugin: [string, Record<string, string>] = [
+    "expo-notifications",
+    {
+      icon: "./assets/images/android-icon-monochrome.png",
+      color: "#000000",
+    },
+  ];
   const plugins: NonNullable<ExpoConfig["plugins"]> = [
     [
       "expo-share-intent",
@@ -70,25 +77,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       },
     ],
     [
-      "react-native-vision-camera",
-      {
-        cameraPermissionText: "$(PRODUCT_NAME) needs access to your Camera.",
-        enableCodeScanner: true,
-      },
-    ],
-    [
       "expo-image-picker",
       {
         photosPermission: "$(PRODUCT_NAME) needs access to your Photos.",
       },
     ],
-    [
-      "expo-notifications",
-      {
-        icon: "./assets/images/android-icon-monochrome.png",
-        color: "#000000",
-      },
-    ],
+    ...(isFdroidBuild ? [] : [notificationsPlugin]),
     [
       "expo-screen-orientation",
       {

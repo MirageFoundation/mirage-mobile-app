@@ -8,7 +8,6 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import * as Notifications from "expo-notifications";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useInfiniteInbox } from "@/src/api/read/hooks/use-inbox";
@@ -24,6 +23,7 @@ import { useShallow } from "zustand/react/shallow";
 import { markRepliesAsNotified } from "@/src/services/inbox-notified-ids";
 import { markInboxViewed } from "@/src/api/write/endpoints/inbox";
 import { walletService } from "@/src/services/wallet-service";
+import { IS_FDROID_BUILD } from "@/src/config/build-flags";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
@@ -74,6 +74,14 @@ function buildInboxParentPost(reply: InboxReply): PostWithChildren | null {
     user_weight: 0,
     children: [],
   };
+}
+
+async function clearDeliveredNotifications(): Promise<void> {
+  if (IS_FDROID_BUILD) return;
+
+  const Notifications = await import("expo-notifications");
+  await Notifications.dismissAllNotificationsAsync();
+  await Notifications.setBadgeCountAsync(0);
 }
 
 export function InboxScreen() {
@@ -168,8 +176,7 @@ export function InboxScreen() {
       if (!fromNotificationRef.current) {
         refetch();
       }
-      Notifications.dismissAllNotificationsAsync();
-      Notifications.setBadgeCountAsync(0);
+      void clearDeliveredNotifications();
       const task = InteractionManager.runAfterInteractions(() => {
         if (walletAddress) {
           walletService.getWallet().then((wallet) => {

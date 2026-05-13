@@ -1,4 +1,4 @@
-import * as Notifications from "expo-notifications";
+import type * as Notifications from "expo-notifications";
 import * as BackgroundFetch from "expo-background-fetch";
 import * as TaskManager from "expo-task-manager";
 import { AppState, Platform } from "react-native";
@@ -20,6 +20,7 @@ import {
   getInboxNotifiedIds,
   saveInboxNotifiedIds,
 } from "@/src/services/inbox-notified-ids";
+import { IS_FDROID_BUILD } from "@/src/config/build-flags";
 
 const TASK_NAME = "INBOX_NOTIFICATION_CHECK";
 const LAST_CHECK_KEY = "inbox-last-check-ts";
@@ -43,6 +44,13 @@ let isInboxNotificationsInitialized = false;
 let isInitializingInboxNotifications = false;
 let lastInboxNotificationNavigationAt = 0;
 let lastShareIntentNavigationAt = 0;
+
+type NotificationsModule = typeof import("expo-notifications");
+
+async function loadNotifications(): Promise<NotificationsModule | null> {
+  if (IS_FDROID_BUILD) return null;
+  return import("expo-notifications");
+}
 
 let _rootLayoutReadyResolve: (() => void) | null = null;
 let _rootLayoutReadyPromise: Promise<void> = new Promise<void>((resolve) => {
@@ -199,17 +207,21 @@ function scheduleInitInboxNotificationsOnForeground(): void {
   });
 }
 
-Notifications.setNotificationHandler({
-  handleNotification: async (notification) => {
-    console.log("[InboxNotifications] handleNotification called for:", notification.request.identifier);
-    const isInboxActive = useInboxStore.getState().isInboxActive;
-    return {
-      shouldShowBanner: !isInboxActive,
-      shouldShowList: !isInboxActive,
-      shouldPlaySound: !isInboxActive,
-      shouldSetBadge: false,
-    };
-  },
+void loadNotifications().then((Notifications) => {
+  if (!Notifications) return;
+
+  Notifications.setNotificationHandler({
+    handleNotification: async (notification) => {
+      console.log("[InboxNotifications] handleNotification called for:", notification.request.identifier);
+      const isInboxActive = useInboxStore.getState().isInboxActive;
+      return {
+        shouldShowBanner: !isInboxActive,
+        shouldShowList: !isInboxActive,
+        shouldPlaySound: !isInboxActive,
+        shouldSetBadge: false,
+      };
+    },
+  });
 });
 
 export function getNotifiedIds(): Set<string> {
@@ -501,6 +513,9 @@ async function performInboxCheck(
 ): Promise<BackgroundFetch.BackgroundFetchResult> {
 
   try {
+    const Notifications = await loadNotifications();
+    if (!Notifications) return BackgroundFetch.BackgroundFetchResult.NoData;
+
     const walletAddress = useAuthStore.getState().walletAddress;
     console.log("[InboxNotifications] walletAddress:", walletAddress);
     if (!walletAddress) {
@@ -1073,54 +1088,58 @@ function handleNotificationResponse(
 }
 
 function subscribeNotificationResponses(): void {
-  if (notificationResponseSubscription) return;
+  if (notificationResponseSubscription || IS_FDROID_BUILD) return;
   Sentry.addBreadcrumb({
     category: "inbox-notifications",
     message: "Subscribing to notification responses",
     level: "info",
     data: getNavigationReadinessDebugData(),
   });
-  notificationResponseSubscription =
-    Notifications.addNotificationResponseReceivedListener((response) => {
-      Sentry.addBreadcrumb({
-        category: "inbox-notifications",
-        message: "Live notification response listener fired",
-        level: "info",
-        data: {
-          notificationId: response.notification?.request?.identifier,
-          notificationDate: response.notification?.date,
-          dataKeys: getNotificationDataKeys(getNotificationData(response)),
-          ...getNavigationReadinessDebugData(),
-        },
-      });
-      handleNotificationResponse(response, "live-listener");
-    });
+  void loadNotifications().then((Notifications) => {
+    if (!Notifications || notificationResponseSubscription) return;
 
-  Notifications.getLastNotificationResponseAsync()
-    .then((response) => {
-      Sentry.addBreadcrumb({
-        category: "inbox-notifications",
-        message: "Checked last notification response",
-        level: "info",
-        data: {
-          hasResponse: !!response,
-          notificationId: response?.notification?.request?.identifier,
-          notificationDate: response?.notification?.date,
-          dataKeys: response ? getNotificationDataKeys(getNotificationData(response)) : [],
-          ...getNavigationReadinessDebugData(),
-        },
+    notificationResponseSubscription =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        Sentry.addBreadcrumb({
+          category: "inbox-notifications",
+          message: "Live notification response listener fired",
+          level: "info",
+          data: {
+            notificationId: response.notification?.request?.identifier,
+            notificationDate: response.notification?.date,
+            dataKeys: getNotificationDataKeys(getNotificationData(response)),
+            ...getNavigationReadinessDebugData(),
+          },
+        });
+        handleNotificationResponse(response, "live-listener");
       });
-      handleNotificationResponse(response, "last-response");
-    })
-    .catch((error) => {
-      console.error(
-        "[InboxNotifications] Failed to read last notification response:",
-        error,
-      );
-      Sentry.captureException(error, {
-        tags: { feature: "inbox-notifications", operation: "last-notification-response" },
+
+    Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        Sentry.addBreadcrumb({
+          category: "inbox-notifications",
+          message: "Checked last notification response",
+          level: "info",
+          data: {
+            hasResponse: !!response,
+            notificationId: response?.notification?.request?.identifier,
+            notificationDate: response?.notification?.date,
+            dataKeys: response ? getNotificationDataKeys(getNotificationData(response)) : [],
+            ...getNavigationReadinessDebugData(),
+          },
+        });
+        handleNotificationResponse(response, "last-response");
+      })
+      .catch((error) => {
+        console.error(
+          "[InboxNotifications] Failed to read last notification response:",
+          error,
+        );
+        Sentry.captureException(error, {
+          tags: { feature: "inbox-notifications", operation: "last-notification-response" },
+        });
       });
-    });
+  });
 }
 
 function subscribeInboxSignals(): void {
@@ -1150,6 +1169,11 @@ TaskManager.defineTask(TASK_NAME, async () => {
 });
 
 export async function initInboxNotifications(): Promise<void> {
+  if (IS_FDROID_BUILD) {
+    isInboxNotificationsInitialized = true;
+    return;
+  }
+
   if (isInboxNotificationsInitialized || isInitializingInboxNotifications) {
     return;
   }
@@ -1169,6 +1193,9 @@ export async function initInboxNotifications(): Promise<void> {
   isInitializingInboxNotifications = true;
 
   try {
+    const Notifications = await loadNotifications();
+    if (!Notifications) return;
+
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("inbox", {
         name: "Inbox Replies",
@@ -1307,6 +1334,9 @@ export async function cleanupInboxNotificationsForLogout(): Promise<void> {
   }
 
   try {
+    const Notifications = await loadNotifications();
+    if (!Notifications) return;
+
     await Notifications.dismissAllNotificationsAsync();
     await Notifications.cancelAllScheduledNotificationsAsync();
     Sentry.addBreadcrumb({
@@ -1330,6 +1360,9 @@ export async function runInboxCheckNow(): Promise<void> {
 
 export async function sendTestNotification(): Promise<void> {
   try {
+    const Notifications = await loadNotifications();
+    if (!Notifications) return;
+
     const { status } = await Notifications.getPermissionsAsync();
     console.log("[InboxNotifications] Test - permission status:", status);
 

@@ -81,7 +81,6 @@
         "react-native-nitro-modules": "0.35.4",
         "react-native-otp-entry": "^1.8.5",
         "react-native-pager-view": "6.9.1",
-        "react-native-passkeys": "^0.4.0",
         "react-native-popup-menu": "^0.19.0",
         "react-native-reanimated": "~4.1.1",
         "react-native-safe-area-context": "~5.6.0",
@@ -90,7 +89,6 @@
         "react-native-unistyles": "3.2.4",
         "react-native-url-polyfill": "^3.0.0",
         "react-native-video-trim": "^6.0.13",
-        "react-native-vision-camera": "^4.7.3",
         "react-native-wagmi-charts": "^2.8.3",
         "react-native-web": "~0.21.0",
         "react-native-webview": "13.15.0",
@@ -1834,8 +1832,6 @@
 
     "react-native-pager-view": ["react-native-pager-view@6.9.1", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-uUT0MMMbNtoSbxe9pRvdJJKEi9snjuJ3fXlZhG8F2vVMOBJVt/AFtqMPUHu9yMflmqOr08PewKzj9EPl/Yj+Gw=="],
 
-    "react-native-passkeys": ["react-native-passkeys@0.4.0", "", { "peerDependencies": { "expo": ">=48.0.0", "react": "*", "react-native": ">=0.71.0" } }, "sha512-WX0jw60tDyZ3SwhnKvAdddwC27efT4CWWcq/j8O+RyGU/wIidQXeaAtX0kX1CMGNsXnoDDgbMAhUbIG+Ia786Q=="],
-
     "react-native-popup-menu": ["react-native-popup-menu@0.19.0", "", {}, "sha512-mWC2VCLMmTDPlqgIy39JUy57yZV0//4/dITIrTM0Wu0QtUDlbDmSKl115YjAAY4mj2iceTxo0nOmXrLu8Tp8UQ=="],
 
     "react-native-reanimated": ["react-native-reanimated@4.1.6", "", { "dependencies": { "react-native-is-edge-to-edge": "^1.2.1", "semver": "7.7.2" }, "peerDependencies": { "@babel/core": "^7.0.0-0", "react": "*", "react-native": "*", "react-native-worklets": ">=0.5.0" } }, "sha512-F+ZJBYiok/6Jzp1re75F/9aLzkgoQCOh4yxrnwATa8392RvM3kx+fiXXFvwcgE59v48lMwd9q0nzF1oJLXpfxQ=="],
@@ -1853,8 +1849,6 @@
     "react-native-url-polyfill": ["react-native-url-polyfill@3.0.0", "", { "dependencies": { "whatwg-url-without-unicode": "8.0.0-3" }, "peerDependencies": { "react-native": "*" } }, "sha512-aA5CiuUCUb/lbrliVCJ6lZ17/RpNJzvTO/C7gC/YmDQhTUoRD5q5HlJfwLWcxz4VgAhHwXKzhxH+wUN24tAdqg=="],
 
     "react-native-video-trim": ["react-native-video-trim@6.0.13", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-vatJM2RZ6ME4JFNDxrhO+2zPdr6nPVa0BbtxBXoAXXxjbF62o+R2GSHoi6uNihCyY77Z6K1inTD/GcDdtd//LQ=="],
-
-    "react-native-vision-camera": ["react-native-vision-camera@4.7.3", "", { "peerDependencies": { "@shopify/react-native-skia": "*", "react": "*", "react-native": "*", "react-native-reanimated": "*", "react-native-worklets-core": "*" }, "optionalPeers": ["@shopify/react-native-skia", "react-native-reanimated", "react-native-worklets-core"] }, "sha512-g1/neOyjSqn1kaAa2FxI/qp5KzNvPcF0bnQw6NntfbxH6tm0+8WFZszlgb5OV+iYlB6lFUztCbDtyz5IpL47OA=="],
 
     "react-native-wagmi-charts": ["react-native-wagmi-charts@2.9.0", "", { "dependencies": { "d3-array": "^3.1.6", "d3-scale": "^2", "d3-shape": "^3.0.1", "fbjs": "^3.0.5", "react-keyed-flatten-children": "^1.3.0", "react-native-redash": "^18.1.3" }, "peerDependencies": { "react": "*", "react-native": "*", "react-native-gesture-handler": "*", "react-native-reanimated": "*", "react-native-svg": "*" } }, "sha512-BJmBu+lV+jiVwqRLTEUkIMn1FziEGZ158vOEjxC2Y+/ba6zCb3RmbFmQNtnKj2++D75rlPjeHS8yChv/9vHYWA=="],
 

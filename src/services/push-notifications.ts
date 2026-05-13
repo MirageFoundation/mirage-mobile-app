@@ -1,4 +1,4 @@
-import * as Notifications from "expo-notifications";
+import type * as Notifications from "expo-notifications";
 import * as Network from "expo-network";
 import { AppState, type NativeEventSubscription, Platform } from "react-native";
 import * as Sentry from "@sentry/react-native";
@@ -21,6 +21,7 @@ import type { MirageWallet } from "@/src/wallet";
 import { useAuthStore } from "@/src/stores/auth-store";
 import { getInbox } from "@/src/api/read/endpoints/inbox";
 import { isRetryable } from "@/src/utils/error-messages";
+import { IS_FDROID_BUILD } from "@/src/config/build-flags";
 
 const PUSH_TOKEN_KEY = "push-token";
 const PUSH_ENABLED_KEY = "push-enabled";
@@ -38,6 +39,13 @@ let isRegisteringPush = false;
 let lastRegisterPushAt = 0;
 const REGISTER_PUSH_MIN_INTERVAL_MS = 30_000;
 let unhandledRejectionHandler: ((event: any) => void) | null = null;
+
+type NotificationsModule = typeof import("expo-notifications");
+
+async function loadNotifications(): Promise<NotificationsModule | null> {
+  if (IS_FDROID_BUILD) return null;
+  return import("expo-notifications");
+}
 
 type PendingUnregister = {
   id: string;
@@ -233,6 +241,9 @@ async function flushPendingUnregisters(): Promise<boolean> {
 }
 
 async function getExpoPushToken(): Promise<string | null> {
+  const Notifications = await loadNotifications();
+  if (!Notifications) return null;
+
   if (!isAppInForeground()) {
     console.log("[PushNotifications] Skipping token fetch — app is not in foreground");
     Sentry.addBreadcrumb({
@@ -334,6 +345,12 @@ async function getExpoPushToken(): Promise<string | null> {
 }
 
 export async function registerPush(wallet: MirageWallet): Promise<void> {
+  if (IS_FDROID_BUILD) {
+    clearStoredPushToken();
+    setPushEnabled(false);
+    return;
+  }
+
   if (isRegisteringPush) return;
   const now = Date.now();
   if (now - lastRegisterPushAt < REGISTER_PUSH_MIN_INTERVAL_MS) return;
@@ -426,6 +443,12 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
 }
 
 export async function unregisterPush(wallet?: MirageWallet | null): Promise<void> {
+  if (IS_FDROID_BUILD) {
+    clearStoredPushToken();
+    setPushEnabled(false);
+    return;
+  }
+
   let didUnregister = false;
   let unregisterToken: string | null = null;
   let unregisterWallet: MirageWallet | null = null;
@@ -521,21 +544,25 @@ export async function unregisterPush(wallet?: MirageWallet | null): Promise<void
 }
 
 function subscribePushReceived(): void {
-  if (pushReceivedSubscription) return;
+  if (pushReceivedSubscription || IS_FDROID_BUILD) return;
 
-  pushReceivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
-    const data = notification.request.content.data;
-    if (data?.replyId) {
-      markRepliesAsNotified([data.replyId as string]);
-    }
-    const address = useAuthStore.getState().walletAddress;
-    if (address) {
-      queryClient.prefetchInfiniteQuery({
-        queryKey: queryKeys.inboxInfinite(address),
-        queryFn: ({ pageParam = 1 }) => getInbox({ address, page: pageParam, limit: 25 }),
-        initialPageParam: 1,
-      });
-    }
+  void loadNotifications().then((Notifications) => {
+    if (!Notifications || pushReceivedSubscription) return;
+
+    pushReceivedSubscription = Notifications.addNotificationReceivedListener((notification) => {
+      const data = notification.request.content.data;
+      if (data?.replyId) {
+        markRepliesAsNotified([data.replyId as string]);
+      }
+      const address = useAuthStore.getState().walletAddress;
+      if (address) {
+        queryClient.prefetchInfiniteQuery({
+          queryKey: queryKeys.inboxInfinite(address),
+          queryFn: ({ pageParam = 1 }) => getInbox({ address, page: pageParam, limit: 25 }),
+          initialPageParam: 1,
+        });
+      }
+    });
   });
 }
 
@@ -612,6 +639,12 @@ function subscribeKeychainRejectionHandler(): void {
 }
 
 export async function initPushNotifications(): Promise<void> {
+  if (IS_FDROID_BUILD) {
+    clearStoredPushToken();
+    setPushEnabled(false);
+    return;
+  }
+
   Sentry.addBreadcrumb({
     category: "push-notifications",
     message: "Initializing push notifications service",
