@@ -112,7 +112,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { getLastPressedPostY } from "@/src/utils/post-transition";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import type { PostsResponse, Post as ApiPost, PostWithChildren } from "@/src/api/types";
+import type { CommentsResponse, PostsResponse, Post as ApiPost, PostWithChildren } from "@/src/api/types";
 
 export default function PostDetailScreen() {
   const { id, highlight, reveal, syncContext, depth } = useLocalSearchParams<{
@@ -684,9 +684,18 @@ export default function PostDetailScreen() {
     return null;
   }, [id, actualRootPostId, queryClient]);
 
+  const cachedRootPostFromComments = useMemo(() => {
+    if (!actualRootPostId) return null;
+    const address = currentUser?.walletAddress ?? undefined;
+    const cachedComments = queryClient.getQueryData<CommentsResponse>(
+      queryKeys.comments(actualRootPostId, address),
+    );
+    return cachedComments?.root ?? null;
+  }, [actualRootPostId, currentUser?.walletAddress, queryClient]);
+
   const resolvedRootPost =
     isViewingComment
-      ? actualRootPost ?? cachedFeedPost ?? commentsData?.root
+      ? actualRootPost ?? cachedRootPostFromComments ?? cachedFeedPost ?? commentsData?.root
       : commentsData?.root ?? cachedFeedPost;
 
   // Transform API post and comments to UI format

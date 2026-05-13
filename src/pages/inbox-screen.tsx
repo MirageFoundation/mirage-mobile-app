@@ -9,10 +9,13 @@ import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
+import { useQueryClient } from "@tanstack/react-query";
 
+import { getComments } from "@/src/api/read/endpoints/posts";
 import { useInfiniteInbox } from "@/src/api/read/hooks/use-inbox";
+import { queryKeys } from "@/src/api/read/query-keys";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import type { InboxReply } from "@/src/api/types";
+import type { CommentsResponse, InboxReply, PostWithChildren } from "@/src/api/types";
 import { InboxItem } from "@/src/components/molecules/inbox-item";
 import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { Box, Text } from "@/src/components/ui/primitives";
@@ -27,10 +30,58 @@ const emptyInfoImage = require("@/assets/images/empty-info.png");
 
 const MemoizedInboxItem = InboxItem;
 
+function buildInboxCommentPost(reply: InboxReply): PostWithChildren {
+  return {
+    post_id: reply.reply_id,
+    user_id: reply.reply_owner,
+    username: reply.reply_username || reply.reply_owner,
+    author_level: reply.reply_author_level,
+    timestamp: reply.reply_timestamp,
+    topic: "",
+    root_topic: "",
+    root_post_id: reply.root_post_id,
+    title: "",
+    content: reply.reply_content,
+    tag: "",
+    edited_at: 0,
+    thumbnail: "",
+    points: 0,
+    comments: 0,
+    user_vote: 0,
+    user_weight: 0,
+    children: [],
+  };
+}
+
+function buildInboxParentPost(reply: InboxReply): PostWithChildren | null {
+  if (!reply.parent_id || !reply.parent_content) return null;
+
+  return {
+    post_id: reply.parent_id,
+    user_id: reply.parent_owner,
+    username: reply.parent_owner,
+    timestamp: reply.reply_timestamp,
+    topic: "",
+    root_topic: "",
+    root_post_id: reply.root_post_id,
+    title: "",
+    content: reply.parent_content,
+    tag: "",
+    edited_at: 0,
+    thumbnail: "",
+    points: 0,
+    comments: 1,
+    user_vote: 0,
+    user_weight: 0,
+    children: [],
+  };
+}
+
 export function InboxScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const router = useRouter();
+  const queryClient = useQueryClient();
   useLocalSearchParams<{
     fromNotification?: string;
     replyId?: string;
@@ -153,6 +204,45 @@ export function InboxScreen() {
   }, [visibleReplies]);
 
   useEffect(() => {
+    if (!walletAddress || visibleReplies.length === 0) return;
+
+    const rootPostIds = Array.from(
+      new Set(
+        visibleReplies
+          .map((reply) => reply.root_post_id)
+          .filter((rootPostId): rootPostId is string => !!rootPostId),
+      ),
+    ).slice(0, 10);
+
+    for (const rootPostId of rootPostIds) {
+      void queryClient.fetchQuery({
+        queryKey: queryKeys.comments(rootPostId, walletAddress),
+        queryFn: () =>
+          getComments({
+            post_id: rootPostId,
+            address: walletAddress,
+          }),
+        staleTime: 1000 * 30,
+      }).then((commentsData) => {
+        const mediaUrls = [
+          ...(commentsData.root.media ?? []),
+          commentsData.root.thumbnail,
+        ].filter((url): url is string => !!url);
+        if (mediaUrls.length > 0) {
+          void ExpoImage.prefetch(mediaUrls, "memory-disk");
+        }
+      }).catch((error) => {
+        Sentry.addBreadcrumb({
+          category: "inbox",
+          message: "Failed to prefetch inbox root post",
+          level: "warning",
+          data: { rootPostId, error: String(error) },
+        });
+      });
+    }
+  }, [queryClient, visibleReplies, walletAddress]);
+
+  useEffect(() => {
     if (!activeNotificationId) {
       setIsNotificationLoading(false);
       return;
@@ -231,6 +321,41 @@ export function InboxScreen() {
   const routerRef = useRef(router);
   routerRef.current = router;
 
+  const seedFocusedCommentFromInbox = useCallback(
+    (reply: InboxReply) => {
+      const address = walletAddress ?? undefined;
+      const comment = buildInboxCommentPost(reply);
+      const parent = buildInboxParentPost(reply);
+      const cachedRootPost = queryClient.getQueryData<CommentsResponse>(
+        queryKeys.comments(reply.root_post_id, address),
+      )?.root;
+      const focusedCommentData: CommentsResponse = {
+        root: comment,
+        children: [],
+      };
+
+      queryClient.setQueryData(
+        queryKeys.comments(reply.reply_id, address),
+        focusedCommentData,
+      );
+
+      if (parent) {
+        queryClient.setQueryData(queryKeys.commentContext(reply.reply_id, 5), {
+          comment_id: reply.reply_id,
+          context: [parent],
+        });
+
+        if (reply.parent_id === reply.root_post_id) {
+          queryClient.setQueryData(queryKeys.comments(reply.root_post_id, address), {
+            root: cachedRootPost ?? parent,
+            children: [comment],
+          });
+        }
+      }
+    },
+    [queryClient, walletAddress],
+  );
+
   const handleItemPress = useCallback(
     (reply: InboxReply) => {
       markReplyAsRead(reply.reply_id);
@@ -257,7 +382,7 @@ export function InboxScreen() {
 
       Sentry.addBreadcrumb({
         category: "inbox",
-        message: "Inbox reply opened post detail",
+        message: "Inbox reply opened focused comment detail",
         level: "info",
         data: {
           replyId: reply.reply_id,
@@ -266,9 +391,10 @@ export function InboxScreen() {
           type: reply.type ?? "reply",
         },
       });
-      routerRef.current.push(`/post/${reply.root_post_id}?highlight=${reply.reply_id}`);
+      seedFocusedCommentFromInbox(reply);
+      routerRef.current.push(`/post/${reply.reply_id}?depth=5`);
     },
-    [markReplyAsRead],
+    [markReplyAsRead, seedFocusedCommentFromInbox],
   );
 
   const lastFetchTime = useRef(0);
