@@ -723,15 +723,24 @@ export default function MediaPostDetailScreen({
     data: commentsData,
     isLoading: isLoadingComments,
     refetch: refetchComments,
+    isError: isCommentsError,
+    error: commentsError,
   } = useComments(id!, { enabled: isFocused });
   const focusedDepth = focusedMode === "context" ? 5 : 0;
   const {
     data: focusedCommentData,
     isFetched: isFocusedCommentFetched,
+    isError: isFocusedCommentError,
+    error: focusedCommentError,
   } = useComments(focusedCommentId, {
     enabled: isFocused && !!focusedCommentId && focusedMode !== "full",
   });
-  const { data: focusedContextData, refetch: refetchFocusedContext } = useQuery({
+  const {
+    data: focusedContextData,
+    refetch: refetchFocusedContext,
+    isError: isFocusedContextError,
+    error: focusedContextError,
+  } = useQuery({
     queryKey: queryKeys.commentContext(focusedCommentId!, focusedDepth),
     queryFn: () =>
       getCommentContext({
@@ -745,6 +754,8 @@ export default function MediaPostDetailScreen({
   const {
     data: focusedContextCheckData,
     isFetched: isFocusedContextCheckFetched,
+    isError: isFocusedContextCheckError,
+    error: focusedContextCheckError,
   } = useQuery({
     queryKey: queryKeys.commentContext(focusedCommentId!, 5),
     queryFn: () =>
@@ -756,6 +767,46 @@ export default function MediaPostDetailScreen({
     enabled: isFocused && !!focusedCommentId && focusedMode !== "full",
     staleTime: 1000 * 60,
   });
+
+  useEffect(() => {
+    if (isCommentsError) {
+      Sentry.captureException(commentsError, {
+        tags: { feature: "media-post-detail", operation: "load-comments" },
+        extra: { postId: id, focusedCommentId, focusedMode },
+      });
+    }
+    if (isFocusedCommentError) {
+      Sentry.captureException(focusedCommentError, {
+        tags: { feature: "media-post-detail", operation: "load-focused-comment" },
+        extra: { postId: id, focusedCommentId, focusedMode },
+      });
+    }
+    if (isFocusedContextError) {
+      Sentry.captureException(focusedContextError, {
+        tags: { feature: "media-post-detail", operation: "load-focused-context" },
+        extra: { postId: id, focusedCommentId, focusedMode, focusedDepth },
+      });
+    }
+    if (isFocusedContextCheckError) {
+      Sentry.captureException(focusedContextCheckError, {
+        tags: { feature: "media-post-detail", operation: "load-focused-context-check" },
+        extra: { postId: id, focusedCommentId, focusedMode },
+      });
+    }
+  }, [
+    isCommentsError,
+    commentsError,
+    isFocusedCommentError,
+    focusedCommentError,
+    isFocusedContextError,
+    focusedContextError,
+    isFocusedContextCheckError,
+    focusedContextCheckError,
+    id,
+    focusedCommentId,
+    focusedMode,
+    focusedDepth,
+  ]);
   const { data: followedData } = useUserFollowed();
   const followedUsers = useMemo(
     () => followedData?.followed_users ?? [],

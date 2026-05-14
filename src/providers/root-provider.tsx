@@ -95,6 +95,9 @@ export const RootProvider = memo(
       hadLoggedInSessionRef.current = false;
       cleanupInboxNotificationsForLogout().catch((error) => {
         console.warn("[RootProvider] Failed to cleanup inbox notifications:", error);
+        Sentry.captureException(error, {
+          tags: { feature: "inbox-notifications", operation: "root-provider-logout-cleanup" },
+        });
       });
     }, [isLoggedIn]);
 

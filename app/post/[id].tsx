@@ -211,6 +211,52 @@ export default function PostDetailScreen() {
   const routeRootCommentsQuery = useComments(routeRootPostId!, {
     enabled: !!routeRootPostId,
   });
+  const unresolvedFocusedRouteCapturedRef = useRef(false);
+
+  useEffect(() => {
+    if (routeCommentsQuery.isError) {
+      Sentry.captureException(routeCommentsQuery.error, {
+        tags: { feature: "post-routing", operation: "focused-route-comments" },
+        extra: {
+          routePostId: params.id,
+          highlight: params.highlight,
+          depth: params.depth,
+        },
+      });
+    }
+    if (routeRootIdQuery.isError) {
+      Sentry.captureException(routeRootIdQuery.error, {
+        tags: { feature: "post-routing", operation: "focused-route-root-id" },
+        extra: {
+          routePostId: params.id,
+          highlight: params.highlight,
+          depth: params.depth,
+        },
+      });
+    }
+    if (routeRootCommentsQuery.isError) {
+      Sentry.captureException(routeRootCommentsQuery.error, {
+        tags: { feature: "post-routing", operation: "focused-route-root-comments" },
+        extra: {
+          routePostId: params.id,
+          rootPostId: routeRootPostId,
+          highlight: params.highlight,
+          depth: params.depth,
+        },
+      });
+    }
+  }, [
+    routeCommentsQuery.isError,
+    routeCommentsQuery.error,
+    routeRootIdQuery.isError,
+    routeRootIdQuery.error,
+    routeRootCommentsQuery.isError,
+    routeRootCommentsQuery.error,
+    params.id,
+    params.highlight,
+    params.depth,
+    routeRootPostId,
+  ]);
 
   // Branch to the immersive MediaPostDetailScreen when the post has
   // image/video/gif media. For comment links, resolve the root post so
@@ -256,6 +302,35 @@ export default function PostDetailScreen() {
     (params.highlight || params.depth) &&
     (routeCommentsQuery.isLoading || routeRootIdQuery.isLoading || (routeRootPostId && routeRootCommentsQuery.isLoading))
   );
+
+  useEffect(() => {
+    if (!params.id || (!params.highlight && !params.depth)) return;
+    if (isResolvingFocusedMediaRoute || routingRoot || unresolvedFocusedRouteCapturedRef.current) return;
+    unresolvedFocusedRouteCapturedRef.current = true;
+    Sentry.captureMessage("Focused post route resolved without root post", {
+      level: "warning",
+      tags: { feature: "post-routing", operation: "focused-route-unresolved" },
+      extra: {
+        routePostId: params.id,
+        rootPostId: routeRootPostId,
+        highlight: params.highlight,
+        depth: params.depth,
+        hasRouteCommentsData: !!routeCommentsQuery.data,
+        hasRouteRootIdData: !!routeRootIdQuery.data,
+        hasRouteRootCommentsData: !!routeRootCommentsQuery.data,
+      },
+    });
+  }, [
+    params.id,
+    params.highlight,
+    params.depth,
+    isResolvingFocusedMediaRoute,
+    routingRoot,
+    routeRootPostId,
+    routeCommentsQuery.data,
+    routeRootIdQuery.data,
+    routeRootCommentsQuery.data,
+  ]);
 
   if (!useImmersive && isResolvingFocusedMediaRoute) {
     return <MediaPostDetailSkeleton />;
