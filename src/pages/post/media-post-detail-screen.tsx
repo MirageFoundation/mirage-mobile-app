@@ -49,6 +49,7 @@ import {
   GiftMirageSheetRef,
   GiftSubscriptionSheet,
   GiftSubscriptionSheetRef,
+  MediaPostDetailSkeleton,
   PostActions,
   PostOptionsSheet,
   PostOptionsSheetRef,
@@ -170,6 +171,7 @@ import Animated, {
 import BottomSheet, {
   BottomSheetFlatList,
   BottomSheetView,
+  useBottomSheetSpringConfigs,
 } from "@gorhom/bottom-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -776,6 +778,12 @@ export default function MediaPostDetailScreen() {
   // revealing comments + sticky input dock.
   const expandedSheetH = Math.max(100, SCREEN_H - listTopY);
   const snapPoints = useMemo(() => [expandedSheetH], [expandedSheetH]);
+  const sheetAnimationConfigs = useBottomSheetSpringConfigs({
+    damping: 42,
+    stiffness: 620,
+    mass: 0.75,
+    overshootClamping: true,
+  });
   const sheetRef = useRef<BottomSheet>(null);
   const commentsListRef = useRef<any>(null);
   // animatedIndex is -1 when closed, 0 when at first snap point.
@@ -820,20 +828,9 @@ export default function MediaPostDetailScreen() {
   const collapseMedia = openSheet;
 
   // --- animated styles ----------------------------------------------------
-  // Use transform-only animation (GPU-accelerated) instead of
-  // animating `top` + `height` (which trigger layout each frame and
-  // cause shivering on every scroll tick).
-  //
-  // Container is laid out at its expanded position/size. To collapse:
-  //   - scaleY shrinks the box from expandedMediaH → collapsedMediaH
-  //   - translateY shifts the (now-shorter) box upward so its top
-  //     aligns with collapsedMediaTop instead of expandedMediaTop.
-  // Animate the container's `height` and `top` directly on the UI
-  // thread (driven by the sheet's animatedIndex SharedValue, no JS
-  // bridge). With `resizeMode: contain` on the inner image/video,
-  // the media re-fits proportionally inside the new box — no
-  // squishing, no distortion, just a smaller-but-correctly-shaped
-  // media in the collapsed 30% strip.
+  // Keep collapse/expand fast by driving the media from the bottom
+  // sheet's UI-thread spring. Avoid JS state updates during the spring;
+  // only opacity/position style worklets derive from `animatedIndex`.
   const mediaContainerStyle = useAnimatedStyle(() => {
     const p = collapseProgress.value;
     const h = expandedMediaH + (collapsedMediaH - expandedMediaH) * p;
@@ -1390,11 +1387,7 @@ export default function MediaPostDetailScreen() {
 
   // --- render -------------------------------------------------------------
   if (!post && isLoadingComments) {
-    return (
-      <Box flex center background="base">
-        <ActivityIndicator color={theme.colors.text.default} />
-      </Box>
-    );
+    return <MediaPostDetailSkeleton />;
   }
 
   if (!post) {
@@ -1523,6 +1516,7 @@ export default function MediaPostDetailScreen() {
             index={-1}
             snapPoints={snapPoints}
             animatedIndex={animatedIndex}
+            animationConfigs={sheetAnimationConfigs}
             enableDynamicSizing={false}
             enablePanDownToClose={true}
             enableOverDrag={false}

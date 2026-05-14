@@ -16,6 +16,7 @@ export {
 export { MediaPreviewModal } from "./media-preview-modal";
 export { PostCardItem } from "./post-card-item";
 export { PostCardSkeleton, PostCardSkeletonList } from "./post-card-skeleton";
+export { MediaPostDetailSkeleton } from "./media-post-detail-skeleton";
 
 // Comment system
 export { CommentInput, type CommentInputRef } from "./comment-input";
