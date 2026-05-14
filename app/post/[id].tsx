@@ -155,12 +155,21 @@ export default function PostDetailScreen() {
     // ApiPost.media is string[] (URIs); resolve type from URL.
     const media = (cachedRoot as any).media as string[] | undefined;
     const thumbnail = (cachedRoot as any).thumbnail as string | undefined;
-    const body = (cachedRoot as any).body as string | undefined;
+    const body = ((cachedRoot as any).body ??
+      (cachedRoot as any).content) as string | undefined;
     // Some posts have a video/gif URL embedded inside the body rather
     // than in the media array (e.g. cloudflarestream, redgifs, .mp4).
+    // YouTube posts should keep using the legacy post details screen.
     const bodyUri = extractFirstUrl(body) ?? undefined;
-    const firstUri =
-      media && media.length > 0 ? media[0] : thumbnail ?? bodyUri;
+    const bodyType = bodyUri ? getMediaTypeFromUrl(bodyUri) : null;
+    if (bodyType === "youtube") return false;
+    const bodyIsPlayableMedia =
+      bodyType === "video" || bodyType === "gif";
+    const firstUri = bodyIsPlayableMedia
+      ? bodyUri
+      : media && media.length > 0
+      ? media[0]
+      : thumbnail ?? bodyUri;
     if (!firstUri) return false;
     const t = getMediaTypeFromUrl(firstUri);
     return t === "image" || t === "video" || t === "gif";

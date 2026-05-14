@@ -762,15 +762,22 @@ export default function MediaPostDetailScreen() {
   const mediaItems = useMemo<MediaItem[]>(() => {
     if (!post) return [];
     const resolved = resolvePostContent(post.body, post.media);
+    const shouldPreferResolvedMedia =
+      (resolved.bodyVideoUrl && resolved.resolvedMedia?.type === "video");
     const list =
-      post.media && post.media.length > 0
+      shouldPreferResolvedMedia && resolved.resolvedMedia
+        ? [resolved.resolvedMedia]
+        : post.media && post.media.length > 0
         ? post.media
         : resolved.resolvedMedia
         ? [resolved.resolvedMedia]
         : [];
     return list
       .filter(
-        (m) => m.type === "image" || m.type === "video" || m.type === "gif",
+        (m) =>
+          m.type === "image" ||
+          m.type === "video" ||
+          m.type === "gif",
       )
       .map((m) => ({
         uri: m.uri,
