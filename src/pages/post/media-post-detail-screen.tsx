@@ -72,10 +72,12 @@ import {
 import { useRouter } from "@/src/hooks/use-router";
 import { useToast } from "@/src/providers/toast-provider";
 import {
+  buildVideoPositionKey,
   getShareBaseUrl,
   useAuthStore,
   usePreferencesStore,
   useSavedPostsStore,
+  useVideoPositionStore,
   useVideoMuteStore,
   useContentModerationStore,
 } from "@/src/stores";
@@ -503,6 +505,7 @@ type ItemRenderProps = {
   onTapWhenCollapsed: () => void;
   registerVideo: (key: string, api: VideoApi | null) => void;
   videoKey: string;
+  videoSyncScope?: string;
 };
 
 const MediaItemView = memo(function MediaItemView({
@@ -513,14 +516,34 @@ const MediaItemView = memo(function MediaItemView({
   onTapWhenCollapsed,
   registerVideo,
   videoKey,
+  videoSyncScope,
 }: ItemRenderProps) {
   const videoRef = useRef<Video | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [positionMs, setPositionMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
   const globalMuted = useVideoMuteStore((s) => s.isMuted);
+  const getPosition = useVideoPositionStore((s) => s.getPosition);
+  const setPosition = useVideoPositionStore((s) => s.setPosition);
+  const currentVideoPositionRef = useRef(0);
+  const hasRestoredVideoPositionRef = useRef(false);
 
   const isVideo = item.type === "video";
+  const videoPositionKey = isVideo
+    ? buildVideoPositionKey(item.uri, videoSyncScope)
+    : "";
+
+  const saveVideoPosition = useCallback(() => {
+    if (!videoPositionKey) return;
+    const seconds = currentVideoPositionRef.current / 1000;
+    if (seconds > 0.5) setPosition(videoPositionKey, seconds);
+  }, [videoPositionKey, setPosition]);
+
+  useEffect(() => {
+    return () => {
+      saveVideoPosition();
+    };
+  }, [saveVideoPosition]);
 
   const togglePlay = useCallback(async () => {
     const v = videoRef.current;
@@ -543,7 +566,9 @@ const MediaItemView = memo(function MediaItemView({
       toggle: togglePlay,
       seek: async (ms) => {
         await videoRef.current?.setStatusAsync({ positionMillis: ms });
+        currentVideoPositionRef.current = ms;
         setPositionMs(ms);
+        saveVideoPosition();
       },
       getPosition: () => positionMs,
       getDuration: () => durationMs,
@@ -562,12 +587,18 @@ const MediaItemView = memo(function MediaItemView({
     durationMs,
     isPlaying,
     togglePlay,
+    saveVideoPosition,
   ]);
 
   const handleStatus = useCallback(
     (s: AVPlaybackStatus) => {
       if (!s.isLoaded) return;
+      currentVideoPositionRef.current = s.positionMillis ?? 0;
       setPositionMs(s.positionMillis ?? 0);
+      if (s.isPlaying && videoPositionKey) {
+        const seconds = (s.positionMillis ?? 0) / 1000;
+        if (seconds > 0.5) setPosition(videoPositionKey, seconds);
+      }
       if (s.durationMillis && s.durationMillis !== durationMs) {
         setDurationMs(s.durationMillis);
       }
@@ -575,7 +606,7 @@ const MediaItemView = memo(function MediaItemView({
         setIsPlaying(s.isPlaying);
       }
     },
-    [durationMs, isPlaying],
+    [durationMs, isPlaying, videoPositionKey, setPosition],
   );
 
   const tap = Gesture.Tap()
@@ -603,6 +634,18 @@ const MediaItemView = memo(function MediaItemView({
             isMuted={globalMuted || !isActive}
             useNativeControls={false}
             progressUpdateIntervalMillis={200}
+            onLoad={async () => {
+              if (!videoPositionKey || hasRestoredVideoPositionRef.current) return;
+              const saved = getPosition(videoPositionKey);
+              if (saved > 0.5) {
+                hasRestoredVideoPositionRef.current = true;
+                currentVideoPositionRef.current = saved * 1000;
+                setPositionMs(saved * 1000);
+                await videoRef.current?.setStatusAsync({
+                  positionMillis: saved * 1000,
+                }).catch(() => {});
+              }
+            }}
             onPlaybackStatusUpdate={handleStatus}
           />
         ) : (
@@ -623,13 +666,17 @@ const MediaItemView = memo(function MediaItemView({
 // ---------------------------------------------------------------------------
 
 export default function MediaPostDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, syncContext } = useLocalSearchParams<{
+    id: string;
+    syncContext?: string;
+  }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const isFocused = useIsFocused();
   const toast = useToast();
   const { isLoggedIn, requireAuth } = useAuthGuard();
+  const videoSyncScope = syncContext ?? (id ? `post:${id}` : undefined);
 
   const currentUser = useAuthStore((s) => s.user);
   const shareServer = usePreferencesStore((s) => s.apiServer);
@@ -1441,6 +1488,7 @@ export default function MediaPostDetailScreen() {
                         onTapWhenCollapsed={expandMedia}
                         registerVideo={registerVideo}
                         videoKey={`m-${i}`}
+                        videoSyncScope={videoSyncScope}
                       />
                     </View>
                   ))}
@@ -1454,6 +1502,7 @@ export default function MediaPostDetailScreen() {
                   onTapWhenCollapsed={expandMedia}
                   registerVideo={registerVideo}
                   videoKey="m-0"
+                  videoSyncScope={videoSyncScope}
                 />
               ) : null}
 
