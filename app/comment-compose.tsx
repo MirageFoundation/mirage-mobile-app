@@ -11,9 +11,12 @@ import {
   MaterialIcons,
 } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import * as Network from "expo-network";
+import * as Sentry from "@sentry/react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/hooks/use-router";
+import { uploadImageAndGetUrl } from "@/src/api/read/hooks/use-upload-media";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -39,10 +42,18 @@ import { canEditContent, getTierPostLimits } from "@/src/utils/tiers";
 
 type InputMode = "keyboard" | "link" | "gif" | "photo";
 
+type CommentImageUploadState = {
+  uploading: boolean;
+  done: boolean;
+  error: string | null;
+  url: string | null;
+};
+
 const PREVIEW_WIDTH = 180;
 const PREVIEW_HEIGHT = 140;
 
 const URL_REGEX = /^https?:\/\/[^\s<>"{}|\\^`\[\]]+$/i;
+const HTTP_URL_REGEX = /^https?:\/\//i;
 
 function looksLikeUrlWithoutProtocol(text: string): boolean {
   return (
@@ -204,6 +215,21 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const selectedGifUrlRef = useRef<string | null>(selectedGifUrl);
   const didSubmitRef = useRef(false);
   const [isMediaLoading, setIsMediaLoading] = useState(false);
+  const [isPreviewVisible, setIsPreviewVisible] = useState(
+    !!initialAttachment && HTTP_URL_REGEX.test(initialAttachment.url),
+  );
+  const [isPreparingImage, setIsPreparingImage] = useState(false);
+  const [isNetworkOnline, setIsNetworkOnline] = useState(true);
+  const [imageUploadState, setImageUploadState] = useState<CommentImageUploadState>(() => ({
+    uploading: false,
+    done: initialAttachment?.type === "image" && HTTP_URL_REGEX.test(initialAttachment.url),
+    error: null,
+    url: initialAttachment?.type === "image" && HTTP_URL_REGEX.test(initialAttachment.url)
+      ? initialAttachment.url
+      : null,
+  }));
+  const imageUploadSessionRef = useRef(0);
+  const shouldRefocusAfterImagePreviewRef = useRef(false);
   const [showStickerPicker, setShowStickerPicker] = useState(false);
   const mention = useMentionSearch();
 
@@ -213,10 +239,30 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const effectiveMaxLength = Math.max(1, tierLimits.maxContentLength - attachmentOverhead);
   const editBlocked = isEditMode && editability && !editability.allowed;
   const editExpired = !!editBlocked;
-  const canSubmit = (text.trim().length > 0 || hasAttachment) && !editExpired;
+  const imageUploadBlocked = !!selectedImageUri && (isPreparingImage || imageUploadState.uploading || !!imageUploadState.error);
+  const showImagePreviewBlockingOverlay = isPreparingImage || (!!selectedImageUri && isMediaLoading && !isPreviewVisible);
+  const canSubmit = (text.trim().length > 0 || hasAttachment) && !editExpired && !imageUploadBlocked;
  const canAddLink = linkName.trim().length > 0 && linkUrl.trim().length > 0 && !linkError;
 
+  useEffect(() => {
+    if (showImagePreviewBlockingOverlay) return;
+    if (!shouldRefocusAfterImagePreviewRef.current) return;
+    shouldRefocusAfterImagePreviewRef.current = false;
+    const timer = setTimeout(() => inputRef.current?.focus(), 80);
+    return () => clearTimeout(timer);
+  }, [showImagePreviewBlockingOverlay]);
+
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    Network.getNetworkStateAsync().then((state) => {
+      setIsNetworkOnline(state.isConnected === true && state.isInternetReachable !== false);
+    });
+    const sub = Network.addNetworkStateListener((event) => {
+      setIsNetworkOnline(event.isConnected === true && event.isInternetReachable !== false);
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -234,6 +280,12 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   }, []);
 
  const setWasDismissed = useCommentComposeStore((s) => s.setWasDismissed);
+
+  useEffect(() => {
+    return () => {
+      imageUploadSessionRef.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
     textRef.current = text;
@@ -272,6 +324,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const handleSubmit = useCallback(() => {
     if (!canSubmit) return;
     triggerHaptic("medium");
+    const resolvedImageUri = selectedImageUri ? imageUploadState.url ?? selectedImageUri : null;
     if (isEditMode && editCommentId && editParentId) {
       setPendingEdit({
         postId: postId!,
@@ -279,7 +332,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
         commentId: editCommentId,
         parentId: editParentId,
         text: text.trim(),
-        imageUri: selectedImageUri,
+        imageUri: resolvedImageUri,
         gifUrl: selectedGifUrl,
       });
     } else {
@@ -287,7 +340,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
         postId: postId!,
         replyToId: replyToId ?? null,
         text: text.trim(),
-        imageUri: selectedImageUri,
+        imageUri: resolvedImageUri,
         gifUrl: selectedGifUrl,
       });
     }
@@ -300,6 +353,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
     canSubmit,
     text,
     selectedImageUri,
+    imageUploadState.url,
     selectedGifUrl,
     setPendingComment,
     setPendingEdit,
@@ -363,8 +417,11 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const handleSelectGif = useCallback(
     (gifUrl: string) => {
       triggerHaptic("medium");
+      imageUploadSessionRef.current += 1;
       setSelectedImageUri(null);
       setSelectedGifUrl(gifUrl);
+      setIsPreviewVisible(false);
+      setImageUploadState({ uploading: false, done: false, error: null, url: null });
       setIsMediaLoading(true);
       inputModeRef.current = "keyboard";
       setInputMode("keyboard");
@@ -374,28 +431,107 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
     [setGifSearch],
   );
 
+  const startImageUpload = useCallback((uri: string) => {
+    const sessionId = imageUploadSessionRef.current;
+    setImageUploadState({ uploading: true, done: false, error: null, url: null });
+    Sentry.addBreadcrumb({
+      category: "comment-image-upload",
+      message: "Starting comment image upload",
+      level: "info",
+      data: { fileName: uri.split("/").pop() ?? uri },
+    });
+
+    uploadImageAndGetUrl(uri)
+      .then((url) => {
+        if (imageUploadSessionRef.current !== sessionId) return;
+        setImageUploadState({ uploading: false, done: true, error: null, url });
+        setIsMediaLoading(true);
+        setIsPreviewVisible(false);
+        setSelectedImageUri(url);
+        Sentry.addBreadcrumb({
+          category: "comment-image-upload",
+          message: "Comment image upload succeeded",
+          level: "info",
+          data: { fileName: uri.split("/").pop() ?? uri, hasUrl: !!url },
+        });
+      })
+      .catch((error) => {
+        if (imageUploadSessionRef.current !== sessionId) return;
+        const status = (error as any)?.response?.status ?? (error as any)?.status;
+        const responseText = (error as any)?.responseText ?? (error as any)?.response?.data?.error ?? "";
+        const isUnsupportedFormat = status === 422 && String(responseText).includes("decoding");
+        const msg = isUnsupportedFormat
+          ? "This image format isn't supported. Try a different photo."
+          : error instanceof Error ? error.message : "Upload failed";
+        setImageUploadState({ uploading: false, done: false, error: msg, url: null });
+        Sentry.captureException(error, {
+          tags: {
+            feature: "comment-compose",
+            operation: "image-upload",
+            unsupportedFormat: String(isUnsupportedFormat),
+          },
+          extra: {
+            fileName: uri.split("/").pop() ?? uri,
+            status,
+            responseText,
+          },
+        });
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!selectedImageUri || selectedGifUrl) return;
+    if (HTTP_URL_REGEX.test(selectedImageUri)) return;
+    if (imageUploadState.uploading || imageUploadState.done || imageUploadState.error) return;
+    imageUploadSessionRef.current += 1;
+    startImageUpload(selectedImageUri);
+  }, [selectedImageUri, selectedGifUrl, imageUploadState.uploading, imageUploadState.done, imageUploadState.error, startImageUpload]);
+
   const handlePickImage = useCallback(async () => {
     triggerHaptic("selection");
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: false,
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setSelectedGifUrl(null);
-      setSelectedImageUri(result.assets[0].uri);
-      setIsMediaLoading(true);
-      inputModeRef.current = "keyboard";
-      setInputMode("keyboard");
-      setTimeout(() => inputRef.current?.focus(), 100);
+    try {
+      shouldRefocusAfterImagePreviewRef.current = true;
+      Keyboard.dismiss();
+      setIsPreparingImage(true);
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const uri = result.assets[0].uri;
+        imageUploadSessionRef.current += 1;
+        setSelectedGifUrl(null);
+        setIsPreviewVisible(false);
+        setSelectedImageUri(uri);
+        setIsMediaLoading(true);
+        inputModeRef.current = "keyboard";
+        setInputMode("keyboard");
+        startImageUpload(uri);
+      } else {
+        shouldRefocusAfterImagePreviewRef.current = false;
+      }
+    } catch (error) {
+      shouldRefocusAfterImagePreviewRef.current = false;
+      Sentry.captureException(error, {
+        tags: { feature: "comment-compose", operation: "image-picker" },
+      });
+      setImageUploadState({ uploading: false, done: false, error: "Couldn't load image", url: null });
+    } finally {
+      setIsPreparingImage(false);
     }
-  }, []);
+  }, [startImageUpload]);
 
   const handleRemoveAttachment = useCallback(() => {
     triggerHaptic("selection");
+    imageUploadSessionRef.current += 1;
+    shouldRefocusAfterImagePreviewRef.current = false;
     setSelectedImageUri(null);
     setSelectedGifUrl(null);
     setIsMediaLoading(false);
+    setIsPreviewVisible(false);
+    setIsPreparingImage(false);
+    setImageUploadState({ uploading: false, done: false, error: null, url: null });
   }, []);
 
   const handleSpoilerPress = useCallback(() => {
@@ -427,6 +563,11 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
           },
         ]}
       >
+        {showImagePreviewBlockingOverlay && (
+          <View style={styles.fullscreenLoadingOverlay}>
+            <ActivityIndicator size="large" color="#fff" />
+          </View>
+        )}
         {/* Header */}
         <View style={styles.header}>
           <Pressable onPress={handleClose} style={styles.headerButton}>
@@ -677,21 +818,70 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
              style={styles.previewContainer}
            >
              <View style={styles.previewWrapper}>
-               <RNImage
-                 source={{
-                   uri: selectedImageUri || selectedGifUrl || undefined,
-                 }}
-                 style={styles.previewImage}
-                 resizeMode="cover"
-                  onLoadStart={() => setIsMediaLoading(true)}
-                  onLoad={() => setIsMediaLoading(false)}
-                  onError={() => setIsMediaLoading(false)}
-               />
-                {isMediaLoading && (
-                  <View style={styles.previewLoadingOverlay}>
-                    <ActivityIndicator size="small" color="#fff" />
-                  </View>
-                )}
+               {(selectedImageUri || selectedGifUrl) && (
+                 <RNImage
+                   source={{
+                     uri: selectedImageUri || selectedGifUrl || undefined,
+                   }}
+                   style={styles.previewImage}
+                   resizeMode="cover"
+                    onLoadStart={() => {
+                      setIsPreviewVisible(false);
+                      setIsMediaLoading(true);
+                    }}
+                    onLoad={() => {
+                      setTimeout(() => {
+                        setIsPreviewVisible(true);
+                        setIsMediaLoading(false);
+                      }, 50);
+                    }}
+                    onError={() => {
+                      setIsPreviewVisible(true);
+                      setIsMediaLoading(false);
+                    }}
+                 />
+               )}
+               {selectedImageUri && isPreparingImage && (
+                 <View style={styles.uploadedBadge}>
+                   <ActivityIndicator size="small" color="#fff" />
+                   <Text size="xs" weight="medium" style={styles.uploadedBadgeText}>
+                     Preparing…
+                   </Text>
+                 </View>
+               )}
+
+               {selectedImageUri && imageUploadState.uploading && !isPreparingImage && (
+                 <View style={[styles.uploadedBadge, !isNetworkOnline && styles.uploadWarningBadge]}>
+                   <ActivityIndicator size="small" color="#fff" />
+                   <Text size="xs" weight="medium" style={styles.uploadedBadgeText}>
+                     {!isNetworkOnline ? "Low connectivity…" : "Uploading…"}
+                   </Text>
+                 </View>
+               )}
+
+               {selectedImageUri && !imageUploadState.uploading && imageUploadState.done && (
+                 <View style={styles.uploadedBadge}>
+                   <Feather name="check" size={12} color="#fff" />
+                   <Text size="xs" weight="medium" style={styles.uploadedBadgeText}>
+                     Uploaded
+                   </Text>
+                 </View>
+               )}
+
+               {selectedImageUri && imageUploadState.error && (
+                 <Pressable
+                   onPress={() => {
+                     imageUploadSessionRef.current += 1;
+                     startImageUpload(selectedImageUri);
+                   }}
+                   style={[styles.uploadedBadge, styles.uploadErrorBadge]}
+                 >
+                   <Feather name="refresh-cw" size={12} color="#fff" />
+                   <Text size="xs" weight="medium" style={styles.uploadedBadgeText}>
+                     Retry
+                   </Text>
+                 </Pressable>
+               )}
                {!editExpired && (
                  <Pressable
                    onPress={handleRemoveAttachment}
@@ -997,6 +1187,13 @@ const styles = StyleSheet.create((theme) => ({
   screen: {
     flex: 1,
   },
+  fullscreenLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -1120,6 +1317,27 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: "rgba(0, 0, 0, 0.4)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  uploadedBadge: {
+    position: "absolute",
+    left: 8,
+    bottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(16, 185, 129, 0.9)",
+    borderRadius: theme.radius.full,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+  },
+  uploadedBadgeText: {
+    color: "#fff",
+    marginLeft: 4,
+  },
+  uploadWarningBadge: {
+    backgroundColor: "rgba(234,179,8,0.85)",
+  },
+  uploadErrorBadge: {
+    backgroundColor: "rgba(220,50,50,0.85)",
   },
   removeButton: {
     position: "absolute",
