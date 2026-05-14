@@ -1,4 +1,6 @@
 import { ConfigContext, ExpoConfig } from "expo/config";
+import { withGradleProperties } from "expo/config-plugins";
+import type { AndroidConfig, ConfigPlugin } from "expo/config-plugins";
 
 const env = process.env.EXPO_PUBLIC_ENV || "";
 const isFdroidBuild = process.env.EXPO_PUBLIC_FDROID === "true";
@@ -8,6 +10,41 @@ const bundleIdentifier = env
 const scheme = env ? `mirage${env}` : `mirage`;
 
 const name = env ? `Mirage (${env.toUpperCase()})` : "Mirage";
+
+const fdroidGradleProperties: Record<string, string> = {
+  "org.gradle.daemon": "false",
+  "org.gradle.workers.max": "1",
+  "org.gradle.vfs.watch": "false",
+  "kotlin.compiler.execution.strategy": "in-process",
+  "org.gradle.jvmargs":
+    "-Xmx2048m -XX:MaxMetaspaceSize=1024m -Dfile.encoding=UTF-8",
+};
+
+const setGradleProperty = (
+  gradleProperties: AndroidConfig.Properties.PropertiesItem[],
+  key: string,
+  value: string,
+) => {
+  const existingProperty = gradleProperties.find(
+    (property) => property.type === "property" && property.key === key,
+  );
+
+  if (existingProperty?.type === "property") {
+    existingProperty.value = value;
+    return;
+  }
+
+  gradleProperties.push({ type: "property", key, value });
+};
+
+const withFdroidGradleProperties: ConfigPlugin = (config) =>
+  withGradleProperties(config, (config) => {
+    Object.entries(fdroidGradleProperties).forEach(([key, value]) => {
+      setGradleProperty(config.modResults, key, value);
+    });
+
+    return config;
+  });
 
 export default ({ config }: ConfigContext): ExpoConfig => {
   const slug = "mirage";
@@ -66,6 +103,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         },
       },
     ],
+    ...(isFdroidBuild ? [withFdroidGradleProperties] : []),
     "expo-sqlite",
     "@react-native-community/datetimepicker",
     "react-native-cloud-storage",
