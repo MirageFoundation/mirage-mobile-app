@@ -723,10 +723,13 @@ export default function MediaPostDetailScreen({
     refetch: refetchComments,
   } = useComments(id!, { enabled: isFocused });
   const focusedDepth = focusedMode === "context" ? 5 : 0;
-  const { data: focusedCommentData } = useComments(focusedCommentId, {
+  const {
+    data: focusedCommentData,
+    isFetched: isFocusedCommentFetched,
+  } = useComments(focusedCommentId, {
     enabled: isFocused && !!focusedCommentId && focusedMode !== "full",
   });
-  const { data: focusedContextData } = useQuery({
+  const { data: focusedContextData, refetch: refetchFocusedContext } = useQuery({
     queryKey: queryKeys.commentContext(focusedCommentId!, focusedDepth),
     queryFn: () =>
       getCommentContext({
@@ -735,15 +738,18 @@ export default function MediaPostDetailScreen({
         max_depth: focusedDepth,
       }),
     enabled: isFocused && !!focusedCommentId && focusedDepth > 0,
-    staleTime: 1000 * 60,
+    staleTime: 0,
   });
-  const { data: focusedContextCheckData } = useQuery({
-    queryKey: queryKeys.commentContext(focusedCommentId!, 1),
+  const {
+    data: focusedContextCheckData,
+    isFetched: isFocusedContextCheckFetched,
+  } = useQuery({
+    queryKey: queryKeys.commentContext(focusedCommentId!, 5),
     queryFn: () =>
       getCommentContext({
         comment_id: focusedCommentId!,
         address: currentUser?.walletAddress ?? undefined,
-        max_depth: 1,
+        max_depth: 5,
       }),
     enabled: isFocused && !!focusedCommentId && focusedMode !== "full",
     staleTime: 1000 * 60,
@@ -1164,14 +1170,11 @@ export default function MediaPostDetailScreen({
     blockedUserIds,
   ]);
 
-  const displayComments = useMemo(() => {
-    if (!focusedCommentId || focusedMode === "full") return allDisplayComments;
-
-    const processFocused = (comment: Comment) =>
-      applyVoteOverridesToComment(applyOptimisticReplies(comment));
+  const focusedThreadState = useMemo(() => {
     const isVisible = (comment: Comment) =>
       !hiddenCommentIds.has(comment.id) && !blockedUserIds.has(comment.author.id);
     const findComment = (items: Comment[]): Comment | null => {
+      if (!focusedCommentId) return null;
       for (const item of items) {
         if (item.id === focusedCommentId) return item;
         const nested = item.replies?.length ? findComment(item.replies) : null;
@@ -1179,45 +1182,64 @@ export default function MediaPostDetailScreen({
       }
       return null;
     };
+    const processFocused = (comment: Comment) =>
+      applyVoteOverridesToComment(applyOptimisticReplies(comment));
 
-    if (focusedDepth > 0 && focusedContextData?.context?.length) {
-      const rootId = id?.toLowerCase();
-      const context = [...focusedContextData.context]
-        .reverse()
-        .filter((comment) => comment.post_id.toLowerCase() !== rootId)
-        .map((comment, index) =>
+    if (!focusedCommentId) {
+      return { focused: null as Comment | null, parents: [] as Comment[], hasParent: false, hasReplies: false };
+    }
+
+    const focusedFromApi = focusedCommentData?.root
+      ? {
+          ...transformApiComment(focusedCommentData.root, id ?? null, 0),
+          replies: transformApiComments(focusedCommentData.children ?? []),
+          replyCount: Math.max(
+            focusedCommentData.root.comments ?? 0,
+            focusedCommentData.children?.length ?? 0,
+          ),
+        }
+      : null;
+    const focused = focusedFromApi
+      ? processFocused(focusedFromApi)
+      : findComment(allDisplayComments);
+
+    const rootId = id?.toLowerCase();
+    const focusedId = focusedCommentId.toLowerCase();
+    const parentApiComments = (focusedContextData?.context ?? focusedContextCheckData?.context ?? [])
+      .filter((comment) => {
+        const contextPostId = comment.post_id.toLowerCase();
+        return contextPostId !== rootId && contextPostId !== focusedId;
+      })
+      .reverse();
+    const parents = parentApiComments
+      .map((comment, index) =>
+        processFocused(
           transformApiComment(
             comment as PostWithChildren,
-            index === 0 ? id ?? null : focusedContextData.context[index - 1]?.post_id ?? null,
+            index === 0 ? id ?? null : parentApiComments[index - 1]?.post_id ?? null,
             index,
           ),
-        )
-        .map(processFocused)
-        .filter(isVisible);
+        ),
+      )
+      .filter(isVisible);
 
-      const focusedRoot = focusedCommentData?.root
-        ? processFocused(transformApiComment(focusedCommentData.root, id ?? null, context.length))
-        : findComment(allDisplayComments);
-      return focusedRoot && isVisible(focusedRoot) ? [...context, focusedRoot] : context;
-    }
+    const hasReplies = !!focused &&
+      ((focused.replies?.length ?? 0) > 0 ||
+        (focused.replyCount ?? 0) > 0 ||
+        (focusedCommentData?.children?.length ?? 0) > 0 ||
+        (focusedCommentData?.root?.comments ?? 0) > 0);
 
-    const found = findComment(allDisplayComments);
-    if (found) return [found];
-
-    if (focusedCommentData?.root) {
-      const focused = processFocused(
-        transformApiComment(focusedCommentData.root, id ?? null, 0),
-      );
-      return isVisible(focused) ? [focused] : [];
-    }
-
-    return [];
+    return {
+      focused: focused && isVisible(focused) ? focused : null,
+      parents,
+      hasParent: parents.length > 0,
+      hasReplies,
+    };
   }, [
     focusedCommentId,
-    focusedMode,
     allDisplayComments,
-    focusedDepth,
     focusedContextData,
+    focusedContextCheckData,
     focusedCommentData,
     id,
     applyOptimisticReplies,
@@ -1225,6 +1247,26 @@ export default function MediaPostDetailScreen({
     hiddenCommentIds,
     blockedUserIds,
   ]);
+
+  const displayComments = useMemo(() => {
+    if (!focusedCommentId || focusedMode === "full") return allDisplayComments;
+    const focused = focusedThreadState.focused;
+    if (!focused) return [];
+    if (focusedMode !== "context" || focusedThreadState.parents.length === 0) {
+      return [focused];
+    }
+    let thread: Comment = focused;
+    for (let index = focusedThreadState.parents.length - 1; index >= 0; index -= 1) {
+      const parent = focusedThreadState.parents[index];
+      thread = {
+        ...parent,
+        isFocusedContext: true,
+        replies: [thread],
+        replyCount: Math.max(parent.replyCount ?? 0, 1),
+      };
+    }
+    return [{ ...thread, isFocusedContext: true }];
+  }, [focusedCommentId, focusedMode, allDisplayComments, focusedThreadState]);
 
   useEffect(() => {
     if (!id || !commentsData?.children) return;
@@ -1239,11 +1281,25 @@ export default function MediaPostDetailScreen({
 
   const hasRecentContext = useMemo(() => {
     if (!focusedCommentId || focusedMode === "full") return false;
-    const context = focusedContextCheckData?.context ?? focusedContextData?.context ?? [];
-    if (context.length === 0) return false;
-    const rootId = id?.toLowerCase();
-    return context.some((comment) => comment.post_id.toLowerCase() !== rootId);
-  }, [focusedCommentId, focusedMode, focusedContextCheckData, focusedContextData, id]);
+    if (!isFocusedCommentFetched || !isFocusedContextCheckFetched) return false;
+    return focusedThreadState.hasParent;
+  }, [focusedCommentId, focusedMode, isFocusedCommentFetched, isFocusedContextCheckFetched, focusedThreadState]);
+
+  const recentContextDone =
+    focusedMode === "context" &&
+    isFocusedCommentFetched &&
+    isFocusedContextCheckFetched &&
+    focusedThreadState.hasParent;
+  const recentContextDisabled = !hasRecentContext || recentContextDone;
+
+  const hasFullThreadBeyondFocus = useMemo(() => {
+    if (!focusedCommentId || focusedMode === "full") return false;
+    const countTree = (items: Comment[]): number =>
+      items.reduce((total, item) => total + 1 + countTree(item.replies ?? []), 0);
+    const fullCount = Math.max(post?.comments ?? 0, countTree(allDisplayComments));
+    const focusedCount = countTree(displayComments);
+    return fullCount > focusedCount;
+  }, [focusedCommentId, focusedMode, post?.comments, allDisplayComments, displayComments]);
 
   useEffect(() => {
     if (reportHandler.showReportSheet) reportSheetRef.current?.present();
@@ -1883,20 +1939,22 @@ export default function MediaPostDetailScreen({
                     <View style={styles.threadReminderActionsRow}>
                       <View style={styles.threadReminderButtonSlot}>
                         <Pressable
-                          onPress={() => setFocusedMode("context")}
+                          onPress={() => {
+                            setFocusedMode("context");
+                            setTimeout(() => refetchFocusedContext(), 0);
+                          }}
                           style={({ pressed }) => [
                             styles.threadReminderButton,
                             pressed && styles.threadReminderButtonPressed,
-                            (!hasRecentContext || focusedMode === "context") &&
-                              styles.threadReminderButtonDisabled,
+                            recentContextDisabled && styles.threadReminderButtonDisabled,
                           ]}
-                          disabled={!hasRecentContext || focusedMode === "context"}
+                          disabled={recentContextDisabled}
                         >
                           <Ionicons
-                            name={focusedMode === "context" ? "checkmark-outline" : "arrow-up-outline"}
+                            name={recentContextDone ? "checkmark-outline" : "arrow-up-outline"}
                             size={14}
                             color={
-                              !hasRecentContext || focusedMode === "context"
+                              recentContextDisabled
                                 ? theme.colors.text.subtle
                                 : theme.colors.text.default
                             }
@@ -1904,7 +1962,7 @@ export default function MediaPostDetailScreen({
                           <Text
                             size="xs"
                             weight="semibold"
-                            mode={!hasRecentContext || focusedMode === "context" ? "subtle" : undefined}
+                            mode={recentContextDisabled ? "subtle" : undefined}
                           >
                             Recent context
                           </Text>
@@ -1916,14 +1974,24 @@ export default function MediaPostDetailScreen({
                           style={({ pressed }) => [
                             styles.threadReminderButton,
                             pressed && styles.threadReminderButtonPressed,
+                            !hasFullThreadBeyondFocus && styles.threadReminderButtonDisabled,
                           ]}
+                          disabled={!hasFullThreadBeyondFocus}
                         >
                           <Ionicons
                             name="list-outline"
                             size={14}
-                            color={theme.colors.text.default}
+                            color={
+                              hasFullThreadBeyondFocus
+                                ? theme.colors.text.default
+                                : theme.colors.text.subtle
+                            }
                           />
-                          <Text size="xs" weight="semibold">
+                          <Text
+                            size="xs"
+                            weight="semibold"
+                            mode={hasFullThreadBeyondFocus ? undefined : "subtle"}
+                          >
                             Full thread
                           </Text>
                         </Pressable>

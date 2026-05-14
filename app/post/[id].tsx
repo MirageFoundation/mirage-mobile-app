@@ -443,10 +443,29 @@ function LegacyPostDetailScreen() {
     return isViewingComment ? root.root_post_id : root.post_id;
   }, [commentsData?.root, isViewingComment]);
 
-  const focusedCommentId = isViewingComment ? commentsData?.root?.post_id : null;
+  const highlightCommentId = typeof highlight === "string" && highlight.length > 0 ? highlight : null;
+  const [showFocusedThread, setShowFocusedThread] = useState(true);
+  const focusedCommentId = showFocusedThread
+    ? isViewingComment
+      ? commentsData?.root?.post_id
+      : highlightCommentId
+    : null;
+  const {
+    data: focusedCommentData,
+    isLoading: isLoadingFocusedComment,
+  } = useComments(focusedCommentId, {
+    enabled: isFocused && !!focusedCommentId && !isViewingComment,
+  });
+  const {
+    data: fullThreadCommentsData,
+    isLoading: isLoadingFullThreadComments,
+  } = useComments(actualRootPostId, {
+    enabled: isFocused && !showFocusedThread && isViewingComment && !!actualRootPostId,
+  });
   const [actualRootPost, setActualRootPost] = useState<PostWithChildren | null>(null);
   const [contextComments, setContextComments] = useState<ApiPost[]>([]);
   const [isLoadingContext, setIsLoadingContext] = useState(false);
+  const [hasLoadedFocusedContext, setHasLoadedFocusedContext] = useState(false);
 
   const contextDepth = useMemo(() => {
     if (!depth) return 0;
@@ -456,8 +475,69 @@ function LegacyPostDetailScreen() {
   }, [depth]);
 
   useEffect(() => {
-    if (!isViewingComment || !actualRootPostId) {
+    setShowFocusedThread(true);
+  }, [id, highlight, depth]);
+
+  const focusedContextCheckQuery = useQuery({
+    queryKey: focusedCommentId
+      ? queryKeys.commentContext(focusedCommentId, 5)
+      : ["commentContext", "missing", 5],
+    queryFn: () =>
+      getCommentContext({
+        comment_id: focusedCommentId!,
+        address: currentUser?.walletAddress ?? undefined,
+        max_depth: 5,
+      }),
+    enabled: !!focusedCommentId,
+    staleTime: 1000 * 60,
+  });
+
+  const loadFocusedContext = useCallback(
+    async (maxDepth = 5) => {
+      if (!focusedCommentId) return;
+      const depthToLoad = Math.min(Math.max(maxDepth, 0), 5);
+      if (depthToLoad <= 0) return;
+      const address = currentUser?.walletAddress ?? undefined;
+      setIsLoadingContext(true);
+      try {
+        const data = await queryClient.fetchQuery({
+          queryKey: queryKeys.commentContext(focusedCommentId, depthToLoad),
+          queryFn: () =>
+            getCommentContext({
+              comment_id: focusedCommentId,
+              address,
+              max_depth: depthToLoad,
+            }),
+          staleTime: 1000 * 60,
+        });
+        setContextComments([...data.context].reverse());
+        setHasLoadedFocusedContext(true);
+      } catch (error) {
+        Sentry.addBreadcrumb({
+          category: "comments",
+          message: "Failed to load focused comment context",
+          data: { focusedCommentId, error: String(error) },
+          level: "warning",
+        });
+      } finally {
+        setIsLoadingContext(false);
+      }
+    },
+    [focusedCommentId, currentUser?.walletAddress, queryClient],
+  );
+
+  useEffect(() => {
+    setHasLoadedFocusedContext(false);
+  }, [focusedCommentId]);
+
+  useEffect(() => {
+    if (!actualRootPostId) {
       setActualRootPost(null);
+      return;
+    }
+
+    if (!isViewingComment && commentsData?.root?.post_id) {
+      setActualRootPost(commentsData.root);
       return;
     }
 
@@ -472,7 +552,7 @@ function LegacyPostDetailScreen() {
           level: "warning",
         });
       });
-  }, [isViewingComment, actualRootPostId, currentUser?.walletAddress]);
+  }, [isViewingComment, actualRootPostId, commentsData?.root, currentUser?.walletAddress]);
 
   useEffect(() => {
     if (!focusedCommentId || contextDepth <= 0) {
@@ -480,34 +560,8 @@ function LegacyPostDetailScreen() {
       setIsLoadingContext(false);
       return;
     }
-
-    const address = currentUser?.walletAddress ?? undefined;
-    setIsLoadingContext(true);
-    queryClient
-      .fetchQuery({
-        queryKey: queryKeys.commentContext(focusedCommentId, contextDepth),
-        queryFn: () =>
-          getCommentContext({
-            comment_id: focusedCommentId,
-            address,
-            max_depth: contextDepth,
-          }),
-        staleTime: 1000 * 60,
-      })
-      .then((data) => {
-        setContextComments([...data.context].reverse());
-        setIsLoadingContext(false);
-      })
-      .catch((error) => {
-        setIsLoadingContext(false);
-        Sentry.addBreadcrumb({
-          category: "comments",
-          message: "Failed to load focused comment context",
-          data: { focusedCommentId, error: String(error) },
-          level: "warning",
-        });
-      });
-  }, [focusedCommentId, contextDepth, currentUser?.walletAddress, queryClient]);
+    void loadFocusedContext(contextDepth);
+  }, [focusedCommentId, contextDepth, loadFocusedContext]);
 
   useEffect(() => {
     if (focusedCommentId && !highlight) {
@@ -871,15 +925,30 @@ function LegacyPostDetailScreen() {
   }, [post?.id]);
 
   const comments = useMemo(() => {
-    if (!commentsData?.children) return [];
-    if (isViewingComment && commentsData.root) {
+    if (!showFocusedThread && isViewingComment) {
+      if (!fullThreadCommentsData?.children) return [];
+      return transformApiComments(fullThreadCommentsData.children);
+    }
+
+    const focusedApiRoot = isViewingComment ? commentsData?.root : focusedCommentData?.root;
+    const focusedApiChildren = isViewingComment
+      ? commentsData?.children ?? []
+      : focusedCommentData?.children ?? [];
+
+    if (focusedCommentId && !focusedApiRoot) return [];
+
+    if (focusedCommentId && focusedApiRoot) {
       // While the parent context is still loading, hide the focused
       // thread so the empty-state skeleton can render. Prevents the
       // focused comment from popping in alone before parents arrive.
       if (contextDepth > 0 && isLoadingContext) return [];
       const contextRootId = actualRootPostId?.toLowerCase();
+      const focusedPostId = focusedApiRoot.post_id.toLowerCase();
       const context = contextComments
-        .filter((comment) => comment.post_id.toLowerCase() !== contextRootId)
+        .filter((comment) => {
+          const contextPostId = comment.post_id.toLowerCase();
+          return contextPostId !== contextRootId && contextPostId !== focusedPostId;
+        })
         .map((comment) =>
           transformApiComment(
             { ...comment, children: [] } as PostWithChildren,
@@ -888,9 +957,13 @@ function LegacyPostDetailScreen() {
           ),
         );
       const focused = {
-        ...transformApiComment(commentsData.root, actualRootPostId, 0),
+        ...transformApiComment(focusedApiRoot, actualRootPostId, 0),
         isFocusedComment: true,
-        replies: transformApiComments(commentsData.children),
+        replies: transformApiComments(focusedApiChildren),
+        replyCount: Math.max(
+          focusedApiRoot.comments ?? 0,
+          focusedApiChildren.length,
+        ),
       };
 
       // Build a nested parent-chain so the existing CommentThread rail
@@ -907,15 +980,47 @@ function LegacyPostDetailScreen() {
       }
       return [{ ...thread, isFocusedContext: true }];
     }
+
+    if (!commentsData?.children) return [];
     return transformApiComments(commentsData.children);
   }, [
     commentsData,
+    focusedCommentData,
+    fullThreadCommentsData,
+    focusedCommentId,
+    showFocusedThread,
     isViewingComment,
     actualRootPostId,
     contextComments,
     contextDepth,
     isLoadingContext,
   ]);
+
+  const hasFocusedRecentContext = useMemo(() => {
+    if (!focusedCommentId) return false;
+    const rootId = actualRootPostId?.toLowerCase();
+    const focusedId = focusedCommentId.toLowerCase();
+    const hasParentComment = (focusedContextCheckQuery.data?.context ?? [])
+      .some((comment) => {
+        const contextPostId = comment.post_id.toLowerCase();
+        return contextPostId !== rootId && contextPostId !== focusedId;
+      });
+    return hasParentComment;
+  }, [focusedCommentId, actualRootPostId, focusedContextCheckQuery.data]);
+
+  const recentContextDone =
+    (contextDepth > 0 || hasLoadedFocusedContext) &&
+    focusedContextCheckQuery.isFetched &&
+    hasFocusedRecentContext;
+
+  const hasFullThreadBeyondFocus = useMemo(() => {
+    if (!focusedCommentId) return false;
+    const countTree = (items: Comment[]): number =>
+      items.reduce((total, item) => total + 1 + countTree(item.replies ?? []), 0);
+    const focusedCount = countTree(comments);
+    const fullCount = Math.max(post?.comments ?? 0, actualRootPost?.comments ?? 0);
+    return fullCount > focusedCount;
+  }, [focusedCommentId, comments, post?.comments, actualRootPost?.comments]);
 
   // Local state for optimistic updates
   const [localPostUpdates, setLocalPostUpdates] = useState<Partial<Post>>({});
@@ -2162,17 +2267,15 @@ function LegacyPostDetailScreen() {
             </View>
             <View style={styles.threadReminderActions}>
               {(() => {
-                const contextDone = contextDepth > 0;
                 const contextDisabled =
-                  contextDone || threadActionLoading !== null;
+                  !hasFocusedRecentContext || recentContextDone || threadActionLoading !== null;
                 return (
                   <View style={styles.threadReminderButtonSlot}>
                   <Pressable
                     onPress={() => {
                       if (contextDisabled) return;
                       setThreadActionLoading("context");
-                      router.replace(`/post/${focusedCommentId}?depth=5`);
-                      setTimeout(() => setThreadActionLoading(null), 1500);
+                      void loadFocusedContext(5).finally(() => setThreadActionLoading(null));
                     }}
                     disabled={contextDisabled}
                     style={({ pressed }) => [
@@ -2180,7 +2283,7 @@ function LegacyPostDetailScreen() {
                       pressed && styles.threadReminderButtonPressed,
                       threadActionLoading === "context" &&
                         styles.threadReminderButtonActive,
-                      contextDone && styles.threadReminderButtonDisabled,
+                      contextDisabled && styles.threadReminderButtonDisabled,
                     ]}
                   >
                     {threadActionLoading === "context" ? (
@@ -2190,10 +2293,10 @@ function LegacyPostDetailScreen() {
                       />
                     ) : (
                       <Ionicons
-                        name={contextDone ? "checkmark-outline" : "arrow-up-outline"}
+                        name={recentContextDone ? "checkmark-outline" : "arrow-up-outline"}
                         size={14}
                         color={
-                          contextDone
+                          contextDisabled
                             ? theme.colors.text.subtle
                             : theme.colors.text.default
                         }
@@ -2202,7 +2305,7 @@ function LegacyPostDetailScreen() {
                     <Text
                       size="xs"
                       weight="semibold"
-                      mode={contextDone ? "subtle" : undefined}
+                      mode={contextDisabled ? "subtle" : undefined}
                     >
                       Recent context
                     </Text>
@@ -2213,29 +2316,18 @@ function LegacyPostDetailScreen() {
               <View style={styles.threadReminderButtonSlot}>
               <Pressable
                 onPress={() => {
-                  if (threadActionLoading) return;
+                  if (threadActionLoading || !hasFullThreadBeyondFocus) return;
                   setThreadActionLoading("full");
-                  // Seed the destination's comments cache so its
-                  // post header renders immediately and only the
-                  // comments area shows a skeleton.
-                  const address = currentUser?.walletAddress ?? undefined;
-                  if (actualRootPost) {
-                    queryClient.setQueryData(
-                      queryKeys.comments(actualRootPostId, address),
-                      { root: actualRootPost, children: [] },
-                    );
-                    queryClient.invalidateQueries({
-                      queryKey: queryKeys.comments(actualRootPostId, address),
-                    });
-                  }
-                  router.replace(`/post/${actualRootPostId}`);
-                  setTimeout(() => setThreadActionLoading(null), 1500);
+                  setShowFocusedThread(false);
+                  setContextComments([]);
+                  setTimeout(() => setThreadActionLoading(null), 150);
                 }}
-                disabled={threadActionLoading !== null}
+                disabled={threadActionLoading !== null || !hasFullThreadBeyondFocus}
                 style={({ pressed }) => [
                   styles.threadReminderButton,
                   pressed && styles.threadReminderButtonPressed,
                   threadActionLoading === "full" && styles.threadReminderButtonActive,
+                  !hasFullThreadBeyondFocus && styles.threadReminderButtonDisabled,
                 ]}
               >
                 {threadActionLoading === "full" ? (
@@ -2247,10 +2339,18 @@ function LegacyPostDetailScreen() {
                   <Ionicons
                     name="list-outline"
                     size={14}
-                    color={theme.colors.text.default}
+                    color={
+                      hasFullThreadBeyondFocus
+                        ? theme.colors.text.default
+                        : theme.colors.text.subtle
+                    }
                   />
                 )}
-                <Text size="xs" weight="semibold">
+                <Text
+                  size="xs"
+                  weight="semibold"
+                  mode={hasFullThreadBeyondFocus ? undefined : "subtle"}
+                >
                   Full thread
                 </Text>
               </Pressable>
@@ -2281,6 +2381,10 @@ function LegacyPostDetailScreen() {
     focusedCommentId,
     actualRootPostId,
     contextDepth,
+    hasFocusedRecentContext,
+    recentContextDone,
+    hasFullThreadBeyondFocus,
+    loadFocusedContext,
     router,
     threadActionLoading,
     theme.colors.text.default,
@@ -2445,6 +2549,8 @@ function LegacyPostDetailScreen() {
     if (
       isLoadingComments ||
       isLoadingContext ||
+      isLoadingFocusedComment ||
+      isLoadingFullThreadComments ||
       (isFetchingComments && (commentsData?.children?.length ?? 0) === 0)
     ) {
       return (
@@ -2532,6 +2638,8 @@ function LegacyPostDetailScreen() {
   }, [
     isLoadingComments,
     isLoadingContext,
+    isLoadingFocusedComment,
+    isLoadingFullThreadComments,
     isCommentsError,
     isFetchingComments,
     commentsData,
