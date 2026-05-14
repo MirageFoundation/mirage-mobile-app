@@ -390,7 +390,9 @@ const SeekBar = memo(function SeekBar({
 
   const baseProgress = durationMs > 0 ? positionMs / durationMs : 0;
   const baseProgressShared = useSharedValue(baseProgress);
-  baseProgressShared.value = baseProgress;
+  useEffect(() => {
+    baseProgressShared.value = baseProgress;
+  }, [baseProgress, baseProgressShared]);
 
   const pan = Gesture.Pan()
     .onBegin((e) => {
