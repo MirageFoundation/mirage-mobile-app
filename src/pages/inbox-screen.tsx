@@ -358,7 +358,7 @@ export function InboxScreen() {
         },
       });
       seedFocusedCommentFromInbox(reply);
-      routerRef.current.push(`/post/${reply.reply_id}?depth=5`);
+      routerRef.current.push(`/post/${reply.root_post_id}?highlight=${reply.reply_id}`);
     },
     [markReplyAsRead, seedFocusedCommentFromInbox],
   );
