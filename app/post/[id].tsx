@@ -119,6 +119,58 @@ import {
   extractFirstUrl,
 } from "@/src/components/molecules/post-card-utils";
 
+function getCachedPostId(post: any): string | undefined {
+  return post?.post_id ?? post?.id;
+}
+
+function findPostInCachedData(data: unknown, postId: string, depth = 0): any | null {
+  if (!data || depth > 6) return null;
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      const matched = findPostInCachedData(item, postId, depth + 1);
+      if (matched) return matched;
+    }
+    return null;
+  }
+  if (typeof data !== "object") return null;
+
+  const record = data as Record<string, any>;
+  if (getCachedPostId(record) === postId) return record;
+
+  const priorityKeys = ["root", "post", "posts", "pages", "data", "items", "children"];
+  for (const key of priorityKeys) {
+    const matched = findPostInCachedData(record[key], postId, depth + 1);
+    if (matched) return matched;
+  }
+
+  return null;
+}
+
+function cachedPostHasImmersiveMedia(post: any): boolean {
+  if (!post) return false;
+  const media = post.media as Array<string | { uri?: string; type?: string }> | undefined;
+  const thumbnail = post.thumbnail as string | undefined;
+  const body = (post.body ?? post.content) as string | undefined;
+
+  const bodyUri = extractFirstUrl(body) ?? undefined;
+  const bodyType = bodyUri ? getMediaTypeFromUrl(bodyUri) : null;
+  if (bodyType === "youtube") return false;
+
+  if (bodyType === "video" || bodyType === "gif") return true;
+
+  const firstMedia = media?.[0];
+  const firstMediaUri =
+    typeof firstMedia === "string" ? firstMedia : firstMedia?.uri;
+  const firstUri = firstMediaUri ?? thumbnail ?? bodyUri;
+  if (!firstUri) return false;
+
+  const t =
+    typeof firstMedia === "object" && firstMedia.type
+      ? firstMedia.type
+      : getMediaTypeFromUrl(firstUri);
+  return t === "image" || t === "video" || t === "gif";
+}
+
 export default function PostDetailScreen() {
   const params = useLocalSearchParams<{
     id: string;
@@ -127,6 +179,8 @@ export default function PostDetailScreen() {
   }>();
   const queryClient = useQueryClient();
   const currentUserWallet = useAuthStore((s) => s.user?.walletAddress);
+  const savedPostsForRouting = useSavedPostsStore((s) => s.savedPosts);
+  const historyEntriesForRouting = useHistoryStore((s) => s.entries);
 
   // Branch to the immersive MediaPostDetailScreen when the cached post
   // has image/video/gif media and we're not viewing a single-comment
@@ -138,41 +192,21 @@ export default function PostDetailScreen() {
       queryKeys.comments(params.id, currentUserWallet ?? undefined),
     );
     if (commentsRoot?.root) return commentsRoot.root;
-    const cachedQueries = queryClient.getQueriesData<InfiniteData<PostsResponse>>({
-      queryKey: ["posts"],
-    });
+    const savedPost = savedPostsForRouting.find((p) => p.id === params.id);
+    if (savedPost) return savedPost;
+    const historyPost = historyEntriesForRouting.find((p) => p.id === params.id);
+    if (historyPost) return historyPost;
+
+    const cachedQueries = queryClient.getQueriesData({});
     for (const [, queryData] of cachedQueries) {
-      const matched = queryData?.pages
-        ?.flatMap((page) => page.posts)
-        .find((p) => p.post_id === params.id);
-      if (matched) return matched as ApiPost;
+      const matched = findPostInCachedData(queryData, params.id);
+      if (matched) return matched;
     }
     return null;
-  }, [params.id, currentUserWallet, queryClient]);
+  }, [params.id, currentUserWallet, queryClient, savedPostsForRouting, historyEntriesForRouting]);
 
   const hasImmersiveMedia = useMemo(() => {
-    if (!cachedRoot) return false;
-    // ApiPost.media is string[] (URIs); resolve type from URL.
-    const media = (cachedRoot as any).media as string[] | undefined;
-    const thumbnail = (cachedRoot as any).thumbnail as string | undefined;
-    const body = ((cachedRoot as any).body ??
-      (cachedRoot as any).content) as string | undefined;
-    // Some posts have a video/gif URL embedded inside the body rather
-    // than in the media array (e.g. cloudflarestream, redgifs, .mp4).
-    // YouTube posts should keep using the legacy post details screen.
-    const bodyUri = extractFirstUrl(body) ?? undefined;
-    const bodyType = bodyUri ? getMediaTypeFromUrl(bodyUri) : null;
-    if (bodyType === "youtube") return false;
-    const bodyIsPlayableMedia =
-      bodyType === "video" || bodyType === "gif";
-    const firstUri = bodyIsPlayableMedia
-      ? bodyUri
-      : media && media.length > 0
-      ? media[0]
-      : thumbnail ?? bodyUri;
-    if (!firstUri) return false;
-    const t = getMediaTypeFromUrl(firstUri);
-    return t === "image" || t === "video" || t === "gif";
+    return cachedPostHasImmersiveMedia(cachedRoot);
   }, [cachedRoot]);
 
   const useImmersive = hasImmersiveMedia && !params.highlight && !params.depth;
