@@ -240,7 +240,9 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const editBlocked = isEditMode && editability && !editability.allowed;
   const editExpired = !!editBlocked;
   const imageUploadBlocked = !!selectedImageUri && (isPreparingImage || imageUploadState.uploading || !!imageUploadState.error);
-  const showImagePreviewBlockingOverlay = isPreparingImage || (!!selectedImageUri && isMediaLoading && !isPreviewVisible);
+  const showImagePreviewBlockingOverlay =
+    isPreparingImage ||
+    (!!selectedImageUri && !imageUploadState.done && isMediaLoading && !isPreviewVisible);
   const canSubmit = (text.trim().length > 0 || hasAttachment) && !editExpired && !imageUploadBlocked;
  const canAddLink = linkName.trim().length > 0 && linkUrl.trim().length > 0 && !linkError;
 
@@ -445,8 +447,8 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
       .then((url) => {
         if (imageUploadSessionRef.current !== sessionId) return;
         setImageUploadState({ uploading: false, done: true, error: null, url });
-        setIsMediaLoading(true);
-        setIsPreviewVisible(false);
+        setIsMediaLoading(false);
+        setIsPreviewVisible(true);
         setSelectedImageUri(url);
         Sentry.addBreadcrumb({
           category: "comment-image-upload",
