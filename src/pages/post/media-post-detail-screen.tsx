@@ -29,6 +29,7 @@
  */
 
 import {
+  transformApiComment,
   transformApiComments,
   transformApiPost,
   useComments,
@@ -104,6 +105,10 @@ import {
 } from "react-native-popup-menu";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Sentry from "@sentry/react-native";
+import { useQuery } from "@tanstack/react-query";
+import { getCommentContext } from "@/src/api/read/endpoints/posts";
+import { queryKeys } from "@/src/api/read/query-keys";
+import type { PostWithChildren } from "@/src/api/types";
 import {
   generateActionId,
   getActionLabel,
@@ -665,18 +670,39 @@ const MediaItemView = memo(function MediaItemView({
 // Main screen
 // ---------------------------------------------------------------------------
 
-export default function MediaPostDetailScreen() {
-  const { id, syncContext } = useLocalSearchParams<{
+type MediaPostDetailScreenProps = {
+  rootPostId?: string;
+  highlightCommentId?: string;
+  initialSheetOpen?: boolean;
+};
+
+export default function MediaPostDetailScreen({
+  rootPostId,
+  highlightCommentId,
+  initialSheetOpen = false,
+}: MediaPostDetailScreenProps = {}) {
+  const params = useLocalSearchParams<{
     id: string;
+    highlight?: string;
+    depth?: string;
     syncContext?: string;
   }>();
+  const id = rootPostId ?? params.id;
+  const initialHighlightCommentId = highlightCommentId ?? params.highlight;
+  const shouldOpenSheetInitially = initialSheetOpen || !!initialHighlightCommentId || !!params.depth;
+  const [focusedCommentId, setFocusedCommentId] = useState<string | null>(
+    initialHighlightCommentId ?? null,
+  );
+  const [focusedMode, setFocusedMode] = useState<"single" | "context" | "full">(
+    initialHighlightCommentId ? (params.depth ? "context" : "single") : "full",
+  );
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const isFocused = useIsFocused();
   const toast = useToast();
   const { isLoggedIn, requireAuth } = useAuthGuard();
-  const videoSyncScope = syncContext ?? (id ? `post:${id}` : undefined);
+  const videoSyncScope = params.syncContext ?? (id ? `post:${id}` : undefined);
 
   const currentUser = useAuthStore((s) => s.user);
   const shareServer = usePreferencesStore((s) => s.apiServer);
@@ -696,6 +722,32 @@ export default function MediaPostDetailScreen() {
     isLoading: isLoadingComments,
     refetch: refetchComments,
   } = useComments(id!, { enabled: isFocused });
+  const focusedDepth = focusedMode === "context" ? 5 : 0;
+  const { data: focusedCommentData } = useComments(focusedCommentId, {
+    enabled: isFocused && !!focusedCommentId && focusedMode !== "full",
+  });
+  const { data: focusedContextData } = useQuery({
+    queryKey: queryKeys.commentContext(focusedCommentId!, focusedDepth),
+    queryFn: () =>
+      getCommentContext({
+        comment_id: focusedCommentId!,
+        address: currentUser?.walletAddress ?? undefined,
+        max_depth: focusedDepth,
+      }),
+    enabled: isFocused && !!focusedCommentId && focusedDepth > 0,
+    staleTime: 1000 * 60,
+  });
+  const { data: focusedContextCheckData } = useQuery({
+    queryKey: queryKeys.commentContext(focusedCommentId!, 1),
+    queryFn: () =>
+      getCommentContext({
+        comment_id: focusedCommentId!,
+        address: currentUser?.walletAddress ?? undefined,
+        max_depth: 1,
+      }),
+    enabled: isFocused && !!focusedCommentId && focusedMode !== "full",
+    staleTime: 1000 * 60,
+  });
   const { data: followedData } = useUserFollowed();
   const followedUsers = useMemo(
     () => followedData?.followed_users ?? [],
@@ -994,7 +1046,9 @@ export default function MediaPostDetailScreen() {
   const commentInputRef = useRef<CommentInputRef>(null);
 
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
-  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
+  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(
+    initialHighlightCommentId ?? null,
+  );
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressCommentOptionsUntilRef = useRef(0);
   const [awardTargetId, setAwardTargetId] = useState<string>("");
@@ -1086,7 +1140,7 @@ export default function MediaPostDetailScreen() {
     [optimisticReplyComments],
   );
 
-  const displayComments = useMemo(() => {
+  const allDisplayComments = useMemo(() => {
     const localIds = new Set(optimisticTopLevelComments.map((c) => c.id));
     const deduped = comments.filter((c) => !localIds.has(c.id));
     return [...optimisticTopLevelComments, ...deduped]
@@ -1110,6 +1164,68 @@ export default function MediaPostDetailScreen() {
     blockedUserIds,
   ]);
 
+  const displayComments = useMemo(() => {
+    if (!focusedCommentId || focusedMode === "full") return allDisplayComments;
+
+    const processFocused = (comment: Comment) =>
+      applyVoteOverridesToComment(applyOptimisticReplies(comment));
+    const isVisible = (comment: Comment) =>
+      !hiddenCommentIds.has(comment.id) && !blockedUserIds.has(comment.author.id);
+    const findComment = (items: Comment[]): Comment | null => {
+      for (const item of items) {
+        if (item.id === focusedCommentId) return item;
+        const nested = item.replies?.length ? findComment(item.replies) : null;
+        if (nested) return nested;
+      }
+      return null;
+    };
+
+    if (focusedDepth > 0 && focusedContextData?.context?.length) {
+      const rootId = id?.toLowerCase();
+      const context = [...focusedContextData.context]
+        .reverse()
+        .filter((comment) => comment.post_id.toLowerCase() !== rootId)
+        .map((comment, index) =>
+          transformApiComment(
+            comment as PostWithChildren,
+            index === 0 ? id ?? null : focusedContextData.context[index - 1]?.post_id ?? null,
+            index,
+          ),
+        )
+        .map(processFocused)
+        .filter(isVisible);
+
+      const focusedRoot = focusedCommentData?.root
+        ? processFocused(transformApiComment(focusedCommentData.root, id ?? null, context.length))
+        : findComment(allDisplayComments);
+      return focusedRoot && isVisible(focusedRoot) ? [...context, focusedRoot] : context;
+    }
+
+    const found = findComment(allDisplayComments);
+    if (found) return [found];
+
+    if (focusedCommentData?.root) {
+      const focused = processFocused(
+        transformApiComment(focusedCommentData.root, id ?? null, 0),
+      );
+      return isVisible(focused) ? [focused] : [];
+    }
+
+    return [];
+  }, [
+    focusedCommentId,
+    focusedMode,
+    allDisplayComments,
+    focusedDepth,
+    focusedContextData,
+    focusedCommentData,
+    id,
+    applyOptimisticReplies,
+    applyVoteOverridesToComment,
+    hiddenCommentIds,
+    blockedUserIds,
+  ]);
+
   useEffect(() => {
     if (!id || !commentsData?.children) return;
     pruneCommentsPresentOnServer(id, comments);
@@ -1121,6 +1237,14 @@ export default function MediaPostDetailScreen() {
   const { handleFollowUser: followUser, handleFollowTopic: followTopic } =
     useFollowHandler({});
 
+  const hasRecentContext = useMemo(() => {
+    if (!focusedCommentId || focusedMode === "full") return false;
+    const context = focusedContextCheckData?.context ?? focusedContextData?.context ?? [];
+    if (context.length === 0) return false;
+    const rootId = id?.toLowerCase();
+    return context.some((comment) => comment.post_id.toLowerCase() !== rootId);
+  }, [focusedCommentId, focusedMode, focusedContextCheckData, focusedContextData, id]);
+
   useEffect(() => {
     if (reportHandler.showReportSheet) reportSheetRef.current?.present();
   }, [reportHandler.showReportSheet]);
@@ -1130,6 +1254,40 @@ export default function MediaPostDetailScreen() {
       if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (initialHighlightCommentId) {
+      setFocusedCommentId(initialHighlightCommentId);
+      setFocusedMode(params.depth ? "context" : "single");
+      setHighlightedCommentId(initialHighlightCommentId);
+    }
+  }, [initialHighlightCommentId, params.depth]);
+
+  useEffect(() => {
+    if (!shouldOpenSheetInitially) return;
+    const timer = setTimeout(() => collapseMedia(), 100);
+    return () => clearTimeout(timer);
+  }, [shouldOpenSheetInitially, collapseMedia]);
+
+  useEffect(() => {
+    if (!focusedCommentId || focusedMode === "full" || displayComments.length === 0) return;
+    const containsComment = (comment: Comment): boolean => {
+      if (comment.id === focusedCommentId) return true;
+      return comment.replies?.some((reply) => containsComment(reply)) ?? false;
+    };
+    const index = displayComments.findIndex((comment) => {
+      return containsComment(comment);
+    });
+    if (index < 0) return;
+    const timer = setTimeout(() => {
+      commentsListRef.current?.scrollToIndex?.({
+        index,
+        animated: true,
+        viewPosition: 0.25,
+      });
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [focusedCommentId, focusedMode, displayComments]);
 
   const removeCommentFromState = useCallback(
     (commentId: string) => {
@@ -1569,7 +1727,7 @@ export default function MediaPostDetailScreen() {
           {/* --------------- BottomSheet for comments ------------------ */}
           <BottomSheet
             ref={sheetRef}
-            index={-1}
+            index={shouldOpenSheetInitially ? 0 : -1}
             snapPoints={snapPoints}
             animatedIndex={animatedIndex}
             animationConfigs={sheetAnimationConfigs}
@@ -1602,6 +1760,15 @@ export default function MediaPostDetailScreen() {
               data={displayComments as Comment[]}
               keyExtractor={(c: Comment) => c.id}
               showsVerticalScrollIndicator={false}
+              onScrollToIndexFailed={({ index }: { index: number }) => {
+                setTimeout(() => {
+                  commentsListRef.current?.scrollToIndex?.({
+                    index,
+                    animated: true,
+                    viewPosition: 0.25,
+                  });
+                }, 300);
+              }}
               contentContainerStyle={{
                 paddingBottom: inputDockTotalH + 24,
               }}
@@ -1695,6 +1862,75 @@ export default function MediaPostDetailScreen() {
                     </View>
                   ) : null}
                 </View>
+
+                {focusedCommentId && focusedMode !== "full" ? (
+                  <View style={styles.threadReminderCard}>
+                    <View style={styles.threadReminderHeaderRow}>
+                      <Ionicons
+                        name="chatbubbles-outline"
+                        size={14}
+                        color={theme.colors.text.subtle}
+                      />
+                      <Text
+                        size="xs"
+                        mode="subtle"
+                        weight="medium"
+                        style={styles.threadReminderTitle}
+                      >
+                        You&apos;re viewing single comment&apos;s thread
+                      </Text>
+                    </View>
+                    <View style={styles.threadReminderActionsRow}>
+                      <View style={styles.threadReminderButtonSlot}>
+                        <Pressable
+                          onPress={() => setFocusedMode("context")}
+                          style={({ pressed }) => [
+                            styles.threadReminderButton,
+                            pressed && styles.threadReminderButtonPressed,
+                            (!hasRecentContext || focusedMode === "context") &&
+                              styles.threadReminderButtonDisabled,
+                          ]}
+                          disabled={!hasRecentContext || focusedMode === "context"}
+                        >
+                          <Ionicons
+                            name={focusedMode === "context" ? "checkmark-outline" : "arrow-up-outline"}
+                            size={14}
+                            color={
+                              !hasRecentContext || focusedMode === "context"
+                                ? theme.colors.text.subtle
+                                : theme.colors.text.default
+                            }
+                          />
+                          <Text
+                            size="xs"
+                            weight="semibold"
+                            mode={!hasRecentContext || focusedMode === "context" ? "subtle" : undefined}
+                          >
+                            Recent context
+                          </Text>
+                        </Pressable>
+                      </View>
+                      <View style={styles.threadReminderButtonSlot}>
+                        <Pressable
+                          onPress={() => setFocusedMode("full")}
+                          style={({ pressed }) => [
+                            styles.threadReminderButton,
+                            pressed && styles.threadReminderButtonPressed,
+                          ]}
+                        >
+                          <Ionicons
+                            name="list-outline"
+                            size={14}
+                            color={theme.colors.text.default}
+                          />
+                          <Text size="xs" weight="semibold">
+                            Full thread
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  </View>
+                ) : null}
 
                 <View
                   style={[
@@ -2547,6 +2783,58 @@ const styles = StyleSheet.create((theme) => ({
   },
   sheetPostInfo: {
     paddingVertical: 2,
+  },
+  threadReminderCard: {
+    marginTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.background.subtle,
+    borderLeftWidth: 3,
+    borderLeftColor: theme.colors.primary[500],
+    gap: theme.spacing.sm,
+  },
+  threadReminderHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+  },
+  threadReminderTitle: {
+    flexShrink: 1,
+  },
+  threadReminderActionsRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: theme.spacing.sm,
+    width: "100%",
+  },
+  threadReminderButtonSlot: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: "50%",
+    minWidth: 0,
+    maxWidth: "50%",
+  },
+  threadReminderButton: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 8,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border.default,
+    backgroundColor: theme.colors.background.default,
+    minHeight: 36,
+  },
+  threadReminderButtonPressed: {
+    opacity: 0.7,
+  },
+  threadReminderButtonDisabled: {
+    opacity: 0.5,
+    backgroundColor: theme.colors.background.subtle,
   },
   commentsTitle: {
     marginTop: 4,

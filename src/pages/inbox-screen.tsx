@@ -298,17 +298,23 @@ export function InboxScreen() {
         queryKeys.comments(reply.reply_id, address),
         focusedCommentData,
       );
+      queryClient.setQueryData(queryKeys.rootPostId(reply.reply_id), {
+        root_post_id: reply.root_post_id,
+      });
 
       if (parent) {
         queryClient.setQueryData(queryKeys.commentContext(reply.reply_id, 5), {
           comment_id: reply.reply_id,
           context: [parent],
         });
-
-        if (reply.parent_id === reply.root_post_id) {
+        if (cachedRootPost && reply.parent_id === reply.root_post_id) {
           queryClient.setQueryData(queryKeys.comments(reply.root_post_id, address), {
-            root: cachedRootPost ?? parent,
+            root: cachedRootPost,
             children: [comment],
+          });
+        } else {
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.comments(reply.root_post_id, address),
           });
         }
       }

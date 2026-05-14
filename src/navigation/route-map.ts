@@ -120,7 +120,7 @@ export function mapMiragePathToRoute(
   if (segments.length >= 2) {
     const resourceId = segments[1];
 
-    if (prefix === "p") {
+    if (prefix === "p" || prefix === "c" || prefix === "comment") {
       const postSearch = withDefaultSearchParam(search, "depth", "5");
       return {
         type: "post",

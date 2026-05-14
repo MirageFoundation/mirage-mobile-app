@@ -9,7 +9,7 @@ import {
 import { markSeen } from "@/src/services/seen-posts";
 import * as Sentry from "@sentry/react-native";
 import { parseApiError } from "@/src/utils/parse-api-error";
-import { getCommentContext, getComments } from "@/src/api/read/endpoints/posts";
+import { getCommentContext, getComments, getRootPostId } from "@/src/api/read/endpoints/posts";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { LinearGradient } from "expo-linear-gradient";
 import { getGradientColor } from "@/src/components/molecules/profile-header";
@@ -37,6 +37,7 @@ import {
   GiftMirageSheetRef,
   GiftSubscriptionSheet,
   GiftSubscriptionSheetRef,
+  MediaPostDetailSkeleton,
   PostCard,
   PostOptionsSheet,
   PostOptionsSheetRef,
@@ -111,7 +112,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { getLastPressedPostY } from "@/src/utils/post-transition";
-import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import type { CommentsResponse, PostsResponse, Post as ApiPost, PostWithChildren } from "@/src/api/types";
 import MediaPostDetailScreen from "@/src/pages/post/media-post-detail-screen";
 import {
@@ -182,12 +183,49 @@ export default function PostDetailScreen() {
   const savedPostsForRouting = useSavedPostsStore((s) => s.savedPosts);
   const historyEntriesForRouting = useHistoryStore((s) => s.entries);
 
-  // Branch to the immersive MediaPostDetailScreen when the cached post
-  // has image/video/gif media and we're not viewing a single-comment
-  // thread (highlight / depth). Fall through to the legacy layout
-  // (text + first-class comment thread) otherwise.
+  const routeCommentsQuery = useComments(params.id!, {
+    enabled: !!params.id && (!!params.highlight || !!params.depth),
+  });
+  const routeRootIdQuery = useQuery({
+    queryKey: queryKeys.rootPostId(params.id!),
+    queryFn: () => getRootPostId({ comment_id: params.id! }),
+    enabled: !!params.id && (!!params.highlight || !!params.depth) && !routeCommentsQuery.data,
+    staleTime: 1000 * 60 * 60,
+  });
+  const routeCommentRoot = routeCommentsQuery.data?.root;
+  const isRouteComment = !!(
+    routeCommentRoot?.post_id &&
+    routeCommentRoot.root_post_id &&
+    routeCommentRoot.root_post_id.toLowerCase() !== routeCommentRoot.post_id.toLowerCase()
+  );
+  const routeRootPostId = isRouteComment
+    ? routeCommentRoot?.root_post_id
+    : routeRootIdQuery.data?.root_post_id ?? null;
+  const routeHighlightCommentId =
+    params.highlight ??
+    (isRouteComment
+      ? routeCommentRoot?.post_id
+      : routeRootPostId && params.id !== routeRootPostId
+      ? params.id
+      : undefined);
+  const routeRootCommentsQuery = useComments(routeRootPostId!, {
+    enabled: !!routeRootPostId,
+  });
+
+  // Branch to the immersive MediaPostDetailScreen when the post has
+  // image/video/gif media. For comment links, resolve the root post so
+  // media posts can open with the comment sheet already expanded.
   const cachedRoot = useMemo(() => {
     if (!params.id) return null;
+    if (!isRouteComment && routeCommentsQuery.data?.root) {
+      return routeCommentsQuery.data.root;
+    }
+    if (routeRootPostId) {
+      const rootComments = queryClient.getQueryData<CommentsResponse>(
+        queryKeys.comments(routeRootPostId, currentUserWallet ?? undefined),
+      );
+      if (rootComments?.root) return rootComments.root;
+    }
     const commentsRoot = queryClient.getQueryData<CommentsResponse>(
       queryKeys.comments(params.id, currentUserWallet ?? undefined),
     );
@@ -203,16 +241,34 @@ export default function PostDetailScreen() {
       if (matched) return matched;
     }
     return null;
-  }, [params.id, currentUserWallet, queryClient, savedPostsForRouting, historyEntriesForRouting]);
+  }, [params.id, isRouteComment, routeCommentsQuery.data?.root, routeRootPostId, currentUserWallet, queryClient, savedPostsForRouting, historyEntriesForRouting]);
+
+  const routingRoot = routeRootCommentsQuery.data?.root ?? cachedRoot;
 
   const hasImmersiveMedia = useMemo(() => {
-    return cachedPostHasImmersiveMedia(cachedRoot);
-  }, [cachedRoot]);
+    return cachedPostHasImmersiveMedia(routingRoot);
+  }, [routingRoot]);
 
-  const useImmersive = hasImmersiveMedia && !params.highlight && !params.depth;
+  const useImmersive = hasImmersiveMedia;
+
+  const isResolvingFocusedMediaRoute = !!(
+    params.id &&
+    (params.highlight || params.depth) &&
+    (routeCommentsQuery.isLoading || routeRootIdQuery.isLoading || (routeRootPostId && routeRootCommentsQuery.isLoading))
+  );
+
+  if (!useImmersive && isResolvingFocusedMediaRoute) {
+    return <MediaPostDetailSkeleton />;
+  }
 
   if (useImmersive) {
-    return <MediaPostDetailScreen />;
+    return (
+      <MediaPostDetailScreen
+        rootPostId={routeRootPostId ?? undefined}
+        highlightCommentId={routeHighlightCommentId}
+        initialSheetOpen={!!routeHighlightCommentId}
+      />
+    );
   }
 
   return <LegacyPostDetailScreen />;
