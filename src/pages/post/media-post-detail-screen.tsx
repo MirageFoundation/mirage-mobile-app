@@ -34,9 +34,9 @@ import {
   transformApiPost,
   useComments,
   useUserFollowed,
-  uploadImageAndGetUrl,
 } from "@/src/api/read";
 import { Avatar, TimeAgo } from "@/src/components/atoms";
+import { composeCommentContent, resolveCommentMediaUrl } from "@/src/utils/comment-media";
 import {
   AwardPickerSheet,
   AwardPickerSheetRef,
@@ -1548,11 +1548,7 @@ export default function MediaPostDetailScreen({
     const parentId = captured.replyToId ?? id;
     const optimisticMediaUrl = captured.imageUri || captured.gifUrl || null;
     const capturedText = captured.text ?? "";
-    const optimisticContent = optimisticMediaUrl
-      ? capturedText.trim()
-        ? `${optimisticMediaUrl}\n\n${capturedText.trim()}`
-        : optimisticMediaUrl
-      : capturedText;
+    const optimisticContent = composeCommentContent(capturedText, optimisticMediaUrl);
 
     const optimisticCommentId = `optimistic-${Date.now()}`;
     const optimisticComment: Comment = {
@@ -1578,20 +1574,8 @@ export default function MediaPostDetailScreen({
       type: "comment",
       label: getActionLabel("comment"),
       execute: async () => {
-        let mediaUrl: string | null = null;
-        if (captured.imageUri) {
-          mediaUrl = captured.imageUri.startsWith("http")
-            ? captured.imageUri
-            : await uploadImageAndGetUrl(captured.imageUri);
-        } else if (captured.gifUrl) {
-          mediaUrl = captured.gifUrl;
-        }
-
-        const finalContent = mediaUrl
-          ? capturedText.trim()
-            ? `${mediaUrl}\n\n${capturedText.trim()}`
-            : mediaUrl
-          : capturedText;
+        const mediaUrl = await resolveCommentMediaUrl(captured.imageUri, captured.gifUrl);
+        const finalContent = composeCommentContent(capturedText, mediaUrl);
 
         return commentMutation.mutateAsync({ parentId, content: finalContent });
       },

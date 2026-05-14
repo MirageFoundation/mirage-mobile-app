@@ -80,6 +80,7 @@ import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import { useEdit } from "@/src/api/write";
 import { useToast } from "@/src/providers/toast-provider";
+import { composeCommentContent, resolveCommentMediaUrl } from "@/src/utils/comment-media";
 import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 import {
   usePowQueueStore,
@@ -572,14 +573,9 @@ useEffect(() => {
 
     if (!commentId || commentId.startsWith("optimistic-")) return;
 
-   let finalContent = text;
-    if (imageUri) {
-      finalContent = text.trim() ? `${imageUri}\n\n${text.trim()}` : imageUri;
-    } else if (gifUrl) {
-      finalContent = text.trim() ? `${gifUrl}\n\n${text.trim()}` : gifUrl;
-    }
+   const optimisticContent = composeCommentContent(text, imageUri || gifUrl || null);
 
-      setCommentEditOverrides((prev) => ({ ...prev, [commentId]: finalContent }));
+      setCommentEditOverrides((prev) => ({ ...prev, [commentId]: optimisticContent }));
 
       const actionId = generateActionId();
       enqueue({
@@ -587,6 +583,9 @@ useEffect(() => {
         type: "edit",
         label: getActionLabel("edit"),
         execute: async () => {
+          const mediaUrl = await resolveCommentMediaUrl(imageUri, gifUrl);
+          const finalContent = composeCommentContent(text, mediaUrl);
+
           return editMutateAsyncRef.current({
             postId: commentId,
             parentId,
@@ -605,7 +604,17 @@ useEffect(() => {
             });
           }, 3000);
         },
-        onError: () => {
+        onError: (err) => {
+          Sentry.captureException(err, {
+            tags: { feature: "comment", operation: "edit_comment_profile" },
+            extra: {
+              commentId,
+              parentId,
+              hadImage: !!imageUri,
+              hadGif: !!gifUrl,
+              contentLength: text.length,
+            },
+          });
           setCommentEditOverrides((prev) => {
             const next = { ...prev };
             delete next[commentId];

@@ -4,11 +4,11 @@ import {
   transformApiPost,
   useComments,
   useUserFollowed,
-  uploadImageAndGetUrl,
 } from "@/src/api/read";
 import { markSeen } from "@/src/services/seen-posts";
 import * as Sentry from "@sentry/react-native";
 import { parseApiError } from "@/src/utils/parse-api-error";
+import { composeCommentContent, resolveCommentMediaUrl } from "@/src/utils/comment-media";
 import { getCommentContext, getComments, getRootPostId } from "@/src/api/read/endpoints/posts";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { LinearGradient } from "expo-linear-gradient";
@@ -1723,12 +1723,7 @@ function LegacyPostDetailScreen() {
       const parentId = replyingTo?.id ?? implicitReplyTarget?.id ?? id;
 
       const optimisticMediaUrl = imageUri || gifUrl || null;
-      let optimisticContent = text;
-      if (optimisticMediaUrl) {
-        optimisticContent = text.trim()
-          ? `${optimisticMediaUrl}\n\n${text.trim()}`
-          : optimisticMediaUrl;
-      }
+      const optimisticContent = composeCommentContent(text, optimisticMediaUrl);
 
       const optimisticCommentId = `optimistic-${Date.now()}`;
       const optimisticComment: Comment = {
@@ -1764,21 +1759,8 @@ function LegacyPostDetailScreen() {
         type: "comment",
         label: getActionLabel("comment"),
         execute: async () => {
-          let mediaUrl: string | null = null;
-          if (capturedImageUri) {
-            mediaUrl = capturedImageUri.startsWith("http")
-              ? capturedImageUri
-              : await uploadImageAndGetUrl(capturedImageUri);
-          } else if (capturedGifUrl) {
-            mediaUrl = capturedGifUrl;
-          }
-
-          let finalContent = capturedText;
-          if (mediaUrl) {
-            finalContent = capturedText.trim()
-              ? `${mediaUrl}\n\n${capturedText.trim()}`
-              : mediaUrl;
-          }
+          const mediaUrl = await resolveCommentMediaUrl(capturedImageUri, capturedGifUrl);
+          const finalContent = composeCommentContent(capturedText, mediaUrl);
 
           return commentMutateAsyncRef.current({
             parentId,
@@ -1902,16 +1884,11 @@ function LegacyPostDetailScreen() {
 
       if (!commentId || commentId.startsWith("optimistic-")) return;
 
-      let finalContent = text;
-      if (imageUri) {
-        finalContent = text.trim() ? `${imageUri}\n\n${text.trim()}` : imageUri;
-      } else if (gifUrl) {
-        finalContent = text.trim() ? `${gifUrl}\n\n${text.trim()}` : gifUrl;
-      }
+      const optimisticContent = composeCommentContent(text, imageUri || gifUrl || null);
 
       setCommentEditOverrides((prev) => ({
         ...prev,
-        [commentId]: finalContent,
+        [commentId]: optimisticContent,
       }));
 
       const actionId = generateActionId();
@@ -1920,6 +1897,9 @@ function LegacyPostDetailScreen() {
         type: "edit",
         label: getActionLabel("edit"),
         execute: async () => {
+          const mediaUrl = await resolveCommentMediaUrl(imageUri, gifUrl);
+          const finalContent = composeCommentContent(text, mediaUrl);
+
           return editMutateAsyncRef.current({
             postId: commentId,
             parentId,
@@ -1938,7 +1918,17 @@ function LegacyPostDetailScreen() {
             });
           }, 3000);
         },
-        onError: () => {
+        onError: (err) => {
+          Sentry.captureException(err, {
+            tags: { feature: "comment", operation: "edit_comment" },
+            extra: {
+              commentId,
+              parentId,
+              hadImage: !!imageUri,
+              hadGif: !!gifUrl,
+              contentLength: text.length,
+            },
+          });
           setCommentEditOverrides((prev) => {
             const next = { ...prev };
             delete next[commentId];
