@@ -1123,6 +1123,14 @@ export default function MediaPostDetailScreen({
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressedHighlightScrollRef = useRef<string | null>(null);
   const suppressCommentOptionsUntilRef = useRef(0);
+  const composeNavigationLockedUntilRef = useRef(0);
+
+  const reserveComposeNavigation = useCallback(() => {
+    const now = Date.now();
+    if (now < composeNavigationLockedUntilRef.current) return false;
+    composeNavigationLockedUntilRef.current = now + 1000;
+    return true;
+  }, []);
 
   useEffect(() => {
     preciseScrollTargetRef.current = null;
@@ -1596,6 +1604,7 @@ export default function MediaPostDetailScreen({
 
   const handleEditComment = useCallback(() => {
     if (!selectedComment || !post || selectedComment.id.startsWith("optimistic-")) return;
+    if (!reserveComposeNavigation()) return;
     const createdAt = selectedComment.createdAt instanceof Date
       ? Math.floor(selectedComment.createdAt.getTime() / 1000)
       : Math.floor(Number(selectedComment.createdAt) / (Number(selectedComment.createdAt) > 1e12 ? 1000 : 1));
@@ -1612,7 +1621,7 @@ export default function MediaPostDetailScreen({
         editSource: "post",
       },
     });
-  }, [selectedComment, post, router]);
+  }, [selectedComment, post, reserveComposeNavigation, router]);
 
   const handleAuthorPress = useCallback(() => {
     if (!post) return;
@@ -1655,6 +1664,7 @@ export default function MediaPostDetailScreen({
   const handleComment = useCallback(() => {
     if (!post) return;
     requireAuth(() => {
+      if (!reserveComposeNavigation()) return;
       router.push({
         pathname: "/comment-compose",
         params: {
@@ -1666,7 +1676,7 @@ export default function MediaPostDetailScreen({
         },
       });
     });
-  }, [post, requireAuth, router, activeMedia?.uri]);
+  }, [post, requireAuth, reserveComposeNavigation, router, activeMedia?.uri]);
 
   const handleMuteToggle = useCallback(async () => {
     const next = !globalMuted;
@@ -2197,6 +2207,7 @@ export default function MediaPostDetailScreen({
                 }
                 onReplyPress={(c) => {
                   requireAuth(() => {
+                    if (!reserveComposeNavigation()) return;
                     router.push({
                       pathname: "/comment-compose",
                       params: {
@@ -2401,6 +2412,7 @@ export default function MediaPostDetailScreen({
               ref={commentInputRef}
               isLoggedIn={isLoggedIn}
               onAuthRequired={() => requireAuth(() => {})}
+              onBeforeOpen={reserveComposeNavigation}
               postId={post.id}
               postTitle={post.title}
               postAuthorUsername={post.author.username}
