@@ -543,11 +543,11 @@ function LegacyPostDetailScreen() {
   const [hasLoadedFocusedContext, setHasLoadedFocusedContext] = useState(false);
 
   const contextDepth = useMemo(() => {
-    if (!depth) return 0;
+    if (!depth) return focusedCommentId ? 5 : 0;
     const parsed = Number(depth);
     if (!Number.isInteger(parsed) || parsed < 0) return 0;
     return Math.min(parsed, 5);
-  }, [depth]);
+  }, [depth, focusedCommentId]);
 
   useEffect(() => {
     setShowFocusedThread(true);

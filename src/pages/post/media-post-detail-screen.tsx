@@ -696,7 +696,7 @@ export default function MediaPostDetailScreen({
     initialHighlightCommentId ?? null,
   );
   const [focusedMode, setFocusedMode] = useState<"single" | "context" | "full">(
-    initialHighlightCommentId ? (params.depth ? "context" : "single") : "full",
+    initialHighlightCommentId ? "context" : "full",
   );
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -729,6 +729,7 @@ export default function MediaPostDetailScreen({
   const focusedDepth = focusedMode === "context" ? 5 : 0;
   const {
     data: focusedCommentData,
+    isLoading: isLoadingFocusedComment,
     isFetched: isFocusedCommentFetched,
     isError: isFocusedCommentError,
     error: focusedCommentError,
@@ -738,6 +739,8 @@ export default function MediaPostDetailScreen({
   const {
     data: focusedContextData,
     refetch: refetchFocusedContext,
+    isLoading: isLoadingFocusedContext,
+    isFetching: isFetchingFocusedContext,
     isError: isFocusedContextError,
     error: focusedContextError,
   } = useQuery({
@@ -1301,8 +1304,15 @@ export default function MediaPostDetailScreen({
     blockedUserIds,
   ]);
 
+  const isLoadingFocusedContextThread = !!(
+    focusedCommentId &&
+    focusedMode === "context" &&
+    (!isFocusedCommentFetched || isLoadingFocusedContext || isFetchingFocusedContext)
+  );
+
   const displayComments = useMemo(() => {
     if (!focusedCommentId || focusedMode === "full") return allDisplayComments;
+    if (isLoadingFocusedContextThread) return [];
     const focused = focusedThreadState.focused;
     if (!focused) return [];
     if (focusedMode !== "context" || focusedThreadState.parents.length === 0) {
@@ -1319,7 +1329,7 @@ export default function MediaPostDetailScreen({
       };
     }
     return [{ ...thread, isFocusedContext: true }];
-  }, [focusedCommentId, focusedMode, allDisplayComments, focusedThreadState]);
+  }, [focusedCommentId, focusedMode, allDisplayComments, isLoadingFocusedContextThread, focusedThreadState]);
 
   useEffect(() => {
     if (!id || !commentsData?.children) return;
@@ -1367,10 +1377,10 @@ export default function MediaPostDetailScreen({
   useEffect(() => {
     if (initialHighlightCommentId) {
       setFocusedCommentId(initialHighlightCommentId);
-      setFocusedMode(params.depth ? "context" : "single");
+      setFocusedMode("context");
       setHighlightedCommentId(initialHighlightCommentId);
     }
-  }, [initialHighlightCommentId, params.depth]);
+  }, [initialHighlightCommentId]);
 
   useEffect(() => {
     if (!shouldOpenSheetInitially) return;
@@ -2096,7 +2106,26 @@ export default function MediaPostDetailScreen({
               />
             )}
             ListEmptyComponent={
-              !isLoadingComments ? (
+              isLoadingComments || isLoadingFocusedComment || isLoadingFocusedContextThread ? (
+                <View style={styles.contextSkeletonList}>
+                  {[0, 1, 2, 3].map((item) => (
+                    <View
+                      key={`focused-context-skeleton-${item}`}
+                      style={[
+                        styles.contextSkeletonRow,
+                        item > 0 && { marginLeft: item === 3 ? 48 : 24 },
+                      ]}
+                    >
+                      <View style={styles.contextSkeletonHeader}>
+                        <View style={styles.contextSkeletonAvatar} />
+                        <View style={styles.contextSkeletonName} />
+                      </View>
+                      <View style={styles.contextSkeletonLineFull} />
+                      <View style={styles.contextSkeletonLineShort} />
+                    </View>
+                  ))}
+                </View>
+              ) : (
                 <View style={styles.emptyState}>
                   <Ionicons
                     name="chatbubbles-outline"
@@ -2119,7 +2148,7 @@ export default function MediaPostDetailScreen({
                     Be the first to share your thoughts!
                   </Text>
                 </View>
-              ) : null
+              )
             }
             />
           </BottomSheet>
@@ -2944,6 +2973,43 @@ const styles = StyleSheet.create((theme) => ({
   commentsTitle: {
     marginTop: 4,
     marginBottom: 4,
+  },
+  contextSkeletonList: {
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    gap: theme.spacing.md,
+  },
+  contextSkeletonRow: {
+    gap: 8,
+  },
+  contextSkeletonHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  contextSkeletonAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.colors.background.subtle,
+  },
+  contextSkeletonName: {
+    width: 104,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: theme.colors.background.subtle,
+  },
+  contextSkeletonLineFull: {
+    width: "100%",
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: theme.colors.background.subtle,
+  },
+  contextSkeletonLineShort: {
+    width: "72%",
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: theme.colors.background.subtle,
   },
   emptyState: {
     alignItems: "center",

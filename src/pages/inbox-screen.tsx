@@ -307,6 +307,12 @@ export function InboxScreen() {
       }
 
       queryClient.invalidateQueries({
+        queryKey: queryKeys.comments(reply.reply_id, address),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.commentContext(reply.reply_id, 5),
+      });
+      queryClient.invalidateQueries({
         queryKey: queryKeys.comments(reply.root_post_id, address),
       });
     },
