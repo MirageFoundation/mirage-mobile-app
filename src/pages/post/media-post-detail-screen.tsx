@@ -153,8 +153,12 @@ import {
 import {
   ActivityIndicator,
   Dimensions,
+  LayoutChangeEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
   Share,
+  UIManager,
   View,
 } from "react-native";
 import {
@@ -953,6 +957,8 @@ export default function MediaPostDetailScreen({
   });
   const sheetRef = useRef<BottomSheet>(null);
   const commentsListRef = useRef<any>(null);
+  const commentsScrollYRef = useRef(0);
+  const preciseScrollTargetRef = useRef<string | null>(null);
   // animatedIndex is -1 when closed, 0 when at first snap point.
   // We clamp/normalize to [0,1] for collapseProgress.
   const animatedIndex = useSharedValue(-1);
@@ -1112,6 +1118,11 @@ export default function MediaPostDetailScreen({
   );
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressCommentOptionsUntilRef = useRef(0);
+
+  useEffect(() => {
+    preciseScrollTargetRef.current = null;
+  }, [highlightedCommentId]);
+
   const [awardTargetId, setAwardTargetId] = useState<string>("");
   const [awardTargetType, setAwardTargetType] = useState<"post" | "comment">("post");
   const [awardTargetIsOwn, setAwardTargetIsOwn] = useState(false);
@@ -1320,11 +1331,14 @@ export default function MediaPostDetailScreen({
     let thread: Comment = focused;
     for (let index = focusedThreadState.parents.length - 1; index >= 0; index -= 1) {
       const parent = focusedThreadState.parents[index];
+      const optimisticParentReplies = (parent.replies ?? []).filter(
+        (reply) => reply.id !== thread.id,
+      );
       thread = {
         ...parent,
         isFocusedContext: true,
-        replies: [thread],
-        replyCount: Math.max(parent.replyCount ?? 0, 1),
+        replies: [...optimisticParentReplies, thread],
+        replyCount: Math.max(parent.replyCount ?? 0, optimisticParentReplies.length + 1),
       };
     }
     return [{ ...thread, isFocusedContext: true }];
@@ -1332,8 +1346,9 @@ export default function MediaPostDetailScreen({
 
   useEffect(() => {
     if (!id || !commentsData?.children) return;
+    if (focusedCommentId && focusedMode !== "full") return;
     pruneCommentsPresentOnServer(id, comments);
-  }, [id, commentsData?.children, comments, pruneCommentsPresentOnServer]);
+  }, [id, commentsData?.children, comments, focusedCommentId, focusedMode, pruneCommentsPresentOnServer]);
 
   const deleteHandler = useDeleteHandler({});
   const blockHandler = useBlockHandler({});
@@ -1389,6 +1404,7 @@ export default function MediaPostDetailScreen({
 
   useEffect(() => {
     if (!focusedCommentId || focusedMode === "full" || displayComments.length === 0) return;
+    if (highlightedCommentId && highlightedCommentId !== focusedCommentId) return;
     const containsComment = (comment: Comment): boolean => {
       if (comment.id === focusedCommentId) return true;
       return comment.replies?.some((reply) => containsComment(reply)) ?? false;
@@ -1405,7 +1421,58 @@ export default function MediaPostDetailScreen({
       });
     }, 350);
     return () => clearTimeout(timer);
-  }, [focusedCommentId, focusedMode, displayComments]);
+  }, [focusedCommentId, focusedMode, displayComments, highlightedCommentId]);
+
+  const findCommentInTree = useCallback((comment: Comment, targetId: string): boolean => {
+    if (comment.id === targetId) return true;
+    return comment.replies?.some((reply) => findCommentInTree(reply, targetId)) ?? false;
+  }, []);
+
+  useEffect(() => {
+    if (!highlightedCommentId || displayComments.length === 0) return;
+    const index = displayComments.findIndex((comment) =>
+      findCommentInTree(comment, highlightedCommentId),
+    );
+    if (index < 0) return;
+    const timer = setTimeout(() => {
+      commentsListRef.current?.scrollToIndex?.({
+        index,
+        animated: true,
+        viewPosition: 0.25,
+      });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [highlightedCommentId, displayComments, findCommentInTree]);
+
+  const handleHighlightedCommentLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      if (!highlightedCommentId) return;
+      const target = (event.nativeEvent as { target?: number }).target;
+      if (!target) return;
+      const targetKey = `${highlightedCommentId}:${target}`;
+
+      setTimeout(() => {
+        UIManager.measureInWindow(target, (_x, y, _width, height) => {
+          if (preciseScrollTargetRef.current === targetKey) return;
+          if (height <= 0) return;
+
+          const desiredY = listTopY + 80;
+          const delta = y - desiredY;
+          if (Math.abs(delta) < 24) {
+            preciseScrollTargetRef.current = targetKey;
+            return;
+          }
+
+          preciseScrollTargetRef.current = targetKey;
+          commentsListRef.current?.scrollToOffset?.({
+            offset: Math.max(0, commentsScrollYRef.current + delta),
+            animated: true,
+          });
+        });
+      }, 500);
+    },
+    [highlightedCommentId, listTopY],
+  );
 
   const removeCommentFromState = useCallback(
     (commentId: string) => {
@@ -1644,12 +1711,15 @@ export default function MediaPostDetailScreen({
           addReplyOptimisticComment(id, captured.replyToId, optimisticComment);
         } else {
           addTopLevelOptimisticComment(id, optimisticComment);
+          if (focusedCommentId && focusedMode !== "full") {
+            setFocusedMode("full");
+          }
+          setTimeout(() => commentsListRef.current?.scrollToEnd?.({ animated: true }), 250);
         }
         setHighlightedCommentId(optimisticCommentId);
         if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
         highlightTimerRef.current = setTimeout(() => setHighlightedCommentId(null), 3000);
         collapseMedia();
-        setTimeout(() => commentsListRef.current?.scrollToEnd?.({ animated: true }), 250);
       },
       onSuccess: (result) => {
         const confirmedCommentId =
@@ -1687,6 +1757,8 @@ export default function MediaPostDetailScreen({
   }, [
     pendingComment,
     id,
+    focusedCommentId,
+    focusedMode,
     currentUser,
     clearPendingComment,
     commentMutation,
@@ -1862,6 +1934,10 @@ export default function MediaPostDetailScreen({
               data={displayComments as Comment[]}
               keyExtractor={(c: Comment) => c.id}
               showsVerticalScrollIndicator={false}
+              onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
+                commentsScrollYRef.current = event.nativeEvent.contentOffset.y;
+              }}
+              scrollEventThrottle={16}
               onScrollToIndexFailed={({ index }: { index: number }) => {
                 setTimeout(() => {
                   commentsListRef.current?.scrollToIndex?.({
@@ -2102,6 +2178,7 @@ export default function MediaPostDetailScreen({
                   setSelectedComment(c);
                   commentOptionsRef.current?.present();
                 }}
+                onHighlightedLayout={handleHighlightedCommentLayout}
               />
             )}
             ListEmptyComponent={

@@ -517,6 +517,7 @@ function LegacyPostDetailScreen() {
     if (!root?.post_id) return null;
     return isViewingComment ? root.root_post_id : root.post_id;
   }, [commentsData?.root, isViewingComment]);
+  const optimisticThreadId = actualRootPostId ?? id;
 
   const highlightCommentId = typeof highlight === "string" && highlight.length > 0 ? highlight : null;
   const [showFocusedThread, setShowFocusedThread] = useState(true);
@@ -1108,8 +1109,8 @@ function LegacyPostDetailScreen() {
   useEffect(() => {
     setThreadActionLoading(null);
   }, [id]);
-  const optimisticTopLevelComments = useOptimisticTopLevelComments(id);
-  const optimisticReplyComments = useOptimisticReplyComments(id);
+  const optimisticTopLevelComments = useOptimisticTopLevelComments(optimisticThreadId);
+  const optimisticReplyComments = useOptimisticReplyComments(optimisticThreadId);
   const addTopLevelOptimisticComment = usePostCommentOptimisticStore(
     (state) => state.addTopLevelComment,
   );
@@ -1135,14 +1136,15 @@ function LegacyPostDetailScreen() {
   // This prevents duplicates when user pulls to refresh after posting
   useEffect(() => {
     if (!id || !commentsData?.children) return;
+    if (focusedCommentId && showFocusedThread) return;
 
     if (!hasInitialCommentsLoaded.current) {
       hasInitialCommentsLoaded.current = true;
       return;
     }
 
-    pruneCommentsPresentOnServer(id, comments);
-  }, [commentsData?.children, comments, id, pruneCommentsPresentOnServer]);
+    pruneCommentsPresentOnServer(optimisticThreadId, comments);
+  }, [commentsData?.children, comments, focusedCommentId, id, optimisticThreadId, pruneCommentsPresentOnServer, showFocusedThread]);
   const [commentVoteOverrides, setCommentVoteOverrides] = useState<
     Record<
       string,
@@ -1401,8 +1403,6 @@ function LegacyPostDetailScreen() {
     // the focused chain is built and the focused comment exists.
     if (focusedCommentId && contextDepth > 0 && isLoadingContext) return;
     if (highlightedCommentId && allComments.length > 0 && flatListRef.current) {
-      const isOptimistic = highlightedCommentId.startsWith("optimistic-");
-      if (isOptimistic) return;
       if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
 
       // First try to find the comment at top level
@@ -1551,7 +1551,8 @@ function LegacyPostDetailScreen() {
     (event: LayoutChangeEvent) => {
       if (!highlightedCommentId) return;
       if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
-      const target = event.nativeEvent.target;
+      const target = (event.nativeEvent as { target?: number }).target;
+      if (!target) return;
       const targetKey = `${highlightedCommentId}:${target}`;
 
       setTimeout(() => {
@@ -1845,10 +1846,14 @@ function LegacyPostDetailScreen() {
         onOptimisticUpdate: () => {
           suppressedHighlightScrollRef.current = null;
           if (replyTarget) {
-            addReplyOptimisticComment(id, replyTarget.id, optimisticComment);
+            addReplyOptimisticComment(optimisticThreadId, replyTarget.id, optimisticComment);
             setHighlightedCommentId(optimisticCommentId);
           } else {
-            addTopLevelOptimisticComment(id, optimisticComment);
+            addTopLevelOptimisticComment(optimisticThreadId, optimisticComment);
+            if (focusedCommentId && showFocusedThread) {
+              setShowFocusedThread(false);
+              setContextComments([]);
+            }
             setHighlightedCommentId(optimisticCommentId);
             pendingScrollToEnd.current = true;
           }
@@ -1871,7 +1876,7 @@ function LegacyPostDetailScreen() {
 
           if (!confirmedCommentId) return;
 
-          replaceOptimisticCommentId(id, optimisticCommentId, confirmedCommentId);
+          replaceOptimisticCommentId(optimisticThreadId, optimisticCommentId, confirmedCommentId);
           suppressedHighlightScrollRef.current = confirmedCommentId;
 
           setHighlightedCommentId((prev) =>
@@ -1904,7 +1909,7 @@ function LegacyPostDetailScreen() {
           });
         },
         onRollback: () => {
-          removeOptimisticComment(id, optimisticCommentId);
+          removeOptimisticComment(optimisticThreadId, optimisticCommentId);
           setLocalPostUpdates((prev) => ({
             ...prev,
             comments: Math.max(
@@ -1919,7 +1924,10 @@ function LegacyPostDetailScreen() {
     [
       currentUser,
       id,
+      optimisticThreadId,
       replyingTo,
+      focusedCommentId,
+      showFocusedThread,
       displayPost,
       enqueue,
       toast,
