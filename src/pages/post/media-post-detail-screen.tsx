@@ -959,6 +959,8 @@ export default function MediaPostDetailScreen({
   const commentsListRef = useRef<any>(null);
   const commentsScrollYRef = useRef(0);
   const preciseScrollTargetRef = useRef<string | null>(null);
+  const coarseScrollTargetRef = useRef<string | null>(null);
+  const focusedInitialScrollTargetRef = useRef<string | null>(null);
   // animatedIndex is -1 when closed, 0 when at first snap point.
   // We clamp/normalize to [0,1] for collapseProgress.
   const animatedIndex = useSharedValue(-1);
@@ -1117,10 +1119,12 @@ export default function MediaPostDetailScreen({
     initialHighlightCommentId ?? null,
   );
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suppressedHighlightScrollRef = useRef<string | null>(null);
   const suppressCommentOptionsUntilRef = useRef(0);
 
   useEffect(() => {
     preciseScrollTargetRef.current = null;
+    coarseScrollTargetRef.current = null;
   }, [highlightedCommentId]);
 
   const [awardTargetId, setAwardTargetId] = useState<string>("");
@@ -1404,6 +1408,7 @@ export default function MediaPostDetailScreen({
 
   useEffect(() => {
     if (!focusedCommentId || focusedMode === "full" || displayComments.length === 0) return;
+    if (focusedInitialScrollTargetRef.current === focusedCommentId) return;
     if (highlightedCommentId && highlightedCommentId !== focusedCommentId) return;
     const containsComment = (comment: Comment): boolean => {
       if (comment.id === focusedCommentId) return true;
@@ -1414,6 +1419,7 @@ export default function MediaPostDetailScreen({
     });
     if (index < 0) return;
     const timer = setTimeout(() => {
+      focusedInitialScrollTargetRef.current = focusedCommentId;
       commentsListRef.current?.scrollToIndex?.({
         index,
         animated: true,
@@ -1430,11 +1436,17 @@ export default function MediaPostDetailScreen({
 
   useEffect(() => {
     if (!highlightedCommentId || displayComments.length === 0) return;
+    if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
+    if (highlightedCommentId.startsWith("optimistic-")) return;
     const index = displayComments.findIndex((comment) =>
       findCommentInTree(comment, highlightedCommentId),
     );
     if (index < 0) return;
+    const coarseTargetKey = `${highlightedCommentId}:${index}`;
+    if (coarseScrollTargetRef.current?.startsWith(`${highlightedCommentId}:`)) return;
     const timer = setTimeout(() => {
+      if (coarseScrollTargetRef.current?.startsWith(`${highlightedCommentId}:`)) return;
+      coarseScrollTargetRef.current = coarseTargetKey;
       commentsListRef.current?.scrollToIndex?.({
         index,
         animated: true,
@@ -1447,23 +1459,31 @@ export default function MediaPostDetailScreen({
   const handleHighlightedCommentLayout = useCallback(
     (event: LayoutChangeEvent) => {
       if (!highlightedCommentId) return;
+      if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
+      if (preciseScrollTargetRef.current?.startsWith(`${highlightedCommentId}:`)) return;
       const target = (event.nativeEvent as { target?: number }).target;
       if (!target) return;
-      const targetKey = `${highlightedCommentId}:${target}`;
+      const scheduledTargetKey = `${highlightedCommentId}:scheduled`;
+      preciseScrollTargetRef.current = scheduledTargetKey;
 
       setTimeout(() => {
         UIManager.measureInWindow(target, (_x, y, _width, height) => {
-          if (preciseScrollTargetRef.current === targetKey) return;
-          if (height <= 0) return;
+          if (preciseScrollTargetRef.current !== scheduledTargetKey) return;
+          if (height <= 0) {
+            preciseScrollTargetRef.current = null;
+            return;
+          }
 
           const desiredY = listTopY + 80;
           const delta = y - desiredY;
           if (Math.abs(delta) < 24) {
-            preciseScrollTargetRef.current = targetKey;
+            preciseScrollTargetRef.current = `${highlightedCommentId}:done`;
+            coarseScrollTargetRef.current = `${highlightedCommentId}:precise`;
             return;
           }
 
-          preciseScrollTargetRef.current = targetKey;
+          preciseScrollTargetRef.current = `${highlightedCommentId}:done`;
+          coarseScrollTargetRef.current = `${highlightedCommentId}:precise`;
           commentsListRef.current?.scrollToOffset?.({
             offset: Math.max(0, commentsScrollYRef.current + delta),
             animated: true,
@@ -1707,6 +1727,7 @@ export default function MediaPostDetailScreen({
         return commentMutation.mutateAsync({ parentId, content: finalContent });
       },
       onOptimisticUpdate: () => {
+        suppressedHighlightScrollRef.current = null;
         if (captured.replyToId) {
           addReplyOptimisticComment(id, captured.replyToId, optimisticComment);
         } else {
@@ -1731,6 +1752,7 @@ export default function MediaPostDetailScreen({
             : null;
         if (confirmedCommentId) {
           replaceOptimisticCommentId(id, optimisticCommentId, confirmedCommentId);
+          suppressedHighlightScrollRef.current = confirmedCommentId;
           setHighlightedCommentId((prev) =>
             prev === optimisticCommentId ? confirmedCommentId : prev,
           );
