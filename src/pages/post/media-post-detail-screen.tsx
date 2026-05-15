@@ -740,7 +740,6 @@ export default function MediaPostDetailScreen({
     data: focusedContextData,
     refetch: refetchFocusedContext,
     isLoading: isLoadingFocusedContext,
-    isFetching: isFetchingFocusedContext,
     isError: isFocusedContextError,
     error: focusedContextError,
   } = useQuery({
@@ -1307,7 +1306,7 @@ export default function MediaPostDetailScreen({
   const isLoadingFocusedContextThread = !!(
     focusedCommentId &&
     focusedMode === "context" &&
-    (!isFocusedCommentFetched || isLoadingFocusedContext || isFetchingFocusedContext)
+    (!isFocusedCommentFetched || isLoadingFocusedContext)
   );
 
   const displayComments = useMemo(() => {
