@@ -517,7 +517,7 @@ function LegacyPostDetailScreen() {
     if (!root?.post_id) return null;
     return isViewingComment ? root.root_post_id : root.post_id;
   }, [commentsData?.root, isViewingComment]);
-  const optimisticThreadId = actualRootPostId ?? id;
+  const optimisticThreadId = isViewingComment ? actualRootPostId ?? id : id;
 
   const highlightCommentId = typeof highlight === "string" && highlight.length > 0 ? highlight : null;
   const [showFocusedThread, setShowFocusedThread] = useState(true);

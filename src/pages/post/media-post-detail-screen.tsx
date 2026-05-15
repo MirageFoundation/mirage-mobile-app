@@ -961,6 +961,8 @@ export default function MediaPostDetailScreen({
   const preciseScrollTargetRef = useRef<string | null>(null);
   const coarseScrollTargetRef = useRef<string | null>(null);
   const focusedInitialScrollTargetRef = useRef<string | null>(null);
+  const pendingScrollToEndRef = useRef(false);
+  const pendingReplyScrollIdRef = useRef<string | null>(null);
   // animatedIndex is -1 when closed, 0 when at first snap point.
   // We clamp/normalize to [0,1] for collapseProgress.
   const animatedIndex = useSharedValue(-1);
@@ -1240,6 +1242,17 @@ export default function MediaPostDetailScreen({
     blockedUserIds,
   ]);
 
+  useEffect(() => {
+    if (!pendingScrollToEndRef.current) return;
+    if (focusedCommentId && focusedMode !== "full") return;
+    if (!allDisplayComments.some((comment) => comment.id === highlightedCommentId)) return;
+    pendingScrollToEndRef.current = false;
+    const timer = setTimeout(() => {
+      commentsListRef.current?.scrollToEnd?.({ animated: true });
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [allDisplayComments, focusedCommentId, focusedMode, highlightedCommentId]);
+
   const focusedThreadState = useMemo(() => {
     const isVisible = (comment: Comment) =>
       !hiddenCommentIds.has(comment.id) && !blockedUserIds.has(comment.author.id);
@@ -1437,7 +1450,8 @@ export default function MediaPostDetailScreen({
   useEffect(() => {
     if (!highlightedCommentId || displayComments.length === 0) return;
     if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
-    if (highlightedCommentId.startsWith("optimistic-")) return;
+    const isPendingOptimisticReply = pendingReplyScrollIdRef.current === highlightedCommentId;
+    if (highlightedCommentId.startsWith("optimistic-") && !isPendingOptimisticReply) return;
     const index = displayComments.findIndex((comment) =>
       findCommentInTree(comment, highlightedCommentId),
     );
@@ -1447,6 +1461,7 @@ export default function MediaPostDetailScreen({
     const timer = setTimeout(() => {
       if (coarseScrollTargetRef.current?.startsWith(`${highlightedCommentId}:`)) return;
       coarseScrollTargetRef.current = coarseTargetKey;
+      if (isPendingOptimisticReply) pendingReplyScrollIdRef.current = null;
       commentsListRef.current?.scrollToIndex?.({
         index,
         animated: true,
@@ -1730,12 +1745,13 @@ export default function MediaPostDetailScreen({
         suppressedHighlightScrollRef.current = null;
         if (captured.replyToId) {
           addReplyOptimisticComment(id, captured.replyToId, optimisticComment);
+          pendingReplyScrollIdRef.current = optimisticCommentId;
         } else {
           addTopLevelOptimisticComment(id, optimisticComment);
           if (focusedCommentId && focusedMode !== "full") {
             setFocusedMode("full");
           }
-          setTimeout(() => commentsListRef.current?.scrollToEnd?.({ animated: true }), 250);
+          pendingScrollToEndRef.current = true;
         }
         setHighlightedCommentId(optimisticCommentId);
         if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
