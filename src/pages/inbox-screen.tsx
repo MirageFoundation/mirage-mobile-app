@@ -286,9 +286,6 @@ export function InboxScreen() {
       const address = walletAddress ?? undefined;
       const comment = buildInboxCommentPost(reply);
       const parent = buildInboxParentPost(reply);
-      const cachedRootPost = queryClient.getQueryData<CommentsResponse>(
-        queryKeys.comments(reply.root_post_id, address),
-      )?.root;
       const focusedCommentData: CommentsResponse = {
         root: comment,
         children: [],
@@ -307,17 +304,11 @@ export function InboxScreen() {
           comment_id: reply.reply_id,
           context: [parent],
         });
-        if (cachedRootPost && reply.parent_id === reply.root_post_id) {
-          queryClient.setQueryData(queryKeys.comments(reply.root_post_id, address), {
-            root: cachedRootPost,
-            children: [comment],
-          });
-        } else {
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.comments(reply.root_post_id, address),
-          });
-        }
       }
+
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.comments(reply.root_post_id, address),
+      });
     },
     [queryClient, walletAddress],
   );
