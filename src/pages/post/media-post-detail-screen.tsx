@@ -884,8 +884,8 @@ export default function MediaPostDetailScreen({
     const list =
       shouldPreferResolvedMedia && resolved.resolvedMedia
         ? [resolved.resolvedMedia]
-        : post.media && post.media.length > 0
-        ? post.media
+        : resolved.resolvedMediaList.length > 0
+        ? resolved.resolvedMediaList
         : resolved.resolvedMedia
         ? [resolved.resolvedMedia]
         : [];
