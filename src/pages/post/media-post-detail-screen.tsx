@@ -963,6 +963,7 @@ export default function MediaPostDetailScreen({
   const focusedInitialScrollTargetRef = useRef<string | null>(null);
   const pendingScrollToEndRef = useRef(false);
   const pendingReplyScrollIdRef = useRef<string | null>(null);
+  const displayCommentsLengthRef = useRef(0);
   // animatedIndex is -1 when closed, 0 when at first snap point.
   // We clamp/normalize to [0,1] for collapseProgress.
   const animatedIndex = useSharedValue(-1);
@@ -1368,6 +1369,17 @@ export default function MediaPostDetailScreen({
     }
     return [{ ...thread, isFocusedContext: true }];
   }, [focusedCommentId, focusedMode, allDisplayComments, isLoadingFocusedContextThread, focusedThreadState]);
+  displayCommentsLengthRef.current = displayComments.length;
+
+  const scrollCommentsToIndex = useCallback((index: number, animated = true) => {
+    if (index < 0 || index >= displayCommentsLengthRef.current) return false;
+    commentsListRef.current?.scrollToIndex?.({
+      index,
+      animated,
+      viewPosition: 0.25,
+    });
+    return true;
+  }, []);
 
   useEffect(() => {
     if (!id || !commentsData?.children) return;
@@ -1440,15 +1452,12 @@ export default function MediaPostDetailScreen({
     });
     if (index < 0) return;
     const timer = setTimeout(() => {
+      if (index >= displayCommentsLengthRef.current) return;
       focusedInitialScrollTargetRef.current = focusedCommentId;
-      commentsListRef.current?.scrollToIndex?.({
-        index,
-        animated: true,
-        viewPosition: 0.25,
-      });
+      scrollCommentsToIndex(index);
     }, 350);
     return () => clearTimeout(timer);
-  }, [focusedCommentId, focusedMode, displayComments, highlightedCommentId]);
+  }, [focusedCommentId, focusedMode, displayComments, highlightedCommentId, scrollCommentsToIndex]);
 
   const findCommentInTree = useCallback((comment: Comment, targetId: string): boolean => {
     if (comment.id === targetId) return true;
@@ -1468,16 +1477,13 @@ export default function MediaPostDetailScreen({
     if (coarseScrollTargetRef.current?.startsWith(`${highlightedCommentId}:`)) return;
     const timer = setTimeout(() => {
       if (coarseScrollTargetRef.current?.startsWith(`${highlightedCommentId}:`)) return;
+      if (index >= displayCommentsLengthRef.current) return;
       coarseScrollTargetRef.current = coarseTargetKey;
       if (isPendingOptimisticReply) pendingReplyScrollIdRef.current = null;
-      commentsListRef.current?.scrollToIndex?.({
-        index,
-        animated: true,
-        viewPosition: 0.25,
-      });
+      scrollCommentsToIndex(index);
     }, 250);
     return () => clearTimeout(timer);
-  }, [highlightedCommentId, displayComments, findCommentInTree]);
+  }, [highlightedCommentId, displayComments, findCommentInTree, scrollCommentsToIndex]);
 
   const handleHighlightedCommentLayout = useCallback(
     (event: LayoutChangeEvent) => {
@@ -1988,11 +1994,7 @@ export default function MediaPostDetailScreen({
               scrollEventThrottle={16}
               onScrollToIndexFailed={({ index }: { index: number }) => {
                 setTimeout(() => {
-                  commentsListRef.current?.scrollToIndex?.({
-                    index,
-                    animated: true,
-                    viewPosition: 0.25,
-                  });
+                  scrollCommentsToIndex(index);
                 }, 300);
               }}
               contentContainerStyle={{

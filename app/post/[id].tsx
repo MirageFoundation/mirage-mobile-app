@@ -409,6 +409,7 @@ function LegacyPostDetailScreen() {
   const [giftRecipientUsername, setGiftRecipientUsername] = useState("");
   const commentInputRef = useRef<CommentInputRef>(null);
   const flatListRef = useRef<FlatList<Comment>>(null);
+  const allCommentsLengthRef = useRef(0);
 
   // State for highlighted comment (from URL param)
   const [highlightedCommentId, setHighlightedCommentId] = useState<
@@ -1380,6 +1381,17 @@ function LegacyPostDetailScreen() {
     applyEditOverridesToComment,
     filterComments,
   ]);
+  allCommentsLengthRef.current = allComments.length;
+
+  const scrollCommentsToIndex = useCallback((index: number) => {
+    if (index < 0 || index >= allCommentsLengthRef.current) return false;
+    flatListRef.current?.scrollToIndex({
+      index,
+      animated: true,
+      viewPosition: 0.1,
+    });
+    return true;
+  }, []);
 
   // Helper to find if a comment or its nested replies contain the target ID
   const findCommentInTree = useCallback(
@@ -1438,16 +1450,12 @@ function LegacyPostDetailScreen() {
           allComments[index]?.id !== highlightedCommentId;
         // Small delay to ensure layout is ready
         setTimeout(() => {
-          if (index < (allComments.length ?? 0)) {
+          if (index < allCommentsLengthRef.current) {
             if (isFocusedChain) {
               flatListRef.current?.scrollToEnd({ animated: true });
               return;
             }
-            flatListRef.current?.scrollToIndex({
-              index,
-              animated: true,
-              viewPosition: 0.1,
-            });
+            scrollCommentsToIndex(index);
           }
         }, 600);
 
@@ -1459,7 +1467,7 @@ function LegacyPostDetailScreen() {
         }, 6000);
       }
     }
-  }, [highlightedCommentId, allComments, findCommentInTree, id, focusedCommentId, contextDepth, isLoadingContext]);
+  }, [highlightedCommentId, allComments, findCommentInTree, id, focusedCommentId, contextDepth, isLoadingContext, scrollCommentsToIndex]);
 
   useEffect(() => {
     if (
@@ -2850,6 +2858,7 @@ function LegacyPostDetailScreen() {
           onScrollToIndexFailed={(info) => {
             // Fallback: scroll to offset if index not rendered yet
             setTimeout(() => {
+              if (info.index < 0 || info.index >= allCommentsLengthRef.current) return;
               flatListRef.current?.scrollToOffset({
                 offset: info.averageItemLength * info.index,
                 animated: true,
