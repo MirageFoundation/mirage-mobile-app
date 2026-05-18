@@ -4,7 +4,7 @@
 - `app/` is routing, layout, and route config only.
 - Route files should be thin wrappers over `src/pages/*`.
 - Keep navigation parsing and auth-aware deep-link behavior in `src/navigation/*`.
-- Current refactor priority: extract the remaining large route implementations from `app/` before doing effect cleanup.
+- Route/page separation is complete; keep `app/` thin during future feature work.
 
 ## Pages
 - Prefer modular feature folders under `src/pages/<feature>/*`.
@@ -29,10 +29,9 @@
 - Do not upgrade Expo, React Native, native video/media libraries, or PoW native modules as part of cleanup refactors.
 
 ## Verification Commands
-- Current available command: `bun run lint`.
-- Planned guardrails, not currently present in this codebase version:
-  - `bun run check:file-sizes`
-  - `bun run check:navigation`
-  - `bun run check:stores`
-  - `bun run check:query-keys`
-  - `bun run check:architecture`
+- `bun run lint`
+- `bun run check:file-sizes`
+- `bun run check:navigation`
+- `bun run check:stores`
+- `bun run check:query-keys`
+- `bun run check:architecture`

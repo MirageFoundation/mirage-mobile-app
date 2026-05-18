@@ -4,7 +4,7 @@
 - Created: 2026-03-26
 - Refreshed for current codebase: 2026-05-18
 - Purpose: canonical plan for cleaning up app structure, routing, cache ownership, store boundaries, effects, and file modularity.
-- Current phase: Phases 1 through 7 are complete. Phase 8 regression guardrails are next.
+- Current phase: Phases 1 through 8 are complete. The structural refactor is complete; continue using guardrails for regressions.
 - Dependency policy: this plan is for clean refactor only. Do **not** combine it with Expo/RN/video/native dependency upgrades.
 
 ---
@@ -510,17 +510,23 @@ Status: **complete**.
 
 Goal: prevent the architecture from drifting back.
 
+Status: **complete**.
+
 ### Tasks
 - Add file-size reporting under `tools/`.
+  - [x] `tools/check-file-sizes.mjs`
 - Add store-boundary checks.
+  - [x] `tools/check-store-boundaries.mjs`
 - Add raw query-key literal checks.
+  - [x] `tools/check-query-key-literals.mjs`
 - Add navigation/deep-link smoke checks.
+  - [x] `tools/check-navigation.mjs`
 - Add package scripts, using Bun:
-  - `bun run check:file-sizes`
-  - `bun run check:stores`
-  - `bun run check:query-keys`
-  - `bun run check:navigation`
-  - `bun run check:architecture`
+  - [x] `bun run check:file-sizes`
+  - [x] `bun run check:stores`
+  - [x] `bun run check:query-keys`
+  - [x] `bun run check:navigation`
+  - [x] `bun run check:architecture`
 
 ### Success Criteria
 - Guardrail commands exist and run in CI/local workflows.
@@ -530,11 +536,11 @@ Goal: prevent the architecture from drifting back.
 
 ## Immediate Next Actions
 
-1. Start Phase 8 by adding regression guardrails under `tools/`.
-2. Add Bun-backed checks for file size, store boundaries, query-key literals, and navigation smoke coverage.
-3. Continue avoiding dependency, video, native, and PoW upgrades during cleanup.
-4. Keep reusable cache mutation in `src/api/cache/*`.
-5. Add guardrail scripts in Phase 8 before relying on `check:*` commands.
+1. Run `bun run check:architecture` before future structural refactors.
+2. Continue avoiding dependency, video, native, and PoW upgrades during cleanup-only work.
+3. Keep route wrappers thin and feature implementation in `src/pages/*`.
+4. Keep navigation, query/cache, and store ownership inside their canonical directories.
+5. Treat large implementation-file warnings as future product/refactor backlog, not current blockers.
 
 ---
 
@@ -542,5 +548,10 @@ Goal: prevent the architecture from drifting back.
 
 Current `package.json` scripts:
 - `bun run lint`
+- `bun run check:file-sizes`
+- `bun run check:stores`
+- `bun run check:query-keys`
+- `bun run check:navigation`
+- `bun run check:architecture`
 
-The old docs referenced guardrail scripts under `tools/`, but those files are not present in this version of the repo. Add them in Phase 8 before relying on commands like `check:file-sizes` or `check:architecture`.
+`bun run check:architecture` currently passes. `check:file-sizes` reports remaining large implementation files as warnings while failing route/page-container regressions.

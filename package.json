@@ -10,7 +10,12 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "prebuild:fdroid": "EXPO_PUBLIC_FDROID=true expo prebuild --platform android --no-install",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "check:file-sizes": "bun tools/check-file-sizes.mjs",
+    "check:stores": "bun tools/check-store-boundaries.mjs",
+    "check:query-keys": "bun tools/check-query-key-literals.mjs",
+    "check:navigation": "bun tools/check-navigation.mjs",
+    "check:architecture": "bun tools/check-architecture.mjs"
   },
   "dependencies": {
     "@docren/react-native-markdown": "^0.8.5",
