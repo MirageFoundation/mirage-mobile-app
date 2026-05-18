@@ -687,7 +687,7 @@ function LegacyPostDetailScreen() {
     ];
 
     queryClient.setQueriesData<InfiniteData<PostsResponse>>(
-      { queryKey: ["posts"] },
+      { queryKey: queryKeys.postsRoot() },
       (old) => {
         if (!old?.pages) return old;
 
@@ -960,7 +960,7 @@ function LegacyPostDetailScreen() {
     const targetId = actualRootPostId ?? id;
 
     const cachedQueries = queryClient.getQueriesData<InfiniteData<PostsResponse>>({
-      queryKey: ["posts"],
+      queryKey: queryKeys.postsRoot(),
     });
 
     for (const [, queryData] of cachedQueries) {

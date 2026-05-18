@@ -9,6 +9,7 @@ export const queryKeys = {
   // User
   userStatus: (address: string) => ["user", "status", address] as const,
   profile: (address: string) => ["user", "profile", address] as const,
+  userPostsRoot: () => ["user", "posts"] as const,
   userPosts: (owner: string, type?: string, allowedTags?: string) =>
     ["user", "posts", owner, type, allowedTags] as const,
   userFollowed: (address: string) => ["user", "followed", address] as const,
@@ -17,12 +18,17 @@ export const queryKeys = {
   similarUsers: (address: string) => ["user", "similar", address] as const,
 
   // Posts & Feed
+  postsRoot: () => ["posts"] as const,
+  commentsRoot: () => ["comments"] as const,
   posts: (filters: PostFilters) => ["posts", filters] as const,
   comments: (postId: string, address?: string) =>
     ["comments", postId, address] as const,
   rootPostId: (commentId: string) => ["rootPostId", commentId] as const,
+  commentContextRoot: () => ["commentContext"] as const,
   commentContext: (commentId: string, maxDepth?: number) =>
     ["commentContext", commentId, maxDepth] as const,
+  batchUsernamesRoot: () => ["batchUsernames"] as const,
+  batchUsernames: (stableKey: string) => ["batchUsernames", stableKey] as const,
 
   // Inbox
   inbox: (address: string, page?: number) =>
@@ -31,6 +37,7 @@ export const queryKeys = {
     ["inbox", "infinite", address] as const,
 
   // Topics
+  topicsRoot: () => ["topics"] as const,
   topics: (limit?: number, allowedTags?: string) => ["topics", limit, allowedTags] as const,
   searchTopics: (query: string, limit?: number, allowedTags?: string) =>
     ["topics", "search", query, limit, allowedTags] as const,
@@ -65,6 +72,7 @@ export const queryKeys = {
 
   // Peers
   peers: () => ["peers"] as const,
+  peersSource: () => ["peers", "source"] as const,
 
  // Invite Code
  inviteCode: (code: string) => ["inviteCode", code] as const,

@@ -847,7 +847,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         if (userAddress) {
           const type = index === 0 ? "submissions" : "comments";
           queryClient.invalidateQueries({
-            queryKey: ["user", "posts", userAddress, type],
+            queryKey: queryKeys.userPosts(userAddress, type),
           });
         }
       } finally {

@@ -3,6 +3,7 @@ import { useWallet } from "@/src/hooks/use-wallet";
 import { claimReward, type ClaimRewardInput, type ClaimRewardResponse } from "../endpoints/rewards";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { useAuthStore } from "@/src/stores";
+import { mutationKeys } from "../mutation-keys";
 import type { PoWProgress } from "../signing";
 import * as Sentry from "@sentry/react-native";
 
@@ -18,6 +19,7 @@ export function useClaimReward(options?: UseClaimRewardOptions) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
 
   return useMutation({
+    mutationKey: mutationKeys.rewards.claim(),
     mutationFn: async (input: ClaimRewardInput) => {
       const wallet = await getWallet();
       return claimReward(wallet, input, options?.onPoWProgress);

@@ -255,19 +255,19 @@ export function ChangeUsernameScreen() {
           username,
         );
 
-        queryClient.getQueriesData({ queryKey: ["posts"] }).forEach(([key]) => {
+        queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }).forEach(([key]) => {
           queryClient.setQueryData(key, (old: any) => updateCachedPostData(old));
         });
-        queryClient.getQueriesData({ queryKey: ["user", "posts"] }).forEach(([key]) => {
+        queryClient.getQueriesData({ queryKey: queryKeys.userPostsRoot() }).forEach(([key]) => {
           queryClient.setQueryData(key, (old: any) => updateCachedPostData(old));
         });
-        queryClient.getQueriesData({ queryKey: ["comments"] }).forEach(([key]) => {
+        queryClient.getQueriesData({ queryKey: queryKeys.commentsRoot() }).forEach(([key]) => {
           queryClient.setQueryData(key, (old: any) => updateCachedPostData(old));
         });
-        queryClient.getQueriesData({ queryKey: ["commentContext"] }).forEach(([key]) => {
+        queryClient.getQueriesData({ queryKey: queryKeys.commentContextRoot() }).forEach(([key]) => {
           queryClient.setQueryData(key, (old: any) => updateCachedPostData(old));
         });
-        queryClient.getQueriesData({ queryKey: ["batchUsernames"] }).forEach(([key]) => {
+        queryClient.getQueriesData({ queryKey: queryKeys.batchUsernamesRoot() }).forEach(([key]) => {
           queryClient.setQueryData(key, (old: any) => {
             if (!old || typeof old !== "object") return old;
             return { ...old, [walletAddr.toLowerCase()]: username };
@@ -284,10 +284,10 @@ export function ChangeUsernameScreen() {
         queryClient.cancelQueries({
           queryKey: queryKeys.profile(walletAddr),
         });
-        queryClient.cancelQueries({ queryKey: ["posts"] });
-        queryClient.cancelQueries({ queryKey: ["user", "posts"] });
-        queryClient.cancelQueries({ queryKey: ["comments"] });
-        queryClient.cancelQueries({ queryKey: ["commentContext"] });
+        queryClient.cancelQueries({ queryKey: queryKeys.postsRoot() });
+        queryClient.cancelQueries({ queryKey: queryKeys.userPostsRoot() });
+        queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() });
+        queryClient.cancelQueries({ queryKey: queryKeys.commentContextRoot() });
 
         setTimeout(() => {
           applyOptimisticUpdates();
@@ -308,19 +308,19 @@ export function ChangeUsernameScreen() {
             queryKey: queryKeys.usernameFromAddress(walletAddr),
           });
           queryClient.invalidateQueries({
-            queryKey: ["batchUsernames"],
+            queryKey: queryKeys.batchUsernamesRoot(),
           });
           queryClient.invalidateQueries({
-            queryKey: ["posts"],
+            queryKey: queryKeys.postsRoot(),
           });
           queryClient.invalidateQueries({
-            queryKey: ["user", "posts"],
+            queryKey: queryKeys.userPostsRoot(),
           });
           queryClient.invalidateQueries({
-            queryKey: ["comments"],
+            queryKey: queryKeys.commentsRoot(),
           });
           queryClient.invalidateQueries({
-            queryKey: ["commentContext"],
+            queryKey: queryKeys.commentContextRoot(),
           });
         }, 15000);
       }

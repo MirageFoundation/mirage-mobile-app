@@ -9,6 +9,7 @@ import { queryKeys } from "@/src/api/read/query-keys";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { useAuthStore } from "@/src/stores";
 import { setUsername, type SetUsernameInput } from "../endpoints/username";
+import { mutationKeys } from "../mutation-keys";
 import type { PoWProgress } from "../signing";
 
 // ============================================
@@ -42,6 +43,7 @@ export function useSetUsername(options: UseSetUsernameOptions = {}) {
   const setHasUsername = useAuthStore((s) => s.setHasUsername);
 
   return useMutation({
+    mutationKey: mutationKeys.username.set(),
     mutationFn: async (input: SetUsernameInput) => {
       const wallet = await getWallet();
       return setUsername(wallet, input, options.onPoWProgress);

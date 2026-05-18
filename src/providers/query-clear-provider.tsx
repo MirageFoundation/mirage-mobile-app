@@ -23,7 +23,6 @@ export const QueryClearProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const clearQueries = async () => {
     queryClient.removeQueries();
-    queryClient.clear();
   };
 
   return (

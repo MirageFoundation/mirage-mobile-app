@@ -159,7 +159,7 @@ function patchRootMetadataIntoPostQueries(
   root: ApiPost,
 ) {
   queryClient.setQueriesData<InfiniteData<PostsResponse>>(
-    { queryKey: ["posts"] },
+    { queryKey: queryKeys.postsRoot() },
     (old) => {
       if (!old?.pages) return old;
 

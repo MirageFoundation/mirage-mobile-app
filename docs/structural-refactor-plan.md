@@ -4,7 +4,7 @@
 - Created: 2026-03-26
 - Refreshed for current codebase: 2026-05-18
 - Purpose: canonical plan for cleaning up app structure, routing, cache ownership, store boundaries, effects, and file modularity.
-- Current phase: Phases 1 and 2 are complete. Next phase is Phase 3 query/cache ownership cleanup.
+- Current phase: Phases 1, 2, and 3 are complete. Next phase is Phase 4 store/domain boundary cleanup.
 - Dependency policy: this plan is for clean refactor only. Do **not** combine it with Expo/RN/video/native dependency upgrades.
 
 ---
@@ -376,19 +376,22 @@ Status: **complete**.
 
 Goal: TanStack Query owns server state with centralized keys and reusable cache helpers.
 
+Status: **complete**.
+
 ### Tasks
-- Create `src/api/write/mutation-keys.ts`.
-- Add `mutationKey` to write hooks.
-- Create `src/api/cache/*` helpers for repeated post/comment/user cache fanout.
-- Replace raw query keys in high-churn files first:
-  - `src/api/write/hooks/use-post.ts`
-  - `src/api/write/hooks/use-vote.ts`
-  - `src/api/write/hooks/use-award.ts`
-  - `src/api/write/hooks/use-block.ts`
-  - `src/api/write/hooks/use-follow.ts`
-  - `src/pages/create-screen.tsx`
-  - `src/pages/change-username-screen.tsx`
-- Replace normal-flow `queryClient.clear()` with targeted invalidation/removal.
+- [x] Create `src/api/write/mutation-keys.ts`.
+- [x] Add `mutationKey` to write hooks and upload mutation.
+- [x] Create `src/api/cache/*` helpers for repeated post/comment/server cache fanout.
+- [x] Replace raw query keys in high-churn files first:
+  - [x] `src/api/write/hooks/use-post.ts`
+  - [x] `src/api/write/hooks/use-vote.ts`
+  - [x] `src/api/write/hooks/use-award.ts`
+  - [x] `src/api/write/hooks/use-block.ts`
+  - [x] `src/api/write/hooks/use-follow.ts`
+  - [x] `src/pages/create-screen.tsx`
+  - [x] `src/pages/change-username-screen.tsx`
+- [x] Replace remaining direct raw query-key literals found by the current search pass.
+- [x] Replace normal-flow `queryClient.clear()` with targeted invalidation/removal.
 
 ### Success Criteria
 - Query key literals are centralized or isolated behind approved helpers.
@@ -502,10 +505,10 @@ Goal: prevent the architecture from drifting back.
 
 ## Immediate Next Actions
 
-1. Start Phase 3 by creating `src/api/write/mutation-keys.ts`.
-2. Add `mutationKey` to write hooks in small batches.
-3. Add `src/api/cache/*` helpers for repeated post/comment/user cache fanout.
-4. Replace normal-flow `queryClient.clear()` with targeted invalidation/removal.
+1. Start Phase 4 by moving page/component-coupled store types into `src/domain/*` or store-safe modules.
+2. Repoint stores away from `src/pages/*` and `src/components/*` imports.
+3. Move `src/pages/home/home-post-card-store.ts` into `src/stores/*` and update imports.
+4. Keep query/cache orchestration out of Zustand stores.
 5. Do not touch video/native dependencies while doing this cleanup.
 
 ---

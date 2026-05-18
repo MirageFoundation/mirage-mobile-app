@@ -344,7 +344,7 @@ export function AgentsScreen() {
               queryKey: queryKeys.profile(addr),
             });
           }
-          queryClient.invalidateQueries({ queryKey: ["posts"] });
+          queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
         }, 15000);
        } catch (error) {
         Sentry.captureException(error, {

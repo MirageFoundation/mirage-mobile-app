@@ -1,4 +1,5 @@
 import { getNodeConfig } from "@/src/api/read/endpoints/parameters";
+import { resetServerScopedCache } from "@/src/api/cache/server-cache";
 import { queryKeys } from "@/src/api/read/query-keys";
 import type { NodeConfigResponse } from "@/src/api/types";
 import { RecoveryPhraseInput } from "@/src/components/molecules";
@@ -285,7 +286,7 @@ export default function LoginScreen() {
                       setSwitchingServer(server);
                       try {
                         apiClient.setBaseUrl(`https://${server}`);
-                        queryClient.clear();
+                        resetServerScopedCache(queryClient);
                         await getNodeConfig();
                         setActiveServer(server);
                         setApiServer(server);
@@ -387,7 +388,7 @@ export default function LoginScreen() {
                 setIsSwitchingReg(true);
                 try {
                   apiClient.setBaseUrl(`https://${target}`);
-                  queryClient.clear();
+                  resetServerScopedCache(queryClient);
                   const config = await getNodeConfig();
                   setActiveServer(target);
                   setApiServer(target);

@@ -7,6 +7,7 @@ import { mergeAudioVideo } from "@/src/utils/merge-audio-video";
 import { sanitizeTopicName } from "@/src/utils/topic-validation";
 import { trimToMaxDuration } from "@/src/utils/video-processing";
 import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/src/api/read/query-keys";
 import * as Sentry from "@sentry/react-native";
 import { getApiErrorMessage, parseApiError } from "@/src/utils/parse-api-error";
 import { isPowCancelled } from "@/src/wallet";
@@ -1683,13 +1684,13 @@ export function CreateScreen() {
           }
           return data;
         };
-        queryClient.getQueriesData({ queryKey: ["posts"] }).forEach(([key]) => {
+        queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }).forEach(([key]) => {
           queryClient.setQueryData(key, (old: any) => applyToData(old));
         });
-        queryClient.getQueriesData({ queryKey: ["user", "posts"] }).forEach(([key]) => {
+        queryClient.getQueriesData({ queryKey: queryKeys.userPostsRoot() }).forEach(([key]) => {
           queryClient.setQueryData(key, (old: any) => applyToData(old));
         });
-        queryClient.getQueriesData<any>({ queryKey: ["comments"] }).forEach(([key, data]) => {
+        queryClient.getQueriesData<any>({ queryKey: queryKeys.commentsRoot() }).forEach(([key, data]) => {
           if (data?.root?.post_id === editPostId) {
             queryClient.setQueryData(key, {
               ...data,
@@ -2575,7 +2576,7 @@ export function CreateScreen() {
             >
               <Feather name="alert-triangle" size={14} color={theme.colors.warning[500]} />
               <Text size="xs" style={{ color: theme.colors.warning[500], flex: 1 }}>
-                Please don't leave the app while images are uploading
+                Please do not leave the app while images are uploading
               </Text>
             </Animated.View>
           )}
@@ -2598,7 +2599,7 @@ export function CreateScreen() {
             >
               <Feather name="alert-triangle" size={14} color={theme.colors.warning[500]} />
               <Text size="xs" style={{ color: theme.colors.warning[500], flex: 1 }}>
-                Please don't leave the app while the video is uploading
+                Please do not leave the app while the video is uploading
               </Text>
             </Animated.View>
           )}

@@ -16,6 +16,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { useWelcomeStats } from "@/src/api/read/hooks/use-stats";
 import { useNodeConfig } from "@/src/api/read/hooks/use-parameters";
+import { resetServerScopedCache } from "@/src/api/cache/server-cache";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useToast } from "@/src/providers/toast-provider";
@@ -73,8 +74,7 @@ export function LoggedOutHome() {
       const newServer = otherServer;
       console.log("[LoggedOutHome] Switching server to:", newServer);
       apiClient.setBaseUrl(`https://${newServer}`);
-      queryClient.clear();
-      await queryClient.invalidateQueries();
+      resetServerScopedCache(queryClient);
 
       const result = await refetchNodeConfig();
 
@@ -424,8 +424,7 @@ export function LoggedOutHome() {
                       setSwitchingServer(server);
                       try {
                         apiClient.setBaseUrl(`https://${server}`);
-                        queryClient.clear();
-                        await queryClient.invalidateQueries();
+                        resetServerScopedCache(queryClient);
                         await refetchNodeConfig();
                         setApiServer(server);
                         toast.success(`Switched to ${server}`);

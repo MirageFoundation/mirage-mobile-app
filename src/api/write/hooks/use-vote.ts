@@ -10,6 +10,7 @@ import { queryKeys } from "@/src/api/read/query-keys";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { useTxStatusPolling } from "@/src/api/read/hooks/use-tx-status";
 import { vote, type VoteDirection } from "../endpoints/vote";
+import { mutationKeys } from "../mutation-keys";
 import type { PoWProgress } from "../signing";
 import * as Sentry from "@sentry/react-native";
 
@@ -45,6 +46,7 @@ export function useVote(options: UseVoteOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.vote.create(),
     mutationFn: async ({ target, direction }: VoteMutationInput) => {
       const wallet = await getWallet();
       return vote(wallet, { target, direction }, options.onPoWProgress);
@@ -55,11 +57,11 @@ export function useVote(options: UseVoteOptions = {}) {
       // The optimistic update already shows the correct state
       // Posts will be refetched on next navigation or pull-to-refresh
       queryClient.invalidateQueries({ 
-        queryKey: ["posts"],
+        queryKey: queryKeys.postsRoot(),
         refetchType: "none",
       });
       queryClient.invalidateQueries({ 
-        queryKey: ["comments"],
+        queryKey: queryKeys.commentsRoot(),
         refetchType: "none",
       });
 
@@ -124,6 +126,7 @@ export function useOptimisticVote(options: UseVoteOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.vote.optimistic(),
     mutationFn: async ({ target, direction }: VoteMutationInput) => {
       const wallet = await getWallet();
       return vote(wallet, { target, direction }, options.onPoWProgress);
@@ -131,13 +134,13 @@ export function useOptimisticVote(options: UseVoteOptions = {}) {
     // Optimistic update before the mutation completes
     onMutate: async ({ target, direction }) => {
       // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ["posts"] });
-      await queryClient.cancelQueries({ queryKey: ["comments"] });
+      await queryClient.cancelQueries({ queryKey: queryKeys.postsRoot() });
+      await queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() });
 
       // Snapshot previous data for rollback
-      const previousPosts = queryClient.getQueriesData({ queryKey: ["posts"] });
+      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() });
       const previousComments = queryClient.getQueriesData({
-        queryKey: ["comments"],
+        queryKey: queryKeys.commentsRoot(),
       });
 
       // Optimistically update the vote in cache
@@ -167,11 +170,11 @@ export function useOptimisticVote(options: UseVoteOptions = {}) {
       // This prevents the refreshing indicator from showing
       // Posts will be refetched on next navigation or pull-to-refresh
       queryClient.invalidateQueries({ 
-        queryKey: ["posts"],
+        queryKey: queryKeys.postsRoot(),
         refetchType: "none",
       });
       queryClient.invalidateQueries({ 
-        queryKey: ["comments"],
+        queryKey: queryKeys.commentsRoot(),
         refetchType: "none",
       });
 

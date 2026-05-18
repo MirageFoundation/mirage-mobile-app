@@ -426,10 +426,10 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
         ]);
         if (user?.walletAddress) {
           queryClient.invalidateQueries({
-            queryKey: ["user", "posts", user.walletAddress],
+            queryKey: queryKeys.userPosts(user.walletAddress),
           });
           queryClient.invalidateQueries({
-            queryKey: ["user", "blocked", user.walletAddress],
+            queryKey: queryKeys.userBlocked(user.walletAddress),
           });
         }
       } finally {
@@ -454,10 +454,10 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
         refetchUserStatus();
         refetchProfile();
         queryClient.invalidateQueries({
-          queryKey: ["user", "posts", user.walletAddress],
+          queryKey: queryKeys.userPosts(user.walletAddress),
         });
         queryClient.invalidateQueries({
-          queryKey: ["user", "blocked", user.walletAddress],
+          queryKey: queryKeys.userBlocked(user.walletAddress),
         });
       }
     }, [showBars, queryClient, user?.walletAddress, refetchUserStatus, refetchProfile]),
@@ -763,10 +763,10 @@ useEffect(() => {
         ]);
         if (user?.walletAddress) {
           queryClient.invalidateQueries({
-            queryKey: ["user", "posts", user.walletAddress],
+            queryKey: queryKeys.userPosts(user.walletAddress),
           });
           queryClient.invalidateQueries({
-            queryKey: ["user", "blocked", user.walletAddress],
+            queryKey: queryKeys.userBlocked(user.walletAddress),
           });
         }
       } finally {

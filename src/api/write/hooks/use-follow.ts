@@ -16,6 +16,7 @@ import {
 import type { PoWProgress, WriteResponse } from "../signing";
 import * as Sentry from "@sentry/react-native";
 import { parseApiError } from "@/src/utils/parse-api-error";
+import { mutationKeys } from "../mutation-keys";
 
 const addFollowBreadcrumb = (
   operation: string,
@@ -31,7 +32,7 @@ const addFollowBreadcrumb = (
 
 const markPostsStaleWithoutRefetch = (queryClient: ReturnType<typeof useQueryClient>) => {
   queryClient.invalidateQueries({
-    queryKey: ["posts"],
+    queryKey: queryKeys.postsRoot(),
     refetchType: "none",
   });
   addFollowBreadcrumb("Posts marked stale without active refetch");
@@ -59,6 +60,7 @@ export function useFollowUser(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.follow.user(),
     mutationFn: async (userAddress: string) => {
       const wallet = await getWallet();
       return followUser(wallet, userAddress, options.onPoWProgress);
@@ -83,6 +85,7 @@ export function useUnfollowUser(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.follow.unfollowUser(),
     mutationFn: async (userAddress: string) => {
       const wallet = await getWallet();
       return unfollowUser(wallet, userAddress, options.onPoWProgress);
@@ -110,6 +113,7 @@ export function useFollowTopic(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.follow.topic(),
     mutationFn: async (topic: string) => {
       const wallet = await getWallet();
       return followTopic(wallet, topic, options.onPoWProgress);
@@ -134,6 +138,7 @@ export function useUnfollowTopic(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.follow.unfollowTopic(),
     mutationFn: async (topic: string) => {
       const wallet = await getWallet();
       return unfollowTopic(wallet, topic, options.onPoWProgress);
@@ -161,6 +166,7 @@ export function useEnableAgent(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.follow.enableAgent(),
     mutationFn: async (agentAddress: string) => {
       const wallet = await getWallet();
       return enableAgent(wallet, agentAddress, options.onPoWProgress);
@@ -185,6 +191,7 @@ export function useDisableAgent(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.follow.disableAgent(),
     mutationFn: async (agentAddress: string) => {
       const wallet = await getWallet();
       return disableAgent(wallet, agentAddress, options.onPoWProgress);
@@ -221,6 +228,7 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.follow.toggleTopic(),
     mutationFn: async ({
       topic,
       isCurrentlyFollowing,
@@ -371,6 +379,7 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.follow.toggleUser(),
     mutationFn: async ({
       userAddress,
       isCurrentlyFollowing,
