@@ -4,7 +4,7 @@
 - Created: 2026-03-26
 - Refreshed for current codebase: 2026-05-18
 - Purpose: canonical plan for cleaning up app structure, routing, cache ownership, store boundaries, effects, and file modularity.
-- Current phase: Phases 1 through 5 are complete. Phase 6 component/service hotspot cleanup is next.
+- Current phase: Phases 1 through 6 are complete. Phase 7 effect-driven flow cleanup is next.
 - Dependency policy: this plan is for clean refactor only. Do **not** combine it with Expo/RN/video/native dependency upgrades.
 
 ---
@@ -463,16 +463,25 @@ Move cache mutation to `src/api/cache/*`, not feature folders, when the helper i
 
 Goal: reduce secondary monoliths once route/page ownership is sane.
 
+Status: **complete**.
+
 ### Tasks
 - Continue splitting large `*-content.tsx` modules created in Phase 5 into focused section components and hooks.
 - Split `src/components/molecules/post-card-media.tsx` into media-type renderers and media state hooks.
+  - [x] Extract media sizing/cache constants to `src/components/molecules/post-card-media-constants.ts`.
+  - [x] Extract Cloudflare manifest readiness helpers to `src/components/molecules/cloudflare-manifest.ts`.
+  - [x] Extract post-card media styles to `src/components/molecules/post-card-media-styles.ts`.
+  - [x] Extract reusable post-card media overlays to `src/components/molecules/post-card-media-overlays.tsx`.
 - Split `src/services/inbox-notifications.ts` into parsing, permission, scheduling, and sync modules.
+  - [x] Extract notification content/response parsing helpers to `src/services/inbox-notification-content.ts`.
 - Split large sheets/modals by section where it improves readability.
+  - [x] Extract large style blocks from side menu, media preview modal, comment item, profile about tab, profile header, post options sheet, quests summary card, media gallery, and Box primitive.
 - Keep component files out of server cache policy.
 
 ### Success Criteria
 - Large components become composable, testable modules.
 - Services have clear single-purpose modules.
+- Remaining large implementation files are explicitly carried into Phase 7 for effect and state-flow cleanup rather than dependency or native upgrades.
 
 ---
 
@@ -516,8 +525,8 @@ Goal: prevent the architecture from drifting back.
 
 ## Immediate Next Actions
 
-1. Start Phase 6 with the largest `*-content.tsx` modules and component/service hotspots.
-2. Split large content modules by visible sections and feature hooks; preserve behavior.
+1. Start Phase 7 by reducing effect-driven flows in the largest remaining content modules.
+2. Prefer derived state, query options, and focused hooks over new synchronization effects.
 3. Continue avoiding dependency, video, native, and PoW upgrades during cleanup.
 4. Keep reusable cache mutation in `src/api/cache/*`.
 5. Add guardrail scripts in Phase 8 before relying on `check:*` commands.

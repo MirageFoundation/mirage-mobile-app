@@ -1,8 +1,6 @@
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
-import { BlurView } from "expo-blur";
-import axios from "axios";
 import * as Sentry from "@sentry/react-native";
 import { Audio, AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
@@ -20,14 +18,12 @@ import { type ImageLoadEventData } from "expo-image";
 import {
   ActivityIndicator,
   AppState,
-  Dimensions,
   Linking,
   Platform,
   Pressable,
   View,
   type GestureResponderEvent,
 } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
 import YoutubePlayer from "react-native-youtube-iframe";
 import type { YoutubeIframeRef } from "react-native-youtube-iframe";
 import { extractYouTubeVideoId, getVideoThumbnailUri, type ResolvedMedia } from "./post-card-utils";
@@ -43,11 +39,26 @@ import {
   type YouTubeAutoplayEmbedRef,
 } from "./youtube-autoplay-embed";
 import { useNetworkState } from "@/src/hooks/use-network-state";
-
-
-const SCREEN_WIDTH = Dimensions.get("window").width;
-const MEDIA_MAX_HEIGHT = 450;
-const MEDIA_HORIZONTAL_PADDING = 32; // md padding * 2
+import {
+  CLOUD_FLARE_PROCESSING_MAX_WAIT_MS,
+  CLOUD_FLARE_PROCESSING_POLL_INTERVAL_MS,
+  isCloudflareManifestReady,
+} from "./cloudflare-manifest";
+import {
+  MEDIA_ASPECT_RATIO_CACHE,
+  MEDIA_HORIZONTAL_PADDING,
+  MEDIA_LOADED_CACHE,
+  MEDIA_MAX_HEIGHT,
+  SCREEN_WIDTH,
+  getMediaAspectRatio,
+} from "./post-card-media-constants";
+import {
+  MediaBlurRevealOverlay,
+  MediaOfflineOverlay,
+  MediaProcessingOverlay,
+  MediaTypeBadge,
+} from "./post-card-media-overlays";
+import { styles } from "./post-card-media-styles";
 
 export type PostCardMediaRef = {
   pauseVideo: () => void;
@@ -72,88 +83,11 @@ type PostCardMediaProps = {
   videoSyncScope?: string;
 };
 
-const MEDIA_ASPECT_RATIO_CACHE = new Map<string, number>();
-const MEDIA_LOADED_CACHE = new Set<string>();
-const CLOUD_FLARE_PROCESSING_POLL_INTERVAL_MS = 2500;
-const CLOUD_FLARE_PROCESSING_MAX_WAIT_MS = 120000;
-const CLOUD_FLARE_PROCESSING_REQUEST_TIMEOUT_MS = 4000;
 let nextNativeAudioFocusId = 0;
 let activeNativeAudioFocus: {
   id: string;
   onLoseFocus: () => void;
 } | null = null;
-
-function extractFirstPlaylistUrl(manifestUrl: string, manifestText: string): string | null {
-  const lines = manifestText
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const playlistLine = lines.find(
-    (line) => !line.startsWith("#") && line.endsWith(".m3u8")
-  );
-
-  if (!playlistLine) return null;
-
-  try {
-    return new URL(playlistLine, manifestUrl).toString();
-  } catch {
-    return null;
-  }
-}
-
-async function isCloudflareManifestReady(manifestUrl: string, signal?: AbortSignal): Promise<boolean> {
-  const manifestResponse = await axios.get<string>(manifestUrl, {
-    timeout: CLOUD_FLARE_PROCESSING_REQUEST_TIMEOUT_MS,
-    responseType: "text",
-    signal,
-    headers: {
-      Accept: "application/vnd.apple.mpegurl,application/x-mpegURL,*/*",
-    },
-  });
-
-  const manifestText = typeof manifestResponse.data === "string"
-    ? manifestResponse.data
-    : String(manifestResponse.data ?? "");
-
-  if (!manifestText.includes("#EXTM3U")) return false;
-
-  const childPlaylistUrl = extractFirstPlaylistUrl(manifestUrl, manifestText);
-  if (!childPlaylistUrl) {
-    return manifestText.includes("#EXTINF") || manifestText.includes("#EXT-X-TARGETDURATION");
-  }
-
-  const childPlaylistResponse = await axios.get<string>(childPlaylistUrl, {
-    timeout: CLOUD_FLARE_PROCESSING_REQUEST_TIMEOUT_MS,
-    responseType: "text",
-    signal,
-    headers: {
-      Accept: "application/vnd.apple.mpegurl,application/x-mpegURL,*/*",
-    },
-  });
-
-  const childPlaylistText = typeof childPlaylistResponse.data === "string"
-    ? childPlaylistResponse.data
-    : String(childPlaylistResponse.data ?? "");
-
-  return childPlaylistText.includes("#EXTM3U") && (
-    childPlaylistText.includes("#EXTINF") || childPlaylistText.includes("#EXT-X-TARGETDURATION")
-  );
-}
-
-function getMediaAspectRatio(media?: ResolvedMedia): number {
-  if (!media) return 16 / 9;
-  const cached = media.uri
-    ? MEDIA_ASPECT_RATIO_CACHE.get(media.uri)
-    : undefined;
-  if (cached) return cached;
-  if (media.aspectRatio) return media.aspectRatio;
-  if (media.width && media.height) {
-    return media.width / media.height;
-  }
-  if (media.type === "video") return 4 / 3;
-  return 16 / 9;
-}
 
 export const PostCardMedia = memo(
   forwardRef<PostCardMediaRef, PostCardMediaProps>(function PostCardMedia(
@@ -1076,27 +1010,10 @@ export const PostCardMedia = memo(
               isVisible={isVisible}
               isFocused={isFocused}
               isPostDetail={isPostDetail}
-             shouldBlurContent={shouldBlurContent}
-             onRevealContent={onRevealContent}
+              shouldBlurContent={shouldBlurContent}
+              onRevealContent={onRevealContent}
             />
-            {!isConnected && !shouldBlurContent && !mediaLoaded && (
-              <View style={styles.processingOverlay}>
-                <Ionicons name="cloud-offline-outline" size={32} color="#fff" />
-                <Text
-                  size="sm"
-                  weight="semibold"
-                  style={{ color: "#fff", marginTop: 8 }}
-                >
-                  No internet connection
-                </Text>
-                <Text
-                  size="xs"
-                  style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}
-                >
-                  Check your network and try again
-                </Text>
-              </View>
-            )}
+            <MediaOfflineOverlay visible={!isConnected && !shouldBlurContent && !mediaLoaded} />
             <View style={styles.borderOverlay} pointerEvents="none" />
           </View>
         </View>
@@ -1520,43 +1437,12 @@ export const PostCardMedia = memo(
             </Pressable>
           )}
 
-          {isVideoProcessing && isRetryableVideo && isConnected && (
-            <View style={styles.processingOverlay}>
-              <ActivityIndicator size="large" color="#fff" />
-              <Text
-                size="sm"
-                weight="semibold"
-                style={{ color: "#fff", marginTop: 8 }}
-              >
-                {isRedgifsVideo ? "Loading video..." : "Video is still processing."}
-              </Text>
-              <Text
-                size="xs"
-                style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}
-              >
-                {isRedgifsVideo ? "Retrying..." : "It may take a few moments."}
-              </Text>
-            </View>
-          )}
+          <MediaProcessingOverlay
+            visible={isVideoProcessing && isRetryableVideo && isConnected}
+            isRedgifsVideo={isRedgifsVideo}
+          />
 
-          {!isConnected && !shouldBlurContent && !mediaLoaded && (
-            <View style={styles.processingOverlay}>
-              <Ionicons name="cloud-offline-outline" size={32} color="#fff" />
-              <Text
-                size="sm"
-                weight="semibold"
-                style={{ color: "#fff", marginTop: 8 }}
-              >
-                No internet connection
-              </Text>
-              <Text
-                size="xs"
-                style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}
-              >
-                Check your network and try again
-              </Text>
-            </View>
-          )}
+          <MediaOfflineOverlay visible={!isConnected && !shouldBlurContent && !mediaLoaded} />
 
           {hasMultipleMedia && (
             <View style={styles.multiMediaBadge}>
@@ -1566,279 +1452,15 @@ export const PostCardMedia = memo(
             </View>
           )}
 
-          {/* Blur overlay with reveal button */}
-          {shouldBlurContent && (
-            <Pressable onPress={onRevealContent} style={styles.blurOverlay}>
-              {Platform.OS === "ios" ? (
-                <BlurView
-                  intensity={80}
-                  tint="dark"
-                  style={styles.blurViewFill}
-                >
-                  <View style={styles.revealTextContainer}>
-                    <Ionicons name="eye-outline" size={24} color="#fff" />
-                    <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                      Tap to reveal
-                    </Text>
-                  </View>
-                </BlurView>
-              ) : (
-                <View style={styles.androidBlurOverlay}>
-                  <Ionicons name="eye-outline" size={24} color="#fff" />
-                  <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                    Tap to reveal
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-          )}
+          <MediaBlurRevealOverlay
+            visible={shouldBlurContent}
+            onRevealContent={onRevealContent}
+          />
 
-          {/* Video badge - placed after blur so it's always visible */}
-          {media.type === "video" && (
-            <View style={styles.videoBadge}>
-              <Text size="xs" weight="bold" style={{ color: "#fff" }}>
-                VIDEO
-              </Text>
-            </View>
-          )}
-
-          {/* GIF badge - placed after blur so it's always visible */}
-          {media.type === "gif" && (
-            <View style={styles.gifBadge}>
-              <Text size="xs" weight="bold" style={{ color: "#fff" }}>
-                GIF
-              </Text>
-            </View>
-          )}
-
-          {/* Image badge - placed after blur so it's always visible */}
-          {media.type === "image" && (
-            <View style={styles.imageBadge}>
-              <Text size="xs" weight="bold" style={{ color: "#fff" }}>
-                IMG
-              </Text>
-            </View>
-          )}
+          <MediaTypeBadge type={media.type} />
           <View style={styles.borderOverlay} pointerEvents="none" />
         </View>
       </View>
     );
   }),
 );
-
-const styles = StyleSheet.create((theme) => ({
-  mediaContainer: {
-    marginTop: theme.spacing.sm,
-    borderRadius: theme.radius.md,
-    overflow: "hidden",
-  },
-  mediaWrapper: {
-    width: "100%",
-    backgroundColor: theme.colors.background.subtle,
-    borderRadius: theme.radius.md,
-    overflow: "hidden",
-  },
-  borderOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: theme.radius.md,
-    borderWidth: 0.3,
-    borderColor: theme.colors.border.subtle,
-    zIndex: 50,
-  },
-  skeletonOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: theme.radius.md,
-    zIndex: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  media: {
-    width: "100%",
-    height: "100%",
-    borderRadius: theme.radius.md,
-  },
-  deferredMediaPlaceholder: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.colors.background.subtle,
-  },
-  deferredMediaLabel: {
-    marginTop: theme.spacing.xs,
-    color: theme.colors.text.subtle,
-  },
-  playOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  videoTapArea: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  playButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loadingContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tapToPlayContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  videoPlaceholder: {
-    backgroundColor: "rgba(0, 0, 0, 0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  youtubeControlsContainer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: theme.spacing.sm,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 25,
-  },
-  youtubeControlsRow: {
-    flexDirection: "row",
-    gap: theme.spacing.sm,
-  },
-  youtubeControlButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(0, 0, 0, 0.65)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  watchOnYouTubeButton: {
-    position: "absolute",
-    bottom: theme.spacing.sm,
-    left: theme.spacing.sm,
-    zIndex: 30,
-  },
-  watchOnYouTubeButtonTop: {
-    position: "absolute",
-    top: theme.spacing.sm,
-    left: theme.spacing.sm,
-    zIndex: 30,
-  },
-  watchOnYouTubeInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-  },
-  processingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.75)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  muteButton: {
-    position: "absolute",
-    bottom: theme.spacing.sm,
-    right: theme.spacing.sm,
-    zIndex: 30,
-    elevation: 4,
-  },
-  muteButtonInner: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  fullscreenButton: {
-    position: "absolute",
-    top: theme.spacing.sm,
-    right: theme.spacing.sm,
-    zIndex: 20,
-  },
-  fullscreenButtonInner: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  gifBadge: {
-    position: "absolute",
-    top: theme.spacing.sm,
-    left: theme.spacing.sm,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 2,
-    borderRadius: theme.radius.sm,
-    zIndex: 20,
-  },
-  videoBadge: {
-    position: "absolute",
-    top: theme.spacing.sm,
-    left: theme.spacing.sm,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 2,
-    borderRadius: theme.radius.sm,
-    zIndex: 20,
-  },
-  imageBadge: {
-    position: "absolute",
-    top: theme.spacing.sm,
-    left: theme.spacing.sm,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 2,
-    borderRadius: theme.radius.sm,
-    zIndex: 20,
-  },
-  multiMediaBadge: {
-    position: "absolute",
-    top: theme.spacing.sm,
-    right: theme.spacing.sm,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
-    borderRadius: theme.radius.sm,
-  },
-  blurOverlay: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  blurViewFill: {
-    flex: 1,
-    width: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  revealTextContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  androidBlurOverlay: {
-    flex: 1,
-    width: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(5, 5, 5, 0.97)",
-    gap: 8,
-  },
-}));
