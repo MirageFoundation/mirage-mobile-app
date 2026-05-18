@@ -4,7 +4,7 @@
 - Created: 2026-03-26
 - Refreshed for current codebase: 2026-05-18
 - Purpose: canonical plan for cleaning up app structure, routing, cache ownership, store boundaries, effects, and file modularity.
-- Current phase: Phases 1 through 6 are complete. Phase 7 effect-driven flow cleanup is next.
+- Current phase: Phases 1 through 7 are complete. Phase 8 regression guardrails are next.
 - Dependency policy: this plan is for clean refactor only. Do **not** combine it with Expo/RN/video/native dependency upgrades.
 
 ---
@@ -488,11 +488,17 @@ Status: **complete**.
 
 Goal: cut rerenders and timing bugs after ownership boundaries are clear.
 
+Status: **complete**.
+
 ### Tasks
 - Replace effect chains with derived state and query options.
+  - [x] Consolidated duplicated home/following/topic post-card context sync into a single store action instead of many page-level mirroring effects.
 - Move app-global listeners into providers/services only when they are truly global.
 - Remove effects that mirror query/store state into duplicate local state.
+  - [x] Added `useLatestRef` for latest callback refs without render-after-render effect assignment.
+  - [x] Removed mutation ref-sync effects from `useFollowHandler` by depending on the mutation callbacks directly.
 - Replace timer/delayed navigation patterns with centralized navigation helpers.
+  - [x] Fixed focused effect dependencies for feed foreground listeners and media cleanup paths.
 
 ### Success Criteria
 - High-effect hotspots shrink naturally as pages/components are split.
@@ -524,8 +530,8 @@ Goal: prevent the architecture from drifting back.
 
 ## Immediate Next Actions
 
-1. Start Phase 7 by reducing effect-driven flows in the largest remaining content modules.
-2. Prefer derived state, query options, and focused hooks over new synchronization effects.
+1. Start Phase 8 by adding regression guardrails under `tools/`.
+2. Add Bun-backed checks for file size, store boundaries, query-key literals, and navigation smoke coverage.
 3. Continue avoiding dependency, video, native, and PoW upgrades during cleanup.
 4. Keep reusable cache mutation in `src/api/cache/*`.
 5. Add guardrail scripts in Phase 8 before relying on `check:*` commands.

@@ -32,7 +32,7 @@ import { Box, Text } from "@/src/components/ui/primitives";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
 import { storage } from "@/src/stores";
 
-import { APP_FOREGROUND_REFRESH_THRESHOLD_MS, useAuthGuard, useBlockHandler, getBlockConfirmationMessage, useDeleteHandler, useFollowHandler, useReportHandler, useVoteHandler, type VoteResult } from "@/src/hooks";
+import { APP_FOREGROUND_REFRESH_THRESHOLD_MS, useAuthGuard, useBlockHandler, getBlockConfirmationMessage, useDeleteHandler, useFollowHandler, useLatestRef, useReportHandler, useVoteHandler, type VoteResult } from "@/src/hooks";
 import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
@@ -120,7 +120,7 @@ export function FollowingScreen() {
     };
     const sub = AppState.addEventListener("change", handleAppStateChange);
     return () => sub.remove();
-  }, []);
+  }, [showBars]);
 
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
@@ -377,13 +377,8 @@ export function FollowingScreen() {
     });
   }, []);
 
-  const setCurrentUserId = useHomePostCardStore((state) => state.setCurrentUserId);
-  const setFollowedUsers = useHomePostCardStore((state) => state.setFollowedUsers);
-  const setFollowedTopicsStore = useHomePostCardStore((state) => state.setFollowedTopics);
-  const setFollowLoadingUsersStore = useHomePostCardStore((state) => state.setFollowLoadingUsers);
-  const setRevealedPostsStore = useHomePostCardStore((state) => state.setRevealedPosts);
+  const setCardContext = useHomePostCardStore((state) => state.setCardContext);
   const setHandlers = useHomePostCardStore((state) => state.setHandlers);
-  const setShareServer = useHomePostCardStore((state) => state.setShareServer);
   const setActiveFeedScreen = useHomePostCardStore((state) => state.setActiveFeedScreen);
   const setDisabledTopicName = useHomePostCardStore((state) => state.setDisabledTopicName);
 
@@ -391,24 +386,21 @@ export function FollowingScreen() {
   const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
 
   useEffect(() => {
-    setCurrentUserId(currentUser?.id);
-  }, [currentUser?.id, setCurrentUserId]);
-
-  useEffect(() => {
-    setFollowedUsers(followedUsersSet);
-  }, [followedUsersSet, setFollowedUsers]);
-
-  useEffect(() => {
-    setFollowedTopicsStore(followedTopicsSet);
-  }, [followedTopicsSet, setFollowedTopicsStore]);
-
-  useEffect(() => {
-    setRevealedPostsStore(revealedPosts);
-  }, [revealedPosts, setRevealedPostsStore]);
-
-  useEffect(() => {
-    setShareServer(shareServer);
-  }, [shareServer, setShareServer]);
+    setCardContext({
+      currentUserId: currentUser?.id,
+      followedUsers: followedUsersSet,
+      followedTopics: followedTopicsSet,
+      revealedPosts,
+      shareServer,
+    });
+  }, [
+    currentUser?.id,
+    followedTopicsSet,
+    followedUsersSet,
+    revealedPosts,
+    setCardContext,
+    shareServer,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -424,7 +416,7 @@ export function FollowingScreen() {
     }, [setActiveFeedScreen, setDisabledTopicName]),
   );
 
-  const handlersRef = useRef({
+  const handlersRef = useLatestRef({
     handlePostPress,
     handleAuthorPress,
     handleTopicPress,
@@ -439,25 +431,6 @@ export function FollowingScreen() {
     handleBlockPostFromCard,
     handleBlockTopicFromCard,
     handleReportFromCard,
-  });
-
-  useEffect(() => {
-    handlersRef.current = {
-      handlePostPress,
-      handleAuthorPress,
-      handleTopicPress,
-      handleMorePress,
-      handleUpvote,
-      handleDownvote,
-      handleCommentPress,
-      handleFollowPress,
-      handleFollowTopicFromCard,
-      handleRevealContent,
-      handleBlockUserFromCard,
-      handleBlockPostFromCard,
-      handleBlockTopicFromCard,
-      handleReportFromCard,
-    };
   });
 
   useFocusEffect(
@@ -483,7 +456,7 @@ export function FollowingScreen() {
         onBlockTopic: (postId, topic) => handlersRef.current.handleBlockTopicFromCard(postId, topic),
         onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
       });
-    }, [setHandlers])
+    }, [handlersRef, setHandlers])
   );
 
   return (

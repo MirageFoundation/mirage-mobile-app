@@ -47,6 +47,7 @@ import {
   useReportHandler,
   useVoteHandler,
   shouldAutoplayVideo,
+  useLatestRef,
   type VoteResult,
 } from "@/src/hooks";
 import {
@@ -148,7 +149,7 @@ export function HomeScreen() {
     };
     const sub = AppState.addEventListener("change", handleAppStateChange);
     return () => sub.remove();
-  }, []);
+  }, [showBars]);
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
 
@@ -187,7 +188,7 @@ export function HomeScreen() {
         return () => clearTimeout(timer);
       }
     }
-  }, []);
+  }, [showBars]);
 
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
@@ -693,24 +694,8 @@ export function HomeScreen() {
     return () => clearTimeout(timer);
   }, [shouldScrollToTop, isHomeFocused, clearScrollToTop]);
 
-  const setCurrentUserId = useHomePostCardStore(
-    (state) => state.setCurrentUserId
-  );
-  const setFollowedUsers = useHomePostCardStore(
-    (state) => state.setFollowedUsers
-  );
-  const setFollowedTopicsStore = useHomePostCardStore(
-    (state) => state.setFollowedTopics
-  );
-  const setFollowLoadingUsersStore = useHomePostCardStore(
-    (state) => state.setFollowLoadingUsers
-  );
-  const setRevealedPostsStore = useHomePostCardStore(
-    (state) => state.setRevealedPosts
-  );
+  const setCardContext = useHomePostCardStore((state) => state.setCardContext);
   const setHandlers = useHomePostCardStore((state) => state.setHandlers);
-  const setShareServer = useHomePostCardStore((state) => state.setShareServer);
-  const setAllowAutoplay = useHomePostCardStore((state) => state.setAllowAutoplay);
   const setActiveFeedScreen = useHomePostCardStore((state) => state.setActiveFeedScreen);
   const setDisabledTopicName = useHomePostCardStore((state) => state.setDisabledTopicName);
 
@@ -723,28 +708,23 @@ export function HomeScreen() {
   );
 
   useEffect(() => {
-    setCurrentUserId(currentUser?.id);
-  }, [currentUser?.id, setCurrentUserId]);
-
-  useEffect(() => {
-    setFollowedUsers(followedUsersSet);
-  }, [followedUsersSet, setFollowedUsers]);
-
-  useEffect(() => {
-    setFollowedTopicsStore(followedTopicsSet);
-  }, [followedTopicsSet, setFollowedTopicsStore]);
-
-  useEffect(() => {
-    setRevealedPostsStore(revealedPosts);
-  }, [revealedPosts, setRevealedPostsStore]);
-
-  useEffect(() => {
-    setShareServer(shareServer);
-  }, [shareServer, setShareServer]);
-
-  useEffect(() => {
-    setAllowAutoplay(allowAutoplay);
-  }, [allowAutoplay, setAllowAutoplay]);
+    setCardContext({
+      currentUserId: currentUser?.id,
+      followedUsers: followedUsersSet,
+      followedTopics: followedTopicsSet,
+      revealedPosts,
+      shareServer,
+      allowAutoplay,
+    });
+  }, [
+    allowAutoplay,
+    currentUser?.id,
+    followedTopicsSet,
+    followedUsersSet,
+    revealedPosts,
+    setCardContext,
+    shareServer,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -760,7 +740,7 @@ export function HomeScreen() {
     }, [setActiveFeedScreen, setDisabledTopicName]),
   );
 
-  const handlersRef = useRef({
+  const handlersRef = useLatestRef({
     handlePostPress,
     handleAuthorPress,
     handleTopicPress,
@@ -775,25 +755,6 @@ export function HomeScreen() {
     handleBlockPostFromCard,
     handleBlockTopicFromCard,
     handleReportFromCard,
-  });
-
-  useEffect(() => {
-    handlersRef.current = {
-      handlePostPress,
-      handleAuthorPress,
-      handleTopicPress,
-      handleMorePress,
-      handleUpvote,
-      handleDownvote,
-      handleCommentPress,
-      handleFollowPress,
-      handleFollowTopicFromCard,
-      handleRevealContent,
-      handleBlockUserFromCard,
-      handleBlockPostFromCard,
-      handleBlockTopicFromCard,
-      handleReportFromCard,
-    };
   });
 
   useFocusEffect(
@@ -819,7 +780,7 @@ export function HomeScreen() {
         onBlockTopic: (postId, topic) => handlersRef.current.handleBlockTopicFromCard(postId, topic),
         onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
       });
-    }, [setHandlers])
+    }, [handlersRef, setHandlers])
   );
 
   if (!isLoggedIn && !isInitializing) {

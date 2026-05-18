@@ -59,6 +59,7 @@ import {
   useReportHandler,
   useVoteHandler,
   shouldAutoplayVideo,
+  useLatestRef,
   type VoteResult,
 } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
@@ -643,25 +644,8 @@ export function TopicFeedScreen() {
     );
   }, [handleRefresh, insets.top, isIOS]);
 
-  const setCurrentUserId = useHomePostCardStore(
-    (state) => state.setCurrentUserId,
-  );
-  const setFollowedUsersStore = useHomePostCardStore(
-    (state) => state.setFollowedUsers,
-  );
-  const setFollowedTopicsStore = useHomePostCardStore(
-    (state) => state.setFollowedTopics,
-  );
-  const setRevealedPostsStore = useHomePostCardStore(
-    (state) => state.setRevealedPosts,
-  );
+  const setCardContext = useHomePostCardStore((state) => state.setCardContext);
   const setHandlers = useHomePostCardStore((state) => state.setHandlers);
-  const setShareServerStore = useHomePostCardStore(
-    (state) => state.setShareServer,
-  );
-  const setAllowAutoplay = useHomePostCardStore(
-    (state) => state.setAllowAutoplay,
-  );
   const setActiveFeedScreen = useHomePostCardStore(
     (state) => state.setActiveFeedScreen,
   );
@@ -685,28 +669,23 @@ export function TopicFeedScreen() {
   );
 
   useEffect(() => {
-    setCurrentUserId(currentUser?.id);
-  }, [currentUser?.id, setCurrentUserId]);
-
-  useEffect(() => {
-    setFollowedUsersStore(followedUsersSet);
-  }, [followedUsersSet, setFollowedUsersStore]);
-
-  useEffect(() => {
-    setFollowedTopicsStore(followedTopicsSet);
-  }, [followedTopicsSet, setFollowedTopicsStore]);
-
-  useEffect(() => {
-    setRevealedPostsStore(revealedPosts);
-  }, [revealedPosts, setRevealedPostsStore]);
-
-  useEffect(() => {
-    setShareServerStore(shareServer);
-  }, [shareServer, setShareServerStore]);
-
-  useEffect(() => {
-    setAllowAutoplay(allowAutoplay);
-  }, [allowAutoplay, setAllowAutoplay]);
+    setCardContext({
+      currentUserId: currentUser?.id,
+      followedUsers: followedUsersSet,
+      followedTopics: followedTopicsSet,
+      revealedPosts,
+      shareServer,
+      allowAutoplay,
+    });
+  }, [
+    allowAutoplay,
+    currentUser?.id,
+    followedTopicsSet,
+    followedUsersSet,
+    revealedPosts,
+    setCardContext,
+    shareServer,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
@@ -722,7 +701,7 @@ export function TopicFeedScreen() {
     }, [setActiveFeedScreen, setDisabledTopicName, topicName]),
   );
 
-  const handlersRef = useRef({
+  const handlersRef = useLatestRef({
     handlePostPress,
     handleAuthorPress,
     handleTopicPress,
@@ -737,25 +716,6 @@ export function TopicFeedScreen() {
     handleBlockPostFromCard,
     handleBlockTopicFromCard,
     handleReportFromCard,
-  });
-
-  useEffect(() => {
-    handlersRef.current = {
-      handlePostPress,
-      handleAuthorPress,
-      handleTopicPress,
-      handleMorePress,
-      handleUpvote,
-      handleDownvote,
-      handleCommentPress,
-      handleFollowPress,
-      handleFollowTopicFromCard,
-      handleRevealContent,
-      handleBlockUserFromCard,
-      handleBlockPostFromCard,
-      handleBlockTopicFromCard,
-      handleReportFromCard,
-    };
   });
 
   useFocusEffect(
@@ -794,7 +754,7 @@ export function TopicFeedScreen() {
           handlersRef.current.handleBlockTopicFromCard(postId, topic),
         onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
       });
-    }, [setHandlers]),
+    }, [handlersRef, setHandlers]),
   );
 
   return (

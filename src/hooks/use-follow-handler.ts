@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback } from "react";
 import {
  useToggleFollowUser,
  useToggleFollowTopic,
@@ -43,18 +43,8 @@ export function useFollowHandler(
  const { requireAuth } = useAuthGuard();
  const enqueue = usePowQueueStore((state) => state.enqueue);
 
- const toggleFollowUserMutation = useToggleFollowUser();
- const toggleFollowTopicMutation = useToggleFollowTopic();
- const followUserAsyncRef = useRef(toggleFollowUserMutation.mutateAsync);
- const followTopicAsyncRef = useRef(toggleFollowTopicMutation.mutateAsync);
-
- useEffect(() => {
-  followUserAsyncRef.current = toggleFollowUserMutation.mutateAsync;
- }, [toggleFollowUserMutation.mutateAsync]);
-
- useEffect(() => {
-  followTopicAsyncRef.current = toggleFollowTopicMutation.mutateAsync;
- }, [toggleFollowTopicMutation.mutateAsync]);
+ const { mutateAsync: toggleFollowUserAsync } = useToggleFollowUser();
+ const { mutateAsync: toggleFollowTopicAsync } = useToggleFollowTopic();
 
  const handleFollowUser = useCallback(
   (
@@ -73,7 +63,7 @@ export function useFollowHandler(
      type: actionType,
      label: getActionLabel(actionType),
      execute: async () => {
-      return followUserAsyncRef.current({
+      return toggleFollowUserAsync({
        userAddress: userId,
        isCurrentlyFollowing,
       });
@@ -89,7 +79,13 @@ export function useFollowHandler(
     });
    });
   },
-  [requireAuth, enqueue, onOptimisticFollowUser, onRollbackFollowUser],
+  [
+   requireAuth,
+   enqueue,
+   onOptimisticFollowUser,
+   onRollbackFollowUser,
+   toggleFollowUserAsync,
+  ],
  );
 
  const handleFollowTopic = useCallback(
@@ -105,7 +101,7 @@ export function useFollowHandler(
      type: actionType,
      label: getActionLabel(actionType),
      execute: async () => {
-      return followTopicAsyncRef.current({
+      return toggleFollowTopicAsync({
        topic,
        isCurrentlyFollowing,
       });
@@ -121,7 +117,13 @@ export function useFollowHandler(
     });
    });
   },
-  [requireAuth, enqueue, onOptimisticFollowTopic, onRollbackFollowTopic],
+  [
+   requireAuth,
+   enqueue,
+   onOptimisticFollowTopic,
+   onRollbackFollowTopic,
+   toggleFollowTopicAsync,
+  ],
  );
 
  return {

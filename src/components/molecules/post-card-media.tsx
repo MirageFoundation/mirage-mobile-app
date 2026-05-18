@@ -14,7 +14,6 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { type ImageLoadEventData } from "expo-image";
 import {
   ActivityIndicator,
   AppState,
@@ -25,7 +24,6 @@ import {
   type GestureResponderEvent,
 } from "react-native";
 import YoutubePlayer from "react-native-youtube-iframe";
-import type { YoutubeIframeRef } from "react-native-youtube-iframe";
 import { extractYouTubeVideoId, getVideoThumbnailUri, type ResolvedMedia } from "./post-card-utils";
 import { MediaGallery } from "./media-gallery";
 import {
@@ -129,9 +127,6 @@ export const PostCardMedia = memo(
     const [videoPlaybackPrepared, setVideoPlaybackPrepared] = useState(
       media?.type !== "video",
     );
-    const [videoStartedPlayback, setVideoStartedPlayback] = useState(
-      media?.type !== "video",
-    );
     const videoMuted = media?.type === "video"
       ? (effectiveMuted || !videoReadyForDisplay || (!isPostDetail && !hasNativeAudioFocus))
       : effectiveMuted;
@@ -155,7 +150,6 @@ export const PostCardMedia = memo(
     const userInitiatedPlayRef = useRef(false);
     const prevShouldBlurRef = useRef(shouldBlurContent);
     const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
-    const feedTapCooldownRef = useRef(false);
 
     const youtubeVideoId = media?.type === "youtube" ? (extractYouTubeVideoId(media.uri) ?? "") : "";
     const youtubePositionKey = youtubeVideoId
@@ -244,6 +238,7 @@ export const PostCardMedia = memo(
     }, []);
 
     useEffect(() => {
+      const nativeAudioFocusId = nativeAudioFocusIdRef.current;
       const shouldOwnNativeAudioFocus =
         media?.type === "video" &&
         !isPostDetail &&
@@ -254,10 +249,10 @@ export const PostCardMedia = memo(
         isFocused;
 
       if (shouldOwnNativeAudioFocus) {
-        if (activeNativeAudioFocus?.id !== nativeAudioFocusIdRef.current) {
+        if (activeNativeAudioFocus?.id !== nativeAudioFocusId) {
           activeNativeAudioFocus?.onLoseFocus();
           activeNativeAudioFocus = {
-            id: nativeAudioFocusIdRef.current,
+            id: nativeAudioFocusId,
             onLoseFocus: () => {
               setHasNativeAudioFocus(false);
               void stopNativeVideoPlayback();
@@ -271,14 +266,14 @@ export const PostCardMedia = memo(
           setHasNativeAudioFocus(true);
         }
       } else if (!isPostDetail && hasNativeAudioFocus) {
-        if (activeNativeAudioFocus?.id === nativeAudioFocusIdRef.current) {
+        if (activeNativeAudioFocus?.id === nativeAudioFocusId) {
           activeNativeAudioFocus = null;
         }
         setHasNativeAudioFocus(false);
       }
 
       return () => {
-        if (activeNativeAudioFocus?.id === nativeAudioFocusIdRef.current) {
+        if (activeNativeAudioFocus?.id === nativeAudioFocusId) {
           activeNativeAudioFocus = null;
         }
       };
@@ -307,6 +302,7 @@ export const PostCardMedia = memo(
     }));
 
     useEffect(() => {
+      const nativeAudioFocusId = nativeAudioFocusIdRef.current;
       return () => {
         if (media?.type === "video" && videoPositionKey && currentVideoPositionRef.current > 500) {
           useVideoPositionStore.getState().setPosition(videoPositionKey, currentVideoPositionRef.current / 1000);
@@ -330,7 +326,7 @@ export const PostCardMedia = memo(
         if (videoProcessingPollTimeoutRef.current) {
           clearTimeout(videoProcessingPollTimeoutRef.current);
         }
-        if (activeNativeAudioFocus?.id === nativeAudioFocusIdRef.current) {
+        if (activeNativeAudioFocus?.id === nativeAudioFocusId) {
           activeNativeAudioFocus = null;
         }
       };
@@ -348,7 +344,6 @@ export const PostCardMedia = memo(
         focusRecoveryRetryCountRef.current = 0;
         setVideoReadyForDisplay(false);
         setVideoPlaybackPrepared(media?.type !== "video");
-        setVideoStartedPlayback(media?.type !== "video");
         setShowVideoPrepSpinner(false);
         const wasLoaded = resolvedMediaUri ? MEDIA_LOADED_CACHE.has(resolvedMediaUri) : false;
         setMediaLoaded(wasLoaded);
@@ -363,7 +358,7 @@ export const PostCardMedia = memo(
           }, 8000);
         }
       }
-    }, [resolvedMediaUri]);
+    }, [media?.type, resolvedMediaUri]);
 
     useEffect(() => {
       const needsVideoPrep =
@@ -396,7 +391,7 @@ export const PostCardMedia = memo(
           videoPrepSpinnerTimeoutRef.current = null;
         }
       };
-    }, [media?.type, isVideoPlaying, videoStartedPlayback, shouldBlurContent]);
+    }, [media?.type, isVideoPlaying, shouldBlurContent, videoReadyForDisplay]);
 
     const cachedAspectRatio = resolvedMediaUri
       ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
@@ -719,7 +714,6 @@ export const PostCardMedia = memo(
         }
         currentVideoPositionRef.current = status.positionMillis;
         if (status.isPlaying && !status.isBuffering) {
-          setVideoStartedPlayback(true);
           setShowVideoPrepSpinner(false);
           setIsVideoLoading(false);
           setMediaLoaded(true);
@@ -787,7 +781,7 @@ export const PostCardMedia = memo(
           } catch {}
         }
       },
-      [globalMuted, toggleMute, media?.type, shouldUseAndroidYouTubeEmbed, isFocused, isPostDetail, allowAutoplay, videoReadyForDisplay, hasNativeAudioFocus],
+      [globalMuted, toggleMute, media?.type, shouldUseAndroidYouTubeEmbed, isFocused, isPostDetail, allowAutoplay, videoReadyForDisplay],
     );
 
     const handleYouTubeTogglePlay = useCallback(
@@ -891,7 +885,7 @@ export const PostCardMedia = memo(
       } else {
         wasOfflineRef.current = false;
       }
-    }, [isConnected]);
+    }, [imageError, isConnected, isVideoProcessing]);
 
     useEffect(() => {
       if (!isVideoProcessing || !isCloudflareVideo || !resolvedMediaUri) {
