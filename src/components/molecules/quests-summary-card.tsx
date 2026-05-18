@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "@/src/hooks/use-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import Animated, {
@@ -14,8 +15,9 @@ import Animated, {
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { useRewardSummary } from "@/src/api/read/hooks";
+import { queryKeys } from "@/src/api/read/query-keys";
 import { useNodeConfig } from "@/src/api/read/hooks/use-parameters";
-import type { FlashQuest } from "@/src/api/read/endpoints/rewards";
+import type { FlashQuest, RewardSummaryResponse } from "@/src/api/read/endpoints/rewards";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { usePreferencesStore } from "@/src/stores";
@@ -211,12 +213,19 @@ function FlashQuestSummaryItem({ quest }: { quest: FlashQuest }) {
 export function QuestsSummaryCard() {
   const { theme, rt } = useUnistyles();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { showBars } = useScrollAnimationContext();
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
   const { data: nodeConfig } = useNodeConfig();
   const questsEnabled = nodeConfig?.quests_enabled ?? true;
   const payoutsEnabled = nodeConfig?.quest_payouts_enabled ?? true;
-  const { data, isLoading } = useRewardSummary();
+  const cachedRewardSummary = walletAddress
+    ? queryClient.getQueryData<RewardSummaryResponse>(queryKeys.rewardSummary(walletAddress))
+    : undefined;
+  const { data, isLoading } = useRewardSummary(undefined, {
+    enabled: !!cachedRewardSummary,
+  });
   const questsCardExpanded = usePreferencesStore((s) => s.questsCardExpanded);
   const setQuestsCardExpanded = usePreferencesStore(
     (s) => s.setQuestsCardExpanded,

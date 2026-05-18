@@ -208,7 +208,8 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
             seed={avatarSeed || username}
             source={avatarUrl ? { uri: avatarUrl } : undefined}
             rounded="sm"
-            paddingRatio={0}
+            paddingRatio={0.2}
+            containerStyle={styles.profileAvatar}
           />
 
           <Box mt="sm">

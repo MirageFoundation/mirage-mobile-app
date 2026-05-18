@@ -14,6 +14,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { usePowQueueStore, getSuccessLabel } from "@/src/services/pow-queue";
 import { getPowProgress } from "@/src/wallet";
 import { useTopToastStack } from "@/src/stores/toast-layout-store";
+import { useNetworkState } from "@/src/hooks/use-network-state";
 import { Text } from "./primitives";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -54,6 +55,7 @@ const formatHashRate = (rate: number): string => {
 export const PowQueueToast = () => {
   const { theme, rt } = useUnistyles();
   const insets = useSafeAreaInsets();
+  const { isConnected } = useNetworkState();
 
   const {
     currentAction,
@@ -120,6 +122,7 @@ export const PowQueueToast = () => {
     );
   const hasActiveResultAction = activeResultAction !== null;
   const isShowingProcessing = hasPendingWork && !isShowingResult;
+  const isOfflineProcessing = isShowingProcessing && !isConnected;
 
   const displayLabel = isShowingResult
     ? activeResultAction.success
@@ -213,13 +216,25 @@ export const PowQueueToast = () => {
       setTransientResultAction(null);
       transientResultTimeoutRef.current = null;
     }, durationMs);
+    // NOTE: deliberately no cleanup that clears the timeout here.
+    // The store clears `successOverlay` ~500ms after success, which re-runs
+    // this effect. If cleanup cleared the timer, the timer would be killed
+    // before it could reset `transientResultAction`, leaving the toast stuck
+    // on the previous success state until the NEXT action succeeds (which
+    // on free tier with PoW can be many seconds away). The timer is reset
+    // on the next non-null `successOverlay` (above), and on unmount via
+    // the dedicated unmount-only effect below.
+  }, [successOverlay]);
 
+  // Clear the transient-result timeout on unmount only.
+  useEffect(() => {
     return () => {
       if (transientResultTimeoutRef.current) {
         clearTimeout(transientResultTimeoutRef.current);
+        transientResultTimeoutRef.current = null;
       }
     };
-  }, [successOverlay]);
+  }, []);
 
   useEffect(() => {
     if ((hasPendingWork || successOverlay) && !isVisible) {
@@ -268,6 +283,8 @@ export const PowQueueToast = () => {
 
   useEffect(() => {
     if (isShowingProcessing && isVisible) {
+      if (!isConnected) return;
+
       const interval = setInterval(async () => {
         try {
           const progress = await getPowProgress();
@@ -289,14 +306,14 @@ export const PowQueueToast = () => {
             }
           }
         } catch {
-          if (powStartedRef.current) {
+          if (powStartedRef.current && isConnected) {
             setElapsedMs((prev) => prev + 200);
           }
         }
       }, 200);
       return () => clearInterval(interval);
     }
-  }, [isShowingProcessing, isVisible]);
+  }, [isConnected, isShowingProcessing, isVisible]);
 
   if (!isVisible) return null;
 
@@ -357,7 +374,7 @@ export const PowQueueToast = () => {
     lastHashRateRef.current;
 
   const showStats =
-    (isShowingProcessing && phase === "solving" && elapsedMs > 0) ||
+    (isShowingProcessing && !isOfflineProcessing && phase === "solving" && elapsedMs > 0) ||
     (isShowingResult && resultElapsedMs > 0);
 
   const renderToastContent = (wrapperProps: any) => {
@@ -404,7 +421,9 @@ export const PowQueueToast = () => {
                   : activeResultAction?.skippedPoW
                     ? "Failed"
                     : "PoW Failed"
-                : PHASE_LABEL[phase]}
+                : isOfflineProcessing
+                  ? "Waiting for internet…"
+                  : PHASE_LABEL[phase]}
             </Text>
           )}
 

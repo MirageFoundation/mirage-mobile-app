@@ -77,6 +77,9 @@ type PreferencesState = {
   // Content
   adultContentEnabled: boolean;
   hasSeenAdultPrompt: boolean;
+  adultPromptDismissedAt: number;
+  moderationReminderUnderstoodByUser: Record<string, boolean>;
+  moderationReminderSnoozedUntilByUser: Record<string, number>;
   selectedContentTypes: ContentType[];
   blurSensitiveMedia: boolean;
   ageVerified: boolean;
@@ -110,6 +113,9 @@ type PreferencesState = {
   setTheme: (theme: ThemeMode) => void;
   setAdultContent: (enabled: boolean) => void;
   setHasSeenAdultPrompt: () => void;
+  setAdultPromptDismissedAt: (timestamp: number) => void;
+  dismissModerationReminder: (userId: string) => void;
+  snoozeModerationReminder: (userId: string, until: number) => void;
   setSelectedContentTypes: (types: ContentType[]) => void;
   toggleContentType: (type: ContentType) => void;
   setBlurSensitiveMedia: (blur: boolean) => void;
@@ -140,6 +146,9 @@ export const usePreferencesStore = create<PreferencesState>()(
       // Content
       adultContentEnabled: false,
       hasSeenAdultPrompt: true,
+      adultPromptDismissedAt: 0,
+      moderationReminderUnderstoodByUser: {},
+      moderationReminderSnoozedUntilByUser: {},
       selectedContentTypes: ["sensitive"],
       blurSensitiveMedia: false,
       ageVerified: false,
@@ -190,6 +199,26 @@ export const usePreferencesStore = create<PreferencesState>()(
           };
         }),
       setHasSeenAdultPrompt: () => set({ hasSeenAdultPrompt: true }),
+      setAdultPromptDismissedAt: (timestamp) =>
+        set({ adultPromptDismissedAt: timestamp }),
+      dismissModerationReminder: (userId) =>
+        set((state) => ({
+          moderationReminderUnderstoodByUser: {
+            ...state.moderationReminderUnderstoodByUser,
+            [userId]: true,
+          },
+          moderationReminderSnoozedUntilByUser: {
+            ...state.moderationReminderSnoozedUntilByUser,
+            [userId]: 0,
+          },
+        })),
+      snoozeModerationReminder: (userId, until) =>
+        set((state) => ({
+          moderationReminderSnoozedUntilByUser: {
+            ...state.moderationReminderSnoozedUntilByUser,
+            [userId]: until,
+          },
+        })),
       setSelectedContentTypes: (types) => {
         const normalized = normalizeContentTypes(types);
         set({
@@ -241,7 +270,7 @@ export const usePreferencesStore = create<PreferencesState>()(
    {
      name: "preferences-storage",
       storage: createJSONStorage(() => mmkvStorage),
-      version: 4,
+      version: 5,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<PreferencesState>;
         
@@ -263,6 +292,7 @@ export const usePreferencesStore = create<PreferencesState>()(
           state.adultContentEnabled = false;
           state.blurSensitiveMedia = false;
           state.hasSeenAdultPrompt = true;
+          state.adultPromptDismissedAt = 0;
         }
 
         if (version < 4) {
@@ -272,7 +302,15 @@ export const usePreferencesStore = create<PreferencesState>()(
             );
           }
         }
-        
+
+        if (version < 5) {
+          state.adultPromptDismissedAt = state.adultPromptDismissedAt ?? 0;
+          state.moderationReminderUnderstoodByUser =
+            state.moderationReminderUnderstoodByUser ?? {};
+          state.moderationReminderSnoozedUntilByUser =
+            state.moderationReminderSnoozedUntilByUser ?? {};
+        }
+
         return state as PreferencesState;
       },
     }

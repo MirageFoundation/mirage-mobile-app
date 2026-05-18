@@ -265,7 +265,7 @@ onDismiss: () => void;
 }) => {
   const { theme } = useUnistyles();
 const insets = useSafeAreaInsets();
-const shareServer = usePreferencesStore((s) => s.shareServer);
+const shareServer = usePreferencesStore((s) => s.apiServer);
 const [copiedCode, setCopiedCode] = useState(false);
  const [copiedLink, setCopiedLink] = useState(false);
 

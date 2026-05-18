@@ -1,7 +1,7 @@
 {
   "name": "mirage",
   "main": "index.ts",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "scripts": {
     "start": "expo start",
     "postinstall": "patch-package",
@@ -58,7 +58,7 @@
     "expo-screen-capture": "~8.0.9",
     "expo-screen-orientation": "~9.0.8",
     "expo-secure-store": "~15.0.8",
-    "expo-share-intent": "^6.0.0",
+    "expo-share-intent": "^5.0.0",
     "expo-sharing": "~14.0.8",
     "expo-splash-screen": "~31.0.13",
     "expo-sqlite": "~16.0.10",

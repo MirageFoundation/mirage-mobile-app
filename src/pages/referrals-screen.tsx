@@ -156,7 +156,7 @@ export function ReferralsScreen() {
   const { data: nodeConfig } = useNodeConfig();
   const walletAddress = useAuthStore((s) => s.walletAddress);
   const username = useAuthStore((s) => s.user?.username);
-  const shareServer = usePreferencesStore((s) => s.shareServer);
+  const shareServer = usePreferencesStore((s) => s.apiServer);
 
   const inviteCodeRequired = nodeConfig?.registration_invite_code_required ?? false;
   const precheckEnabled = userStatus?.referral_precheck_enabled ?? false;

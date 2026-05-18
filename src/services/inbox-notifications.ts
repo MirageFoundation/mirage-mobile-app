@@ -28,6 +28,9 @@ const SEED_TIMESTAMP_KEY = "inbox-seed-timestamp";
 const FETCH_INTERVAL_SECONDS = 15 * 60;
 const FOREGROUND_INTERVAL_MS = FETCH_INTERVAL_SECONDS * 1000;
 const SIGNAL_THROTTLE_MS = 15_000;
+const INBOX_NAVIGATION_READY_TIMEOUT_MS = 3_000;
+const INBOX_NOTIFICATION_NAVIGATION_ACTIVE_MS = 10_000;
+const SHARE_INTENT_NAVIGATION_ACTIVE_MS = 15_000;
 
 let isCheckInFlight = false;
 let lastSignalCheckAt = 0;
@@ -38,6 +41,8 @@ let notificationResponseSubscription: Notifications.Subscription | null = null;
 let deferredInitSubscription: { remove(): void } | null = null;
 let isInboxNotificationsInitialized = false;
 let isInitializingInboxNotifications = false;
+let lastInboxNotificationNavigationAt = 0;
+let lastShareIntentNavigationAt = 0;
 
 let _rootLayoutReadyResolve: (() => void) | null = null;
 let _rootLayoutReadyPromise: Promise<void> = new Promise<void>((resolve) => {
@@ -81,43 +86,85 @@ export function signalTabsReady(): void {
   _tabsReadyResolve?.();
 }
 
+export function isInboxNotificationNavigationActive(): boolean {
+  return Date.now() - lastInboxNotificationNavigationAt < INBOX_NOTIFICATION_NAVIGATION_ACTIVE_MS;
+}
+
+function markInboxNotificationNavigationActive(): void {
+  lastInboxNotificationNavigationAt = Date.now();
+}
+
+export function markShareIntentNavigationActive(reason = "share-intent"): void {
+  lastShareIntentNavigationAt = Date.now();
+  Sentry.addBreadcrumb({
+    category: "share-intent",
+    message: "Share intent navigation marked active",
+    level: "info",
+    data: { reason },
+  });
+}
+
+export function isShareIntentNavigationActive(): boolean {
+  return Date.now() - lastShareIntentNavigationAt < SHARE_INTENT_NAVIGATION_ACTIVE_MS;
+}
+
+function getNavigationReadinessDebugData(): Record<string, unknown> {
+  return {
+    isRootLayoutReady: _isRootLayoutReady,
+    areTabsReady: _areTabsReady,
+    appState: AppState.currentState,
+    hasWallet: !!useAuthStore.getState().walletAddress,
+    isInboxNotificationsInitialized,
+    isInitializingInboxNotifications,
+    hasNotificationResponseSubscription: !!notificationResponseSubscription,
+    isShareIntentNavigationActive: isShareIntentNavigationActive(),
+  };
+}
+
 export function signalTabsUnmounted(): void {
   if (!_areTabsReady) return;
   _areTabsReady = false;
+  Sentry.addBreadcrumb({
+    category: "notifications",
+    message: "Tabs navigator unmounted for notification navigation",
+    level: "info",
+    data: getNavigationReadinessDebugData(),
+  });
   _tabsReadyPromise = new Promise<void>((resolve) => {
     _tabsReadyResolve = resolve;
   });
 }
 
-function waitForTabsReady(timeoutMs = 5000): Promise<void> {
+function waitForTabsReady(timeoutMs = 5000): Promise<boolean> {
   let didSettle = false;
   return Promise.race([
     Promise.all([_rootLayoutReadyPromise, _tabsReadyPromise]).then(() => {
-      if (didSettle) return;
+      if (didSettle) return true;
       didSettle = true;
       Sentry.addBreadcrumb({
         category: "notifications",
         message: "Navigation tree ready before inbox notification navigation",
         level: "info",
       });
+      return true;
     }),
-    new Promise<void>((resolve) =>
+    new Promise<boolean>((resolve) =>
       setTimeout(() => {
         if (!didSettle) {
           didSettle = true;
           Sentry.captureMessage(
-            "Inbox notification navigation continued before tabs ready",
+            "Inbox notification navigation delayed until tabs ready",
             {
               level: "warning",
               tags: {
                 feature: "inbox-notifications",
                 operation: "wait-tabs-ready",
               },
-              extra: { timeoutMs },
+              extra: { timeoutMs, ...getNavigationReadinessDebugData() },
             },
           );
         }
-        resolve();
+        resolve(false);
       }, timeoutMs),
     ),
   ]);
@@ -242,6 +289,77 @@ function normalizeInboxReplyType(value: unknown): InboxReply["type"] {
     default:
       return "reply";
   }
+}
+
+function getNotificationData(
+  response: Notifications.NotificationResponse,
+): Record<string, unknown> {
+  return (response.notification?.request?.content?.data ?? {}) as Record<string, unknown>;
+}
+
+function getNotificationDataKeys(data: Record<string, unknown>): string[] {
+  return Object.keys(data).slice(0, 20);
+}
+
+function isAndroidShareIntentNotificationData(data: Record<string, unknown>): boolean {
+  const keys = Object.keys(data);
+  return keys.some((key) =>
+    key === "android.intent.extra.TEXT" ||
+    key === "android.intent.extra.STREAM" ||
+    key === "android.intent.extra.SUBJECT" ||
+    key.startsWith("android.intent.extra.")
+  );
+}
+
+function getFallbackInboxNotificationResponseId(
+  response: Notifications.NotificationResponse,
+  data: Record<string, unknown>,
+): string {
+  const notificationDate = response.notification?.date ?? Date.now();
+  const dataKeys = getNotificationDataKeys(data).join(",") || "no-data";
+  Sentry.addBreadcrumb({
+    category: "inbox-notifications",
+    message: "Using fallback inbox notification response id",
+    level: "warning",
+    data: {
+      actionIdentifier: response.actionIdentifier,
+      requestIdentifier: response.notification?.request?.identifier,
+      notificationDate,
+      dataKeys: getNotificationDataKeys(data),
+      hasNotificationType: !!data.notificationType,
+      hasReplyId: !!toOptionalString(data.replyId),
+      hasRootPostId: !!toOptionalString(data.rootPostId),
+      hasInboxReply: !!data.inboxReply,
+    },
+  });
+  return `inbox-notification:${response.actionIdentifier}:${notificationDate}:${dataKeys}`;
+}
+
+function getInboxNotificationResponseId(
+  response: Notifications.NotificationResponse,
+  data: Record<string, unknown>,
+): string {
+  const explicitNotificationId = toOptionalString(data.notificationId);
+  if (explicitNotificationId) return explicitNotificationId;
+
+  const replyId = toOptionalString(data.replyId);
+  if (replyId) return `inbox-reply:${replyId}`;
+
+  const rootPostId = toOptionalString(data.rootPostId);
+  if (rootPostId) return `inbox-root:${rootPostId}`;
+
+  const snapshot = data.inboxReply;
+  if (snapshot && typeof snapshot === "object") {
+    const snapshotReplyId = toOptionalString(
+      (snapshot as Record<string, unknown>).reply_id,
+    );
+    if (snapshotReplyId) return `inbox-reply:${snapshotReplyId}`;
+  }
+
+  const requestId = toOptionalString(response.notification?.request?.identifier);
+  if (requestId) return requestId;
+
+  return getFallbackInboxNotificationResponseId(response, data);
 }
 
 function buildPreviewReplyFromNotification(
@@ -494,19 +612,10 @@ async function performInboxCheck(
             title: getNotificationTitle(reply),
             body: getNotificationBody(reply),
             data: {
+              notificationType: "inbox",
               rootPostId: reply.root_post_id,
               replyId: reply.reply_id,
-              replyOwner: reply.reply_owner,
-              replyUsername: reply.reply_username,
-              replyAuthorLevel: reply.reply_author_level,
-              replyContent: reply.reply_content,
-              parentId: reply.parent_id,
-              parentContent: reply.parent_content,
-              parentOwner: reply.parent_owner,
               type: reply.type,
-              awardType: reply.award_type,
-              amount: reply.amount,
-              inboxReply: reply,
             },
             ...(Platform.OS === "android" && {
               categoryIdentifier: "inbox",
@@ -608,8 +717,11 @@ function subscribeAppState(): void {
 const HANDLED_NOTIFICATION_IDS_KEY = "inbox-handled-notification-ids";
 const handledNotificationIdsInFlight = new Set<string>();
 const deferredNotificationResponseRetries = new Map<string, number>();
-const DEFERRED_NOTIFICATION_RESPONSE_MAX_RETRIES = 12;
+const deferredNotificationResponses = new Map<string, Notifications.NotificationResponse>();
+const deferredNotificationResponseReceivedAt = new Map<string, number>();
+let unsubscribeDeferredNotificationWalletWatcher: (() => void) | null = null;
 const DEFERRED_NOTIFICATION_RESPONSE_RETRY_MS = 500;
+const DEFERRED_NOTIFICATION_RESPONSE_MAX_AGE_MS = 5 * 60_000;
 
 function getHandledNotificationIds(): Set<string> {
   const raw = storage.getString(HANDLED_NOTIFICATION_IDS_KEY);
@@ -627,12 +739,53 @@ function saveHandledNotificationIds(ids: Set<string>): void {
   storage.set(HANDLED_NOTIFICATION_IDS_KEY, JSON.stringify(trimmed));
 }
 
+function clearDeferredNotificationResponse(notificationId: string): void {
+  deferredNotificationResponseRetries.delete(notificationId);
+  deferredNotificationResponses.delete(notificationId);
+  deferredNotificationResponseReceivedAt.delete(notificationId);
+}
+
+function flushDeferredNotificationResponses(reason: string): void {
+  if (!useAuthStore.getState().walletAddress) return;
+  for (const [notificationId, response] of Array.from(deferredNotificationResponses.entries())) {
+    clearDeferredNotificationResponse(notificationId);
+    Sentry.captureMessage("Inbox notification response resumed after wallet ready", {
+      level: "info",
+      tags: {
+        feature: "inbox-notifications",
+        operation: "deferred-notification-response",
+      },
+      extra: {
+        notificationId,
+        reason,
+        ...getNavigationReadinessDebugData(),
+      },
+    });
+    handleNotificationResponse(response, "wallet-deferred");
+  }
+}
+
+function ensureDeferredNotificationWalletWatcher(): void {
+  if (unsubscribeDeferredNotificationWalletWatcher) return;
+  unsubscribeDeferredNotificationWalletWatcher = useAuthStore.subscribe((state) => {
+    if (!state.walletAddress) return;
+    flushDeferredNotificationResponses("wallet-store-ready");
+  });
+}
+
 function deferNotificationResponseUntilWallet(
   response: Notifications.NotificationResponse,
   notificationId: string,
 ): void {
+  ensureDeferredNotificationWalletWatcher();
+  deferredNotificationResponses.set(notificationId, response);
+  if (!deferredNotificationResponseReceivedAt.has(notificationId)) {
+    deferredNotificationResponseReceivedAt.set(notificationId, Date.now());
+  }
   const attempt = (deferredNotificationResponseRetries.get(notificationId) ?? 0) + 1;
   deferredNotificationResponseRetries.set(notificationId, attempt);
+  const receivedAt = deferredNotificationResponseReceivedAt.get(notificationId) ?? Date.now();
+  const ageMs = Date.now() - receivedAt;
 
   Sentry.addBreadcrumb({
     category: "inbox-notifications",
@@ -641,13 +794,14 @@ function deferNotificationResponseUntilWallet(
     data: {
       notificationId,
       attempt,
-      appState: AppState.currentState,
+      ageMs,
+      ...getNavigationReadinessDebugData(),
     },
   });
 
-  if (attempt > DEFERRED_NOTIFICATION_RESPONSE_MAX_RETRIES) {
-    deferredNotificationResponseRetries.delete(notificationId);
-    Sentry.captureMessage("Inbox notification response dropped before wallet ready", {
+  if (ageMs > DEFERRED_NOTIFICATION_RESPONSE_MAX_AGE_MS) {
+    clearDeferredNotificationResponse(notificationId);
+    Sentry.captureMessage("Inbox notification response expired before wallet ready", {
       level: "warning",
       tags: {
         feature: "inbox-notifications",
@@ -655,7 +809,9 @@ function deferNotificationResponseUntilWallet(
       },
       extra: {
         notificationId,
-        appState: AppState.currentState,
+        attempt,
+        ageMs,
+        ...getNavigationReadinessDebugData(),
       },
     });
     return;
@@ -667,48 +823,71 @@ function deferNotificationResponseUntilWallet(
       return;
     }
 
-    deferredNotificationResponseRetries.delete(notificationId);
-    Sentry.captureMessage("Inbox notification response resumed after wallet ready", {
-      level: "info",
-      tags: {
-        feature: "inbox-notifications",
-        operation: "deferred-notification-response",
-      },
-      extra: {
-        notificationId,
-        attempt,
-        appState: AppState.currentState,
-      },
-    });
-    handleNotificationResponse(response);
+    flushDeferredNotificationResponses("retry-timer");
   }, DEFERRED_NOTIFICATION_RESPONSE_RETRY_MS);
 }
 
 function handleNotificationResponse(
-  response: Notifications.NotificationResponse | null
+  response: Notifications.NotificationResponse | null,
+  source: "live-listener" | "last-response" | "wallet-deferred" = "live-listener",
 ): void {
   if (!response) return;
   try {
-    const notificationId = response.notification?.request?.identifier;
-    if (!notificationId) {
-      Sentry.captureMessage("Inbox notification response missing notification id", {
-        level: "warning",
-        tags: {
-          feature: "inbox-notifications",
-          operation: "notification-response",
+    const notificationData = getNotificationData(response);
+    if (isAndroidShareIntentNotificationData(notificationData)) {
+      markShareIntentNavigationActive("android-intent-extra-in-notification-response");
+      Sentry.addBreadcrumb({
+        category: "inbox-notifications",
+        message: "Ignoring Android share intent in notification response handler",
+        level: "info",
+        data: {
+          source,
+          actionIdentifier: response.actionIdentifier,
+          requestIdentifier: response.notification?.request?.identifier,
+          notificationDate: response.notification?.date,
+          dataKeys: getNotificationDataKeys(notificationData),
+          hasSharedText: !!toOptionalString(notificationData["android.intent.extra.TEXT"]),
+          ...getNavigationReadinessDebugData(),
         },
-        extra: { actionIdentifier: response.actionIdentifier },
       });
       return;
     }
+    if (source === "last-response" && isShareIntentNavigationActive()) {
+      Sentry.addBreadcrumb({
+        category: "inbox-notifications",
+        message: "Ignoring stale last notification response during share intent",
+        level: "info",
+        data: {
+          source,
+          actionIdentifier: response.actionIdentifier,
+          requestIdentifier: response.notification?.request?.identifier,
+          notificationDate: response.notification?.date,
+          dataKeys: getNotificationDataKeys(notificationData),
+          ...getNavigationReadinessDebugData(),
+        },
+      });
+      void Notifications.clearLastNotificationResponseAsync?.().catch(() => undefined);
+      return;
+    }
+    const notificationId = getInboxNotificationResponseId(response, notificationData);
+    markInboxNotificationNavigationActive();
     Sentry.addBreadcrumb({
       category: "notifications",
       message: "Inbox notification response received",
       level: "info",
       data: {
         notificationId,
+        source,
         actionIdentifier: response.actionIdentifier,
         appState: AppState.currentState,
+        notificationDate: response.notification?.date,
+        requestIdentifier: response.notification?.request?.identifier,
+        dataKeys: getNotificationDataKeys(notificationData),
+        hasNotificationType: !!notificationData.notificationType,
+        hasReplyId: !!toOptionalString(notificationData.replyId),
+        hasRootPostId: !!toOptionalString(notificationData.rootPostId),
+        hasInboxReply: !!notificationData.inboxReply,
+        ...getNavigationReadinessDebugData(),
       },
     });
     const handledNotificationIds = getHandledNotificationIds();
@@ -725,14 +904,13 @@ function handleNotificationResponse(
       });
       return;
     }
-    const notificationData = response.notification?.request?.content?.data;
     if (!useAuthStore.getState().walletAddress) {
       console.log("[InboxNotifications] Deferring notification response until wallet is ready");
       Sentry.addBreadcrumb({
         category: "inbox-notifications",
         message: "Notification response received before wallet is ready",
         level: "info",
-        data: { notificationId, appState: AppState.currentState },
+        data: { notificationId, source, ...getNavigationReadinessDebugData() },
       });
       deferNotificationResponseUntilWallet(response, notificationId);
       return;
@@ -777,6 +955,7 @@ function handleNotificationResponse(
       await fetchAndSeedInboxCache(address, 25);
     };
     const navigateToInbox = async () => {
+      markInboxNotificationNavigationActive();
       void prefetchInbox().catch((error) => {
         console.warn("[InboxNotifications] Failed to prefetch inbox before navigation:", error);
         Sentry.addBreadcrumb({
@@ -789,12 +968,26 @@ function handleNotificationResponse(
           },
         });
       });
-      await waitForTabsReady();
+      const areTabsReady = await waitForTabsReady(INBOX_NAVIGATION_READY_TIMEOUT_MS);
+      if (!areTabsReady) {
+        Sentry.addBreadcrumb({
+          category: "navigation",
+          message: "Proceeding with inbox notification navigation after tabs wait timeout",
+          level: "warning",
+          data: { notificationId, ...getNavigationReadinessDebugData() },
+        });
+      }
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Dispatching inbox notification navigation",
         level: "info",
-        data: { notificationId, hasReplyId: !!replyId },
+        data: {
+          notificationId,
+          hasReplyId: !!replyId,
+          hasRootPostId: !!rootPostId,
+          areTabsReady,
+          ...getNavigationReadinessDebugData(),
+        },
       });
       router.navigate({
         pathname: "/(tabs)/inbox",
@@ -812,11 +1005,15 @@ function handleNotificationResponse(
         extra: {
           notificationId,
           hasReplyId: !!replyId,
+          hasRootPostId: !!rootPostId,
+          areTabsReady,
           appState: AppState.currentState,
+          ...getNavigationReadinessDebugData(),
         },
       });
       handledNotificationIds.add(notificationId);
       saveHandledNotificationIds(handledNotificationIds);
+      void Notifications.clearLastNotificationResponseAsync?.().catch(() => undefined);
     };
     const runNavigateToInbox = () => {
       void navigateToInbox().catch((error) => {
@@ -881,10 +1078,7 @@ function subscribeNotificationResponses(): void {
     category: "inbox-notifications",
     message: "Subscribing to notification responses",
     level: "info",
-    data: {
-      appState: AppState.currentState,
-      hasWallet: !!useAuthStore.getState().walletAddress,
-    },
+    data: getNavigationReadinessDebugData(),
   });
   notificationResponseSubscription =
     Notifications.addNotificationResponseReceivedListener((response) => {
@@ -893,12 +1087,13 @@ function subscribeNotificationResponses(): void {
         message: "Live notification response listener fired",
         level: "info",
         data: {
-          appState: AppState.currentState,
-          hasWallet: !!useAuthStore.getState().walletAddress,
           notificationId: response.notification?.request?.identifier,
+          notificationDate: response.notification?.date,
+          dataKeys: getNotificationDataKeys(getNotificationData(response)),
+          ...getNavigationReadinessDebugData(),
         },
       });
-      handleNotificationResponse(response);
+      handleNotificationResponse(response, "live-listener");
     });
 
   Notifications.getLastNotificationResponseAsync()
@@ -909,11 +1104,13 @@ function subscribeNotificationResponses(): void {
         level: "info",
         data: {
           hasResponse: !!response,
-          appState: AppState.currentState,
-          hasWallet: !!useAuthStore.getState().walletAddress,
+          notificationId: response?.notification?.request?.identifier,
+          notificationDate: response?.notification?.date,
+          dataKeys: response ? getNotificationDataKeys(getNotificationData(response)) : [],
+          ...getNavigationReadinessDebugData(),
         },
       });
-      handleNotificationResponse(response);
+      handleNotificationResponse(response, "last-response");
     })
     .catch((error) => {
       console.error(
@@ -1083,6 +1280,11 @@ export async function cleanupInboxNotificationsForLogout(): Promise<void> {
   notificationResponseSubscription = null;
   deferredInitSubscription?.remove();
   deferredInitSubscription = null;
+  unsubscribeDeferredNotificationWalletWatcher?.();
+  unsubscribeDeferredNotificationWalletWatcher = null;
+  deferredNotificationResponseRetries.clear();
+  deferredNotificationResponses.clear();
+  deferredNotificationResponseReceivedAt.clear();
   isInboxNotificationsInitialized = false;
   isInitializingInboxNotifications = false;
 

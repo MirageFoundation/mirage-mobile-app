@@ -1,6 +1,6 @@
-import { getUserStatus } from "@/src/api/read/endpoints/users";
 import { getNodeConfig } from "@/src/api/read/endpoints/parameters";
-import { getTierName } from "@/src/utils/tiers";
+import { queryKeys } from "@/src/api/read/query-keys";
+import type { NodeConfigResponse } from "@/src/api/types";
 import { RecoveryPhraseInput } from "@/src/components/molecules";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
@@ -34,9 +34,6 @@ export default function LoginScreen() {
   const queryClient = useQueryClient();
 
   const importWallet = useAuthStore((s) => s.importWallet);
-  const setUserLevel = useAuthStore((s) => s.setUserLevel);
-  const setHasUsername = useAuthStore((s) => s.setHasUsername);
-  const setUser = useAuthStore((s) => s.setUser);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
   const toast = useToast();
 
@@ -59,10 +56,15 @@ export default function LoginScreen() {
 
   useEffect(() => {
     apiClient.setBaseUrl(`https://${activeServer}`);
+    const cachedConfig = queryClient.getQueryData<NodeConfigResponse>(queryKeys.nodeConfig());
+    if (cachedConfig) {
+      setNodeConfigData(cachedConfig);
+      return;
+    }
     getNodeConfig()
       .then((config) => setNodeConfigData(config))
       .catch(() => setNodeConfigData(null));
-  }, [activeServer]);
+  }, [activeServer, queryClient]);
 
   useEffect(() => {
     return () => {
@@ -136,34 +138,6 @@ export default function LoginScreen() {
       // Import the wallet using the mnemonic
       await importWallet(phrase);
 
-      // Get the wallet address from auth store after import
-      const walletAddress = useAuthStore.getState().walletAddress;
-
-      if (walletAddress) {
-        try {
-          // Fetch user status from API to get username and subscription level
-          const userStatus = await getUserStatus({ address: walletAddress });
-
-          // Update auth store with user level
-          setUserLevel(userStatus.user_level);
-
-          // Update username info
-          if (userStatus.username) {
-            setHasUsername(true);
-            setUser({
-              id: walletAddress,
-              username: userStatus.username,
-              walletAddress,
-              tier:
-                getTierName(userStatus.user_level),
-            });
-          }
-        } catch (apiError) {
-          // API error shouldn't block login - user can still use the app
-          console.warn("[Login] Failed to fetch user status:", apiError);
-        }
-      }
-
       triggerHaptic("success");
 
       // Navigate to home
@@ -191,9 +165,6 @@ export default function LoginScreen() {
     words,
     validatePhrase,
     importWallet,
-    setUserLevel,
-    setHasUsername,
-    setUser,
     router,
   ]);
 

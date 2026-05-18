@@ -32,6 +32,8 @@ import {
 } from "../endpoints/posts";
 import type { PoWProgress } from "../signing";
 import * as Sentry from "@sentry/react-native";
+import type { PostDraft } from "@/src/stores/draft-store";
+import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 
 // ============================================
 // Types
@@ -42,8 +44,12 @@ export interface UsePostOptions {
 }
 
 export type CreatePostMutationInput = CreatePostInput & {
+  optimisticId?: string;
+  optimisticActionId?: string;
   optimisticMediaUrl?: string | null;
   optimisticMediaUrls?: string[];
+  optimisticPreviewMediaUrls?: string[];
+  optimisticDraft?: PostDraft;
 };
 
 const MEDIA_URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
@@ -89,17 +95,27 @@ const getFirstMediaUrl = (content: string): string | null => {
   return null;
 };
 
-const buildOptimisticPost = (
+export const buildOptimisticPost = (
   txHash: string | undefined,
   input: CreatePostMutationInput,
   address: string | null,
   username: string | null | undefined,
+  status: ApiPost["optimistic_status"] = "success",
 ): ApiPost => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const fallbackMediaUrl = getFirstMediaUrl(input.content);
   const mediaUrl =
     input.optimisticMediaUrl?.trim() || fallbackMediaUrl || null;
-  const postId = txHash ?? `local-${Date.now()}`;
+  const postId = txHash ?? input.optimisticId ?? `local-${Date.now()}`;
+  const shouldUsePreviewMedia =
+    (status === "pending" || status === "success") &&
+    !!input.optimisticPreviewMediaUrls?.length;
+  const media = shouldUsePreviewMedia
+    ? input.optimisticPreviewMediaUrls
+    : input.optimisticMediaUrls ?? (mediaUrl ? [mediaUrl] : []);
+  const thumbnail = shouldUsePreviewMedia
+    ? input.optimisticPreviewMediaUrls?.[0] ?? mediaUrl ?? ""
+    : mediaUrl ?? "";
 
   return {
     post_id: postId,
@@ -113,13 +129,205 @@ const buildOptimisticPost = (
     content: input.content,
     tag: input.tag ?? "",
     edited_at: 0,
-    thumbnail: mediaUrl ?? "",
-    media: input.optimisticMediaUrls ?? (mediaUrl ? [mediaUrl] : []),
+    thumbnail,
+    media,
     points: 0,
     comments: 0,
     user_vote: 1,
     user_weight: 0,
+    optimistic_status: status,
+    optimistic_action_id: input.optimisticActionId,
+    optimistic_draft: input.optimisticDraft,
+    optimistic_video_preview_until: input.optimisticPreviewMediaUrls?.length
+      ? Date.now() + 45000
+      : undefined,
   };
+};
+
+export const upsertHomePost = (queryClient: QueryClient, optimisticPost: ApiPost) => {
+  const postQueries = queryClient.getQueriesData({ queryKey: ["posts"] });
+  postQueries.forEach(([queryKey, queryData]) => {
+    if (!queryData) return;
+    const filters = queryKey[1] as PostFilters | undefined;
+    if (filters?.feed !== "home") return;
+
+    if (
+      typeof queryData === "object" &&
+      queryData !== null &&
+      "pages" in queryData
+    ) {
+      const dataWithPages = queryData as {
+        pages: PostsResponse[];
+        pageParams: unknown[];
+      };
+      const [firstPage, ...rest] = dataWithPages.pages;
+      if (!firstPage) return;
+      if (firstPage.posts.some((post) => post.post_id === optimisticPost.post_id)) {
+        return;
+      }
+
+      queryClient.setQueryData(queryKey, {
+        ...dataWithPages,
+        pages: [
+          {
+            ...firstPage,
+            posts: [optimisticPost, ...firstPage.posts],
+            total: firstPage.total + 1,
+          },
+          ...rest,
+        ],
+      });
+    } else {
+      const dataSingle = queryData as PostsResponse;
+      if (dataSingle.posts.some((post) => post.post_id === optimisticPost.post_id)) {
+        return;
+      }
+      queryClient.setQueryData(queryKey, {
+        ...dataSingle,
+        posts: [optimisticPost, ...dataSingle.posts],
+        total: dataSingle.total + 1,
+      });
+    }
+  });
+};
+
+export const removeOptimisticPostFromCache = (queryClient: QueryClient, postId: string) => {
+  updateQueriesWithReducer(queryClient, ["posts"], (data) => removePostFromPostsData(data, postId));
+};
+
+export const markOptimisticPostError = (
+  queryClient: QueryClient,
+  postId: string,
+  errorMessage: string,
+) => {
+  updateQueriesWithReducer(queryClient, ["posts"], (data) => {
+    if (!data) return { nextData: data, didUpdate: false };
+    const markError = (post: ApiPost) =>
+      post.post_id === postId
+        ? { ...post, optimistic_status: "error" as const, optimistic_error: errorMessage }
+        : post;
+    if (isInfinitePostsData(data)) {
+      let didUpdate = false;
+      const pages = data.pages.map((page) => {
+        const posts = page.posts.map((post) => {
+          if (post.post_id !== postId) return post;
+          didUpdate = true;
+          return markError(post);
+        });
+        return didUpdate ? { ...page, posts } : page;
+      });
+      return { nextData: didUpdate ? { ...data, pages } : data, didUpdate };
+    }
+    const singleData = data as PostsResponse;
+    let didUpdate = false;
+    const posts = singleData.posts.map((post) => {
+      if (post.post_id !== postId) return post;
+      didUpdate = true;
+      return markError(post);
+    });
+    return { nextData: didUpdate ? { ...singleData, posts } : data, didUpdate };
+  });
+};
+
+const replaceOrUpdateOptimisticPost = (
+  queryClient: QueryClient,
+  optimisticId: string,
+  nextPost: ApiPost,
+) => {
+  const nextPostId = nextPost.post_id;
+  updateQueriesWithReducer(queryClient, ["posts"], (data) => {
+    if (!data) return { nextData: data, didUpdate: false };
+    const replace = (post: ApiPost) =>
+      post.post_id === optimisticId ? nextPost : post;
+    if (isInfinitePostsData(data)) {
+      let didUpdate = false;
+      const pages = data.pages.map((page) => {
+        const posts = page.posts.map((post) => {
+          if (post.post_id !== optimisticId) return post;
+          didUpdate = true;
+          return replace(post);
+        });
+        return didUpdate ? { ...page, posts } : page;
+      });
+      return { nextData: didUpdate ? { ...data, pages } : data, didUpdate };
+    }
+    const singleData = data as PostsResponse;
+    let didUpdate = false;
+    const posts = singleData.posts.map((post) => {
+      if (post.post_id !== optimisticId) return post;
+      didUpdate = true;
+      return replace(post);
+    });
+    return { nextData: didUpdate ? { ...singleData, posts } : data, didUpdate };
+  });
+
+  useHomePostCardStore.setState((state) => {
+    const replaceId = (id: string | null | undefined) =>
+      id === optimisticId ? nextPostId : id ?? null;
+    const replaceSet = (ids?: Set<string>) => {
+      if (!ids?.has(optimisticId)) return ids;
+      const next = new Set(ids);
+      next.delete(optimisticId);
+      next.add(nextPostId);
+      return next;
+    };
+
+    const activeVideoPostIds = Object.fromEntries(
+      Object.entries(state.activeVideoPostIds).map(([screen, id]) => [screen, replaceId(id)]),
+    );
+    const visibleVideoPostIds = Object.fromEntries(
+      Object.entries(state.visibleVideoPostIds).map(([screen, ids]) => [screen, replaceSet(ids) ?? ids]),
+    );
+    const nearbyVideoPostIds = Object.fromEntries(
+      Object.entries(state.nearbyVideoPostIds).map(([screen, ids]) => [screen, replaceSet(ids) ?? ids]),
+    );
+
+    return {
+      activeVideoPostIds,
+      visibleVideoPostIds,
+      nearbyVideoPostIds,
+    };
+  });
+};
+
+const preserveLocalPreviewMedia = (
+  queryClient: QueryClient,
+  postId: string,
+  previewMediaUrls: string[],
+) => {
+  if (!previewMediaUrls.length) return;
+  updateQueriesWithReducer(queryClient, ["posts"], (data) => {
+    if (!data) return { nextData: data, didUpdate: false };
+    const preserve = (post: ApiPost) =>
+      post.post_id === postId
+        ? {
+            ...post,
+            thumbnail: previewMediaUrls[0] ?? post.thumbnail,
+            media: previewMediaUrls,
+            optimistic_video_preview_until: Date.now() + 45000,
+          }
+        : post;
+    if (isInfinitePostsData(data)) {
+      let didUpdate = false;
+      const pages = data.pages.map((page) => {
+        const posts = page.posts.map((post) => {
+          if (post.post_id !== postId) return post;
+          didUpdate = true;
+          return preserve(post);
+        });
+        return didUpdate ? { ...page, posts } : page;
+      });
+      return { nextData: didUpdate ? { ...data, pages } : data, didUpdate };
+    }
+    const singleData = data as PostsResponse;
+    let didUpdate = false;
+    const posts = singleData.posts.map((post) => {
+      if (post.post_id !== postId) return post;
+      didUpdate = true;
+      return preserve(post);
+    });
+    return { nextData: didUpdate ? { ...singleData, posts } : data, didUpdate };
+  });
 };
 
 const buildOptimisticComment = (
@@ -433,10 +641,22 @@ export function usePost(options: UsePostOptions = {}) {
   return useMutation({
     mutationFn: async (input: CreatePostMutationInput) => {
       const wallet = await getWallet();
-      const { optimisticMediaUrl, optimisticMediaUrls, ...postInput } = input;
+      const { optimisticId, optimisticActionId, optimisticMediaUrl, optimisticMediaUrls, optimisticPreviewMediaUrls, optimisticDraft, ...postInput } = input;
       return createPost(wallet, postInput, options.onPoWProgress);
     },
     onSuccess: (data, input) => {
+      Sentry.addBreadcrumb({
+        category: "create-post",
+        message: "Create post mutation succeeded",
+        level: "info",
+        data: {
+          txHash: data?.tx_hash,
+          optimisticId: input.optimisticId,
+          optimisticActionId: input.optimisticActionId,
+          mediaCount: input.media?.length ?? 0,
+          hasPreviewMedia: !!input.optimisticPreviewMediaUrls?.length,
+        },
+      });
       const optimisticPost = buildOptimisticPost(
         data?.tx_hash,
         input,
@@ -444,50 +664,99 @@ export function usePost(options: UsePostOptions = {}) {
         username,
       );
 
-      const postQueries = queryClient.getQueriesData({ queryKey: ["posts"] });
-      postQueries.forEach(([queryKey, queryData]) => {
-        if (!queryData) return;
-        const filters = queryKey[1] as PostFilters | undefined;
-        if (filters?.feed !== "home") return;
-
-        if (
-          typeof queryData === "object" &&
-          queryData !== null &&
-          "pages" in queryData
-        ) {
-          const dataWithPages = queryData as {
-            pages: PostsResponse[];
-            pageParams: unknown[];
-          };
-          const [firstPage, ...rest] = dataWithPages.pages;
-          if (!firstPage) return;
-          if (firstPage.posts.some((post) => post.post_id === optimisticPost.post_id)) {
-            return;
-          }
-
-          queryClient.setQueryData(queryKey, {
-            ...dataWithPages,
-            pages: [
-              {
-                ...firstPage,
-                posts: [optimisticPost, ...firstPage.posts],
-                total: firstPage.total + 1,
-              },
-              ...rest,
-            ],
+      if (input.optimisticId) {
+        Sentry.addBreadcrumb({
+          category: "create-post",
+          message: "Replacing optimistic post with confirmed post",
+          level: "info",
+          data: {
+            optimisticId: input.optimisticId,
+            confirmedPostId: optimisticPost.post_id,
+            hasPreviewMedia: !!input.optimisticPreviewMediaUrls?.length,
+          },
+        });
+        replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, optimisticPost);
+        if (input.optimisticPreviewMediaUrls?.length) {
+          Sentry.addBreadcrumb({
+            category: "create-post",
+            message: "Preserving local media preview after post success",
+            level: "info",
+            data: {
+              postId: optimisticPost.post_id,
+              previewCount: input.optimisticPreviewMediaUrls.length,
+            },
           });
-        } else {
-          const dataSingle = queryData as PostsResponse;
-          if (dataSingle.posts.some((post) => post.post_id === optimisticPost.post_id)) {
-            return;
-          }
-          queryClient.setQueryData(queryKey, {
-            ...dataSingle,
-            posts: [optimisticPost, ...dataSingle.posts],
-            total: dataSingle.total + 1,
+          preserveLocalPreviewMedia(queryClient, optimisticPost.post_id, input.optimisticPreviewMediaUrls);
+          [1000, 2500, 5000, 10000, 20000, 45000].forEach((delay) => {
+            setTimeout(() => {
+              preserveLocalPreviewMedia(queryClient, optimisticPost.post_id, input.optimisticPreviewMediaUrls ?? []);
+            }, delay);
           });
         }
-      });
+        setTimeout(() => {
+          if (input.optimisticPreviewMediaUrls?.length) {
+            useHomePostCardStore.setState((state) => {
+              const screen = state.activeFeedScreen;
+              if (!screen) return state;
+              const visible = new Set(state.visibleVideoPostIds[screen] ?? []);
+              const nearby = new Set(state.nearbyVideoPostIds[screen] ?? []);
+              visible.add(optimisticPost.post_id);
+              nearby.add(optimisticPost.post_id);
+              return {
+                activeVideoPostIds: {
+                  ...state.activeVideoPostIds,
+                  [screen]: optimisticPost.post_id,
+                },
+                visibleVideoPostIds: {
+                  ...state.visibleVideoPostIds,
+                  [screen]: visible,
+                },
+                nearbyVideoPostIds: {
+                  ...state.nearbyVideoPostIds,
+                  [screen]: nearby,
+                },
+              };
+            });
+          }
+          updateQueriesWithReducer(queryClient, ["posts"], (queryData) => {
+            if (!queryData) return { nextData: queryData, didUpdate: false };
+            const clearStatus = (post: ApiPost) =>
+              post.post_id === optimisticPost.post_id
+                ? {
+                    ...post,
+                    optimistic_status: undefined,
+                    optimistic_error: undefined,
+                    optimistic_draft: undefined,
+                    optimistic_video_preview_until: input.optimisticPreviewMediaUrls?.length
+                      ? Date.now() + 45000
+                      : post.optimistic_video_preview_until,
+                  }
+                : post;
+            if (isInfinitePostsData(queryData)) {
+              let didUpdate = false;
+              const pages = queryData.pages.map((page) => {
+                const posts = page.posts.map((post) => {
+                  if (post.post_id !== optimisticPost.post_id) return post;
+                  didUpdate = true;
+                  return clearStatus(post);
+                });
+                return didUpdate ? { ...page, posts } : page;
+              });
+              return { nextData: didUpdate ? { ...queryData, pages } : queryData, didUpdate };
+            }
+            const singleData = queryData as PostsResponse;
+            let didUpdate = false;
+            const posts = singleData.posts.map((post) => {
+              if (post.post_id !== optimisticPost.post_id) return post;
+              didUpdate = true;
+              return clearStatus(post);
+            });
+            return { nextData: didUpdate ? { ...singleData, posts } : queryData, didUpdate };
+          });
+        }, 2000);
+      } else {
+        upsertHomePost(queryClient, optimisticPost);
+      }
 
       // Keep the newly created post visible immediately in Home feeds.
       // Magic is reconciled back to backend ordering on refresh / new-posts reload.
@@ -602,17 +871,17 @@ export function useComment(options: UsePostOptions = {}) {
     onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: ["comments"],
-        refetchType: "inactive",
+        refetchType: "active",
       });
       queryClient.invalidateQueries({
         queryKey: ["posts"],
-        refetchType: "inactive",
+        refetchType: "active",
       });
 
       if (address) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.userPosts(address),
-          refetchType: "inactive",
+          refetchType: "active",
         });
       }
     },

@@ -18,7 +18,7 @@ import type {
   FileSystemNetworkTaskProgressCallback,
 } from "expo-file-system/legacy";
 import * as Network from "expo-network";
-import { AppState } from "react-native";
+import { AppState, Platform } from "react-native";
 import type { ImageUploadResponse, VideoUploadResponse } from "@/src/api/types";
 
 // ============================================
@@ -52,6 +52,7 @@ function isNetworkError(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error);
   return msg.includes("Network") ||
     msg.includes("network") ||
+    msg.includes("Upload aborted") ||
     msg.includes("timed out") ||
     msg.includes("no result") ||
     (error as any)?.code === "ERR_NETWORK";
@@ -376,8 +377,84 @@ export async function uploadVideoToSignedUrl(
   console.log("[VideoUpload] Starting upload to signed URL");
 
   const normalizedUri = normalizeFileUri(localUri);
+  const filename = getFileNameFromUri(localUri) || "video.mp4";
+
+  const uploadWithXhr = async (): Promise<void> => {
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      let didSettle = false;
+
+      const settle = (fn: () => void) => {
+        if (didSettle) return;
+        didSettle = true;
+        signal?.removeEventListener("abort", onAbort);
+        fn();
+      };
+
+      const onAbort = () => {
+        xhr.abort();
+        settle(() => reject(new Error("Upload aborted")));
+      };
+
+      xhr.open("POST", uploadUrl);
+      xhr.timeout = VIDEO_UPLOAD_TIMEOUT_MS;
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0 && onProgress) {
+          const pct = Math.min(100, Math.round((event.loaded / event.total) * 100));
+          onProgress(pct);
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          console.log("[VideoUpload] Android XHR upload complete, status:", xhr.status);
+          settle(resolve);
+          return;
+        }
+        settle(() => reject(Object.assign(
+          new Error(`Upload failed: ${xhr.status}`),
+          { status: xhr.status, responseText: xhr.responseText }
+        )));
+      };
+      xhr.onerror = () => {
+        settle(() => reject(new Error("Video upload network error")));
+      };
+      xhr.ontimeout = () => {
+        settle(() => reject(new Error(`Video upload timed out after ${VIDEO_UPLOAD_TIMEOUT_MS / 1000}s`)));
+      };
+      xhr.onabort = () => {
+        settle(() => reject(new Error("Upload aborted")));
+      };
+
+      if (signal) {
+        if (signal.aborted) {
+          onAbort();
+          return;
+        }
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
+
+      const formData = new FormData();
+      formData.append("file", {
+        uri: normalizedUri,
+        name: filename,
+        type: contentType,
+      } as unknown as Blob);
+      Sentry.addBreadcrumb({
+        category: "media-upload",
+        message: "Using Android XHR video upload",
+        level: "info",
+        data: { fileName: filename, contentType },
+      });
+      xhr.send(formData);
+    });
+  };
 
   const uploadFn = async (): Promise<void> => {
+    if (Platform.OS === "android") {
+      await uploadWithXhr();
+      return;
+    }
+
     const task = createUploadTask(
       uploadUrl,
       normalizedUri,
@@ -433,7 +510,10 @@ export async function uploadVideoToSignedUrl(
     }
   };
 
-  return withRetry(uploadFn, { label: "video-upload", signal });
+  // Cloudflare Stream signed upload URLs are single-use. If the client times
+  // out after Cloudflare already accepted the file, retrying this same URL can
+  // fail later with "Video already uploaded" and surface stale errors.
+  return withRetry(uploadFn, { label: "video-upload", maxRetries: 0, signal });
 }
 
 export async function uploadVideo(

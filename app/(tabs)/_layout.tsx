@@ -36,6 +36,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { SideMenuProvider } from "@/src/providers/side-menu-provider";
 import {
+  isInboxNotificationNavigationActive,
+  isShareIntentNavigationActive,
+  markShareIntentNavigationActive,
   signalTabsReady,
   signalTabsUnmounted,
 } from "@/src/services/inbox-notifications";
@@ -331,21 +334,69 @@ export default function TabLayout() {
   const { hasShareIntent } = useShareIntentContext();
   const hasHandledInitialRouteRef = useRef(false);
   const initialShareIntentRef = useRef(hasShareIntent);
+  const latestPathnameRef = useRef(pathname);
+  const latestShareIntentRef = useRef(hasShareIntent);
 
   useEffect(() => {
+    latestPathnameRef.current = pathname;
+    latestShareIntentRef.current = hasShareIntent;
+  }, [pathname, hasShareIntent]);
+
+  useEffect(() => {
+    Sentry.addBreadcrumb({
+      category: "navigation",
+      message: "Tabs layout mounted",
+      level: "info",
+      data: { pathname: latestPathnameRef.current, hasShareIntent: latestShareIntentRef.current },
+    });
     signalTabsReady();
-    return () => signalTabsUnmounted();
+    return () => {
+      Sentry.addBreadcrumb({
+        category: "navigation",
+        message: "Tabs layout unmounted",
+        level: "info",
+        data: { pathname: latestPathnameRef.current, hasShareIntent: latestShareIntentRef.current },
+      });
+      signalTabsUnmounted();
+    };
   }, []);
 
   const prevShareIntentRef = useRef(hasShareIntent);
+  const hasForcedShareIntentRouteRef = useRef(false);
   useEffect(() => {
     const prev = prevShareIntentRef.current;
     prevShareIntentRef.current = hasShareIntent;
-    // Only navigate on a fresh false->true transition after initial route has settled.
-    if (!hasHandledInitialRouteRef.current) return;
-    if (prev || !hasShareIntent) return;
-    if (!pathname.endsWith("/create")) {
-      router.navigate("/(tabs)/create");
+    if (!hasShareIntent) {
+      hasForcedShareIntentRouteRef.current = false;
+      return;
+    }
+    markShareIntentNavigationActive("tabs-share-intent");
+    if (pathname.endsWith("/create")) {
+      hasForcedShareIntentRouteRef.current = true;
+      return;
+    }
+    if (!hasForcedShareIntentRouteRef.current) {
+      hasForcedShareIntentRouteRef.current = true;
+      Sentry.addBreadcrumb({
+        category: "navigation",
+        message: "Forcing share intent to create tab",
+        level: "info",
+        data: {
+          pathname,
+          hadPreviousShareIntent: prev,
+          hasHandledInitialRoute: hasHandledInitialRouteRef.current,
+          isNotificationNavigationActive: isInboxNotificationNavigationActive(),
+          hasForcedShareIntentRoute: hasForcedShareIntentRouteRef.current,
+        },
+      });
+      router.replace("/(tabs)/create");
+    } else {
+      Sentry.addBreadcrumb({
+        category: "navigation",
+        message: "Skipped repeated share intent create redirect",
+        level: "info",
+        data: { pathname, hadPreviousShareIntent: prev },
+      });
     }
   }, [hasShareIntent, pathname]);
 
@@ -357,28 +408,51 @@ export default function TabLayout() {
       hasHandledInitialRouteRef.current = true;
 
       const hasInitialShareIntent =
-        initialShareIntentRef.current || hasShareIntent || isRecentSharePath(10_000);
+        initialShareIntentRef.current ||
+        hasShareIntent ||
+        isRecentSharePath(60_000) ||
+        isShareIntentNavigationActive();
       const hasInitialCreateIntent =
         hasInitialShareIntent || isRecentCreateDeepLink();
-      const isOnCreate = pathname.endsWith("/create");
+      const currentPathname = latestPathnameRef.current || pathname;
+      const isOnCreate = currentPathname.endsWith("/create");
+      const isOnInbox = currentPathname.endsWith("/inbox");
+      const isNotificationNavigationActive = isInboxNotificationNavigationActive();
+      const isShareNavigationActive = isShareIntentNavigationActive();
 
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Initial tab route check",
         data: {
-          pathname,
+          pathname: currentPathname,
           hasInitialCreateIntent,
           hasInitialShareIntent,
           isOnCreate,
+          isNotificationNavigationActive,
+          isShareNavigationActive,
         },
         level: "info",
       });
 
       if (isOnCreate && !hasInitialCreateIntent) {
+        if (isOnInbox || isNotificationNavigationActive || isShareNavigationActive) {
+          Sentry.addBreadcrumb({
+            category: "navigation",
+            message: "Skipped stale create redirect during active route intent",
+            data: {
+              pathname: currentPathname,
+              isNotificationNavigationActive,
+              isShareNavigationActive,
+            },
+            level: "info",
+          });
+          return;
+        }
+
         Sentry.addBreadcrumb({
           category: "navigation",
           message: "Redirecting stale initial create route to home",
-          data: { pathname },
+          data: { pathname: currentPathname },
           level: "info",
         });
         router.replace("/(tabs)");
@@ -390,7 +464,7 @@ export default function TabLayout() {
           category: "navigation",
           message: "Routing initial share intent to create tab",
           data: {
-            pathname,
+            pathname: currentPathname,
             hasShareIntent,
             hadInitialShareIntent: initialShareIntentRef.current,
             detectedRecentSharePath: isRecentSharePath(10_000),
@@ -401,7 +475,7 @@ export default function TabLayout() {
           level: "info",
           tags: { feature: "share-intent", operation: "initial-route-recovery" },
           extra: {
-            pathname,
+            pathname: currentPathname,
             hasShareIntent,
             hadInitialShareIntent: initialShareIntentRef.current,
             detectedRecentSharePath: isRecentSharePath(10_000),

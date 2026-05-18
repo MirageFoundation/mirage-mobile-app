@@ -236,7 +236,7 @@ export const PostOptionsSheet = forwardRef<
     const bottomSheetRef = useRef<BottomSheetModal>(null);
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
-    const shareServer = usePreferencesStore((s) => s.shareServer);
+    const shareServer = usePreferencesStore((s) => s.apiServer);
     const userLevel = useAuthStore((s) => s.userLevel);
     const isAgent = userLevel >= 10;
 

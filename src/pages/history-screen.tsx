@@ -49,7 +49,7 @@ export function HistoryScreen() {
   const clearAll = useHistoryStore((s) => s.clearAll);
   const savedPosts = useSavedPostsStore((s) => s.savedPosts);
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
-  const shareServer = usePreferencesStore((s) => s.shareServer);
+  const shareServer = usePreferencesStore((s) => s.apiServer);
   const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
   const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
 

@@ -2,7 +2,6 @@ import * as Linking from "expo-linking";
 import * as Sentry from "@sentry/react-native";
 import { Alert } from "react-native";
 
-import { getRootPostId } from "@/src/api/read/endpoints/posts";
 import { useAuthStore, usePreferencesStore } from "@/src/stores";
 import { storage } from "@/src/stores/mmkv-storage";
 import { useDeepLinkStore } from "@/src/stores/deep-link-store";
@@ -87,26 +86,6 @@ function getAdditionalMirageHosts(): string[] {
   return [usePreferencesStore.getState().apiServer];
 }
 
-function resolveRootPostForComment(commentId: string) {
-  getRootPostId({ comment_id: commentId })
-    .then((response) => {
-      if (response.root_post_id && response.root_post_id !== commentId) {
-        navigateWithAuthGuard(
-          `/post/${response.root_post_id}?highlight=${commentId}`,
-          "replace",
-        );
-      }
-    })
-    .catch((error) => {
-      Sentry.addBreadcrumb({
-        category: "navigation",
-        message: "Failed to resolve root post",
-        data: { commentId, error: String(error) },
-        level: "warning",
-      });
-    });
-}
-
 function resolveSelfRoute(route: string): string | null {
   if (!route.includes("__SELF__")) return route;
   const walletAddress = useAuthStore.getState().walletAddress;
@@ -146,6 +125,10 @@ export function getRecentSharePathAgeMs(): number | null {
 export function isRecentSharePath(withinMs = 10_000): boolean {
   const age = getRecentSharePathAgeMs();
   return age !== null && age >= 0 && age < withinMs;
+}
+
+export function getLastSharePath(): string | null {
+  return storage.getString(LAST_SHARE_PATH_KEY) ?? null;
 }
 
 export function isRecentCreateDeepLink(
@@ -200,7 +183,7 @@ export async function redirectSystemPath({
     if (shouldSkipRepeatedSharePath(path)) {
       Sentry.addBreadcrumb({
         category: "share-intent",
-        message: "Skipping repeated stale share launch path",
+        message: "Routing repeated share launch path to create",
         data: {
           initial,
           ageMs: repeatedSharePathAgeMs,
@@ -208,7 +191,8 @@ export async function redirectSystemPath({
         },
         level: "info",
       });
-      return "/(tabs)";
+      rememberSharePath(path);
+      return "/(tabs)/create";
     }
 
     Sentry.addBreadcrumb({
@@ -275,13 +259,6 @@ export async function redirectSystemPath({
     rememberCreateDeepLink(path);
   }
 
-  // /p/<id> can be either a post or a comment. Fire the root-post lookup so
-  // that if the id is actually a comment we replace with the real post and
-  // highlight the target comment (same behavior as in-app handleMirageLink).
-  if (match.type === "post" && match.resourceId) {
-    resolveRootPostForComment(match.resourceId);
-  }
-
   return target;
 }
 
@@ -318,10 +295,6 @@ export async function handleMirageLink(url: string): Promise<boolean> {
   }
 
   navigateWithAuthGuard(resolvedRoute);
-
-  if (match.type === "post" && match.resourceId) {
-    resolveRootPostForComment(match.resourceId);
-  }
 
   return true;
 }

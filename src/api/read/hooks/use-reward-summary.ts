@@ -1,11 +1,22 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../query-keys"; 
-import { getRewardSummary, getAchievements, type GetRewardSummaryParams } from "../endpoints/rewards";
-import type { RewardSummaryResponse } from "../endpoints/rewards";
+import {
+  getRewardSummary,
+  getAchievements,
+  type GetRewardSummaryParams,
+  type RewardSummaryResponse,
+} from "../endpoints/rewards";
 import { useAuthStore } from "@/src/stores";
 
-export function useRewardSummary(params?: Omit<GetRewardSummaryParams, "address">) {
+export function useRewardSummary(
+  params?: Omit<GetRewardSummaryParams, "address">,
+  options?: { enabled?: boolean },
+) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const hasOnboarded = useAuthStore((s) => s.hasOnboarded);
+  const isInitializing = useAuthStore((s) => s.isInitializing);
+  const isBootstrapping = useAuthStore((s) => s.isBootstrapping);
   const queryClient = useQueryClient();
 
   return useQuery({
@@ -23,7 +34,13 @@ export function useRewardSummary(params?: Omit<GetRewardSummaryParams, "address"
       }
       return data;
     },
-    enabled: !!walletAddress,
+    enabled:
+      !!walletAddress &&
+      isLoggedIn &&
+      hasOnboarded &&
+      !isInitializing &&
+      !isBootstrapping &&
+      (options?.enabled ?? true),
     staleTime: 1000 * 60,
     gcTime: 1000 * 60 * 5,
   });

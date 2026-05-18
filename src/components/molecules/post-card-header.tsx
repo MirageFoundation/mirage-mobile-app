@@ -50,6 +50,7 @@ type PostCardHeaderProps = {
   topicDisabled?: boolean;
   directFollowUser?: boolean;
   showMoreButton?: boolean;
+  disabled?: boolean;
 };
 
 export const PostCardHeader = memo(function PostCardHeader({
@@ -68,6 +69,7 @@ export const PostCardHeader = memo(function PostCardHeader({
   topicDisabled = false,
   directFollowUser = false,
   showMoreButton = false,
+  disabled = false,
 }: PostCardHeaderProps) {
   const { theme } = useUnistyles();
 
@@ -90,29 +92,34 @@ export const PostCardHeader = memo(function PostCardHeader({
   );
 
   const handleAuthorPress = useCallback(() => {
+    if (disabled) return;
     triggerHaptic("selection");
     onAuthorPress?.();
-  }, [onAuthorPress]);
+  }, [disabled, onAuthorPress]);
 
   const handleTopicPress = useCallback(() => {
+    if (disabled) return;
     triggerHaptic("selection");
     onTopicPress?.();
-  }, [onTopicPress]);
+  }, [disabled, onTopicPress]);
 
   const handleMorePress = useCallback(() => {
+    if (disabled) return;
     triggerHaptic("selection");
     onMorePress?.();
-  }, [onMorePress]);
+  }, [disabled, onMorePress]);
 
   const handleFollowUser = useCallback(() => {
+    if (disabled) return;
     triggerHaptic("medium");
     onFollowUser?.();
-  }, [onFollowUser]);
+  }, [disabled, onFollowUser]);
 
   const handleFollowTopic = useCallback(() => {
+    if (disabled) return;
     triggerHaptic("medium");
     onFollowTopic?.();
-  }, [onFollowTopic]);
+  }, [disabled, onFollowTopic]);
 
   const { displayTopic, showUsername } = useMemo(
     () => getTopicUsernameDisplay(topic, author.username),
@@ -124,9 +131,9 @@ export const PostCardHeader = memo(function PostCardHeader({
     [theme.colors.text.subtle],
   );
   const usernameColorStyle = useMemo(() => {
+    if (author.isNewUser) return { color: NEW_USER_COLOR };
     const tierColor = author.level != null ? getUsernameColor(author.level) : undefined;
     if (tierColor) return { color: tierColor };
-    if (author.isNewUser && (!author.level || author.level === 0)) return { color: NEW_USER_COLOR };
     return { color: theme.colors.text.subtle };
   }, [author.level, author.isNewUser, theme.colors.text.subtle]);
   const followingBgStyle = useMemo(

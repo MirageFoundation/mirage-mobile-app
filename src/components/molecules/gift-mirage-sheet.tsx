@@ -40,7 +40,8 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
     const amountInputRef = useRef<any>(null);
     const keyboardRestoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const { data: userStatus } = useUserStatus();
+    const [isPresented, setIsPresented] = useState(false);
+    const { data: userStatus } = useUserStatus({ enabled: isPresented });
     const sendTokensMutation = useSendTokens();
 
     const [amountText, setAmountText] = useState("");
@@ -94,6 +95,7 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
     const canSend = parsedAmount > 0 && !insufficientBalance && !isSending;
 
     const present = useCallback(() => {
+      setIsPresented(true);
       setAmountText("");
       setIsSending(false);
       sendTokensMutation.reset();
@@ -108,7 +110,10 @@ export const GiftMirageSheet = forwardRef<GiftMirageSheetRef, GiftMirageSheetPro
 
     const handleSheetChanges = useCallback(
       (index: number) => {
-        if (index === -1) onDismiss?.();
+        if (index === -1) {
+          setIsPresented(false);
+          onDismiss?.();
+        }
       },
       [onDismiss],
     );

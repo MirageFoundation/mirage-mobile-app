@@ -234,6 +234,11 @@ export interface Post {
   awards?: AwardBadge[];
   agent_edited?: boolean;
   agent_edits_meta?: Record<string, string>;
+  optimistic_status?: "pending" | "success" | "error";
+  optimistic_error?: string;
+  optimistic_action_id?: string;
+  optimistic_draft?: import("@/src/stores/draft-store").PostDraft;
+  optimistic_video_preview_until?: number;
   appendices?: { agent: string; agent_username?: string; text: string }[];
 }
 
@@ -389,7 +394,8 @@ export interface TxStatusResponse {
 export interface WelcomeStatsResponse {
   registered_users: number;
   posts_24h: number;
-  active_24h: number;
+  active_7d: number;
+  active_24h?: number;
 }
 
 export interface DifficultyHistory {

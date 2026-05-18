@@ -1,5 +1,6 @@
 import type { ContentWarningType } from "@/src/components/atoms";
 import type { AwardBadge } from "@/src/api/types";
+import type { PostDraft } from "@/src/stores/draft-store";
 
 export type PostAuthor = {
   id: string;
@@ -37,5 +38,10 @@ export type Post = {
   awards?: AwardBadge[];
   agentEdited?: boolean;
   agentEditsMeta?: Record<string, string>;
+  optimisticStatus?: "pending" | "success" | "error";
+  optimisticError?: string;
+  optimisticActionId?: string;
+  optimisticDraft?: PostDraft;
+  optimisticVideoPreviewUntil?: number;
   appendices?: { agent: string; agentUsername?: string; text: string }[];
 };

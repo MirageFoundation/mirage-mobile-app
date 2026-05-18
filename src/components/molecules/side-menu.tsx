@@ -350,7 +350,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       }
     }, [isLoggedIn]);
 
-    const { data: userStatus } = useUserStatus();
+    const { data: userStatus } = useUserStatus({ enabled: visible });
     const balance = userStatus?.balance
       ? Math.floor(userStatus.balance / 1_000_000)
       : 0;
@@ -367,8 +367,10 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       peopleBeforeShowMore === -1
         ? allFollowedUsers
         : allFollowedUsers.slice(0, peopleBeforeShowMore);
-    const { data: usernameMap } =
-      useBatchUsernamesFromAddresses(allFollowedUsers);
+    const { data: usernameMap } = useBatchUsernamesFromAddresses(
+      allFollowedUsers,
+      { enabled: visible },
+    );
     const followedTopics =
       topicsBeforeShowMore === -1
         ? allFollowedTopics
@@ -763,7 +765,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 144
+                          update 163
                         </Text>
                         <Text
                           style={{
@@ -818,7 +820,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 144
+                          update 163
                         </Text>
                         <Text
                           style={{

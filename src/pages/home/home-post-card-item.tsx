@@ -1,5 +1,6 @@
 import { memo, useCallback, useMemo, useRef, useEffect } from "react";
 import type { LayoutChangeEvent } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Post } from "@/src/components/molecules";
 import { PostCard } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
@@ -7,6 +8,9 @@ import { logPress } from "@/src/utils/press-logger";
 import { markSeen } from "@/src/services/seen-posts";
 import { getShareBaseUrl } from "@/src/stores";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
+import { useDraftStore } from "@/src/stores/draft-store";
+import { router } from "@/src/utils/guarded-router";
+import { removeOptimisticPostFromCache } from "@/src/api/write/hooks/use-post";
 import {
   useHomePostCardStore,
   useAllowAutoplay,
@@ -43,6 +47,10 @@ function areHomePostCardItemPropsEqual(
  if (prev.hasLiked !== next.hasLiked) return false;
  if (prev.hasDisliked !== next.hasDisliked) return false;
  if (prev.awards?.length !== next.awards?.length) return false;
+ if (prev.optimisticStatus !== next.optimisticStatus) return false;
+ if (prev.optimisticError !== next.optimisticError) return false;
+ if (prev.optimisticActionId !== next.optimisticActionId) return false;
+ if (prev.optimisticVideoPreviewUntil !== next.optimisticVideoPreviewUntil) return false;
   if (prevProps.feedScreen !== nextProps.feedScreen) return false;
   if (prevProps.feedContext !== nextProps.feedContext) return false;
  return true;
@@ -57,6 +65,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
   feedContext,
   onLayout,
 }: HomePostCardItemProps) {
+ const queryClient = useQueryClient();
  const visibility = useVideoVisibility(post.id, feedContext);
  const isVisible = (visibility & 2) !== 0;
  const isFocused = (visibility & 1) !== 0;
@@ -197,6 +206,15 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     onLayout?.(post.id, event);
   }, [onLayout, post.id]);
 
+  const handleOptimisticRetryPress = useCallback(() => {
+    const p = postRef.current;
+    if (p.optimisticDraft) {
+      useDraftStore.setState({ draft: p.optimisticDraft, hasDraft: true });
+    }
+    removeOptimisticPostFromCache(queryClient, p.id);
+    router.replace("/(tabs)/create");
+  }, [queryClient]);
+
   const displayPost = useMemo(() => {
     let result = { ...post };
     const needsFollowingUpdate = (post.isFollowing ?? false) !== isFollowing;
@@ -261,6 +279,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
      onReport={handleReport}
     onMediaPress={handlePostPress}
     onLayout={handleLayout}
+    onOptimisticRetryPress={displayPost.optimisticStatus === "error" ? handleOptimisticRetryPress : undefined}
     contentRevealed={contentRevealed}
       shareUrl={`${getShareBaseUrl(shareServer)}/p/${post.id}`}
   />

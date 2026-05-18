@@ -64,6 +64,8 @@ import {
   useDeleteHandler,
   useReportHandler,
   useTabSwipeGesture,
+  useVoteHandler,
+  type VoteResult,
 } from "@/src/hooks";
 import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
 import {
@@ -74,9 +76,11 @@ import {
   useFeedScrollStore,
   useSavedPostsStore,
 } from "@/src/stores";
+import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import { useEdit } from "@/src/api/write";
 import { useToast } from "@/src/providers/toast-provider";
+import { composeCommentContent, resolveCommentMediaUrl } from "@/src/utils/comment-media";
 import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 import {
   usePowQueueStore,
@@ -137,10 +141,13 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  isFocused,
  isNearVisible,
  screenActive,
+  shareUrl,
  onPostPress,
  onAuthorPress,
  onCommentPress,
  onMorePress,
+  onLikePress,
+  onDislikePress,
   onTopicPress,
   videoSyncScope,
 }: {
@@ -149,10 +156,23 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
  isFocused?: boolean;
  isNearVisible?: boolean;
  screenActive?: boolean;
+  shareUrl?: string;
  onPostPress: (postId: string) => void;
  onAuthorPress: (authorId: string) => void;
  onCommentPress: (postId: string) => void;
  onMorePress: (postId: string) => void;
+  onLikePress: (
+    postId: string,
+    currentlyLiked: boolean,
+    currentlyDisliked: boolean,
+    currentLikes: number
+  ) => void;
+  onDislikePress: (
+    postId: string,
+    currentlyLiked: boolean,
+    currentlyDisliked: boolean,
+    currentLikes: number
+  ) => void;
   onTopicPress: (topic: string) => void;
   videoSyncScope?: string;
 }) {
@@ -176,10 +196,13 @@ const AnimatedPostWrapper = memo(function AnimatedPostWrapper({
    screenActive={screenActive}
     showUrlCard={false}
     videoSyncScope={videoSyncScope}
+     shareUrl={shareUrl}
     onPostPress={onPostPress}
     onAuthorPress={onAuthorPress}
     onCommentPress={onCommentPress}
     onMorePress={onMorePress}
+    onLikePress={onLikePress}
+    onDislikePress={onDislikePress}
    onTopicPress={onTopicPress}
    />
  );
@@ -204,7 +227,7 @@ export function ProfileScreen() {
   const router = useRouter();
   const isFocused = useIsFocused();
   const user = useAuthStore((s) => s.user);
-  const shareServer = usePreferencesStore((s) => s.shareServer);
+  const shareServer = usePreferencesStore((s) => s.apiServer);
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { theme } = useUnistyles();
@@ -260,6 +283,22 @@ export function ProfileScreen() {
   });
   const blockHandler = useBlockHandler({});
   const reportHandler = useReportHandler({});
+
+  const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
+  const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
+
+  const { handleUpvote, handleDownvote } = useVoteHandler({
+    onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
+      setVoteOverride(targetId, {
+        hasLiked: result.hasLiked,
+        hasDisliked: result.hasDisliked,
+        likes: result.newLikes,
+      });
+    }, [setVoteOverride]),
+    onRollback: useCallback((targetId: string) => {
+      clearVoteOverride(targetId);
+    }, [clearVoteOverride]),
+  });
 
  const toast = useToast();
  const pendingEdit = useCommentComposeStore((s) => s.pendingEdit);
@@ -534,14 +573,9 @@ useEffect(() => {
 
     if (!commentId || commentId.startsWith("optimistic-")) return;
 
-   let finalContent = text;
-    if (imageUri) {
-      finalContent = text.trim() ? `${imageUri}\n\n${text.trim()}` : imageUri;
-    } else if (gifUrl) {
-      finalContent = text.trim() ? `${gifUrl}\n\n${text.trim()}` : gifUrl;
-    }
+   const optimisticContent = composeCommentContent(text, imageUri || gifUrl || null);
 
-      setCommentEditOverrides((prev) => ({ ...prev, [commentId]: finalContent }));
+      setCommentEditOverrides((prev) => ({ ...prev, [commentId]: optimisticContent }));
 
       const actionId = generateActionId();
       enqueue({
@@ -549,6 +583,9 @@ useEffect(() => {
         type: "edit",
         label: getActionLabel("edit"),
         execute: async () => {
+          const mediaUrl = await resolveCommentMediaUrl(imageUri, gifUrl);
+          const finalContent = composeCommentContent(text, mediaUrl);
+
           return editMutateAsyncRef.current({
             postId: commentId,
             parentId,
@@ -567,7 +604,17 @@ useEffect(() => {
             });
           }, 3000);
         },
-        onError: () => {
+        onError: (err) => {
+          Sentry.captureException(err, {
+            tags: { feature: "comment", operation: "edit_comment_profile" },
+            extra: {
+              commentId,
+              parentId,
+              hadImage: !!imageUri,
+              hadGif: !!gifUrl,
+              contentLength: text.length,
+            },
+          });
           setCommentEditOverrides((prev) => {
             const next = { ...prev };
             delete next[commentId];
@@ -955,10 +1002,13 @@ useEffect(() => {
                isNearVisible={nearbyVideoPostIds.has(item.id)}
                screenActive={isFocused}
                videoSyncScope={PROFILE_POSTS_FEED_CONTEXT}
+               shareUrl={`${getShareBaseUrl(shareServer)}/p/${item.id}`}
                onPostPress={handlePostPress}
                onAuthorPress={handleAuthorPress}
                onCommentPress={handlePostPress}
                onMorePress={handlePostMorePress}
+               onLikePress={handleUpvote}
+               onDislikePress={handleDownvote}
                onTopicPress={handleTopicPress}
               />
             </Animated.View>
@@ -997,11 +1047,14 @@ useEffect(() => {
         handleAuthorPress,
         handlePostMorePress,
        handleCommentPress,
+      handleUpvote,
+      handleDownvote,
       contentAnimatedStyle,
       animatedTabIndex,
       postsWithoutWarnings,
       activeVideoPostId,
       isFocused,
+      shareServer,
       ],
     );
 
@@ -1075,7 +1128,6 @@ useEffect(() => {
     const isSticky = scrollY.value >= stickyThreshold;
     return {
       opacity: isSticky ? 1 : 0,
-      pointerEvents: isSticky ? "auto" : "none",
     } as any;
   });
 
@@ -1127,6 +1179,7 @@ useEffect(() => {
           },
           stickyTabsAnimatedStyle,
         ]}
+        pointerEvents={isTabsSticky ? "auto" : "none"}
       >
         <ProfileTabBar
           activeTab={activeTab}

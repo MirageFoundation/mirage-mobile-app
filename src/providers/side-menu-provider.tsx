@@ -26,7 +26,7 @@ export function SideMenuProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const logout = useAuthStore((s) => s.logout);
   const currentUser = useAuthStore((s) => s.user);
-  const { refetch: refetchUserStatus } = useUserStatus();
+  const { refetch: refetchUserStatus } = useUserStatus({ enabled: false });
 
   const openSideMenu = useCallback(() => {
     refetchUserStatus();

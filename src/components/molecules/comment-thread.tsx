@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePreferencesStore } from "@/src/stores";
-import { View } from "react-native";
+import { View, type LayoutChangeEvent } from "react-native";
 import Animated, {
   FadeIn,
   FadeOut,
@@ -31,20 +31,32 @@ type CommentThreadProps = {
   currentUserId?: string | null;
   highlightedCommentId?: string | null;
   onAuthorPress?: (authorId: string) => void;
-  onLikePress?: (commentId: string, hasLiked: boolean, hasDisliked: boolean, likes: number) => void;
-  onDislikePress?: (commentId: string, hasLiked: boolean, hasDisliked: boolean, likes: number) => void;
+  onLikePress?: (
+    commentId: string,
+    hasLiked: boolean,
+    hasDisliked: boolean,
+    likes: number,
+  ) => void;
+  onDislikePress?: (
+    commentId: string,
+    hasLiked: boolean,
+    hasDisliked: boolean,
+    likes: number,
+  ) => void;
   onReplyPress?: (comment: Comment) => void;
   onMorePress?: (comment: Comment) => void;
   followedUsers?: string[];
   followLoadingUsers?: Set<string>;
   onFollowPress?: (authorId: string, isCurrentlyFollowing: boolean) => void;
+  onHighlightedLayout?: (event: LayoutChangeEvent) => void;
   showDivider?: boolean;
+  focusedContextMode?: boolean;
 };
 
 export const CommentThread = ({
   comment,
   depth = 0,
-  maxDepth = 4,
+  maxDepth = 20,
   activeDepths = EMPTY_DEPTHS,
   isLastChild = true,
   currentUserId,
@@ -57,19 +69,35 @@ export const CommentThread = ({
   followedUsers = [],
   followLoadingUsers = EMPTY_LOADING_SET,
   onFollowPress,
+  onHighlightedLayout,
   showDivider = true,
+  focusedContextMode = false,
 }: CommentThreadProps) => {
-  const autoCollapseThreshold = usePreferencesStore((s) => s.autoCollapseThreshold);
+  const autoCollapseThreshold = usePreferencesStore(
+    (s) => s.autoCollapseThreshold,
+  );
   const score = comment.likes;
-  const shouldAutoCollapse = autoCollapseThreshold !== null && score <= autoCollapseThreshold;
+  const shouldAutoCollapse =
+    autoCollapseThreshold !== null && score <= autoCollapseThreshold;
   const [isCollapsed, setIsCollapsed] = useState(shouldAutoCollapse);
-
-  useEffect(() => {
-    setIsCollapsed(shouldAutoCollapse);
-  }, [autoCollapseThreshold]);
-
   const replies = comment.replies ?? [];
   const hasReplies = replies.length > 0;
+  const containsHighlightedComment = useMemo(() => {
+    if (!highlightedCommentId) return false;
+    const containsComment = (target: Comment): boolean => {
+      if (target.id === highlightedCommentId) return true;
+      return target.replies?.some(containsComment) ?? false;
+    };
+    return containsComment(comment);
+  }, [comment, highlightedCommentId]);
+
+  useEffect(() => {
+    if (containsHighlightedComment) {
+      setIsCollapsed(false);
+      return;
+    }
+    setIsCollapsed(shouldAutoCollapse);
+  }, [containsHighlightedComment, shouldAutoCollapse]);
 
   const handleToggleCollapse = useCallback(() => {
     setIsCollapsed((prev) => !prev);
@@ -79,14 +107,22 @@ export const CommentThread = ({
   const isHighlighted = highlightedCommentId === comment.id;
 
   return (
-    <Animated.View style={styles.container} layout={LinearTransition.duration(250)}>
+    <Animated.View
+      style={styles.container}
+      layout={LinearTransition.duration(250)}
+    >
       <CommentItem
         comment={comment}
         isOwnComment={isOwnComment}
         isHighlighted={isHighlighted}
         isFollowingAuthor={followedUsers.includes(comment.author.id)}
         isFollowLoading={followLoadingUsers.has(comment.author.id)}
-        onFollowPress={() => onFollowPress?.(comment.author.id, followedUsers.includes(comment.author.id))}
+        onFollowPress={() =>
+          onFollowPress?.(
+            comment.author.id,
+            followedUsers.includes(comment.author.id),
+          )
+        }
         depth={depth}
         maxDepth={maxDepth}
         activeDepths={activeDepths}
@@ -94,10 +130,25 @@ export const CommentThread = ({
         isCollapsed={isCollapsed}
         onPress={handleToggleCollapse}
         onAuthorPress={() => onAuthorPress?.(comment.author.id)}
-        onLikePress={() => onLikePress?.(comment.id, comment.hasLiked ?? false, comment.hasDisliked ?? false, comment.likes)}
-        onDislikePress={() => onDislikePress?.(comment.id, comment.hasLiked ?? false, comment.hasDisliked ?? false, comment.likes)}
+        onLikePress={() =>
+          onLikePress?.(
+            comment.id,
+            comment.hasLiked ?? false,
+            comment.hasDisliked ?? false,
+            comment.likes,
+          )
+        }
+        onDislikePress={() =>
+          onDislikePress?.(
+            comment.id,
+            comment.hasLiked ?? false,
+            comment.hasDisliked ?? false,
+            comment.likes,
+          )
+        }
         onReplyPress={() => onReplyPress?.(comment)}
         onMorePress={() => onMorePress?.(comment)}
+        onHighlightedLayout={onHighlightedLayout}
       />
 
       {hasReplies && !isCollapsed && (
@@ -108,15 +159,22 @@ export const CommentThread = ({
         >
           {replies.map((reply, idx) => {
             const replyIsLast = idx === replies.length - 1;
-            // Each child inherits our `activeDepths` always. If THIS
-            // child is not the last sibling, our own column (depth)
-            // must also run through that child's subtree so the rail
-            // reaches the next sibling below — this is what makes a
-            // parent with multiple children connect through its first
-            // child to the next one.
-            const replyActiveDepths = replyIsLast
-              ? activeDepths
-              : [...activeDepths, depth];
+            // Once we descend past the focused comment, its actual
+            // replies render as a normal thread, not parent chain.
+            const childInFocusedContext =
+              focusedContextMode && !comment.isFocusedComment;
+            // Normal threads inherit ancestor rails through non-last
+            // siblings so sibling subtrees stay connected. Focused
+            // comment context is a single parent chain (like web), so
+            // each child only needs ONE ancestor rail at its immediate
+            // parent's column — drawn full row height — to guarantee
+            // an unbroken vertical line across the parent→child row
+            // boundary at every depth.
+            const replyActiveDepths = childInFocusedContext
+              ? [depth]
+              : replyIsLast
+                ? activeDepths
+                : [...activeDepths, depth];
             return (
               <CommentThread
                 key={reply.id}
@@ -135,7 +193,9 @@ export const CommentThread = ({
                 followedUsers={followedUsers}
                 followLoadingUsers={followLoadingUsers}
                 onFollowPress={onFollowPress}
+                onHighlightedLayout={onHighlightedLayout}
                 showDivider={false}
+                focusedContextMode={childInFocusedContext}
               />
             );
           })}

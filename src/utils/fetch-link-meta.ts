@@ -33,7 +33,7 @@ function getMeta(html: string, property: string): string | null {
   return null;
 }
 
-function useFxTwitter(url: string): string | null {
+function getFxTwitterUrl(url: string): string | null {
   try {
     const parsed = new URL(url);
     if (
@@ -47,6 +47,51 @@ function useFxTwitter(url: string): string | null {
     }
   } catch {}
   return null;
+}
+
+function getTweetId(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "").replace(/^mobile\./, "");
+    if (host !== "x.com" && host !== "twitter.com" && host !== "fxtwitter.com" && host !== "vxtwitter.com") {
+      return null;
+    }
+    return parsed.pathname.match(/\/status(?:es)?\/(\d+)/i)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function applyTweetMedia(
+  tweet: any,
+  state: {
+    images: string[];
+    videos: string[];
+    image: string | null;
+    video: string | null;
+  },
+): { image: string | null; video: string | null } {
+  const media = tweet?.media?.all ?? tweet?.media?.photos ?? tweet?.photos ?? [];
+  for (const item of media) {
+    const url = item?.url ?? item?.media_url_https ?? item?.media_url ?? item?.image_url ?? null;
+    const thumbnail = item?.thumbnail_url ?? item?.thumb ?? item?.preview_image_url ?? null;
+    const videoUrl = item?.url ?? item?.video_url ?? item?.variants?.find?.((v: any) => v?.type === "video/mp4")?.url ?? null;
+    if ((item?.type === "video" || item?.type === "animated_gif" || item?.type === "gif") && videoUrl) {
+      state.videos.push(videoUrl);
+      if (!state.video) state.video = videoUrl;
+      if (!state.image && thumbnail) state.image = thumbnail;
+    } else if (url) {
+      state.images.push(url);
+      if (!state.image) state.image = url;
+    }
+  }
+  const cardImage = tweet?.card?.image?.url ?? tweet?.card?.image ?? tweet?.thumbnail_url ?? null;
+  if (cardImage) {
+    state.images.push(cardImage);
+    if (!state.image) state.image = cardImage;
+  }
+  if (state.images.length > 0 && !state.image) state.image = state.images[0];
+  return { image: state.image, video: state.video };
 }
 
 async function fetchHtml(url: string, signal: AbortSignal, useBot = false): Promise<string> {
@@ -162,7 +207,34 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
     }
 
     const raw = await res.text();
-    const data = JSON.parse(raw);
+    if (!raw.trim()) {
+      console.log("[fetchRedditVideo] JSON fetch returned empty body:", { jsonUrl });
+      Sentry.captureMessage("Reddit JSON returned empty body", {
+        level: "warning",
+        tags: { feature: "share-intent", domain: "reddit.com" },
+        extra: { jsonUrl, originalUrl: url, resolvedUrl },
+      });
+      return {};
+    }
+
+    let data: unknown;
+    try {
+      data = JSON.parse(raw);
+    } catch (parseErr) {
+      console.log("[fetchRedditVideo] JSON parse failed:", { jsonUrl, error: String(parseErr) });
+      Sentry.captureMessage("Reddit JSON parse failed", {
+        level: "warning",
+        tags: { feature: "share-intent", domain: "reddit.com" },
+        extra: {
+          jsonUrl,
+          originalUrl: url,
+          resolvedUrl,
+          rawPreview: raw.slice(0, 300),
+          error: String(parseErr),
+        },
+      });
+      return {};
+    }
 
     const listing = Array.isArray(data) ? data[0] : data;
     const post = listing?.data?.children?.[0]?.data;
@@ -799,11 +871,53 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       siteName = siteName ?? tt.siteName ?? null;
     }
 
-    const fxUrl = useFxTwitter(url);
+    const fxUrl = getFxTwitterUrl(url);
     let html: string | null = null;
+    let shouldSkipGenericHtmlFallback = false;
 
     if (fxUrl) {
       try {
+        const tweetId = getTweetId(url);
+        if (tweetId) {
+          try {
+            const syndicationRes = await fetch(`https://cdn.syndication.twimg.com/tweet-result?id=${tweetId}&lang=en`, {
+              signal: controller.signal,
+              headers: { Accept: "application/json" },
+            });
+            if (syndicationRes.ok) {
+              const tweet = await syndicationRes.json();
+              const tweetText = tweet?.text ?? tweet?.full_text ?? "";
+              const tweetLines = tweetText.split("\n").filter((line: string) => line.trim().length > 0);
+              if (!title) title = tweetLines[0]?.trim() ?? null;
+              if (!description) description = tweetLines.length > 1 ? tweetLines.slice(1).join("\n").trim() : tweetText || null;
+              if (!siteName) siteName = "X";
+              const mediaState = applyTweetMedia(tweet, { images, videos, image, video });
+              image = mediaState.image;
+              video = mediaState.video;
+              Sentry.addBreadcrumb({
+                category: "link-meta",
+                message: "Fetched X metadata from syndication API",
+                data: {
+                  tweetId,
+                  hasTitle: !!title,
+                  hasImage: !!image,
+                  hasVideo: !!video,
+                  imageCount: images.length,
+                  videoCount: videos.length,
+                },
+                level: "info",
+              });
+            }
+          } catch (syndicationErr) {
+            Sentry.addBreadcrumb({
+              category: "link-meta",
+              message: "X syndication metadata failed",
+              data: { tweetId, error: String(syndicationErr) },
+              level: "warning",
+            });
+          }
+        }
+
         const apiUrl = fxUrl.replace("fxtwitter.com", "api.fxtwitter.com");
         try {
           const apiRes = await fetch(apiUrl, {
@@ -817,29 +931,20 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
               const tweetText = tweet.text ?? "";
               const tweetLines = tweetText.split("\n").filter((l: string) => l.trim().length > 0);
               if (!title) title = tweetLines[0]?.trim() ?? null;
-              if (!description) description = tweetLines.length > 1 ? tweetLines.slice(1).join("\n").trim() : null;
+              if (!description) description = tweetLines.length > 1 ? tweetLines.slice(1).join("\n").trim() : tweetText || null;
               if (!siteName) siteName = "X";
-              const media = tweet.media?.all ?? tweet.media?.photos ?? [];
-              for (const m of media) {
-                if (m.type === "photo" && m.url) {
-                  images.push(m.url);
-                } else if (m.type === "video" && m.url) {
-                  videos.push(m.url);
-                  if (!video) video = m.url;
-                } else if (m.type === "gif" && m.url) {
-                  videos.push(m.url);
-                  if (!video) video = m.url;
-                }
-                if (!image && (m.thumbnail_url || m.url)) {
-                  image = m.thumbnail_url ?? m.url;
-                }
-              }
-              const cardImage = tweet.card?.image?.url ?? null;
-              if (cardImage) {
-                images.push(cardImage);
-                if (!image) image = cardImage;
-              }
-              if (images.length > 0 && !image) image = images[0];
+              const mediaState = applyTweetMedia(tweet, { images, videos, image, video });
+              image = mediaState.image;
+              video = mediaState.video;
+              shouldSkipGenericHtmlFallback = !!(title || description || image || video);
+              console.log("[fetchLinkMeta] X API metadata:", {
+                hasTitle: !!title,
+                hasDescription: !!description,
+                hasImage: !!image,
+                hasVideo: !!video,
+                imageCount: images.length,
+                videoCount: videos.length,
+              });
             }
           }
         } catch {}
@@ -853,11 +958,13 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
           if (!siteName) siteName = getMeta(html, "site_name") ?? "X";
         }
       } catch {
-        html = await fetchHtml(url, controller.signal);
+        if (!title && !description && !image && !video) {
+          html = await fetchHtml(url, controller.signal);
+        }
       }
     }
 
-    if (!title || !description || !image || !video) {
+    if (!shouldSkipGenericHtmlFallback && (!title || !description || !image || !video)) {
       if (!html) html = await fetchHtml(url, controller.signal);
 
       if (!title) title = getMeta(html, "title");

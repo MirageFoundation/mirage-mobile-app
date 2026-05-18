@@ -24,7 +24,7 @@ import axios from "axios";
 
 type AwardPickerSheetProps = {
   targetId: string;
-  targetType: "post" | "comment";
+  targetType: "post" | "comment" | "user";
   isOwnContent?: boolean;
   onDismiss?: () => void;
   onSuccess?: () => void;
@@ -121,14 +121,15 @@ export const AwardPickerSheet = forwardRef<
     const userLevel = useAuthStore((s) => s.userLevel);
     const isAdmin = userLevel >= 100;
 
-    const { data: awardConfigs } = useAwardConfigs();
-    const { data: userStatus } = useUserStatus();
-    const giveAwardMutation = useGiveAward();
-
+    const [isPresented, setIsPresented] = useState(false);
     const [selectedType, setSelectedType] = useState<string | null>(null);
     const [isSending, setIsSending] = useState(false);
+    const { data: awardConfigs } = useAwardConfigs({ enabled: isPresented });
+    const { data: userStatus } = useUserStatus({ enabled: isPresented });
+    const giveAwardMutation = useGiveAward();
 
     const present = useCallback(() => {
+      setIsPresented(true);
       setSelectedType(null);
       setIsSending(false);
       giveAwardMutation.reset();
@@ -147,6 +148,7 @@ export const AwardPickerSheet = forwardRef<
     const handleSheetChanges = useCallback(
       (index: number) => {
         if (index === -1) {
+          setIsPresented(false);
           onDismiss?.();
         }
       },

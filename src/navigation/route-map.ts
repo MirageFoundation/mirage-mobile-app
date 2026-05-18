@@ -66,6 +66,19 @@ function splitPathAndSearch(value: string): {
   };
 }
 
+function withDefaultSearchParam(
+  search: string,
+  key: string,
+  value: string,
+): string {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  if (!params.has(key)) {
+    params.set(key, value);
+  }
+  const nextSearch = params.toString();
+  return nextSearch ? `?${nextSearch}` : "";
+}
+
 export function getMirageHosts(additionalHosts: string[] = []): string[] {
   return [...new Set([...MIRAGE_HOSTS, ...additionalHosts.filter(Boolean)])];
 }
@@ -107,11 +120,12 @@ export function mapMiragePathToRoute(
   if (segments.length >= 2) {
     const resourceId = segments[1];
 
-    if (prefix === "p") {
+    if (prefix === "p" || prefix === "c" || prefix === "comment") {
+      const postSearch = withDefaultSearchParam(search, "depth", "5");
       return {
         type: "post",
         hostname: "",
-        route: `/post/${resourceId}`,
+        route: `/post/${resourceId}${postSearch}`,
         requiresAuth: true,
         resourceId,
       };
