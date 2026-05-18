@@ -34,7 +34,7 @@ import { mutationKeys } from "../mutation-keys";
 import type { PoWProgress } from "../signing";
 import * as Sentry from "@sentry/react-native";
 import type { PostDraft } from "@/src/stores/draft-store";
-import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 
 // ============================================
 // Types

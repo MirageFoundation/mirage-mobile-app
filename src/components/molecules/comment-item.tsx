@@ -13,6 +13,7 @@ import { Ionicons, Octicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { openUrlOrInternal } from "@/src/utils/internal-link-handler";
+import type { Comment } from "@/src/domain/content";
 import {
   ActivityIndicator,
   Dimensions,
@@ -92,33 +93,7 @@ function commentRailXPx(depth: number): number {
   return commentAvatarLeftPx(d - 1) + COMMENT_AVATAR_SIZE / 2;
 }
 
-export type CommentAuthor = {
-  id: string;
-  username: string;
-  avatarSeed?: string;
-  avatarUrl?: string;
-  level?: number;
-  isNewUser?: boolean;
-};
-
-export type Comment = {
-  id: string;
-  author: CommentAuthor;
-  content: string;
-  likes: number;
-  dislikes: number;
-  hasLiked?: boolean;
-  hasDisliked?: boolean;
-  createdAt: Date | string | number;
-  replies?: Comment[];
-  replyCount?: number;
-  parentId?: string | null;
-  depth?: number;
-  isFocusedContext?: boolean;
-  isFocusedComment?: boolean;
-  awards?: import("@/src/api/types").AwardBadge[];
-  hasMoreReplies?: boolean;
-};
+export type { Comment, CommentAuthor } from "@/src/domain/content";
 
 type CommentItemProps = {
   /** Comment data */

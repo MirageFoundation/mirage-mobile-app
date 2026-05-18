@@ -3,21 +3,22 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { mmkvStorage } from "./mmkv-storage";
 import * as Sentry from "@sentry/react-native";
 import { walletService } from "@/src/services/wallet-service";
-import { getUserStatus } from "@/src/api/read/endpoints/users";
-import { queryKeys } from "@/src/api/read/query-keys";
-import { queryClient } from "@/src/providers/query-provider";
-import { getPosts } from "@/src/api/read/endpoints/posts";
-import {
-  getAllowedTagsFromContentTypes,
-  usePreferencesStore,
-} from "./preferences-store";
-import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { usePreferencesStore } from "./preferences-store";
+import { useHomePostCardStore } from "./home-post-card-store";
 import { useContentModerationStore } from "./content-moderation-store";
 import { useInboxStore } from "./inbox-store";
 import { useDraftStore } from "./draft-store";
-import { getTierName } from "@/src/utils/tiers";
 import { unregisterPush } from "@/src/services/push-notifications";
-import { primeBootstrap } from "@/src/services/bootstrap";
+import { getTierName } from "@/src/utils/tiers";
+import {
+  addAuthBootstrapBreadcrumb,
+  bootstrapAnonymousAfterLogout,
+  bootstrapAnonymousStartup,
+  bootstrapAuthSession,
+  resolveAndCacheAuthUserStatus,
+  startAuthUserStatusBootstrap,
+  type AuthUserStatusSnapshot,
+} from "@/src/services/auth-bootstrap";
 
 // ============================================
 // Types
@@ -49,16 +50,16 @@ const MOCK_USER: User = {
   followerCount: 128,
 };
 
-function addAuthBootstrapBreadcrumb(
-  message: string,
-  data?: Record<string, unknown>,
-) {
-  Sentry.addBreadcrumb({
-    category: "auth-bootstrap",
-    message,
-    level: "info",
-    data,
-  });
+function buildUserFromStatus(
+  walletAddress: string,
+  snapshot: AuthUserStatusSnapshot,
+): User {
+  return {
+    id: walletAddress,
+    username: snapshot.username,
+    walletAddress,
+    tier: snapshot.tier,
+  };
 }
 
 // ============================================
@@ -154,25 +155,7 @@ export const useAuthStore = create<AuthState>()(
           }
 
           if (!hasWalletResult) {
-            addAuthBootstrapBreadcrumb("Anonymous startup bootstrap started");
-            await primeBootstrap(queryClient);
-            addAuthBootstrapBreadcrumb("Anonymous startup bootstrap finished");
-
-            const prefs = usePreferencesStore.getState();
-            const allowedTags =
-              getAllowedTagsFromContentTypes(prefs.selectedContentTypes, prefs.adultContentEnabled) || undefined;
-            const prefetchParams = {
-              limit: 10,
-              feed: "home" as const,
-              by: "magic" as const,
-              allowed_tags: allowedTags,
-            };
-            queryClient.prefetchInfiniteQuery({
-              queryKey: queryKeys.posts({ ...prefetchParams, page: undefined }),
-              queryFn: ({ pageParam = 1 }) =>
-                getPosts({ ...prefetchParams, page: pageParam }),
-              initialPageParam: 1,
-            });
+            await bootstrapAnonymousStartup();
             set({
               isLoggedIn: false,
               walletAddress: null,
@@ -188,9 +171,6 @@ export const useAuthStore = create<AuthState>()(
           if (metadata) {
             Sentry.setUser({
               id: metadata.address,
-            });
-            addAuthBootstrapBreadcrumb("Logged-in startup bootstrap gating enabled", {
-              hasUsername: metadata.hasUsername,
             });
             set({
               isLoggedIn: true,
@@ -208,56 +188,19 @@ export const useAuthStore = create<AuthState>()(
               },
             });
 
-            const bootstrapResponse = await primeBootstrap(queryClient, metadata.address);
-            addAuthBootstrapBreadcrumb("Logged-in startup bootstrap finished", {
-              usedUserStatusFromBootstrap: Boolean(bootstrapResponse?.user_status),
-            });
-
-            const prefs2 = usePreferencesStore.getState();
-            const allowedTags =
-              getAllowedTagsFromContentTypes(prefs2.selectedContentTypes, prefs2.adultContentEnabled) || undefined;
-            const prefetchParams = {
-              limit: 10,
-              feed: "home" as const,
-              by: "magic" as const,
-              allowed_tags: allowedTags,
-              address: metadata.address,
-            };
-            queryClient.prefetchInfiniteQuery({
-              queryKey: queryKeys.posts({ ...prefetchParams, page: undefined }),
-              queryFn: ({ pageParam = 1 }) =>
-                getPosts({ ...prefetchParams, page: pageParam }),
-              initialPageParam: 1,
-            });
+            const bootstrapResponse = await bootstrapAuthSession(
+              metadata.address,
+              "Logged-in startup",
+            );
 
             set({ isInitializing: false });
 
-            Promise.resolve(
-              bootstrapResponse?.user_status ?? getUserStatus({ address: metadata.address })
-            )
-              .then((userStatus) => {
-                queryClient.setQueryData(
-                  queryKeys.userStatus(metadata.address),
-                  userStatus,
-                );
-
-                const newUserLevel = userStatus.user_level;
-                const newHasUsername = !!userStatus.username;
-                const newTier = getTierName(userStatus.user_level);
-
-                if (userStatus.username) {
-                  walletService.updateMetadata({ hasUsername: true });
-                }
-
+            resolveAndCacheAuthUserStatus(metadata.address, bootstrapResponse)
+              .then((snapshot) => {
                 set({
-                  hasUsername: newHasUsername,
-                  userLevel: newUserLevel,
-                  user: {
-                    id: metadata.address,
-                    username: userStatus.username,
-                    walletAddress: metadata.address,
-                    tier: newTier,
-                  },
+                  hasUsername: snapshot.hasUsername,
+                  userLevel: snapshot.userLevel,
+                  user: buildUserFromStatus(metadata.address, snapshot),
                 });
               })
               .catch((apiError) => {
@@ -355,9 +298,6 @@ export const useAuthStore = create<AuthState>()(
             message: "Wallet imported successfully",
             level: "info",
           });
-          addAuthBootstrapBreadcrumb("Import bootstrap gating enabled", {
-            hasUsername: metadata.hasUsername,
-          });
           set({
             isLoggedIn: true,
             isBootstrapping: true,
@@ -372,36 +312,19 @@ export const useAuthStore = create<AuthState>()(
               tier: "Free",
             },
           });
-          const bootstrapResponse = await primeBootstrap(queryClient, metadata.address);
-          addAuthBootstrapBreadcrumb("Import bootstrap finished", {
-            usedUserStatusFromBootstrap: Boolean(bootstrapResponse?.user_status),
-          });
-          const userStatus =
-            bootstrapResponse?.user_status ??
-            (await getUserStatus({ address: metadata.address }));
-
-          queryClient.setQueryData(
-            queryKeys.userStatus(metadata.address),
-            userStatus,
+          const bootstrapResponse = await bootstrapAuthSession(
+            metadata.address,
+            "Import",
+          );
+          const snapshot = await resolveAndCacheAuthUserStatus(
+            metadata.address,
+            bootstrapResponse,
           );
 
-          const newUserLevel = userStatus.user_level;
-          const newHasUsername = !!userStatus.username;
-          const newTier = getTierName(userStatus.user_level);
-
-          if (userStatus.username) {
-            walletService.updateMetadata({ hasUsername: true });
-          }
-
           set({
-            hasUsername: newHasUsername,
-            userLevel: newUserLevel,
-            user: {
-              id: metadata.address,
-              username: userStatus.username,
-              walletAddress: metadata.address,
-              tier: newTier,
-            },
+            hasUsername: snapshot.hasUsername,
+            userLevel: snapshot.userLevel,
+            user: buildUserFromStatus(metadata.address, snapshot),
           });
         } catch (error) {
           set({ isBootstrapping: false });
@@ -424,8 +347,6 @@ export const useAuthStore = create<AuthState>()(
 
         walletService.confirmWallet();
 
-        addAuthBootstrapBreadcrumb("New wallet bootstrap gating enabled");
-
         set({
           isLoggedIn: true,
           isBootstrapping: true,
@@ -439,47 +360,21 @@ export const useAuthStore = create<AuthState>()(
           },
         });
 
-        primeBootstrap(queryClient, walletAddress)
-          .then((bootstrapResponse) =>
-            bootstrapResponse?.user_status ?? getUserStatus({ address: walletAddress })
-          )
-          .then((userStatus) => {
-            queryClient.setQueryData(
-              queryKeys.userStatus(walletAddress),
-              userStatus,
-            );
-
-            const newUserLevel = userStatus.user_level;
-            const newHasUsername = !!userStatus.username;
-            const newTier = getTierName(userStatus.user_level);
-
-            if (userStatus.username) {
-              walletService.updateMetadata({ hasUsername: true });
-            }
-
+        startAuthUserStatusBootstrap(
+          walletAddress,
+          "New wallet",
+          (snapshot) => {
             set({
-              hasUsername: newHasUsername,
-              userLevel: newUserLevel,
-              user: {
-                id: walletAddress,
-                username: userStatus.username,
-                walletAddress,
-                tier: newTier,
-              },
+              hasUsername: snapshot.hasUsername,
+              userLevel: snapshot.userLevel,
+              user: buildUserFromStatus(walletAddress, snapshot),
             });
-          })
-          .catch((error) => {
-            Sentry.captureException(error, {
-              tags: {
-                feature: "auth-bootstrap",
-                operation: "new-wallet-user-status",
-              },
-            });
-          })
-          .finally(() => {
+          },
+          () => {
             addAuthBootstrapBreadcrumb("New wallet bootstrap gating disabled");
             set({ isBootstrapping: false });
-          });
+          },
+        );
       },
 
       logout: async () => {
@@ -500,7 +395,6 @@ export const useAuthStore = create<AuthState>()(
           message: "User logged out",
           level: "info",
         });
-        addAuthBootstrapBreadcrumb("Logout anonymous bootstrap gating enabled");
         set({
           user: null,
           isLoggedIn: false,
@@ -519,19 +413,9 @@ export const useAuthStore = create<AuthState>()(
         usePreferencesStore.setState({ hasSeenAdultPrompt: false });
         usePreferencesStore.setState({ ageVerified: false });
         useDraftStore.getState().clearDraft();
-        primeBootstrap(queryClient)
-          .catch((error) => {
-            Sentry.captureException(error, {
-              tags: {
-                feature: "auth-bootstrap",
-                operation: "logout-anonymous-bootstrap",
-              },
-            });
-          })
-          .finally(() => {
-            addAuthBootstrapBreadcrumb("Logout anonymous bootstrap gating disabled");
-            set({ isBootstrapping: false });
-          });
+        bootstrapAnonymousAfterLogout(() => {
+          set({ isBootstrapping: false });
+        });
       },
 
       // ============================================

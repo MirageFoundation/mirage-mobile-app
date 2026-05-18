@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Comment } from "@/src/components/molecules";
+import type { Comment } from "@/src/domain/content";
 
 type ReplyMap = Record<string, Comment[]>;
 

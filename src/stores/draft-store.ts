@@ -1,30 +1,9 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { mmkvStorage } from "./mmkv-storage";
+import type { AttachmentType, PostDraft } from "@/src/domain/content";
 
-export type Community = {
-  id: string;
-  name: string;
-  avatar?: string;
-  memberCount: number;
-  description?: string;
-  isSubscribed: boolean;
-  isNewTopic?: boolean;
-};
-
-export type AttachmentType = "link" | "image" | "video" | "poll" | null;
-
-export type PostDraft = {
-  community: Community | null;
-  topic: string | null;
-  title: string;
-  body: string;
-  contentWarning: string[];
-  mediaUris: string[];
-  linkUrl: string | null;
-  attachmentType: AttachmentType;
-  tags: string[];
-};
+export type { AttachmentType, Community, PostDraft } from "@/src/domain/content";
 
 const MAX_MEDIA_ITEMS = 10;
 

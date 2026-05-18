@@ -4,7 +4,7 @@
 - Created: 2026-03-26
 - Refreshed for current codebase: 2026-05-18
 - Purpose: canonical plan for cleaning up app structure, routing, cache ownership, store boundaries, effects, and file modularity.
-- Current phase: Phases 1, 2, and 3 are complete. Next phase is Phase 4 store/domain boundary cleanup.
+- Current phase: Phases 1 through 4 are complete. Phase 5 giant page breakup has started.
 - Dependency policy: this plan is for clean refactor only. Do **not** combine it with Expo/RN/video/native dependency upgrades.
 
 ---
@@ -404,11 +404,13 @@ Status: **complete**.
 
 Goal: keep Zustand client-state-only and remove UI/page type coupling.
 
+Status: **complete**.
+
 ### Tasks
-- Move `src/pages/home/home-post-card-store.ts` into `src/stores/home-post-card-store.ts` or rename it so `auth-store` no longer imports from pages.
-- Move reusable post/comment/content types from components into `src/domain/*`.
-- Repoint `history-store`, `saved-posts-store`, and `post-comment-optimistic-store` away from component modules.
-- Audit `auth-store.ts` for server/query orchestration and split it out if present.
+- [x] Move `src/pages/home/home-post-card-store.ts` into `src/stores/home-post-card-store.ts` or rename it so `auth-store` no longer imports from pages.
+- [x] Move reusable post/comment/content types from components into `src/domain/*`.
+- [x] Repoint `history-store`, `saved-posts-store`, and `post-comment-optimistic-store` away from component modules.
+- [x] Audit `auth-store.ts` for server/query orchestration and split it out if present.
 
 ### Success Criteria
 - `src/stores/*` imports nothing from `src/pages/*` or `src/components/*`.
@@ -419,6 +421,8 @@ Goal: keep Zustand client-state-only and remove UI/page type coupling.
 ## Phase 5 — Break Up Giant Pages
 
 Goal: replace page monoliths with modular feature structure.
+
+Status: **in progress**.
 
 ### Priority order
 1. `src/pages/create-screen.tsx`
@@ -505,10 +509,10 @@ Goal: prevent the architecture from drifting back.
 
 ## Immediate Next Actions
 
-1. Start Phase 4 by moving page/component-coupled store types into `src/domain/*` or store-safe modules.
-2. Repoint stores away from `src/pages/*` and `src/components/*` imports.
-3. Move `src/pages/home/home-post-card-store.ts` into `src/stores/*` and update imports.
-4. Keep query/cache orchestration out of Zustand stores.
+1. Start Phase 5 with `src/pages/create-screen.tsx`.
+2. Extract focused create-screen modules instead of rewriting behavior.
+3. Prefer feature hooks/components/util files under `src/pages/create/*`.
+4. Keep reusable cache mutation in `src/api/cache/*`.
 5. Do not touch video/native dependencies while doing this cleanup.
 
 ---
