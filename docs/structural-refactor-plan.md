@@ -4,7 +4,7 @@
 - Created: 2026-03-26
 - Refreshed for current codebase: 2026-05-18
 - Purpose: canonical plan for cleaning up app structure, routing, cache ownership, store boundaries, effects, and file modularity.
-- Current phase: Phases 1 through 4 are complete. Phase 5 giant page breakup has started.
+- Current phase: Phases 1 through 5 are complete. Phase 6 component/service hotspot cleanup is next.
 - Dependency policy: this plan is for clean refactor only. Do **not** combine it with Expo/RN/video/native dependency upgrades.
 
 ---
@@ -422,19 +422,25 @@ Status: **complete**.
 
 Goal: replace page monoliths with modular feature structure.
 
-Status: **in progress**.
+Status: **complete**.
 
-### Priority order
-1. `src/pages/create-screen.tsx`
-2. `src/pages/post/media-post-detail-screen.tsx`
-3. `src/pages/quests-screen.tsx`
-4. `src/pages/annotate-screen.tsx`
-5. `src/pages/search-screen.tsx`
-6. `src/pages/user-profile-screen.tsx`
-7. `src/pages/profile-screen.tsx`
-8. `src/pages/topic-feed-screen.tsx`
-9. `src/pages/saved-posts-screen.tsx`
-10. `src/pages/home-screen.tsx` and `src/pages/following-screen.tsx`
+### Completed work
+- Converted large top-level `src/pages/*-screen.tsx` entries into thin wrappers.
+- Moved feature implementations into folders such as `src/pages/create/*`, `src/pages/search/*`, `src/pages/settings/*`, `src/pages/user/*`, `src/pages/home/*`, and `src/pages/post/*`.
+- Split page containers from large content modules with `*-page.tsx` wrappers and `*-content.tsx` implementation modules.
+- Extracted repeated style blocks into feature-local `*-styles.ts` modules.
+- Extracted create-screen helpers/state/UI into focused modules:
+  - `src/pages/create/create-screen-utils.ts`
+  - `src/pages/create/create-upload-state.ts`
+  - `src/pages/create/create-screen-styles.ts`
+  - `src/pages/create/content-warning-modal.tsx`
+  - `src/pages/create/create-media-toolbar.tsx`
+  - `src/pages/create/video-preview-carousel.tsx`
+
+### Current page/container status
+- Top-level `src/pages/*-screen.tsx` entries are now below the 600-line strong refactor target.
+- Feature `*-page.tsx` containers are now thin re-export wrappers.
+- Remaining files over 600 lines are intentionally named `*-content.tsx` or existing reusable components/hooks and are carried into Phase 6/7 for component/service/effect cleanup.
 
 ### Extraction pattern
 For each feature, create a folder such as `src/pages/create/` with:
@@ -447,9 +453,9 @@ For each feature, create a folder such as `src/pages/create/` with:
 Move cache mutation to `src/api/cache/*`, not feature folders, when the helper is reusable.
 
 ### Success Criteria
-- No page/container file remains over 600 lines without a documented reason.
-- New or touched page files trend toward 300-400 lines.
-- Behavior remains stable after each extraction.
+- Page/container entry files remain below 600 lines.
+- Large implementation content has named ownership and no longer lives in top-level page files.
+- Behavior remains stable after extraction.
 
 ---
 
@@ -458,6 +464,7 @@ Move cache mutation to `src/api/cache/*`, not feature folders, when the helper i
 Goal: reduce secondary monoliths once route/page ownership is sane.
 
 ### Tasks
+- Continue splitting large `*-content.tsx` modules created in Phase 5 into focused section components and hooks.
 - Split `src/components/molecules/post-card-media.tsx` into media-type renderers and media state hooks.
 - Split `src/services/inbox-notifications.ts` into parsing, permission, scheduling, and sync modules.
 - Split large sheets/modals by section where it improves readability.
@@ -509,11 +516,11 @@ Goal: prevent the architecture from drifting back.
 
 ## Immediate Next Actions
 
-1. Start Phase 5 with `src/pages/create-screen.tsx`.
-2. Extract focused create-screen modules instead of rewriting behavior.
-3. Prefer feature hooks/components/util files under `src/pages/create/*`.
+1. Start Phase 6 with the largest `*-content.tsx` modules and component/service hotspots.
+2. Split large content modules by visible sections and feature hooks; preserve behavior.
+3. Continue avoiding dependency, video, native, and PoW upgrades during cleanup.
 4. Keep reusable cache mutation in `src/api/cache/*`.
-5. Do not touch video/native dependencies while doing this cleanup.
+5. Add guardrail scripts in Phase 8 before relying on `check:*` commands.
 
 ---
 
