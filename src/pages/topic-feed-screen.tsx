@@ -6,7 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import type { FlashListRef } from "@shopify/flash-list";
 import { useLocalSearchParams } from "expo-router";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useAndroidPullIndicator } from "@/src/hooks/use-android-pull-indicator";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {

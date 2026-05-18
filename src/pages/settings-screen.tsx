@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/react-native";
 import { EvilIcons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useRef, useState } from "react";
 import { Pressable, SectionList, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

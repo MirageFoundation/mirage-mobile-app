@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { EvilIcons } from "@expo/vector-icons";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import * as Sentry from "@sentry/react-native";
 import { useCallback, useEffect, useState } from "react";
 import { Keyboard } from "react-native";

@@ -5,7 +5,7 @@ import {
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useFocusEffect } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import * as Network from "expo-network";

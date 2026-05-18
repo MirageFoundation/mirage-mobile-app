@@ -7,7 +7,7 @@ import { useUnistyles } from "react-native-unistyles";
 
 import { SavedPostsScreen } from "@/src/pages";
 import { Text } from "@/src/components/ui/primitives";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 
 function SavedPostsErrorFallback({ resetError }: { resetError: () => void }) {
   const { theme } = useUnistyles();

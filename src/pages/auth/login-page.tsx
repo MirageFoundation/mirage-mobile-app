@@ -10,7 +10,7 @@ import { apiClient } from "@/src/api/client";
 import { useToast } from "@/src/providers/toast-provider";
 import { isValidMnemonic } from "@/src/wallet";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,

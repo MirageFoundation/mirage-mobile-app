@@ -83,7 +83,7 @@ import {
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,

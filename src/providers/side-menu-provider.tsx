@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useRef } from "react";
 import { Alert, Linking } from "react-native";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import {
   SideMenu,
   type SideMenuRef,

@@ -1,4 +1,5 @@
-import { router as expoRouter } from "expo-router";
+import { useCallback, useRef } from "react";
+import { router as expoRouter, useRouter as useExpoRouter } from "expo-router";
 
 const GUARD_MS = 500;
 let lastNavTime = 0;
@@ -26,3 +27,29 @@ export const router = new Proxy(expoRouter, {
     return value;
   },
 });
+
+export const useRouter = () => {
+  const router = useExpoRouter();
+  const lastNavRef = useRef(0);
+
+  const guardHookNavigation = useCallback(<T extends (...args: any[]) => any>(fn: T) => {
+    return ((...args: Parameters<T>) => {
+      const now = Date.now();
+      if (now - lastNavRef.current < GUARD_MS) return;
+      lastNavRef.current = now;
+      try {
+        return fn(...args);
+      } catch (error) {
+        lastNavRef.current = 0;
+        throw error;
+      }
+    }) as T;
+  }, []);
+
+  return {
+    ...router,
+    push: guardHookNavigation(router.push),
+    navigate: guardHookNavigation(router.navigate),
+    replace: guardHookNavigation(router.replace),
+  };
+};

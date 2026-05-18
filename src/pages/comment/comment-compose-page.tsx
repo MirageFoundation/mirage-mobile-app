@@ -15,7 +15,7 @@ import * as Network from "expo-network";
 import * as Sentry from "@sentry/react-native";
 import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { uploadImageAndGetUrl } from "@/src/api/read/hooks/use-upload-media";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {

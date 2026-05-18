@@ -2,7 +2,7 @@ import { navigateToEditPost } from "@/src/utils/edit-post";
 import { markSeen } from "@/src/services/seen-posts";
 import * as Sentry from "@sentry/react-native";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Platform, View, type AppStateStatus } from "react-native";
 

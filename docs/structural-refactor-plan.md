@@ -4,7 +4,7 @@
 - Created: 2026-03-26
 - Refreshed for current codebase: 2026-05-18
 - Purpose: canonical plan for cleaning up app structure, routing, cache ownership, store boundaries, effects, and file modularity.
-- Current phase: Phase 1 route/page separation is complete. Phase 2 navigation boundary cleanup has started.
+- Current phase: Phases 1 and 2 are complete. Next phase is Phase 3 query/cache ownership cleanup.
 - Dependency policy: this plan is for clean refactor only. Do **not** combine it with Expo/RN/video/native dependency upgrades.
 
 ---
@@ -274,12 +274,12 @@ Current store imports that violate the intended boundary:
 
 Current good pieces:
 - `app/+native-intent.ts` delegates to `src/navigation/linking`.
-- `src/navigation/route-map.ts`, `src/navigation/linking.ts`, `src/navigation/auth-navigation.ts`, and `src/navigation/guarded-router.ts` exist.
-- `src/utils/guarded-router.ts` is now a compatibility re-export.
+- `src/navigation/route-map.ts`, `src/navigation/linking.ts`, `src/navigation/auth-navigation.ts`, `src/navigation/guarded-router.ts`, and `src/navigation/auth-invite-linking.ts` exist.
+- `src/hooks/use-router.ts`, `src/utils/guarded-router.ts`, and `src/utils/internal-link-handler.ts` are compatibility re-exports.
+- Direct `expo-router` router imports are removed outside `src/navigation/*`; remaining direct imports are route config/layout APIs, route param hooks, or types.
 
 Current gaps:
-- Continue auditing direct `expo-router` imports and page-local navigation decisions.
-- Continue consolidating route/auth/share-intent decisions under `src/navigation/*`.
+- Navigation guardrails are still manual until Phase 8 adds checks.
 
 ### Effect-heavy hotspots
 
@@ -352,14 +352,19 @@ Status: **complete**.
 
 Goal: put route parsing, guarded navigation, and auth-aware route deferral under `src/navigation/*`.
 
-Status: **in progress**.
+Status: **complete**.
 
 ### Tasks
 - [x] Move guarded router implementation from `src/utils/guarded-router.ts` to `src/navigation/guarded-router.ts`.
 - [x] Keep legacy utility wrapper as a thin re-export for incremental migration.
 - [x] Repoint current guarded-router callers to `src/navigation/guarded-router.ts`.
-- [ ] Audit direct imports of `expo-router` from page files.
-- Keep native intent and in-app link parsing delegated to `src/navigation/linking.ts`.
+- [x] Move guarded `useRouter` hook implementation into `src/navigation/guarded-router.ts`.
+- [x] Keep `src/hooks/use-router.ts` as a thin compatibility re-export.
+- [x] Repoint current `useRouter` callers to `src/navigation/guarded-router.ts`.
+- [x] Audit direct imports of `expo-router` from page files.
+- [x] Remove direct `router` imports from `expo-router` outside navigation modules.
+- [x] Keep native intent and in-app link parsing delegated to `src/navigation/linking.ts`.
+- [x] Move auth invite/ref URL listener and parsing into `src/navigation/auth-invite-linking.ts`.
 
 ### Success Criteria
 - Navigation behavior has one canonical home under `src/navigation/*`.
@@ -497,10 +502,10 @@ Goal: prevent the architecture from drifting back.
 
 ## Immediate Next Actions
 
-1. Continue Phase 2 by auditing direct `expo-router` imports in `src/pages/*`, `src/components/*`, and `src/hooks/*`.
-2. Move route/auth/share-intent decisions into `src/navigation/*` when they are not purely local UI navigation.
-3. Keep `src/utils/guarded-router.ts` as a compatibility re-export only; do not add new callers there.
-4. Run focused lint after each navigation cleanup batch.
+1. Start Phase 3 by creating `src/api/write/mutation-keys.ts`.
+2. Add `mutationKey` to write hooks in small batches.
+3. Add `src/api/cache/*` helpers for repeated post/comment/user cache fanout.
+4. Replace normal-flow `queryClient.clear()` with targeted invalidation/removal.
 5. Do not touch video/native dependencies while doing this cleanup.
 
 ---

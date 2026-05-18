@@ -70,7 +70,7 @@ import {
   useReportHandler,
   useVoteHandler,
 } from "@/src/hooks";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useToast } from "@/src/providers/toast-provider";
 import {
   buildVideoPositionKey,

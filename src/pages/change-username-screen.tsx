@@ -2,7 +2,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as Sentry from "@sentry/react-native";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
