@@ -1,4 +1,8 @@
+import { Dimensions } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
+
+const PREVIEW_WIDTH = 180;
+const PREVIEW_HEIGHT = 140;
 
 export const styles = StyleSheet.create((theme) => ({
   keyboardView: {

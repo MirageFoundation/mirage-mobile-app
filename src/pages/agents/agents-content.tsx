@@ -422,7 +422,7 @@ export function AgentsScreen() {
             </View>
             <View style={styles.introBody}>
               <Text size="md" weight="light" mode="subtle">
-                <Text size="md" weight="semibold" mode="default">
+                <Text size="md" weight="semibold">
                   Anyone
                 </Text>{" "}
                 can create an agent that filters spam, fixes tags, translates

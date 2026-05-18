@@ -34,7 +34,7 @@ import {
 import { getUserPosts } from "@/src/api/read/endpoints/posts";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { transformApiPost } from "@/src/api/read/utils";
-import type { Post as ApiPost } from "@/src/api/types";
+import type { Post as ApiPost, PostsResponse } from "@/src/api/types";
 import {
   ConfirmationPopup,
   getGradientColor,
@@ -76,7 +76,7 @@ import {
   useFeedScrollStore,
   useSavedPostsStore,
 } from "@/src/stores";
-import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import { useEdit } from "@/src/api/write";
 import { useToast } from "@/src/providers/toast-provider";
@@ -369,7 +369,7 @@ export function ProfileScreen() {
           limit: 20,
         }),
       initialPageParam: 1,
-      getNextPageParam: (lastPage) => {
+      getNextPageParam: (lastPage: PostsResponse) => {
         if (!lastPage?.has_more) return undefined;
         return lastPage.page + 1;
       },

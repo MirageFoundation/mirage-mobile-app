@@ -22,7 +22,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useConfig } from "@/src/api/read/hooks/use-parameters";
 import { useAddressFromUsername } from "@/src/api/read/hooks/use-username-resolution";
 import { useUserStatus } from "@/src/api/read";
-import { queryKeys } from "@/src/api/read/query-keys";
+import {
+  cancelUsernameRelatedQueries,
+  invalidateUsernameRelatedQueries,
+  updateUsernameAcrossCaches,
+} from "@/src/api/cache";
 import { setUsername as setUsernameOnChain } from "@/src/api/write";
 import { TransactionProgressModal } from "@/src/components/molecules";
 import {
@@ -181,113 +185,15 @@ export function ChangeUsernameScreen() {
       }
 
       const walletAddr = user?.walletAddress;
-
-      const updatePostAuthorUsername = (post: any) => {
-        if (!post || typeof post !== "object") return post;
-
-        const updatedPost =
-          post.user_id === walletAddr ? { ...post, username } : post;
-
-        if (Array.isArray(updatedPost.children)) {
-          return {
-            ...updatedPost,
-            children: updatedPost.children.map(updatePostAuthorUsername),
-          };
-        }
-
-        return updatedPost;
-      };
-
-      const updateCachedPostData = (data: any) => {
-        if (!data || typeof data !== "object") return data;
-
-        if (Array.isArray(data.pages)) {
-          return {
-            ...data,
-            pages: data.pages.map((page: any) =>
-              page?.posts
-                ? { ...page, posts: page.posts.map(updatePostAuthorUsername) }
-                : page,
-            ),
-          };
-        }
-
-        if (Array.isArray(data.posts)) {
-          return {
-            ...data,
-            posts: data.posts.map(updatePostAuthorUsername),
-          };
-        }
-
-        if (data.root || Array.isArray(data.children)) {
-          return {
-            ...data,
-            root: data.root ? updatePostAuthorUsername(data.root) : data.root,
-            children: Array.isArray(data.children)
-              ? data.children.map(updatePostAuthorUsername)
-              : data.children,
-          };
-        }
-
-        if (Array.isArray(data.context)) {
-          return {
-            ...data,
-            context: data.context.map(updatePostAuthorUsername),
-          };
-        }
-
-        return data;
-      };
-
       const applyOptimisticUpdates = () => {
         if (!walletAddr) return;
-
-        queryClient.setQueryData(
-          queryKeys.userStatus(walletAddr),
-          (old: any) => (old ? { ...old, username } : old),
-        );
-        queryClient.setQueryData(
-          queryKeys.profile(walletAddr),
-          (old: any) => (old ? { ...old, username } : old),
-        );
-        queryClient.setQueryData(
-          queryKeys.usernameFromAddress(walletAddr),
-          username,
-        );
-
-        queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }).forEach(([key]) => {
-          queryClient.setQueryData(key, (old: any) => updateCachedPostData(old));
-        });
-        queryClient.getQueriesData({ queryKey: queryKeys.userPostsRoot() }).forEach(([key]) => {
-          queryClient.setQueryData(key, (old: any) => updateCachedPostData(old));
-        });
-        queryClient.getQueriesData({ queryKey: queryKeys.commentsRoot() }).forEach(([key]) => {
-          queryClient.setQueryData(key, (old: any) => updateCachedPostData(old));
-        });
-        queryClient.getQueriesData({ queryKey: queryKeys.commentContextRoot() }).forEach(([key]) => {
-          queryClient.setQueryData(key, (old: any) => updateCachedPostData(old));
-        });
-        queryClient.getQueriesData({ queryKey: queryKeys.batchUsernamesRoot() }).forEach(([key]) => {
-          queryClient.setQueryData(key, (old: any) => {
-            if (!old || typeof old !== "object") return old;
-            return { ...old, [walletAddr.toLowerCase()]: username };
-          });
-        });
+        updateUsernameAcrossCaches(queryClient, walletAddr, username);
       };
 
       applyOptimisticUpdates();
 
       if (walletAddr) {
-        queryClient.cancelQueries({
-          queryKey: queryKeys.userStatus(walletAddr),
-        });
-        queryClient.cancelQueries({
-          queryKey: queryKeys.profile(walletAddr),
-        });
-        queryClient.cancelQueries({ queryKey: queryKeys.postsRoot() });
-        queryClient.cancelQueries({ queryKey: queryKeys.userPostsRoot() });
-        queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() });
-        queryClient.cancelQueries({ queryKey: queryKeys.commentContextRoot() });
+        void cancelUsernameRelatedQueries(queryClient, walletAddr);
 
         setTimeout(() => {
           applyOptimisticUpdates();
@@ -298,30 +204,7 @@ export function ChangeUsernameScreen() {
         }, 3000);
 
         setTimeout(() => {
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.userStatus(walletAddr),
-          });
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.profile(walletAddr),
-          });
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.usernameFromAddress(walletAddr),
-          });
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.batchUsernamesRoot(),
-          });
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.postsRoot(),
-          });
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.userPostsRoot(),
-          });
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.commentsRoot(),
-          });
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.commentContextRoot(),
-          });
+          void invalidateUsernameRelatedQueries(queryClient, walletAddr);
         }, 15000);
       }
 

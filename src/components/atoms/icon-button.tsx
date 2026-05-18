@@ -86,7 +86,7 @@ export const IconButton = ({
   };
 
   const handlePressIn = () => {
-    triggerHaptic(haptics, disabled);
+    triggerHaptic(haptics, Boolean(disabled));
     Animated.spring(scale, {
       toValue: 0.85,
       useNativeDriver: true,
@@ -100,7 +100,10 @@ export const IconButton = ({
     }).start();
   };
 
-  styles.useVariants({ variant, active });
+  styles.useVariants({
+    variant: variant === "default" ? undefined : variant,
+    active,
+  });
 
   return (
     <Animated.View style={[{ transform: [{ scale }] }, style]}>
@@ -108,7 +111,7 @@ export const IconButton = ({
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={onPress}
-        disabled={disabled}
+        disabled={Boolean(disabled)}
         style={[
           styles.container,
           { width: buttonSize, height: buttonSize },
@@ -151,4 +154,3 @@ const styles = StyleSheet.create((theme) => ({
     opacity: 0.5,
   },
 }));
-

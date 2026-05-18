@@ -43,7 +43,7 @@ import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
 import { HomePostList } from "./home-post-list";
-import { useHomePostCardStore } from "./home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
   getAllowedTagsFromContentTypes,
   useAuthStore,

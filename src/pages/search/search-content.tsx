@@ -45,7 +45,7 @@ import { useSearchStore, type RecentSearch } from "@/src/stores";
 import {
   useCommentCountOverride,
   useVoteOverride,
-} from "@/src/pages/home/home-post-card-store";
+} from "@/src/stores/home-post-card-store";
 import { styles } from "./search-styles";
 
 type SearchTab = "posts" | "topics" | "users";

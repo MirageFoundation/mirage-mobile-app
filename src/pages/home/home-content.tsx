@@ -56,7 +56,7 @@ import {
 import { HEADER_HEIGHT } from "@/src/providers/scroll-animation-context";
 import { useToast } from "@/src/providers/toast-provider";
 import { HomeTabbedFeed, type HomeTabbedFeedRef } from "./home-tabbed-feed";
-import { useHomePostCardStore } from "./home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
   useAuthStore,
   useContentModerationStore,

@@ -1432,8 +1432,8 @@ export const PostCardMedia = memo(
           )}
 
           <MediaProcessingOverlay
-            visible={isVideoProcessing && isRetryableVideo && isConnected}
-            isRedgifsVideo={isRedgifsVideo}
+            visible={Boolean(isVideoProcessing && isRetryableVideo && isConnected)}
+            isRedgifsVideo={Boolean(isRedgifsVideo)}
           />
 
           <MediaOfflineOverlay visible={!isConnected && !shouldBlurContent && !mediaLoaded} />

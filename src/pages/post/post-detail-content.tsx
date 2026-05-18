@@ -74,7 +74,7 @@ import {
   useOptimisticTopLevelComments,
   usePostCommentOptimisticStore,
 } from "@/src/stores/post-comment-optimistic-store";
-import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
   AntDesign,
   Ionicons,

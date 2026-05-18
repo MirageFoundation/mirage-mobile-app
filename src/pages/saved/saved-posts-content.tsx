@@ -49,7 +49,7 @@ import {
   getShareBaseUrl,
   type SavedComment,
 } from "@/src/stores";
-import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { MediaPreviewModal } from "@/src/components/molecules/media-preview-modal";

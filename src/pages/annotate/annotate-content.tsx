@@ -36,8 +36,8 @@ import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 import { useAnnotate } from "@/src/api/write";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { StickerPicker } from "@/src/components/molecules/sticker-picker";
-import { CommunitySelectionModal } from "@/src/pages/create/community-selection-modal";
-import { consumePendingVideoResult } from "@/src/pages/create/video-editor-screen";
+import { CommunitySelectionModal } from "@/src/components/molecules/community-selection-modal";
+import { consumePendingVideoResult } from "@/src/stores/video-editor-result-store";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useToast } from "@/src/providers/toast-provider";
 import type { Community } from "@/src/stores/draft-store";
@@ -135,28 +135,6 @@ export function AnnotateScreen() {
     return () => sub.remove();
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      const result = consumePendingVideoResult();
-      if (result) {
-        const oldUri = result.replacingUri || null;
-        setMediaEnabled(true);
-        setMediaType("video");
-
-        if (oldUri && oldUri !== result.videoUri) {
-          VIDEO_UPLOADS.delete(oldUri);
-          setVideoUploadState((prev) => { const next = { ...prev }; delete next[oldUri]; return next; });
-          setMediaUris((prev) => prev.map((u) => (u === oldUri ? result.videoUri : u)));
-        } else {
-          setMediaUris((prev) => [...prev, result.videoUri].slice(0, 10));
-        }
-
-        startVideoUpload(result.videoUri);
-      }
-      setIsPreparingVideo(false);
-    }, [startVideoUpload])
-  );
-
   const isUploadingVideo = useMemo(() => {
     return Object.values(videoUploadState).some((v) => v.uploading);
   }, [videoUploadState]);
@@ -214,6 +192,28 @@ export function AnnotateScreen() {
         triggerHaptic("error");
       });
   }, [toast]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const result = consumePendingVideoResult();
+      if (result) {
+        const oldUri = result.replacingUri || null;
+        setMediaEnabled(true);
+        setMediaType("video");
+
+        if (oldUri && oldUri !== result.videoUri) {
+          VIDEO_UPLOADS.delete(oldUri);
+          setVideoUploadState((prev) => { const next = { ...prev }; delete next[oldUri]; return next; });
+          setMediaUris((prev) => prev.map((u) => (u === oldUri ? result.videoUri : u)));
+        } else {
+          setMediaUris((prev) => [...prev, result.videoUri].slice(0, 10));
+        }
+
+        startVideoUpload(result.videoUri);
+      }
+      setIsPreparingVideo(false);
+    }, [startVideoUpload])
+  );
 
   useEffect(() => {
     if (!hasFailedUploads) return;
@@ -526,7 +526,7 @@ export function AnnotateScreen() {
       style={{ flex: 1, backgroundColor: theme.colors.background.default }}
       behavior="padding"
     >
-      <Box flex background="default">
+      <Box flex background="base">
         {isPreparingVideo && (
           <View style={styles.preparingVideoOverlay}>
             <ActivityIndicator size="large" color="#fff" />

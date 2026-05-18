@@ -28,6 +28,7 @@ import {
   getNotificationDataKeys,
   getNotificationTitle,
   isAndroidShareIntentNotificationData,
+  toOptionalString,
 } from "@/src/services/inbox-notification-content";
 
 const TASK_NAME = "INBOX_NOTIFICATION_CHECK";

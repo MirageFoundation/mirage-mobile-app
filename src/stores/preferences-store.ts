@@ -19,7 +19,7 @@ export type ContentType =
 const CONTENT_TAGS = ["sensitive", "adult", "violence", "gore", "death"] as const;
 const ADULT_CONTENT_TAGS = ["adult", "violence", "gore", "death"] as const;
 
-type ContentTag = (typeof CONTENT_TAGS)[number];
+type AdultContentTag = (typeof ADULT_CONTENT_TAGS)[number];
 
 const normalizeContentTypes = (types: ContentType[]): ContentType[] => {
   if (!types || types.length === 0) return [];
@@ -54,7 +54,7 @@ export const isAdultContentEnabled = (types: ContentType[]): boolean => {
   if (!types || types.length === 0) return false;
   if (types.includes("all")) return true;
   return types.some((type) =>
-    ADULT_CONTENT_TAGS.includes(type as ContentTag)
+    ADULT_CONTENT_TAGS.includes(type as AdultContentTag)
   );
 };
 

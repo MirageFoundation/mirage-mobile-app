@@ -41,7 +41,7 @@ import {
 import { getUserPosts } from "@/src/api/read/endpoints/posts";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { transformApiPost } from "@/src/api/read/utils";
-import type { Post as ApiPost } from "@/src/api/types";
+import type { Post as ApiPost, PostsResponse } from "@/src/api/types";
 import {
   useBlockUser,
   useUnblockUser,
@@ -98,7 +98,7 @@ import {
   useFeedScrollStore,
   useSavedPostsStore,
 } from "@/src/stores";
-import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { styles } from "./user-profile-styles";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -425,7 +425,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           limit: 20,
         }),
       initialPageParam: 1,
-      getNextPageParam: (lastPage) => {
+      getNextPageParam: (lastPage: PostsResponse) => {
         if (!lastPage?.has_more) return undefined;
         return lastPage.page + 1;
       },

@@ -177,7 +177,7 @@ const MenuItem = ({
 }) => {
   const { theme } = useUnistyles();
   const color = disabled
-    ? theme.colors.text.muted
+    ? theme.colors.text.subtle
     : isDestructive
       ? theme.colors.error[500]
       : theme.colors.text.subtle;
@@ -400,12 +400,12 @@ export const PostOptionsSheet = forwardRef<
 
     const handleCopyText = useCallback(async () => {
       triggerHaptic("medium");
-      if (post?.content) {
-        await Clipboard.setStringAsync(post.content);
+      if (post?.body) {
+        await Clipboard.setStringAsync(post.body);
       }
       dismiss();
       onCopyText?.();
-    }, [dismiss, post?.content, onCopyText]);
+    }, [dismiss, post?.body, onCopyText]);
 
     const handleHidePost = useCallback(() => {
       triggerHaptic("warning");

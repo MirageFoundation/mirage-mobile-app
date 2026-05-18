@@ -64,7 +64,7 @@ import {
 } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
 import { HomePostList } from "../home/home-post-list";
-import { useHomePostCardStore } from "../home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
   getAllowedTagsFromContentTypes,
   useAuthStore,

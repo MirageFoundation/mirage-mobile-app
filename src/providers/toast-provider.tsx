@@ -230,7 +230,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
       {Platform.OS === "ios" ? (
-        <FullWindowOverlay style={StyleSheet.absoluteFill}>
+        <FullWindowOverlay>
           <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
             {toastContent}
           </View>

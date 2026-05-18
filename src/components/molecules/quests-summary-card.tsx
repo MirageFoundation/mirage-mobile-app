@@ -20,10 +20,9 @@ import { useNodeConfig } from "@/src/api/read/hooks/use-parameters";
 import type { FlashQuest, RewardSummaryResponse } from "@/src/api/read/endpoints/rewards";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { usePreferencesStore } from "@/src/stores";
-import { useAuthStore } from "@/src/stores";
+import { useAuthStore, usePreferencesStore } from "@/src/stores";
 import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
-import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 
 function formatTimeShort(seconds: number): string {
   const hours = Math.floor(seconds / 3600);

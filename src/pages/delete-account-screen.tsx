@@ -75,7 +75,7 @@ export function DeleteAccountScreen() {
   }, [isConfirmed, txProgress, getWallet, router, toast, closeSideMenu]);
 
   return (
-    <Box flex background="default">
+    <Box flex background="base">
       <View
         style={[
           styles.header,

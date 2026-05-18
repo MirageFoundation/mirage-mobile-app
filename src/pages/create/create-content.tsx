@@ -43,7 +43,7 @@ import {
   uploadImageAndGetUrl,
   uploadVideoAndGetUrl,
 } from "@/src/api/read/hooks/use-upload-media";
-import { consumePendingVideoResult } from "@/src/pages/create/video-editor-screen";
+import { consumePendingVideoResult } from "@/src/stores/video-editor-result-store";
 import { usePost, useEdit, type CreatePostMutationInput } from "@/src/api/write";
 import { buildOptimisticPost, markOptimisticPostError, upsertHomePost } from "@/src/api/write/hooks/use-post";
 import type { ContentTag, EditPostInput } from "@/src/api/write/endpoints/posts";
@@ -53,12 +53,12 @@ import { useToast } from "@/src/providers/toast-provider";
 import { TransactionProgressModal } from "@/src/components/molecules/transaction-progress-modal";
 import { useTransactionProgress } from "@/src/hooks/use-transaction-progress";
 import { useDraftStore, type Community, type PostDraft } from "@/src/stores/draft-store";
-import { useHomePostCardStore } from "../home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { useUserLevel, useAuthStore } from "@/src/stores/auth-store";
 import { useUIStore } from "@/src/stores";
 import { getTierPostLimits, canEditContent } from "@/src/utils/tiers";
 
-import { CommunitySelectionModal } from "./community-selection-modal";
+import { CommunitySelectionModal } from "@/src/components/molecules/community-selection-modal";
 import { StickerPicker } from "@/src/components/molecules/sticker-picker";
 import { MentionSuggestions } from "@/src/components/molecules/mention-suggestions";
 import { DraftDiscardPopup } from "@/src/components/molecules/draft-discard-popup";

@@ -7,7 +7,7 @@ import {
 } from "@/src/components/molecules";
 import { useAuthStore } from "@/src/stores";
 import { useUserStatus } from "@/src/api/read/hooks";
-import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 
 type SideMenuContextType = {
   openSideMenu: () => void;

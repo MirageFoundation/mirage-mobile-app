@@ -31,6 +31,7 @@ type SettingRowNavigateProps = SettingRowBaseProps & {
   rightText?: string;
   value?: never;
   onValueChange?: never;
+  disabled?: boolean;
 };
 
 type SettingRowValueProps = SettingRowBaseProps & {
@@ -39,6 +40,7 @@ type SettingRowValueProps = SettingRowBaseProps & {
   rightText: string;
   value?: never;
   onValueChange?: never;
+  disabled?: boolean;
 };
 
 export type SettingRowProps =
@@ -50,7 +52,7 @@ export function SettingRow(props: SettingRowProps) {
   const { theme } = useUnistyles();
   const { icon, title, subtitle, type, iconElement } = props;
 
-  const isDisabled = type === "toggle" && props.disabled;
+  const isDisabled = Boolean(props.disabled);
 
   const handlePress = () => {
     if (isDisabled) return;
@@ -86,7 +88,7 @@ export function SettingRow(props: SettingRowProps) {
             ]}
           />
         ) : null}
-        <Box flex gap="xxs">
+        <Box flex gap="xs">
           <Text
             size="md"
             weight="regular"

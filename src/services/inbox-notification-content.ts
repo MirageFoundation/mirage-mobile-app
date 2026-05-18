@@ -14,7 +14,7 @@ function formatMirageAmount(amountUmirage: number): string {
   return text;
 }
 
-function toOptionalString(value: unknown): string | null {
+export function toOptionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 

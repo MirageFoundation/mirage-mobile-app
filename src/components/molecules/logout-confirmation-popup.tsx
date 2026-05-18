@@ -86,7 +86,7 @@ export function LogoutConfirmationPopup({
             Are you sure you want to log out?
           </Text>
           <Text size="md" mode="subtle" style={styles.warning}>
-            You'll need your recovery phrase to log back in.
+            You&apos;ll need your recovery phrase to log back in.
           </Text>
 
           {/* Buttons */}

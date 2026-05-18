@@ -7,8 +7,11 @@ const TOOLS_DIR = dirname(fileURLToPath(import.meta.url));
 const checks = [
   "check:file-sizes",
   "check:stores",
+  "check:boundaries",
   "check:query-keys",
   "check:navigation",
+  "check:typecheck",
+  "check:lint",
 ];
 
 for (const check of checks) {

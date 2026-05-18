@@ -88,7 +88,7 @@ import { Audio, AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
 import { getUsernameColor } from "@/src/utils/tiers";
-import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { resolvePostContent } from "@/src/components/molecules/post-card-utils";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import { useComment } from "@/src/api/write/hooks/use-post";

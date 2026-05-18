@@ -45,7 +45,7 @@ import {
   useTimeTickStore,
 } from "@/src/stores";
 import { HomeTabbedFeed, type HomeTabbedFeedRef } from "./home-tabbed-feed";
-import { useHomePostCardStore } from "./home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { styles } from "./following-styles";
 
 export function FollowingScreen() {

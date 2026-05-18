@@ -450,7 +450,7 @@ export function TransactionProgressModal({
           {/* Non-dismissible hint */}
           {!canDismiss && (
             <Text size="xs" mode="subtle" style={styles.hint}>
-              Please wait, don't close the app...
+              Please wait, don&apos;t close the app...
             </Text>
           )}
         </Animated.View>

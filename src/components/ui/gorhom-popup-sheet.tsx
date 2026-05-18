@@ -247,10 +247,8 @@ const GorhomPopupSheet = forwardRef<GorhomPopupSheetRef, GorhomPopupSheetProps>(
     }, []);
 
     const renderContainerComponent = useCallback(
-      ({ children }: { children: React.ReactNode }) => (
-        <FullWindowOverlay style={{ flex: 1 }}>
-          {children}
-        </FullWindowOverlay>
+      ({ children }: { children?: React.ReactNode }) => (
+        <FullWindowOverlay>{children}</FullWindowOverlay>
       ),
       []
     );

@@ -23,30 +23,13 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { processVideo } from "@/src/utils/video-processing";
+import { setPendingVideoResult } from "@/src/stores/video-editor-result-store";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const TIMELINE_PADDING = 24;
 const TIMELINE_WIDTH = SCREEN_WIDTH - TIMELINE_PADDING * 2;
 const MIN_TRIM_DURATION = 1000; // 1 second minimum
 const MAX_TRIM_DURATION = 59000; // 59 seconds maximum
-
-export type PendingVideoResult = {
-  videoUri: string;
-  originalVideoUri: string;
-  videoWidth: number;
-  videoHeight: number;
-  trimStart: number;
-  trimEnd: number;
-  replacingUri: string;
-} | null;
-
-export let _pendingVideoResult: PendingVideoResult = null;
-
-export function consumePendingVideoResult(): PendingVideoResult {
-  const result = _pendingVideoResult;
-  _pendingVideoResult = null;
-  return result;
-}
 
 export function VideoEditorScreen() {
   const { theme } = useUnistyles();
@@ -263,7 +246,7 @@ export function VideoEditorScreen() {
     }
     
     if (params.returnTo) {
-      _pendingVideoResult = {
+      setPendingVideoResult({
         videoUri: processedUri,
         originalVideoUri: videoUri,
         videoWidth: resolvedVideoSize.width,
@@ -271,7 +254,7 @@ export function VideoEditorScreen() {
         trimStart,
         trimEnd,
         replacingUri: params.replacingUri ?? "",
-      };
+      });
       router.back();
     } else {
       router.replace({

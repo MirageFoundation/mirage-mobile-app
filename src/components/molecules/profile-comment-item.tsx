@@ -5,7 +5,7 @@ import { Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { MediaPreviewModal } from "./media-preview-modal";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { memo, useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Dimensions, View } from "react-native";
@@ -110,6 +110,9 @@ const CommentImage = memo(({ url, onPress }: { url: string; onPress?: (url: stri
     </View>
   );
 });
+
+CommentImage.displayName = "CommentImage";
+
 interface ProfileCommentItemProps {
   comment: Post;
   onPress: (commentId: string, rootPostId: string) => void;

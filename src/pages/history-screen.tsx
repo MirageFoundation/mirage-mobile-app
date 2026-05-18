@@ -29,7 +29,7 @@ import {
   getShareBaseUrl,
 } from "@/src/stores";
 import { useHistoryStore, type HistoryEntry } from "@/src/stores/history-store";
-import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 const HISTORY_FEED_CONTEXT = "history:posts";
