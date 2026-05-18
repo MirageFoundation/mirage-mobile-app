@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Sentry from "@sentry/react-native";
 import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { useLocalSearchParams } from "expo-router";
-import { router } from "@/src/utils/guarded-router";
+import { router } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,

@@ -13,7 +13,7 @@ import {
   resolveAuthNavigationTarget,
 } from "./auth-navigation";
 import { isAppRoute, resolveMirageUrl } from "./route-map";
-import { router } from "@/src/utils/guarded-router";
+import { router } from "@/src/navigation/guarded-router";
 
 function showLoginRequiredAlert(): void {
   Alert.alert(

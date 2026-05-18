@@ -8,7 +8,8 @@ This file defines the working rules for coding agents in this repository.
 - Router: Expo Router
 - Server state: TanStack Query
 - Client state: Zustand
-- Current refactor status: Phases 1–5 and 7 are complete enough to be treated as established architecture; Phase 6 (effect-driven flow cleanup) is the main remaining structural phase.
+- Current refactor status: the old phase-completion notes were from a previous codebase version. Start from `docs/structural-refactor-plan.md`; current priority is route/page separation for large `app/` implementations, then navigation/query/store/page/effect cleanup.
+- Dependency policy: structural refactors must be dependency-neutral unless explicitly requested. Do not upgrade Expo/RN/video/native dependencies as part of cleanup work.
 
 ## Non-Negotiable Working Rules
 
@@ -17,7 +18,6 @@ Always use `bun` for repo commands.
 
 Examples:
 - `bun run lint`
-- `bun run check:architecture`
 - `bunx eslint ...`
 
 Do not introduce npm/yarn/pnpm commands in docs or scripts unless explicitly required.
@@ -33,6 +33,8 @@ Navigation logic belongs in:
 - `src/navigation/linking.ts`
 - `src/navigation/guarded-router.ts`
 - `src/navigation/auth-navigation.ts`
+
+Note: `src/navigation/guarded-router.ts` is the intended canonical path, but the current codebase still has guarded router logic in `src/utils/guarded-router.ts`. Move it during navigation cleanup instead of adding more callers there.
 
 When touching deep links, route parsing, guarded navigation, or auth-aware navigation:
 - prefer changing `src/navigation/*`
@@ -61,6 +63,8 @@ Use centralized query helpers:
 - `src/api/write/mutation-keys.ts`
 - `src/api/cache/*`
 
+Note: `src/api/write/mutation-keys.ts` and `src/api/cache/*` are intended architecture targets but are not currently present in this codebase version. Add them as part of query/cache cleanup.
+
 Rules:
 - do not introduce raw literal query keys like `['posts']`
 - do not introduce write hooks without `mutationKey`
@@ -82,7 +86,7 @@ When touching a large screen, prefer extracting:
 - section renderers
 
 ### 7) Avoid effect-heavy orchestration
-The main remaining cleanup phase is reducing effect-driven flows.
+Do not start with effect cleanup while route implementations still live in `app/`. Extract ownership first, then reduce effects inside the smaller modules.
 
 When editing code, prefer:
 - derived state
@@ -147,13 +151,14 @@ Run focused verification for the area you touched.
 
 ### Useful commands
 - `bun run lint`
-- `bun run check:file-sizes`
-- `bun run check:navigation`
-- `bun run check:stores`
-- `bun run check:query-keys`
-- `bun run check:architecture`
+- Planned guardrail commands after tools/scripts are restored:
+  - `bun run check:file-sizes`
+  - `bun run check:navigation`
+  - `bun run check:stores`
+  - `bun run check:query-keys`
+  - `bun run check:architecture`
 
-### What these checks mean
+### What planned checks will mean
 - `check:file-sizes` → reports large page files
 - `check:navigation` → smoke-checks route/deep-link parsing
 - `check:stores` → ensures stores do not import pages/components
@@ -162,12 +167,13 @@ Run focused verification for the area you touched.
 If you touch a narrow feature, prefer targeted eslint runs for those files instead of always linting the whole repo.
 
 ## Current Remaining Structural Work
-The major remaining plan work is Phase 6:
-- reduce effect-driven flows
-- move nonessential lifecycle orchestration out of pages
-- simplify timer/delayed navigation/state sync patterns
-
-If you are choosing the next architectural improvement, bias toward reducing effect complexity instead of reopening already-completed phase work.
+Follow `docs/structural-refactor-plan.md` for the current codebase. Priority order:
+1. Extract large route implementations from `app/` into `src/pages/*`.
+2. Consolidate navigation helpers under `src/navigation/*`.
+3. Add query/cache helpers and remove raw query-key/broad-clear patterns.
+4. Remove store imports from pages/components.
+5. Break up giant pages/components.
+6. Reduce effect-driven flows after ownership boundaries are clear.
 
 ## Quick Do / Don’t
 

@@ -2,33 +2,47 @@
 
 ## Status
 - Created: 2026-03-26
-- Purpose: canonical plan for cleaning up app structure, routing, cache ownership, deep linking, and file modularity
-- Current phase: Phase 6 ready (Phases 5 and 7 complete)
+- Refreshed for current codebase: 2026-05-18
+- Purpose: canonical plan for cleaning up app structure, routing, cache ownership, store boundaries, effects, and file modularity.
+- Current phase: Phase 1 route/page separation is complete. Phase 2 navigation boundary cleanup has started.
+- Dependency policy: this plan is for clean refactor only. Do **not** combine it with Expo/RN/video/native dependency upgrades.
 
 ---
 
 ## Executive Summary
 
-The codebase already has most of the right building blocks:
+The current app has the right broad stack:
 - Expo Router
 - `src/pages`
-- `src/api`
-- `src/hooks`
-- `src/components/{atoms,molecules,ui/primitives}`
+- `src/api/read` and `src/api/write`
 - TanStack Query
 - Zustand
+- `src/navigation` for route parsing/linking pieces
+- reusable UI under `src/components`
 
-The problem is not missing tools. The problem is weak ownership boundaries.
+The current issue is still ownership and file size, not missing libraries. Phase 1 fixed the largest routing mismatch by making `app/` routing-only again. The remaining cleanup should now move through navigation, cache/store, page modularity, and effect cleanup.
 
-Right now responsibilities are mixed across route files, page files, stores, providers, services, and cache logic. That leads to:
-- oversized files
-- duplicated navigation logic
-- deep-link bugs
-- inconsistent query/cache behavior
-- overuse of `useEffect`
-- poor modularity and weak maintainability
+Treat the previous “Phase 6 ready / Phases 1-5 complete” status as stale. The current refactor restarted from the actual tree and Phase 1 is now complete.
 
-This plan is the source of truth for the cleanup.
+---
+
+## Non-Goals / Dependency Freeze
+
+This refactor must avoid dependency churn unless a separate task explicitly asks for it.
+
+Do not do these as part of the structural refactor:
+- Upgrade Expo SDK, React Native, React, or navigation packages.
+- Replace or upgrade video libraries.
+- Change native video processing packages such as `react-native-video-trim`, `react-native-vision-camera`, `expo-av`, or `expo-video-thumbnails`.
+- Switch media/video architecture while splitting files.
+- Change PoW native module behavior or release a native module.
+- Add new dependencies just to make refactoring easier.
+
+Dependency-related docs found during review:
+- `docs/POW_NATIVE_MODULE_PLAN.md` proposes `react-native-argon2-turbo` as a native-module/performance migration. That is not part of this clean refactor.
+- `docs/pow-v1.11.0-upgrade-plan.md` mentions possible native `react-native-argon2-turbo` changes for target-based PoW. That is not part of this clean refactor.
+- `docs/fdroid-build-handoff.md` notes prior native dependency upgrades for `react-native-unistyles` and `react-native-nitro-modules`. That is historical, not a new refactor task.
+- No doc reviewed requires a video dependency upgrade for this cleanup.
 
 ---
 
@@ -36,22 +50,22 @@ This plan is the source of truth for the cleanup.
 
 ```txt
 app/
-  _layout.tsx
-  +native-intent.ts
+  _layout.tsx                 # app shell/layout only
+  +native-intent.ts            # delegates to src/navigation/linking
   (auth)/
     _layout.tsx
-    login.tsx
-    recovery-phrase.tsx
-    username.tsx
+    login.tsx                  # thin wrapper
+    recovery-phrase.tsx        # thin wrapper
+    username.tsx               # thin wrapper
   (tabs)/
-    _layout.tsx
-    index.tsx
-    following.tsx
-    create.tsx
-    inbox.tsx
-    profile.tsx
-  post/[id].tsx
-  comment-compose.tsx
+    _layout.tsx                # tab layout only; minimize feature logic
+    index.tsx                  # thin wrapper
+    following.tsx              # thin wrapper
+    create.tsx                 # thin wrapper
+    inbox.tsx                  # thin wrapper
+    profile.tsx                # thin wrapper
+  post/[id].tsx                # thin wrapper
+  comment-compose.tsx          # thin wrapper
   ...
 
 src/
@@ -60,54 +74,58 @@ src/
       login-page.tsx
       recovery-phrase-page.tsx
       username-page.tsx
+      components/
+      hooks/
     post/
       post-detail-page.tsx
+      media-post-detail-page.tsx
+      components/
+      hooks/
+      utils/
     comment/
       comment-compose-page.tsx
+      components/
+      hooks/
+      utils/
+    create/
+      create-page.tsx
+      components/
+      hooks/
+      utils/
     home/
       home-page.tsx
       following-page.tsx
-      home-post-list.tsx
-      ...
-    profile/
-      profile-page.tsx
-      user-profile-page.tsx
+      components/
+      hooks/
+      utils/
     ...
 
   api/
-    client.ts
-    query-keys.ts
+    read/
+      endpoints/
+      hooks/
+      query-keys.ts
+    write/
+      endpoints/
+      hooks/
+      mutation-keys.ts
     cache/
       posts-cache.ts
       comments-cache.ts
       users-cache.ts
-      inbox-cache.ts
-    read/
-      endpoints/
-      hooks/
-    write/
-      endpoints/
-      hooks/
+      server-cache.ts
 
-  hooks/
-    auth/
-    navigation/
-    posts/
-    comments/
-    profile/
-    topics/
-    ui/
+  domain/
+    posts/types.ts
+    comments/types.ts
+    content/types.ts
+    users/types.ts
 
   navigation/
     route-map.ts
     linking.ts
     guarded-router.ts
     auth-navigation.ts
-
-  domain/
-    posts/types.ts
-    comments/types.ts
-    users/types.ts
 
   stores/
     auth-store.ts
@@ -123,348 +141,373 @@ src/
 
 ### Routing
 1. `app/` contains route files, layout files, and route-level config only.
-2. Route files should stay tiny. Prefer simple wrappers that import a page and export it.
-3. Layout files should not contain feature business logic.
-4. Deep-link mapping must be centralized in one navigation module.
+2. Route files should be tiny wrappers that import from `src/pages/*`.
+3. Layout files may compose providers/navigation chrome, but should not own feature business logic.
+4. Deep-link mapping and route parsing belong in `src/navigation/*`.
 
 ### Pages and Modularity
-5. `src/pages/` contains page containers and feature page composition.
-6. Page files must be modular and small enough to reason about.
-7. Hard target: keep new page/container files around **<= 300 lines** when possible.
-8. Soft warning threshold: **> 400 lines** means split it.
-9. Strong refactor threshold: **> 600 lines** is too large and must be broken up.
-10. Split pages into:
-   - page container
-   - page sections
-   - feature hooks
-   - presentational components
-   - cache helpers if needed
+5. `src/pages/` owns page containers and feature page composition.
+6. Keep new page/container files near **300 lines** when practical.
+7. Soft warning: **> 400 lines**.
+8. Strong refactor target: **> 600 lines**.
+9. Split large pages into page containers, feature hooks, presentational sections, utilities, and cache helpers.
 
-### Components
-11. `primitives` are the styling/UI building blocks.
-12. `atoms` are small reusable UI units.
-13. `molecules` compose atoms/primitives into reusable feature UI pieces.
-14. Component files should not own server cache policy.
+### API, Query, and Cache
+10. TanStack Query owns server state.
+11. Query keys must come from `src/api/read/query-keys.ts` or centralized prefix helpers.
+12. Avoid raw literal query keys such as `["posts"]` in pages/hooks.
+13. Write hooks should use centralized `mutationKey`s.
+14. Reusable optimistic updates/cache fanout should live under `src/api/cache/*`.
+15. Avoid `queryClient.clear()` in normal flows; prefer targeted removal/invalidation.
 
-### API and Hooks
-15. API definitions stay centralized under `src/api`.
-16. Pages and route files should not import endpoint functions directly.
-17. Pages should consume centralized read hooks and write hooks.
-18. Query keys must be centralized and reused everywhere.
-19. Do not scatter raw literal query keys like `['posts']` across the app.
-20. Mutation cache updates and optimistic updates should live in reusable cache helpers or mutation hooks, not in page files.
-
-### TanStack Query
-21. TanStack Query owns server state.
-22. Zustand should not mirror server resources unless there is a very strong local-only reason.
-23. Query identity must consider server/session scope when required.
-24. Avoid brute-force `queryClient.clear()` as a normal flow control mechanism.
-25. Prefer targeted invalidation and deterministic cache helpers.
-26. Add `mutationKey` consistently for mutation observability and debugging.
-
-### Zustand
-27. Zustand is for client state only:
-   - auth/session metadata
-   - UI state
-   - preferences
-   - drafts
-   - local-only persisted state
-28. Stores must not depend on page modules.
-29. Stores must not depend on component model types.
-30. Stores must not perform broad query orchestration or prefetch flows unless explicitly justified and isolated.
+### Stores and Domain Types
+16. Zustand is for client/local state only: auth/session metadata, UI state, preferences, drafts, and local-only persisted state.
+17. Stores must not import from `src/pages/*`.
+18. Stores should not import model types from `src/components/*`; use `src/domain/*` types instead.
+19. Stores should not orchestrate server fetches, query invalidation, or feature/page flows.
 
 ### Effects and Performance
-31. Avoid heavy `useEffect` orchestration.
-32. Prefer:
-   - derived state
-   - event handlers
-   - query `enabled`
-   - query `select`
-   - memoized selectors
-33. Do not use effects to sync state that can be derived during render.
-34. App-level listeners belong in providers/services only if they are truly app-global.
+20. Avoid effect-heavy orchestration.
+21. Prefer derived state, event handlers, query `enabled`, query `select`, memoized selectors, and focused hooks.
+22. Do not use effects to mirror state that can be derived during render.
+23. App-global listeners belong in providers/services only when truly app-global.
 
-### Boundaries
-35. `stores/` must not import from `pages/`.
-36. `stores/` should avoid importing from `components/` for data types.
-37. `services/` should not become alternate data-fetch layers that bypass query conventions.
-38. `navigation/` should own route parsing and route/auth transition logic.
-39. Domain types should live outside UI components.
-
-### Safety / Maintainability
-40. No new huge files.
-41. No “temporary” giant files that become permanent.
-42. Prefer small, composable modules over feature dumping grounds.
-43. Every refactor should improve ownership clarity, not just move code around.
-44. Add lint/boundary enforcement later so this structure does not regress.
+### Safety
+24. No broad rewrites without a clear owner/boundary improvement.
+25. No new giant files.
+26. No dependency upgrades during structural cleanup.
+27. Preserve behavior first; refactor in small, reviewable steps.
 
 ---
 
-## Main Findings from the Audit
+## Current Codebase Snapshot
 
-### 1) Route files currently contain full implementations
-Large files still live in `app/`:
-- `app/post/[id].tsx`
-- `app/comment-compose.tsx`
-- `app/(auth)/username.tsx`
-- `app/(auth)/login.tsx`
-- `app/(auth)/recovery-phrase.tsx`
+Generated from the current repo on 2026-05-18.
 
-This violates the intended router/page separation.
+### `app/` routing boundary status
 
-### 2) Many page files are far too large
-Hotspots include:
-- `src/pages/create-screen.tsx`
-- `src/pages/quests-screen.tsx`
-- `src/pages/annotate-screen.tsx`
-- `src/pages/search-screen.tsx`
-- `src/pages/user-profile-screen.tsx`
-- `src/pages/profile-screen.tsx`
-- `src/pages/topic-feed-screen.tsx`
-- `src/pages/saved-posts-screen.tsx`
+Phase 1 is complete. `app/` now contains route wrappers, route/layout config, `+native-intent` delegation, and `+not-found` only.
 
-### 3) Query exists, but usage is inconsistent
-- Query is installed and actively used.
-- Query persistence exists.
-- Query hooks and endpoint modules exist.
-- But many places bypass clean layering.
+Largest remaining `app/` files:
 
-### 4) Cache ownership is muddy
-- Some cache logic lives in query hooks.
-- Some lives in page files.
-- Some lives in services.
-- Some lives in stores.
-- Server switching currently relies too much on broad cache clearing.
+| File | Current size | Status |
+| --- | ---: | --- |
+| `app/(auth)/_layout.tsx` | 18 lines | route/layout config |
+| `app/(tabs)/_layout.tsx` | 5 lines | wrapper plus `unstable_settings` |
+| standard route wrappers | 1-6 lines | delegate to `src/pages/*` or `src/navigation/*` |
 
-### 5) Zustand boundaries are loose
-- Zustand is definitely in use.
-- But some stores know too much about queries/pages/UI model types.
+Moved implementation modules:
+- `app/(auth)/login.tsx` → `src/pages/auth/login-page.tsx`
+- `app/(auth)/recovery-phrase.tsx` → `src/pages/auth/recovery-phrase-page.tsx`
+- `app/(auth)/username.tsx` → `src/pages/auth/username-page.tsx`
+- `app/comment-compose.tsx` → `src/pages/comment/comment-compose-page.tsx`
+- `app/post/[id].tsx` → `src/pages/post/post-detail-page.tsx`
+- `app/saved-posts.tsx` route error-boundary UI → `src/pages/saved/saved-posts-route.tsx`
+- `app/(tabs)/_layout.tsx` implementation → `src/navigation/tab-layout.tsx`
+- `app/_layout.tsx` implementation → `src/navigation/root-layout.tsx`
 
-### 6) Deep linking and navigation are fragmented
-Logic is split across multiple files instead of one central navigation/linking system.
+### Largest `src/pages` files
 
-### 7) `useEffect` usage is too heavy
-There is too much effect-based orchestration, which contributes to rerenders and timing bugs.
+Files over the 600-line strong refactor target:
 
-### 8) The project lacks structural guardrails
-No meaningful enforcement currently protects these boundaries.
+| File | Lines |
+| --- | ---: |
+| `src/pages/create-screen.tsx` | 3300 |
+| `src/pages/post/media-post-detail-screen.tsx` | 3149 |
+| `src/pages/quests-screen.tsx` | 1688 |
+| `src/pages/annotate-screen.tsx` | 1536 |
+| `src/pages/search-screen.tsx` | 1528 |
+| `src/pages/user-profile-screen.tsx` | 1484 |
+| `src/pages/profile-screen.tsx` | 1309 |
+| `src/pages/topic-feed-screen.tsx` | 1128 |
+| `src/pages/saved-posts-screen.tsx` | 1108 |
+| `src/pages/home-screen.tsx` | 983 |
+| `src/pages/user-following-screen.tsx` | 865 |
+| `src/pages/home/home-tabbed-feed.tsx` | 810 |
+| `src/pages/invite-and-earn-screen.tsx` | 792 |
+| `src/pages/change-username-screen.tsx` | 785 |
+| `src/pages/settings-screen.tsx` | 758 |
+| `src/pages/logged-out-home.tsx` | 719 |
+| `src/pages/agents-screen.tsx` | 713 |
+| `src/pages/blocked-list-screen.tsx` | 667 |
+| `src/pages/following-screen.tsx` | 626 |
+| `src/pages/create/video-editor-screen.tsx` | 600 |
+
+### Component and service hotspots
+
+These are not first priority while `app/` still has full screens, but they are known cleanup targets:
+
+| File | Lines |
+| --- | ---: |
+| `src/components/molecules/post-card-media.tsx` | 1845 |
+| `src/services/inbox-notifications.ts` | 1382 |
+| `src/components/molecules/side-menu.tsx` | 999 |
+| `src/components/molecules/comment-item.tsx` | 957 |
+| `src/components/molecules/media-preview-modal.tsx` | 949 |
+| `src/components/molecules/profile-about-tab.tsx` | 940 |
+| `src/services/pow-queue.ts` | 798 |
+| `src/components/ui/primitives/box.tsx` | 734 |
+| `src/components/molecules/media-gallery.tsx` | 688 |
+| `src/components/molecules/post-options-sheet.tsx` | 668 |
+
+### Query/cache findings
+
+Current issues to clean up after route extraction:
+- `src/api/read/query-keys.ts` exists and is used, but raw query keys remain in write hooks and page files.
+- `src/api/cache/*` does not currently exist.
+- `src/api/write/mutation-keys.ts` does not currently exist.
+- Broad `queryClient.clear()` still appears in normal flows, including:
+  - `src/providers/api-server-provider.tsx`
+  - `src/providers/query-clear-provider.tsx`
+  - `src/pages/logged-out-home.tsx`
+  - `src/components/ui/dev-toolbar.tsx` (acceptable only as dev tooling)
+
+### Store boundary findings
+
+Current store imports that violate the intended boundary:
+- `src/stores/auth-store.ts` imports from `@/src/pages/home/home-post-card-store`.
+- `src/stores/post-comment-optimistic-store.ts` imports from `@/src/components/molecules`.
+- `src/stores/history-store.ts` imports from `@/src/components/molecules/post-card-types`.
+- `src/stores/saved-posts-store.ts` imports from `@/src/components/molecules/post-card-types` and `@/src/components/molecules/comment-item`.
+
+### Navigation findings
+
+Current good pieces:
+- `app/+native-intent.ts` delegates to `src/navigation/linking`.
+- `src/navigation/route-map.ts`, `src/navigation/linking.ts`, `src/navigation/auth-navigation.ts`, and `src/navigation/guarded-router.ts` exist.
+- `src/utils/guarded-router.ts` is now a compatibility re-export.
+
+Current gaps:
+- Continue auditing direct `expo-router` imports and page-local navigation decisions.
+- Continue consolidating route/auth/share-intent decisions under `src/navigation/*`.
+
+### Effect-heavy hotspots
+
+Most `useEffect` occurrences are in the same large screens that need extraction first:
+- `app/post/[id].tsx` — 25
+- `src/pages/post/media-post-detail-screen.tsx` — 15
+- `src/pages/home-screen.tsx` — 13
+- `src/pages/quests-screen.tsx` — 13
+- `src/components/molecules/post-card-media.tsx` — 12
+- `src/pages/create-screen.tsx` — 10
+- `app/comment-compose.tsx` — 9
+- `src/pages/topic-feed-screen.tsx` — 9
+- `src/pages/following-screen.tsx` — 8
+
+Do not start by deleting effects blindly. Extract ownership first, then replace synchronization effects with derived state/query options where safe.
 
 ---
 
-## Refactor Phases
+## Refactor Phases for Current Codebase
 
-## Phase 1 — Route/Page Separation
-Goal: make `app/` a true routing layer.
+## Phase 0 — Align Docs and Guardrails
+
+Goal: make the plan and future checks reflect the current tree.
 
 ### Tasks
-- Move route implementations out of `app/` into `src/pages/`.
-- Create thin wrappers in `app/`.
-- Start with:
-  - `app/(auth)/login.tsx`
-  - `app/(auth)/username.tsx`
-  - `app/(auth)/recovery-phrase.tsx`
-  - `app/post/[id].tsx`
-  - `app/comment-compose.tsx`
-- Add page exports as needed.
+- Replace stale completion claims with current audit data.
+- Keep dependency upgrades explicitly out of scope.
+- Add or restore guardrail scripts after the plan is updated:
+  - file-size report
+  - store-boundary check
+  - raw query-key literal check
+  - navigation/deep-link smoke check
+- Add `package.json` scripts for the checks once the tools exist.
 
 ### Success Criteria
-- `app/` only holds wrappers/layouts.
-- Page implementation lives in `src/pages/**`.
-- No behavior change intended.
+- Docs no longer claim completed extractions that are absent from the repo.
+- Agents know not to start with dependency/video upgrades.
+- Verification commands match actual scripts.
 
 ---
 
-## Phase 2 — Navigation + Deep-Link Consolidation
-Goal: one source of truth for route parsing and auth-aware navigation.
+## Phase 1 — Route/Page Separation
+
+Goal: make `app/` a true routing layer.
+
+Status: **complete**.
+
+### Order
+1. [x] Extract `app/(auth)/login.tsx` to `src/pages/auth/login-page.tsx`.
+2. [x] Extract `app/(auth)/recovery-phrase.tsx` to `src/pages/auth/recovery-phrase-page.tsx`.
+3. [x] Extract `app/(auth)/username.tsx` to `src/pages/auth/username-page.tsx`.
+4. [x] Extract `app/comment-compose.tsx` to `src/pages/comment/comment-compose-page.tsx`.
+5. [x] Extract `app/post/[id].tsx` to `src/pages/post/post-detail-page.tsx`.
+6. [x] Review and extract `app/(tabs)/_layout.tsx` and `app/_layout.tsx` implementation into `src/navigation/*` modules.
+7. [x] Extract `app/saved-posts.tsx` route error-boundary UI to `src/pages/saved/saved-posts-route.tsx`.
+
+### Rules
+- Preserve behavior.
+- Prefer move/extract over rewrite.
+- After extraction, `app/*` files should only import and export page modules or configure layout metadata.
+- If a moved page is still huge, accept that temporarily; split it in Phase 4.
+
+### Success Criteria
+- No route implementation over ~100 lines unless it is a layout with clear routing-only responsibility.
+- Auth, post detail, and comment compose implementations live in `src/pages/*`.
+
+---
+
+## Phase 2 — Navigation Boundary Cleanup
+
+Goal: put route parsing, guarded navigation, and auth-aware route deferral under `src/navigation/*`.
+
+Status: **in progress**.
 
 ### Tasks
-- Centralize route mapping.
-- Unify deep-link parsing for native and internal links.
-- Remove duplicate router guard logic.
-- Eliminate timeout-based pending-route navigation where possible.
+- [x] Move guarded router implementation from `src/utils/guarded-router.ts` to `src/navigation/guarded-router.ts`.
+- [x] Keep legacy utility wrapper as a thin re-export for incremental migration.
+- [x] Repoint current guarded-router callers to `src/navigation/guarded-router.ts`.
+- [ ] Audit direct imports of `expo-router` from page files.
+- Keep native intent and in-app link parsing delegated to `src/navigation/linking.ts`.
 
-### Likely Targets
-- `app/+native-intent.ts`
-- `src/utils/internal-link-handler.ts`
-- `src/hooks/use-router.ts`
-- `src/utils/guarded-router.ts`
-- `src/stores/deep-link-store.ts`
-- `src/providers/root-provider.tsx`
+### Success Criteria
+- Navigation behavior has one canonical home under `src/navigation/*`.
+- Page files do not create new deep-link parsing or route-guard logic.
 
 ---
 
 ## Phase 3 — Query Ownership and Cache Cleanup
-Goal: TanStack Query becomes the single clean owner of server state.
+
+Goal: TanStack Query owns server state with centralized keys and reusable cache helpers.
 
 ### Tasks
-- Centralize `queryKeys` usage everywhere.
-- Replace raw literal keys with helper functions.
+- Create `src/api/write/mutation-keys.ts`.
 - Add `mutationKey` to write hooks.
-- Create `src/api/cache/*` helpers for reusable optimistic updates.
-- Remove page-level ad hoc cache mutation where possible.
-- Revisit server-scoped cache identity.
+- Create `src/api/cache/*` helpers for repeated post/comment/user cache fanout.
+- Replace raw query keys in high-churn files first:
+  - `src/api/write/hooks/use-post.ts`
+  - `src/api/write/hooks/use-vote.ts`
+  - `src/api/write/hooks/use-award.ts`
+  - `src/api/write/hooks/use-block.ts`
+  - `src/api/write/hooks/use-follow.ts`
+  - `src/pages/create-screen.tsx`
+  - `src/pages/change-username-screen.tsx`
+- Replace normal-flow `queryClient.clear()` with targeted invalidation/removal.
+
+### Success Criteria
+- Query key literals are centralized or isolated behind approved helpers.
+- Mutation observability is improved with `mutationKey`s.
+- No broad cache clearing in normal app flows.
 
 ---
 
-## Phase 4 — Zustand Boundary Cleanup
-Goal: make Zustand purely client-state oriented.
+## Phase 4 — Store and Domain Boundary Cleanup
+
+Goal: keep Zustand client-state-only and remove UI/page type coupling.
 
 ### Tasks
-- Remove page imports from stores.
-- Remove component type imports from stores where possible.
-- Move server-derived concerns to Query.
-- Trim auth-store responsibilities.
+- Move `src/pages/home/home-post-card-store.ts` into `src/stores/home-post-card-store.ts` or rename it so `auth-store` no longer imports from pages.
+- Move reusable post/comment/content types from components into `src/domain/*`.
+- Repoint `history-store`, `saved-posts-store`, and `post-comment-optimistic-store` away from component modules.
+- Audit `auth-store.ts` for server/query orchestration and split it out if present.
+
+### Success Criteria
+- `src/stores/*` imports nothing from `src/pages/*` or `src/components/*`.
+- Store types come from `src/domain/*` or local store-safe modules.
 
 ---
 
 ## Phase 5 — Break Up Giant Pages
+
 Goal: replace page monoliths with modular feature structure.
 
-### First targets
+### Priority order
 1. `src/pages/create-screen.tsx`
-2. `src/pages/search-screen.tsx`
-3. `src/pages/profile-screen.tsx`
-4. `src/pages/user-profile-screen.tsx`
-5. `src/pages/quests-screen.tsx`
-6. `src/pages/topic-feed-screen.tsx`
-7. `src/pages/annotate-screen.tsx`
+2. `src/pages/post/media-post-detail-screen.tsx`
+3. `src/pages/quests-screen.tsx`
+4. `src/pages/annotate-screen.tsx`
+5. `src/pages/search-screen.tsx`
+6. `src/pages/user-profile-screen.tsx`
+7. `src/pages/profile-screen.tsx`
+8. `src/pages/topic-feed-screen.tsx`
+9. `src/pages/saved-posts-screen.tsx`
+10. `src/pages/home-screen.tsx` and `src/pages/following-screen.tsx`
 
-### Pattern
-Each giant page should be decomposed into:
-- `*-page.tsx`
+### Extraction pattern
+For each feature, create a folder such as `src/pages/create/` with:
+- a page container
 - `components/`
 - `hooks/`
 - `utils/`
-- cache helpers if needed
+- optional feature-local types
+
+Move cache mutation to `src/api/cache/*`, not feature folders, when the helper is reusable.
+
+### Success Criteria
+- No page/container file remains over 600 lines without a documented reason.
+- New or touched page files trend toward 300-400 lines.
+- Behavior remains stable after each extraction.
 
 ---
 
-## Phase 6 — Reduce Effect-Driven Flows
-Goal: cut rerenders and timing bugs.
+## Phase 6 — Component and Service Hotspot Cleanup
+
+Goal: reduce secondary monoliths once route/page ownership is sane.
 
 ### Tasks
-- Replace effect chains with declarative query options.
-- Move lifecycle listeners out of pages where appropriate.
-- Remove sync effects that only mirror derived state.
-- Reduce app-level timers and delayed navigation patterns.
+- Split `src/components/molecules/post-card-media.tsx` into media-type renderers and media state hooks.
+- Split `src/services/inbox-notifications.ts` into parsing, permission, scheduling, and sync modules.
+- Split large sheets/modals by section where it improves readability.
+- Keep component files out of server cache policy.
+
+### Success Criteria
+- Large components become composable, testable modules.
+- Services have clear single-purpose modules.
 
 ---
 
-## Phase 7 — Guardrails and Regression Prevention
-Goal: keep the architecture clean after the refactor.
+## Phase 7 — Reduce Effect-Driven Flows
+
+Goal: cut rerenders and timing bugs after ownership boundaries are clear.
 
 ### Tasks
-- Add lint/import boundary rules.
-- Add file-size reporting or thresholds.
-- Add focused smoke tests for navigation/deep links.
-- Document conventions in README or architecture docs.
+- Replace effect chains with derived state and query options.
+- Move app-global listeners into providers/services only when they are truly global.
+- Remove effects that mirror query/store state into duplicate local state.
+- Replace timer/delayed navigation patterns with centralized navigation helpers.
+
+### Success Criteria
+- High-effect hotspots shrink naturally as pages/components are split.
+- Remaining effects have clear external side effects or subscriptions.
 
 ---
 
-## Immediate Order of Execution
+## Phase 8 — Regression Guardrails
 
-1. Write this plan file.
-2. Start Phase 1 route/page extraction.
-3. Convert extracted `app/` files into thin wrappers.
-4. Continue Phase 1 until major route implementations are out of `app/`.
-5. Then move to Phase 2 navigation consolidation.
+Goal: prevent the architecture from drifting back.
+
+### Tasks
+- Add file-size reporting under `tools/`.
+- Add store-boundary checks.
+- Add raw query-key literal checks.
+- Add navigation/deep-link smoke checks.
+- Add package scripts, using Bun:
+  - `bun run check:file-sizes`
+  - `bun run check:stores`
+  - `bun run check:query-keys`
+  - `bun run check:navigation`
+  - `bun run check:architecture`
+
+### Success Criteria
+- Guardrail commands exist and run in CI/local workflows.
+- Docs and `package.json` commands match the actual tools.
 
 ---
 
-## Current Working Notes
+## Immediate Next Actions
 
-### Phase 1 starting order
-1. Auth routes
-   - login
-   - username
-   - recovery phrase
-2. Post route
-3. Comment compose route
+1. Continue Phase 2 by auditing direct `expo-router` imports in `src/pages/*`, `src/components/*`, and `src/hooks/*`.
+2. Move route/auth/share-intent decisions into `src/navigation/*` when they are not purely local UI navigation.
+3. Keep `src/utils/guarded-router.ts` as a compatibility re-export only; do not add new callers there.
+4. Run focused lint after each navigation cleanup batch.
+5. Do not touch video/native dependencies while doing this cleanup.
 
-### Phase 1 progress
-- [x] Extracted `app/(auth)/login.tsx` to `src/pages/auth/login-page.tsx`
-- [x] Extracted `app/(auth)/username.tsx` to `src/pages/auth/username-page.tsx`
-- [x] Extracted `app/(auth)/recovery-phrase.tsx` to `src/pages/auth/recovery-phrase-page.tsx`
-- [x] Extracted `app/post/[id].tsx` to `src/pages/post/post-detail-page.tsx`
-- [x] Extracted `app/comment-compose.tsx` to `src/pages/comment/comment-compose-page.tsx`
-- [x] Converted the original `app/` files into thin wrappers
-- [x] Extracted shared auth route UI into reusable components (`AuthRouteHeader`, `NodeSwitchModal`, `RegistrationUnavailableModal`)
-- [x] Continued breaking up `src/pages/auth/login-page.tsx` by extracting the login form state, header/title/footer/error sections, and a shared auth server base-url hook reused by auth routes
-- [x] Continued breaking up `src/pages/auth/username-page.tsx` by extracting registration/referral/server-switch orchestration into `use-username-registration.ts` and dedicated username form/footer/transaction modules
-- [x] Split `src/pages/comment/comment-compose-page.tsx` into focused modules (`components/*`, `comment-compose-utils.ts`)
-- [x] Continued breaking up `src/pages/comment/comment-compose-page.tsx` by extracting compose orchestration into `use-comment-compose.ts` and a dedicated text editor component
-- [x] Started breaking up `src/pages/post/post-detail-page.tsx` by extracting header, sticky header, loading/empty states, and shared post-detail utilities
-- [x] Continued breaking up `src/pages/post/post-detail-page.tsx` by extracting comment tree utilities and a dedicated comment list item component
-- [x] Continued breaking up `src/pages/post/post-detail-page.tsx` by extracting overlay/sheet rendering into a dedicated `PostDetailOverlays` component
-- [x] Continued breaking up `src/pages/post/post-detail-page.tsx` by extracting comment action/param builders into `post-detail-action-utils.ts`
-- [x] Continued breaking up `src/pages/post/post-detail-page.tsx` by extracting moderation/report/delete orchestration into `use-post-detail-moderation.ts`
-- [x] Continued breaking up `src/pages/post/post-detail-page.tsx` by extracting optimistic comment submit/edit + pending compose flow into `use-post-detail-comment-actions.ts`
-- [x] Continued breaking up `src/pages/post/post-detail-page.tsx` by extracting the post-card/list header into `PostDetailListHeader`
-- [x] Continued breaking up `src/pages/post/post-detail-page.tsx` by extracting sticky-header/scroll orchestration into `use-post-detail-scroll-state.ts`
-- [x] Continued breaking up `src/pages/post/post-detail-page.tsx` by extracting sync/cache/focus orchestration into `use-post-detail-sync.ts`
-- [x] Continued breaking up `src/pages/post/post-detail-page.tsx` by extracting screen orchestration, overlay state, and list rendering into `use-post-detail-screen.ts`, `use-post-detail-overlays.ts`, and `PostDetailCommentsList`
-- [x] Started breaking up `src/pages/create-screen.tsx` by extracting the create header and video preview into dedicated create-screen modules
-- [x] Continued breaking up `src/pages/create-screen.tsx` by extracting link, editability, content-warning, media toolbar, sticker/image preview, processing overlays, post-meta section, and video upload state into dedicated create-screen modules/hooks
-- [x] Continued breaking up `src/pages/create-screen.tsx` by extracting submission flow, intake/share-intent sync, and media interaction logic into dedicated create hooks
-- [x] Completed search feature modularization by extracting header, tabs, list items, empty states, and search utilities into `src/pages/search/*`
-- [x] Completed profile feature modularization by extracting list items, footer, overlays, and post-action helpers into `src/pages/profile/*`
-- [x] Continue splitting the extracted page implementations into smaller feature modules
+---
 
-### Phase 2 progress
-- [x] Centralized Mirage route parsing into `src/navigation/route-map.ts`
-- [x] Centralized guarded router exports into `src/navigation/guarded-router.ts`
-- [x] Centralized auth-aware route deferral + pending-route flushing into `src/navigation/auth-navigation.ts`
-- [x] Centralized deep-link handling for native intents and in-app links into `src/navigation/linking.ts`
-- [x] Repointed `app/+native-intent.ts`, `src/utils/internal-link-handler.ts`, `src/hooks/use-router.ts`, and `src/utils/guarded-router.ts` to the shared navigation modules
-- [x] Replaced timeout-based pending-route navigation in `src/providers/root-provider.tsx` with shared pending-route flushing via `requestAnimationFrame`
-- [x] Repointed additional shared callers (headers, markdown/comment link handling, auth guard, post/auth/comment hooks, inbox notifications, and create flows) to the canonical `src/navigation/*` modules
-- [x] Finished consolidating remaining navigation callers onto the new `src/navigation/*` modules; legacy wrapper imports are no longer referenced in app code
+## Current Verification Reality
 
-### Phase 3 progress
-- [x] Added reusable post cache helpers in `src/api/cache/posts-cache.ts` for edited-post fanout and root-post metadata sync
-- [x] Added query-key prefix helpers (`postsRoot`, `commentsRoot`, `userPostsRoot`) to reduce scattered literal key prefixes
-- [x] Replaced ad hoc edited-post cache fanout in `src/pages/create/use-create-submit.ts` with shared cache helpers
-- [x] Replaced post-detail feed metadata sync in `src/pages/post/use-post-detail-sync.ts` with shared cache helpers and centralized key prefixes
-- [x] Replaced a first batch of raw user-post/user-blocked invalidation keys in profile screens with `queryKeys` helpers
-- [x] Replaced another batch of raw post/comment/topic query-key prefixes in write hooks (`use-vote`, `use-award`, `use-post`, `use-block`, `use-follow`) with centralized root helpers
-- [x] Reduced one broad cache-clearing flow in `src/pages/logged-out-home.tsx` to targeted query removal/refetch for node/config/welcome stats
-- [x] Added centralized mutation keys in `src/api/write/mutation-keys.ts` and wired all write hooks to use `mutationKey`
-- [x] Replaced the remaining raw query-key hotspots (`use-annotate`, `use-set-agents`, `use-username-resolution`, `use-server-list`, `agents-screen`) with centralized helpers
-- [x] Replaced normal-flow broad query clearing in `src/pages/auth/login-page.tsx` and `src/providers/api-server-provider.tsx` with targeted server-scoped cache clearing via `src/api/cache/server-cache.ts`
-- [x] Continue replacing remaining raw query keys and broad cache-clearing flows as Phase 3 continues
+Current `package.json` scripts:
+- `bun run lint`
 
-### Phase 4 progress
-- [x] Moved canonical home post-card store ownership from `src/pages/home/home-post-card-store.ts` to `src/stores/home-post-card-store.ts`
-- [x] Repointed app imports to the canonical store module so stores no longer depend on page modules
-- [x] Moved canonical post/comment/content-warning types into `src/domain/{posts,comments,content}/types.ts`
-- [x] Updated store consumers (`auth-store`, `history-store`, `saved-posts-store`) to depend on domain/store-safe modules instead of UI component model types
-- [x] Removed server/query orchestration from `src/stores/auth-store.ts`
-- [x] Moved auth hydration fetch logic into `src/providers/wallet-provider.tsx` so Zustand remains client-state focused
-- [x] Verified `src/stores/*` no longer import from `pages/` or `components/`
-
-### Phase 5 progress
-- [x] Continued breaking up `src/pages/user-profile-screen.tsx` by extracting list-item wrappers, viewability orchestration, footer rendering, and shared user-profile utilities into `src/pages/user-profile/*`
-- [x] Continued breaking up `src/pages/topic-feed-screen.tsx` by extracting the topic header and overlay/sheet rendering into `src/pages/topic-feed/*`
-- [x] Continued breaking up `src/pages/saved-posts-screen.tsx` by extracting the tab bar, saved-comment/media rendering, empty state, and saved-posts viewability orchestration into `src/pages/saved/*`
-- [x] Continued breaking up `src/pages/quests-screen.tsx` by extracting quest cards, countdowns, loading/empty states, and claim-success UI into `src/pages/quests/*`
-- [x] Continued breaking up `src/pages/annotate-screen.tsx` by extracting annotate header, post summary, tag modal, media section, and basic override sections into `src/pages/annotate/*`
-- [x] Continue follow-on cleanup for remaining still-large screens (`user-profile-screen`, `topic-feed-screen`, `saved-posts-screen`, `annotate-screen`) as needed
-
-### Phase 6 progress
-- [x] Consolidated duplicated feed background/foreground refresh timers into `src/hooks/use-feed-resume-refresh.ts` so feed resume work is focus-aware and no longer orchestrated separately inside `home-screen` and `following-screen`
-- [x] Replaced repeated home-post-card sync effects in `home-screen`, `following-screen`, and `topic-feed-screen` with `src/hooks/use-home-post-card-bindings.ts` plus a batched `syncFeedContext` store action
-- [x] Removed per-render handler-ref synchronization in the main feed screens by memoizing feed action handlers and binding them declaratively through the shared hook
-
-### Phase 7 progress
-- [x] Added import-boundary lint protection for `src/stores/*` in `eslint.config.js`
-- [x] Added file-size reporting via `tools/check-file-sizes.mjs`
-- [x] Added navigation/deep-link smoke checks via `tools/navigation-smoke-check.mjs`
-- [x] Documented architecture conventions and verification commands in `docs/architecture-conventions.md` and `README.md`
-- [x] Added additional smoke checks for store boundaries and raw query-key literal regressions (`tools/check-store-boundaries.mjs`, `tools/check-query-key-literals.mjs`)
-
-### Do not do during Phase 1
-- No logic rewrite unless necessary.
-- No behavior changes unless required to preserve routing correctness.
-- No large API/caching redesign yet.
-
-Phase 1 is about ownership and file placement first.
+The old docs referenced guardrail scripts under `tools/`, but those files are not present in this version of the repo. Add them in Phase 8 before relying on commands like `check:file-sizes` or `check:architecture`.

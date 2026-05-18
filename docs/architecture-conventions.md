@@ -4,6 +4,7 @@
 - `app/` is routing, layout, and route config only.
 - Route files should be thin wrappers over `src/pages/*`.
 - Keep navigation parsing and auth-aware deep-link behavior in `src/navigation/*`.
+- Current refactor priority: extract the remaining large route implementations from `app/` before doing effect cleanup.
 
 ## Pages
 - Prefer modular feature folders under `src/pages/<feature>/*`.
@@ -23,9 +24,15 @@
 - Prefer targeted invalidation/removal over `queryClient.clear()` in normal flows.
 - Write hooks should define `mutationKey`.
 
+## Dependency Policy
+- Keep structural refactors dependency-neutral unless a separate task explicitly asks for dependency work.
+- Do not upgrade Expo, React Native, native video/media libraries, or PoW native modules as part of cleanup refactors.
+
 ## Verification Commands
-- `bunx eslint . --ext .ts,.tsx`
-- `bun tools/check-file-sizes.mjs`
-- `bun tools/navigation-smoke-check.mjs`
-- `bun tools/check-store-boundaries.mjs`
-- `bun tools/check-query-key-literals.mjs`
+- Current available command: `bun run lint`.
+- Planned guardrails, not currently present in this codebase version:
+  - `bun run check:file-sizes`
+  - `bun run check:navigation`
+  - `bun run check:stores`
+  - `bun run check:query-keys`
+  - `bun run check:architecture`

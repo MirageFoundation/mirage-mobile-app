@@ -15,7 +15,7 @@ import { Audio, ResizeMode, Video } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import { Paths, File as ExpoFile } from "expo-file-system";
 import { useLocalSearchParams } from "expo-router";
-import { router } from "@/src/utils/guarded-router";
+import { router } from "@/src/navigation/guarded-router";
 import { useShareIntentContext } from "expo-share-intent";
 import ExpoShareIntentModule from "expo-share-intent/build/ExpoShareIntentModule";
 import { getLastSharePath, isRecentSharePath } from "@/src/navigation/linking";
