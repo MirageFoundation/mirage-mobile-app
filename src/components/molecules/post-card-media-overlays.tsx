@@ -2,8 +2,7 @@ import { Text } from "@/src/components/ui/primitives";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { ActivityIndicator, Platform, Pressable, View } from "react-native";
-
-import { styles } from "./post-card-media-styles";
+import { StyleSheet } from "react-native-unistyles";
 
 type MediaOfflineOverlayProps = {
   visible: boolean;
@@ -114,3 +113,64 @@ export function MediaTypeBadge({ type }: MediaTypeBadgeProps) {
 
   return null;
 }
+
+const styles = StyleSheet.create((theme) => ({
+  processingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  blurOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  blurViewFill: {
+    flex: 1,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  revealTextContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  androidBlurOverlay: {
+    flex: 1,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(5, 5, 5, 0.97)",
+    gap: 8,
+  },
+  gifBadge: {
+    position: "absolute",
+    top: theme.spacing.sm,
+    left: theme.spacing.sm,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 2,
+    borderRadius: theme.radius.sm,
+    zIndex: 20,
+  },
+  videoBadge: {
+    position: "absolute",
+    top: theme.spacing.sm,
+    left: theme.spacing.sm,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 2,
+    borderRadius: theme.radius.sm,
+    zIndex: 20,
+  },
+  imageBadge: {
+    position: "absolute",
+    top: theme.spacing.sm,
+    left: theme.spacing.sm,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 2,
+    borderRadius: theme.radius.sm,
+    zIndex: 20,
+  },
+}));

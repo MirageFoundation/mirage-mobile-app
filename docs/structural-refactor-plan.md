@@ -470,12 +470,11 @@ Status: **complete**.
 - Split `src/components/molecules/post-card-media.tsx` into media-type renderers and media state hooks.
   - [x] Extract media sizing/cache constants to `src/components/molecules/post-card-media-constants.ts`.
   - [x] Extract Cloudflare manifest readiness helpers to `src/components/molecules/cloudflare-manifest.ts`.
-  - [x] Extract post-card media styles to `src/components/molecules/post-card-media-styles.ts`.
   - [x] Extract reusable post-card media overlays to `src/components/molecules/post-card-media-overlays.tsx`.
 - Split `src/services/inbox-notifications.ts` into parsing, permission, scheduling, and sync modules.
   - [x] Extract notification content/response parsing helpers to `src/services/inbox-notification-content.ts`.
 - Split large sheets/modals by section where it improves readability.
-  - [x] Extract large style blocks from side menu, media preview modal, comment item, profile about tab, profile header, post options sheet, quests summary card, media gallery, and Box primitive.
+  - [x] Keep styles colocated with their owning components unless a style module is needed by multiple extracted components.
 - Keep component files out of server cache policy.
 
 ### Success Criteria

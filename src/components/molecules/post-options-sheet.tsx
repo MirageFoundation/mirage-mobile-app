@@ -15,13 +15,12 @@ import * as Linking from "expo-linking";
 import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
 import { FlatList, Platform, Pressable, Share, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useUnistyles } from "react-native-unistyles";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Text } from "@/src/components/ui/primitives";
 import { usePreferencesStore, getShareBaseUrl } from "@/src/stores";
 import { useAuthStore } from "@/src/stores/auth-store";
 import type { Post } from "./post-card";
-import { styles } from "./post-options-sheet-styles";
 
 type PostOptionsSheetProps = {
   /** The post to show options for */
@@ -609,3 +608,60 @@ export const PostOptionsSheet = forwardRef<
 );
 
 PostOptionsSheet.displayName = "PostOptionsSheet";
+
+const styles = StyleSheet.create((theme) => ({
+  content: {
+    paddingHorizontal: theme.spacing.lg,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: theme.spacing.md,
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  shareRow: {
+    marginHorizontal: -theme.spacing.lg,
+  },
+  shareRowContent: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    gap: theme.spacing.md,
+  },
+  shareAppButton: {
+    alignItems: "center",
+    width: 56,
+  },
+  shareAppIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: theme.spacing.xs,
+  },
+  shareAppLabel: {
+    textAlign: "center",
+  },
+  divider: {
+    height: 1,
+    marginVertical: theme.spacing.md,
+    marginHorizontal: -theme.spacing.lg,
+  },
+  menuList: {},
+  menuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: theme.spacing.sm + 3,
+  },
+  menuItemIOS: {
+    paddingVertical: theme.spacing.sm + 3,
+  },
+}));
