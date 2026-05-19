@@ -1,11 +1,15 @@
 import { Feather } from "@expo/vector-icons";
 import { ResizeMode, Video } from "expo-av";
-import { useRef } from "react";
+import { useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useUnistyles } from "react-native-unistyles";
 
 import { Text } from "@/src/components/ui/primitives";
+import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useRouter } from "@/src/navigation/guarded-router";
+import { useDraftStore } from "@/src/stores/draft-store";
+import { VIDEO_META, VIDEO_UPLOADS } from "./create-upload-state";
 import { styles } from "./create-screen-styles";
 
 type VideoUploadState = Record<
@@ -14,13 +18,12 @@ type VideoUploadState = Record<
 >;
 
 type VideoPreviewCarouselProps = {
-  mediaUris: string[];
   videoUploadState: VideoUploadState;
+  setVideoUploadState: Dispatch<SetStateAction<VideoUploadState>>;
+  videoUploadControllersRef: MutableRefObject<Map<string, AbortController>>;
   isNetworkOnline: boolean;
   editExpired: boolean;
-  onEditVideo: (uri: string) => void;
   onRetryUpload: (uri: string) => void;
-  onRemoveVideo: (uri: string) => void;
   onAddVideo: () => void;
 };
 
@@ -28,17 +31,54 @@ const VIDEO_HEIGHT = 180;
 const VIDEO_WIDTH = Math.round(VIDEO_HEIGHT * (16 / 9) * 0.6);
 
 export function VideoPreviewCarousel({
-  mediaUris,
   videoUploadState,
+  setVideoUploadState,
+  videoUploadControllersRef,
   isNetworkOnline,
   editExpired,
-  onEditVideo,
   onRetryUpload,
-  onRemoveVideo,
   onAddVideo,
 }: VideoPreviewCarouselProps) {
   const { theme } = useUnistyles();
+  const router = useRouter();
   const videoScrollRef = useRef<ScrollView>(null);
+  const attachmentType = useDraftStore((state) => state.draft.attachmentType);
+  const mediaUris = useDraftStore((state) => state.draft.mediaUris);
+
+  if (attachmentType !== "video") {
+    return null;
+  }
+
+  const handleEditVideo = (uri: string) => {
+    triggerHaptic("selection");
+    const meta = VIDEO_META.get(uri);
+    router.push({
+      pathname: "/video-editor",
+      params: {
+        uri: meta?.originalUri ?? uri,
+        width: (meta?.width ?? 1920).toString(),
+        height: (meta?.height ?? 1080).toString(),
+        initialTrimStart: (meta?.trimStart ?? 0).toString(),
+        initialTrimEnd: (meta?.trimEnd ?? 0).toString(),
+        replacingUri: uri,
+        returnTo: "/(tabs)/create",
+      },
+    });
+  };
+
+  const handleRemoveVideo = (uri: string) => {
+    triggerHaptic("selection");
+    useDraftStore.getState().removeMediaUri(uri);
+    videoUploadControllersRef.current.get(uri)?.abort();
+    videoUploadControllersRef.current.delete(uri);
+    VIDEO_UPLOADS.delete(uri);
+    setVideoUploadState((prev) => {
+      const next = { ...prev };
+      delete next[uri];
+      return next;
+    });
+    VIDEO_META.delete(uri);
+  };
 
   if (mediaUris.length === 0) {
     return null;
@@ -62,7 +102,7 @@ export function VideoPreviewCarousel({
           return (
             <Pressable
               key={uri}
-              onPress={() => onEditVideo(uri)}
+              onPress={() => handleEditVideo(uri)}
               style={[styles.videoPlayerWrapper, { height: VIDEO_HEIGHT, width: VIDEO_WIDTH }]}
             >
               <View pointerEvents="none">
@@ -121,7 +161,7 @@ export function VideoPreviewCarousel({
 
               {!editExpired && (
                 <Pressable
-                  onPress={() => onRemoveVideo(uri)}
+                  onPress={() => handleRemoveVideo(uri)}
                   style={styles.videoRemoveButton}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >

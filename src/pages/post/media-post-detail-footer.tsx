@@ -1,0 +1,215 @@
+import { Ionicons } from "@expo/vector-icons";
+import { memo } from "react";
+import { Pressable, View } from "react-native";
+import { useUnistyles } from "react-native-unistyles";
+
+import { Avatar, TimeAgo } from "@/src/components/atoms";
+import { PostActions, type Post } from "@/src/components/molecules";
+import { Text } from "@/src/components/ui/primitives";
+import { getUsernameColor } from "@/src/utils/tiers";
+
+import { MediaPostDetailFollowMenuButton } from "./media-post-detail-follow-menu-button";
+import { SeekBarFlex, formatTime } from "./media-post-detail-seek-bar";
+import { styles } from "./media-post-detail-styles";
+
+function truncateForInline(body: string, maxChars = 100): string {
+  const firstLine = body.split(/\r?\n/)[0] ?? body;
+  if (firstLine.length <= maxChars) return firstLine;
+  return firstLine.slice(0, maxChars) + "…";
+}
+
+function renderInlineBody(body: string): string {
+  const firstLine = truncateForInline(body);
+  return firstLine
+    .replace(/!?\[([^\]]+)\]\(([^)]+)\)/g, "$1")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1");
+}
+
+type MediaPostDetailFooterProps = {
+  post: Post;
+  onAuthorPress: () => void;
+  onUpvote: () => void;
+  onDownvote: () => void;
+  onComment: () => void;
+  onShare: () => void;
+  onBlockUser: () => void;
+  onBlockPost: () => void;
+  onBlockTopic: () => void;
+  onReport: () => void;
+  isOwnPost: boolean;
+  shareUrl: string;
+  isVideo: boolean;
+  isPlaying: boolean;
+  positionMs: number;
+  durationMs: number;
+  onPlayPause: () => void;
+  onSeek: (ms: number) => void;
+  onMoreLink: () => void;
+  isMuted: boolean;
+  onMuteToggle: () => void;
+  isFollowing: boolean;
+  isTopicFollowed: boolean;
+  topic?: string;
+  isOwnAuthor: boolean;
+  onFollowAuthor: () => void;
+  onFollowTopic: () => void;
+};
+
+export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
+  post,
+  onAuthorPress,
+  onUpvote,
+  onDownvote,
+  onComment,
+  onShare,
+  onBlockUser,
+  onBlockPost,
+  onBlockTopic,
+  onReport,
+  isOwnPost,
+  shareUrl,
+  isVideo,
+  isPlaying,
+  positionMs,
+  durationMs,
+  onPlayPause,
+  onSeek,
+  onMoreLink,
+  isMuted,
+  onMuteToggle,
+  isFollowing,
+  isTopicFollowed,
+  topic,
+  isOwnAuthor,
+  onFollowAuthor,
+  onFollowTopic,
+}: MediaPostDetailFooterProps) {
+  const { theme } = useUnistyles();
+  const tierColor =
+    post.author.level != null ? getUsernameColor(post.author.level) : undefined;
+
+  return (
+    <View style={styles.footerBlock}>
+      <View style={styles.authorRowFull}>
+        <Pressable onPress={onAuthorPress} style={styles.authorRow}>
+          <Avatar seed={post.author.avatarSeed ?? post.author.id} size={32} />
+          <Text
+            size="md"
+            weight="semibold"
+            style={{
+              color: tierColor ?? theme.colors.text.default,
+              marginLeft: 8,
+            }}
+          >
+            @{post.author.username}
+          </Text>
+          <Text size="sm" mode="subtle" style={{ marginHorizontal: 6 }}>
+            •
+          </Text>
+          <TimeAgo
+            timestamp={post.createdAt}
+            showSuffix={false}
+            size="md"
+            mode="subtle"
+          />
+        </Pressable>
+        {!isOwnAuthor ? (
+          <MediaPostDetailFollowMenuButton
+            username={post.author.username}
+            topic={topic}
+            isFollowing={isFollowing}
+            isTopicFollowed={isTopicFollowed}
+            onFollowUser={onFollowAuthor}
+            onFollowTopic={onFollowTopic}
+          />
+        ) : null}
+      </View>
+
+      <Text size="lg" weight="bold" style={{ marginTop: 4, lineHeight: 20 }}>
+        {post.title}
+      </Text>
+
+      {post.body ? (
+        <View style={styles.bodyRow}>
+          <Text
+            size="md"
+            numberOfLines={1}
+            style={{ flex: 1, color: theme.colors.text.default }}
+          >
+            {renderInlineBody(post.body)}
+          </Text>
+          <Pressable onPress={onMoreLink} hitSlop={4}>
+            <Text
+              size="md"
+              weight="medium"
+              style={{ color: theme.colors.text.subtle, marginLeft: 6 }}
+            >
+              more
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {isVideo ? (
+        <View style={styles.controlsRow}>
+          <Pressable onPress={onPlayPause} hitSlop={8} style={styles.ctrlBtn}>
+            <Ionicons
+              name={isPlaying ? "pause" : "play"}
+              size={18}
+              color={theme.colors.text.subtle}
+            />
+          </Pressable>
+          <View style={{ flex: 1, marginHorizontal: 8 }}>
+            <SeekBarFlex
+              positionMs={positionMs}
+              durationMs={durationMs}
+              onSeek={onSeek}
+              tint={theme.colors.text.subtle}
+            />
+          </View>
+          <Text
+            size="xs"
+            style={{ color: theme.colors.text.subtle, marginRight: 8 }}
+          >
+            {formatTime(positionMs)} / {formatTime(durationMs)}
+          </Text>
+          <Pressable
+            onPress={onMuteToggle}
+            hitSlop={8}
+            style={styles.ctrlBtn}
+          >
+            <Ionicons
+              name={isMuted ? "volume-mute" : "volume-high"}
+              size={18}
+              color={theme.colors.text.subtle}
+            />
+          </Pressable>
+        </View>
+      ) : null}
+
+      <PostActions
+        likes={post.likes}
+        dislikes={post.dislikes}
+        comments={post.comments}
+        hasLiked={post.hasLiked}
+        hasDisliked={post.hasDisliked}
+        onLikePress={onUpvote}
+        onDislikePress={onDownvote}
+        onCommentPress={onComment}
+        onSharePress={onShare}
+        shareUrl={shareUrl}
+        shareTitle={post.title}
+        isOwnPost={isOwnPost}
+        authorUsername={post.author.username}
+        onBlockUser={onBlockUser}
+        onBlockPost={onBlockPost}
+        onBlockTopic={onBlockTopic}
+        topic={post.topic}
+        onReport={onReport}
+        size="md"
+        style={{ marginTop: 12 }}
+      />
+    </View>
+  );
+});
