@@ -765,7 +765,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 163
+                          update 164
                         </Text>
                         <Text
                           style={{
@@ -775,11 +775,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          saved post not working fix,sharing external link to
-                          app whnen killed is not extracting the meta and is not
-                          navigating to create post on android fixed,
-                          notification not opening inbox when app is killed
-                          fixed, identicon container shape changed to square
+                          Refactor
                         </Text>
                       </>
                     )}
@@ -820,7 +816,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 163
+                          update 164
                         </Text>
                         <Text
                           style={{
@@ -830,11 +826,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          saved post not working fix,sharing external link to
-                          app whnen killed is not extracting the meta and is not
-                          navigating to create post on android fixed,
-                          notification not opening inbox when app is killed
-                          fixed, identicon container shape changed to square
+                          Refactor
                         </Text>
                       </>
                     )}
