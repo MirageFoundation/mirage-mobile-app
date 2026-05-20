@@ -6,13 +6,7 @@ import { getNodeConfig } from "@/src/api/read/endpoints/parameters";
 import { getTxStatus } from "@/src/api/read/endpoints/tx";
 import { setUsername as setUsernameOnChain } from "@/src/api/write";
 import { TransactionProgressModal } from "@/src/components/molecules";
-import {
-  Box,
-  Button,
-  Divider,
-  Input,
-  Text,
-} from "@/src/components/ui/primitives";
+import { Box, Button, Input, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { executeWithProgress, useTransactionProgress, useServerList } from "@/src/hooks";
 import { walletService } from "@/src/services/wallet-service";
@@ -21,7 +15,7 @@ import { apiClient } from "@/src/api/client";
 import { usePreferencesStore } from "@/src/stores";
 import { useToast } from "@/src/providers/toast-provider";
 import { useQueryClient } from "@tanstack/react-query";
-import { EvilIcons, Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "@/src/navigation/guarded-router";
 import { useLocalSearchParams } from "expo-router";
 import { getReferralPrecheck } from "@/src/api/read/endpoints/referrals";
@@ -34,16 +28,18 @@ import {
   ActivityIndicator,
   Image,
   Keyboard,
-  Modal,
-  Platform,
   Pressable,
   ScrollView,
   View,
 } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { LinearGradient } from "expo-linear-gradient";
+import { useUnistyles } from "react-native-unistyles";
+import { UsernameFooter } from "./username-footer";
+import { UsernameHeader } from "./username-header";
+import { UsernameRegistrationUnavailableModal } from "./username-registration-unavailable-modal";
+import { UsernameServerModal } from "./username-server-modal";
+import { styles } from "./username-styles";
 
 type UsernameStatus = "idle" | "checking" | "available" | "taken" | "invalid";
 type InviteCodeStatus =
@@ -425,6 +421,46 @@ export default function UsernameScreen() {
     router.replace("/(auth)/login");
   }, [router]);
 
+  const handleRegistrationUnavailableCancel = useCallback(() => {
+    setShowRegPopup(false);
+    router.replace("/(tabs)");
+  }, [router]);
+
+  const handleSelectServer = useCallback(
+    async (server: ApiServer) => {
+      setSwitchingServer(server);
+      setActiveServer(server);
+      apiClient.setBaseUrl(`https://${server}`);
+      queryClient.removeQueries({ queryKey: queryKeys.nodeConfig() });
+      queryClient.removeQueries({ queryKey: queryKeys.config() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.nodeConfig() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.config() });
+
+      try {
+        const freshNodeConfig = await getNodeConfig();
+        if (!freshNodeConfig.registration_enabled) {
+          setSwitchingServer(null);
+          setShowServerModal(false);
+          setApiServer(server);
+          apiClient.setBaseUrl(`https://${server}`);
+          toast.success(`Switched to ${server}`);
+          router.back();
+          return;
+        }
+        setApiServer(server);
+        toast.success(`Switched to ${server}`);
+      } catch (e) {
+        console.error("[UsernameScreen] Failed to fetch nodeConfig after switch:", e);
+        setActiveServer(activeServer);
+        apiClient.setBaseUrl(`https://${activeServer}`);
+        toast.error(`Failed to connect to ${server}`);
+      }
+      setSwitchingServer(null);
+      setShowServerModal(false);
+    },
+    [activeServer, queryClient, router, setApiServer, toast],
+  );
+
   const getStatusIcon = () => {
     switch (status) {
       case "checking":
@@ -568,30 +604,12 @@ export default function UsernameScreen() {
         }
       />
 
-      <View
-        style={[
-          styles.header,
-          { paddingTop: Platform.OS === "ios" ? 20 : insets.top },
-        ]}
-      >
-        <Pressable onPress={handleClose} style={styles.closeButton}>
-          <EvilIcons name="close" size={36} color={theme.colors.text.default} />
-        </Pressable>
-        <Pressable onPress={() => setShowServerModal(true)}>
-          <Text
-            size="lg"
-            weight="semibold"
-            style={{
-              color: "#60A5FA",
-              textDecorationLine: "underline",
-              marginRight: 8,
-            }}
-          >
-            {activeServer}
-          </Text>
-        </Pressable>
-      </View>
-
+      <UsernameHeader
+        activeServer={activeServer}
+        insetsTop={insets.top}
+        onClose={handleClose}
+        onOpenServerModal={() => setShowServerModal(true)}
+      />
 
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <ScrollView
@@ -836,325 +854,25 @@ export default function UsernameScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      <Modal
+      <UsernameServerModal
+        activeServer={activeServer}
+        servers={servers as ApiServer[]}
+        switchingServer={switchingServer}
         visible={showServerModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowServerModal(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowServerModal(false)}
-        >
-          <View
-            style={[
-              styles.modalContent,
-              { backgroundColor: theme.colors.background.default },
-            ]}
-          >
-            <Text size="lg" weight="bold" style={{ marginBottom: 16, textAlign: "center" }}>
-              Switch Node
-            </Text>
-            {servers.map((server) => {
-              const isActive = server === activeServer;
-              const isSwitching = switchingServer === server;
-              return (
-                <Pressable
-                  key={server}
-                  disabled={!!switchingServer}
-                  onPress={async () => {
-                    if (!isActive) {
-                      setSwitchingServer(server);
-                      setActiveServer(server);
-                      apiClient.setBaseUrl(`https://${server}`);
-                      queryClient.removeQueries({ queryKey: queryKeys.nodeConfig() });
-                      queryClient.removeQueries({ queryKey: queryKeys.config() });
-                      queryClient.invalidateQueries({ queryKey: queryKeys.nodeConfig() });
-                      queryClient.invalidateQueries({ queryKey: queryKeys.config() });
+        onClose={() => setShowServerModal(false)}
+        onSelectServer={handleSelectServer}
+      />
 
-                      try {
-                        const freshNodeConfig = await getNodeConfig();
-                        if (!freshNodeConfig.registration_enabled) {
-                          setSwitchingServer(null);
-                          setShowServerModal(false);
-                          setApiServer(server);
-                          apiClient.setBaseUrl(`https://${server}`);
-                          toast.success(`Switched to ${server}`);
-                          router.back();
-                          return;
-                        }
-                        setApiServer(server);
-                        toast.success(`Switched to ${server}`);
-                      } catch (e) {
-                        console.error("[UsernameScreen] Failed to fetch nodeConfig after switch:", e);
-                        setActiveServer(activeServer);
-                        apiClient.setBaseUrl(`https://${activeServer}`);
-                        toast.error(`Failed to connect to ${server}`);
-                      }
-                      setSwitchingServer(null);
-                    }
-                    setShowServerModal(false);
-                  }}
-                  style={[
-                    styles.modalOption,
-                    {
-                      backgroundColor: isActive
-                        ? `${theme.colors.primary[500]}10`
-                        : "transparent",
-                      opacity: switchingServer && !isSwitching ? 0.5 : 1,
-                    },
-                  ]}
-                >
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
-                    <Ionicons
-                      name={isActive ? "radio-button-on" : "radio-button-off"}
-                      size={20}
-                      color={isActive ? theme.colors.primary[500] : theme.colors.text.subtle}
-                    />
-                    <Text
-                      size="md"
-                      weight={isActive ? "semibold" : "regular"}
-                      style={isActive ? { color: theme.colors.primary[500] } : undefined}
-                    >
-                      {server}
-                    </Text>
-                  </View>
-                  {isSwitching && (
-                    <ActivityIndicator size="small" color={theme.colors.primary[500]} />
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
-        </Pressable>
-      </Modal>
-
-      <Modal
+      <UsernameRegistrationUnavailableModal
+        activeServer={activeServer}
+        isSwitchingNode={isSwitchingNode}
+        otherServer={otherServer as ApiServer}
         visible={showRegPopup}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setShowRegPopup(false);
-          router.replace("/(tabs)");
-        }}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => {
-            setShowRegPopup(false);
-            router.replace("/(tabs)");
-          }}
-        >
-          <View
-            style={[
-              styles.modalContent,
-              { backgroundColor: theme.colors.background.default },
-            ]}
-          >
-            <View style={{ alignItems: "center", marginBottom: 16 }}>
-              <Ionicons
-                name="alert-circle-outline"
-                size={48}
-                color={theme.colors.warning[500]}
-              />
-            </View>
-            <Text
-              size="lg"
-              weight="bold"
-              style={{ textAlign: "center", marginBottom: 10 }}
-            >
-              Registration Unavailable
-            </Text>
-            <Text
-              size="md"
-              style={{
-                textAlign: "center",
-                color: theme.colors.text.subtle,
-                marginBottom: 20,
-              }}
-            >
-              Account creation is not available on{" "}
-              <Text size="md" weight="semibold">
-                {activeServer}
-              </Text>
-              . Switch to{" "}
-              <Text size="md" weight="semibold">
-                {otherServer}
-              </Text>{" "}
-              to create an account.
-            </Text>
-            <Pressable
-              onPress={handleSwitchNode}
-              disabled={isSwitchingNode}
-              style={{ borderRadius: 12, overflow: "hidden", opacity: isSwitchingNode ? 0.7 : 1 }}
-            >
-              <LinearGradient
-                colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={{
-                  paddingVertical: 14,
-                  paddingHorizontal: 24,
-                  borderRadius: 12,
-                  alignItems: "center",
-                }}
-              >
-                {isSwitchingNode ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text
-                    style={{ color: "#FFFFFF", fontSize: 15, fontWeight: "600" }}
-                  >
-                    Switch to {otherServer}
-                  </Text>
-                )}
-              </LinearGradient>
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                setShowRegPopup(false);
-                router.replace("/(tabs)");
-              }}
-              disabled={isSwitchingNode}
-              style={{ paddingTop: 12, alignItems: "center", opacity: isSwitchingNode ? 0.3 : 1 }}
-            >
-              <Text size="md" style={{ color: theme.colors.text.subtle }}>
-                Cancel
-              </Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
+        onCancel={handleRegistrationUnavailableCancel}
+        onSwitchNode={handleSwitchNode}
+      />
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-        <Divider size="extraThin" />
-        <Pressable onPress={handleLogin} style={styles.loginLink}>
-          <Text style={styles.loginText}>Log into existing account</Text>
-        </Pressable>
-      </View>
+      <UsernameFooter bottomInset={insets.bottom} onLogin={handleLogin} />
     </Box>
   );
 }
-
-const styles = StyleSheet.create((theme) => ({
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: theme.spacing.sm,
-  },
-  closeButton: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  content: {
-    flexGrow: 1,
-    paddingHorizontal: theme.spacing.lg,
-    justifyContent: "center",
-  },
-  iconContainer: {
-    alignItems: "center",
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
-  },
-  appIcon: {
-    width: 44,
-    height: 50,
-  },
-  titleContainer: {
-    alignItems: "center",
-    marginTop: theme.spacing.sm,
-  },
-  titleText: {
-    textAlign: "center",
-    fontSize: 26,
-    fontWeight: "700",
-    lineHeight: 30,
-  },
-  subtitle: {
-    textAlign: "center",
-    marginVertical: theme.spacing.lg,
-    fontSize: 16,
-    color: theme.colors.neutral[600],
-    paddingHorizontal: theme.spacing.lg,
-  },
-  inputWrapper: {
-    marginBottom: theme.spacing.xs,
-  },
-  inviteInputWrapper: {
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.xs,
-  },
-  input: {
-    paddingLeft: 12,
-  },
-  statusIcon: {
-    paddingHorizontal: theme.spacing.sm,
-    backgroundColor: theme.colors.background.subtle,
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  statusContainer: {
-    paddingHorizontal: theme.spacing.sm,
-    borderRadius: 8,
-    minHeight: 20,
-  },
-  continueButton: {
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.lg,
-  },
-  termsText: {
-    textAlign: "center",
-    lineHeight: 20,
-    paddingHorizontal: theme.spacing.sm,
-    fontSize: 13,
-    color: theme.colors.text.subtle,
-  },
-  termsLink: {
-    color: theme.colors.text.default,
-    textDecorationLine: "underline",
-    fontSize: 13,
-  },
-  footer: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.sm,
-  },
-  loginLink: {
-    alignItems: "center",
-    paddingVertical: theme.spacing.md,
-  },
-  loginText: {
-    color: "#60A5FA",
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    width: "75%",
-    borderRadius: 14,
-    paddingVertical: 20,
-    paddingHorizontal: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  modalOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    marginBottom: 4,
-  },
-}));

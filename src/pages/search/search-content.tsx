@@ -1,11 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   FlatList,
   Keyboard,
   Pressable,
@@ -17,18 +15,15 @@ import Animated, {
   FadeIn,
   FadeInDown,
   FadeOut,
-  Layout,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
-  interpolate,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUnistyles } from "react-native-unistyles";
 
 import {
-  calculateDisplayPoints,
   useDebouncedSearch,
   usePosts,
   useTopics,
@@ -36,274 +31,20 @@ import {
 import type { Post, TopicInfo, UserInfo } from "@/src/api/types";
 import { getUsernameColor } from "@/src/utils/tiers";
 import { Avatar } from "@/src/components/atoms";
-import { TimeAgo } from "@/src/components/atoms/time-ago";
 import { Box, Text } from "@/src/components/ui/primitives";
-import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useTabSwipeGesture } from "@/src/hooks";
 import { useSearchStore, type RecentSearch } from "@/src/stores";
-import {
-  useCommentCountOverride,
-  useVoteOverride,
-} from "@/src/stores/home-post-card-store";
+import { SearchPostResult } from "./search-post-result";
+import { SearchRecentItem } from "./search-recent-item";
 import { styles } from "./search-styles";
+import {
+  SCREEN_WIDTH,
+  formatPostCount,
+  getTopicIcon,
+  type SearchTab,
+} from "./search-utils";
 
-type SearchTab = "posts" | "topics" | "users";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-
-const getTopicIcon = (
-  topic: string,
-): { icon: keyof typeof Ionicons.glyphMap; color: string } => {
-  const lowerTopic = topic.toLowerCase();
-
-  if (lowerTopic.includes("bitcoin") || lowerTopic.includes("btc")) {
-    return { icon: "logo-bitcoin", color: "#F7931A" };
-  }
-  if (
-    lowerTopic.includes("crypto") ||
-    lowerTopic.includes("eth") ||
-    lowerTopic.includes("defi")
-  ) {
-    return { icon: "wallet", color: "#627EEA" };
-  }
-  if (
-    lowerTopic.includes("ai") ||
-    lowerTopic.includes("artificial") ||
-    lowerTopic.includes("machine")
-  ) {
-    return { icon: "sparkles", color: "#8B5CF6" };
-  }
-  if (
-    lowerTopic.includes("game") ||
-    lowerTopic.includes("gaming") ||
-    lowerTopic.includes("esport")
-  ) {
-    return { icon: "game-controller", color: "#10B981" };
-  }
-  if (
-    lowerTopic.includes("space") ||
-    lowerTopic.includes("rocket") ||
-    lowerTopic.includes("nasa")
-  ) {
-    return { icon: "rocket", color: "#3B82F6" };
-  }
-  if (
-    lowerTopic.includes("sport") ||
-    lowerTopic.includes("football") ||
-    lowerTopic.includes("soccer")
-  ) {
-    return { icon: "football", color: "#EF4444" };
-  }
-  if (
-    lowerTopic.includes("music") ||
-    lowerTopic.includes("song") ||
-    lowerTopic.includes("album")
-  ) {
-    return { icon: "musical-notes", color: "#EC4899" };
-  }
-  if (
-    lowerTopic.includes("movie") ||
-    lowerTopic.includes("film") ||
-    lowerTopic.includes("cinema")
-  ) {
-    return { icon: "film", color: "#F59E0B" };
-  }
-  if (
-    lowerTopic.includes("tech") ||
-    lowerTopic.includes("code") ||
-    lowerTopic.includes("programming")
-  ) {
-    return { icon: "code-slash", color: "#06B6D4" };
-  }
-  if (
-    lowerTopic.includes("news") ||
-    lowerTopic.includes("politics") ||
-    lowerTopic.includes("world")
-  ) {
-    return { icon: "newspaper", color: "#64748B" };
-  }
-  if (
-    lowerTopic.includes("science") ||
-    lowerTopic.includes("research") ||
-    lowerTopic.includes("study")
-  ) {
-    return { icon: "flask", color: "#14B8A6" };
-  }
-  if (
-    lowerTopic.includes("art") ||
-    lowerTopic.includes("design") ||
-    lowerTopic.includes("creative")
-  ) {
-    return { icon: "color-palette", color: "#F472B6" };
-  }
-  if (
-    lowerTopic.includes("food") ||
-    lowerTopic.includes("cook") ||
-    lowerTopic.includes("recipe")
-  ) {
-    return { icon: "restaurant", color: "#FB923C" };
-  }
-  if (
-    lowerTopic.includes("health") ||
-    lowerTopic.includes("fitness") ||
-    lowerTopic.includes("workout")
-  ) {
-    return { icon: "fitness", color: "#22C55E" };
-  }
-  if (
-    lowerTopic.includes("travel") ||
-    lowerTopic.includes("trip") ||
-    lowerTopic.includes("vacation")
-  ) {
-    return { icon: "airplane", color: "#0EA5E9" };
-  }
-
-  // Default icon
-  return { icon: "chatbubble", color: "#6366F1" };
-};
-
-// Format post count for display
-const formatPostCount = (count?: number): string => {
-  if (!count) return "";
-  if (count >= 1000000) {
-    return `${(count / 1000000).toFixed(1)}M posts`;
-  }
-  if (count >= 1000) {
-    return `${(count / 1000).toFixed(1)}K posts`;
-  }
-  return `${count} posts`;
-};
-
-// Format count with label
-const formatCount = (
-  count: number,
-  singular: string,
-  plural: string,
-): string => {
-  if (count === 1) {
-    return `${count} ${singular}`;
-  }
-  return `${count} ${plural}`;
-};
-
-type SearchPostResultProps = {
-  item: Post;
-  index: number;
-  totalPosts: number;
-  dividerColor: string;
-  textSubtleColor: string;
-  onPress: (post: Post) => void;
-};
-
-function SearchPostResult({
-  item,
-  index,
-  totalPosts,
-  dividerColor,
-  textSubtleColor,
-  onPress,
-}: SearchPostResultProps) {
-  const voteOverride = useVoteOverride(item.post_id);
-  const commentCountOverride = useCommentCountOverride(item.post_id);
-  const isLast = index === totalPosts - 1;
-  const hasThumbnail = item.thumbnail && item.thumbnail.length > 0;
-  const timestampMs = item.timestamp * 1000;
-
-  const displayPoints = voteOverride?.likes ?? calculateDisplayPoints(item);
-  const displayComments =
-    commentCountOverride && item.comments === commentCountOverride.baseComments
-      ? commentCountOverride.baseComments +
-        (commentCountOverride.commentDelta ?? 0)
-      : item.comments;
-
-  return (
-    <Animated.View entering={FadeInDown.delay(index * 30).duration(150)}>
-      <Pressable
-        onPress={() => onPress(item)}
-        style={({ pressed }) => [
-          styles.postResultItem,
-          pressed && { opacity: 0.7 },
-        ]}
-      >
-        <View style={styles.postResultContent}>
-          <View style={styles.postResultHeader}>
-            <Text
-              size="sm"
-              weight="medium"
-              numberOfLines={1}
-              style={(item.new_user ?? item.author_is_new)
-                ? { color: "rgb(94,194,106)" }
-                : (item.level ?? item.author_level ?? item.user_level)
-                  ? {
-                      color: getUsernameColor(
-                        item.level ?? item.author_level ?? item.user_level ?? 0,
-                      ),
-                    }
-                  : { color: textSubtleColor }}
-            >
-              @{item.username || "anonymous"}
-            </Text>
-            <Text size="sm" mode="subtle">
-              •
-            </Text>
-            <TimeAgo
-              timestamp={timestampMs}
-              size="sm"
-              mode="subtle"
-              weight="regular"
-              showSuffix={false}
-            />
-          </View>
-
-          {item.title ? (
-            <Text
-              size="md"
-              weight="regular"
-              numberOfLines={2}
-              style={styles.postTitle}
-            >
-              {item.title}
-            </Text>
-          ) : item.content ? (
-            <View>
-              <MarkdownContent content={item.content} />
-            </View>
-          ) : null}
-
-          <View style={styles.postResultMeta}>
-            <Text size="sm" mode="subtle">
-              {formatCount(Math.round(displayPoints), "point", "points")}
-            </Text>
-            <Text size="sm" mode="subtle">
-              •
-            </Text>
-            <Text size="sm" mode="subtle">
-              {formatCount(displayComments, "comment", "comments")}
-            </Text>
-          </View>
-        </View>
-
-        {hasThumbnail && (
-          <Image
-            source={{ uri: item.thumbnail }}
-            style={styles.postThumbnail}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-          />
-        )}
-      </Pressable>
-      {!isLast && (
-        <View
-          style={[
-            styles.divider,
-            { backgroundColor: dividerColor },
-          ]}
-        />
-      )}
-    </Animated.View>
-  );
-}
 
 export function SearchScreen() {
   const router = useRouter();
@@ -512,39 +253,13 @@ export function SearchScreen() {
   // Render recent search item
   const renderRecentSearchItem = useCallback(
     ({ item, index }: { item: RecentSearch; index: number }) => (
-      <Animated.View
-        entering={FadeInDown.delay(index * 50).duration(200)}
-        layout={Layout.springify()}
-      >
-        <Pressable
-          onPress={() => handleRecentSearchPress(item)}
-          style={({ pressed }) => [
-            styles.recentSearchItem,
-            pressed && { opacity: 0.7 },
-          ]}
-        >
-          <View style={styles.recentSearchLeft}>
-            <Ionicons
-              name="time-outline"
-              size={18}
-              color={theme.colors.text.subtle}
-            />
-            <Text size="md" style={{ flex: 1 }}>
-              {item.query}
-            </Text>
-          </View>
-          <Pressable
-            onPress={() => handleRemoveRecentSearch(item.id)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={({ pressed }) => [
-              styles.clearButton,
-              pressed && { opacity: 0.5 },
-            ]}
-          >
-            <Ionicons name="close" size={18} color={theme.colors.text.subtle} />
-          </Pressable>
-        </Pressable>
-      </Animated.View>
+      <SearchRecentItem
+        item={item}
+        index={index}
+        textSubtleColor={theme.colors.text.subtle}
+        onPress={handleRecentSearchPress}
+        onRemove={handleRemoveRecentSearch}
+      />
     ),
     [
       theme.colors.text.subtle,

@@ -1,9 +1,4 @@
-import {
-  Entypo,
-  Feather,
-  Ionicons,
-  MaterialCommunityIcons,
-} from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/navigation/guarded-router";
 import { useFocusEffect } from "@react-navigation/native";
@@ -12,15 +7,11 @@ import * as Network from "expo-network";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Modal,
-  Platform,
+  Image,
   Pressable,
   ScrollView,
-  TextInput,
   View,
 } from "react-native";
-import { Image } from "react-native";
-import { Image as ExpoImage } from "expo-image";
 import { ResizeMode, Video } from "expo-av";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
@@ -46,26 +37,20 @@ import {
   generateActionId,
   getActionLabel,
 } from "@/src/services/pow-queue";
+import { AnnotateAgentBanner } from "./annotate-agent-banner";
+import { AnnotateAppendixSection } from "./annotate-appendix-section";
+import { AnnotateContentWarningModal } from "./annotate-content-warning-modal";
+import { AnnotateHeader } from "./annotate-header";
+import { AnnotatePostSummary } from "./annotate-post-summary";
 import { styles } from "./annotate-styles";
-
-const CONTENT_WARNING_OPTIONS: { value: string; label: string }[] = [
-  { value: "sensitive", label: "Sensitive" },
-  { value: "adult", label: "Adult" },
-  { value: "violence", label: "Violence" },
-  { value: "gore", label: "Gore" },
-  { value: "death", label: "Death" },
-];
+import { AnnotateTextOverrideSection } from "./annotate-text-override-section";
+import { AnnotateTopicTagSection } from "./annotate-topic-tag-section";
+import { AnnotateToggle } from "./annotate-toggle";
 
 type MediaType = "image" | "sticker" | "video" | null;
 
 type VideoUploadEntry = { url: string | null; uploading: boolean; progress: number; error: string | null; isServerError?: boolean };
 const VIDEO_UPLOADS = new Map<string, VideoUploadEntry>();
-
-const formatCount = (num: number): string => {
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-  return num.toString();
-};
 
 export function AnnotateScreen() {
   const router = useRouter();
@@ -532,85 +517,19 @@ export function AnnotateScreen() {
             <ActivityIndicator size="large" color="#fff" />
           </View>
         )}
-        <View style={[styles.header, { paddingTop: insets.top }]}>
-          <View style={[styles.headerTitleAbsolute, { paddingTop: insets.top, paddingBottom: theme.spacing.sm }]} pointerEvents="none">
-            <Text size="lg" weight="bold">
-              Annotate Post
-            </Text>
-          </View>
-          <Pressable onPress={handleBack} style={styles.headerButton}>
-            <Ionicons
-              name="close"
-              size={28}
-              color={theme.colors.text.default}
-            />
-          </Pressable>
-          <View style={{ flex: 1 }} />
-          <Pressable
-            onPress={handleSubmit}
-            disabled={!hasChanges}
-            style={[
-              styles.postButton,
-              {
-                backgroundColor: hasChanges
-                  ? theme.colors.brand[500]
-                  : theme.colors.background.subtle,
-              },
-            ]}
-          >
-            <Text
-              size="sm"
-              weight="bold"
-              style={{
-                color: hasChanges ? "#FFFFFF" : theme.colors.text.subtle,
-              }}
-            >
-              Submit
-            </Text>
-          </Pressable>
-        </View>
+        <AnnotateHeader
+          canSubmit={hasChanges}
+          topInset={insets.top}
+          onBack={handleBack}
+          onSubmit={handleSubmit}
+        />
 
-        {/* Post summary - stuck to header */}
-        <View
-          style={[
-            styles.postSummary,
-            {
-              backgroundColor: theme.colors.background.default,
-              borderBottomWidth: 1,
-              borderBottomColor: theme.colors.border.subtle,
-            },
-          ]}
-        >
-          <View style={styles.postSummaryInfo}>
-            <Text
-              size="md"
-              weight="bold"
-              numberOfLines={1}
-              style={styles.postSummaryTitle}
-            >
-              {originalTitle || "Untitled post"}
-            </Text>
-            <View style={styles.postSummaryStats}>
-              <Text size="sm" mode="subtle">
-                {formatCount(postLikes)} upvotes
-              </Text>
-              <Text size="sm" mode="subtle" style={styles.postSummaryDot}>
-                •
-              </Text>
-              <Text size="sm" mode="subtle">
-                {formatCount(postComments)} comments
-              </Text>
-            </View>
-          </View>
-          {postThumbnail ? (
-            <ExpoImage
-              source={{ uri: postThumbnail }}
-              style={styles.postSummaryThumb}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-            />
-          ) : null}
-        </View>
+        <AnnotatePostSummary
+          comments={postComments}
+          likes={postLikes}
+          thumbnail={postThumbnail}
+          title={originalTitle}
+        />
 
         <ScrollView
           style={styles.scrollView}
@@ -621,201 +540,44 @@ export function AnnotateScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Agent info */}
-          <View style={[styles.agentBanner, { borderColor: "#EF4444" + "30" }]}>
-            <View
-              style={[
-                styles.agentBannerIcon,
-                { backgroundColor: "#EF4444" + "15" },
-              ]}
-            >
-              <Ionicons name="shield-checkmark" size={18} color="#EF4444" />
-            </View>
-            <View style={styles.agentBannerText}>
-              <Text size="sm" weight="semibold">
-                Agent Annotation
-              </Text>
-              <Text size="xs" mode="subtle">
-                Your changes overlay this post for users who enabled you.
-              </Text>
-            </View>
-          </View>
+          <AnnotateAgentBanner />
 
-          {/* Title */}
-          <AnnotateToggle
+          <AnnotateTextOverrideSection
             label="Title"
             enabled={titleEnabled}
             onToggle={() => setTitleEnabled(!titleEnabled)}
-            theme={theme}
-          >
-            <TextInput
-              style={[
-                styles.textInput,
-                {
-                  backgroundColor: theme.colors.background.light,
-                  borderColor: theme.colors.border.default,
-                  color: theme.colors.text.default,
-                },
-              ]}
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Replacement title..."
-              placeholderTextColor={theme.colors.text.subtle}
-            />
-          </AnnotateToggle>
+            value={title}
+            onChange={setTitle}
+            placeholder="Replacement title..."
+          />
 
-          {/* Content */}
-          <AnnotateToggle
+          <AnnotateTextOverrideSection
             label="Content"
             enabled={contentEnabled}
             onToggle={() => setContentEnabled(!contentEnabled)}
-            theme={theme}
-          >
-            <TextInput
-              style={[
-                styles.textInput,
-                styles.multilineInput,
-                {
-                  backgroundColor: theme.colors.background.light,
-                  borderColor: theme.colors.border.default,
-                  color: theme.colors.text.default,
-                },
-              ]}
-              value={content}
-              onChangeText={setContent}
-              placeholder="Replacement content..."
-              placeholderTextColor={theme.colors.text.subtle}
-              multiline
-              textAlignVertical="top"
-            />
-          </AnnotateToggle>
+            value={content}
+            onChange={setContent}
+            placeholder="Replacement content..."
+            multiline
+          />
 
-          {/* Topic */}
-          <AnnotateToggle
-            label="Topic"
-            enabled={topicEnabled}
-            onToggle={() => setTopicEnabled(!topicEnabled)}
-            theme={theme}
-          >
-            <Pressable
-              onPress={() => {
-                triggerHaptic("selection");
-                setShowCommunityModal(true);
-              }}
-              style={[
-                styles.selectorButton,
-                { backgroundColor: theme.colors.background.light },
-              ]}
-            >
-              {selectedCommunity && (
-                <Text
-                  size="lg"
-                  weight="bold"
-                  style={{ color: theme.colors.text.default }}
-                >
-                  #
-                </Text>
-              )}
-              <Text
-                size="md"
-                weight="semibold"
-                style={{ color: theme.colors.text.default }}
-              >
-                {selectedCommunity?.name?.toLowerCase() ?? "Select a topic"}
-              </Text>
-              <Box style={{ marginLeft: 8 }}>
-                <Entypo
-                  name="chevron-up"
-                  size={10}
-                  color={theme.colors.text.default}
-                  style={{ marginBottom: -4 }}
-                />
-                <Entypo
-                  name="chevron-down"
-                  size={10}
-                  color={theme.colors.text.default}
-                />
-              </Box>
-            </Pressable>
-          </AnnotateToggle>
-
-          {topicEnabled && selectedCommunity?.isNewTopic && (
-            <View
-              style={[
-                styles.newTopicWarning,
-                { backgroundColor: theme.colors.warning[500] + "15" },
-              ]}
-            >
-              <Text size="xs" mode="subtle" style={{ lineHeight: 16 }}>
-                Topics are communities centered around specific interests.
-                Posting in the wrong topic may affect your overall trust status
-                on Mirage. Make sure to post into the right category!
-              </Text>
-            </View>
-          )}
-
-          {/* Tag */}
-          <AnnotateToggle
-            label="Tag"
-            enabled={tagEnabled}
-            onToggle={() => setTagEnabled(!tagEnabled)}
-            theme={theme}
-          >
-            {selectedTag ? (
-              <Pressable
-                onPress={() => {
-                  triggerHaptic("selection");
-                  setShowTagModal(true);
-                }}
-                style={[
-                  styles.selectorButton,
-                  { backgroundColor: theme.colors.background.light, gap: theme.spacing.sm },
-                ]}
-              >
-                <Text
-                  size="md"
-                  weight="bold"
-                  style={{ color: theme.colors.warning[500] }}
-                >
-                  ⚠️{" "}
-                  {selectedTag.charAt(0).toUpperCase() + selectedTag.slice(1)}
-                </Text>
-                <Pressable
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    triggerHaptic("selection");
-                    setSelectedTag("");
-                  }}
-                  hitSlop={8}
-                >
-                  <Feather
-                    name="x"
-                    size={14}
-                    color={theme.colors.text.subtle}
-                  />
-                </Pressable>
-              </Pressable>
-            ) : (
-              <Pressable
-                onPress={() => {
-                  triggerHaptic("selection");
-                  setShowTagModal(true);
-                }}
-                style={[
-                  styles.selectorButton,
-                  { backgroundColor: theme.colors.background.light },
-                ]}
-              >
-                <Text
-                  size="md"
-                  weight="semibold"
-                  style={{ color: theme.colors.text.default }}
-                >
-                  Add content warning
-                </Text>
-              </Pressable>
-            )}
-          </AnnotateToggle>
+          <AnnotateTopicTagSection
+            selectedCommunity={selectedCommunity}
+            selectedTag={selectedTag}
+            tagEnabled={tagEnabled}
+            topicEnabled={topicEnabled}
+            onClearTag={() => setSelectedTag("")}
+            onOpenCommunity={() => {
+              triggerHaptic("selection");
+              setShowCommunityModal(true);
+            }}
+            onOpenTag={() => {
+              triggerHaptic("selection");
+              setShowTagModal(true);
+            }}
+            onToggleTag={() => setTagEnabled(!tagEnabled)}
+            onToggleTopic={() => setTopicEnabled(!topicEnabled)}
+          />
 
           {/* Media */}
           <AnnotateToggle
@@ -1106,32 +868,10 @@ export function AnnotateScreen() {
             </View>
           </AnnotateToggle>
 
-          {/* Appendix */}
-          <View style={styles.section}>
-            <Text size="md" weight="semibold">
-              Appendix
-            </Text>
-            <Text size="xs" mode="subtle">
-              Added below the post. All agent appendices stack.
-            </Text>
-            <TextInput
-              style={[
-                styles.textInput,
-                styles.multilineInput,
-                {
-                  backgroundColor: theme.colors.background.light,
-                  borderColor: theme.colors.border.default,
-                  color: theme.colors.text.default,
-                },
-              ]}
-              value={appendix}
-              onChangeText={setAppendix}
-              placeholder="Add context, corrections, or notes..."
-              placeholderTextColor={theme.colors.text.subtle}
-              multiline
-              textAlignVertical="top"
-            />
-          </View>
+          <AnnotateAppendixSection
+            appendix={appendix}
+            onChangeAppendix={setAppendix}
+          />
         </ScrollView>
 
       </Box>
@@ -1143,80 +883,16 @@ export function AnnotateScreen() {
         selectedCommunity={selectedCommunity ?? undefined}
       />
 
-      <Modal
+      <AnnotateContentWarningModal
+        selectedTag={selectedTag}
         visible={showTagModal}
-        animationType="fade"
-        transparent
-        statusBarTranslucent
-        onRequestClose={() => setShowTagModal(false)}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowTagModal(false)}
-        >
-          <Pressable
-            style={[
-              styles.tagModalContent,
-              { backgroundColor: theme.colors.background.base },
-            ]}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <View style={styles.tagModalHeader}>
-              <Text size="lg" weight="bold">
-                Add content warning
-              </Text>
-              <Pressable onPress={() => setShowTagModal(false)} hitSlop={8}>
-                <Feather name="x" size={20} color={theme.colors.text.subtle} />
-              </Pressable>
-            </View>
-            <View style={styles.tagOptions}>
-              {CONTENT_WARNING_OPTIONS.map((option) => (
-                <Pressable
-                  key={option.value}
-                  onPress={() => handleSelectTag(option.value)}
-                  style={styles.tagOption}
-                >
-                  <Text size="md" style={{ color: theme.colors.text.default }}>
-                    {option.label}
-                  </Text>
-                  <View
-                    style={[
-                      styles.tagRadio,
-                      {
-                        borderColor:
-                          selectedTag === option.value
-                            ? theme.colors.brand[500]
-                            : theme.colors.border.default,
-                        backgroundColor:
-                          selectedTag === option.value
-                            ? theme.colors.brand[500]
-                            : "transparent",
-                      },
-                    ]}
-                  >
-                    {selectedTag === option.value && (
-                      <Feather name="check" size={12} color="#fff" />
-                    )}
-                  </View>
-                </Pressable>
-              ))}
-            </View>
-            {selectedTag ? (
-              <Pressable
-                onPress={() => {
-                  setSelectedTag("");
-                  setShowTagModal(false);
-                }}
-                style={styles.clearTagButton}
-              >
-                <Text size="sm" style={{ color: theme.colors.error[500] }}>
-                  Remove warning
-                </Text>
-              </Pressable>
-            ) : null}
-          </Pressable>
-        </Pressable>
-      </Modal>
+        onClear={() => {
+          setSelectedTag("");
+          setShowTagModal(false);
+        }}
+        onClose={() => setShowTagModal(false)}
+        onSelect={handleSelectTag}
+      />
 
       <StickerPicker
         visible={showStickerPicker}
@@ -1234,35 +910,5 @@ export function AnnotateScreen() {
         multiSelect={false}
       />
     </KeyboardAvoidingView>
-  );
-}
-
-function AnnotateToggle({
-  label,
-  enabled,
-  onToggle,
-  theme,
-  children,
-}: {
-  label: string;
-  enabled: boolean;
-  onToggle: () => void;
-  theme: any;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.section}>
-      <Pressable onPress={onToggle} style={styles.fieldToggle}>
-        <Ionicons
-          name={enabled ? "checkbox" : "square-outline"}
-          size={20}
-          color={enabled ? "#EF4444" : theme.colors.text.subtle}
-        />
-        <Text size="md" weight="semibold" style={styles.fieldLabel}>
-          Override {label}
-        </Text>
-      </Pressable>
-      {enabled && children}
-    </View>
   );
 }

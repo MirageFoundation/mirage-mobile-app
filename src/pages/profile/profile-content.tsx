@@ -1,4 +1,3 @@
-import { navigateToEditPost } from "@/src/utils/edit-post";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Sentry from "@sentry/react-native";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
@@ -9,10 +8,8 @@ import {
   Dimensions,
   FlatList,
   Platform,
-  Share,
   useWindowDimensions,
   View,
-  type ViewToken,
 } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -36,33 +33,21 @@ import { queryKeys } from "@/src/api/read/query-keys";
 import { transformApiPost } from "@/src/api/read/utils";
 import type { Post as ApiPost, PostsResponse } from "@/src/api/types";
 import {
-  ConfirmationPopup,
   getGradientColor,
   type Post,
-  PostOptionsSheet,
-  PostOptionsSheetRef,
   PROFILE_CONTENT_HEIGHT,
   ProfileHeaderBar,
   ProfileTabBar,
   ProfileEmptyState,
-  ReportSheet,
-  ReportSheetRef,
   ProfileAboutTab,
 } from "@/src/components/molecules";
 import { PostCardItem } from "@/src/components/molecules/post-card-item";
 import { PostCardSkeletonList } from "@/src/components/molecules/post-card-skeleton";
-import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { ProfileCommentItem } from "@/src/components/molecules/profile-comment-item";
 import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { ProfileContentAnimated } from "@/src/components/molecules/profile-content-animated";
-import { PROFILE_TAB_BAR_HEIGHT } from "@/src/components/molecules/profile-tabs";
 import { Box } from "@/src/components/ui/primitives";
 import {
-  useAppState,
-  useBlockHandler,
-  getBlockConfirmationMessage,
-  useDeleteHandler,
-  useReportHandler,
   useTabSwipeGesture,
   useVoteHandler,
   type VoteResult,
@@ -74,12 +59,10 @@ import {
   usePreferencesStore,
   getShareBaseUrl,
   useFeedScrollStore,
-  useSavedPostsStore,
 } from "@/src/stores";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import { useEdit } from "@/src/api/write";
-import { useToast } from "@/src/providers/toast-provider";
 import { composeCommentContent, resolveCommentMediaUrl } from "@/src/utils/comment-media";
 import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 import {
@@ -87,7 +70,12 @@ import {
   generateActionId,
   getActionLabel,
 } from "@/src/services/pow-queue";
+import {
+  ProfilePostActionSheets,
+  type ProfilePostActionSheetsRef,
+} from "./profile-post-action-sheets";
 import { styles } from "./profile-styles";
+import { useProfileFeedVideoState } from "./use-profile-feed-video-state";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const AnimatedFlatList = Animated.createAnimatedComponent(
@@ -109,9 +97,6 @@ const calculateAccountAgeDays = (
   const ageInSeconds = now - createdAt;
   return ageInSeconds / (60 * 60 * 24);
 };
-
-type TabType = "posts" | "comments" | "about";
-
 const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
  const p = prev.post;
  const n = next.post;
@@ -260,30 +245,9 @@ export function ProfileScreen() {
   const [activeTab, setActiveTab] = useState(0);
   const [isTabsSticky, setIsTabsSticky] = useState(false);
 
-  const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
-  const reportSheetRef = useRef<ReportSheetRef>(null);
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-
-  const savedPosts = useSavedPostsStore((s) => s.savedPosts);
+  const postActionSheetsRef = useRef<ProfilePostActionSheetsRef>(null);
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const hiddenCommentIds = useContentModerationStore((s) => s.hiddenCommentIds);
-  const globalHidePost = useContentModerationStore((s) => s.hidePost);
-  const globalUnhidePost = useContentModerationStore((s) => s.unhidePost);
-  const globalHideComment = useContentModerationStore((s) => s.hideComment);
-  const globalUnhideComment = useContentModerationStore((s) => s.unhideComment);
-  const blockTopicOptimistic = useContentModerationStore((s) => s.blockTopic);
-
-  const deleteHandler = useDeleteHandler({
-    onRollback: (targetId, targetType) => {
-      if (targetType === "post") {
-        globalUnhidePost(targetId);
-      } else {
-        globalUnhideComment(targetId);
-      }
-    },
-  });
-  const blockHandler = useBlockHandler({});
-  const reportHandler = useReportHandler({});
 
   const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
   const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
@@ -301,7 +265,6 @@ export function ProfileScreen() {
     }, [clearVoteOverride]),
   });
 
- const toast = useToast();
  const pendingEdit = useCommentComposeStore((s) => s.pendingEdit);
  const clearPendingEdit = useCommentComposeStore((s) => s.clearPendingEdit);
 
@@ -493,17 +456,6 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
     router.back();
   }, [router]);
 
-  const handleSharePress = useCallback(async () => {
-    try {
-      await Share.share({
-        message: `Check out @${user?.username} on Mirage!`,
-        url: `${getShareBaseUrl(shareServer)}/u/${user?.username}`,
-      });
-    } catch (error) {
-      Sentry.addBreadcrumb({ category: "profile", message: "Share failed", data: { error: String(error) }, level: "warning" });
-    }
-  }, [user?.username, shareServer]);
-
   const handleEditUsernamePress = useCallback(() => {
     router.push("/change-username");
   }, [router]);
@@ -542,29 +494,6 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
       router.push(`/post/${rootPostId}?highlight=${commentId}`);
     },
     [router],
-  );
-
-  const handleEditCommentPress = useCallback(
-    (comment: ApiPost, rootPostId: string) => {
-      const params: Record<string, string> = {
-        postId: rootPostId,
-        postTitle: "",
-        postAuthorUsername: "",
-        editCommentId: comment.post_id,
-        editParentId: comment.root_post_id || rootPostId,
-        editContent: comment.content,
-        editSource: "profile",
-      };
-      router.push({ pathname: "/comment-compose", params });
-    },
-    [router],
-  );
-
-  const handleDeleteCommentPress = useCallback(
-    (comment: ApiPost) => {
-      deleteHandler.requestDelete(comment.post_id, "comment");
-    },
-    [deleteHandler],
   );
 
 useEffect(() => {
@@ -652,75 +581,11 @@ useEffect(() => {
     (postId: string) => {
       const post = postsById.get(postId);
       if (post) {
-        setSelectedPost(post);
-        postOptionsSheetRef.current?.present();
+        postActionSheetsRef.current?.openPost(post);
       }
     },
     [postsById],
   );
-
-  const handleEditPost = useCallback(() => {
-    if (!selectedPost) return;
-    navigateToEditPost(router, selectedPost);
-  }, [selectedPost, router]);
-
-  const handleDeletePost = useCallback(() => {
-    if (!selectedPost) return;
-    deleteHandler.requestDelete(selectedPost.id, "post");
-  }, [selectedPost, deleteHandler]);
-
-  const handleBlockPost = useCallback(() => {
-    if (!selectedPost) return;
-    blockHandler.requestBlockPost(selectedPost.id);
-  }, [selectedPost, blockHandler]);
-
-  const handleReportPost = useCallback(() => {
-    if (!selectedPost) return;
-    reportHandler.requestReport(selectedPost.id, "post");
-  }, [selectedPost, reportHandler]);
-
-  const handleConfirmDelete = useCallback(() => {
-    const pending = deleteHandler.pendingTarget;
-    if (pending) {
-      if (pending.type === "post") {
-        globalHidePost(pending.id);
-      } else {
-        globalHideComment(pending.id);
-      }
-    }
-    setSelectedPost(null);
-    deleteHandler.confirmDelete();
-  }, [deleteHandler, globalHidePost, globalHideComment]);
-
-  const handleConfirmBlock = useCallback(() => {
-    const pending = blockHandler.pendingBlock;
-    if (pending && pending.type === "topic") {
-      blockTopicOptimistic(pending.id);
-    } else if (pending && pending.type === "post") {
-      globalHidePost(pending.id);
-    }
-    setSelectedPost(null);
-    blockHandler.confirmBlock();
-  }, [blockHandler, globalHidePost, blockTopicOptimistic]);
-
-  const handleReportSubmit = useCallback(
-    (reason: string) => {
-      const pending = reportHandler.pendingTarget;
-      if (pending && pending.type === "post") {
-        globalHidePost(pending.id);
-      }
-      setSelectedPost(null);
-      reportSheetRef.current?.dismiss();
-      reportHandler.submitReport(reason);
-    },
-    [reportHandler, globalHidePost],
-  );
-
-  useEffect(() => {
-    if (reportHandler.showReportSheet) {
-      reportSheetRef.current?.present();
-    }
-  }, [reportHandler.showReportSheet]);
 
   const handleSwipeTabChange = useCallback((index: number) => {
     setActiveTab(index);
@@ -777,142 +642,14 @@ useEffect(() => {
     [refetchUserStatus, refetchProfile, refetchPosts, queryClient, user?.walletAddress],
   );
 
-  const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
-  const [visibleVideoPostIds, setVisibleVideoPostIds] = useState<Set<string>>(new Set());
-  const [nearbyVideoPostIds, setNearbyVideoPostIds] = useState<Set<string>>(new Set());
-
-  const profileViewabilityConfig = useRef({
-    viewAreaCoveragePercentThreshold: 30,
-    minimumViewTime: 300,
-  }).current;
-
-  const pendingProfileViewableRef = useRef<ViewToken[] | null>(null);
-  const profileDeferHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const listDataRef = useRef(listData);
-  listDataRef.current = listData;
-
-  const flushProfileViewability = () => {
-    const items = pendingProfileViewableRef.current;
-    if (!items) return;
-    const visibleItems = items.filter(
-      (item) => item.isViewable && item.item && typeof item.item === "object" && "id" in item.item
-    );
-    if (visibleItems.length === 0) {
-      setVisibleVideoPostIds(new Set());
-      setNearbyVideoPostIds(new Set());
-      setActiveVideoPostId(null);
-      return;
-    }
-    const videoItems = visibleItems.filter(
-      (item) => postHasPlayableVideo(item.item)
-    );
-    const newVisibleIds = new Set(videoItems.map((item) => item.item.id));
-    setVisibleVideoPostIds(newVisibleIds);
-
-    const nearbyIds = new Set(newVisibleIds);
-    const allData = listDataRef.current;
-    if (allData.length > 0 && visibleItems.length > 0) {
-      const indices = visibleItems.map((v) => v.index ?? 0);
-      const minIdx = Math.min(...indices);
-      const maxIdx = Math.max(...indices);
-      const lo = Math.max(0, minIdx - 3);
-      const hi = Math.min(allData.length - 1, maxIdx + 3);
-      for (let i = lo; i <= hi; i++) {
-        const p = allData[i];
-        if (p && typeof p === "object" && "id" in p && postHasPlayableVideo(p)) nearbyIds.add(p.id);
-      }
-    }
-    setNearbyVideoPostIds(nearbyIds);
-
-    if (videoItems.length > 0) {
-      const sortedIndices = visibleItems
-        .map((v) => v.index ?? 0)
-        .sort((a, b) => a - b);
-      const mid = Math.floor((sortedIndices.length - 1) / 2);
-      const centerIndex = sortedIndices[mid] ?? 0;
-      const visibleSpan = (sortedIndices[sortedIndices.length - 1] ?? 0) - (sortedIndices[0] ?? 0);
-      const maxDist = Math.max(1, visibleSpan * 0.35);
-      let best = videoItems[0];
-      let bestDist = Math.abs((best.index ?? 0) - centerIndex);
-      for (let i = 1; i < videoItems.length; i++) {
-        const d = Math.abs((videoItems[i].index ?? 0) - centerIndex);
-        if (d < bestDist) { best = videoItems[i]; bestDist = d; }
-      }
-      setActiveVideoPostId(bestDist <= maxDist ? best.item.id : null);
-    } else {
-      setActiveVideoPostId(null);
-    }
-  };
-
-  const activeVideoPostIdRef = useRef(activeVideoPostId);
-  activeVideoPostIdRef.current = activeVideoPostId;
-
-  const onProfileViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      pendingProfileViewableRef.current = viewableItems;
-
-      const currentActive = activeVideoPostIdRef.current;
-      if (currentActive) {
-        const stillVisible = viewableItems.some(
-          (v) => v.isViewable && v.item && typeof v.item === "object" && "id" in v.item && v.item.id === currentActive
-        );
-        if (!stillVisible) {
-          setActiveVideoPostId(null);
-        }
-      }
-
-      if (profileDeferHandleRef.current !== null) {
-        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
-      }
-      profileDeferHandleRef.current = setTimeout(flushProfileViewability, Platform.OS === "ios" ? 200 : 150);
-    }
-  ).current;
-
-  const handleProfileMomentumScrollEnd = useCallback(() => {
-    if (profileDeferHandleRef.current !== null) {
-      clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
-      profileDeferHandleRef.current = null;
-    }
-    if (Platform.OS === "ios") {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(flushProfileViewability);
-      });
-    } else {
-      setTimeout(() => {
-        requestAnimationFrame(flushProfileViewability);
-      }, 50);
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (profileDeferHandleRef.current !== null) {
-        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
-      }
-    };
-  }, []);
-
-  useAppState({
-    onBackground: () => {
-      if (profileDeferHandleRef.current !== null) {
-        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
-        profileDeferHandleRef.current = null;
-      }
-      setVisibleVideoPostIds(new Set());
-      setNearbyVideoPostIds(new Set());
-      setActiveVideoPostId(null);
-    },
-    onForeground: () => {
-      if (activeTab !== 0) return;
-      if (profileDeferHandleRef.current !== null) {
-        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
-        profileDeferHandleRef.current = null;
-      }
-      requestAnimationFrame(() => {
-        flushProfileViewability();
-      });
-    },
-  });
+  const {
+    activeVideoPostId,
+    visibleVideoPostIds,
+    nearbyVideoPostIds,
+    profileViewabilityConfig,
+    onProfileViewableItemsChanged,
+    handleProfileMomentumScrollEnd,
+  } = useProfileFeedVideoState({ activeTab, listData });
 
   const lastFetchTime = useRef(0);
   const isFetchingRef = useRef(false);
@@ -1224,67 +961,7 @@ useEffect(() => {
         />
       </GestureDetector>
 
-      <PostOptionsSheet
-        ref={postOptionsSheetRef}
-        post={selectedPost}
-        isOwnPost={true}
-        isSaved={selectedPost ? savedPosts.some((p) => p.id === selectedPost.id) : false}
-        onSave={() => {
-          if (!selectedPost) return;
-          const saved = useSavedPostsStore.getState().toggleSavePost(selectedPost);
-          toast.success(
-            saved ? "Post saved" : "Post unsaved",
-            saved ? "You can find it in your saved items." : "Removed from saved items.",
-          );
-        }}
-        onEdit={handleEditPost}
-        onDelete={handleDeletePost}
-        onBlockPost={handleBlockPost}
-        onReport={handleReportPost}
-        onDismiss={() => setSelectedPost(null)}
-      />
-
-      <ConfirmationPopup
-        visible={deleteHandler.showConfirmation}
-        title={
-          deleteHandler.pendingTarget?.type === "comment"
-            ? "Delete Comment?"
-            : "Delete Post?"
-        }
-        message="This action cannot be undone."
-        description={
-          deleteHandler.pendingTarget?.type === "comment"
-            ? "The comment will be permanently removed."
-            : "The post will be permanently removed."
-        }
-        icon="trash-outline"
-        isDestructive
-        isLoading={deleteHandler.isDeleting}
-        confirmText="Delete"
-        onConfirm={handleConfirmDelete}
-        onCancel={deleteHandler.cancelDelete}
-      />
-
-      <ConfirmationPopup
-        visible={blockHandler.showConfirmation}
-        title={`Block ${blockHandler.pendingBlock?.label || "this post"}?`}
-        message={getBlockConfirmationMessage(
-          blockHandler.pendingBlock?.type ?? "post",
-        )}
-        icon="ban-outline"
-        confirmText="Block"
-        isDestructive
-        onConfirm={handleConfirmBlock}
-        onCancel={blockHandler.cancelBlock}
-      />
-
-      <ReportSheet
-        ref={reportSheetRef}
-        targetType={reportHandler.pendingTarget?.type}
-        onSubmit={handleReportSubmit}
-        onDismiss={reportHandler.cancelReport}
-        isLoading={reportHandler.isReporting}
-      />
+      <ProfilePostActionSheets ref={postActionSheetsRef} isOwnPost />
     </Box>
   );
 }

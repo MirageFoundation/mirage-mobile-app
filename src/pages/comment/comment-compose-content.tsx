@@ -20,7 +20,6 @@ import { uploadImageAndGetUrl } from "@/src/api/read/hooks/use-upload-media";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   Image as RNImage,
   Keyboard,
   Platform,
@@ -39,71 +38,19 @@ import { useMentionSearch } from "@/src/hooks/use-mention-search";
 import { MEME_STICKERS } from "@/src/data/stickers";
 import { useUserLevel } from "@/src/stores/auth-store";
 import { canEditContent, getTierPostLimits } from "@/src/utils/tiers";
+import { CommentComposeHeader } from "./comment-compose-header";
+import { CommentComposeLinkSection } from "./comment-compose-link-section";
+import { CommentComposeReplyBanner } from "./comment-compose-reply-banner";
 import { styles } from "./comment-compose-styles";
-
-type InputMode = "keyboard" | "link" | "gif" | "photo";
-
-type CommentImageUploadState = {
-  uploading: boolean;
-  done: boolean;
-  error: string | null;
-  url: string | null;
-};
-
-const PREVIEW_WIDTH = 180;
-const PREVIEW_HEIGHT = 140;
-
-const URL_REGEX = /^https?:\/\/[^\s<>"{}|\\^`\[\]]+$/i;
-const HTTP_URL_REGEX = /^https?:\/\//i;
-
-function looksLikeUrlWithoutProtocol(text: string): boolean {
-  return (
-    /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z]{2,})+/i.test(text) &&
-    !text.startsWith("http")
-  );
-}
-
-const MARKDOWN_LINK_EXTRACT = /\[([^\]]+)\]\(([^)]+)\)/g;
-
-function extractMarkdownLinks(text: string): { name: string; url: string }[] {
-  const links: { name: string; url: string }[] = [];
-  let match: RegExpExecArray | null;
-  MARKDOWN_LINK_EXTRACT.lastIndex = 0;
-  while ((match = MARKDOWN_LINK_EXTRACT.exec(text)) !== null) {
-    links.push({ name: match[1], url: match[2] });
-  }
-  return links;
-}
-
-const IMAGE_URL_REGEX = /^(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp))$/i;
-const CLOUDFLARE_IMAGE_REGEX = /^https?:\/\/imagedelivery\.net\/[^\s]+$/i;
-const GIPHY_URL_REGEX =
-  /^https?:\/\/(?:media\d?\.giphy\.com|i\.giphy\.com)\/[^\s]+$/i;
-
-function isImageUrl(url: string): boolean {
-  return (
-    IMAGE_URL_REGEX.test(url) ||
-    CLOUDFLARE_IMAGE_REGEX.test(url) ||
-    GIPHY_URL_REGEX.test(url)
-  );
-}
-
-function extractImageUrls(content: string): {
-  text: string;
-  imageUrls: string[];
-} {
-  const imageUrls: string[] = [];
-  const textLines: string[] = [];
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-    if (isImageUrl(trimmed)) {
-      imageUrls.push(trimmed);
-    } else {
-      textLines.push(line);
-    }
-  }
-  return { text: textLines.join("\n").trim(), imageUrls };
-}
+import {
+  GIPHY_URL_REGEX,
+  HTTP_URL_REGEX,
+  URL_REGEX,
+  extractImageUrls,
+  looksLikeUrlWithoutProtocol,
+  type CommentImageUploadState,
+  type InputMode,
+} from "./comment-compose-utils";
 
 export default function CommentComposeScreen() {
   const router = useRouter();
@@ -417,6 +364,19 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
    inputModeRef.current = "keyboard";
  }, [canAddLink, linkName, linkUrl]);
 
+ const handleCancelLink = useCallback(() => {
+   setLinkName("");
+   setLinkUrl("");
+   setLinkError(null);
+   setInputMode("keyboard");
+   inputModeRef.current = "keyboard";
+   inputRef.current?.focus();
+ }, []);
+
+ const handleRemoveMarkdownLink = useCallback((markdown: string) => {
+   setText((prev) => prev.replace(markdown, "").replace(/\n{2,}/g, "\n").trim());
+ }, []);
+
   const handleSelectGif = useCallback(
     (gifUrl: string) => {
       triggerHaptic("medium");
@@ -571,57 +531,14 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
             <ActivityIndicator size="large" color="#fff" />
           </View>
         )}
-        {/* Header */}
-        <View style={styles.header}>
-          <Pressable onPress={handleClose} style={styles.headerButton}>
-            <Ionicons
-              name="close"
-              size={28}
-              color={theme.colors.text.default}
-            />
-          </Pressable>
-          <Text size="lg" weight="bold" style={styles.headerTitle}>
-            {isEditMode ? "Edit comment" : "Add comment"}
-          </Text>
-          <Pressable
-            onPress={handleSubmit}
-            disabled={!canSubmit}
-            style={[
-              styles.postButton,
-              {
-                backgroundColor: canSubmit
-                  ? theme.colors.brand[500]
-                  : theme.colors.background.subtle,
-              },
-            ]}
-          >
-            <Text
-              size="sm"
-              weight="bold"
-              style={{
-                color: canSubmit ? "#FFFFFF" : theme.colors.text.subtle,
-              }}
-            >
-              {isEditMode ? "Save" : "Post"}
-            </Text>
-          </Pressable>
-        </View>
+        <CommentComposeHeader
+          canSubmit={canSubmit}
+          isEditMode={isEditMode}
+          onClose={handleClose}
+          onSubmit={handleSubmit}
+        />
 
-        {/* Reply to banner */}
-        {replyToUsername && (
-          <View style={styles.replyBanner}>
-            <Text size="xs" mode="subtle">
-              Replying to{" "}
-              <Text
-                size="xs"
-                weight="semibold"
-                style={{ color: theme.colors.brand[500] }}
-              >
-                @{replyToUsername}
-              </Text>
-            </Text>
-          </View>
-        )}
+        <CommentComposeReplyBanner username={replyToUsername} />
 
        {/* Post preview */}
        <View
@@ -691,126 +608,19 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
         >
           {/* Link input mode — above text input */}
           {inputMode === "link" && (
-            <Animated.View
-              entering={FadeIn.duration(200)}
-              exiting={FadeOut.duration(150)}
-              style={styles.linkContainer}
-            >
-             <TextInput
-               style={[
-                 styles.linkInput,
-                 styles.linkNameInput,
-                 { color: theme.colors.text.default },
-               ]}
-               placeholder="Link name"
-               placeholderTextColor={theme.colors.text.subtle}
-               value={linkName}
-               onChangeText={setLinkName}
-               autoFocus
-                returnKeyType="next"
-                onSubmitEditing={() => linkUrlRef.current?.focus()}
-                blurOnSubmit={false}
-             />
-             <TextInput
-                ref={linkUrlRef}
-               style={[styles.linkInput, { color: theme.colors.text.default }]}
-               placeholder="https://"
-                placeholderTextColor={theme.colors.text.subtle}
-                value={linkUrl}
-                onChangeText={handleLinkUrlChange}
-                keyboardType="url"
-                autoCapitalize="none"
-              />
-              {linkError && (
-                <View style={styles.linkErrorContainer}>
-                  <Feather
-                    name="alert-circle"
-                    size={14}
-                    color={theme.colors.error[500]}
-                  />
-                  <Text
-                    size="xs"
-                    style={{ color: theme.colors.error[500], marginLeft: 4 }}
-                  >
-                    {linkError}
-                  </Text>
-                </View>
-              )}
-              <View style={{ flexDirection: "row", gap: theme.spacing.sm, marginTop: theme.spacing.xs }}>
-                <Pressable
-                  onPress={handleAddLink}
-                  disabled={!canAddLink}
-                  style={[
-                    styles.addLinkButton,
-                    {
-                      backgroundColor: canAddLink
-                        ? theme.colors.brand[500]
-                        : theme.colors.background.subtle,
-                    },
-                  ]}
-                >
-                  <Text
-                    size="md"
-                    weight="semibold"
-                    style={{
-                      color: canAddLink ? "#FFFFFF" : theme.colors.text.subtle,
-                      fontSize: 16,
-                    }}
-                  >
-                    Add link
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    setLinkName("");
-                    setLinkUrl("");
-                    setLinkError(null);
-                    setInputMode("keyboard");
-                    inputModeRef.current = "keyboard";
-                    inputRef.current?.focus();
-                  }}
-                  style={[
-                    styles.addLinkButton,
-                    { backgroundColor: theme.colors.background.subtle },
-                  ]}
-                >
-                  <Text size="md" weight="semibold" style={{ color: theme.colors.text.subtle, fontSize: 16 }}>
-                    Cancel
-                  </Text>
-                </Pressable>
-              </View>
-              {(() => {
-                const links = extractMarkdownLinks(text);
-                if (links.length === 0) return null;
-                return (
-                  <View style={styles.addedLinksContainer}>
-                    <Text size="md" weight="semibold">Added links:</Text>
-                    {links.map((link, i) => (
-                      <View key={i} style={styles.addedLinkRow}>
-                        <Feather name="link" size={16} color={theme.colors.text.subtle} style={{ marginTop: 4 }} />
-                        <View style={{ flex: 1 }}>
-                          <Text size="md" style={{ color: "#3B82F6" }}>
-                            {link.name}
-                          </Text>
-                          <Text size="md" mode="subtle">
-                            {link.url.split("").join("\u200B")}
-                          </Text>
-                        </View>
-                        <Pressable
-                          onPress={() => {
-                            const markdown = `[${link.name}](${link.url})`;
-                            setText((prev) => prev.replace(markdown, "").replace(/\n{2,}/g, "\n").trim());
-                          }}
-                          hitSlop={8}
-                        >
-                          <Ionicons name="close-circle" size={18} color={theme.colors.error[500]} style={{ marginTop: 4 }} />
-                        </Pressable>
-                      </View>
-                    ))}
-                  </View>
-                );
-              })()}
-            </Animated.View>
+            <CommentComposeLinkSection
+              canAddLink={canAddLink}
+              linkError={linkError}
+              linkName={linkName}
+              linkUrl={linkUrl}
+              linkUrlRef={linkUrlRef}
+              text={text}
+              onAddLink={handleAddLink}
+              onCancel={handleCancelLink}
+              onChangeLinkName={setLinkName}
+              onChangeLinkUrl={handleLinkUrlChange}
+              onRemoveLink={handleRemoveMarkdownLink}
+            />
           )}
 
           {/* Image/GIF Preview */}

@@ -2,7 +2,6 @@ import { navigateToEditPost } from "@/src/utils/edit-post";
 import { markSeen } from "@/src/services/seen-posts";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Sentry from "@sentry/react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import type { FlashListRef } from "@shopify/flash-list";
 import { useLocalSearchParams } from "expo-router";
@@ -11,7 +10,6 @@ import { useAndroidPullIndicator } from "@/src/hooks/use-android-pull-indicator"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Platform,
-  Pressable,
   RefreshControl,
   View,
 } from "react-native";
@@ -19,13 +17,6 @@ import { IOSRefreshIndicator } from "@/src/components/atoms/refresh-indicator";
 import { useSharedValue, useAnimatedScrollHandler } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GestureDetector } from "react-native-gesture-handler";
-import { useUnistyles } from "react-native-unistyles";
-import {
-  Menu,
-  MenuOption,
-  MenuOptions,
-  MenuTrigger,
-} from "react-native-popup-menu";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
 import {
@@ -76,11 +67,10 @@ import {
 } from "@/src/stores";
 import { useNewPostsChecker } from "@/src/hooks/use-new-posts-checker";
 import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
-import { styles } from "./topic-feed-styles";
+import { TopicFeedHeader } from "./topic-feed-header";
 
 export function TopicFeedScreen() {
   const { id: topicName } = useLocalSearchParams<{ id: string }>();
-  const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const toast = useToast();
@@ -759,154 +749,16 @@ export function TopicFeedScreen() {
 
   return (
     <Box flex background="base">
-      <View
-        style={[
-          styles.headerContainer,
-          {
-            paddingTop: insets.top,
-            backgroundColor: theme.colors.background.default,
-            borderBottomColor: theme.colors.border.subtle,
-          },
-        ]}
-      >
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => [
-            styles.backButton,
-            pressed && { opacity: 0.7 },
-          ]}
-        >
-          <Ionicons
-            name="arrow-back"
-            size={24}
-            color={theme.colors.text.default}
-          />
-        </Pressable>
-        <Menu style={styles.headerTitleMenu}>
-          <MenuTrigger
-            customStyles={{
-              triggerTouchable: {
-                hitSlop: { top: 8, bottom: 8, left: 4, right: 4 },
-              },
-            }}
-          >
-            <View style={styles.titleButton}>
-              <Text
-                size="xl"
-                weight="bold"
-                numberOfLines={1}
-                style={{ flexShrink: 1 }}
-              >
-                #{topicName}
-              </Text>
-              <Text
-                size="xl"
-                weight="medium"
-                style={{
-                  color: theme.colors.text.subtle,
-                  marginLeft: 6,
-                }}
-              >
-                ǀ {SORT_OPTIONS.find((o) => o.value === sortBy)?.label}
-              </Text>
-              <Ionicons
-                name="chevron-down"
-                size={14}
-                color={theme.colors.text.subtle}
-                style={{ marginLeft: 2, marginTop: 4 }}
-              />
-            </View>
-          </MenuTrigger>
-          <MenuOptions
-            customStyles={{
-              optionsContainer: {
-                backgroundColor: theme.colors.background.default,
-                borderRadius: theme.radius.lg,
-                minWidth: 160,
-                shadowColor: theme.colors.contrast.base,
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.15,
-                shadowRadius: 12,
-                elevation: 8,
-                borderWidth: 1,
-                borderColor: theme.colors.border.subtle,
-                marginTop: 4,
-                paddingVertical: 4,
-              },
-            }}
-          >
-            {SORT_OPTIONS.map((option, index) => {
-              const isActive = option.value === sortBy;
-              return (
-                <View key={option.value}>
-                  {index > 0 && (
-                    <View
-                      style={{
-                        height: 1,
-                        backgroundColor: theme.colors.border.subtle,
-                        marginHorizontal: theme.spacing.md,
-                        marginVertical: 2,
-                      }}
-                    />
-                  )}
-                  <MenuOption onSelect={() => handleSortChange(option.value)}>
-                    <View style={styles.menuOption}>
-                      <Ionicons
-                        name={isActive ? "checkmark-circle" : "ellipse-outline"}
-                        size={16}
-                        color={
-                          isActive
-                            ? theme.colors.primary[500]
-                            : theme.colors.text.subtle
-                        }
-                      />
-                      <Text
-                        size="md"
-                        weight={isActive ? "semibold" : "medium"}
-                        style={
-                          isActive
-                            ? { color: theme.colors.primary[500] }
-                            : undefined
-                        }
-                      >
-                        {option.label}
-                      </Text>
-                    </View>
-                  </MenuOption>
-                </View>
-              );
-            })}
-          </MenuOptions>
-        </Menu>
-        <Pressable
-          onPress={handleHeaderFollowTopic}
-          style={[
-            styles.headerFollowButton,
-            {
-              backgroundColor: isTopicFollowed
-                ? "transparent"
-                : theme.colors.primary[500],
-              borderColor: isTopicFollowed
-                ? theme.colors.border.default
-                : theme.colors.primary[500],
-              paddingVertical: 2,
-              // height: isTopicFollowed ? 28 : 24,
-            },
-          ]}
-        >
-          <Text
-            size="md"
-            weight="bold"
-            style={{
-              color: isTopicFollowed
-                ? theme.colors.text.default
-                : theme.colors.background.default,
-            }}
-          >
-            {isTopicFollowed ? "Following" : "Follow"}
-          </Text>
-        </Pressable>
-      </View>
+      <TopicFeedHeader
+        insetsTop={insets.top}
+        isTopicFollowed={isTopicFollowed}
+        onBack={router.back}
+        onFollowTopic={handleHeaderFollowTopic}
+        onSortChange={handleSortChange}
+        sortBy={sortBy}
+        sortOptions={SORT_OPTIONS}
+        topicName={topicName}
+      />
 
       <GestureDetector gesture={pullGesture}>
         <View style={{ flex: 1 }} collapsable={false}>

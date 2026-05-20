@@ -1,4 +1,3 @@
-import { navigateToEditPost } from "@/src/utils/edit-post";
 import { markSeen } from "@/src/services/seen-posts";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Sentry from "@sentry/react-native";
@@ -7,7 +6,7 @@ import { useIsFocused } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/navigation/guarded-router";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
@@ -16,7 +15,6 @@ import {
   Share,
   useWindowDimensions,
   View,
-  type ViewToken,
 } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -48,19 +46,15 @@ import {
 } from "@/src/api/write";
 import {
   ConfirmationPopup,
-  getGradientColor,
   type Post,
-  PostOptionsSheet,
-  PostOptionsSheetRef,
+  getGradientColor,
   PROFILE_CONTENT_HEIGHT,
   ProfileHeaderBar,
   ProfileTabBar,
-  ProfileEmptyState,
   ReportSheet,
   ReportSheetRef,
   UserProfileMenuSheet,
   UserProfileMenuSheetRef,
-  ProfileAboutTab,
   AwardPickerSheet,
   type AwardPickerSheetRef,
   GiftMirageSheet,
@@ -68,22 +62,13 @@ import {
   GiftSubscriptionSheet,
   type GiftSubscriptionSheetRef,
 } from "@/src/components/molecules";
-import { PostCardItem } from "@/src/components/molecules/post-card-item";
-import { PostCardSkeletonList } from "@/src/components/molecules/post-card-skeleton";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
-import { ProfileCommentItem } from "@/src/components/molecules/profile-comment-item";
-import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { UserProfileContentAnimated } from "@/src/components/molecules/user-profile-content-animated";
-import { PROFILE_TAB_BAR_HEIGHT } from "@/src/components/molecules/profile-tabs";
 import { Box } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import {
-  useAppState,
-  useBlockHandler,
   getBlockConfirmationMessage,
-  useDeleteHandler,
   useFollowHandler,
-  useReportHandler,
   useVoteHandler,
   type VoteResult,
 } from "@/src/hooks";
@@ -96,18 +81,25 @@ import {
   usePreferencesStore,
   getShareBaseUrl,
   useFeedScrollStore,
-  useSavedPostsStore,
 } from "@/src/stores";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
+import {
+  ProfilePostActionSheets,
+  type ProfilePostActionSheetsRef,
+} from "@/src/pages/profile/profile-post-action-sheets";
+import { useProfileFeedVideoState } from "@/src/pages/profile/use-profile-feed-video-state";
+import {
+  UserProfileCommentWrapper,
+  UserProfilePostWrapper,
+} from "./user-profile-feed-items";
+import { UserProfileListFooter } from "./user-profile-list-footer";
 import { styles } from "./user-profile-styles";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const AnimatedFlatList = Animated.createAnimatedComponent(
   FlatList<Post | ApiPost | "header" | "tabs">
 );
-
 const HEADER_BAR_HEIGHT = 56;
-
 const formatMirageBalance = (umirage: number): number => {
   return Math.floor(umirage / 1_000_000);
 };
@@ -120,128 +112,6 @@ const calculateAccountAgeDays = (
   const ageInSeconds = now - createdAt;
   return ageInSeconds / (60 * 60 * 24);
 };
-
-const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
- const p = prev.post;
- const n = next.post;
- if (p.id !== n.id) return false;
- if (p.title !== n.title) return false;
- if (p.body !== n.body) return false;
- if (p.likes !== n.likes) return false;
- if (p.dislikes !== n.dislikes) return false;
- if (p.comments !== n.comments) return false;
- if (p.hasLiked !== n.hasLiked) return false;
- if (p.hasDisliked !== n.hasDisliked) return false;
- if (p.awards?.length !== n.awards?.length) return false;
- if (prev.isVisible !== next.isVisible) return false;
- if (prev.isFocused !== next.isFocused) return false;
- if (prev.isNearVisible !== next.isNearVisible) return false;
- if (prev.screenActive !== next.screenActive) return false;
- if (prev.contentRevealed !== next.contentRevealed) return false;
- return true;
-});
-const MemoizedProfileCommentItem = memo(ProfileCommentItem, (prev, next) => {
- return prev.comment.post_id === next.comment.post_id
-  && prev.comment.content === next.comment.content
-  && prev.comment.points === next.comment.points;
-});
-
-const PostWrapper = memo(function PostWrapper({
- post,
- isOwnProfile,
- isVisible,
- isFocused,
- isNearVisible,
- screenActive,
- contentRevealed,
- shareUrl,
- onPostPress,
- onAuthorPress,
- onCommentPress,
- onMorePress,
- onLikePress,
- onDislikePress,
- onBlockUser,
- onBlockPost,
- onReport,
- onRevealContent,
-  onTopicPress,
-  videoSyncScope,
-}: {
- post: Post;
- isOwnProfile: boolean;
- isVisible?: boolean;
- isFocused?: boolean;
- isNearVisible?: boolean;
- screenActive?: boolean;
- contentRevealed?: boolean;
- shareUrl: string;
- onPostPress: (postId: string) => void;
- onAuthorPress: (authorId: string) => void;
- onCommentPress: (postId: string) => void;
- onMorePress: (postId: string) => void;
- onLikePress: (postId: string, liked: boolean, disliked: boolean, likes: number) => void;
- onDislikePress: (postId: string, liked: boolean, disliked: boolean, likes: number) => void;
- onBlockUser: (postId: string, authorId: string, authorUsername: string) => void;
- onBlockPost: (postId: string) => void;
- onReport: (postId: string) => void;
- onRevealContent?: (postId: string) => void;
-  onTopicPress: (topic: string) => void;
-  videoSyncScope?: string;
-}) {
- const editOverride = usePostEditStore((s) => s.overrides[post.id]);
- const displayPost = editOverride ? {
-   ...post,
-   title: editOverride.title,
-   body: editOverride.content || undefined,
-   topic: editOverride.topic ?? post.topic,
-   media: editOverride.media
-     ? editOverride.media.map((url: string) => ({ uri: url, type: "image" as const }))
-     : post.media,
- } : post;
- return (
-   <MemoizedPostCardItem
-    post={displayPost}
-    isOwnPost={isOwnProfile}
-    isVisible={isVisible}
-    isFocused={isFocused}
-    isNearVisible={isNearVisible}
-    screenActive={screenActive}
-    contentRevealed={contentRevealed}
-    showUrlCard={false}
-    videoSyncScope={videoSyncScope}
-    showFollowButton={false}
-    shareUrl={shareUrl}
-    onPostPress={onPostPress}
-    onAuthorPress={onAuthorPress}
-    onCommentPress={onCommentPress}
-    onMorePress={onMorePress}
-    onLikePress={onLikePress}
-    onDislikePress={onDislikePress}
-    onBlockUser={onBlockUser}
-    onBlockPost={onBlockPost}
-    onReport={onReport}
-    onRevealContent={onRevealContent}
-   onTopicPress={onTopicPress}
-   />
- );
-});
-
-const MemoizedCommentWrapper = memo(function MemoizedCommentWrapper({
- comment,
- onPress,
-}: {
- comment: ApiPost;
- onPress: (commentId: string, rootPostId: string) => void;
-}) {
- return (
-   <MemoizedProfileCommentItem
-    comment={comment}
-    onPress={onPress}
-   />
- );
-});
-
 export function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
@@ -291,16 +161,12 @@ export function UserProfileScreen() {
   const [activeTab, setActiveTab] = useState(0);
   const [isTabsSticky, setIsTabsSticky] = useState(false);
 
-  const savedPosts = useSavedPostsStore((s) => s.savedPosts);
-  const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
   const reportSheetRef = useRef<ReportSheetRef>(null);
+  const postActionSheetsRef = useRef<ProfilePostActionSheetsRef>(null);
   const userMenuSheetRef = useRef<UserProfileMenuSheetRef>(null);
   const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
   const giftMirageSheetRef = useRef<GiftMirageSheetRef>(null);
   const giftSubscriptionSheetRef = useRef<GiftSubscriptionSheetRef>(null);
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [showReportUserSheet, setShowReportUserSheet] = useState(false);
-
   const [showBlockUserConfirmation, setShowBlockUserConfirmation] =
     useState(false);
   const [isBlockingUser, setIsBlockingUser] = useState(false);
@@ -313,25 +179,6 @@ const [optimisticBlocked, setOptimisticBlocked] = useState<boolean | null>(
 
 const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const hiddenCommentIds = useContentModerationStore((s) => s.hiddenCommentIds);
-  const globalHidePost = useContentModerationStore((s) => s.hidePost);
-  const globalUnhidePost = useContentModerationStore((s) => s.unhidePost);
-  const globalHideComment = useContentModerationStore((s) => s.hideComment);
-  const globalUnhideComment = useContentModerationStore(
-    (s) => s.unhideComment
-  );
-  const blockTopicOptimistic = useContentModerationStore((s) => s.blockTopic);
-
-  const deleteHandler = useDeleteHandler({
-    onRollback: (targetId, targetType) => {
-      if (targetType === "post") {
-        globalUnhidePost(targetId);
-      } else {
-        globalUnhideComment(targetId);
-      }
-    },
-  });
- const blockHandler = useBlockHandler({});
- const reportHandler = useReportHandler({});
 
   const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
   const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
@@ -497,17 +344,6 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     router.back();
   }, [router]);
 
-  const handleSharePress = useCallback(async () => {
-    try {
-      await Share.share({
-        message: `Check out @${username} on Mirage!`,
-        url: `${getShareBaseUrl(shareServer)}/u/${username}`,
-      });
-    } catch (error) {
-      Sentry.addBreadcrumb({ category: "user-profile", message: "Share failed", data: { error: String(error) }, level: "warning" });
-    }
-  }, [username, shareServer]);
-
   const handleMenuPress = useCallback(() => {
     if (!isOwnProfile) {
       userMenuSheetRef.current?.present();
@@ -583,7 +419,6 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   }, [userAddress, displayUsername, unblockUserMutation, toast]);
 
   const handleReportUser = useCallback(() => {
-    setShowReportUserSheet(true);
     reportSheetRef.current?.present();
   }, []);
 
@@ -652,7 +487,6 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
       if (!userAddress) return;
       const loadingId = toast.loading("Submitting report...");
       reportSheetRef.current?.dismiss();
-      setShowReportUserSheet(false);
       setTimeout(() => {
         toast.update(loadingId, {
           type: "success",
@@ -721,96 +555,32 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     (postId: string) => {
       const post = postsById.get(postId);
       if (post) {
-        setSelectedPost(post);
-        postOptionsSheetRef.current?.present();
+        postActionSheetsRef.current?.openPost(post);
       }
     },
     [postsById]
   );
 
-  const handleEditPost = useCallback(() => {
-    if (!selectedPost) return;
-    navigateToEditPost(router, selectedPost);
-  }, [selectedPost, router]);
-
-  const handleDeletePost = useCallback(() => {
-    if (!selectedPost) return;
-    deleteHandler.requestDelete(selectedPost.id, "post");
-  }, [selectedPost, deleteHandler]);
-
-  const handleBlockPost = useCallback(() => {
-    if (!selectedPost) return;
-    blockHandler.requestBlockPost(selectedPost.id);
-  }, [selectedPost, blockHandler]);
-
   const handleBlockUserFromCard = useCallback(
     (postId: string, authorId: string, authorUsername: string) => {
-      blockHandler.requestBlockUser(authorId, authorUsername);
+      postActionSheetsRef.current?.requestBlockUser(authorId, authorUsername);
     },
-    [blockHandler]
+    []
   );
 
   const handleBlockPostFromCard = useCallback(
     (postId: string) => {
-      blockHandler.requestBlockPost(postId);
+      postActionSheetsRef.current?.requestBlockPost(postId);
     },
-    [blockHandler]
+    []
   );
 
   const handleReportFromCard = useCallback(
     (postId: string) => {
-      reportHandler.requestReport(postId, "post");
+      postActionSheetsRef.current?.requestReportPost(postId);
     },
-    [reportHandler]
+    []
   );
-
-  const handleReportPost = useCallback(() => {
-    if (!selectedPost) return;
-    reportHandler.requestReport(selectedPost.id, "post");
-  }, [selectedPost, reportHandler]);
-
-  const handleConfirmDelete = useCallback(() => {
-    const pending = deleteHandler.pendingTarget;
-    if (pending) {
-      if (pending.type === "post") {
-        globalHidePost(pending.id);
-      } else {
-        globalHideComment(pending.id);
-      }
-    }
-    setSelectedPost(null);
-    deleteHandler.confirmDelete();
-  }, [deleteHandler, globalHidePost, globalHideComment]);
-
-  const handleConfirmBlock = useCallback(() => {
-    const pending = blockHandler.pendingBlock;
-    if (pending && pending.type === "topic") {
-      blockTopicOptimistic(pending.id);
-    } else if (pending && pending.type === "post") {
-      globalHidePost(pending.id);
-    }
-    setSelectedPost(null);
-    blockHandler.confirmBlock();
-  }, [blockHandler, globalHidePost, blockTopicOptimistic]);
-
-  const handleReportSubmit = useCallback(
-    (reason: string) => {
-      const pending = reportHandler.pendingTarget;
-      if (pending && pending.type === "post") {
-        globalHidePost(pending.id);
-      }
-      setSelectedPost(null);
-      reportSheetRef.current?.dismiss();
-      reportHandler.submitReport(reason);
-    },
-    [reportHandler, globalHidePost]
-  );
-
-  useEffect(() => {
-    if (reportHandler.showReportSheet && !showReportUserSheet) {
-      reportSheetRef.current?.present();
-    }
-  }, [reportHandler.showReportSheet, showReportUserSheet]);
 
   const handleSwipeTabChange = useCallback((index: number) => {
     setActiveTab(index);
@@ -878,9 +648,15 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, activeTab, isBlocked]);
 
-  const [activeVideoPostId, setActiveVideoPostId] = useState<string | null>(null);
-  const [visibleVideoPostIds, setVisibleVideoPostIds] = useState<Set<string>>(new Set());
-  const [nearbyVideoPostIds, setNearbyVideoPostIds] = useState<Set<string>>(new Set());
+  const {
+    activeVideoPostId,
+    visibleVideoPostIds,
+    nearbyVideoPostIds,
+    profileViewabilityConfig,
+    onProfileViewableItemsChanged,
+    handleProfileMomentumScrollEnd,
+    revealVideoPost,
+  } = useProfileFeedVideoState({ activeTab, listData });
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
   const handleRevealContent = useCallback((postId: string) => {
@@ -892,147 +668,9 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     });
     const post = uiPosts.find((p) => p.id === postId);
     if (postHasPlayableVideo(post)) {
-      setActiveVideoPostId(postId);
-      setVisibleVideoPostIds((prev) => {
-        const next = new Set(prev);
-        next.add(postId);
-        return next;
-      });
+      revealVideoPost(postId);
     }
-  }, [uiPosts]);
-
-  const profileViewabilityConfig = useRef({
-    viewAreaCoveragePercentThreshold: 30,
-    minimumViewTime: 300,
-  }).current;
-
-  const pendingProfileViewableRef = useRef<ViewToken[] | null>(null);
-  const profileDeferHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const listDataRef = useRef(listData);
-  listDataRef.current = listData;
-
-  const flushProfileViewability = () => {
-    const items = pendingProfileViewableRef.current;
-    if (!items) return;
-    const visibleItems = items.filter(
-      (item) => item.isViewable && item.item && typeof item.item === "object" && "id" in item.item
-    );
-    if (visibleItems.length === 0) {
-      setVisibleVideoPostIds(new Set());
-      setNearbyVideoPostIds(new Set());
-      setActiveVideoPostId(null);
-      return;
-    }
-    const videoItems = visibleItems.filter(
-      (item) => postHasPlayableVideo(item.item)
-    );
-    const newVisibleIds = new Set(videoItems.map((item) => item.item.id));
-    setVisibleVideoPostIds(newVisibleIds);
-
-    const nearbyIds = new Set(newVisibleIds);
-    const allData = listDataRef.current;
-    if (allData.length > 0 && visibleItems.length > 0) {
-      const indices = visibleItems.map((v) => v.index ?? 0);
-      const minIdx = Math.min(...indices);
-      const maxIdx = Math.max(...indices);
-      const lo = Math.max(0, minIdx - 3);
-      const hi = Math.min(allData.length - 1, maxIdx + 3);
-      for (let i = lo; i <= hi; i++) {
-        const p = allData[i];
-        if (p && typeof p === "object" && "id" in p && postHasPlayableVideo(p)) nearbyIds.add(p.id);
-      }
-    }
-    setNearbyVideoPostIds(nearbyIds);
-
-    if (videoItems.length > 0) {
-      const sortedIndices = visibleItems
-        .map((v) => v.index ?? 0)
-        .sort((a, b) => a - b);
-      const mid = Math.floor((sortedIndices.length - 1) / 2);
-      const centerIndex = sortedIndices[mid] ?? 0;
-      const visibleSpan = (sortedIndices[sortedIndices.length - 1] ?? 0) - (sortedIndices[0] ?? 0);
-      const maxDist = Math.max(1, visibleSpan * 0.35);
-      let best = videoItems[0];
-      let bestDist = Math.abs((best.index ?? 0) - centerIndex);
-      for (let i = 1; i < videoItems.length; i++) {
-        const d = Math.abs((videoItems[i].index ?? 0) - centerIndex);
-        if (d < bestDist) { best = videoItems[i]; bestDist = d; }
-      }
-      setActiveVideoPostId(bestDist <= maxDist ? best.item.id : null);
-    } else {
-      setActiveVideoPostId(null);
-    }
-  };
-
-  const activeVideoPostIdRef = useRef(activeVideoPostId);
-  activeVideoPostIdRef.current = activeVideoPostId;
-
-  const onProfileViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      pendingProfileViewableRef.current = viewableItems;
-
-      const currentActive = activeVideoPostIdRef.current;
-      if (currentActive) {
-        const stillVisible = viewableItems.some(
-          (v) => v.isViewable && v.item && typeof v.item === "object" && "id" in v.item && v.item.id === currentActive
-        );
-        if (!stillVisible) {
-          setActiveVideoPostId(null);
-        }
-      }
-
-      if (profileDeferHandleRef.current !== null) {
-        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
-      }
-      profileDeferHandleRef.current = setTimeout(flushProfileViewability, Platform.OS === "ios" ? 200 : 150);
-    }
-  ).current;
-
-  const handleProfileMomentumScrollEnd = useCallback(() => {
-    if (profileDeferHandleRef.current !== null) {
-      clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
-      profileDeferHandleRef.current = null;
-    }
-    if (Platform.OS === "ios") {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(flushProfileViewability);
-      });
-    } else {
-      setTimeout(() => {
-        requestAnimationFrame(flushProfileViewability);
-      }, 50);
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (profileDeferHandleRef.current !== null) {
-        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
-      }
-    };
-  }, []);
-
-  useAppState({
-    onBackground: () => {
-      if (profileDeferHandleRef.current !== null) {
-        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
-        profileDeferHandleRef.current = null;
-      }
-      setVisibleVideoPostIds(new Set());
-      setNearbyVideoPostIds(new Set());
-      setActiveVideoPostId(null);
-    },
-    onForeground: () => {
-      if (activeTab !== 0) return;
-      if (profileDeferHandleRef.current !== null) {
-        clearTimeout(profileDeferHandleRef.current as ReturnType<typeof setTimeout>);
-        profileDeferHandleRef.current = null;
-      }
-      requestAnimationFrame(() => {
-        flushProfileViewability();
-      });
-    },
-  });
+  }, [uiPosts, revealVideoPost]);
 
   const keyExtractor = useCallback(
     (item: Post | ApiPost | "header" | "tabs", index: number) => {
@@ -1086,7 +724,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
        if (activeTab === 0 && "id" in item) {
         return (
           <Animated.View style={contentAnimatedStyle}>
-            <PostWrapper
+            <UserProfilePostWrapper
              post={item}
              isOwnProfile={isOwnProfile}
              isVisible={visibleVideoPostIds.has(item.id)}
@@ -1115,7 +753,7 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         if (activeTab === 1 && "post_id" in item) {
           return (
             <Animated.View style={contentAnimatedStyle}>
-              <MemoizedCommentWrapper
+              <UserProfileCommentWrapper
                comment={item}
                onPress={handleCommentPress}
               />
@@ -1161,72 +799,19 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   );
 
   const listFooter = useMemo(() => {
-    if (isBlocked) {
-      const tabType = activeTab === 0 ? "posts" : activeTab === 1 ? "comments" : "about";
-      return (
-          <Animated.View style={contentAnimatedStyle}>
-            <ProfileEmptyState
-              tabType={tabType}
-              isOwnProfile={false}
-              isBlocked={true}
-              onUnblock={handleUnblockUser}
-            />
-          </Animated.View>
-      );
-   }
-
-    if (activeTab === 2) {
-      return (
-          <Animated.View style={contentAnimatedStyle}>
-            <ProfileAboutTab
-              userAddress={userAddress}
-              isOwnProfile={isOwnProfile}
-            />
-          </Animated.View>
-      );
-    }
-
-    if (isLoadingPosts) {
-      return activeTab === 0 ? (
-            <Animated.View style={contentAnimatedStyle}>
-              <PostCardSkeletonList count={3} />
-            </Animated.View>
-          ) : (
-            <Animated.View style={contentAnimatedStyle}>
-              <ProfilePostsSkeleton count={5} type="comments" />
-            </Animated.View>
-          );
-    }
-
-    if (listData.length <= 2) {
-      const tabType = activeTab === 0 ? "posts" : "comments";
-      return (
-          <Animated.View style={contentAnimatedStyle}>
-            <ProfileEmptyState
-              tabType={tabType}
-              onSettingsPress={handleSettingsPress}
-              isOwnProfile={isOwnProfile}
-            />
-          </Animated.View>
-      );
-    }
-
-    if (isFetchingNextPage) {
-      return activeTab === 0 ? (
-            <Animated.View style={contentAnimatedStyle}>
-              <PostCardSkeletonList count={1} />
-            </Animated.View>
-          ) : (
-            <Animated.View style={contentAnimatedStyle}>
-              <ProfilePostsSkeleton count={2} type="comments" />
-            </Animated.View>
-          );
-    }
-
     return (
-      <Animated.View style={contentAnimatedStyle}>
-        <View style={styles.bottomSpacer} />
-      </Animated.View>
+      <UserProfileListFooter
+        activeTab={activeTab}
+        contentAnimatedStyle={contentAnimatedStyle}
+        isBlocked={isBlocked}
+        isFetchingNextPage={isFetchingNextPage}
+        isLoadingPosts={isLoadingPosts}
+        isOwnProfile={isOwnProfile}
+        listDataLength={listData.length}
+        userAddress={userAddress}
+        onSettingsPress={handleSettingsPress}
+        onUnblock={handleUnblockUser}
+      />
     );
   }, [
     activeTab,
@@ -1385,50 +970,9 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
         </>
       )}
 
-      <PostOptionsSheet
-        ref={postOptionsSheetRef}
-        post={selectedPost}
+      <ProfilePostActionSheets
+        ref={postActionSheetsRef}
         isOwnPost={isOwnProfile}
-        isSaved={selectedPost ? savedPosts.some((p) => p.id === selectedPost.id) : false}
-        onSave={() => {
-          if (!selectedPost) return;
-          const saved = useSavedPostsStore.getState().toggleSavePost(selectedPost);
-          toast.success(
-            saved ? "Post saved" : "Post unsaved",
-            saved ? "You can find it in your saved items." : "Removed from saved items.",
-          );
-        }}
-        onEdit={handleEditPost}
-        onDelete={handleDeletePost}
-        onBlockPost={handleBlockPost}
-        onReport={handleReportPost}
-        onDismiss={() => setSelectedPost(null)}
-      />
-
-      <ConfirmationPopup
-        visible={deleteHandler.showConfirmation}
-        title="Delete Post?"
-        message="This action cannot be undone."
-        description="The post will be permanently removed."
-        icon="trash-outline"
-        isDestructive
-        isLoading={deleteHandler.isDeleting}
-        confirmText="Delete"
-        onConfirm={handleConfirmDelete}
-        onCancel={deleteHandler.cancelDelete}
-      />
-
-      <ConfirmationPopup
-        visible={blockHandler.showConfirmation}
-        title={`Block ${blockHandler.pendingBlock?.label || "this post"}?`}
-        message={getBlockConfirmationMessage(
-          blockHandler.pendingBlock?.type ?? "post",
-        )}
-        icon="ban-outline"
-        confirmText="Block"
-        isDestructive
-        onConfirm={handleConfirmBlock}
-        onCancel={blockHandler.cancelBlock}
       />
 
       <ConfirmationPopup
@@ -1445,20 +989,10 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
 
       <ReportSheet
         ref={reportSheetRef}
-        targetType={
-          showReportUserSheet ? "post" : reportHandler.pendingTarget?.type
-        }
-        onSubmit={
-          showReportUserSheet ? handleReportUserSubmit : handleReportSubmit
-        }
-        onDismiss={() => {
-          if (showReportUserSheet) {
-            setShowReportUserSheet(false);
-          } else {
-            reportHandler.cancelReport();
-          }
-        }}
-        isLoading={reportHandler.isReporting}
+        targetType="post"
+        onSubmit={handleReportUserSubmit}
+        onDismiss={() => undefined}
+        isLoading={false}
       />
     </Box>
   );
