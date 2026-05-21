@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, memo } from "react";
 import { View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { runOnJS, type SharedValue } from "react-native-reanimated";
+import Animated, { runOnJS, type SharedValue } from "react-native-reanimated";
 import { Audio, AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
 
@@ -13,6 +13,8 @@ import {
 import { getVideoThumbnailUri } from "@/src/components/molecules/post-card-utils";
 
 import { styles } from "./media-post-detail-styles";
+
+const AnimatedVideo = Animated.createAnimatedComponent(Video);
 
 export type MediaItem = {
   uri: string;
@@ -168,7 +170,7 @@ export const MediaItemView = memo(function MediaItemView({
     <GestureDetector gesture={tap}>
       <View style={styles.mediaItem}>
         {isVideo ? (
-          <Video
+          <AnimatedVideo
             ref={videoRef}
             source={{ uri: item.uri }}
             style={styles.mediaInner}
