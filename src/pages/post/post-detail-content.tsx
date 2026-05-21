@@ -134,11 +134,16 @@ function LegacyPostDetailScreen() {
   const currentUser = useAuthStore((s) => s.user);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
   const shareServer = usePreferencesStore((s) => s.apiServer);
+  const setActiveFeedScreen = useHomePostCardStore((s) => s.setActiveFeedScreen);
   const actionSheetsRef = useRef<PostDetailActionSheetsRef>(null);
   const commentComposerRef = useRef<PostDetailCommentComposerRef>(null);
   const commentsSectionRef = useRef<PostDetailCommentsSectionRef>(null);
 
   const isFocused = useIsFocused();
+
+  useEffect(() => {
+    setActiveFeedScreen(null);
+  }, [setActiveFeedScreen]);
 
   useEffect(() => {
     if (highlight && id) {

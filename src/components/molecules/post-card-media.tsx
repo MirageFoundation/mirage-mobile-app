@@ -37,6 +37,7 @@ import {
   type YouTubeAutoplayEmbedRef,
 } from "./youtube-autoplay-embed";
 import { useNetworkState } from "@/src/hooks/use-network-state";
+import { setLastPressedMediaTransition } from "@/src/utils/post-transition";
 import {
   CLOUD_FLARE_PROCESSING_MAX_WAIT_MS,
   CLOUD_FLARE_PROCESSING_POLL_INTERVAL_MS,
@@ -79,6 +80,7 @@ type PostCardMediaProps = {
   onGalleryMediaPress?: (index: number) => void;
   isPostDetail?: boolean;
   videoSyncScope?: string;
+  postId?: string;
 };
 
 let nextNativeAudioFocusId = 0;
@@ -106,6 +108,7 @@ export const PostCardMedia = memo(
       onGalleryMediaPress,
       isPostDetail = false,
       videoSyncScope,
+      postId,
     },
     ref,
   ) {
@@ -145,6 +148,7 @@ export const PostCardMedia = memo(
     const videoProcessingStartedAtRef = useRef<number | null>(null);
     const videoProcessingAttemptsRef = useRef(0);
     const focusRecoveryRetryCountRef = useRef(0);
+    const mediaFrameRef = useRef<View | null>(null);
 
     const aspectRatioLockedRef = useRef(false);
     const userInitiatedPlayRef = useRef(false);
@@ -615,17 +619,60 @@ export const PostCardMedia = memo(
       [resolvedMediaUri],
     );
 
-    const shouldKeepAndroidFeedVideoMounted =
-      Platform.OS === "android" &&
+    const shouldKeepFeedVideoMounted =
       media?.type === "video" &&
-      (isFocused || feedTappedToPlay || isVideoPlaying || videoReadyForDisplay);
+      screenActive &&
+      (isNearVisible || isFocused || feedTappedToPlay || isVideoPlaying);
 
     const shouldMountNativeVideo =
       !shouldDeferHeavyMedia && (
         isPostDetail ||
-        Platform.OS === "ios" ||
-        shouldKeepAndroidFeedVideoMounted
+        shouldKeepFeedVideoMounted
       );
+
+    const runWithMediaTransition = useCallback(
+      (targetMedia: ResolvedMedia | undefined, run: () => void) => {
+        if (isPostDetail || !postId || !targetMedia?.uri || !mediaFrameRef.current) {
+          run();
+          return;
+        }
+
+        let didRun = false;
+        const runOnce = () => {
+          if (didRun) return;
+          didRun = true;
+          run();
+        };
+        const fallback = setTimeout(runOnce, 80);
+
+        mediaFrameRef.current.measureInWindow((x, y, width, height) => {
+          clearTimeout(fallback);
+          if (width > 0 && height > 0) {
+            setLastPressedMediaTransition({
+              postId,
+              uri: targetMedia.uri,
+              previewUri: targetMedia.type === "video"
+                ? getVideoThumbnailUri(targetMedia.uri, targetMedia.posterUri)
+                : targetMedia.uri,
+              type: targetMedia.type,
+              x,
+              y,
+              width,
+              height,
+            });
+          }
+          runOnce();
+        });
+      },
+      [isPostDetail, postId],
+    );
+
+    const handleGalleryMediaPressWithTransition = useCallback(
+      (index: number) => {
+        runWithMediaTransition(mediaList?.[index], () => onGalleryMediaPress?.(index));
+      },
+      [runWithMediaTransition, mediaList, onGalleryMediaPress],
+    );
 
     const handleVideoToggle = useCallback(async () => {
       if (media?.type !== "video") return;
@@ -679,10 +726,12 @@ export const PostCardMedia = memo(
           return;
         }
         triggerHaptic("selection");
-        saveVideoPositionFresh();
-        onMediaPress?.();
+        runWithMediaTransition(media, () => {
+          saveVideoPositionFresh();
+          onMediaPress?.();
+        });
       },
-      [disabled, isPostDetail, shouldBlurContent, onRevealContent, allowAutoplay, isVideoPlaying, feedTappedToPlay, handleVideoToggle, onMediaPress, saveVideoPositionFresh],
+      [disabled, isPostDetail, shouldBlurContent, onRevealContent, allowAutoplay, isVideoPlaying, feedTappedToPlay, handleVideoToggle, runWithMediaTransition, media, onMediaPress, saveVideoPositionFresh],
     );
 
     const handleFeedYouTubeTap = useCallback(
@@ -699,9 +748,9 @@ export const PostCardMedia = memo(
           return;
         }
         triggerHaptic("selection");
-        onMediaPress?.();
+        runWithMediaTransition(media, () => onMediaPress?.());
       },
-      [disabled, isPostDetail, shouldBlurContent, onRevealContent, shouldAutoPlayYouTube, isVideoPlaying, feedTappedToPlay, onMediaPress],
+      [disabled, isPostDetail, shouldBlurContent, onRevealContent, shouldAutoPlayYouTube, isVideoPlaying, feedTappedToPlay, runWithMediaTransition, media, onMediaPress],
     );
 
     const resolvedMediaUriForCacheRef = useRef(media?.uri);
@@ -831,10 +880,12 @@ export const PostCardMedia = memo(
           return;
         }
         triggerHaptic("selection");
-        saveVideoPosition();
-        onMediaPress?.();
+        runWithMediaTransition(media, () => {
+          saveVideoPosition();
+          onMediaPress?.();
+        });
       },
-      [disabled, shouldBlurContent, onRevealContent, onMediaPress, saveVideoPosition],
+      [disabled, shouldBlurContent, onRevealContent, runWithMediaTransition, media, onMediaPress, saveVideoPosition],
     );
 
     const isCloudflareVideo =
@@ -995,10 +1046,10 @@ export const PostCardMedia = memo(
     if (mediaList && mediaList.length > 1) {
       return (
         <View style={styles.mediaContainer}>
-          <View style={styles.mediaWrapper}>
+          <View ref={mediaFrameRef} style={styles.mediaWrapper}>
             <MediaGallery
               media={mediaList}
-              onMediaPress={onGalleryMediaPress}
+              onMediaPress={handleGalleryMediaPressWithTransition}
               screenActive={screenActive}
               allowAutoplay={allowAutoplay}
               isVisible={isVisible}
@@ -1024,7 +1075,7 @@ export const PostCardMedia = memo(
 
     return (
       <View style={styles.mediaContainer}>
-        <View style={[styles.mediaWrapper, mediaWrapperStyle]}>
+        <View ref={mediaFrameRef} style={[styles.mediaWrapper, mediaWrapperStyle]}>
           {media.type === "youtube" ? (
             <>
               {shouldLazyMountYouTube && (!isVisible || shouldDeferHeavyMedia) ? (

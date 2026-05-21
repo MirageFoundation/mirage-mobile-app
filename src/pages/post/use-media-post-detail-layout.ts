@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Dimensions } from "react-native";
 import { Gesture } from "react-native-gesture-handler";
 import {
@@ -9,10 +9,12 @@ import {
   useAnimatedStyle,
   useDerivedValue,
   useSharedValue,
+  withTiming,
 } from "react-native-reanimated";
 import BottomSheet, { useBottomSheetSpringConfigs } from "@gorhom/bottom-sheet";
+import type { PressedMediaTransition } from "@/src/utils/post-transition";
 
-const { height: SCREEN_H } = Dimensions.get("window");
+const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get("window");
 const COLLAPSED_FRACTION = 0.3;
 const HEADER_HEIGHT_BASE = 48;
 const INPUT_DOCK_HEIGHT = 52;
@@ -25,11 +27,13 @@ type Insets = {
 type UseMediaPostDetailLayoutOptions = {
   insets: Insets;
   onDismiss: () => void;
+  sourceMediaTransition?: PressedMediaTransition | null;
 };
 
 export function useMediaPostDetailLayout({
   insets,
   onDismiss,
+  sourceMediaTransition,
 }: UseMediaPostDetailLayoutOptions) {
   const headerH = insets.top + HEADER_HEIGHT_BASE;
   const [measuredInputDockH, setMeasuredInputDockH] = useState(
@@ -58,10 +62,17 @@ export function useMediaPostDetailLayout({
   const sheetRef = useRef<BottomSheet>(null);
 
   const animatedIndex = useSharedValue(-1);
+  const mediaEnterProgress = useSharedValue(sourceMediaTransition ? 0 : 1);
   const collapseProgress = useDerivedValue(() => {
     const value = animatedIndex.value + 1;
     return value < 0 ? 0 : value > 1 ? 1 : value;
   });
+
+  useEffect(() => {
+    if (!sourceMediaTransition) return;
+    mediaEnterProgress.value = 0;
+    mediaEnterProgress.value = withTiming(1, { duration: 260 });
+  }, [mediaEnterProgress, sourceMediaTransition]);
 
   const dragDownY = useSharedValue(0);
   const openSheet = useCallback(() => {
@@ -92,12 +103,30 @@ export function useMediaPostDetailLayout({
 
   const mediaContainerStyle = useAnimatedStyle(() => {
     const progress = collapseProgress.value;
-    const height = expandedMediaH + (collapsedMediaH - expandedMediaH) * progress;
-    const top = expandedMediaTop + (collapsedMediaTop - expandedMediaTop) * progress;
+    const targetHeight = expandedMediaH + (collapsedMediaH - expandedMediaH) * progress;
+    const targetTop = expandedMediaTop + (collapsedMediaTop - expandedMediaTop) * progress;
+
+    if (!sourceMediaTransition) {
+      return {
+        height: targetHeight,
+        top: targetTop,
+        transform: [{ translateY: dragDownY.value }],
+      };
+    }
+
+    const enter = mediaEnterProgress.value;
+    const sourceCenterX = sourceMediaTransition.x + sourceMediaTransition.width / 2;
+    const targetCenterX = SCREEN_W / 2;
+    const sourceScaleX = sourceMediaTransition.width / SCREEN_W;
+
     return {
-      height,
-      top,
-      transform: [{ translateY: dragDownY.value }],
+      height: sourceMediaTransition.height + (targetHeight - sourceMediaTransition.height) * enter,
+      top: sourceMediaTransition.y + (targetTop - sourceMediaTransition.y) * enter,
+      transform: [
+        { translateX: (sourceCenterX - targetCenterX) * (1 - enter) },
+        { scaleX: sourceScaleX + (1 - sourceScaleX) * enter },
+        { translateY: dragDownY.value },
+      ],
     };
   });
 

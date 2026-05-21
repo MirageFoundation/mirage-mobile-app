@@ -6,6 +6,7 @@ import Animated, { type SharedValue } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 
 import { Box, Text } from "@/src/components/ui/primitives";
+import type { PressedMediaTransition } from "@/src/utils/post-transition";
 import {
   MediaItemView,
   type MediaItem,
@@ -35,6 +36,7 @@ type MediaPostDetailGalleryProps = {
   onPlayPause: () => void;
   registerVideo: (key: string, api: VideoApi | null) => void;
   setActiveIndex: (index: number) => void;
+  sourceMediaTransition?: PressedMediaTransition | null;
   videoSyncScope?: string;
 };
 
@@ -55,8 +57,14 @@ export function MediaPostDetailGallery({
   onPlayPause,
   registerVideo,
   setActiveIndex,
+  sourceMediaTransition,
   videoSyncScope,
 }: MediaPostDetailGalleryProps) {
+  const getInitialPreviewUri = (item: MediaItem) => {
+    if (!sourceMediaTransition || sourceMediaTransition.uri !== item.uri) return undefined;
+    return sourceMediaTransition.previewUri || sourceMediaTransition.uri;
+  };
+
   return (
     <GestureDetector gesture={mediaPan}>
       <Animated.View
@@ -84,6 +92,7 @@ export function MediaPostDetailGallery({
                   registerVideo={registerVideo}
                   videoKey={`m-${index}`}
                   videoSyncScope={videoSyncScope}
+                  initialPreviewUri={getInitialPreviewUri(item)}
                 />
               </View>
             ))}
@@ -98,6 +107,7 @@ export function MediaPostDetailGallery({
             registerVideo={registerVideo}
             videoKey="m-0"
             videoSyncScope={videoSyncScope}
+            initialPreviewUri={getInitialPreviewUri(activeMedia)}
           />
         ) : null}
 

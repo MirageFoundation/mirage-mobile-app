@@ -23,6 +23,10 @@ export const styles = StyleSheet.create((theme) => ({
     width: "100%",
     height: "100%",
   },
+  mediaPreviewOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: theme.colors.background.default,
+  },
   header: {
     position: "absolute",
     top: 0,

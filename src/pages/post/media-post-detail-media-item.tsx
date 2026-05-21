@@ -10,6 +10,7 @@ import {
   useVideoPositionStore,
   useVideoMuteStore,
 } from "@/src/stores";
+import { getVideoThumbnailUri } from "@/src/components/molecules/post-card-utils";
 
 import { styles } from "./media-post-detail-styles";
 
@@ -38,6 +39,7 @@ type ItemRenderProps = {
   registerVideo: (key: string, api: VideoApi | null) => void;
   videoKey: string;
   videoSyncScope?: string;
+  initialPreviewUri?: string;
 };
 
 export const MediaItemView = memo(function MediaItemView({
@@ -49,6 +51,7 @@ export const MediaItemView = memo(function MediaItemView({
   registerVideo,
   videoKey,
   videoSyncScope,
+  initialPreviewUri,
 }: ItemRenderProps) {
   const videoRef = useRef<Video | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -61,9 +64,18 @@ export const MediaItemView = memo(function MediaItemView({
   const hasRestoredVideoPositionRef = useRef(false);
 
   const isVideo = item.type === "video";
+  const videoPreviewUri = isVideo
+    ? initialPreviewUri || getVideoThumbnailUri(item.uri, item.posterUri)
+    : "";
+  const mediaPreviewUri = initialPreviewUri || (isVideo ? videoPreviewUri : item.uri);
+  const [showInitialPreview, setShowInitialPreview] = useState(!!mediaPreviewUri);
   const videoPositionKey = isVideo
     ? buildVideoPositionKey(item.uri, videoSyncScope)
     : "";
+
+  useEffect(() => {
+    setShowInitialPreview(!!mediaPreviewUri);
+  }, [mediaPreviewUri]);
 
   const saveVideoPosition = useCallback(() => {
     if (!videoPositionKey) return;
@@ -178,6 +190,9 @@ export const MediaItemView = memo(function MediaItemView({
                 }).catch(() => {});
               }
             }}
+            onReadyForDisplay={() => {
+              setShowInitialPreview(false);
+            }}
             onPlaybackStatusUpdate={handleStatus}
           />
         ) : (
@@ -186,8 +201,19 @@ export const MediaItemView = memo(function MediaItemView({
             style={styles.mediaInner}
             contentFit="contain"
             cachePolicy="memory-disk"
+            recyclingKey={item.uri}
+            onLoad={() => setShowInitialPreview(false)}
           />
         )}
+        {showInitialPreview && mediaPreviewUri ? (
+          <Image
+            source={{ uri: mediaPreviewUri }}
+            style={styles.mediaPreviewOverlay}
+            contentFit="contain"
+            cachePolicy="memory-disk"
+            recyclingKey={mediaPreviewUri}
+          />
+        ) : null}
       </View>
     </GestureDetector>
   );

@@ -1,5 +1,5 @@
 import { type RefObject, useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
 
 import {
@@ -20,6 +20,7 @@ import {
   useOptimisticTopLevelComments,
   usePostCommentOptimisticStore,
 } from "@/src/stores/post-comment-optimistic-store";
+import { findPostInCachedData } from "./post-detail-media-routing";
 
 type FocusedMode = "single" | "context" | "full";
 
@@ -32,6 +33,27 @@ type CurrentUser = {
 type ScrollableCommentsRef = {
   scrollToEnd?: (options?: { animated?: boolean }) => void;
 };
+
+type CachedPostRecord = Post | PostWithChildren | Record<string, unknown>;
+
+function isUiPost(post: CachedPostRecord): post is Post {
+  return !!(
+    post &&
+    typeof post === "object" &&
+    typeof (post as Post).id === "string" &&
+    (post as Post).author &&
+    typeof (post as Post).author === "object"
+  );
+}
+
+function isApiPost(post: CachedPostRecord): post is PostWithChildren {
+  return !!(
+    post &&
+    typeof post === "object" &&
+    typeof (post as PostWithChildren).post_id === "string" &&
+    typeof (post as PostWithChildren).user_id === "string"
+  );
+}
 
 type UseMediaPostDetailDataOptions = {
   commentsListRef: RefObject<ScrollableCommentsRef | null>;
@@ -56,6 +78,7 @@ export function useMediaPostDetailData({
   isFocused,
   pendingScrollToEndRef,
 }: UseMediaPostDetailDataOptions) {
+  const queryClient = useQueryClient();
   const {
     data: commentsData,
     isLoading: isLoadingComments,
@@ -157,15 +180,35 @@ export function useMediaPostDetailData({
     [followedData],
   );
 
+  const cachedPost = useMemo<Post | null>(() => {
+    if (!id) return null;
+
+    const cachedQueries = queryClient.getQueriesData({});
+    for (const [, queryData] of cachedQueries) {
+      const matched = findPostInCachedData(queryData, id) as CachedPostRecord | null;
+      if (!matched) continue;
+      if (isUiPost(matched)) return matched;
+      if (isApiPost(matched)) {
+        return transformApiPost(matched, {
+          followedUsers,
+          currentUser: currentUser
+            ? { id: currentUser.id, username: currentUser.username ?? null }
+            : undefined,
+        });
+      }
+    }
+    return null;
+  }, [currentUser, followedUsers, id, queryClient]);
+
   const basePost: Post | null = useMemo(() => {
-    if (!commentsData?.root) return null;
+    if (!commentsData?.root) return cachedPost;
     return transformApiPost(commentsData.root, {
       followedUsers,
       currentUser: currentUser
         ? { id: currentUser.id, username: currentUser.username ?? null }
         : undefined,
     });
-  }, [commentsData, followedUsers, currentUser]);
+  }, [cachedPost, commentsData, followedUsers, currentUser]);
 
   const sharedVoteOverride = useHomePostCardStore((state) =>
     id ? state.voteOverrides[id] : undefined,

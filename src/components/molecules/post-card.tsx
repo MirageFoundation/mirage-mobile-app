@@ -407,6 +407,7 @@ export const PostCard = memo(function PostCard({
         onMediaPress={disablePostInteractions ? undefined : handleMediaPress}
         isPostDetail={isPostDetail}
         videoSyncScope={videoSyncScope}
+        postId={post.id}
         onGalleryMediaPress={disablePostInteractions ? undefined : handleGalleryMediaPress}
       />
 

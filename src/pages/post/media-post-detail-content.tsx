@@ -81,6 +81,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getLastPressedMediaTransition } from "@/src/utils/post-transition";
 
 // ---------------------------------------------------------------------------
 // Main screen
@@ -117,9 +118,11 @@ export default function MediaPostDetailScreen({
   const isFocused = useIsFocused();
   const { isLoggedIn, requireAuth } = useAuthGuard();
   const videoSyncScope = params.syncContext ?? (id ? `post:${id}` : undefined);
+  const sourceMediaTransition = useMemo(() => getLastPressedMediaTransition(), []);
 
   const currentUser = useAuthStore((s) => s.user);
   const shareServer = usePreferencesStore((s) => s.apiServer);
+  const setActiveFeedScreen = useHomePostCardStore((s) => s.setActiveFeedScreen);
 
   const commentsListRef = useRef<any>(null);
   const commentsScrollYRef = useRef(0);
@@ -149,6 +152,10 @@ export default function MediaPostDetailScreen({
     preciseScrollTargetRef.current = null;
     coarseScrollTargetRef.current = null;
   }, [highlightedCommentId]);
+
+  useEffect(() => {
+    setActiveFeedScreen(null);
+  }, [setActiveFeedScreen]);
 
   const {
     blockCommentAuthor,
@@ -250,6 +257,8 @@ export default function MediaPostDetailScreen({
   } = useMediaPostDetailLayout({
     insets,
     onDismiss: router.back,
+    sourceMediaTransition:
+      sourceMediaTransition?.postId === id ? sourceMediaTransition : null,
   });
 
   const {
@@ -479,6 +488,9 @@ export default function MediaPostDetailScreen({
             onPlayPause={handlePlayPause}
             registerVideo={registerVideo}
             setActiveIndex={setActiveIndex}
+            sourceMediaTransition={
+              sourceMediaTransition?.postId === id ? sourceMediaTransition : null
+            }
             videoSyncScope={videoSyncScope}
           />
 
