@@ -211,7 +211,7 @@ function applyVoteOverridesToComment(
   return updatedComment;
 }
 
-function applyEditOverridesToComment(
+export function applyEditOverridesToComment(
   comment: Comment,
   commentEditOverrides: CommentEditOverrides,
 ): Comment {

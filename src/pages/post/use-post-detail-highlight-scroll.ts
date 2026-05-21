@@ -256,8 +256,8 @@ export function usePostDetailHighlightScroll({
     }
   }, [commentsSectionRef]);
 
-  const handleComposerHighlight = useCallback((commentId: string) => {
-    suppressedHighlightScrollRef.current = null;
+  const handleComposerHighlight = useCallback((commentId: string, suppressScroll = false) => {
+    suppressedHighlightScrollRef.current = suppressScroll ? commentId : null;
     setHighlightedCommentId(commentId);
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     highlightTimerRef.current = setTimeout(() => setHighlightedCommentId(null), 3000);

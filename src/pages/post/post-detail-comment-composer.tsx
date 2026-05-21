@@ -169,6 +169,7 @@ export const PostDetailCommentComposer = forwardRef<
             });
           },
           onOptimisticUpdate: () => {
+            const shouldSuppressHighlightScroll = !replyTarget;
             if (replyTarget) {
               addReplyOptimisticComment(optimisticThreadId, replyTarget.id, optimisticComment);
             } else {
@@ -178,7 +179,7 @@ export const PostDetailCommentComposer = forwardRef<
               }
               onScrollToEndAfterLayout();
             }
-            onHighlightComment(optimisticCommentId);
+            onHighlightComment(optimisticCommentId, shouldSuppressHighlightScroll);
             onCommentCountDelta(1, baseCommentCount);
             incrementCommentCount(id, rootPostCommentCount);
           },
