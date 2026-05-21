@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { RefObject } from "react";
+import { useState } from "react";
 import {
   LayoutChangeEvent,
   NativeScrollEvent,
@@ -154,6 +155,9 @@ export function MediaPostDetailCommentSheet({
   onHighlightedLayout,
 }: MediaPostDetailCommentSheetProps) {
   const { theme } = useUnistyles();
+  const [isSheetExpanded, setIsSheetExpanded] = useState(
+    shouldOpenSheetInitially,
+  );
   const contextActionAvailable = !recentContextDisabled;
   const fullThreadActionAvailable = hasFullThreadBeyondFocus;
   const shouldShowThreadReminder = !!(
@@ -213,6 +217,17 @@ export function MediaPostDetailCommentSheet({
       enableHandlePanningGesture
       enableContentPanningGesture
       onClose={onClose}
+      onAnimate={(_from, to) => {
+        // Switch to collapsed body content immediately when a collapse
+        // begins so the full markdown disappears as the sheet shrinks.
+        if (to < 1) setIsSheetExpanded(false);
+      }}
+      onChange={(index) => {
+        // Reveal the full body only after the sheet has settled at the
+        // expanded position, so the markdown fades in cleanly on top of a
+        // stable layout.
+        if (index >= 1) setIsSheetExpanded(true);
+      }}
       style={{ zIndex: 30, elevation: 30 }}
       handleComponent={renderHandle}
       backgroundStyle={{
@@ -242,6 +257,10 @@ export function MediaPostDetailCommentSheet({
             <View
               onLayout={(event) => {
                 const height = Math.ceil(event.nativeEvent.layout.height);
+                // Skip measurement updates while expanded so the collapsed
+                // snap point stays stable and the sheet does not jump as the
+                // body content grows/shrinks during the transition.
+                if (isSheetExpanded) return;
                 if (height > 0 && height !== measuredPostSummaryH) {
                   onPostSummaryHeightChange(height);
                 }
@@ -249,6 +268,7 @@ export function MediaPostDetailCommentSheet({
             >
               <MediaPostDetailFooter
                 post={post}
+                isExpanded={isSheetExpanded}
                 onAuthorPress={onAuthorPress}
                 onUpvote={onUpvote}
                 onDownvote={onDownvote}

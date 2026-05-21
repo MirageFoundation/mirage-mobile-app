@@ -1,11 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { memo } from "react";
 import { Pressable, View } from "react-native";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { useUnistyles } from "react-native-unistyles";
 
 import { Avatar, TimeAgo } from "@/src/components/atoms";
 import { PostActions, type Post } from "@/src/components/molecules";
 import { Text } from "@/src/components/ui/primitives";
+import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { getUsernameColor } from "@/src/utils/tiers";
 
 import { MediaPostDetailFollowMenuButton } from "./media-post-detail-follow-menu-button";
@@ -26,8 +28,21 @@ function renderInlineBody(body: string): string {
     .replace(/__(.+?)__/g, "$1");
 }
 
+function hasMoreBodyContent(body: string): boolean {
+  const lines = body.split(/\r?\n/);
+  if (lines.length > 1) {
+    // Any additional non-empty lines mean there is more to show.
+    for (let i = 1; i < lines.length; i++) {
+      if (lines[i].trim().length > 0) return true;
+    }
+  }
+  const firstLine = lines[0] ?? body;
+  return firstLine.length > 100;
+}
+
 type MediaPostDetailFooterProps = {
   post: Post;
+  isExpanded?: boolean;
   onAuthorPress: () => void;
   onUpvote: () => void;
   onDownvote: () => void;
@@ -58,6 +73,7 @@ type MediaPostDetailFooterProps = {
 
 export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
   post,
+  isExpanded = false,
   onAuthorPress,
   onUpvote,
   onDownvote,
@@ -131,24 +147,43 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
       </Text>
 
       {post.body ? (
-        <View style={styles.bodyRow}>
-          <Text
-            size="md"
-            numberOfLines={1}
-            style={{ flex: 1, color: theme.colors.text.default }}
+        isExpanded ? (
+          <Animated.View
+            key="media-post-detail-body-expanded"
+            entering={FadeIn.duration(180)}
+            // Markdown adds a paragraph marginBottom (theme.spacing.md);
+            // offset it so the spacing below the body matches the collapsed
+            // single-line variant exactly.
+            style={{ marginTop: 4, marginBottom: -theme.spacing.md }}
           >
-            {renderInlineBody(post.body)}
-          </Text>
-          <Pressable onPress={onMoreLink} hitSlop={4}>
+            <MarkdownContent content={post.body} />
+          </Animated.View>
+        ) : (
+          <Animated.View
+            key="media-post-detail-body-collapsed"
+            entering={FadeIn.duration(180)}
+            style={styles.bodyRow}
+          >
             <Text
               size="md"
-              weight="medium"
-              style={{ color: theme.colors.text.subtle, marginLeft: 6 }}
+              numberOfLines={1}
+              style={{ flex: 1, color: theme.colors.text.default }}
             >
-              more
+              {renderInlineBody(post.body)}
             </Text>
-          </Pressable>
-        </View>
+            {hasMoreBodyContent(post.body) ? (
+              <Pressable onPress={onMoreLink} hitSlop={4}>
+                <Text
+                  size="md"
+                  weight="medium"
+                  style={{ color: theme.colors.text.subtle, marginLeft: 6 }}
+                >
+                  more
+                </Text>
+              </Pressable>
+            ) : null}
+          </Animated.View>
+        )
       ) : null}
 
       {isVideo ? (
