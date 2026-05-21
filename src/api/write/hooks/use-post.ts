@@ -831,12 +831,17 @@ export function useComment(options: UsePostOptions = {}) {
     },
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() });
+      await queryClient.cancelQueries({ queryKey: queryKeys.postsRoot() });
+      await queryClient.cancelQueries({ queryKey: queryKeys.userPostsRoot() });
 
       const previousComments = queryClient.getQueriesData<CommentsResponse>({
         queryKey: queryKeys.commentsRoot(),
       }) as Array<[QueryKey, CommentsResponse | undefined]>;
+      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as [QueryKey, unknown][];
+      const previousUserPosts = queryClient.getQueriesData({ queryKey: queryKeys.userPostsRoot() }) as [QueryKey, unknown][];
 
       const optimisticCommentId = `optimistic-${Date.now()}`;
+      const affectedRootPostIds = new Set<string>();
 
       previousComments.forEach(([queryKey, queryData]) => {
         if (!queryData?.root) return;
@@ -848,6 +853,7 @@ export function useComment(options: UsePostOptions = {}) {
         );
 
         if (!isTopLevelComment && !isReplyToNestedComment) return;
+        affectedRootPostIds.add(queryData.root.post_id);
 
         queryClient.setQueryData<CommentsResponse>(queryKey, {
           ...queryData,
@@ -858,8 +864,23 @@ export function useComment(options: UsePostOptions = {}) {
         });
       });
 
+      if (affectedRootPostIds.size === 0) {
+        affectedRootPostIds.add(input.parentId);
+      }
+
+      affectedRootPostIds.forEach((rootPostId) => {
+        updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (queryData) =>
+          applyCommentDeltaToPostsData(queryData, rootPostId, 1),
+        );
+        updateQueriesWithReducer(queryClient, queryKeys.userPostsRoot(), (queryData) =>
+          applyCommentDeltaToPostsData(queryData, rootPostId, 1),
+        );
+      });
+
       return {
         previousComments,
+        previousPosts,
+        previousUserPosts,
         optimisticCommentId,
       };
     },
@@ -869,6 +890,8 @@ export function useComment(options: UsePostOptions = {}) {
         extra: { parentId: _input.parentId },
       });
       restoreQuerySnapshots(queryClient, context?.previousComments);
+      restoreQuerySnapshots(queryClient, context?.previousPosts);
+      restoreQuerySnapshots(queryClient, context?.previousUserPosts);
     },
     onSuccess: () => {},
     onSettled: () => {
@@ -876,15 +899,11 @@ export function useComment(options: UsePostOptions = {}) {
         queryKey: queryKeys.commentsRoot(),
         refetchType: "active",
       });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.postsRoot(),
-        refetchType: "active",
-      });
 
       if (address) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.userPosts(address),
-          refetchType: "active",
+          refetchType: "inactive",
         });
       }
     },
