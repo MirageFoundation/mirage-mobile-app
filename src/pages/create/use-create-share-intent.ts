@@ -213,71 +213,88 @@ export function useCreateShareIntent({
           });
           let finalTitle: string | undefined;
           let titleOverflow = "";
-          if (meta.title) {
-            finalTitle = meta.title;
-            if (meta.domain === "instagram.com") {
-              const igMatch = meta.title.match(/^(.+?)\s+on\s+Instagram/i);
-              if (igMatch) {
-                finalTitle = `${igMatch[1]} on Instagram`;
+          const applyAutofillTitle = (title: string) => {
+            const decodedTitle = decodeHtmlEntities(title).trim();
+            const splitTitleAtLimit = (text: string) => {
+              const limitedText = text.slice(0, tierLimits.maxTitleLength);
+              const sentenceEnd = Math.max(limitedText.lastIndexOf(". "), limitedText.lastIndexOf("! "), limitedText.lastIndexOf("? "));
+              if (sentenceEnd <= 0) {
+                return { titlePart: "", overflowPart: text };
+              }
+              const splitAt = sentenceEnd + 1;
+              return {
+                titlePart: text.slice(0, splitAt).trim(),
+                overflowPart: text.slice(splitAt).trim(),
+              };
+            };
+            finalTitle = decodedTitle;
+            if (decodedTitle.length > tierLimits.maxTitleLength) {
+              const lines = decodedTitle.split("\n");
+              let titlePart = "";
+              let overflowLines: string[] = [];
+              for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                const candidate = titlePart ? `${titlePart}\n${line}` : line;
+                if (candidate.length <= tierLimits.maxTitleLength) {
+                  titlePart = candidate;
+                } else {
+                  overflowLines = lines.slice(i);
+                  break;
+                }
+              }
+              if (!titlePart && overflowLines[0]) {
+                const split = splitTitleAtLimit(overflowLines[0].trim());
+                titlePart = split.titlePart;
+                overflowLines = [split.overflowPart, ...overflowLines.slice(1)].filter(Boolean);
+              }
+              finalTitle = titlePart || undefined;
+              titleOverflow = overflowLines.join("\n").trim();
+            }
+            if (finalTitle) {
+              updateDraft({ title: finalTitle });
+            }
+          };
+          if (meta.domain === "instagram.com") {
+            let instagramTitle = "";
+            if (meta.title) {
+              const igCaptionMatch = meta.title.match(/on\s+Instagram:\s*"(.+)"/s);
+              if (igCaptionMatch) {
+                instagramTitle = igCaptionMatch[1];
               }
             }
+            instagramTitle = decodeHtmlEntities(instagramTitle)
+              .replace(/\([^)]*\)/g, "")
+              .replace(/\[[^\]]*\]/g, "")
+              .replace(/#\w+/g, "")
+              .replace(/\b[A-Z][a-z]+(?:[A-Z][a-z]*)+\b/g, "")
+              .replace(/[.…][\s.…]*[.…]/g, "")
+              .replace(/\s{2,}/g, " ")
+              .trim();
+            if (instagramTitle) {
+              applyAutofillTitle(instagramTitle);
+            }
+          } else if (meta.title) {
+            finalTitle = meta.title;
             if ((meta.domain === "x.com" || meta.domain === "twitter.com") && /^.+\s+\(@\w+\)$/.test(finalTitle)) {
               finalTitle = undefined;
             }
             if (finalTitle) {
-              finalTitle = decodeHtmlEntities(finalTitle);
-              if (finalTitle.length > tierLimits.maxTitleLength) {
-                const lines = finalTitle.split("\n");
-                let titlePart = "";
-                let overflowLines: string[] = [];
-                for (let i = 0; i < lines.length; i++) {
-                  const candidate = titlePart ? `${titlePart}\n${lines[i]}` : lines[i];
-                  if (candidate.length <= tierLimits.maxTitleLength) {
-                    titlePart = candidate;
-                  } else {
-                    overflowLines = lines.slice(i);
-                    break;
-                  }
-                }
-                if (!titlePart && lines[0]) {
-                  titlePart = lines[0].slice(0, tierLimits.maxTitleLength);
-                  overflowLines = lines;
-                }
-                finalTitle = titlePart;
-                titleOverflow = overflowLines.join("\n").trim();
-              }
-              updateDraft({ title: finalTitle.slice(0, tierLimits.maxTitleLength) });
+              applyAutofillTitle(finalTitle);
             }
           }
           const bodyParts: string[] = [];
-          if (!finalTitle && meta.description) {
-            let desc = decodeHtmlEntities(meta.description);
+          if (meta.domain !== "instagram.com" && !finalTitle && meta.description) {
+            const desc = decodeHtmlEntities(meta.description);
             const lines = desc.split("\n");
-            finalTitle = lines[0].slice(0, tierLimits.maxTitleLength);
-            updateDraft({ title: finalTitle });
-            const remaining = lines.slice(1).join("\n").trim();
+            applyAutofillTitle(lines[0]);
+            const remainingLines = lines.slice(1);
+            const remaining = remainingLines.join("\n").trim();
             if (remaining) {
               bodyParts.push(remaining.slice(0, tierLimits.maxContentLength));
             }
-          } else if (meta.description && meta.description !== meta.title) {
-            let desc = meta.description;
-            if (meta.domain === "instagram.com" && meta.title) {
-              const igCaptionMatch = meta.title.match(/on\s+Instagram:\s*"(.+)"/s);
-              if (igCaptionMatch) {
-                desc = igCaptionMatch[1];
-              }
-            }
-            desc = decodeHtmlEntities(desc);
-            if (meta.domain === "instagram.com") {
-              desc = desc
-                .replace(/\([^)]*\)/g, "")
-                .replace(/\[[^\]]*\]/g, "")
-                .replace(/#\w+/g, "")
-                .replace(/\b[A-Z][a-z]+(?:[A-Z][a-z]*)+\b/g, "")
-                .replace(/[.…][\s.…]*[.…]/g, "")
-                .replace(/\s{2,}/g, " ")
-                .trim();
-            }
+          } else if (meta.domain !== "instagram.com" && meta.description && meta.description !== meta.title) {
+            const desc = decodeHtmlEntities(meta.description);
             bodyParts.push(desc.slice(0, tierLimits.maxContentLength));
           }
           if (titleOverflow) {
