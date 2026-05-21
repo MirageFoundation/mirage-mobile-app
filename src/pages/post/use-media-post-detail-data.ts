@@ -355,9 +355,12 @@ export function useMediaPostDetailData({
     if (focusedCommentId && focusedMode !== "full") return;
     if (!allDisplayComments.some((comment) => comment.id === highlightedCommentId)) return;
     pendingScrollToEndRef.current = false;
+    requestAnimationFrame(() => {
+      commentsListRef.current?.scrollToEnd?.({ animated: true });
+    });
     const timer = setTimeout(() => {
       commentsListRef.current?.scrollToEnd?.({ animated: true });
-    }, 100);
+    }, 350);
     return () => clearTimeout(timer);
   }, [allDisplayComments, commentsListRef, focusedCommentId, focusedMode, highlightedCommentId, pendingScrollToEndRef]);
 
