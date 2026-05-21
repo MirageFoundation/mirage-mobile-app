@@ -17,7 +17,8 @@ const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get("window");
 const COLLAPSED_FRACTION = 0.3;
 const HEADER_HEIGHT_BASE = 48;
 const INPUT_DOCK_HEIGHT = 52;
-const SHEET_HANDLE_HEIGHT = 44;
+const SHEET_HANDLE_HEIGHT = 28;
+const INITIAL_SHEET_EXTRA_PADDING = 6;
 const INITIAL_SHEET_MIN_HEIGHT = 132;
 const INITIAL_SHEET_MAX_FRACTION = 0.55;
 
@@ -48,9 +49,9 @@ export function useMediaPostDetailLayout({
   const listTopY = collapsedMediaTop + collapsedMediaH;
   const expandedSheetH = Math.max(100, SCREEN_H - listTopY);
   const maxSheetH = SCREEN_H - insets.top;
-  const measuredInitialSheetH = measuredPostSummaryH + SHEET_HANDLE_HEIGHT + insets.bottom;
+  const measuredInitialSheetH = measuredPostSummaryH + SHEET_HANDLE_HEIGHT + INITIAL_SHEET_EXTRA_PADDING;
   const initialSheetH = Math.min(
-    Math.max(measuredInitialSheetH || 0, INITIAL_SHEET_MIN_HEIGHT + insets.bottom),
+    Math.max(measuredInitialSheetH || 0, INITIAL_SHEET_MIN_HEIGHT),
     Math.min(expandedSheetH - 24, SCREEN_H * INITIAL_SHEET_MAX_FRACTION),
   );
   const initialSheetTop = SCREEN_H - initialSheetH;
