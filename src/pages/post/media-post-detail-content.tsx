@@ -187,6 +187,18 @@ export default function MediaPostDetailScreen({
   const { handleFollowUser: followUser, handleFollowTopic: followTopic } =
     useFollowHandler({});
 
+  const handleRemoveComment = useCallback(
+    (commentId: string) => {
+      removeCommentFromState(commentId);
+      if (commentId === focusedCommentId && focusedMode !== "full") {
+        setFocusedCommentId(null);
+        setFocusedMode("full");
+        setHighlightedCommentId(null);
+      }
+    },
+    [focusedCommentId, focusedMode, removeCommentFromState],
+  );
+
   // --- handlers -----------------------------------------------------------
   const setVoteOverride = useHomePostCardStore((s) => s.setVoteOverride);
   const clearVoteOverride = useHomePostCardStore((s) => s.clearVoteOverride);
@@ -629,7 +641,7 @@ export default function MediaPostDetailScreen({
             followedTopics={followedTopics}
             followedUsers={followedUsers}
             onBlockCommentAuthor={blockCommentAuthor}
-            onRemoveComment={removeCommentFromState}
+            onRemoveComment={handleRemoveComment}
             post={post}
             reserveComposeNavigation={reserveComposeNavigation}
           />
