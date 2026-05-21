@@ -248,7 +248,14 @@ export const InboxItem = memo(function InboxItem({
         )}
 
         {!isSpecialEvent && (replyText.length > 0 || imageUrls.length > 0) && (
-          <View style={styles.replyContent}>
+          <View
+            style={[
+              styles.replyContent,
+              imageUrls.length > 0
+                ? styles.replyContentTrailingImage
+                : styles.replyContentTrailingText,
+            ]}
+          >
             {replyText.length > 0 && <MarkdownContent content={replyText} />}
             {imageUrls.map((url) => (
               <ReplyImage
@@ -318,6 +325,12 @@ const styles = StyleSheet.create((theme) => ({
   },
   replyContent: {
     marginLeft: 20,
+  },
+  replyContentTrailingText: {
+    marginBottom: -theme.spacing.md,
+  },
+  replyContentTrailingImage: {
+    marginBottom: -theme.spacing.xs,
   },
   mediaContainer: {
     marginTop: theme.spacing.sm,
