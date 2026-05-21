@@ -165,6 +165,7 @@ export const PostDetailCommentComposer = forwardRef<
             return commentMutateAsyncRef.current({
               parentId,
               content: finalContent,
+              rootPostId: id,
             });
           },
           onOptimisticUpdate: () => {

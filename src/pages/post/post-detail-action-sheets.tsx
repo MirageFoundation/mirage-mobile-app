@@ -226,8 +226,10 @@ export const PostDetailActionSheets = forwardRef<
         return;
       }
 
-      deleteHandler.requestDelete(comment.id, "comment");
-    }, [deleteHandler, toast]);
+      deleteHandler.requestDelete(comment.id, "comment", {
+        rootPostId: actualRootPostId ?? id,
+      });
+    }, [actualRootPostId, deleteHandler, id, toast]);
 
     const handleDeletePost = useCallback(() => {
       if (!post) return;

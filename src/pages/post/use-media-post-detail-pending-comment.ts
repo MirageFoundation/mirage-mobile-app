@@ -97,7 +97,7 @@ export function useMediaPostDetailPendingComment({
         const mediaUrl = await resolveCommentMediaUrl(captured.imageUri, captured.gifUrl);
         const finalContent = composeCommentContent(capturedText, mediaUrl);
 
-        return commentMutation.mutateAsync({ parentId, content: finalContent });
+        return commentMutation.mutateAsync({ parentId, content: finalContent, rootPostId: id });
       },
       onOptimisticUpdate: () => {
         suppressedHighlightScrollRef.current = null;
