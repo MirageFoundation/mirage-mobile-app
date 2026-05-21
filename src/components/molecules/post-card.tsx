@@ -314,8 +314,9 @@ export const PostCard = memo(function PostCard({
         onFollowTopic={disablePostInteractions ? undefined : onFollowTopic}
         onMorePress={disablePostInteractions ? undefined : onMorePress}
         directFollowUser={directFollowUser}
-        showMoreButton={showMoreButton || isOwnPost}
+        showMoreButton={!isPostDetail && (showMoreButton || isOwnPost)}
         disabled={disablePostInteractions}
+        isPostDetail={isPostDetail}
       />
 
       {post.awards && post.awards.length > 0 && (

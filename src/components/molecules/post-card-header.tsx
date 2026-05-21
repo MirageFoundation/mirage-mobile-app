@@ -1,4 +1,4 @@
-import { TimeAgo } from "@/src/components/atoms";
+import { Avatar, TimeAgo } from "@/src/components/atoms";
 import { Text } from "@/src/components/ui/primitives";
 import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
 import { triggerHaptic } from "@/src/components/utils/haptics";
@@ -51,6 +51,7 @@ type PostCardHeaderProps = {
   directFollowUser?: boolean;
   showMoreButton?: boolean;
   disabled?: boolean;
+  isPostDetail?: boolean;
 };
 
 export const PostCardHeader = memo(function PostCardHeader({
@@ -70,6 +71,7 @@ export const PostCardHeader = memo(function PostCardHeader({
   directFollowUser = false,
   showMoreButton = false,
   disabled = false,
+  isPostDetail = false,
 }: PostCardHeaderProps) {
   const { theme } = useUnistyles();
 
@@ -154,6 +156,161 @@ export const PostCardHeader = memo(function PostCardHeader({
     () => ({ color: "#000000" }),
     [],
   );
+
+  if (isPostDetail) {
+    return (
+      <View style={styles.header}>
+        <Pressable
+          onPress={handleAuthorPress}
+          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+          style={({ pressed }) => [
+            styles.postDetailAuthorRow,
+            pressed && styles.usernameButtonPressed,
+          ]}
+        >
+          <Avatar
+            seed={author.avatarSeed ?? author.id}
+            size={32}
+          />
+          <Text
+            size="md"
+            weight="semibold"
+            numberOfLines={1}
+            style={[styles.postDetailUsername, usernameColorStyle]}
+          >
+            @{author.username}
+          </Text>
+          <Text size="sm" style={[subtleTextStyle, styles.postDetailDot]}>
+            •
+          </Text>
+          <TimeAgo
+            timestamp={createdAt}
+            showSuffix={false}
+            size="md"
+            style={subtleTextStyle}
+          />
+        </Pressable>
+        <View style={styles.headerActions}>
+          {!isOwnPost && showFollowButton && directFollowUser && (
+            <Pressable
+              onPress={handleFollowUser}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              style={styles.followPressable}
+            >
+              <View style={[styles.followButton, followingBgStyle]}>
+                <Text size="sm" weight="bold" style={followTextStyle}>
+                  {isFollowing ? "Following" : "Follow"}
+                </Text>
+              </View>
+            </Pressable>
+          )}
+          {!isOwnPost && showFollowButton && !directFollowUser && (
+            <Menu>
+              <MenuTrigger
+                customStyles={{
+                  triggerOuterWrapper: { padding: 4 },
+                  triggerTouchable: {
+                    hitSlop: { top: 12, bottom: 12, left: 12, right: 12 },
+                  },
+                }}
+              >
+                {isFollowingPartial ? (
+                  <LinearGradient
+                    colors={["#FFFFFF", "#C1C1C1"]}
+                    locations={[0.5, 0.5]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.followButton, styles.followButtonPartial]}
+                  >
+                    <Text size="sm" weight="bold" style={defaultBgStyle}>
+                      Follow
+                    </Text>
+                  </LinearGradient>
+                ) : (
+                  <View style={[styles.followButton, followingBgStyle]}>
+                    <Text size="sm" weight="bold" style={followTextStyle}>
+                      {isFollowingAll ? "Unfollow" : "Follow"}
+                    </Text>
+                  </View>
+                )}
+              </MenuTrigger>
+              <MenuOptions
+                customStyles={{
+                  optionsContainer: {
+                    backgroundColor: theme.colors.background.default,
+                    borderRadius: theme.radius.lg,
+                    minWidth: followMenuMinWidth,
+                    shadowColor: theme.colors.contrast.base,
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.15,
+                    shadowRadius: 12,
+                    elevation: 8,
+                    borderWidth: 1,
+                    borderColor: theme.colors.border.subtle,
+                    marginTop: 4,
+                    paddingVertical: 8,
+                  },
+                }}
+              >
+                {topic && (
+                  <MenuOption onSelect={handleFollowTopic}>
+                    <View style={styles.menuOption}>
+                      <Ionicons
+                        name={isTopicFollowed ? "pricetag" : "pricetag-outline"}
+                        size={14}
+                        color={
+                          isTopicFollowed
+                            ? theme.colors.primary[500]
+                            : theme.colors.text.subtle
+                        }
+                      />
+                      <Text
+                        size="lg"
+                        weight={isTopicFollowed ? "semibold" : "medium"}
+                        numberOfLines={1}
+                        style={
+                          isTopicFollowed
+                            ? { color: theme.colors.primary[500] }
+                            : undefined
+                        }
+                      >
+                        {isTopicFollowed ? "Unfollow" : "Follow"} #{topic}
+                      </Text>
+                    </View>
+                  </MenuOption>
+                )}
+                <MenuOption onSelect={handleFollowUser}>
+                  <View style={styles.menuOption}>
+                    <Ionicons
+                      name={isFollowing ? "person" : "person-outline"}
+                      size={14}
+                      color={
+                        isFollowing
+                          ? theme.colors.primary[500]
+                          : theme.colors.text.subtle
+                      }
+                    />
+                    <Text
+                      size="lg"
+                      weight={isFollowing ? "semibold" : "medium"}
+                      numberOfLines={1}
+                      style={
+                        isFollowing
+                          ? { color: theme.colors.primary[500] }
+                          : undefined
+                      }
+                    >
+                      {isFollowing ? "Unfollow" : "Follow"} @{author.username}
+                    </Text>
+                  </View>
+                </MenuOption>
+              </MenuOptions>
+            </Menu>
+          )}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.header}>
@@ -413,5 +570,16 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
     borderRadius: theme.radius.full,
     marginRight: -5,
+  },
+  postDetailAuthorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  postDetailUsername: {
+    marginLeft: 8,
+  },
+  postDetailDot: {
+    marginHorizontal: 6,
   },
 }));

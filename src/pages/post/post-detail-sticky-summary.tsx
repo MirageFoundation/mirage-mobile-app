@@ -37,7 +37,9 @@ export function PostDetailStickySummary({
         styles.stickyHeader,
         {
           backgroundColor: theme.colors.background.default,
-          top: insetsTop + 40,
+          // Sit just below the header divider (40px row + 1px divider) so the
+          // divider stays visible when the sticky summary slides in.
+          top: insetsTop + 41,
         },
         animatedStyle,
       ]}

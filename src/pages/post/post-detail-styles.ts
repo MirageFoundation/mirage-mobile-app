@@ -19,6 +19,11 @@ export const styles = StyleSheet.create((theme) => ({
   headerSpacer: {
     flex: 1,
   },
+  headerCenter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   headerActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -29,6 +34,10 @@ export const styles = StyleSheet.create((theme) => ({
     height: 40,
     alignItems: "center",
     justifyContent: "center",
+  },
+  headerDivider: {
+    height: 1,
+    backgroundColor: theme.colors.border.subtle,
   },
   divider: {
     height: 5,

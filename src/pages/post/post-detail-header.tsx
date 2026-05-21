@@ -1,28 +1,64 @@
-import { AntDesign } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
+import { AntDesign, Ionicons } from "@expo/vector-icons";
 import { Pressable, View } from "react-native";
+import { useUnistyles } from "react-native-unistyles";
+
+import { Text } from "@/src/components/ui/primitives";
 
 import { styles } from "./post-detail-styles";
 
 type PostDetailHeaderProps = {
-  gradientColors: readonly string[];
+  topic?: string;
   insetsTop: number;
   onBack: () => void;
+  onTopicPress?: () => void;
+  onOptionsPress?: () => void;
 };
 
-export function PostDetailHeader({ gradientColors, insetsTop, onBack }: PostDetailHeaderProps) {
-  return (
-    <LinearGradient
-      colors={[...gradientColors] as [string, string, ...string[]]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={[styles.header, { paddingTop: insetsTop }]}
-    >
-      <Pressable onPress={onBack} style={styles.headerButton}>
-        <AntDesign name="close" size={22} color="#FFFFFF" />
-      </Pressable>
+export function PostDetailHeader({
+  topic,
+  insetsTop,
+  onBack,
+  onTopicPress,
+  onOptionsPress,
+}: PostDetailHeaderProps) {
+  const { theme } = useUnistyles();
 
-      <View style={styles.headerSpacer} />
-    </LinearGradient>
+  return (
+    <View style={{ paddingTop: insetsTop }}>
+      <View style={styles.header}>
+        <Pressable onPress={onBack} style={styles.headerButton} hitSlop={8}>
+          <AntDesign name="close" size={22} color={theme.colors.text.default} />
+        </Pressable>
+        <View style={styles.headerCenter}>
+          {topic ? (
+            <Pressable onPress={onTopicPress} disabled={!onTopicPress}>
+              <Text
+                size="lg"
+                weight="semibold"
+                numberOfLines={1}
+                style={{ color: theme.colors.text.default }}
+              >
+                {`#${topic}`}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+        <Pressable
+          onPress={onOptionsPress}
+          style={styles.headerButton}
+          hitSlop={8}
+          disabled={!onOptionsPress}
+        >
+          {onOptionsPress ? (
+            <Ionicons
+              name="ellipsis-horizontal"
+              size={22}
+              color={theme.colors.text.default}
+            />
+          ) : null}
+        </Pressable>
+      </View>
+      <View style={styles.headerDivider} />
+    </View>
   );
 }

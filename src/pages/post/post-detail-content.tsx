@@ -2,7 +2,6 @@ import { transformApiComments, useComments, useUserFollowed } from "@/src/api/re
 import * as Sentry from "@sentry/react-native";
 import { parseApiError } from "@/src/utils/parse-api-error";
 import { queryKeys } from "@/src/api/read/query-keys";
-import { getGradientColor } from "@/src/components/molecules/profile-header";
 import {
   Comment,
   MediaPostDetailSkeleton,
@@ -128,11 +127,6 @@ function LegacyPostDetailScreen() {
   }));
   const { theme } = useUnistyles();
   const { requireAuth, isLoggedIn } = useAuthGuard();
-
-  const gradientColors = useMemo(
-    () => getGradientColor().filter((c) => c !== "#000000"),
-    [],
-  );
 
   const currentUser = useAuthStore((s) => s.user);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
@@ -533,12 +527,23 @@ function LegacyPostDetailScreen() {
   const renderHeader = useMemo(
     () => (
       <PostDetailHeader
-        gradientColors={gradientColors}
+        topic={displayPost?.topic}
         insetsTop={insets.top}
         onBack={handleBack}
+        onTopicPress={
+          displayPost?.topic
+            ? () =>
+                router.push(`/topic/${encodeURIComponent(displayPost.topic!)}`)
+            : undefined
+        }
+        onOptionsPress={
+          displayPost
+            ? () => actionSheetsRef.current?.presentPostOptions()
+            : undefined
+        }
       />
     ),
-    [insets.top, handleBack, gradientColors],
+    [insets.top, handleBack, displayPost, router],
   );
 
   const listHeader = useMemo(
