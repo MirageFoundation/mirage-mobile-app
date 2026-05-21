@@ -1,6 +1,7 @@
 import {
   extractFirstUrl,
   getMediaTypeFromUrl,
+  isDirectMediaUrl,
 } from "@/src/components/molecules/post-card-utils";
 
 type CachedMediaPost = {
@@ -55,7 +56,10 @@ export function cachedPostHasImmersiveMedia(post: unknown): boolean {
   const body = record.body ?? record.content;
 
   const bodyUri = extractFirstUrl(body) ?? undefined;
-  const bodyType = bodyUri ? getMediaTypeFromUrl(bodyUri) : null;
+  // getMediaTypeFromUrl defaults to "image" for any URL, so guard with
+  // isDirectMediaUrl to avoid treating plain article links as media.
+  const bodyIsDirectMedia = bodyUri ? isDirectMediaUrl(bodyUri) : false;
+  const bodyType = bodyIsDirectMedia && bodyUri ? getMediaTypeFromUrl(bodyUri) : null;
   if (bodyType === "youtube") return false;
 
   if (bodyType === "video" || bodyType === "gif") return true;
@@ -63,12 +67,28 @@ export function cachedPostHasImmersiveMedia(post: unknown): boolean {
   const firstMedia = media?.[0];
   const firstMediaUri =
     typeof firstMedia === "string" ? firstMedia : firstMedia?.uri;
-  const firstUri = firstMediaUri ?? thumbnail ?? bodyUri;
-  if (!firstUri) return false;
+  const explicitMediaType =
+    typeof firstMedia === "object" ? firstMedia?.type : undefined;
 
-  const type =
-    typeof firstMedia === "object" && firstMedia.type
-      ? firstMedia.type
-      : getMediaTypeFromUrl(firstUri);
+  // If the server populated `media[0]`, trust it as immersive media. The
+  // server only puts entries here for actual uploaded media (e.g. Cloudflare
+  // Images URLs that end in `/public` and have no file extension, which
+  // `isDirectMediaUrl` would otherwise reject).
+  if (firstMediaUri) {
+    if (explicitMediaType === "youtube") return false;
+    const inferredType = getMediaTypeFromUrl(firstMediaUri);
+    if (inferredType === "youtube") return false;
+    return true;
+  }
+
+  // No explicit media entry: only treat thumbnails/body URLs as immersive when
+  // they point at direct media files. Link previews (article URLs with an
+  // OG-image thumbnail) must fall through to the standard post detail screen,
+  // so we require the body URL itself to be direct media before considering
+  // the thumbnail as immersive.
+  if (!bodyIsDirectMedia) return false;
+  const fallbackUri = bodyUri ?? (thumbnail && isDirectMediaUrl(thumbnail) ? thumbnail : undefined);
+  if (!fallbackUri) return false;
+  const type = getMediaTypeFromUrl(fallbackUri);
   return type === "image" || type === "video" || type === "gif";
 }
