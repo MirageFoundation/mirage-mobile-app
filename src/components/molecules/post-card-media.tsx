@@ -621,7 +621,6 @@ export const PostCardMedia = memo(
 
     const shouldKeepFeedVideoMounted =
       media?.type === "video" &&
-      screenActive &&
       (isNearVisible || isFocused || feedTappedToPlay || isVideoPlaying);
 
     const shouldMountNativeVideo =
