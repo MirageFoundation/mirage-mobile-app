@@ -11,13 +11,10 @@ import BottomSheet, { BottomSheetFlatList } from "@gorhom/bottom-sheet";
 import type { SharedValue } from "react-native-reanimated";
 import { useUnistyles } from "react-native-unistyles";
 
-import { Avatar, TimeAgo } from "@/src/components/atoms";
 import { CommentThread, type Comment, type Post } from "@/src/components/molecules";
-import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { Text } from "@/src/components/ui/primitives";
-import { getUsernameColor } from "@/src/utils/tiers";
 
-import { MediaPostDetailFollowMenuButton } from "./media-post-detail-follow-menu-button";
+import { MediaPostDetailFooter } from "./media-post-detail-footer";
 import { styles } from "./media-post-detail-styles";
 
 type FocusedMode = "single" | "context" | "full";
@@ -34,6 +31,7 @@ type MediaPostDetailCommentSheetProps = {
   shouldOpenSheetInitially: boolean;
   snapPoints: (number | string)[];
   animatedIndex: SharedValue<number>;
+  animatedPosition: SharedValue<number>;
   animationConfigs: any;
   focusedCommentId: string | null;
   focusedMode: FocusedMode;
@@ -50,6 +48,25 @@ type MediaPostDetailCommentSheetProps = {
   onAuthorIdPress: (authorId: string) => void;
   onFollowAuthor: () => void;
   onFollowTopic: () => void;
+  onUpvote: () => void;
+  onDownvote: () => void;
+  onComment: () => void;
+  onShare: () => void;
+  onBlockUser: () => void;
+  onBlockPost: () => void;
+  onBlockTopic: () => void;
+  onReportPost: () => void;
+  onExpandSheet: () => void;
+  isOwnPost: boolean;
+  shareUrl: string;
+  isVideo: boolean;
+  isPlaying: boolean;
+  positionMs: number;
+  durationMs: number;
+  onPlayPause: () => void;
+  onSeek: (ms: number) => void;
+  isMuted: boolean;
+  onMuteToggle: () => void;
   onSetFocusedMode: (mode: FocusedMode) => void;
   onRefetchFocusedContext: () => void;
   onCommentUpvote: (
@@ -81,6 +98,7 @@ export function MediaPostDetailCommentSheet({
   shouldOpenSheetInitially,
   snapPoints,
   animatedIndex,
+  animatedPosition,
   animationConfigs,
   focusedCommentId,
   focusedMode,
@@ -97,6 +115,25 @@ export function MediaPostDetailCommentSheet({
   onAuthorIdPress,
   onFollowAuthor,
   onFollowTopic,
+  onUpvote,
+  onDownvote,
+  onComment,
+  onShare,
+  onBlockUser,
+  onBlockPost,
+  onBlockTopic,
+  onReportPost,
+  onExpandSheet,
+  isOwnPost,
+  shareUrl,
+  isVideo,
+  isPlaying,
+  positionMs,
+  durationMs,
+  onPlayPause,
+  onSeek,
+  isMuted,
+  onMuteToggle,
   onSetFocusedMode,
   onRefetchFocusedContext,
   onCommentUpvote,
@@ -110,13 +147,14 @@ export function MediaPostDetailCommentSheet({
   return (
     <BottomSheet
       ref={sheetRef}
-      index={shouldOpenSheetInitially ? 0 : -1}
+      index={shouldOpenSheetInitially ? 1 : 0}
       snapPoints={snapPoints}
       animatedIndex={animatedIndex}
+      animatedPosition={animatedPosition}
       animationConfigs={animationConfigs}
       enableDynamicSizing={false}
-      enablePanDownToClose={true}
-      enableOverDrag={false}
+      enablePanDownToClose={false}
+      enableOverDrag={true}
       enableHandlePanningGesture
       enableContentPanningGesture
       style={{ zIndex: 30, elevation: 30 }}
@@ -157,61 +195,35 @@ export function MediaPostDetailCommentSheet({
         }}
         ListHeaderComponent={
           <View style={styles.sheetHeader}>
-            <View style={styles.sheetPostInfo}>
-              <View style={styles.authorRowFull}>
-                <Pressable onPress={onAuthorPress} style={styles.authorRow}>
-                  <Avatar seed={post.author.avatarSeed ?? post.author.id} size={32} />
-                  <Text
-                    size="md"
-                    weight="semibold"
-                    style={{
-                      marginLeft: 8,
-                      color:
-                        post.author.level != null
-                          ? getUsernameColor(post.author.level) ??
-                            theme.colors.text.default
-                          : theme.colors.text.default,
-                    }}
-                  >
-                    @{post.author.username}
-                  </Text>
-                  <Text size="sm" mode="subtle" style={{ marginHorizontal: 6 }}>
-                    •
-                  </Text>
-                  <TimeAgo
-                    timestamp={post.createdAt}
-                    showSuffix={false}
-                    size="md"
-                    mode="subtle"
-                  />
-                </Pressable>
-                {currentUserId !== post.author.id ? (
-                  <MediaPostDetailFollowMenuButton
-                    username={post.author.username}
-                    topic={post.topic}
-                    isFollowing={
-                      post.isFollowing ?? followedUsers.includes(post.author.id)
-                    }
-                    isTopicFollowed={
-                      post.topic ? followedTopics.includes(post.topic) : false
-                    }
-                    onFollowUser={onFollowAuthor}
-                    onFollowTopic={onFollowTopic}
-                  />
-                ) : null}
-              </View>
-              <Text size="lg" weight="bold" style={{ marginTop: 6, lineHeight: 20 }}>
-                {post.title}
-              </Text>
-              {post.body ? (
-                <View style={styles.mdNoTrailingMargin}>
-                  <MarkdownContent
-                    content={post.body}
-                    color={theme.colors.text.default}
-                  />
-                </View>
-              ) : null}
-            </View>
+            <MediaPostDetailFooter
+              post={post}
+              onAuthorPress={onAuthorPress}
+              onUpvote={onUpvote}
+              onDownvote={onDownvote}
+              onComment={onComment}
+              onShare={onShare}
+              onBlockUser={onBlockUser}
+              onBlockPost={onBlockPost}
+              onBlockTopic={onBlockTopic}
+              onReport={onReportPost}
+              isOwnPost={isOwnPost}
+              shareUrl={shareUrl}
+              isVideo={isVideo}
+              isPlaying={isPlaying}
+              positionMs={positionMs}
+              durationMs={durationMs}
+              onPlayPause={onPlayPause}
+              onSeek={onSeek}
+              onMoreLink={onExpandSheet}
+              isMuted={isMuted}
+              onMuteToggle={onMuteToggle}
+              isFollowing={post.isFollowing ?? followedUsers.includes(post.author.id)}
+              isTopicFollowed={post.topic ? followedTopics.includes(post.topic) : false}
+              topic={post.topic}
+              isOwnAuthor={currentUserId === post.author.id}
+              onFollowAuthor={onFollowAuthor}
+              onFollowTopic={onFollowTopic}
+            />
 
             {focusedCommentId && focusedMode !== "full" ? (
               <View style={styles.threadReminderCard}>

@@ -1,6 +1,5 @@
 import { type ComponentProps } from "react";
 import { Pressable, View } from "react-native";
-import { GestureDetector } from "react-native-gesture-handler";
 import PagerView from "react-native-pager-view";
 import Animated, { type SharedValue } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
@@ -31,7 +30,6 @@ type MediaPostDetailGalleryProps = {
   isVideoActive: boolean;
   mediaContainerStyle: ComponentProps<typeof Animated.View>["style"];
   mediaItems: MediaItem[];
-  mediaPan: ComponentProps<typeof GestureDetector>["gesture"];
   onMuteToggle: () => void;
   onPlayPause: () => void;
   registerVideo: (key: string, api: VideoApi | null) => void;
@@ -52,7 +50,6 @@ export function MediaPostDetailGallery({
   isVideoActive,
   mediaContainerStyle,
   mediaItems,
-  mediaPan,
   onMuteToggle,
   onPlayPause,
   registerVideo,
@@ -66,13 +63,12 @@ export function MediaPostDetailGallery({
   };
 
   return (
-    <GestureDetector gesture={mediaPan}>
-      <Animated.View
-        style={[
-          styles.mediaContainer,
-          mediaContainerStyle,
-        ]}
-      >
+    <Animated.View
+      style={[
+        styles.mediaContainer,
+        mediaContainerStyle,
+      ]}
+    >
         {mediaItems.length > 1 ? (
           <PagerView
             style={{ flex: 1 }}
@@ -159,7 +155,6 @@ export function MediaPostDetailGallery({
             </Pressable>
           </Animated.View>
         )}
-      </Animated.View>
-    </GestureDetector>
+    </Animated.View>
   );
 }

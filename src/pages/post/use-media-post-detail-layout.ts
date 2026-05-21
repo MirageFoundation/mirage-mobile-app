@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Dimensions } from "react-native";
-import { Gesture } from "react-native-gesture-handler";
 import {
   Extrapolation,
   interpolate,
@@ -18,6 +17,7 @@ const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get("window");
 const COLLAPSED_FRACTION = 0.3;
 const HEADER_HEIGHT_BASE = 48;
 const INPUT_DOCK_HEIGHT = 52;
+const COLLAPSED_SHEET_FRACTION = 0.2;
 
 type Insets = {
   top: number;
@@ -26,13 +26,11 @@ type Insets = {
 
 type UseMediaPostDetailLayoutOptions = {
   insets: Insets;
-  onDismiss: () => void;
   sourceMediaTransition?: PressedMediaTransition | null;
 };
 
 export function useMediaPostDetailLayout({
   insets,
-  onDismiss,
   sourceMediaTransition,
 }: UseMediaPostDetailLayoutOptions) {
   const headerH = insets.top + HEADER_HEIGHT_BASE;
@@ -40,32 +38,37 @@ export function useMediaPostDetailLayout({
     INPUT_DOCK_HEIGHT + insets.bottom,
   );
   const inputDockTotalH = measuredInputDockH;
-  const [measuredFooterH, setMeasuredFooterH] = useState(0);
 
   const expandedMediaTop = headerH;
   const collapsedMediaTop = insets.top;
   const collapsedMediaH = Math.round(SCREEN_H * COLLAPSED_FRACTION);
-  const expandedMediaH = Math.max(
-    collapsedMediaH,
-    SCREEN_H - headerH - Math.max(measuredFooterH, insets.bottom),
-  );
   const listTopY = collapsedMediaTop + collapsedMediaH;
+  const collapsedSheetH = Math.max(SCREEN_H * COLLAPSED_SHEET_FRACTION, 132 + insets.bottom);
+  const collapsedSheetTop = SCREEN_H - collapsedSheetH;
 
   const expandedSheetH = Math.max(100, SCREEN_H - listTopY);
-  const snapPoints = useMemo(() => [expandedSheetH], [expandedSheetH]);
+  const snapPoints = useMemo(
+    () => [collapsedSheetH, expandedSheetH],
+    [collapsedSheetH, expandedSheetH],
+  );
   const sheetAnimationConfigs = useBottomSheetSpringConfigs({
-    damping: 42,
-    stiffness: 620,
-    mass: 0.75,
-    overshootClamping: true,
+    damping: 34,
+    stiffness: 360,
+    mass: 0.9,
+    overshootClamping: false,
   });
   const sheetRef = useRef<BottomSheet>(null);
 
-  const animatedIndex = useSharedValue(-1);
+  const animatedIndex = useSharedValue(0);
+  const animatedPosition = useSharedValue(collapsedSheetTop);
   const mediaEnterProgress = useSharedValue(sourceMediaTransition ? 0 : 1);
   const collapseProgress = useDerivedValue(() => {
-    const value = animatedIndex.value + 1;
-    return value < 0 ? 0 : value > 1 ? 1 : value;
+    return interpolate(
+      animatedPosition.value,
+      [listTopY, collapsedSheetTop],
+      [1, 0],
+      Extrapolation.CLAMP,
+    );
   });
 
   useEffect(() => {
@@ -74,43 +77,22 @@ export function useMediaPostDetailLayout({
     mediaEnterProgress.value = withTiming(1, { duration: 260 });
   }, [mediaEnterProgress, sourceMediaTransition]);
 
-  const dragDownY = useSharedValue(0);
   const openSheet = useCallback(() => {
-    sheetRef.current?.snapToIndex(0);
+    sheetRef.current?.snapToIndex(1);
   }, []);
   const closeSheet = useCallback(() => {
-    sheetRef.current?.close();
+    sheetRef.current?.snapToIndex(0);
   }, []);
-
-  const mediaPan = Gesture.Pan()
-    .onUpdate((event) => {
-      if (event.translationY > 0) {
-        dragDownY.value = event.translationY;
-      }
-    })
-    .onEnd((event) => {
-      if (event.translationY < -40 || event.velocityY < -600) {
-        runOnJS(openSheet)();
-        dragDownY.value = 0;
-        return;
-      }
-      if (event.translationY > 120 || event.velocityY > 800) {
-        runOnJS(onDismiss)();
-        return;
-      }
-      dragDownY.value = 0;
-    });
 
   const mediaContainerStyle = useAnimatedStyle(() => {
     const progress = collapseProgress.value;
-    const targetHeight = expandedMediaH + (collapsedMediaH - expandedMediaH) * progress;
     const targetTop = expandedMediaTop + (collapsedMediaTop - expandedMediaTop) * progress;
+    const targetHeight = Math.max(1, animatedPosition.value - targetTop);
 
     if (!sourceMediaTransition) {
       return {
         height: targetHeight,
         top: targetTop,
-        transform: [{ translateY: dragDownY.value }],
       };
     }
 
@@ -125,7 +107,6 @@ export function useMediaPostDetailLayout({
       transform: [
         { translateX: (sourceCenterX - targetCenterX) * (1 - enter) },
         { scaleX: sourceScaleX + (1 - sourceScaleX) * enter },
-        { translateY: dragDownY.value },
       ],
     };
   });
@@ -179,6 +160,7 @@ export function useMediaPostDetailLayout({
 
   return {
     animatedIndex,
+    animatedPosition,
     collapseMedia: openSheet,
     collapseProgress,
     compactOverlayStyle,
@@ -191,10 +173,7 @@ export function useMediaPostDetailLayout({
     inputDockTotalH,
     listTopY,
     mediaContainerStyle,
-    mediaPan,
-    measuredFooterH,
     measuredInputDockH,
-    setMeasuredFooterH,
     setMeasuredInputDockH,
     sheetAnimationConfigs,
     sheetRef,

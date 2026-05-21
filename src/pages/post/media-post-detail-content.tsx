@@ -55,7 +55,6 @@ import {
   type MediaPostDetailActionSheetsRef,
 } from "./media-post-detail-action-sheets";
 import { MediaPostDetailCommentSheet } from "./media-post-detail-comment-sheet";
-import { MediaPostDetailFooter } from "./media-post-detail-footer";
 import { MediaPostDetailGallery } from "./media-post-detail-gallery";
 import { MediaPostDetailHeader } from "./media-post-detail-header";
 import { type MediaItem } from "./media-post-detail-media-item";
@@ -234,29 +233,25 @@ export default function MediaPostDetailScreen({
 
   const {
     animatedIndex,
+    animatedPosition,
     collapseMedia,
     collapseProgress,
     compactOverlayStyle,
     expandMedia,
     footerInteractive,
-    footerStyle,
     headerH,
     headerStyle,
     inputDockStyle,
     inputDockTotalH,
     listTopY,
     mediaContainerStyle,
-    mediaPan,
-    measuredFooterH,
     measuredInputDockH,
-    setMeasuredFooterH,
     setMeasuredInputDockH,
     sheetAnimationConfigs,
     sheetRef,
     snapPoints,
   } = useMediaPostDetailLayout({
     insets,
-    onDismiss: router.back,
     sourceMediaTransition:
       sourceMediaTransition?.postId === id ? sourceMediaTransition : null,
   });
@@ -483,7 +478,6 @@ export default function MediaPostDetailScreen({
             isVideoActive={isVideoActive}
             mediaContainerStyle={mediaContainerStyle}
             mediaItems={mediaItems}
-            mediaPan={mediaPan}
             onMuteToggle={handleMuteToggle}
             onPlayPause={handlePlayPause}
             registerVideo={registerVideo}
@@ -507,6 +501,7 @@ export default function MediaPostDetailScreen({
             shouldOpenSheetInitially={shouldOpenSheetInitially}
             snapPoints={snapPoints}
             animatedIndex={animatedIndex}
+            animatedPosition={animatedPosition}
             animationConfigs={sheetAnimationConfigs}
             focusedCommentId={focusedCommentId}
             focusedMode={focusedMode}
@@ -535,6 +530,25 @@ export default function MediaPostDetailScreen({
                 followTopic(post.topic, followedTopics.includes(post.topic));
               }
             }}
+            onUpvote={handleUpvote}
+            onDownvote={handleDownvote}
+            onComment={handleComment}
+            onShare={handleShare}
+            onBlockUser={() => actionSheetsRef.current?.requestBlockUser()}
+            onBlockPost={() => actionSheetsRef.current?.requestBlockPost()}
+            onBlockTopic={() => actionSheetsRef.current?.requestBlockTopic()}
+            onReportPost={() => actionSheetsRef.current?.requestReportPost()}
+            onExpandSheet={collapseMedia}
+            isOwnPost={currentUser?.id === post.author.id}
+            shareUrl={`${getShareBaseUrl(shareServer)}/p/${post.id}`}
+            isVideo={isVideoActive}
+            isPlaying={activeStatus.playing}
+            positionMs={activeStatus.position}
+            durationMs={activeStatus.duration}
+            onPlayPause={handlePlayPause}
+            onSeek={handleSeek}
+            isMuted={globalMuted}
+            onMuteToggle={handleMuteToggle}
             onSetFocusedMode={setFocusedMode}
             onRefetchFocusedContext={refetchFocusedContext}
             onCommentUpvote={(cid, l, d, n) =>
@@ -572,74 +586,11 @@ export default function MediaPostDetailScreen({
             paddingTop={insets.top}
             height={headerH}
             animatedStyle={headerStyle}
-            pointerEvents={footerInteractive ? "box-none" : "none"}
+            pointerEvents="box-none"
             onBack={() => router.back()}
             onTopicPress={handleTopicPress}
             onOptionsPress={() => actionSheetsRef.current?.presentPostOptions()}
           />
-
-          {/* --------------- Footer overlay (expanded mode) ----------- */}
-          <Animated.View
-            style={[
-              styles.footerOverlay,
-              { paddingBottom: insets.bottom + 8 },
-              footerStyle,
-            ]}
-            pointerEvents={footerInteractive ? "box-none" : "none"}
-            onLayout={(e) => {
-              const h = Math.round(e.nativeEvent.layout.height);
-              if (h > 0 && h !== measuredFooterH) {
-                setMeasuredFooterH(h);
-              }
-            }}
-          >
-            <MediaPostDetailFooter
-              post={post}
-              onAuthorPress={handleAuthorPress}
-              onUpvote={handleUpvote}
-              onDownvote={handleDownvote}
-              onComment={handleComment}
-              onShare={handleShare}
-              onBlockUser={() => actionSheetsRef.current?.requestBlockUser()}
-              onBlockPost={() => actionSheetsRef.current?.requestBlockPost()}
-              onBlockTopic={() => actionSheetsRef.current?.requestBlockTopic()}
-              onReport={() => actionSheetsRef.current?.requestReportPost()}
-              isOwnPost={currentUser?.id === post.author.id}
-              shareUrl={`${getShareBaseUrl(shareServer)}/p/${post.id}`}
-              isVideo={isVideoActive}
-              isPlaying={activeStatus.playing}
-              positionMs={activeStatus.position}
-              durationMs={activeStatus.duration}
-              onPlayPause={handlePlayPause}
-              onSeek={handleSeek}
-              onMoreLink={collapseMedia}
-              isMuted={globalMuted}
-              onMuteToggle={handleMuteToggle}
-              isFollowing={
-                post.isFollowing ?? followedUsers.includes(post.author.id)
-              }
-              isTopicFollowed={
-                post.topic ? followedTopics.includes(post.topic) : false
-              }
-              topic={post.topic}
-              isOwnAuthor={currentUser?.id === post.author.id}
-              onFollowAuthor={() =>
-                followUser(
-                  post.author.id,
-                  post.author.username,
-                  post.isFollowing ?? false,
-                )
-              }
-              onFollowTopic={() => {
-                if (post.topic) {
-                  followTopic(
-                    post.topic,
-                    followedTopics.includes(post.topic),
-                  );
-                }
-              }}
-            />
-          </Animated.View>
 
           {/* --------------- Comment input dock (collapsed mode) ------ */}
           <Animated.View
