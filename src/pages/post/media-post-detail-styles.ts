@@ -100,7 +100,6 @@ export const styles = StyleSheet.create((theme) => ({
     zIndex: 15,
   },
   footerBlock: {
-    paddingTop: theme.spacing.sm,
     paddingBottom: theme.spacing.sm,
   },
   authorRow: {
