@@ -437,7 +437,7 @@ function extractInstagramImages(html: string): string[] {
     }
   };
 
-  const displayUrlPattern = /display_url["\s:\\]+["']?(https?:[^"'\s,\\]+)/gi;
+  const displayUrlPattern = /display_url["\s:\\]+["']?(https?:[^"'\s,]+)/gi;
   let match;
   while ((match = displayUrlPattern.exec(html)) !== null) {
     addUrl(match[1]);
@@ -447,7 +447,7 @@ function extractInstagramImages(html: string): string[] {
     const sidecarPattern = /edge_sidecar_to_children[\s\S]*?edges[\s\S]*?\[([\s\S]*?)\]/;
     const sidecar = html.match(sidecarPattern);
     if (sidecar) {
-      const urls = [...sidecar[1].matchAll(/display_url["\s:\\]+["']?(https?:[^"'\s,\\]+)/gi)];
+      const urls = [...sidecar[1].matchAll(/display_url["\s:\\]+["']?(https?:[^"'\s,]+)/gi)];
       for (const u of urls) addUrl(u[1]);
     }
   }
