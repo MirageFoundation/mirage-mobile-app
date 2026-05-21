@@ -1,4 +1,5 @@
 import { transformApiComments, useComments, useUserFollowed } from "@/src/api/read";
+import * as Sentry from "@sentry/react-native";
 import { parseApiError } from "@/src/utils/parse-api-error";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { getGradientColor } from "@/src/components/molecules/profile-header";
@@ -46,6 +47,7 @@ import { PostDetailStickySummary } from "./post-detail-sticky-summary";
 import {
   buildPostDetailComments,
   countCommentsInTree,
+  findTopLevelBranchForComment,
   hasMoreRepliesInBranch,
   mergePostDetailComments,
 } from "./post-detail-comment-utils";
@@ -265,9 +267,11 @@ function LegacyPostDetailScreen() {
     (s) => s.blockedUserIds,
   );
   const [revealFocusedBranch, setRevealFocusedBranch] = useState(false);
+  const branchExpansionReportRef = useRef<string | null>(null);
 
   useEffect(() => {
     setRevealFocusedBranch(false);
+    branchExpansionReportRef.current = null;
   }, [id, focusedCommentId]);
 
   const comments = useMemo(() => {
@@ -414,6 +418,41 @@ function LegacyPostDetailScreen() {
     () => hasMoreRepliesInBranch(comments, fullBranchComments, focusedCommentId),
     [comments, fullBranchComments, focusedCommentId],
   );
+
+  useEffect(() => {
+    if (!revealFocusedBranch || !focusedCommentId || fullBranchComments.length === 0) return;
+    const reportKey = `${id}:${focusedCommentId}`;
+    if (branchExpansionReportRef.current === reportKey) return;
+    const branch = findTopLevelBranchForComment(fullBranchComments, focusedCommentId);
+    branchExpansionReportRef.current = reportKey;
+    if (branch) {
+      Sentry.addBreadcrumb({
+        category: "comments",
+        message: "Expanded focused comment branch",
+        data: {
+          postId: id,
+          focusedCommentId,
+          branchId: branch.id,
+          branchCommentCount: countCommentsInTree([branch]),
+          screen: "post-detail",
+        },
+        level: "info",
+      });
+      return;
+    }
+
+    Sentry.captureMessage("Focused branch expansion requested but branch was not found", {
+      level: "warning",
+      tags: { feature: "comments", operation: "focused-branch-expand" },
+      extra: {
+        postId: id,
+        focusedCommentId,
+        rootPostId: actualRootPostId,
+        fullBranchRootCount: fullBranchComments.length,
+        screen: "post-detail",
+      },
+    });
+  }, [revealFocusedBranch, focusedCommentId, fullBranchComments, id, actualRootPostId]);
 
   const hasFocusedRecentContext = hasAvailableFocusedAncestors || hasFocusedBranchReplies;
 

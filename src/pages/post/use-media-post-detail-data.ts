@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useEffect, useMemo, useState } from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
 
@@ -22,6 +22,7 @@ import {
 } from "@/src/stores/post-comment-optimistic-store";
 import {
   appendSupplementalCommentsForMinimum,
+  countCommentsInTree,
   findCommentById,
   findTopLevelBranchForComment,
   hasMoreRepliesInBranch,
@@ -62,6 +63,7 @@ export function useMediaPostDetailData({
   isFocused,
   pendingScrollToEndRef,
 }: UseMediaPostDetailDataOptions) {
+  const branchExpansionReportRef = useRef<string | null>(null);
   const {
     data: commentsData,
     isLoading: isLoadingComments,
@@ -116,6 +118,7 @@ export function useMediaPostDetailData({
 
   useEffect(() => {
     setFocusedContextDepth(5);
+    branchExpansionReportRef.current = null;
   }, [focusedCommentId]);
 
   useEffect(() => {
@@ -461,6 +464,40 @@ export function useMediaPostDetailData({
     () => hasMoreRepliesInBranch(displayComments, allDisplayComments, focusedCommentId),
     [displayComments, allDisplayComments, focusedCommentId],
   );
+
+  useEffect(() => {
+    if (!focusedCommentId || focusedMode !== "context" || focusedContextDepth <= 5) return;
+    const reportKey = `${id ?? "missing"}:${focusedCommentId}:${focusedContextDepth}`;
+    if (branchExpansionReportRef.current === reportKey) return;
+    const branch = findTopLevelBranchForComment(allDisplayComments, focusedCommentId);
+    branchExpansionReportRef.current = reportKey;
+    if (branch) {
+      Sentry.addBreadcrumb({
+        category: "comments",
+        message: "Expanded focused media comment branch",
+        data: {
+          postId: id,
+          focusedCommentId,
+          branchId: branch.id,
+          branchCommentCount: countCommentsInTree([branch]),
+          screen: "media-post-detail",
+        },
+        level: "info",
+      });
+      return;
+    }
+
+    Sentry.captureMessage("Focused media branch expansion requested but branch was not found", {
+      level: "warning",
+      tags: { feature: "comments", operation: "focused-media-branch-expand" },
+      extra: {
+        postId: id,
+        focusedCommentId,
+        fullBranchRootCount: allDisplayComments.length,
+        screen: "media-post-detail",
+      },
+    });
+  }, [focusedCommentId, focusedMode, focusedContextDepth, allDisplayComments, id]);
 
   const hasRecentContext = useMemo(() => {
     if (!focusedCommentId || focusedMode === "full") return false;
