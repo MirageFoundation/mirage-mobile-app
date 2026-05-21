@@ -16,6 +16,7 @@ import { useAuthStore } from "@/src/stores/auth-store";
 import { useDraftStore, type PostDraft } from "@/src/stores/draft-store";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
+import { getAllowedTagsFromContentTypes, usePreferencesStore } from "@/src/stores/preferences-store";
 import { markEditJustCompleted } from "@/src/utils/edit-post";
 import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 import { isPowCancelled } from "@/src/wallet";
@@ -51,6 +52,8 @@ export function useCreateSubmitFlow({
   const selectedContentWarning = useCreateComposeState((state) => state.selectedContentWarning);
   const selectedStickers = useCreateComposeState((state) => state.selectedStickers);
   const resetComposeState = useCreateComposeState((state) => state.resetComposeState);
+  const selectedContentTypes = usePreferencesStore((state) => state.selectedContentTypes);
+  const adultContentEnabled = usePreferencesStore((state) => state.adultContentEnabled);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handlePost = useCallback(async () => {
@@ -234,6 +237,18 @@ export function useCreateSubmitFlow({
             });
           },
           onOptimisticUpdate: () => {
+            const optimisticPost = buildOptimisticPost(
+              undefined,
+              postInput,
+              currentUser?.walletAddress ?? currentUser?.id ?? null,
+              currentUser?.username,
+              "pending",
+            );
+            const upsertOptions = {
+              address: currentUser?.walletAddress,
+              allowedTags: getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled) || undefined,
+              limit: 10,
+            };
             Sentry.addBreadcrumb({
               category: "create-post",
               message: "Inserted optimistic post into home feed",
@@ -245,16 +260,12 @@ export function useCreateSubmitFlow({
                 mediaCount: draft.mediaUris.length,
               },
             });
-            upsertHomePost(
-              queryClient,
-              buildOptimisticPost(
-                undefined,
-                postInput,
-                currentUser?.walletAddress ?? currentUser?.id ?? null,
-                currentUser?.username,
-                "pending",
-              ),
-            );
+            upsertHomePost(queryClient, optimisticPost, upsertOptions);
+            [500, 1500, 3000].forEach((delay) => {
+              setTimeout(() => {
+                upsertHomePost(queryClient, optimisticPost, upsertOptions);
+              }, delay);
+            });
           },
           onError: (err) => {
             const toastMessage = getApiErrorMessage(err);
@@ -286,6 +297,11 @@ export function useCreateSubmitFlow({
         clearDraft();
         setIsSubmitting(false);
         triggerScrollToTop();
+        [500, 1500, 3000, 6000].forEach((delay) => {
+          setTimeout(() => {
+            triggerScrollToTop();
+          }, delay);
+        });
         useHomePostCardStore.getState().setSkipNextRefresh(true);
         router.replace("/");
         return;
@@ -420,6 +436,8 @@ export function useCreateSubmitFlow({
     txProgress,
     queryClient,
     currentUser,
+    selectedContentTypes,
+    adultContentEnabled,
     selectedStickers,
     getUploadedImageUrls,
     resetComposeState,

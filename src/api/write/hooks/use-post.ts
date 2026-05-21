@@ -35,6 +35,7 @@ import type { PoWProgress } from "../signing";
 import * as Sentry from "@sentry/react-native";
 import type { PostDraft } from "@/src/stores/draft-store";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
+import { getAllowedTagsFromContentTypes, usePreferencesStore } from "@/src/stores/preferences-store";
 
 // ============================================
 // Types
@@ -51,6 +52,12 @@ export type CreatePostMutationInput = CreatePostInput & {
   optimisticMediaUrls?: string[];
   optimisticPreviewMediaUrls?: string[];
   optimisticDraft?: PostDraft;
+};
+
+type UpsertHomePostOptions = {
+  address?: string;
+  allowedTags?: string;
+  limit?: number;
 };
 
 const MEDIA_URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
@@ -145,7 +152,56 @@ export const buildOptimisticPost = (
   };
 };
 
-export const upsertHomePost = (queryClient: QueryClient, optimisticPost: ApiPost) => {
+const upsertPostIntoPostsResponse = (
+ queryData: PostsResponse,
+ optimisticPost: ApiPost,
+): PostsResponse => {
+ if (queryData.posts.some((post) => post.post_id === optimisticPost.post_id)) {
+  return queryData;
+ }
+ return {
+  ...queryData,
+  posts: [optimisticPost, ...queryData.posts],
+  total: queryData.total + 1,
+ };
+};
+
+const upsertPostIntoInfinitePostsData = (
+ queryData: { pages: PostsResponse[]; pageParams: unknown[] },
+ optimisticPost: ApiPost,
+) => {
+ const [firstPage, ...rest] = queryData.pages;
+ if (!firstPage) return queryData;
+ const nextFirstPage = upsertPostIntoPostsResponse(firstPage, optimisticPost);
+ if (nextFirstPage === firstPage) return queryData;
+
+ return {
+  ...queryData,
+  pages: [nextFirstPage, ...rest],
+ };
+};
+
+const buildSeededHomeFeedData = (
+ optimisticPost: ApiPost,
+ limit: number,
+): { pages: PostsResponse[]; pageParams: number[] } => ({
+ pages: [
+  {
+   posts: [optimisticPost],
+   total: 1,
+   page: 1,
+   limit,
+   has_more: false,
+  },
+ ],
+ pageParams: [1],
+});
+
+export const upsertHomePost = (
+ queryClient: QueryClient,
+ optimisticPost: ApiPost,
+ options?: UpsertHomePostOptions,
+) => {
   const postQueries = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() });
   postQueries.forEach(([queryKey, queryData]) => {
     if (!queryData) return;
@@ -161,34 +217,41 @@ export const upsertHomePost = (queryClient: QueryClient, optimisticPost: ApiPost
         pages: PostsResponse[];
         pageParams: unknown[];
       };
-      const [firstPage, ...rest] = dataWithPages.pages;
-      if (!firstPage) return;
-      if (firstPage.posts.some((post) => post.post_id === optimisticPost.post_id)) {
-        return;
-      }
-
-      queryClient.setQueryData(queryKey, {
-        ...dataWithPages,
-        pages: [
-          {
-            ...firstPage,
-            posts: [optimisticPost, ...firstPage.posts],
-            total: firstPage.total + 1,
-          },
-          ...rest,
-        ],
-      });
+      const nextData = upsertPostIntoInfinitePostsData(dataWithPages, optimisticPost);
+      if (nextData !== dataWithPages) queryClient.setQueryData(queryKey, nextData);
     } else {
       const dataSingle = queryData as PostsResponse;
-      if (dataSingle.posts.some((post) => post.post_id === optimisticPost.post_id)) {
-        return;
-      }
-      queryClient.setQueryData(queryKey, {
-        ...dataSingle,
-        posts: [optimisticPost, ...dataSingle.posts],
-        total: dataSingle.total + 1,
-      });
+      const nextData = upsertPostIntoPostsResponse(dataSingle, optimisticPost);
+      if (nextData !== dataSingle) queryClient.setQueryData(queryKey, nextData);
     }
+  });
+
+  if (!options) return;
+
+  (["magic", "newest"] as const).forEach((by) => {
+    const queryKey = queryKeys.posts({
+      limit: options.limit ?? 10,
+      feed: "home",
+      by,
+      allowed_tags: options.allowedTags || undefined,
+      address: options.address,
+      page: undefined,
+    });
+
+    queryClient.setQueryData(queryKey, (oldData: unknown) => {
+      if (!oldData) return buildSeededHomeFeedData(optimisticPost, options.limit ?? 10);
+      if (
+        typeof oldData === "object" &&
+        oldData !== null &&
+        "pages" in oldData
+      ) {
+        return upsertPostIntoInfinitePostsData(
+          oldData as { pages: PostsResponse[]; pageParams: unknown[] },
+          optimisticPost,
+        );
+      }
+      return upsertPostIntoPostsResponse(oldData as PostsResponse, optimisticPost);
+    });
   });
 };
 
@@ -687,6 +750,8 @@ export function usePost(options: UsePostOptions = {}) {
   const queryClient = useQueryClient();
   const { getWallet, address } = useWallet();
   const username = useAuthStore((s) => s.user?.username);
+  const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
+  const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
 
   return useMutation({
     mutationKey: mutationKeys.post.create(),
@@ -714,6 +779,11 @@ export function usePost(options: UsePostOptions = {}) {
         address,
         username,
       );
+      const upsertOptions = {
+        address: address ?? undefined,
+        allowedTags: getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled) || undefined,
+        limit: 10,
+      };
 
       if (input.optimisticId) {
         Sentry.addBreadcrumb({
@@ -727,6 +797,7 @@ export function usePost(options: UsePostOptions = {}) {
           },
         });
         replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, optimisticPost);
+        upsertHomePost(queryClient, optimisticPost, upsertOptions);
         if (input.optimisticPreviewMediaUrls?.length) {
           Sentry.addBreadcrumb({
             category: "create-post",
@@ -806,7 +877,7 @@ export function usePost(options: UsePostOptions = {}) {
           });
         }, 2000);
       } else {
-        upsertHomePost(queryClient, optimisticPost);
+        upsertHomePost(queryClient, optimisticPost, upsertOptions);
       }
 
       // Keep the newly created post visible immediately in Home feeds.
