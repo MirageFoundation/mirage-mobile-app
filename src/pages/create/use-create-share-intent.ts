@@ -321,10 +321,11 @@ export function useCreateShareIntent({
           if (shouldKeepSharedUrlInBody(sharedUrl) && !bodyParts.some((part) => part.includes(sharedUrl))) {
             bodyParts.push(sharedUrl);
           }
-          const finalBody = bodyParts.join("\n\n").slice(0, tierLimits.maxContentLength);
-          updateDraft({ body: finalBody });
+          const extractedBody = bodyParts.join("\n\n").trim();
+          const finalBody = (extractedBody || sharedUrl).slice(0, tierLimits.maxContentLength);
+          updateDraft({ title: finalTitle ?? "", body: finalBody });
           console.log("[CreateScreen] Draft auto-filled:", {
-            title: (finalTitle ?? meta.title)?.slice(0, tierLimits.maxTitleLength),
+            title: finalTitle?.slice(0, tierLimits.maxTitleLength),
             body: finalBody.slice(0, 200),
             community: redditMatch ? sanitizeTopicName(redditMatch[1]) : null,
           });
