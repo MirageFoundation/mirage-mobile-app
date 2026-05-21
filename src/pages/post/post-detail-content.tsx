@@ -290,22 +290,34 @@ function LegacyPostDetailScreen() {
     isLoadingContext,
   ]);
 
-  const hasFocusedRecentContext = useMemo(() => {
-    if (!focusedCommentId) return false;
+  const availableFocusedContextCount = useMemo(() => {
+    if (!focusedCommentId) return 0;
     const rootId = actualRootPostId?.toLowerCase();
     const focusedId = focusedCommentId.toLowerCase();
-    const hasParentComment = (focusedContextCheckQuery.data?.context ?? [])
-      .some((comment) => {
+    return (focusedContextCheckQuery.data?.context ?? [])
+      .filter((comment) => {
         const contextPostId = comment.post_id.toLowerCase();
         return contextPostId !== rootId && contextPostId !== focusedId;
-      });
-    return hasParentComment;
+      }).length;
   }, [focusedCommentId, actualRootPostId, focusedContextCheckQuery.data]);
+
+  const loadedFocusedContextCount = useMemo(() => {
+    if (!focusedCommentId) return 0;
+    const rootId = actualRootPostId?.toLowerCase();
+    const focusedId = focusedCommentId.toLowerCase();
+    return contextComments.filter((comment) => {
+      const contextPostId = comment.post_id.toLowerCase();
+      return contextPostId !== rootId && contextPostId !== focusedId;
+    }).length;
+  }, [focusedCommentId, actualRootPostId, contextComments]);
+
+  const hasFocusedRecentContext = availableFocusedContextCount > 0;
 
   const recentContextDone =
     (contextDepth > 0 || hasLoadedFocusedContext) &&
     focusedContextCheckQuery.isFetched &&
-    hasFocusedRecentContext;
+    hasFocusedRecentContext &&
+    loadedFocusedContextCount >= availableFocusedContextCount;
 
   const hasFullThreadBeyondFocus = useMemo(() => {
     if (!focusedCommentId) return false;

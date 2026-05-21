@@ -20,6 +20,7 @@ import {
   useOptimisticTopLevelComments,
   usePostCommentOptimisticStore,
 } from "@/src/stores/post-comment-optimistic-store";
+import { appendSupplementalCommentsForMinimum } from "./post-detail-comment-utils";
 
 type FocusedMode = "single" | "context" | "full";
 
@@ -63,7 +64,8 @@ export function useMediaPostDetailData({
     isError: isCommentsError,
     error: commentsError,
   } = useComments(id!, { enabled: isFocused });
-  const focusedDepth = focusedMode === "context" ? 5 : 0;
+  const [focusedContextDepth, setFocusedContextDepth] = useState(5);
+  const focusedDepth = focusedMode === "context" ? focusedContextDepth : 0;
   const {
     data: focusedCommentData,
     isLoading: isLoadingFocusedComment,
@@ -96,16 +98,20 @@ export function useMediaPostDetailData({
     isError: isFocusedContextCheckError,
     error: focusedContextCheckError,
   } = useQuery({
-    queryKey: queryKeys.commentContext(focusedCommentId!, 5),
+    queryKey: queryKeys.commentContext(focusedCommentId!, 10),
     queryFn: () =>
       getCommentContext({
         comment_id: focusedCommentId!,
         address: currentUser?.walletAddress ?? undefined,
-        max_depth: 5,
+        max_depth: 10,
       }),
     enabled: isFocused && !!focusedCommentId && focusedMode !== "full",
     staleTime: 1000 * 60,
   });
+
+  useEffect(() => {
+    setFocusedContextDepth(5);
+  }, [focusedCommentId]);
 
   useEffect(() => {
     if (isCommentsError) {
@@ -390,7 +396,7 @@ export function useMediaPostDetailData({
     const focused = focusedThreadState.focused;
     if (!focused) return [];
     if (focusedMode !== "context" || focusedThreadState.parents.length === 0) {
-      return [focused];
+      return appendSupplementalCommentsForMinimum([focused], allDisplayComments);
     }
     let thread: Comment = focused;
     for (let index = focusedThreadState.parents.length - 1; index >= 0; index -= 1) {
@@ -405,7 +411,10 @@ export function useMediaPostDetailData({
         replyCount: Math.max(parent.replyCount ?? 0, optimisticParentReplies.length + 1),
       };
     }
-    return [{ ...thread, isFocusedContext: true }];
+    return appendSupplementalCommentsForMinimum(
+      [{ ...thread, isFocusedContext: true }],
+      allDisplayComments,
+    );
   }, [focusedCommentId, focusedMode, allDisplayComments, isLoadingFocusedContextThread, focusedThreadState]);
 
   displayCommentsLengthRef.current = displayComments.length;
@@ -416,17 +425,29 @@ export function useMediaPostDetailData({
     pruneCommentsPresentOnServer(id, comments);
   }, [id, commentsData?.children, comments, focusedCommentId, focusedMode, pruneCommentsPresentOnServer]);
 
+  const availableFocusedContextCount = useMemo(() => {
+    if (!focusedCommentId) return 0;
+    const rootId = id?.toLowerCase();
+    const focusedId = focusedCommentId.toLowerCase();
+    return (focusedContextCheckData?.context ?? []).filter((comment) => {
+      const contextPostId = comment.post_id.toLowerCase();
+      return contextPostId !== rootId && contextPostId !== focusedId;
+    }).length;
+  }, [focusedCommentId, focusedContextCheckData, id]);
+
   const hasRecentContext = useMemo(() => {
     if (!focusedCommentId || focusedMode === "full") return false;
     if (!isFocusedCommentFetched || !isFocusedContextCheckFetched) return false;
-    return focusedThreadState.hasParent;
-  }, [focusedCommentId, focusedMode, isFocusedCommentFetched, isFocusedContextCheckFetched, focusedThreadState]);
+    return availableFocusedContextCount > 0 &&
+      (focusedMode !== "context" || focusedContextDepth < availableFocusedContextCount);
+  }, [focusedCommentId, focusedMode, isFocusedCommentFetched, isFocusedContextCheckFetched, availableFocusedContextCount, focusedContextDepth]);
 
   const recentContextDone =
     focusedMode === "context" &&
     isFocusedCommentFetched &&
     isFocusedContextCheckFetched &&
-    focusedThreadState.hasParent;
+    availableFocusedContextCount > 0 &&
+    focusedContextDepth >= availableFocusedContextCount;
   const recentContextDisabled = !hasRecentContext || recentContextDone;
 
   const hasFullThreadBeyondFocus = useMemo(() => {
@@ -466,6 +487,7 @@ export function useMediaPostDetailData({
     recentContextDone,
     refetchComments,
     refetchFocusedContext,
+    setFocusedContextDepth,
     removeCommentFromState,
   };
 }

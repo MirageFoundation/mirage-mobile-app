@@ -232,7 +232,7 @@ export function PostDetailPostSection({
                     !hasFocusedRecentContext || recentContextDone || threadActionLoading !== null;
                   if (contextDisabled) return;
                   setThreadActionLoading("context");
-                  void loadFocusedContext(5).finally(() => setThreadActionLoading(null));
+                  void loadFocusedContext(10).finally(() => setThreadActionLoading(null));
                 }}
                 disabled={!hasFocusedRecentContext || recentContextDone || threadActionLoading !== null}
                 style={({ pressed }) => [

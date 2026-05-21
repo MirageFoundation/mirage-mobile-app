@@ -12,6 +12,43 @@ export type CommentVoteOverrides = Record<
 
 export type CommentEditOverrides = Record<string, string>;
 
+export const MIN_FOCUSED_COMMENT_COUNT = 5;
+
+function collectCommentIds(comment: Comment, ids: Set<string>) {
+  ids.add(comment.id);
+  comment.replies?.forEach((reply) => collectCommentIds(reply, ids));
+}
+
+function commentTreeContainsId(comment: Comment, targetIds: Set<string>): boolean {
+  if (targetIds.has(comment.id)) return true;
+  return comment.replies?.some((reply) => commentTreeContainsId(reply, targetIds)) ?? false;
+}
+
+export function appendSupplementalCommentsForMinimum(
+  focusedComments: Comment[],
+  candidateComments: Comment[],
+  minimumCount = MIN_FOCUSED_COMMENT_COUNT,
+): Comment[] {
+  const focusedCount = countCommentsInTree(focusedComments);
+  if (focusedCount >= minimumCount) return focusedComments;
+
+  const focusedIds = new Set<string>();
+  focusedComments.forEach((comment) => collectCommentIds(comment, focusedIds));
+
+  const supplemental: Comment[] = [];
+  let totalCount = focusedCount;
+  for (const candidate of candidateComments) {
+    if (commentTreeContainsId(candidate, focusedIds)) continue;
+    supplemental.push(candidate);
+    totalCount += countCommentsInTree([candidate]);
+    if (totalCount >= minimumCount) break;
+  }
+
+  return supplemental.length > 0
+    ? [...focusedComments, ...supplemental]
+    : focusedComments;
+}
+
 type BuildPostDetailCommentsInput = {
   actualRootPostId?: string | null;
   commentsData?: CommentsResponse;
@@ -84,7 +121,14 @@ export function buildPostDetailComments({
         replyCount: Math.max(context[index].replyCount ?? 0, 1),
       };
     }
-    return [{ ...thread, isFocusedContext: true }];
+    const focusedThread = [{ ...thread, isFocusedContext: true }];
+    const supplementalSource = isViewingComment
+      ? fullThreadCommentsData?.children ?? []
+      : commentsData?.children ?? [];
+    return appendSupplementalCommentsForMinimum(
+      focusedThread,
+      transformApiComments(supplementalSource),
+    );
   }
 
   if (!commentsData?.children) return [];
