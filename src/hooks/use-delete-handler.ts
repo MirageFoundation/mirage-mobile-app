@@ -18,7 +18,12 @@ export type DeleteTargetType = "post" | "comment";
 export interface DeleteTarget {
   id: string;
   type: DeleteTargetType;
+  rootPostId?: string;
 }
+
+export type DeleteRequestOptions = {
+  rootPostId?: string;
+};
 
 export interface UseDeleteHandlerOptions {
   onSuccess?: (targetId: string, targetType: DeleteTargetType) => void;
@@ -27,7 +32,7 @@ export interface UseDeleteHandlerOptions {
 }
 
 export interface UseDeleteHandlerReturn {
-  requestDelete: (targetId: string, targetType: DeleteTargetType) => void;
+  requestDelete: (targetId: string, targetType: DeleteTargetType, options?: DeleteRequestOptions) => void;
   confirmDelete: () => void;
   cancelDelete: () => void;
   isDeleting: boolean;
@@ -50,9 +55,13 @@ export function useDeleteHandler(
   const deleteMutation = useDelete();
 
   const requestDelete = useCallback(
-    (targetId: string, targetType: DeleteTargetType) => {
+    (targetId: string, targetType: DeleteTargetType, requestOptions?: DeleteRequestOptions) => {
       requireAuth(() => {
-        setPendingTarget({ id: targetId, type: targetType });
+        setPendingTarget({
+          id: targetId,
+          type: targetType,
+          rootPostId: requestOptions?.rootPostId,
+        });
         setShowConfirmation(true);
       });
     },
@@ -80,7 +89,7 @@ export function useDeleteHandler(
       type: "delete",
       label,
       execute: async () => {
-        return deleteMutation.mutateAsync({ postId: targetId });
+        return deleteMutation.mutateAsync({ postId: targetId, rootPostId: pendingTarget.rootPostId });
       },
       onSuccess: () => {
         setIsDeleting(false);

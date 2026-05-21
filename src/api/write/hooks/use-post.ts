@@ -548,6 +548,55 @@ const applyCommentDeltaToPostsData = (
   };
 };
 
+const findPostInPostsData = (data: unknown, postId: string): ApiPost | null => {
+  if (!data) return null;
+  if (isInfinitePostsData(data)) {
+    for (const page of data.pages) {
+      const match = page.posts.find((post) => post.post_id === postId);
+      if (match) return match;
+    }
+    return null;
+  }
+
+  const singleData = data as PostsResponse;
+  return singleData.posts?.find((post) => post.post_id === postId) ?? null;
+};
+
+const addRootPostIdFromPost = (post: ApiPost | null, rootPostIds: Set<string>) => {
+  if (!post?.root_post_id || post.root_post_id === post.post_id) return;
+  rootPostIds.add(post.root_post_id);
+};
+
+const findRootPostIdsForCachedComment = (
+  queryClient: QueryClient,
+  commentId: string,
+): Set<string> => {
+  const rootPostIds = new Set<string>();
+
+  queryClient.getQueriesData({ queryKey: queryKeys.userPostsRoot() }).forEach(([, data]) => {
+    addRootPostIdFromPost(findPostInPostsData(data, commentId), rootPostIds);
+  });
+
+  queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }).forEach(([, data]) => {
+    addRootPostIdFromPost(findPostInPostsData(data, commentId), rootPostIds);
+  });
+
+  return rootPostIds;
+};
+
+const applyCommentDeltaToRootPostCaches = (
+  queryClient: QueryClient,
+  rootPostId: string,
+  delta: number,
+) => {
+  updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (queryData) =>
+    applyCommentDeltaToPostsData(queryData, rootPostId, delta),
+  );
+  updateQueriesWithReducer(queryClient, queryKeys.userPostsRoot(), (queryData) =>
+    applyCommentDeltaToPostsData(queryData, rootPostId, delta),
+  );
+};
+
 const removePostFromPostsData = (
   data: unknown,
   postId: string,
@@ -842,6 +891,9 @@ export function useComment(options: UsePostOptions = {}) {
 
       const optimisticCommentId = `optimistic-${Date.now()}`;
       const affectedRootPostIds = new Set<string>();
+      if (input.rootPostId) {
+        affectedRootPostIds.add(input.rootPostId);
+      }
 
       previousComments.forEach(([queryKey, queryData]) => {
         if (!queryData?.root) return;
@@ -869,12 +921,7 @@ export function useComment(options: UsePostOptions = {}) {
       }
 
       affectedRootPostIds.forEach((rootPostId) => {
-        updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (queryData) =>
-          applyCommentDeltaToPostsData(queryData, rootPostId, 1),
-        );
-        updateQueriesWithReducer(queryClient, queryKeys.userPostsRoot(), (queryData) =>
-          applyCommentDeltaToPostsData(queryData, rootPostId, 1),
-        );
+        applyCommentDeltaToRootPostCaches(queryClient, rootPostId, 1);
       });
 
       return {
@@ -1086,6 +1133,11 @@ export function useDelete(options: UsePostOptions = {}) {
         queryKey: queryKeys.userPostsRoot(),
       }) as Array<[QueryKey, unknown]>;
 
+      const affectedRootPostIds = findRootPostIdsForCachedComment(queryClient, input.postId);
+      if (input.rootPostId) {
+        affectedRootPostIds.add(input.rootPostId);
+      }
+
       previousComments.forEach(([queryKey, queryData]) => {
         if (!queryData?.root || queryData.root.post_id === input.postId) {
           return;
@@ -1095,6 +1147,7 @@ export function useDelete(options: UsePostOptions = {}) {
         if (!removalResult.removed) {
           return;
         }
+        affectedRootPostIds.add(queryData.root.post_id);
 
         queryClient.setQueryData<CommentsResponse>(queryKey, {
           ...queryData,
@@ -1104,6 +1157,10 @@ export function useDelete(options: UsePostOptions = {}) {
           },
           children: removalResult.nextComments,
         });
+      });
+
+      affectedRootPostIds.forEach((rootPostId) => {
+        applyCommentDeltaToRootPostCaches(queryClient, rootPostId, -1);
       });
 
       updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (queryData) =>
