@@ -8,7 +8,12 @@ import {
   View,
 } from "react-native";
 import BottomSheet, { BottomSheetFlatList } from "@gorhom/bottom-sheet";
-import type { SharedValue } from "react-native-reanimated";
+import Animated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedStyle,
+  type SharedValue,
+} from "react-native-reanimated";
 import { useUnistyles } from "react-native-unistyles";
 
 import { CommentThread, type Comment, type Post } from "@/src/components/molecules";
@@ -157,6 +162,43 @@ export function MediaPostDetailCommentSheet({
     (contextActionAvailable || fullThreadActionAvailable)
   );
 
+  const handleAnimatedStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      animatedIndex.value,
+      [0, 1],
+      [0, 1],
+      Extrapolation.CLAMP,
+    );
+    return {
+      opacity,
+      borderTopWidth: opacity > 0.01 ? 2 : 0,
+    };
+  });
+
+  const renderHandle = () => (
+    <Animated.View
+      style={[
+        {
+          backgroundColor: theme.colors.background.default,
+          paddingVertical: 10,
+          borderTopColor: theme.colors.border.subtle,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        handleAnimatedStyle,
+      ]}
+    >
+      <View
+        style={{
+          width: 36,
+          height: 4,
+          borderRadius: 2,
+          backgroundColor: theme.colors.text.subtle,
+        }}
+      />
+    </Animated.View>
+  );
+
   return (
     <BottomSheet
       ref={sheetRef}
@@ -172,19 +214,7 @@ export function MediaPostDetailCommentSheet({
       enableContentPanningGesture
       onClose={onClose}
       style={{ zIndex: 30, elevation: 30 }}
-      handleIndicatorStyle={{
-        backgroundColor: theme.colors.text.subtle,
-        width: 36,
-        height: 4,
-      }}
-      handleStyle={{
-        backgroundColor: theme.colors.background.default,
-        borderTopLeftRadius: 0,
-        borderTopRightRadius: 0,
-        paddingVertical: 10,
-        borderTopWidth: 2,
-        borderTopColor: theme.colors.border.subtle,
-      }}
+      handleComponent={renderHandle}
       backgroundStyle={{
         backgroundColor: theme.colors.background.default,
         borderRadius: 0,

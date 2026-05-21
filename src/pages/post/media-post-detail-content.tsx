@@ -518,6 +518,8 @@ export default function MediaPostDetailScreen({
               sourceMediaTransition?.postId === id ? sourceMediaTransition : null
             }
             videoSyncScope={videoSyncScope}
+            onSwipeUp={collapseMedia}
+            onSwipeDown={() => router.back()}
           />
 
           {/* --------------- BottomSheet for comments ------------------ */}

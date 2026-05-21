@@ -48,7 +48,6 @@ export function useMediaPostDetailLayout({
   const collapsedMediaH = Math.round(SCREEN_H * COLLAPSED_FRACTION);
   const listTopY = collapsedMediaTop + collapsedMediaH;
   const expandedSheetH = Math.max(100, SCREEN_H - listTopY);
-  const maxSheetH = SCREEN_H - insets.top;
   const measuredInitialSheetH = measuredPostSummaryH + SHEET_HANDLE_HEIGHT + INITIAL_SHEET_EXTRA_PADDING;
   const initialSheetH = Math.min(
     Math.max(measuredInitialSheetH || 0, INITIAL_SHEET_MIN_HEIGHT),
@@ -57,8 +56,8 @@ export function useMediaPostDetailLayout({
   const initialSheetTop = SCREEN_H - initialSheetH;
 
   const snapPoints = useMemo(
-    () => [initialSheetH, expandedSheetH, maxSheetH],
-    [initialSheetH, expandedSheetH, maxSheetH],
+    () => [initialSheetH, expandedSheetH],
+    [initialSheetH, expandedSheetH],
   );
   const sheetAnimationConfigs = useBottomSheetSpringConfigs({
     damping: 34,

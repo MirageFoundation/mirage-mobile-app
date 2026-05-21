@@ -9,6 +9,8 @@ import {
 } from "react-native";
 import Animated, { type SharedValue } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { runOnJS } from "react-native-reanimated";
 
 import { Box, Text } from "@/src/components/ui/primitives";
 import type { PressedMediaTransition } from "@/src/utils/post-transition";
@@ -44,6 +46,8 @@ type MediaPostDetailGalleryProps = {
   setActiveIndex: (index: number) => void;
   sourceMediaTransition?: PressedMediaTransition | null;
   videoSyncScope?: string;
+  onSwipeUp?: () => void;
+  onSwipeDown?: () => void;
 };
 
 export function MediaPostDetailGallery({
@@ -64,6 +68,8 @@ export function MediaPostDetailGallery({
   setActiveIndex,
   sourceMediaTransition,
   videoSyncScope,
+  onSwipeUp,
+  onSwipeDown,
 }: MediaPostDetailGalleryProps) {
   const getInitialPreviewUri = useCallback((item: MediaItem) => {
     if (!sourceMediaTransition || sourceMediaTransition.uri !== item.uri) return undefined;
@@ -105,7 +111,20 @@ export function MediaPostDetailGallery({
     [activeIndex, setActiveIndex],
   );
 
+  const verticalSwipeGesture = Gesture.Pan()
+    .activeOffsetY([-12, 12])
+    .failOffsetX([-20, 20])
+    .onEnd((event) => {
+      const { translationY, velocityY } = event;
+      if (translationY < -30 || velocityY < -400) {
+        if (onSwipeUp) runOnJS(onSwipeUp)();
+      } else if (translationY > 30 || velocityY > 400) {
+        if (onSwipeDown) runOnJS(onSwipeDown)();
+      }
+    });
+
   return (
+    <GestureDetector gesture={verticalSwipeGesture}>
     <Animated.View
       style={[
         styles.mediaContainer,
@@ -196,5 +215,6 @@ export function MediaPostDetailGallery({
           </Animated.View>
         )}
     </Animated.View>
+    </GestureDetector>
   );
 }
