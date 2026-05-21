@@ -149,6 +149,13 @@ export function MediaPostDetailCommentSheet({
   onHighlightedLayout,
 }: MediaPostDetailCommentSheetProps) {
   const { theme } = useUnistyles();
+  const contextActionAvailable = !recentContextDisabled;
+  const fullThreadActionAvailable = hasFullThreadBeyondFocus;
+  const shouldShowThreadReminder = !!(
+    focusedCommentId &&
+    focusedMode !== "full" &&
+    (contextActionAvailable || fullThreadActionAvailable)
+  );
 
   return (
     <BottomSheet
@@ -241,7 +248,7 @@ export function MediaPostDetailCommentSheet({
               />
             </View>
 
-            {focusedCommentId && focusedMode !== "full" ? (
+            {shouldShowThreadReminder ? (
               <View style={styles.threadReminderCard}>
                 <View style={styles.threadReminderHeaderRow}>
                   <Ionicons
@@ -268,15 +275,15 @@ export function MediaPostDetailCommentSheet({
                       style={({ pressed }) => [
                         styles.threadReminderButton,
                         pressed && styles.threadReminderButtonPressed,
-                        recentContextDisabled && styles.threadReminderButtonDisabled,
+                        !contextActionAvailable && styles.threadReminderButtonDisabled,
                       ]}
-                      disabled={recentContextDisabled}
+                      disabled={!contextActionAvailable}
                     >
                       <Ionicons
                         name={recentContextDone ? "checkmark-outline" : "arrow-up-outline"}
                         size={14}
                         color={
-                          recentContextDisabled
+                          !contextActionAvailable
                             ? theme.colors.text.subtle
                             : theme.colors.text.default
                         }
@@ -284,7 +291,7 @@ export function MediaPostDetailCommentSheet({
                       <Text
                         size="xs"
                         weight="semibold"
-                        mode={recentContextDisabled ? "subtle" : undefined}
+                        mode={!contextActionAvailable ? "subtle" : undefined}
                       >
                         Recent context
                       </Text>
@@ -296,15 +303,15 @@ export function MediaPostDetailCommentSheet({
                       style={({ pressed }) => [
                         styles.threadReminderButton,
                         pressed && styles.threadReminderButtonPressed,
-                        !hasFullThreadBeyondFocus && styles.threadReminderButtonDisabled,
+                        !fullThreadActionAvailable && styles.threadReminderButtonDisabled,
                       ]}
-                      disabled={!hasFullThreadBeyondFocus}
+                      disabled={!fullThreadActionAvailable}
                     >
                       <Ionicons
                         name="list-outline"
                         size={14}
                         color={
-                          hasFullThreadBeyondFocus
+                          fullThreadActionAvailable
                             ? theme.colors.text.default
                             : theme.colors.text.subtle
                         }
@@ -312,7 +319,7 @@ export function MediaPostDetailCommentSheet({
                       <Text
                         size="xs"
                         weight="semibold"
-                        mode={hasFullThreadBeyondFocus ? undefined : "subtle"}
+                        mode={fullThreadActionAvailable ? undefined : "subtle"}
                       >
                         Full thread
                       </Text>

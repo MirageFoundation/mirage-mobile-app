@@ -84,6 +84,13 @@ export function PostDetailPostSection({
   const clearTopicFollowOverride = usePostDetailActionStateStore(
     (state) => state.clearTopicFollowOverride,
   );
+  const contextActionAvailable = hasFocusedRecentContext && !recentContextDone;
+  const fullThreadActionAvailable = hasFullThreadBeyondFocus;
+  const shouldShowThreadReminder = !!(
+    focusedCommentId &&
+    actualRootPostId &&
+    (contextActionAvailable || fullThreadActionAvailable)
+  );
 
   const postVoteHandler = useVoteHandler({
     onOptimisticUpdate: useCallback(
@@ -212,7 +219,7 @@ export function PostDetailPostSection({
         videoSyncScope={videoSyncScope}
       />
       <View style={styles.divider} />
-      {focusedCommentId && actualRootPostId ? (
+      {shouldShowThreadReminder ? (
         <View style={styles.threadReminder}>
           <View style={styles.threadReminderHeader}>
             <Ionicons
@@ -229,17 +236,17 @@ export function PostDetailPostSection({
               <Pressable
                 onPress={() => {
                   const contextDisabled =
-                    !hasFocusedRecentContext || recentContextDone || threadActionLoading !== null;
+                    !contextActionAvailable || threadActionLoading !== null;
                   if (contextDisabled) return;
                   setThreadActionLoading("context");
-                  void loadFocusedContext(5).finally(() => setThreadActionLoading(null));
+                  void loadFocusedContext(10).finally(() => setThreadActionLoading(null));
                 }}
-                disabled={!hasFocusedRecentContext || recentContextDone || threadActionLoading !== null}
+                disabled={!contextActionAvailable || threadActionLoading !== null}
                 style={({ pressed }) => [
                   styles.threadReminderButton,
                   pressed && styles.threadReminderButtonPressed,
                   threadActionLoading === "context" && styles.threadReminderButtonActive,
-                  (!hasFocusedRecentContext || recentContextDone || threadActionLoading !== null) &&
+                  (!contextActionAvailable || threadActionLoading !== null) &&
                     styles.threadReminderButtonDisabled,
                 ]}
               >
@@ -250,7 +257,7 @@ export function PostDetailPostSection({
                     name={recentContextDone ? "checkmark-outline" : "arrow-up-outline"}
                     size={14}
                     color={
-                      !hasFocusedRecentContext || recentContextDone || threadActionLoading !== null
+                      !contextActionAvailable || threadActionLoading !== null
                         ? theme.colors.text.subtle
                         : theme.colors.text.default
                     }
@@ -259,7 +266,7 @@ export function PostDetailPostSection({
                 <Text
                   size="xs"
                   weight="semibold"
-                  mode={!hasFocusedRecentContext || recentContextDone || threadActionLoading !== null ? "subtle" : undefined}
+                  mode={!contextActionAvailable || threadActionLoading !== null ? "subtle" : undefined}
                 >
                   Recent context
                 </Text>
@@ -268,17 +275,17 @@ export function PostDetailPostSection({
             <View style={styles.threadReminderButtonSlot}>
               <Pressable
                 onPress={() => {
-                  if (threadActionLoading || !hasFullThreadBeyondFocus) return;
+                  if (threadActionLoading || !fullThreadActionAvailable) return;
                   setThreadActionLoading("full");
                   onShowFullThread();
                   setTimeout(() => setThreadActionLoading(null), 150);
                 }}
-                disabled={threadActionLoading !== null || !hasFullThreadBeyondFocus}
+                disabled={threadActionLoading !== null || !fullThreadActionAvailable}
                 style={({ pressed }) => [
                   styles.threadReminderButton,
                   pressed && styles.threadReminderButtonPressed,
                   threadActionLoading === "full" && styles.threadReminderButtonActive,
-                  !hasFullThreadBeyondFocus && styles.threadReminderButtonDisabled,
+                  !fullThreadActionAvailable && styles.threadReminderButtonDisabled,
                 ]}
               >
                 {threadActionLoading === "full" ? (
@@ -288,7 +295,7 @@ export function PostDetailPostSection({
                     name="list-outline"
                     size={14}
                     color={
-                      hasFullThreadBeyondFocus
+                      fullThreadActionAvailable
                         ? theme.colors.text.default
                         : theme.colors.text.subtle
                     }
@@ -297,7 +304,7 @@ export function PostDetailPostSection({
                 <Text
                   size="xs"
                   weight="semibold"
-                  mode={hasFullThreadBeyondFocus ? undefined : "subtle"}
+                  mode={fullThreadActionAvailable ? undefined : "subtle"}
                 >
                   Full thread
                 </Text>

@@ -1,4 +1,5 @@
-import { useComments, useUserFollowed } from "@/src/api/read";
+import { transformApiComments, useComments, useUserFollowed } from "@/src/api/read";
+import * as Sentry from "@sentry/react-native";
 import { parseApiError } from "@/src/utils/parse-api-error";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { getGradientColor } from "@/src/components/molecules/profile-header";
@@ -46,6 +47,8 @@ import { PostDetailStickySummary } from "./post-detail-sticky-summary";
 import {
   buildPostDetailComments,
   countCommentsInTree,
+  findTopLevelBranchForComment,
+  hasMoreRepliesInBranch,
   mergePostDetailComments,
 } from "./post-detail-comment-utils";
 import { usePostDetailMediaRoute } from "./use-post-detail-media-route";
@@ -268,6 +271,13 @@ function LegacyPostDetailScreen() {
   const globalBlockedUserIds = useContentModerationStore(
     (s) => s.blockedUserIds,
   );
+  const [revealFocusedBranch, setRevealFocusedBranch] = useState(false);
+  const branchExpansionReportRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setRevealFocusedBranch(false);
+    branchExpansionReportRef.current = null;
+  }, [id, focusedCommentId]);
 
   const comments = useMemo(() => {
     return buildPostDetailComments({
@@ -280,6 +290,7 @@ function LegacyPostDetailScreen() {
       fullThreadCommentsData,
       isLoadingContext,
       isViewingComment,
+      revealFocusedBranch,
       showFocusedThread,
     });
   }, [
@@ -293,24 +304,31 @@ function LegacyPostDetailScreen() {
     contextComments,
     contextDepth,
     isLoadingContext,
+    revealFocusedBranch,
   ]);
 
-  const hasFocusedRecentContext = useMemo(() => {
-    if (!focusedCommentId) return false;
+  const availableFocusedContextCount = useMemo(() => {
+    if (!focusedCommentId) return 0;
     const rootId = actualRootPostId?.toLowerCase();
     const focusedId = focusedCommentId.toLowerCase();
-    const hasParentComment = (focusedContextCheckQuery.data?.context ?? [])
-      .some((comment) => {
+    return (focusedContextCheckQuery.data?.context ?? [])
+      .filter((comment) => {
         const contextPostId = comment.post_id.toLowerCase();
         return contextPostId !== rootId && contextPostId !== focusedId;
-      });
-    return hasParentComment;
+      }).length;
   }, [focusedCommentId, actualRootPostId, focusedContextCheckQuery.data]);
 
-  const recentContextDone =
-    (contextDepth > 0 || hasLoadedFocusedContext) &&
-    focusedContextCheckQuery.isFetched &&
-    hasFocusedRecentContext;
+  const loadedFocusedContextCount = useMemo(() => {
+    if (!focusedCommentId) return 0;
+    const rootId = actualRootPostId?.toLowerCase();
+    const focusedId = focusedCommentId.toLowerCase();
+    return contextComments.filter((comment) => {
+      const contextPostId = comment.post_id.toLowerCase();
+      return contextPostId !== rootId && contextPostId !== focusedId;
+    }).length;
+  }, [focusedCommentId, actualRootPostId, contextComments]);
+
+  const hasAvailableFocusedAncestors = availableFocusedContextCount > 0;
 
   const hasFullThreadBeyondFocus = useMemo(() => {
     if (!focusedCommentId) return false;
@@ -393,6 +411,63 @@ function LegacyPostDetailScreen() {
     optimisticReplyComments,
     optimisticTopLevelComments,
   ]);
+
+  const fullBranchComments = useMemo(() => {
+    const source = isViewingComment
+      ? fullThreadCommentsData?.children
+      : commentsData?.children;
+    return transformApiComments(source ?? []);
+  }, [isViewingComment, fullThreadCommentsData?.children, commentsData?.children]);
+
+  const hasFocusedBranchReplies = useMemo(
+    () => hasMoreRepliesInBranch(comments, fullBranchComments, focusedCommentId),
+    [comments, fullBranchComments, focusedCommentId],
+  );
+
+  useEffect(() => {
+    if (!revealFocusedBranch || !focusedCommentId || fullBranchComments.length === 0) return;
+    const reportKey = `${id}:${focusedCommentId}`;
+    if (branchExpansionReportRef.current === reportKey) return;
+    const branch = findTopLevelBranchForComment(fullBranchComments, focusedCommentId);
+    branchExpansionReportRef.current = reportKey;
+    if (branch) {
+      Sentry.addBreadcrumb({
+        category: "comments",
+        message: "Expanded focused comment branch",
+        data: {
+          postId: id,
+          focusedCommentId,
+          branchId: branch.id,
+          branchCommentCount: countCommentsInTree([branch]),
+          screen: "post-detail",
+        },
+        level: "info",
+      });
+      return;
+    }
+
+    Sentry.captureMessage("Focused branch expansion requested but branch was not found", {
+      level: "warning",
+      tags: { feature: "comments", operation: "focused-branch-expand" },
+      extra: {
+        postId: id,
+        focusedCommentId,
+        rootPostId: actualRootPostId,
+        fullBranchRootCount: fullBranchComments.length,
+        screen: "post-detail",
+      },
+    });
+  }, [revealFocusedBranch, focusedCommentId, fullBranchComments, id, actualRootPostId]);
+
+  const hasFocusedRecentContext = hasAvailableFocusedAncestors || hasFocusedBranchReplies;
+
+  const recentContextDone =
+    !hasFocusedBranchReplies &&
+    (contextDepth > 0 || hasLoadedFocusedContext) &&
+    focusedContextCheckQuery.isFetched &&
+    hasAvailableFocusedAncestors &&
+    loadedFocusedContextCount >= availableFocusedContextCount;
+
   const {
     currentScrollYRef,
     handleComposerConfirmedCommentId: handleHighlightConfirmedCommentId,
@@ -478,7 +553,10 @@ function LegacyPostDetailScreen() {
         hasFullThreadBeyondFocus={hasFullThreadBeyondFocus}
         id={id}
         isVideoVisible={isVideoVisible}
-        loadFocusedContext={loadFocusedContext}
+        loadFocusedContext={async (loadDepth) => {
+          setRevealFocusedBranch(true);
+          await loadFocusedContext(loadDepth);
+        }}
         onLayout={handlePostHeaderLayout}
         onShowFullThread={() => {
           setShowFocusedThread(false);

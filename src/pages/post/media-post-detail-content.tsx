@@ -170,7 +170,7 @@ export default function MediaPostDetailScreen({
     recentContextDisabled,
     recentContextDone,
     refetchComments,
-    refetchFocusedContext,
+    setFocusedContextDepth,
     removeCommentFromState,
   } = useMediaPostDetailData({
     commentsListRef,
@@ -555,7 +555,9 @@ export default function MediaPostDetailScreen({
             isMuted={globalMuted}
             onMuteToggle={handleMuteToggle}
             onSetFocusedMode={setFocusedMode}
-            onRefetchFocusedContext={refetchFocusedContext}
+            onRefetchFocusedContext={() => {
+              setFocusedContextDepth(10);
+            }}
             onCommentUpvote={(cid, l, d, n) =>
               commentVote.handleUpvote(cid, l, d, n)
             }

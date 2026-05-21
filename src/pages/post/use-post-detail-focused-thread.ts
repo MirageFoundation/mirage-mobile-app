@@ -52,7 +52,7 @@ export function usePostDetailFocusedThread({
     data: fullThreadCommentsData,
     isLoading: isLoadingFullThreadComments,
   } = useComments(actualRootPostId, {
-    enabled: isFocused && !showFocusedThread && isViewingComment && !!actualRootPostId,
+    enabled: isFocused && isViewingComment && !!actualRootPostId,
   });
   const [actualRootPost, setActualRootPost] = useState<PostWithChildren | null>(null);
   const [contextComments, setContextComments] = useState<ApiPost[]>([]);
@@ -72,13 +72,13 @@ export function usePostDetailFocusedThread({
 
   const focusedContextCheckQuery = useQuery({
     queryKey: focusedCommentId
-      ? queryKeys.commentContext(focusedCommentId, 5)
-      : queryKeys.commentContext("missing", 5),
+      ? queryKeys.commentContext(focusedCommentId, 10)
+      : queryKeys.commentContext("missing", 10),
     queryFn: () =>
       getCommentContext({
         comment_id: focusedCommentId!,
         address: currentUserWallet,
-        max_depth: 5,
+        max_depth: 10,
       }),
     enabled: !!focusedCommentId,
     staleTime: 1000 * 60,
@@ -87,7 +87,7 @@ export function usePostDetailFocusedThread({
   const loadFocusedContext = useCallback(
     async (maxDepth = 5) => {
       if (!focusedCommentId) return;
-      const depthToLoad = Math.min(Math.max(maxDepth, 0), 5);
+      const depthToLoad = Math.min(Math.max(maxDepth, 0), 10);
       if (depthToLoad <= 0) return;
       setIsLoadingContext(true);
       try {

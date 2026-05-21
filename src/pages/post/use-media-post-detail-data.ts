@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useEffect, useMemo, useState } from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
 
@@ -21,6 +21,13 @@ import {
   usePostCommentOptimisticStore,
 } from "@/src/stores/post-comment-optimistic-store";
 import { findPostInCachedData } from "./post-detail-media-routing";
+import {
+  appendSupplementalCommentsForMinimum,
+  countCommentsInTree,
+  findCommentById,
+  findTopLevelBranchForComment,
+  hasMoreRepliesInBranch,
+} from "./post-detail-comment-utils";
 
 type FocusedMode = "single" | "context" | "full";
 
@@ -79,6 +86,7 @@ export function useMediaPostDetailData({
   pendingScrollToEndRef,
 }: UseMediaPostDetailDataOptions) {
   const queryClient = useQueryClient();
+  const branchExpansionReportRef = useRef<string | null>(null);
   const {
     data: commentsData,
     isLoading: isLoadingComments,
@@ -86,7 +94,8 @@ export function useMediaPostDetailData({
     isError: isCommentsError,
     error: commentsError,
   } = useComments(id!, { enabled: isFocused });
-  const focusedDepth = focusedMode === "context" ? 5 : 0;
+  const [focusedContextDepth, setFocusedContextDepth] = useState(5);
+  const focusedDepth = focusedMode === "context" ? focusedContextDepth : 0;
   const {
     data: focusedCommentData,
     isLoading: isLoadingFocusedComment,
@@ -119,16 +128,21 @@ export function useMediaPostDetailData({
     isError: isFocusedContextCheckError,
     error: focusedContextCheckError,
   } = useQuery({
-    queryKey: queryKeys.commentContext(focusedCommentId!, 5),
+    queryKey: queryKeys.commentContext(focusedCommentId!, 10),
     queryFn: () =>
       getCommentContext({
         comment_id: focusedCommentId!,
         address: currentUser?.walletAddress ?? undefined,
-        max_depth: 5,
+        max_depth: 10,
       }),
     enabled: isFocused && !!focusedCommentId && focusedMode !== "full",
     staleTime: 1000 * 60,
   });
+
+  useEffect(() => {
+    setFocusedContextDepth(5);
+    branchExpansionReportRef.current = null;
+  }, [focusedCommentId]);
 
   useEffect(() => {
     if (isCommentsError) {
@@ -372,8 +386,18 @@ export function useMediaPostDetailData({
           ),
         }
       : null;
+    const focusedFromFullBranch = focusedContextDepth > 5
+      ? findCommentById(allDisplayComments, focusedCommentId)
+      : null;
     const focused = focusedFromApi
-      ? processFocused(focusedFromApi)
+      ? processFocused({
+          ...focusedFromApi,
+          replies: focusedFromFullBranch?.replies ?? focusedFromApi.replies,
+          replyCount: Math.max(
+            focusedFromApi.replyCount ?? 0,
+            focusedFromFullBranch?.replyCount ?? 0,
+          ),
+        })
       : findComment(allDisplayComments);
 
     const rootId = id?.toLowerCase();
@@ -414,6 +438,7 @@ export function useMediaPostDetailData({
     focusedContextData,
     focusedContextCheckData,
     focusedCommentData,
+    focusedContextDepth,
     id,
     applyOptimisticReplies,
     applyVoteOverridesToComment,
@@ -432,8 +457,14 @@ export function useMediaPostDetailData({
     if (isLoadingFocusedContextThread) return [];
     const focused = focusedThreadState.focused;
     if (!focused) return [];
+    const expandedFocusedBranch = focusedContextDepth > 5
+      ? findTopLevelBranchForComment(allDisplayComments, focusedCommentId)
+      : null;
+    if (expandedFocusedBranch && focusedMode === "context") {
+      return [expandedFocusedBranch];
+    }
     if (focusedMode !== "context" || focusedThreadState.parents.length === 0) {
-      return [focused];
+      return appendSupplementalCommentsForMinimum([focused], allDisplayComments);
     }
     let thread: Comment = focused;
     for (let index = focusedThreadState.parents.length - 1; index >= 0; index -= 1) {
@@ -448,8 +479,11 @@ export function useMediaPostDetailData({
         replyCount: Math.max(parent.replyCount ?? 0, optimisticParentReplies.length + 1),
       };
     }
-    return [{ ...thread, isFocusedContext: true }];
-  }, [focusedCommentId, focusedMode, allDisplayComments, isLoadingFocusedContextThread, focusedThreadState]);
+    return appendSupplementalCommentsForMinimum(
+      [{ ...thread, isFocusedContext: true }],
+      allDisplayComments,
+    );
+  }, [focusedCommentId, focusedMode, allDisplayComments, isLoadingFocusedContextThread, focusedThreadState, focusedContextDepth]);
 
   displayCommentsLengthRef.current = displayComments.length;
 
@@ -459,17 +493,70 @@ export function useMediaPostDetailData({
     pruneCommentsPresentOnServer(id, comments);
   }, [id, commentsData?.children, comments, focusedCommentId, focusedMode, pruneCommentsPresentOnServer]);
 
+  const availableFocusedContextCount = useMemo(() => {
+    if (!focusedCommentId) return 0;
+    const rootId = id?.toLowerCase();
+    const focusedId = focusedCommentId.toLowerCase();
+    return (focusedContextCheckData?.context ?? []).filter((comment) => {
+      const contextPostId = comment.post_id.toLowerCase();
+      return contextPostId !== rootId && contextPostId !== focusedId;
+    }).length;
+  }, [focusedCommentId, focusedContextCheckData, id]);
+
+  const hasFocusedBranchReplies = useMemo(
+    () => hasMoreRepliesInBranch(displayComments, allDisplayComments, focusedCommentId),
+    [displayComments, allDisplayComments, focusedCommentId],
+  );
+
+  useEffect(() => {
+    if (!focusedCommentId || focusedMode !== "context" || focusedContextDepth <= 5) return;
+    const reportKey = `${id ?? "missing"}:${focusedCommentId}:${focusedContextDepth}`;
+    if (branchExpansionReportRef.current === reportKey) return;
+    const branch = findTopLevelBranchForComment(allDisplayComments, focusedCommentId);
+    branchExpansionReportRef.current = reportKey;
+    if (branch) {
+      Sentry.addBreadcrumb({
+        category: "comments",
+        message: "Expanded focused media comment branch",
+        data: {
+          postId: id,
+          focusedCommentId,
+          branchId: branch.id,
+          branchCommentCount: countCommentsInTree([branch]),
+          screen: "media-post-detail",
+        },
+        level: "info",
+      });
+      return;
+    }
+
+    Sentry.captureMessage("Focused media branch expansion requested but branch was not found", {
+      level: "warning",
+      tags: { feature: "comments", operation: "focused-media-branch-expand" },
+      extra: {
+        postId: id,
+        focusedCommentId,
+        fullBranchRootCount: allDisplayComments.length,
+        screen: "media-post-detail",
+      },
+    });
+  }, [focusedCommentId, focusedMode, focusedContextDepth, allDisplayComments, id]);
+
   const hasRecentContext = useMemo(() => {
     if (!focusedCommentId || focusedMode === "full") return false;
     if (!isFocusedCommentFetched || !isFocusedContextCheckFetched) return false;
-    return focusedThreadState.hasParent;
-  }, [focusedCommentId, focusedMode, isFocusedCommentFetched, isFocusedContextCheckFetched, focusedThreadState]);
+    return hasFocusedBranchReplies ||
+      (availableFocusedContextCount > 0 &&
+        (focusedMode !== "context" || focusedContextDepth < availableFocusedContextCount));
+  }, [focusedCommentId, focusedMode, isFocusedCommentFetched, isFocusedContextCheckFetched, hasFocusedBranchReplies, availableFocusedContextCount, focusedContextDepth]);
 
   const recentContextDone =
+    !hasFocusedBranchReplies &&
     focusedMode === "context" &&
     isFocusedCommentFetched &&
     isFocusedContextCheckFetched &&
-    focusedThreadState.hasParent;
+    availableFocusedContextCount > 0 &&
+    focusedContextDepth >= availableFocusedContextCount;
   const recentContextDisabled = !hasRecentContext || recentContextDone;
 
   const hasFullThreadBeyondFocus = useMemo(() => {
@@ -509,6 +596,7 @@ export function useMediaPostDetailData({
     recentContextDone,
     refetchComments,
     refetchFocusedContext,
+    setFocusedContextDepth,
     removeCommentFromState,
   };
 }
