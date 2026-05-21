@@ -64,6 +64,7 @@ import { styles } from "./media-post-detail-styles";
 import { useMediaPostDetailData } from "./use-media-post-detail-data";
 import { useMediaPostDetailLayout } from "./use-media-post-detail-layout";
 import { useMediaPostDetailPendingComment } from "./use-media-post-detail-pending-comment";
+import { usePostDetailPendingCommentEdit } from "./use-post-detail-pending-comment-edit";
 import { useMediaPostDetailVideoControls } from "./use-media-post-detail-video-controls";
 import {
   useCallback,
@@ -164,6 +165,7 @@ export default function MediaPostDetailScreen({
     recentContextDisabled,
     recentContextDone,
     refetchComments,
+    setCommentEditOverrides,
     setFocusedContextDepth,
     removeCommentFromState,
   } = useMediaPostDetailData({
@@ -458,6 +460,12 @@ export default function MediaPostDetailScreen({
     setFocusedMode,
     setHighlightedCommentId,
     suppressedHighlightScrollRef,
+  });
+
+  usePostDetailPendingCommentEdit({
+    id,
+    refetchComments,
+    setCommentEditOverrides,
   });
 
   // --- render -------------------------------------------------------------

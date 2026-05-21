@@ -100,11 +100,12 @@ export function useMediaPostDetailPendingComment({
         return commentMutation.mutateAsync({ parentId, content: finalContent, rootPostId: id });
       },
       onOptimisticUpdate: () => {
-        suppressedHighlightScrollRef.current = null;
         if (captured.replyToId) {
+          suppressedHighlightScrollRef.current = null;
           addReplyOptimisticComment(id, captured.replyToId, optimisticComment);
           pendingReplyScrollIdRef.current = optimisticCommentId;
         } else {
+          suppressedHighlightScrollRef.current = optimisticCommentId;
           addTopLevelOptimisticComment(id, optimisticComment);
           if (focusedCommentId && focusedMode !== "full") {
             setFocusedMode("full");

@@ -22,6 +22,7 @@ import {
 } from "@/src/stores/post-comment-optimistic-store";
 import {
   appendSupplementalCommentsForMinimum,
+  applyEditOverridesToComment,
   countCommentsInTree,
   findCommentById,
   findTopLevelBranchForComment,
@@ -217,6 +218,7 @@ export function useMediaPostDetailData({
       { hasLiked?: boolean; hasDisliked?: boolean; likeDelta?: number }
     >
   >({});
+  const [commentEditOverrides, setCommentEditOverrides] = useState<Record<string, string>>({});
   const commentVote = useVoteHandler({
     onOptimisticUpdate: (targetId, result) => {
       setCommentVoteOverrides((prev) => {
@@ -285,6 +287,7 @@ export function useMediaPostDetailData({
     return [...optimisticTopLevelComments, ...deduped]
       .map(applyOptimisticReplies)
       .map(applyVoteOverridesToComment)
+      .map((comment) => applyEditOverridesToComment(comment, commentEditOverrides))
       .filter(
         (comment) =>
           !hiddenCommentIds.has(comment.id) && !blockedUserIds.has(comment.author.id),
@@ -299,6 +302,7 @@ export function useMediaPostDetailData({
     comments,
     applyOptimisticReplies,
     applyVoteOverridesToComment,
+    commentEditOverrides,
     hiddenCommentIds,
     blockedUserIds,
   ]);
@@ -553,6 +557,7 @@ export function useMediaPostDetailData({
     recentContextDone,
     refetchComments,
     refetchFocusedContext,
+    setCommentEditOverrides,
     setFocusedContextDepth,
     removeCommentFromState,
   };
