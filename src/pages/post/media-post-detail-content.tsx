@@ -246,7 +246,9 @@ export default function MediaPostDetailScreen({
     listTopY,
     mediaContainerStyle,
     measuredInputDockH,
+    measuredPostSummaryH,
     setMeasuredInputDockH,
+    setMeasuredPostSummaryH,
     sheetAnimationConfigs,
     sheetRef,
     snapPoints,
@@ -503,6 +505,9 @@ export default function MediaPostDetailScreen({
             animatedIndex={animatedIndex}
             animatedPosition={animatedPosition}
             animationConfigs={sheetAnimationConfigs}
+            measuredPostSummaryH={measuredPostSummaryH}
+            onPostSummaryHeightChange={setMeasuredPostSummaryH}
+            onClose={() => router.back()}
             focusedCommentId={focusedCommentId}
             focusedMode={focusedMode}
             isLoadingComments={isLoadingComments}

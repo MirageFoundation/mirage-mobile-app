@@ -19,6 +19,9 @@ export const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
+  carouselItem: {
+    flex: 1,
+  },
   mediaInner: {
     width: "100%",
     height: "100%",

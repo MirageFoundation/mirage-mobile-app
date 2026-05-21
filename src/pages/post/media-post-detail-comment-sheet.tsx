@@ -33,6 +33,9 @@ type MediaPostDetailCommentSheetProps = {
   animatedIndex: SharedValue<number>;
   animatedPosition: SharedValue<number>;
   animationConfigs: any;
+  measuredPostSummaryH: number;
+  onPostSummaryHeightChange: (height: number) => void;
+  onClose: () => void;
   focusedCommentId: string | null;
   focusedMode: FocusedMode;
   isLoadingComments: boolean;
@@ -100,6 +103,9 @@ export function MediaPostDetailCommentSheet({
   animatedIndex,
   animatedPosition,
   animationConfigs,
+  measuredPostSummaryH,
+  onPostSummaryHeightChange,
+  onClose,
   focusedCommentId,
   focusedMode,
   isLoadingComments,
@@ -153,10 +159,11 @@ export function MediaPostDetailCommentSheet({
       animatedPosition={animatedPosition}
       animationConfigs={animationConfigs}
       enableDynamicSizing={false}
-      enablePanDownToClose={false}
+      enablePanDownToClose={true}
       enableOverDrag={true}
       enableHandlePanningGesture
       enableContentPanningGesture
+      onClose={onClose}
       style={{ zIndex: 30, elevation: 30 }}
       handleIndicatorStyle={{
         backgroundColor: theme.colors.text.subtle,
@@ -195,35 +202,44 @@ export function MediaPostDetailCommentSheet({
         }}
         ListHeaderComponent={
           <View style={styles.sheetHeader}>
-            <MediaPostDetailFooter
-              post={post}
-              onAuthorPress={onAuthorPress}
-              onUpvote={onUpvote}
-              onDownvote={onDownvote}
-              onComment={onComment}
-              onShare={onShare}
-              onBlockUser={onBlockUser}
-              onBlockPost={onBlockPost}
-              onBlockTopic={onBlockTopic}
-              onReport={onReportPost}
-              isOwnPost={isOwnPost}
-              shareUrl={shareUrl}
-              isVideo={isVideo}
-              isPlaying={isPlaying}
-              positionMs={positionMs}
-              durationMs={durationMs}
-              onPlayPause={onPlayPause}
-              onSeek={onSeek}
-              onMoreLink={onExpandSheet}
-              isMuted={isMuted}
-              onMuteToggle={onMuteToggle}
-              isFollowing={post.isFollowing ?? followedUsers.includes(post.author.id)}
-              isTopicFollowed={post.topic ? followedTopics.includes(post.topic) : false}
-              topic={post.topic}
-              isOwnAuthor={currentUserId === post.author.id}
-              onFollowAuthor={onFollowAuthor}
-              onFollowTopic={onFollowTopic}
-            />
+            <View
+              onLayout={(event) => {
+                const height = Math.ceil(event.nativeEvent.layout.height);
+                if (height > 0 && height !== measuredPostSummaryH) {
+                  onPostSummaryHeightChange(height);
+                }
+              }}
+            >
+              <MediaPostDetailFooter
+                post={post}
+                onAuthorPress={onAuthorPress}
+                onUpvote={onUpvote}
+                onDownvote={onDownvote}
+                onComment={onComment}
+                onShare={onShare}
+                onBlockUser={onBlockUser}
+                onBlockPost={onBlockPost}
+                onBlockTopic={onBlockTopic}
+                onReport={onReportPost}
+                isOwnPost={isOwnPost}
+                shareUrl={shareUrl}
+                isVideo={isVideo}
+                isPlaying={isPlaying}
+                positionMs={positionMs}
+                durationMs={durationMs}
+                onPlayPause={onPlayPause}
+                onSeek={onSeek}
+                onMoreLink={onExpandSheet}
+                isMuted={isMuted}
+                onMuteToggle={onMuteToggle}
+                isFollowing={post.isFollowing ?? followedUsers.includes(post.author.id)}
+                isTopicFollowed={post.topic ? followedTopics.includes(post.topic) : false}
+                topic={post.topic}
+                isOwnAuthor={currentUserId === post.author.id}
+                onFollowAuthor={onFollowAuthor}
+                onFollowTopic={onFollowTopic}
+              />
+            </View>
 
             {focusedCommentId && focusedMode !== "full" ? (
               <View style={styles.threadReminderCard}>

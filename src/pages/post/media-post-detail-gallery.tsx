@@ -1,6 +1,12 @@
-import { type ComponentProps } from "react";
-import { Pressable, View } from "react-native";
-import PagerView from "react-native-pager-view";
+import { useCallback, type ComponentProps } from "react";
+import {
+  Dimensions,
+  FlatList,
+  Pressable,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native";
 import Animated, { type SharedValue } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -13,6 +19,8 @@ import {
 } from "./media-post-detail-media-item";
 import { formatTime } from "./media-post-detail-seek-bar";
 import { styles } from "./media-post-detail-styles";
+
+const SCREEN_WIDTH = Dimensions.get("window").width;
 
 type MediaPostDetailGalleryProps = {
   activeIndex: number;
@@ -57,10 +65,45 @@ export function MediaPostDetailGallery({
   sourceMediaTransition,
   videoSyncScope,
 }: MediaPostDetailGalleryProps) {
-  const getInitialPreviewUri = (item: MediaItem) => {
+  const getInitialPreviewUri = useCallback((item: MediaItem) => {
     if (!sourceMediaTransition || sourceMediaTransition.uri !== item.uri) return undefined;
     return sourceMediaTransition.previewUri || sourceMediaTransition.uri;
-  };
+  }, [sourceMediaTransition]);
+
+  const renderCarouselItem = useCallback(
+    ({ item, index }: { item: MediaItem; index: number }) => (
+      <View style={[styles.carouselItem, { width: SCREEN_WIDTH }]}>
+        <MediaItemView
+          item={item}
+          isActive={index === activeIndex}
+          screenActive={isFocused}
+          collapseProgress={collapseProgress}
+          onTapWhenCollapsed={expandMedia}
+          registerVideo={registerVideo}
+          videoKey={`m-${index}`}
+          videoSyncScope={videoSyncScope}
+          initialPreviewUri={getInitialPreviewUri(item)}
+        />
+      </View>
+    ),
+    [
+      activeIndex,
+      collapseProgress,
+      expandMedia,
+      getInitialPreviewUri,
+      isFocused,
+      registerVideo,
+      videoSyncScope,
+    ],
+  );
+
+  const handleCarouselMomentumEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const nextIndex = Math.round(event.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+      if (nextIndex !== activeIndex) setActiveIndex(nextIndex);
+    },
+    [activeIndex, setActiveIndex],
+  );
 
   return (
     <Animated.View
@@ -70,29 +113,26 @@ export function MediaPostDetailGallery({
       ]}
     >
         {mediaItems.length > 1 ? (
-          <PagerView
+          <FlatList
+            data={mediaItems}
+            renderItem={renderCarouselItem}
+            keyExtractor={(item, index) => `${item.uri}-${index}`}
             style={{ flex: 1 }}
-            initialPage={0}
-            onPageSelected={(event) =>
-              setActiveIndex(event.nativeEvent.position)
-            }
-          >
-            {mediaItems.map((item, index) => (
-              <View key={`${item.uri}-${index}`} style={{ flex: 1 }}>
-                <MediaItemView
-                  item={item}
-                  isActive={index === activeIndex}
-                  screenActive={isFocused}
-                  collapseProgress={collapseProgress}
-                  onTapWhenCollapsed={expandMedia}
-                  registerVideo={registerVideo}
-                  videoKey={`m-${index}`}
-                  videoSyncScope={videoSyncScope}
-                  initialPreviewUri={getInitialPreviewUri(item)}
-                />
-              </View>
-            ))}
-          </PagerView>
+            horizontal
+            pagingEnabled
+            bounces={false}
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={handleCarouselMomentumEnd}
+            getItemLayout={(_, index) => ({
+              length: SCREEN_WIDTH,
+              offset: SCREEN_WIDTH * index,
+              index,
+            })}
+            initialNumToRender={2}
+            maxToRenderPerBatch={2}
+            windowSize={3}
+            removeClippedSubviews
+          />
         ) : activeMedia ? (
           <MediaItemView
             item={activeMedia}
