@@ -7,6 +7,8 @@ import { ForceUpdatePopup } from "@/src/components/molecules/force-update-popup"
 import { ThemedStatusBar } from "@/src/components/ui/themed-status-bar";
 import { Platform } from "react-native";
 import * as Sentry from '@sentry/react-native';
+import Constants from "expo-constants";
+import * as Updates from "expo-updates";
 import { useEffect } from "react";
 import { getShareScheme } from "@/src/utils/share-scheme";
 import { useForceUpdate } from "@/src/hooks/use-force-update";
@@ -20,6 +22,15 @@ import { IS_FDROID_BUILD } from "@/src/config/build-flags";
 const navigationIntegration = Sentry.reactNavigationIntegration({
   enableTimeToInitialDisplay: true,
 });
+
+const appEnvironment = process.env.EXPO_PUBLIC_ENV || "production";
+const appVersion = Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? "unknown";
+const buildNumber = Platform.select({
+  android: Constants.expoConfig?.android?.versionCode?.toString(),
+  ios: Constants.expoConfig?.ios?.buildNumber,
+  default: undefined,
+});
+const updateId = Updates.updateId ?? "embedded";
 
 function isKnownHandledError(event: Sentry.ErrorEvent): boolean {
   const message = event.exception?.values?.[0]?.value?.toLowerCase() ?? '';
@@ -45,6 +56,9 @@ Sentry.init({
     : 'https://34f3ac8d124f7b5edbbb02ff36ac1a2b@o4510907183595520.ingest.us.sentry.io/4510907185496064',
 
   enabled: !__DEV__ && !IS_FDROID_BUILD,
+  environment: appEnvironment,
+  release: `mirage@${appVersion}`,
+  dist: buildNumber,
 
   sendDefaultPii: !IS_FDROID_BUILD,
 
@@ -65,6 +79,22 @@ Sentry.init({
     if (isKnownHandledError(event)) return null;
     return event;
   },
+});
+
+Sentry.setTags({
+  app_env: appEnvironment,
+  app_platform: Platform.OS,
+  fdroid_build: String(IS_FDROID_BUILD),
+  update_channel: Updates.channel ?? "embedded",
+  update_runtime_version: Updates.runtimeVersion ?? "unknown",
+});
+Sentry.setContext("app_update", {
+  appVersion,
+  buildNumber,
+  updateId,
+  channel: Updates.channel ?? "embedded",
+  runtimeVersion: Updates.runtimeVersion ?? "unknown",
+  isEmbeddedLaunch: Updates.isEmbeddedLaunch,
 });
 
 function AndroidShareIntentColdStartRefresh() {
