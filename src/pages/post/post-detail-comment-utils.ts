@@ -49,6 +49,45 @@ export function appendSupplementalCommentsForMinimum(
     : focusedComments;
 }
 
+export function findCommentById(
+  items: Comment[],
+  targetId?: string | null,
+): Comment | null {
+  if (!targetId) return null;
+  for (const item of items) {
+    if (item.id === targetId) return item;
+    const nested = findCommentById(item.replies ?? [], targetId);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+export function findTopLevelBranchForComment(
+  items: Comment[],
+  targetId?: string | null,
+): Comment | null {
+  if (!targetId) return null;
+  return items.find((item) => findCommentById([item], targetId)) ?? null;
+}
+
+export function hasMoreRepliesInBranch(
+  displayedComments: Comment[],
+  fullComments: Comment[],
+  focusedCommentId?: string | null,
+): boolean {
+  const displayedBranch = findTopLevelBranchForComment(
+    displayedComments,
+    focusedCommentId,
+  );
+  if (!displayedBranch) return false;
+
+  const fullBranch = findCommentById(fullComments, displayedBranch.id) ??
+    findCommentById(fullComments, focusedCommentId);
+  if (!fullBranch) return false;
+
+  return countCommentsInTree([fullBranch]) > countCommentsInTree([displayedBranch]);
+}
+
 type BuildPostDetailCommentsInput = {
   actualRootPostId?: string | null;
   commentsData?: CommentsResponse;
@@ -59,6 +98,7 @@ type BuildPostDetailCommentsInput = {
   fullThreadCommentsData?: CommentsResponse;
   isLoadingContext: boolean;
   isViewingComment: boolean;
+  revealFocusedBranch?: boolean;
   showFocusedThread: boolean;
 };
 
@@ -72,6 +112,7 @@ export function buildPostDetailComments({
   fullThreadCommentsData,
   isLoadingContext,
   isViewingComment,
+  revealFocusedBranch = false,
   showFocusedThread,
 }: BuildPostDetailCommentsInput): Comment[] {
   if (!showFocusedThread && isViewingComment) {
@@ -102,12 +143,24 @@ export function buildPostDetailComments({
           0,
         ),
       );
+    const supplementalSource = isViewingComment
+      ? fullThreadCommentsData?.children ?? []
+      : commentsData?.children ?? [];
+    const supplementalComments = transformApiComments(supplementalSource);
+    const expandedFocusedBranch = revealFocusedBranch
+      ? findTopLevelBranchForComment(supplementalComments, focusedCommentId)
+      : null;
+    if (expandedFocusedBranch) return [expandedFocusedBranch];
+    const focusedFromFullBranch = context.length > 5
+      ? findCommentById(supplementalComments, focusedCommentId)
+      : null;
     const focused = {
       ...transformApiComment(focusedApiRoot, actualRootPostId ?? undefined, 0),
       isFocusedComment: true,
-      replies: transformApiComments(focusedApiChildren),
+      replies: focusedFromFullBranch?.replies ?? transformApiComments(focusedApiChildren),
       replyCount: Math.max(
         focusedApiRoot.comments ?? 0,
+        focusedFromFullBranch?.replyCount ?? 0,
         focusedApiChildren.length,
       ),
     };
@@ -122,12 +175,9 @@ export function buildPostDetailComments({
       };
     }
     const focusedThread = [{ ...thread, isFocusedContext: true }];
-    const supplementalSource = isViewingComment
-      ? fullThreadCommentsData?.children ?? []
-      : commentsData?.children ?? [];
     return appendSupplementalCommentsForMinimum(
       focusedThread,
-      transformApiComments(supplementalSource),
+      supplementalComments,
     );
   }
 

@@ -1,4 +1,4 @@
-import { useComments, useUserFollowed } from "@/src/api/read";
+import { transformApiComments, useComments, useUserFollowed } from "@/src/api/read";
 import { parseApiError } from "@/src/utils/parse-api-error";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { getGradientColor } from "@/src/components/molecules/profile-header";
@@ -46,6 +46,7 @@ import { PostDetailStickySummary } from "./post-detail-sticky-summary";
 import {
   buildPostDetailComments,
   countCommentsInTree,
+  hasMoreRepliesInBranch,
   mergePostDetailComments,
 } from "./post-detail-comment-utils";
 import { usePostDetailMediaRoute } from "./use-post-detail-media-route";
@@ -263,6 +264,11 @@ function LegacyPostDetailScreen() {
   const globalBlockedUserIds = useContentModerationStore(
     (s) => s.blockedUserIds,
   );
+  const [revealFocusedBranch, setRevealFocusedBranch] = useState(false);
+
+  useEffect(() => {
+    setRevealFocusedBranch(false);
+  }, [id, focusedCommentId]);
 
   const comments = useMemo(() => {
     return buildPostDetailComments({
@@ -275,6 +281,7 @@ function LegacyPostDetailScreen() {
       fullThreadCommentsData,
       isLoadingContext,
       isViewingComment,
+      revealFocusedBranch,
       showFocusedThread,
     });
   }, [
@@ -288,6 +295,7 @@ function LegacyPostDetailScreen() {
     contextComments,
     contextDepth,
     isLoadingContext,
+    revealFocusedBranch,
   ]);
 
   const availableFocusedContextCount = useMemo(() => {
@@ -311,13 +319,7 @@ function LegacyPostDetailScreen() {
     }).length;
   }, [focusedCommentId, actualRootPostId, contextComments]);
 
-  const hasFocusedRecentContext = availableFocusedContextCount > 0;
-
-  const recentContextDone =
-    (contextDepth > 0 || hasLoadedFocusedContext) &&
-    focusedContextCheckQuery.isFetched &&
-    hasFocusedRecentContext &&
-    loadedFocusedContextCount >= availableFocusedContextCount;
+  const hasAvailableFocusedAncestors = availableFocusedContextCount > 0;
 
   const hasFullThreadBeyondFocus = useMemo(() => {
     if (!focusedCommentId) return false;
@@ -400,6 +402,28 @@ function LegacyPostDetailScreen() {
     optimisticReplyComments,
     optimisticTopLevelComments,
   ]);
+
+  const fullBranchComments = useMemo(() => {
+    const source = isViewingComment
+      ? fullThreadCommentsData?.children
+      : commentsData?.children;
+    return transformApiComments(source ?? []);
+  }, [isViewingComment, fullThreadCommentsData?.children, commentsData?.children]);
+
+  const hasFocusedBranchReplies = useMemo(
+    () => hasMoreRepliesInBranch(comments, fullBranchComments, focusedCommentId),
+    [comments, fullBranchComments, focusedCommentId],
+  );
+
+  const hasFocusedRecentContext = hasAvailableFocusedAncestors || hasFocusedBranchReplies;
+
+  const recentContextDone =
+    !hasFocusedBranchReplies &&
+    (contextDepth > 0 || hasLoadedFocusedContext) &&
+    focusedContextCheckQuery.isFetched &&
+    hasAvailableFocusedAncestors &&
+    loadedFocusedContextCount >= availableFocusedContextCount;
+
   const {
     currentScrollYRef,
     handleComposerConfirmedCommentId: handleHighlightConfirmedCommentId,
@@ -485,7 +509,10 @@ function LegacyPostDetailScreen() {
         hasFullThreadBeyondFocus={hasFullThreadBeyondFocus}
         id={id}
         isVideoVisible={isVideoVisible}
-        loadFocusedContext={loadFocusedContext}
+        loadFocusedContext={async (loadDepth) => {
+          setRevealFocusedBranch(true);
+          await loadFocusedContext(loadDepth);
+        }}
         onLayout={handlePostHeaderLayout}
         onShowFullThread={() => {
           setShowFocusedThread(false);

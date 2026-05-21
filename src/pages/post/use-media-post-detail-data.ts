@@ -20,7 +20,12 @@ import {
   useOptimisticTopLevelComments,
   usePostCommentOptimisticStore,
 } from "@/src/stores/post-comment-optimistic-store";
-import { appendSupplementalCommentsForMinimum } from "./post-detail-comment-utils";
+import {
+  appendSupplementalCommentsForMinimum,
+  findCommentById,
+  findTopLevelBranchForComment,
+  hasMoreRepliesInBranch,
+} from "./post-detail-comment-utils";
 
 type FocusedMode = "single" | "context" | "full";
 
@@ -335,8 +340,18 @@ export function useMediaPostDetailData({
           ),
         }
       : null;
+    const focusedFromFullBranch = focusedContextDepth > 5
+      ? findCommentById(allDisplayComments, focusedCommentId)
+      : null;
     const focused = focusedFromApi
-      ? processFocused(focusedFromApi)
+      ? processFocused({
+          ...focusedFromApi,
+          replies: focusedFromFullBranch?.replies ?? focusedFromApi.replies,
+          replyCount: Math.max(
+            focusedFromApi.replyCount ?? 0,
+            focusedFromFullBranch?.replyCount ?? 0,
+          ),
+        })
       : findComment(allDisplayComments);
 
     const rootId = id?.toLowerCase();
@@ -377,6 +392,7 @@ export function useMediaPostDetailData({
     focusedContextData,
     focusedContextCheckData,
     focusedCommentData,
+    focusedContextDepth,
     id,
     applyOptimisticReplies,
     applyVoteOverridesToComment,
@@ -395,6 +411,12 @@ export function useMediaPostDetailData({
     if (isLoadingFocusedContextThread) return [];
     const focused = focusedThreadState.focused;
     if (!focused) return [];
+    const expandedFocusedBranch = focusedContextDepth > 5
+      ? findTopLevelBranchForComment(allDisplayComments, focusedCommentId)
+      : null;
+    if (expandedFocusedBranch && focusedMode === "context") {
+      return [expandedFocusedBranch];
+    }
     if (focusedMode !== "context" || focusedThreadState.parents.length === 0) {
       return appendSupplementalCommentsForMinimum([focused], allDisplayComments);
     }
@@ -415,7 +437,7 @@ export function useMediaPostDetailData({
       [{ ...thread, isFocusedContext: true }],
       allDisplayComments,
     );
-  }, [focusedCommentId, focusedMode, allDisplayComments, isLoadingFocusedContextThread, focusedThreadState]);
+  }, [focusedCommentId, focusedMode, allDisplayComments, isLoadingFocusedContextThread, focusedThreadState, focusedContextDepth]);
 
   displayCommentsLengthRef.current = displayComments.length;
 
@@ -435,14 +457,21 @@ export function useMediaPostDetailData({
     }).length;
   }, [focusedCommentId, focusedContextCheckData, id]);
 
+  const hasFocusedBranchReplies = useMemo(
+    () => hasMoreRepliesInBranch(displayComments, allDisplayComments, focusedCommentId),
+    [displayComments, allDisplayComments, focusedCommentId],
+  );
+
   const hasRecentContext = useMemo(() => {
     if (!focusedCommentId || focusedMode === "full") return false;
     if (!isFocusedCommentFetched || !isFocusedContextCheckFetched) return false;
-    return availableFocusedContextCount > 0 &&
-      (focusedMode !== "context" || focusedContextDepth < availableFocusedContextCount);
-  }, [focusedCommentId, focusedMode, isFocusedCommentFetched, isFocusedContextCheckFetched, availableFocusedContextCount, focusedContextDepth]);
+    return hasFocusedBranchReplies ||
+      (availableFocusedContextCount > 0 &&
+        (focusedMode !== "context" || focusedContextDepth < availableFocusedContextCount));
+  }, [focusedCommentId, focusedMode, isFocusedCommentFetched, isFocusedContextCheckFetched, hasFocusedBranchReplies, availableFocusedContextCount, focusedContextDepth]);
 
   const recentContextDone =
+    !hasFocusedBranchReplies &&
     focusedMode === "context" &&
     isFocusedCommentFetched &&
     isFocusedContextCheckFetched &&
