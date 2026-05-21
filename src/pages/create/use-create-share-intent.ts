@@ -50,6 +50,24 @@ const extractSharedUrl = (value?: string | null) => {
     .trim();
 };
 
+const shouldKeepSharedUrlInBody = (url: string | null) => {
+  if (!url) return false;
+  try {
+    return new URL(url).hostname.replace(/^www\./, "") === "share.google";
+  } catch {
+    return false;
+  }
+};
+
+const isDirectDownloadableVideoUrl = (url: string) => {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.replace(/^www\./, "").replace(/^m\./, "");
+    if (host === "youtube.com" || host === "youtu.be") return false;
+  } catch {}
+  return /\.(mp4|mov|webm|m3u8|ts|gif)(\?|#|$)/i.test(url);
+};
+
 export function useCreateShareIntent({
   clearDraft,
   isEditMode,
@@ -300,10 +318,14 @@ export function useCreateShareIntent({
           if (titleOverflow) {
             bodyParts.unshift(titleOverflow);
           }
-          updateDraft({ body: bodyParts.join("\n\n").slice(0, tierLimits.maxContentLength) });
+          if (shouldKeepSharedUrlInBody(sharedUrl) && !bodyParts.some((part) => part.includes(sharedUrl))) {
+            bodyParts.push(sharedUrl);
+          }
+          const finalBody = bodyParts.join("\n\n").slice(0, tierLimits.maxContentLength);
+          updateDraft({ body: finalBody });
           console.log("[CreateScreen] Draft auto-filled:", {
             title: (finalTitle ?? meta.title)?.slice(0, tierLimits.maxTitleLength),
-            body: bodyParts.join("\n\n").slice(0, 200),
+            body: finalBody.slice(0, 200),
             community: redditMatch ? sanitizeTopicName(redditMatch[1]) : null,
           });
 
@@ -322,7 +344,7 @@ export function useCreateShareIntent({
                   ? [meta.video]
                   : []
             )
-          ).slice(0, 10);
+          ).filter(isDirectDownloadableVideoUrl).slice(0, 10);
 
           if (videosToDownload.length === 0 && meta.images?.length > 0) {
             Sentry.addBreadcrumb({
@@ -527,8 +549,10 @@ export function useCreateShareIntent({
           if (!videoDownloaded && videosToDownload.length > 0) {
             const currentBody = useDraftStore.getState().draft.body;
             const link = sharedUrl;
-            const newBody = (currentBody ? `${currentBody}\n\n${link}` : link).slice(0, tierLimits.maxContentLength);
-            updateDraft({ body: newBody });
+            if (link && !currentBody.includes(link)) {
+              const newBody = (currentBody ? `${currentBody}\n\n${link}` : link).slice(0, tierLimits.maxContentLength);
+              updateDraft({ body: newBody });
+            }
           }
 
           if (meta.externalUrl) {

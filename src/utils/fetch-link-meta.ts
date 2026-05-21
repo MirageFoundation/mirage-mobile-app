@@ -107,6 +107,29 @@ async function fetchHtml(url: string, signal: AbortSignal, useBot = false): Prom
   return res.text();
 }
 
+async function resolveRedirectUrl(url: string, signal: AbortSignal): Promise<string> {
+  try {
+    const res = await fetch(url, {
+      signal,
+      headers: { "User-Agent": BROWSER_UA, Accept: "text/html" },
+      redirect: "follow",
+    });
+    if (res.url && res.url !== url) return res.url;
+  } catch {}
+
+  try {
+    const res = await fetch(url, {
+      signal,
+      method: "HEAD",
+      headers: { "User-Agent": BROWSER_UA },
+      redirect: "follow",
+    });
+    if (res.url && res.url !== url) return res.url;
+  } catch {}
+
+  return url;
+}
+
 function isRedditUrl(url: string): boolean {
   try {
     const host = new URL(url).hostname.replace(/^www\./, "").replace(/^m\./, "").replace(/^old\./, "");
@@ -822,10 +845,22 @@ function extractJsonLd(html: string): Partial<LinkMeta> {
 }
 
 export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
-  const domain = new URL(url).hostname.replace(/^www\./, "");
+  let resolvedUrl = url;
+  let domain = new URL(url).hostname.replace(/^www\./, "");
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
+
+    if (domain === "share.google") {
+      resolvedUrl = await resolveRedirectUrl(url, controller.signal);
+      domain = new URL(resolvedUrl).hostname.replace(/^www\./, "");
+      Sentry.addBreadcrumb({
+        category: "link-meta",
+        message: "Resolved shared redirect URL",
+        data: { originalDomain: "share.google", resolvedDomain: domain, resolved: resolvedUrl !== url },
+        level: "info",
+      });
+    }
 
     let title: string | null = null;
     let description: string | null = null;
@@ -838,8 +873,8 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
     let siteName: string | null = null;
     let externalUrl: string | null = null;
 
-    if (isRedditUrl(url)) {
-      const reddit = await fetchRedditVideo(url, controller.signal);
+    if (isRedditUrl(resolvedUrl)) {
+      const reddit = await fetchRedditVideo(resolvedUrl, controller.signal);
       title = reddit.title ?? null;
       description = reddit.description ?? null;
       image = reddit.image ?? null;
@@ -852,8 +887,8 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       externalUrl = reddit.externalUrl ?? null;
     }
 
-    if (isInstagramUrl(url) && !video) {
-      const ig = await fetchInstagramMeta(url, controller.signal);
+    if (isInstagramUrl(resolvedUrl) && !video) {
+      const ig = await fetchInstagramMeta(resolvedUrl, controller.signal);
       if (ig.title) title = title ?? ig.title;
       if (ig.description) description = description ?? ig.description;
       if (ig.image) image = image ?? ig.image;
@@ -862,8 +897,8 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       siteName = siteName ?? ig.siteName ?? null;
     }
 
-    if (isTikTokUrl(url) && !video) {
-      const tt = await fetchTikTokMeta(url, controller.signal);
+    if (isTikTokUrl(resolvedUrl) && !video) {
+      const tt = await fetchTikTokMeta(resolvedUrl, controller.signal);
       if (tt.title) title = title ?? tt.title;
       if (tt.description) description = description ?? tt.description;
       if (tt.image) image = image ?? tt.image;
@@ -871,13 +906,13 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       siteName = siteName ?? tt.siteName ?? null;
     }
 
-    const fxUrl = getFxTwitterUrl(url);
+    const fxUrl = getFxTwitterUrl(resolvedUrl);
     let html: string | null = null;
     let shouldSkipGenericHtmlFallback = false;
 
     if (fxUrl) {
       try {
-        const tweetId = getTweetId(url);
+        const tweetId = getTweetId(resolvedUrl);
         if (tweetId) {
           try {
             const syndicationRes = await fetch(`https://cdn.syndication.twimg.com/tweet-result?id=${tweetId}&lang=en`, {
@@ -959,13 +994,13 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
         }
       } catch {
         if (!title && !description && !image && !video) {
-          html = await fetchHtml(url, controller.signal);
+          html = await fetchHtml(resolvedUrl, controller.signal);
         }
       }
     }
 
     if (!shouldSkipGenericHtmlFallback && (!title || !description || !image || !video)) {
-      if (!html) html = await fetchHtml(url, controller.signal);
+      if (!html) html = await fetchHtml(resolvedUrl, controller.signal);
 
       if (!title) title = getMeta(html, "title");
       if (!description) description = getMeta(html, "description");
@@ -986,16 +1021,16 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       }
 
       if (!image) {
-        image = extractImagesFromHtml(html, url);
+        image = extractImagesFromHtml(html, resolvedUrl);
       }
 
       if (!video) {
-        video = extractVideosFromHtml(html, url);
+        video = extractVideosFromHtml(html, resolvedUrl);
       }
     }
 
     if (!image || !video) {
-      const oembed = await fetchOembed(url, controller.signal);
+      const oembed = await fetchOembed(resolvedUrl, controller.signal);
       if (!title && oembed.title) title = oembed.title;
       if (!description && oembed.description) description = oembed.description;
       if (!image && oembed.image) image = oembed.image;
