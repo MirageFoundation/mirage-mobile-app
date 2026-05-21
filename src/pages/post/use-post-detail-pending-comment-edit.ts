@@ -14,12 +14,14 @@ type CommentEditOverrides = Record<string, string>;
 
 type UsePostDetailPendingCommentEditParams = {
   id?: string;
+  onEditedComment?: (commentId: string) => void;
   refetchComments: () => unknown;
   setCommentEditOverrides: Dispatch<SetStateAction<CommentEditOverrides>>;
 };
 
 export function usePostDetailPendingCommentEdit({
   id,
+  onEditedComment,
   refetchComments,
   setCommentEditOverrides,
 }: UsePostDetailPendingCommentEditParams) {
@@ -47,6 +49,7 @@ export function usePostDetailPendingCommentEdit({
       ...prev,
       [commentId]: optimisticContent,
     }));
+    onEditedComment?.(commentId);
 
     const actionId = generateActionId();
     enqueue({
@@ -97,6 +100,7 @@ export function usePostDetailPendingCommentEdit({
     clearPendingEdit,
     enqueue,
     id,
+    onEditedComment,
     pendingEdit,
     refetchComments,
     setCommentEditOverrides,

@@ -249,12 +249,22 @@ export function usePostDetailHighlightScroll({
     [commentsSectionRef, highlightedCommentId, id, insetsTop],
   );
 
+  const scrollToEnd = useCallback(() => {
+    commentsSectionRef.current?.scrollToEnd({ animated: true });
+  }, [commentsSectionRef]);
+
+  const scheduleScrollToEnd = useCallback(() => {
+    requestAnimationFrame(scrollToEnd);
+    setTimeout(scrollToEnd, 100);
+    setTimeout(scrollToEnd, 350);
+  }, [scrollToEnd]);
+
   const handleContentSizeChange = useCallback(() => {
     if (pendingScrollToEnd.current) {
       pendingScrollToEnd.current = false;
-      commentsSectionRef.current?.scrollToEnd({ animated: true });
+      scheduleScrollToEnd();
     }
-  }, [commentsSectionRef]);
+  }, [scheduleScrollToEnd]);
 
   const handleComposerHighlight = useCallback((commentId: string, suppressScroll = false) => {
     suppressedHighlightScrollRef.current = suppressScroll ? commentId : null;
@@ -277,7 +287,8 @@ export function usePostDetailHighlightScroll({
 
   const handleComposerScrollToEnd = useCallback(() => {
     pendingScrollToEnd.current = true;
-  }, []);
+    scheduleScrollToEnd();
+  }, [scheduleScrollToEnd]);
 
   return {
     currentScrollYRef,

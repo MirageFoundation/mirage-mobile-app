@@ -520,6 +520,7 @@ function LegacyPostDetailScreen() {
 
   usePostDetailPendingCommentEdit({
     id,
+    onEditedComment: handleComposerHighlight,
     refetchComments,
     setCommentEditOverrides,
   });

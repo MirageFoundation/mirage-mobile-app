@@ -448,6 +448,15 @@ export default function MediaPostDetailScreen({
     });
   }, [post, requireAuth, reserveComposeNavigation, router, activeMedia?.uri]);
 
+  const handleEditedComment = useCallback((commentId: string) => {
+    suppressedHighlightScrollRef.current = null;
+    coarseScrollTargetRef.current = null;
+    preciseScrollTargetRef.current = null;
+    setHighlightedCommentId(commentId);
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightedCommentId(null), 3000);
+  }, []);
+
   useMediaPostDetailPendingComment({
     collapseMedia,
     focusedCommentId,
@@ -464,6 +473,7 @@ export default function MediaPostDetailScreen({
 
   usePostDetailPendingCommentEdit({
     id,
+    onEditedComment: handleEditedComment,
     refetchComments,
     setCommentEditOverrides,
   });
