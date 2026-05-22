@@ -205,6 +205,12 @@ export function useCreateShareIntent({
     resetImageUploads();
     VIDEO_META.clear();
     setHandledVideoParam(null);
+    Sentry.addBreadcrumb({
+      category: "share-intent",
+      message: "Create draft reset for share intent",
+      data: { hasSharedUrl: !!sharedUrl, shouldImportSharedFiles },
+      level: "info",
+    });
 
     const redditMatch = (sharedUrl ?? shareIntent.text ?? "").match(/reddit\.com\/r\/([^/]+)/i);
     if (redditMatch) {
@@ -220,12 +226,6 @@ export function useCreateShareIntent({
           },
         });
       }
-    }
-
-    if (sharedUrl) {
-      updateDraft({
-        body: sharedUrl.slice(0, tierLimits.maxContentLength),
-      });
     }
 
     shareTimeoutRef.current = setTimeout(() => {
@@ -253,7 +253,15 @@ export function useCreateShareIntent({
           Sentry.addBreadcrumb({
             category: "share-intent",
             message: "Link meta fetched",
-            data: { domain: meta.domain, hasTitle: !!meta.title, hasVideo: !!meta.video, imageCount: meta.images?.length ?? 0 },
+            data: {
+              domain: meta.domain,
+              hasTitle: !!meta.title,
+              hasDescription: !!meta.description,
+              hasVideo: !!meta.video,
+              videoCount: meta.videos?.length ?? 0,
+              imageCount: meta.images?.length ?? 0,
+              hasAudio: !!meta.audioUrl || (meta.audioUrls?.length ?? 0) > 0,
+            },
             level: "info",
           });
           let finalTitle: string | undefined;
@@ -349,12 +357,25 @@ export function useCreateShareIntent({
             bodyParts.push(sharedUrl);
           }
           const extractedBody = bodyParts.join("\n\n").trim();
-          const finalBody = (extractedBody || sharedUrl).slice(0, tierLimits.maxContentLength);
+          const finalBody = extractedBody.slice(0, tierLimits.maxContentLength);
           updateDraft({ title: finalTitle ?? "", body: finalBody });
           console.log("[CreateScreen] Draft auto-filled:", {
             title: finalTitle?.slice(0, tierLimits.maxTitleLength),
             body: finalBody.slice(0, 200),
             community: redditMatch ? sanitizeTopicName(redditMatch[1]) : null,
+          });
+          Sentry.addBreadcrumb({
+            category: "share-intent",
+            message: "Draft auto-filled from link meta",
+            data: {
+              domain: meta.domain,
+              hasTitle: !!finalTitle,
+              titleLength: finalTitle?.length ?? 0,
+              bodyLength: finalBody.length,
+              hasBody: finalBody.length > 0,
+              keptSharedUrlInBody: finalBody.includes(sharedUrl),
+            },
+            level: "info",
           });
 
           if (meta.externalUrl) {
@@ -363,6 +384,7 @@ export function useCreateShareIntent({
 
           let videoDownloaded = false;
           let mediaCount = 0;
+          const hasVideoCandidate = (meta.videos?.length ?? 0) > 0 || !!meta.video;
 
           const videosToDownload = Array.from(
             new Set(
@@ -373,6 +395,18 @@ export function useCreateShareIntent({
                   : []
             )
           ).filter(isDirectDownloadableVideoUrl).slice(0, 10);
+          Sentry.addBreadcrumb({
+            category: "share-intent",
+            message: "Resolved share media candidates",
+            data: {
+              domain: meta.domain,
+              hasVideoCandidate,
+              downloadableVideoCount: videosToDownload.length,
+              imageCount: meta.images?.length ?? 0,
+              hasFallbackImage: !!meta.image,
+            },
+            level: "info",
+          });
 
           if (videosToDownload.length === 0 && meta.images?.length > 0) {
             Sentry.addBreadcrumb({
@@ -512,6 +546,12 @@ export function useCreateShareIntent({
                 startVideoUpload(finalUri);
                 videoDownloaded = true;
                 mediaCount++;
+                Sentry.addBreadcrumb({
+                  category: "share-intent",
+                  message: "Shared link video attached",
+                  data: { domain: meta.domain, videoIndex: vi, mediaCount },
+                  level: "info",
+                });
               }
             } catch (vidErr) {
               Sentry.captureMessage("Share intent: video download threw exception", {
@@ -560,6 +600,12 @@ export function useCreateShareIntent({
                       setAttachment("image", destFile.uri);
                       startImageUpload(destFile.uri, true)?.catch(() => {});
                       mediaCount++;
+                      Sentry.addBreadcrumb({
+                        category: "share-intent",
+                        message: "Shared link image attached",
+                        data: { domain: meta.domain, imageIndex: i, mediaCount },
+                        level: "info",
+                      });
                     }
                   }
                 } catch (imgErr) {
@@ -574,14 +620,49 @@ export function useCreateShareIntent({
             }
           }
 
-          if (!videoDownloaded && videosToDownload.length > 0) {
+          const shouldAddSharedUrlFallback =
+            (!videoDownloaded && hasVideoCandidate) ||
+            (!finalTitle && !finalBody && mediaCount === 0);
+
+          if (shouldAddSharedUrlFallback) {
             const currentBody = useDraftStore.getState().draft.body;
             const link = sharedUrl;
             if (link && !currentBody.includes(link)) {
-              const newBody = (currentBody ? `${currentBody}\n\n${link}` : link).slice(0, tierLimits.maxContentLength);
+              const newBody = (currentBody ? `${link}\n\n${currentBody}` : link).slice(0, tierLimits.maxContentLength);
               updateDraft({ body: newBody });
+              Sentry.addBreadcrumb({
+                category: "share-intent",
+                message: "Prepended shared URL fallback to body",
+                data: {
+                  domain: meta.domain,
+                  reason: !videoDownloaded && hasVideoCandidate ? "video-not-imported" : "empty-draft",
+                  previousBodyLength: currentBody.length,
+                  newBodyLength: newBody.length,
+                },
+                level: "info",
+              });
+            } else if (link) {
+              Sentry.addBreadcrumb({
+                category: "share-intent",
+                message: "Shared URL fallback already present in body",
+                data: { domain: meta.domain, bodyLength: currentBody.length },
+                level: "info",
+              });
             }
           }
+
+          Sentry.addBreadcrumb({
+            category: "share-intent",
+            message: "Share intent link processing complete",
+            data: {
+              domain: meta.domain,
+              videoDownloaded,
+              hasVideoCandidate,
+              mediaCount,
+              addedSharedUrlFallback: shouldAddSharedUrlFallback,
+            },
+            level: "info",
+          });
 
           if (meta.externalUrl) {
             console.log("[CreateScreen] Keeping external link out of link input:", meta.externalUrl);
@@ -603,6 +684,12 @@ export function useCreateShareIntent({
       }
       if (shareIntent.files?.length && shouldImportSharedFiles) {
         const file = shareIntent.files[0];
+        Sentry.addBreadcrumb({
+          category: "share-intent",
+          message: "Importing shared file attachment",
+          data: { mimeType: file.mimeType, fileCount: shareIntent.files.length },
+          level: "info",
+        });
         if (file.mimeType?.startsWith("image/")) {
           setAttachment("image", file.path);
           startImageUpload(file.path, true)?.catch(() => {});
