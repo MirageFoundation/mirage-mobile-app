@@ -25,6 +25,9 @@ import { styles } from "./media-post-detail-styles";
 
 type FocusedMode = "single" | "context" | "full";
 
+const noop = () => {};
+const noopSeek = (_ms: number) => {};
+
 type MediaPostDetailCommentSheetProps = {
   sheetRef: RefObject<BottomSheet | null>;
   commentsListRef: RefObject<any>;
@@ -158,6 +161,12 @@ export function MediaPostDetailCommentSheet({
   const [isSheetExpanded, setIsSheetExpanded] = useState(
     shouldOpenSheetInitially,
   );
+  // Tracks "is the sheet expanding/expanded" for fast-hiding elements (like
+  // the video controls row) that should disappear as soon as expansion
+  // begins, instead of waiting for the sheet to settle.
+  const [isExpandingOrExpanded, setIsExpandingOrExpanded] = useState(
+    shouldOpenSheetInitially,
+  );
   const contextActionAvailable = !recentContextDisabled;
   const fullThreadActionAvailable = hasFullThreadBeyondFocus;
   const shouldShowThreadReminder = !!(
@@ -221,6 +230,9 @@ export function MediaPostDetailCommentSheet({
         // Switch to collapsed body content immediately when a collapse
         // begins so the full markdown disappears as the sheet shrinks.
         if (to < 1) setIsSheetExpanded(false);
+        // Hide/show fast-collapsing elements as soon as the gesture starts
+        // moving toward the target snap point.
+        setIsExpandingOrExpanded(to >= 1);
       }}
       onChange={(index) => {
         // Reveal the full body only after the sheet has settled at the
@@ -269,6 +281,7 @@ export function MediaPostDetailCommentSheet({
               <MediaPostDetailFooter
                 post={post}
                 isExpanded={isSheetExpanded}
+                hideVideoControls={isExpandingOrExpanded}
                 onAuthorPress={onAuthorPress}
                 onUpvote={onUpvote}
                 onDownvote={onDownvote}
@@ -297,6 +310,77 @@ export function MediaPostDetailCommentSheet({
                 onFollowTopic={onFollowTopic}
               />
             </View>
+
+            {/*
+             * Hidden measurement copy of the footer rendered in its
+             * collapsed-body variant.
+             *
+             * Why: the collapsed snap point's height is driven by the
+             * collapsed-variant footer height (single-line body). When the
+             * screen opens directly into the expanded state (from inbox /
+             * profile / deep link), the visible footer renders the expanded
+             * markdown body and the visible onLayout updates are
+             * intentionally suppressed (to keep the snap point stable during
+             * the transition). Without this side measurement, the snap
+             * point falls back to INITIAL_SHEET_MIN_HEIGHT (132) and clips
+             * the vote row + video controls once the user collapses the
+             * sheet.
+             *
+             * Only rendered until we have a measurement to avoid
+             * double-rendering the video seekbar on every frame.
+             */}
+            {measuredPostSummaryH === 0 ? (
+              <View
+                pointerEvents="none"
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  opacity: 0,
+                  paddingHorizontal: theme.spacing.md,
+                }}
+                onLayout={(event) => {
+                  const height = Math.ceil(event.nativeEvent.layout.height);
+                  if (height > 0 && height !== measuredPostSummaryH) {
+                    onPostSummaryHeightChange(height);
+                  }
+                }}
+              >
+                <MediaPostDetailFooter
+                  post={post}
+                  isExpanded={false}
+                  onAuthorPress={noop}
+                  onUpvote={noop}
+                  onDownvote={noop}
+                  onComment={noop}
+                  onShare={noop}
+                  onBlockUser={noop}
+                  onBlockPost={noop}
+                  onBlockTopic={noop}
+                  onReport={noop}
+                  isOwnPost={isOwnPost}
+                  shareUrl={shareUrl}
+                  isVideo={isVideo}
+                  isPlaying={false}
+                  positionMs={0}
+                  durationMs={durationMs}
+                  onPlayPause={noop}
+                  onSeek={noopSeek}
+                  onMoreLink={noop}
+                  isMuted={isMuted}
+                  onMuteToggle={noop}
+                  isFollowing={post.isFollowing ?? followedUsers.includes(post.author.id)}
+                  isTopicFollowed={post.topic ? followedTopics.includes(post.topic) : false}
+                  topic={post.topic}
+                  isOwnAuthor={currentUserId === post.author.id}
+                  onFollowAuthor={noop}
+                  onFollowTopic={noop}
+                />
+              </View>
+            ) : null}
 
             {shouldShowThreadReminder ? (
               <View style={styles.threadReminderCard}>

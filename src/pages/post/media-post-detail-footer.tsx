@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { memo } from "react";
 import { Pressable, View } from "react-native";
-import Animated, { FadeIn } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useUnistyles } from "react-native-unistyles";
 
 import { Avatar, TimeAgo } from "@/src/components/atoms";
@@ -43,6 +43,7 @@ function hasMoreBodyContent(body: string): boolean {
 type MediaPostDetailFooterProps = {
   post: Post;
   isExpanded?: boolean;
+  hideVideoControls?: boolean;
   onAuthorPress: () => void;
   onUpvote: () => void;
   onDownvote: () => void;
@@ -74,6 +75,7 @@ type MediaPostDetailFooterProps = {
 export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
   post,
   isExpanded = false,
+  hideVideoControls = false,
   onAuthorPress,
   onUpvote,
   onDownvote,
@@ -186,8 +188,12 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
         )
       ) : null}
 
-      {isVideo ? (
-        <View style={styles.controlsRow}>
+      {isVideo && !hideVideoControls ? (
+        <Animated.View
+          style={styles.controlsRow}
+          entering={FadeIn.duration(120)}
+          exiting={FadeOut.duration(120)}
+        >
           <Pressable onPress={onPlayPause} hitSlop={8} style={styles.ctrlBtn}>
             <Ionicons
               name={isPlaying ? "pause" : "play"}
@@ -220,7 +226,7 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
               color={theme.colors.text.subtle}
             />
           </Pressable>
-        </View>
+        </Animated.View>
       ) : null}
 
       <PostActions
