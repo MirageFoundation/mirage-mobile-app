@@ -23,6 +23,7 @@ type CreateShareTierLimits = {
 type UseCreateShareIntentParams = {
   clearDraft: () => void;
   isEditMode: boolean;
+  isAuthInitializing: boolean;
   isLoggedIn: boolean;
   removeAttachment: () => void;
   resetComposeState: () => void;
@@ -71,6 +72,7 @@ const isDirectDownloadableVideoUrl = (url: string) => {
 export function useCreateShareIntent({
   clearDraft,
   isEditMode,
+  isAuthInitializing,
   isLoggedIn,
   removeAttachment,
   resetComposeState,
@@ -114,7 +116,32 @@ export function useCreateShareIntent({
   useEffect(() => {
     if (!hasShareIntent || !shareIntent || isEditMode) return;
 
+    if (isAuthInitializing) {
+      Sentry.addBreadcrumb({
+        category: "share-intent",
+        message: "Waiting for auth initialization before handling share intent",
+        data: {
+          type: shareIntent.type,
+          hasWebUrl: !!shareIntent.webUrl,
+          hasText: !!shareIntent.text,
+          fileCount: shareIntent.files?.length ?? 0,
+        },
+        level: "info",
+      });
+      return;
+    }
+
     if (!isLoggedIn) {
+      Sentry.captureMessage("Share intent received while logged out", {
+        level: "info",
+        tags: { feature: "share-intent", operation: "logged-out-redirect" },
+        extra: {
+          type: shareIntent.type,
+          hasWebUrl: !!shareIntent.webUrl,
+          hasText: !!shareIntent.text,
+          fileCount: shareIntent.files?.length ?? 0,
+        },
+      });
       lastProcessedIntentRef.current = null;
       resetShareIntent();
       router.replace("/(tabs)");
@@ -600,6 +627,7 @@ export function useCreateShareIntent({
     clearDraft,
     hasShareIntent,
     isEditMode,
+    isAuthInitializing,
     isLoggedIn,
     removeAttachment,
     resetComposeState,

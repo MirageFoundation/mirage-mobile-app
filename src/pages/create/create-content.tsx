@@ -54,6 +54,7 @@ import { useCreateSubmitFlow } from "./use-create-submit-flow";
 export function CreateScreen() {
   const insets = useSafeAreaInsets();
   const userLevel = useUserLevel();
+  const isAuthInitializing = useAuthStore((s) => s.isInitializing);
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
   const showAuthSheet = useUIStore((s) => s.showAuthSheet);
   const tierLimits = useMemo(() => getTierPostLimits(userLevel), [userLevel]);
@@ -238,6 +239,7 @@ export function CreateScreen() {
   useCreateShareIntent({
     clearDraft,
     isEditMode,
+    isAuthInitializing,
     isLoggedIn,
     removeAttachment,
     resetComposeState,
