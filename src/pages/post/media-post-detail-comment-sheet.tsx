@@ -227,18 +227,21 @@ export function MediaPostDetailCommentSheet({
       enableContentPanningGesture
       onClose={onClose}
       onAnimate={(_from, to) => {
-        // Switch to collapsed body content immediately when a collapse
-        // begins so the full markdown disappears as the sheet shrinks.
-        if (to < 1) setIsSheetExpanded(false);
+        // Switch body variant (collapsed inline ↔ expanded markdown) as soon
+        // as the gesture starts moving toward the target snap point, so the
+        // body reveals/hides in sync with the sheet instead of popping in
+        // after it settles.
+        setIsSheetExpanded(to >= 1);
         // Hide/show fast-collapsing elements as soon as the gesture starts
         // moving toward the target snap point.
         setIsExpandingOrExpanded(to >= 1);
       }}
       onChange={(index) => {
-        // Reveal the full body only after the sheet has settled at the
-        // expanded position, so the markdown fades in cleanly on top of a
-        // stable layout.
+        // Safety net in case onAnimate didn't fire (e.g. programmatic snap)
+        // — keep the body variant in sync with the final settled index.
         if (index >= 1) setIsSheetExpanded(true);
+        else setIsSheetExpanded(false);
+        setIsExpandingOrExpanded(index >= 1);
       }}
       style={{ zIndex: 30, elevation: 30 }}
       handleComponent={renderHandle}
