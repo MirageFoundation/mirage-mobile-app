@@ -2,9 +2,11 @@ import { memo, useEffect, useState } from "react";
 import { View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  Easing,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  withTiming,
 } from "react-native-reanimated";
 import { useUnistyles } from "react-native-unistyles";
 
@@ -16,6 +18,8 @@ type SeekBarProps = {
   onSeek: (ms: number) => void;
   width: number;
   tint?: string;
+  playing?: boolean;
+  tickIntervalMs?: number;
 };
 
 const SeekBar = memo(function SeekBar({
@@ -24,6 +28,8 @@ const SeekBar = memo(function SeekBar({
   onSeek,
   width,
   tint = "#fff",
+  playing = true,
+  tickIntervalMs = 250,
 }: SeekBarProps) {
   const dragX = useSharedValue<number | null>(null);
   const trackWidth = Math.max(1, width);
@@ -32,8 +38,20 @@ const SeekBar = memo(function SeekBar({
   const baseProgress = durationMs > 0 ? positionMs / durationMs : 0;
   const baseProgressShared = useSharedValue(baseProgress);
   useEffect(() => {
-    baseProgressShared.value = baseProgress;
-  }, [baseProgress, baseProgressShared]);
+    const prev = baseProgressShared.value;
+    const delta = baseProgress - prev;
+    // If paused, no duration, or non-monotonic jump (seek/loop), snap.
+    if (!playing || durationMs <= 0 || delta < 0 || delta > 0.1) {
+      baseProgressShared.value = baseProgress;
+      return;
+    }
+    // Otherwise linearly interpolate to the next sampled progress over the
+    // expected tick interval so playback advances smoothly between polls.
+    baseProgressShared.value = withTiming(baseProgress, {
+      duration: tickIntervalMs,
+      easing: Easing.linear,
+    });
+  }, [baseProgress, baseProgressShared, durationMs, playing, tickIntervalMs]);
 
   const pan = Gesture.Pan()
     .onBegin((e) => {
@@ -95,6 +113,8 @@ export const SeekBarFlex = memo(function SeekBarFlex({
   durationMs,
   onSeek,
   tint,
+  playing,
+  tickIntervalMs,
 }: Omit<SeekBarProps, "width">) {
   const [w, setW] = useState(0);
   return (
@@ -109,6 +129,8 @@ export const SeekBarFlex = memo(function SeekBarFlex({
           onSeek={onSeek}
           width={w}
           tint={tint}
+          playing={playing}
+          tickIntervalMs={tickIntervalMs}
         />
       ) : (
         <View style={[styles.seekTrack, { width: "100%" as any }]}>

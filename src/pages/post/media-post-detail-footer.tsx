@@ -198,7 +198,7 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
             <Ionicons
               name={isPlaying ? "pause" : "play"}
               size={18}
-              color={theme.colors.text.subtle}
+              color={theme.colors.text.default}
             />
           </Pressable>
           <View style={{ flex: 1, marginHorizontal: 8 }}>
@@ -206,12 +206,13 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
               positionMs={positionMs}
               durationMs={durationMs}
               onSeek={onSeek}
-              tint={theme.colors.text.subtle}
+              tint={theme.colors.text.default}
+              playing={isPlaying}
             />
           </View>
           <Text
             size="xs"
-            style={{ color: theme.colors.text.subtle, marginRight: 8 }}
+            style={{ color: theme.colors.text.default, marginRight: 8 }}
           >
             {formatTime(positionMs)} / {formatTime(durationMs)}
           </Text>
@@ -223,7 +224,7 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
             <Ionicons
               name={isMuted ? "volume-mute" : "volume-high"}
               size={18}
-              color={theme.colors.text.subtle}
+              color={theme.colors.text.default}
             />
           </Pressable>
         </Animated.View>
