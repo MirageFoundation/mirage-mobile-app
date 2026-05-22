@@ -156,13 +156,35 @@ const upsertPostIntoPostsResponse = (
  queryData: PostsResponse,
  optimisticPost: ApiPost,
 ): PostsResponse => {
- if (queryData.posts.some((post) => post.post_id === optimisticPost.post_id)) {
+ const matchingPostIndex = queryData.posts.findIndex(
+  (post) =>
+   post.post_id === optimisticPost.post_id ||
+   (!!optimisticPost.optimistic_action_id &&
+    post.optimistic_action_id === optimisticPost.optimistic_action_id),
+ );
+
+ if (matchingPostIndex === -1) {
+  return {
+   ...queryData,
+   posts: [optimisticPost, ...queryData.posts],
+   total: queryData.total + 1,
+  };
+ }
+
+ const existingPost = queryData.posts[matchingPostIndex];
+ if (
+  existingPost.post_id === optimisticPost.post_id ||
+  (optimisticPost.optimistic_status === "pending" &&
+   existingPost.optimistic_status !== "pending")
+ ) {
   return queryData;
  }
+
+ const posts = [...queryData.posts];
+ posts[matchingPostIndex] = optimisticPost;
  return {
   ...queryData,
-  posts: [optimisticPost, ...queryData.posts],
-  total: queryData.total + 1,
+  posts,
  };
 };
 
