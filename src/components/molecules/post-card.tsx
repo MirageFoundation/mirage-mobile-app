@@ -236,6 +236,7 @@ export const PostCard = memo(function PostCard({
     !!post.optimisticActionId &&
     isOptimisticPostQueued &&
     currentPowActionId !== post.optimisticActionId;
+  const isOptimisticEdit = !!post.optimisticStatus && !post.optimisticDraft;
   const disablePostInteractions = !!post.optimisticStatus && post.optimisticStatus !== "success";
   const forceVisibleMedia =
     post.optimisticStatus === "success" ||
@@ -357,7 +358,9 @@ export const PostCard = memo(function PostCard({
             {post.optimisticStatus === "error"
               ? optimisticErrorText
               : post.optimisticStatus === "success"
-              ? "Successfully posted."
+              ? isOptimisticEdit
+                ? "Successfully edited."
+                : "Successfully posted."
               : isOptimisticPostOffline
               ? "Waiting for internet connection before publishing your post."
               : isOptimisticPostWaitingForQueue

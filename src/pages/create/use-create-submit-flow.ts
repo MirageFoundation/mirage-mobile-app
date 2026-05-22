@@ -3,15 +3,13 @@ import { Keyboard } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
 
-import { queryKeys } from "@/src/api/read/query-keys";
-import { useEdit, usePost, type CreatePostMutationInput } from "@/src/api/write";
-import type { EditPostInput } from "@/src/api/write/endpoints/posts";
-import { buildOptimisticPost, markOptimisticPostError, upsertHomePost } from "@/src/api/write/hooks/use-post";
+import { useEdit, usePost, type CreatePostMutationInput, type EditPostMutationInput } from "@/src/api/write";
+import { applyOptimisticPostEdit, buildOptimisticPost, markOptimisticPostError, upsertHomePost } from "@/src/api/write/hooks/use-post";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useTransactionProgress } from "@/src/hooks/use-transaction-progress";
 import { router } from "@/src/navigation/guarded-router";
 import { useToast } from "@/src/providers/toast-provider";
-import { generateActionId, getActionLabel, usePowQueueStore, waitForQueueDrain } from "@/src/services/pow-queue";
+import { generateActionId, getActionLabel, usePowQueueStore } from "@/src/services/pow-queue";
 import { useAuthStore } from "@/src/stores/auth-store";
 import { useDraftStore, type PostDraft } from "@/src/stores/draft-store";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
@@ -62,18 +60,9 @@ export function useCreateSubmitFlow({
 
     Keyboard.dismiss();
     setIsSubmitting(true);
-    if (isEditMode) {
-      txProgress.startTransaction();
-    }
     triggerHaptic("medium");
 
     try {
-      const powState = usePowQueueStore.getState();
-      if (isEditMode && (powState.isProcessing || powState.queue.length > 0 || powState.currentAction)) {
-        txProgress.setPhase("waiting");
-        await waitForQueueDrain();
-      }
-
       const mediaUrls: string[] = [];
 
       if (selectedStickers.length > 0) {
@@ -156,7 +145,6 @@ export function useCreateSubmitFlow({
 
       txProgress.setPhase("signing");
 
-      let result;
       if (isEditMode) {
         if (!editPostId) {
           throw new Error("Missing editPostId for edit operation");
@@ -164,13 +152,15 @@ export function useCreateSubmitFlow({
         if (!draft.title.trim() && !content) {
           throw new Error("Title or content is required");
         }
-        const editInput: EditPostInput = {
+        const actionId = generateActionId();
+        const editInput: EditPostMutationInput = {
           postId: editPostId,
           topic,
           title: draft.title.trim(),
           content: content || "",
           tag: selectedContentWarning,
           media: mediaUrls.length > 0 ? mediaUrls : [],
+          optimisticActionId: actionId,
         };
         console.log("[CreateScreen] Edit input:", {
           postId: editInput.postId,
@@ -180,7 +170,54 @@ export function useCreateSubmitFlow({
           tag: editInput.tag,
           mediaCount: editInput.media?.length ?? 0,
         });
-        result = await editMutation.mutateAsync(editInput);
+        usePowQueueStore.getState().enqueue({
+          id: actionId,
+          type: "edit",
+          label: getActionLabel("edit"),
+          execute: async () => {
+            Sentry.addBreadcrumb({
+              category: "edit-post",
+              message: "Executing queued edit post action",
+              level: "info",
+              data: {
+                editPostId,
+                actionId,
+                mediaCount: mediaUrls.length,
+              },
+            });
+            return editMutation.mutateAsync(editInput);
+          },
+          onOptimisticUpdate: () => {
+            applyOptimisticPostEdit(queryClient, editInput, "pending");
+            usePostEditStore.getState().setOverride(editPostId, {
+              title: editInput.title,
+              content: editInput.content,
+              topic,
+              tag: selectedContentWarning || undefined,
+              media: mediaUrls.length > 0 ? mediaUrls : undefined,
+              editedAt: Math.floor(Date.now() / 1000),
+            });
+            setTimeout(() => {
+              usePostEditStore.getState().clearOverride(editPostId);
+            }, 120000);
+          },
+          onError: (err) => {
+            const toastMessage = getApiErrorMessage(err);
+            applyOptimisticPostEdit(queryClient, editInput, "error", toastMessage);
+            toast.error("Post wasn't edited", toastMessage);
+          },
+        });
+
+        resetComposeState();
+        resetVideoUploads();
+        resetImageUploads();
+        VIDEO_META.clear();
+        setHandledVideoParam(null);
+        clearDraft();
+        setIsSubmitting(false);
+        markEditJustCompleted();
+        router.back();
+        return;
       } else {
         const optimisticId = `optimistic-post-${Date.now()}`;
         const optimisticDraft: PostDraft = { ...draft };
@@ -305,88 +342,6 @@ export function useCreateSubmitFlow({
         useHomePostCardStore.getState().setSkipNextRefresh(true);
         router.replace("/");
         return;
-      }
-
-      if (isEditMode) {
-        txProgress.setSuccess(result?.tx_hash);
-
-        usePostEditStore.getState().setOverride(editPostId, {
-          title: draft.title.trim(),
-          content: content || "",
-          topic,
-          tag: selectedContentWarning || undefined,
-          media: mediaUrls.length > 0 ? mediaUrls : undefined,
-          editedAt: Math.floor(Date.now() / 1000),
-        });
-
-        setTimeout(() => {
-          usePostEditStore.getState().clearOverride(editPostId);
-        }, 120000);
-
-        const nowSeconds = Math.floor(Date.now() / 1000);
-        const updatePostInCache = (post: any) => {
-          if (post?.post_id !== editPostId) return post;
-          return {
-            ...post,
-            title: draft.title.trim(),
-            content,
-            tag: selectedContentWarning || post.tag,
-            topic: topic || post.topic,
-            media: mediaUrls.length > 0 ? mediaUrls : post.media,
-            edited_at: nowSeconds,
-          };
-        };
-        const applyToData = (data: any) => {
-          if (!data) return data;
-          if (data.pages && Array.isArray(data.pages)) {
-            return {
-              ...data,
-              pages: data.pages.map((page: any) => ({
-                ...page,
-                posts: page.posts.map(updatePostInCache),
-              })),
-            };
-          }
-          if (data.posts && Array.isArray(data.posts)) {
-            return { ...data, posts: data.posts.map(updatePostInCache) };
-          }
-          return data;
-        };
-        queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }).forEach(([key]) => {
-          queryClient.setQueryData(key, (old: any) => applyToData(old));
-        });
-        queryClient.getQueriesData({ queryKey: queryKeys.userPostsRoot() }).forEach(([key]) => {
-          queryClient.setQueryData(key, (old: any) => applyToData(old));
-        });
-        queryClient.getQueriesData<any>({ queryKey: queryKeys.commentsRoot() }).forEach(([key, data]) => {
-          if (data?.root?.post_id === editPostId) {
-            queryClient.setQueryData(key, {
-              ...data,
-              root: {
-                ...data.root,
-                title: draft.title.trim(),
-                content,
-                tag: selectedContentWarning || data.root.tag,
-                topic: topic || data.root.topic,
-                media: mediaUrls.length > 0 ? mediaUrls : data.root.media,
-                edited_at: nowSeconds,
-              },
-            });
-          }
-        });
-
-        resetComposeState();
-        resetVideoUploads();
-        VIDEO_META.clear();
-        setHandledVideoParam(null);
-        clearDraft();
-        setIsSubmitting(false);
-
-        markEditJustCompleted();
-        setTimeout(() => {
-          txProgress.hideModal();
-          router.back();
-        }, 500);
       }
     } catch (error) {
       setIsSubmitting(false);

@@ -70,6 +70,7 @@ export type {
   VoteMutationInput,
   UseVoteOptions,
   CreatePostMutationInput,
+  EditPostMutationInput,
   UsePostOptions,
   UseFollowOptions,
   UseBlockOptions,
