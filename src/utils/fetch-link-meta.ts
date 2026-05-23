@@ -493,10 +493,53 @@ function extractInstagramImages(html: string): string[] {
   return images;
 }
 
+function extractInstagramVideos(html: string): string[] {
+  const videos: string[] = [];
+  const seen = new Set<string>();
+
+  const addUrl = (raw: string) => {
+    const cleaned = raw
+      .replace(/\\/g, "")
+      .replace(/u0026/g, "&")
+      .replace(/u00253D/g, "=")
+      .replace(/&amp;/g, "&");
+    if (!cleaned.startsWith("https://")) return;
+    const key = cleaned.split("?")[0];
+    if (seen.has(key)) return;
+    seen.add(key);
+    videos.push(cleaned);
+  };
+
+  const videoUrlPattern = /video_url[\"\s:\\]+[\"']?(https?:[^\"'\s,]+\.mp4[^\"'\s,]*)/gi;
+  let match;
+  while ((match = videoUrlPattern.exec(html)) !== null) {
+    addUrl(match[1]);
+  }
+
+  const sourceSrcPattern = /<source[^>]+src=[\"']([^\"']+\.mp4[^\"']*)[\"']/gi;
+  while ((match = sourceSrcPattern.exec(html)) !== null) {
+    addUrl(match[1]);
+  }
+
+  const videoSrcPattern = /<video[^>]+src=[\"']([^\"']+\.mp4[^\"']*)[\"']/gi;
+  while ((match = videoSrcPattern.exec(html)) !== null) {
+    addUrl(match[1]);
+  }
+
+  if (videos.length === 0) {
+    const mp4Pattern = /https?:\/\/[^\s\"'\\]+\.mp4[^\s\"'\\]*/gi;
+    const all = [...html.matchAll(mp4Pattern)];
+    for (const m of all) addUrl(m[0]);
+  }
+
+  return videos;
+}
+
 async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Partial<LinkMeta>> {
   let embedImage: string | null = null;
   let embedCaption: string | null = null;
   let allImages: string[] = [];
+  let allVideos: string[] = [];
   const shortcode = extractInstagramShortcode(url);
 
   if (shortcode) {
@@ -569,11 +612,16 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
         const embedImages = extractInstagramImages(html);
         if (embedImages.length > 0) allImages = embedImages;
 
+        const embedVideos = extractInstagramVideos(html);
+        if (embedVideos.length > 0) allVideos = embedVideos;
+
         if (videoUrl) {
+          if (allVideos.length === 0) allVideos = [videoUrl];
+          else if (!allVideos.includes(videoUrl)) allVideos = [videoUrl, ...allVideos];
           Sentry.addBreadcrumb({
             category: "link-meta",
             message: "Instagram video extracted from embed",
-            data: { shortcode, carouselCount: allImages.length },
+            data: { shortcode, carouselCount: allImages.length, videoCount: allVideos.length },
             level: "info",
           });
           return {
@@ -581,6 +629,7 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
             description: null,
             image: imageUrl,
             video: videoUrl,
+            videos: allVideos,
             images: allImages,
             siteName: "Instagram",
           };
@@ -642,10 +691,18 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
         if (pageImages.length > 0) allImages = pageImages;
       }
 
+      if (allVideos.length === 0) {
+        const pageVideos = extractInstagramVideos(html);
+        if (pageVideos.length > 0) allVideos = pageVideos;
+      }
+      if (videoUrl && !allVideos.includes(videoUrl)) {
+        allVideos = [videoUrl, ...allVideos];
+      }
+
       Sentry.addBreadcrumb({
         category: "link-meta",
         message: "Instagram meta from direct page",
-        data: { hasVideo: !!videoUrl, hasImage: !!imageUrl, carouselCount: allImages.length },
+        data: { hasVideo: !!videoUrl, hasImage: !!imageUrl, carouselCount: allImages.length, videoCount: allVideos.length },
         level: "info",
       });
 
@@ -654,6 +711,7 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
         description,
         image: imageUrl ?? embedImage ?? null,
         video: videoUrl,
+        videos: allVideos,
         images: allImages,
         siteName: "Instagram",
       };
@@ -894,6 +952,7 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       if (ig.image) image = image ?? ig.image;
       if (ig.video) video = ig.video;
       if (ig.images?.length) images = ig.images;
+      if (ig.videos?.length) videos = ig.videos;
       siteName = siteName ?? ig.siteName ?? null;
     }
 
