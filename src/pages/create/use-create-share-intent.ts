@@ -110,6 +110,12 @@ export function useCreateShareIntent({
   const shareTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (isEditMode) return;
+    if (!hasShareIntent && !pendingShareIntent && !isRecentSharePath(60_000)) return;
+    setIsProcessingShareLink(true);
+  }, [hasShareIntent, isEditMode, pendingShareIntent, setIsProcessingShareLink]);
+
+  useEffect(() => {
     if (!hasShareIntent || !shareIntent || isEditMode) return;
     const pending = persistPendingShareIntent(shareIntent, "share-intent-context");
     if (pending) {
@@ -159,8 +165,17 @@ export function useCreateShareIntent({
       );
       if (pending) {
         setPendingShareIntent(pending);
+      } else {
+        clearLastSharePath(sharePath);
+        Sentry.addBreadcrumb({
+          category: "share-intent",
+          message: "Cleared stale share launch path after failed recovery",
+          data: { pathPreview: sharePath.slice(0, 160) },
+          level: "info",
+        });
       }
     } catch (error) {
+      clearLastSharePath(sharePath);
       Sentry.captureException(error, {
         tags: { feature: "share-intent", operation: "create-screen-recovery" },
       });
@@ -203,6 +218,7 @@ export function useCreateShareIntent({
       lastProcessedIntentRef.current = null;
       clearPendingShareIntent(getPendingShareIntentKey(activeShareIntent));
       setPendingShareIntent(null);
+      setIsProcessingShareLink(false);
       if (hasShareIntent) {
         resetShareIntent();
       }
@@ -224,6 +240,9 @@ export function useCreateShareIntent({
     const sharedUrl = extractSharedUrl(activeShareIntent.webUrl) ?? sharedTextUrl;
     const shouldAutofillLinkInput = shouldAutofillSharedUrlInLinkInput(sharedUrl);
     const shouldImportSharedFiles = !sharedUrl;
+    if (sharedUrl) {
+      setIsProcessingShareLink(true);
+    }
     const consumedLaunchPath = isRecoveredPendingShareIntent
       ? pendingShareIntent?.launchPath
       : getLastSharePath();
@@ -767,6 +786,7 @@ export function useCreateShareIntent({
             setIsProcessingShareLink(false);
             clearPendingShareIntent(currentIntentKey);
             setPendingShareIntent(null);
+            setIsProcessingShareLink(false);
             if (hasShareIntent) {
               resetShareIntent();
             }
