@@ -6,10 +6,7 @@ import { useInboxStore } from "@/src/stores/inbox-store";
 import { useCloudflareErrorStore } from "@/src/stores/cloudflare-error-store";
 import { isRetryable, isMaybeRetryable } from "@/src/utils/error-messages";
 
-const DEFAULT_NODES = [
-  "https://mirage.talk",
-  "https://mirage.talk", // fallback
-];
+const DEFAULT_NODE = "https://mirage.talk";
 
 const MAX_CONCURRENT_REQUESTS = 6;
 const RATE_LIMIT_RETRY_DELAY = 1000;
@@ -35,7 +32,7 @@ class ApiClient {
   private requestQueue: (() => void)[];
 
   constructor() {
-    this.nodeList = DEFAULT_NODES;
+    this.nodeList = [DEFAULT_NODE];
     this.currentNodeIndex = 0;
     this.activeRequests = 0;
     this.requestQueue = [];
@@ -81,7 +78,9 @@ class ApiClient {
         return response;
       },
       async (error: AxiosError) => {
-        // On network error, try failover to next node
+        // On network error, retry only against the currently selected node.
+        // Do not silently fail over to another Mirage node; the selected API
+        // server is user-visible state and must stay authoritative.
         if (
           error.code === "ECONNABORTED" ||
           error.code === "ERR_NETWORK" ||
@@ -91,7 +90,7 @@ class ApiClient {
           if (originalRequest && !originalRequest.headers["X-Retry"]) {
             Sentry.addBreadcrumb({
               category: "api",
-              message: "API request failed; attempting node failover",
+              message: "API request failed; retrying selected node",
               data: {
                 code: error.code,
                 method: originalRequest.method,
@@ -100,7 +99,6 @@ class ApiClient {
               },
               level: "warning",
             });
-            await this.failover();
             originalRequest.baseURL = this.getBaseUrl();
             originalRequest.headers["X-Retry"] = "true";
             return this.client(originalRequest);
@@ -116,9 +114,21 @@ class ApiClient {
   }
 
   /**
-   * Switch to next node on failure
+   * Switch to next configured node on failure.
+   * Currently this is intentionally a no-op unless multiple nodes are
+   * explicitly configured. Runtime server selection should never drift from
+   * the user's selected API server.
    */
   async failover(): Promise<void> {
+    if (this.nodeList.length <= 1) {
+      Sentry.addBreadcrumb({
+        category: "api",
+        message: "Skipped node failover; only selected node is configured",
+        level: "warning",
+      });
+      return;
+    }
+
     this.currentNodeIndex = (this.currentNodeIndex + 1) % this.nodeList.length;
     this.client.defaults.baseURL = this.getBaseUrl();
     Sentry.addBreadcrumb({
@@ -133,7 +143,7 @@ class ApiClient {
    * Allow runtime URL change
    */
   setBaseUrl(url: string): void {
-    this.nodeList = [url, ...DEFAULT_NODES.filter((n) => n !== url)];
+    this.nodeList = [url];
     this.currentNodeIndex = 0;
     this.client.defaults.baseURL = url;
   }

@@ -35,8 +35,9 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const previousServerRef = useRef<ApiServer>(apiServer);
 
   useEffect(() => {
+    const baseUrl = getApiBaseUrl(apiServer);
+
     if (!initializedRef.current) {
-      const baseUrl = getApiBaseUrl(apiServer);
       apiClient.setBaseUrl(baseUrl);
       initializedRef.current = true;
       previousServerRef.current = apiServer;
@@ -44,6 +45,8 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     if (previousServerRef.current !== apiServer) {
+      apiClient.setBaseUrl(baseUrl);
+      resetServerScopedCache(queryClient);
       previousServerRef.current = apiServer;
     }
   }, [apiServer, queryClient]);
