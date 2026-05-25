@@ -56,9 +56,19 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNewPostsChecker, type NewPostAvatar } from "@/src/hooks/use-new-posts-checker";
 import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 
+const APP_STARTED_AT = Date.now();
+const COLD_START_FEED_REFRESH_WINDOW_MS = 30_000;
+const coldStartRefreshedFeedKeys = new Set<string>();
+
+type FeedRefreshOptions = {
+  fetchAllNew?: boolean;
+  silent?: boolean;
+  skipHaptic?: boolean;
+};
+
 export type HomeTabbedFeedRef = {
   scrollToTop: (tabIndex?: number, options?: { animated?: boolean }) => void;
-  refresh: (options?: { fetchAllNew?: boolean; silent?: boolean }) => Promise<void>;
+  refresh: (options?: FeedRefreshOptions) => Promise<void>;
   isRefreshing: () => boolean;
   hasNewPosts: () => boolean;
   handleNewPostsPress: () => Promise<void>;
@@ -96,7 +106,7 @@ export const HomeTabbedFeed = forwardRef<
   const latestListRef = useRef<FlashListRef<Post>>(null);
   const activeListRef = useRef<FlashListRef<Post>>(null);
   const dismissNewPostsRef = useRef<(() => void) | null>(null);
-  const handleRefreshRef = useRef<((options?: { fetchAllNew?: boolean; silent?: boolean }) => Promise<void>) | null>(null);
+  const handleRefreshRef = useRef<((options?: FeedRefreshOptions) => Promise<void>) | null>(null);
   const triggerPullRefresh = useCallback(() => {
     handleRefreshRef.current?.();
   }, []);
@@ -305,12 +315,12 @@ export const HomeTabbedFeed = forwardRef<
     [latestQuery.data, transformPosts, baseFeed, followedUsers, followedTopics],
   );
 
-  const handleRefresh = useCallback(async (options?: { fetchAllNew?: boolean; silent?: boolean }) => {
+  const handleRefresh = useCallback(async (options?: FeedRefreshOptions) => {
     if (isRefreshingRef.current) return;
     isRefreshingRef.current = true;
     transformedPageCacheRef.current = new WeakMap();
     if (!options?.silent) {
-      if (Platform.OS === "android") triggerHaptic("light");
+      if (Platform.OS === "android" && !options?.skipHaptic) triggerHaptic("light");
       dismissNewPostsRef.current?.();
       setIsRefreshing(true);
       onRefreshingChange?.(true);
@@ -733,7 +743,41 @@ export const HomeTabbedFeed = forwardRef<
 
   const posts = activeTabIndex === 0 ? magicPosts : latestPosts;
   const query = activeTabIndex === 0 ? magicQuery : latestQuery;
+  const coldStartRefreshKey = `${feedContext}:${allowedTags ?? "all"}:${currentUser?.walletAddress ?? "anon"}`;
   const seededFeedContextRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (Date.now() - APP_STARTED_AT > COLD_START_FEED_REFRESH_WINDOW_MS) return;
+    if (coldStartRefreshedFeedKeys.has(coldStartRefreshKey)) return;
+    if (posts.length === 0 || query.isPending || query.isFetching || query.isFetchedAfterMount) return;
+
+    coldStartRefreshedFeedKeys.add(coldStartRefreshKey);
+
+    Sentry.addBreadcrumb({
+      category: "home-feed",
+      message: "Cold-start cached feed refresh started",
+      level: "info",
+      data: {
+        feed: baseFeed,
+        sort: activeTabIndex === 0 ? "magic" : "latest",
+        postCount: posts.length,
+      },
+    });
+
+    const timer = setTimeout(() => {
+      handleRefreshRef.current?.({ fetchAllNew: true, skipHaptic: true });
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [
+    activeTabIndex,
+    baseFeed,
+    coldStartRefreshKey,
+    posts.length,
+    query.isFetchedAfterMount,
+    query.isFetching,
+    query.isPending,
+  ]);
 
   useEffect(() => {
     if (posts.length === 0) {
