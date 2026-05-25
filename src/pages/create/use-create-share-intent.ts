@@ -678,6 +678,21 @@ export function useCreateShareIntent({
             });
           }
 
+          if (!videoDownloaded && hasVideoCandidate && videosToDownload.length === 0) {
+            Sentry.captureMessage("Share intent: video candidates were not downloadable", {
+              level: "warning",
+              tags: { feature: "share-intent", operation: "media-extraction" },
+              extra: {
+                domain: meta.domain,
+                sharedUrl,
+                rawVideo: meta.video,
+                rawVideos: meta.videos?.slice(0, 5) ?? [],
+                imageCount: meta.images?.length ?? 0,
+                hasFallbackImage: !!meta.image,
+              },
+            });
+          }
+
           if (!videoDownloaded) {
             const imagesToDownload = Array.from(
               new Set(
@@ -710,6 +725,13 @@ export function useCreateShareIntent({
                         level: "info",
                       });
                     }
+                  } else {
+                    Sentry.addBreadcrumb({
+                      category: "share-intent",
+                      message: "Shared link image download failed",
+                      data: { domain: meta.domain, imageIndex: i, status: response.status },
+                      level: "warning",
+                    });
                   }
                 } catch (imgErr) {
                   Sentry.addBreadcrumb({
@@ -769,6 +791,22 @@ export function useCreateShareIntent({
             level: "info",
           });
 
+          if (!shouldAddSharedUrlFallback && !finalTitle && !finalBody && mediaCount === 0) {
+            Sentry.captureMessage("Share intent link extraction completed with empty draft", {
+              level: "warning",
+              tags: { feature: "share-intent", operation: "link-extraction" },
+              extra: {
+                domain: meta.domain,
+                sharedUrl,
+                hasVideoCandidate,
+                downloadableVideoCount: videosToDownload.length,
+                imageCount: meta.images?.length ?? 0,
+                hasFallbackImage: !!meta.image,
+                autofilledSharedUrlInLinkInput: shouldAutofillLinkInput,
+              },
+            });
+          }
+
           if (meta.externalUrl) {
             console.log("[CreateScreen] Keeping external link out of link input:", meta.externalUrl);
           }
@@ -779,7 +817,16 @@ export function useCreateShareIntent({
               body: sharedUrl.slice(0, tierLimits.maxContentLength),
             });
           }
-          Sentry.captureException(err, { tags: { feature: "share-intent-meta" } });
+          Sentry.captureException(err, {
+            tags: { feature: "share-intent-meta", operation: "fetch-link-meta" },
+            extra: {
+              sharedUrl,
+              shouldAutofillLinkInput,
+              isRecoveredPendingShareIntent,
+              fileCount: activeShareIntent.files?.length ?? 0,
+              textLength: activeShareIntent.text?.length ?? 0,
+            },
+          });
         }).finally(() => {
           if (lastProcessedIntentRef.current === currentIntentKey) {
             lastProcessedIntentRef.current = null;

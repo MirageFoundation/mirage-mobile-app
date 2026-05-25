@@ -39,6 +39,7 @@ const FETCH_INTERVAL_SECONDS = 15 * 60;
 const FOREGROUND_INTERVAL_MS = FETCH_INTERVAL_SECONDS * 1000;
 const SIGNAL_THROTTLE_MS = 15_000;
 const INBOX_NAVIGATION_READY_TIMEOUT_MS = 3_000;
+const INBOX_NAVIGATION_ACTIVE_WATCHDOG_MS = 8_000;
 const INBOX_NOTIFICATION_NAVIGATION_ACTIVE_MS = 10_000;
 const SHARE_INTENT_NAVIGATION_ACTIVE_MS = 15_000;
 
@@ -831,11 +832,12 @@ function handleNotificationResponse(
       });
     };
     if (AppState.currentState !== "active") {
+      const deferredAt = Date.now();
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Deferring inbox notification navigation until app active",
         level: "info",
-        data: { notificationId, appState: AppState.currentState },
+        data: { notificationId, source, appState: AppState.currentState },
       });
       let didNavigate = false;
       const navigateOnce = () => {
@@ -846,7 +848,12 @@ function handleNotificationResponse(
           category: "navigation",
           message: "Starting deferred inbox notification navigation",
           level: "info",
-          data: { notificationId, appState: AppState.currentState },
+          data: {
+            notificationId,
+            source,
+            appState: AppState.currentState,
+            deferredForMs: Date.now() - deferredAt,
+          },
         });
         runNavigateToInbox();
       };
@@ -862,11 +869,27 @@ function handleNotificationResponse(
             category: "navigation",
             message: "Using inbox notification active-state fallback",
             level: "info",
-            data: { notificationId },
+            data: { notificationId, source, deferredForMs: Date.now() - deferredAt },
           });
           navigateOnce();
         }
       }, 1_000);
+      setTimeout(() => {
+        if (didNavigate) return;
+        Sentry.captureMessage("Inbox notification navigation still waiting for active app", {
+          level: "warning",
+          tags: {
+            feature: "inbox-notifications",
+            operation: "notification-cold-start-navigation",
+          },
+          extra: {
+            notificationId,
+            source,
+            deferredForMs: Date.now() - deferredAt,
+            ...getNavigationReadinessDebugData(),
+          },
+        });
+      }, INBOX_NAVIGATION_ACTIVE_WATCHDOG_MS);
     } else {
       runNavigateToInbox();
     }

@@ -225,6 +225,16 @@ async function performPendingUnregisterFlush(): Promise<boolean> {
           "[PushNotifications] Pending unregister still retryable:",
           getPushErrorDetails(error),
         );
+        Sentry.addBreadcrumb({
+          category: "push-notifications",
+          message: "Pending unregister retry remains queued",
+          level: "warning",
+          data: {
+            address: item.address,
+            attempts: nextItem.attempts,
+            ...getPushErrorDetails(error),
+          },
+        });
         remaining.push(nextItem);
       } else {
         console.warn("[PushNotifications] Dropping non-retryable pending unregister:", error);
@@ -253,6 +263,12 @@ async function performPendingUnregisterFlush(): Promise<boolean> {
 async function flushPendingUnregisters(): Promise<boolean> {
   if (pendingUnregisterFlushPromise) {
     console.log("[PushNotifications] Reusing pending unregister flush");
+    Sentry.addBreadcrumb({
+      category: "push-notifications",
+      message: "Reusing in-flight pending unregister flush",
+      level: "info",
+      data: { pendingCount: readPendingUnregisters().length },
+    });
     return pendingUnregisterFlushPromise;
   }
 

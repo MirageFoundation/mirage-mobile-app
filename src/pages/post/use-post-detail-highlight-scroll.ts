@@ -292,12 +292,23 @@ export function usePostDetailHighlightScroll({
 
   const suppressHighlightAutoScroll = useCallback(() => {
     const current = highlightedCommentId;
+    const hadHighlightTimer = !!highlightTimerRef.current;
     if (current) {
       suppressedHighlightScrollRef.current = current;
     }
     preciseScrollTargetRef.current = current ? `${current}:done` : null;
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-  }, [highlightedCommentId]);
+    Sentry.addBreadcrumb({
+      category: "post-detail",
+      message: "Suppressed highlighted comment auto-scroll",
+      level: "info",
+      data: {
+        postId: id,
+        highlight: current,
+        hadHighlightTimer,
+      },
+    });
+  }, [highlightedCommentId, id]);
 
   return {
     currentScrollYRef,
