@@ -470,6 +470,7 @@ function LegacyPostDetailScreen() {
     handleContentSizeChange,
     handleHighlightedCommentLayout,
     highlightedCommentId,
+    suppressHighlightAutoScroll,
   } = usePostDetailHighlightScroll({
     allComments,
     commentsSectionRef,
@@ -566,6 +567,7 @@ function LegacyPostDetailScreen() {
         }}
         onLayout={handlePostHeaderLayout}
         onShowFullThread={() => {
+          suppressHighlightAutoScroll();
           setShowFocusedThread(false);
           setContextComments([]);
         }}
@@ -596,6 +598,7 @@ function LegacyPostDetailScreen() {
       reveal,
       screenActive,
       shareServer,
+      suppressHighlightAutoScroll,
       threadActionLoading,
       videoSyncScope,
     ],

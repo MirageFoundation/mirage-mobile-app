@@ -290,6 +290,15 @@ export function usePostDetailHighlightScroll({
     scheduleScrollToEnd();
   }, [scheduleScrollToEnd]);
 
+  const suppressHighlightAutoScroll = useCallback(() => {
+    const current = highlightedCommentId;
+    if (current) {
+      suppressedHighlightScrollRef.current = current;
+    }
+    preciseScrollTargetRef.current = current ? `${current}:done` : null;
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+  }, [highlightedCommentId]);
+
   return {
     currentScrollYRef,
     handleComposerConfirmedCommentId,
@@ -298,5 +307,6 @@ export function usePostDetailHighlightScroll({
     handleContentSizeChange,
     handleHighlightedCommentLayout,
     highlightedCommentId,
+    suppressHighlightAutoScroll,
   };
 }
