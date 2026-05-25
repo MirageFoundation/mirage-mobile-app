@@ -277,6 +277,11 @@ export function InboxScreen() {
           type: reply.type ?? "reply",
         },
       });
+      if (!reply.reply_content?.trim()) {
+        routerRef.current.push(`/post/${reply.root_post_id}`);
+        return;
+      }
+
       seedFocusedComment(reply);
       routerRef.current.push(`/post/${reply.root_post_id}?highlight=${reply.reply_id}`);
     },

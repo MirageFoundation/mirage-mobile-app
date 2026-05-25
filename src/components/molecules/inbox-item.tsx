@@ -200,6 +200,7 @@ export const InboxItem = memo(function InboxItem({
     () => extractImageUrls(reply.reply_content),
     [reply.reply_content],
   );
+  const hasReplyContent = replyText.length > 0 || imageUrls.length > 0;
 
   return (
     <>
@@ -210,7 +211,13 @@ export const InboxItem = memo(function InboxItem({
           isUnread && styles.unreadContainer,
         ]}
       >
-        <View style={[styles.headerTextRow, isSpecialEvent && !isDonation && styles.headerTextRowNoContent]}>
+        <View
+          style={[
+            styles.headerTextRow,
+            ((isSpecialEvent && !isDonation) || !hasReplyContent) &&
+              styles.headerTextRowNoContent,
+          ]}
+        >
           <Ionicons
             name={actionIcon}
             size={16}
@@ -247,7 +254,7 @@ export const InboxItem = memo(function InboxItem({
           </Text>
         )}
 
-        {!isSpecialEvent && (replyText.length > 0 || imageUrls.length > 0) && (
+        {!isSpecialEvent && hasReplyContent && (
           <View
             style={[
               styles.replyContent,
