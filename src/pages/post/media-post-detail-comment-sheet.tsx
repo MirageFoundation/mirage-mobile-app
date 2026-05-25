@@ -399,7 +399,7 @@ export function MediaPostDetailCommentSheet({
                     weight="medium"
                     style={styles.threadReminderTitle}
                   >
-                    You&apos;re viewing single comment&apos;s thread
+                    You&apos;re viewing a limited set of comments
                   </Text>
                 </View>
                 <View style={styles.threadReminderActionsRow}>
