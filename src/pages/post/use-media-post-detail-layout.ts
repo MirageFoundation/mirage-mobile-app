@@ -48,6 +48,7 @@ export function useMediaPostDetailLayout({
   const collapsedMediaH = Math.round(SCREEN_H * COLLAPSED_FRACTION);
   const listTopY = collapsedMediaTop + collapsedMediaH;
   const expandedSheetH = Math.max(100, SCREEN_H - listTopY);
+  const fullSheetH = Math.max(expandedSheetH + 1, SCREEN_H - insets.top);
   const measuredInitialSheetH = measuredPostSummaryH + SHEET_HANDLE_HEIGHT + INITIAL_SHEET_EXTRA_PADDING;
   const initialSheetH = Math.min(
     Math.max(measuredInitialSheetH || 0, INITIAL_SHEET_MIN_HEIGHT),
@@ -56,8 +57,8 @@ export function useMediaPostDetailLayout({
   const initialSheetTop = SCREEN_H - initialSheetH;
 
   const snapPoints = useMemo(
-    () => [initialSheetH, expandedSheetH],
-    [initialSheetH, expandedSheetH],
+    () => [initialSheetH, expandedSheetH, fullSheetH],
+    [initialSheetH, expandedSheetH, fullSheetH],
   );
   const sheetAnimationConfigs = useBottomSheetSpringConfigs({
     damping: 34,
@@ -95,12 +96,19 @@ export function useMediaPostDetailLayout({
   const mediaContainerStyle = useAnimatedStyle(() => {
     const progress = collapseProgress.value;
     const targetTop = expandedMediaTop + (collapsedMediaTop - expandedMediaTop) * progress;
-    const targetHeight = Math.max(1, animatedPosition.value - targetTop);
+    const rawHeight = animatedPosition.value - targetTop;
+    // When the sheet expands above the collapsed media (full snap point),
+    // slide the media upward in lockstep with the sheet so it never appears
+    // as a tiny strip above the sheet. We keep its collapsed height so it
+    // remains intact behind the sheet when expansion is reversed.
+    const overExpansion = Math.max(0, collapsedMediaH - rawHeight);
+    const adjustedTop = targetTop - overExpansion;
+    const targetHeight = Math.max(collapsedMediaH, rawHeight);
 
     if (!sourceMediaTransition) {
       return {
         height: targetHeight,
-        top: targetTop,
+        top: adjustedTop,
       };
     }
 
@@ -111,7 +119,7 @@ export function useMediaPostDetailLayout({
 
     return {
       height: sourceMediaTransition.height + (targetHeight - sourceMediaTransition.height) * enter,
-      top: sourceMediaTransition.y + (targetTop - sourceMediaTransition.y) * enter,
+      top: sourceMediaTransition.y + (adjustedTop - sourceMediaTransition.y) * enter,
       transform: [
         { translateX: (sourceCenterX - targetCenterX) * (1 - enter) },
         { scaleX: sourceScaleX + (1 - sourceScaleX) * enter },
@@ -119,14 +127,25 @@ export function useMediaPostDetailLayout({
     };
   });
 
-  const headerStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(
+  const headerStyle = useAnimatedStyle(() => {
+    // Full opacity when media is expanded. As the sheet collapses the media,
+    // dim the header so it stays visible (with a close button + topic) while
+    // the sheet is in its half-opened state, then fade out completely once
+    // the sheet snaps to the full overlay above the media.
+    const halfOpacity = interpolate(
       collapseProgress.value,
-      [0, 0.4],
+      [0, 1],
+      [1, 0.55],
+      Extrapolation.CLAMP,
+    );
+    const fullFade = interpolate(
+      animatedIndex.value,
+      [1, 1.6],
       [1, 0],
       Extrapolation.CLAMP,
-    ),
-  }));
+    );
+    return { opacity: halfOpacity * fullFade };
+  });
 
   const footerStyle = useAnimatedStyle(() => ({
     opacity: interpolate(
