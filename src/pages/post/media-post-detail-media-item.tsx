@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState, memo } from "react";
 import { View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { runOnJS, type SharedValue } from "react-native-reanimated";
+import Animated, {
+  runOnJS,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+  type SharedValue,
+} from "react-native-reanimated";
 import { Audio, AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
 
@@ -64,6 +71,35 @@ export const MediaItemView = memo(function MediaItemView({
   const setPosition = useVideoPositionStore((s) => s.setPosition);
   const currentVideoPositionRef = useRef(0);
   const hasRestoredVideoPositionRef = useRef(false);
+
+  // --- pinch-to-zoom (only active when media is fully expanded) -------------
+  const scale = useSharedValue(1);
+  const savedScale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+  const [isZoomed, setIsZoomed] = useState(false);
+
+  const resetZoom = useCallback(() => {
+    scale.value = withTiming(1);
+    savedScale.value = 1;
+    translateX.value = withTiming(0);
+    translateY.value = withTiming(0);
+    savedTranslateX.value = 0;
+    savedTranslateY.value = 0;
+    setIsZoomed(false);
+  }, [savedScale, savedTranslateX, savedTranslateY, scale, translateX, translateY]);
+
+  // If the sheet collapses the media, reset zoom so re-expanding starts clean.
+  useAnimatedReaction(
+    () => collapseProgress.value,
+    (value, prev) => {
+      if (value > 0.05 && (prev === null || prev <= 0.05)) {
+        if (savedScale.value !== 1) runOnJS(resetZoom)();
+      }
+    },
+  );
 
   const isVideo = item.type === "video";
   const videoPreviewUri = isVideo
@@ -166,9 +202,82 @@ export const MediaItemView = memo(function MediaItemView({
       }
     });
 
+  const pinch = Gesture.Pinch()
+    .onUpdate((e) => {
+      "worklet";
+      if (collapseProgress.value > 0.05) return;
+      const next = Math.max(1, Math.min(savedScale.value * e.scale, 4));
+      scale.value = next;
+    })
+    .onEnd(() => {
+      "worklet";
+      if (scale.value <= 1.05) {
+        scale.value = withTiming(1);
+        savedScale.value = 1;
+        translateX.value = withTiming(0);
+        translateY.value = withTiming(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+        runOnJS(setIsZoomed)(false);
+      } else {
+        savedScale.value = scale.value;
+        runOnJS(setIsZoomed)(true);
+      }
+    });
+
+  const pan = Gesture.Pan()
+    .enabled(isZoomed)
+    .averageTouches(true)
+    .onUpdate((e) => {
+      "worklet";
+      if (collapseProgress.value > 0.05 || savedScale.value <= 1) return;
+      translateX.value = savedTranslateX.value + e.translationX;
+      translateY.value = savedTranslateY.value + e.translationY;
+    })
+    .onEnd(() => {
+      "worklet";
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    });
+
+  const doubleTap = Gesture.Tap()
+    .numberOfTaps(2)
+    .onEnd(() => {
+      "worklet";
+      if (collapseProgress.value > 0.05) return;
+      if (savedScale.value > 1) {
+        scale.value = withTiming(1);
+        savedScale.value = 1;
+        translateX.value = withTiming(0);
+        translateY.value = withTiming(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+        runOnJS(setIsZoomed)(false);
+      } else {
+        scale.value = withTiming(2);
+        savedScale.value = 2;
+        runOnJS(setIsZoomed)(true);
+      }
+    });
+
+  const composed = Gesture.Simultaneous(
+    pinch,
+    pan,
+    Gesture.Exclusive(doubleTap, tap),
+  );
+
+  const zoomStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
   return (
-    <GestureDetector gesture={tap}>
+    <GestureDetector gesture={composed}>
       <View style={styles.mediaItem}>
+        <Animated.View style={[styles.mediaInner, zoomStyle]}>
         {isVideo ? (
           <AnimatedVideo
             ref={videoRef}
@@ -216,6 +325,7 @@ export const MediaItemView = memo(function MediaItemView({
             recyclingKey={mediaPreviewUri}
           />
         ) : null}
+        </Animated.View>
       </View>
     </GestureDetector>
   );
