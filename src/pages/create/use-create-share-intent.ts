@@ -459,6 +459,9 @@ export function useCreateShareIntent({
           if (titleOverflow) {
             bodyParts.unshift(titleOverflow);
           }
+          if (meta.externalUrl && !bodyParts.includes(meta.externalUrl)) {
+            bodyParts.push(meta.externalUrl);
+          }
           const extractedBody = bodyParts.join("\n\n").trim();
           const finalBody = extractedBody.slice(0, tierLimits.maxContentLength);
           updateDraft({ title: finalTitle ?? "", body: finalBody });
@@ -476,6 +479,7 @@ export function useCreateShareIntent({
               titleLength: finalTitle?.length ?? 0,
               bodyLength: finalBody.length,
               hasBody: finalBody.length > 0,
+              addedExternalUrlToBody: !!meta.externalUrl,
               autofilledSharedUrlInLinkInput: shouldAutofillLinkInput,
             },
             level: "info",
