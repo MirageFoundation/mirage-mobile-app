@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { FlatList, NativeScrollEvent, NativeSyntheticEvent, Platform, RefreshControl } from "react-native";
 import Animated, { FadeInUp, LinearTransition } from "react-native-reanimated";
 import { useUnistyles } from "react-native-unistyles";
@@ -67,7 +67,7 @@ export const PostDetailCommentsSection = forwardRef<
       isLoadingContext,
       isLoadingFocusedComment,
       isLoadingFullThreadComments,
-      isRefetchingComments,
+      isRefetchingComments: _isRefetchingComments,
       listHeader,
       onAuthorPress,
       onContentSizeChange,
@@ -86,6 +86,18 @@ export const PostDetailCommentsSection = forwardRef<
     const flatListRef = useRef<FlatList<Comment>>(null);
     const commentsLengthRef = useRef(comments.length);
     commentsLengthRef.current = comments.length;
+    const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+
+    useEffect(() => {
+      if (!isFetchingComments && isManualRefreshing) {
+        setIsManualRefreshing(false);
+      }
+    }, [isFetchingComments, isManualRefreshing]);
+
+    const handleManualRefresh = useCallback(() => {
+      setIsManualRefreshing(true);
+      onRefreshComments();
+    }, [onRefreshComments]);
 
     useImperativeHandle(
       ref,
@@ -174,8 +186,8 @@ export const PostDetailCommentsSection = forwardRef<
         onContentSizeChange={onContentSizeChange}
         refreshControl={
           <RefreshControl
-            refreshing={isRefetchingComments}
-            onRefresh={onRefreshComments}
+            refreshing={isManualRefreshing}
+            onRefresh={handleManualRefresh}
             tintColor={theme.colors.primary[500]}
           />
         }
