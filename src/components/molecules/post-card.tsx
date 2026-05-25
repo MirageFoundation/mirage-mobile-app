@@ -3,7 +3,7 @@ import { Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { logPress } from "@/src/utils/press-logger";
 import { setLastPressedPostY } from "@/src/utils/post-transition";
-import { usePreferencesStore } from "@/src/stores";
+import { useIsFeedScrolling, usePreferencesStore } from "@/src/stores";
 import { usePowQueueStore } from "@/src/services/pow-queue";
 import { useNetworkState } from "@/src/hooks/use-network-state";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -238,9 +238,16 @@ export const PostCard = memo(function PostCard({
     currentPowActionId !== post.optimisticActionId;
   const isOptimisticEdit = !!post.optimisticStatus && !post.optimisticDraft;
   const disablePostInteractions = !!post.optimisticStatus && post.optimisticStatus !== "success";
-  const forceVisibleMedia =
+  const keepOptimisticMediaMounted =
     post.optimisticStatus === "success" ||
     (!!post.optimisticVideoPreviewUntil && post.optimisticVideoPreviewUntil > Date.now());
+  const shouldPrimeOptimisticVideo =
+    !isPostDetail &&
+    !!post.optimisticVideoPreviewUntil &&
+    post.optimisticVideoPreviewUntil > Date.now();
+  const isFeedScrolling = useIsFeedScrolling(!isPostDetail ? videoSyncScope : undefined);
+  const [optimisticVideoPrimeDismissed, setOptimisticVideoPrimeDismissed] = useState(false);
+  const primeOptimisticVideo = shouldPrimeOptimisticVideo && !optimisticVideoPrimeDismissed;
   const optimisticCardStyle = post.optimisticStatus
     ? {
         marginTop: -1,
@@ -263,6 +270,17 @@ export const PostCard = memo(function PostCard({
     ? bodyText.slice(0, MAX_BODY_LENGTH)
     : bodyText;
   const previousOptimisticStatusRef = useRef<typeof post.optimisticStatus>(undefined);
+
+  useEffect(() => {
+    if (!shouldPrimeOptimisticVideo) {
+      setOptimisticVideoPrimeDismissed(false);
+      return;
+    }
+
+    if (isFeedScrolling) {
+      setOptimisticVideoPrimeDismissed(true);
+    }
+  }, [isFeedScrolling, post.id, shouldPrimeOptimisticVideo]);
 
   useEffect(() => {
     const previousStatus = previousOptimisticStatusRef.current;
@@ -398,9 +416,9 @@ export const PostCard = memo(function PostCard({
         key={`${post.id}:${videoSyncScope ?? "default"}:${resolvedContent.resolvedMedia?.uri ?? "none"}`}
         media={resolvedContent.resolvedMedia}
         mediaList={resolvedContent.resolvedMediaList}
-        isVisible={forceVisibleMedia || isVisible}
-        isFocused={forceVisibleMedia || (isFocused ?? isVisible)}
-        isNearVisible={forceVisibleMedia || (isNearVisible ?? isVisible)}
+        isVisible={primeOptimisticVideo || isVisible}
+        isFocused={primeOptimisticVideo || (isFocused ?? isVisible)}
+        isNearVisible={keepOptimisticMediaMounted || (isNearVisible ?? isVisible)}
         shouldBlurContent={shouldBlurContent}
         hasMultipleMedia={resolvedContent.hasMultipleMedia}
         extraMediaCount={resolvedContent.extraMediaCount}

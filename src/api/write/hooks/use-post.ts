@@ -394,6 +394,9 @@ const preserveLocalPreviewMedia = (
             ...post,
             thumbnail: previewMediaUrls[0] ?? post.thumbnail,
             media: previewMediaUrls,
+            optimistic_status: undefined,
+            optimistic_error: undefined,
+            optimistic_draft: undefined,
             optimistic_video_preview_until: Date.now() + 45000,
           }
         : post;
@@ -867,6 +870,12 @@ export function usePost(options: UsePostOptions = {}) {
         address,
         username,
       );
+      const confirmedPost = {
+        ...optimisticPost,
+        optimistic_status: undefined,
+        optimistic_error: undefined,
+        optimistic_draft: undefined,
+      };
       const upsertOptions = {
         address: address ?? undefined,
         allowedTags: getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled) || undefined,
@@ -880,58 +889,34 @@ export function usePost(options: UsePostOptions = {}) {
           level: "info",
           data: {
             optimisticId: input.optimisticId,
-            confirmedPostId: optimisticPost.post_id,
+            confirmedPostId: confirmedPost.post_id,
             hasPreviewMedia: !!input.optimisticPreviewMediaUrls?.length,
           },
         });
-        replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, optimisticPost);
-        upsertHomePost(queryClient, optimisticPost, upsertOptions);
+        replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, confirmedPost);
+        upsertHomePost(queryClient, confirmedPost, upsertOptions);
         if (input.optimisticPreviewMediaUrls?.length) {
           Sentry.addBreadcrumb({
             category: "create-post",
             message: "Preserving local media preview after post success",
             level: "info",
             data: {
-              postId: optimisticPost.post_id,
+              postId: confirmedPost.post_id,
               previewCount: input.optimisticPreviewMediaUrls.length,
             },
           });
-          preserveLocalPreviewMedia(queryClient, optimisticPost.post_id, input.optimisticPreviewMediaUrls);
+          preserveLocalPreviewMedia(queryClient, confirmedPost.post_id, input.optimisticPreviewMediaUrls);
           [1000, 2500, 5000, 10000, 20000, 45000].forEach((delay) => {
             setTimeout(() => {
-              preserveLocalPreviewMedia(queryClient, optimisticPost.post_id, input.optimisticPreviewMediaUrls ?? []);
+              preserveLocalPreviewMedia(queryClient, confirmedPost.post_id, input.optimisticPreviewMediaUrls ?? []);
             }, delay);
           });
         }
         setTimeout(() => {
-          if (input.optimisticPreviewMediaUrls?.length) {
-            useHomePostCardStore.setState((state) => {
-              const screen = state.activeFeedScreen;
-              if (!screen) return state;
-              const visible = new Set(state.visibleVideoPostIds[screen] ?? []);
-              const nearby = new Set(state.nearbyVideoPostIds[screen] ?? []);
-              visible.add(optimisticPost.post_id);
-              nearby.add(optimisticPost.post_id);
-              return {
-                activeVideoPostIds: {
-                  ...state.activeVideoPostIds,
-                  [screen]: optimisticPost.post_id,
-                },
-                visibleVideoPostIds: {
-                  ...state.visibleVideoPostIds,
-                  [screen]: visible,
-                },
-                nearbyVideoPostIds: {
-                  ...state.nearbyVideoPostIds,
-                  [screen]: nearby,
-                },
-              };
-            });
-          }
           updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (queryData) => {
             if (!queryData) return { nextData: queryData, didUpdate: false };
             const clearStatus = (post: ApiPost) =>
-              post.post_id === optimisticPost.post_id
+              post.post_id === confirmedPost.post_id
                 ? {
                     ...post,
                     optimistic_status: undefined,
@@ -946,7 +931,7 @@ export function usePost(options: UsePostOptions = {}) {
               let didUpdate = false;
               const pages = queryData.pages.map((page) => {
                 const posts = page.posts.map((post) => {
-                  if (post.post_id !== optimisticPost.post_id) return post;
+                  if (post.post_id !== confirmedPost.post_id) return post;
                   didUpdate = true;
                   return clearStatus(post);
                 });
@@ -957,7 +942,7 @@ export function usePost(options: UsePostOptions = {}) {
             const singleData = queryData as PostsResponse;
             let didUpdate = false;
             const posts = singleData.posts.map((post) => {
-              if (post.post_id !== optimisticPost.post_id) return post;
+              if (post.post_id !== confirmedPost.post_id) return post;
               didUpdate = true;
               return clearStatus(post);
             });
