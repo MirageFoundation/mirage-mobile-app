@@ -439,20 +439,8 @@ export default function MediaPostDetailScreen({
 
   const handleComment = useCallback(() => {
     if (!post) return;
-    requireAuth(() => {
-      if (!reserveComposeNavigation()) return;
-      router.push({
-        pathname: "/comment-compose",
-        params: {
-          postId: post.id,
-          postTitle: post.title,
-          postAuthorUsername: post.author.username,
-          postThumbnail: activeMedia?.uri ?? "",
-          postContent: post.body ?? "",
-        },
-      });
-    });
-  }, [post, requireAuth, reserveComposeNavigation, router, activeMedia?.uri]);
+    collapseMedia();
+  }, [post, collapseMedia]);
 
   const handleEditedComment = useCallback((commentId: string) => {
     suppressedHighlightScrollRef.current = null;
@@ -519,7 +507,13 @@ export default function MediaPostDetailScreen({
             }
             videoSyncScope={videoSyncScope}
             onSwipeUp={collapseMedia}
-            onSwipeDown={() => router.back()}
+            onSwipeDown={() => {
+              if (collapseProgress.value > 0.1) {
+                expandMedia();
+              } else {
+                router.back();
+              }
+            }}
           />
 
           {/* --------------- BottomSheet for comments ------------------ */}
