@@ -105,11 +105,12 @@ export function useMediaPostDetailPendingComment({
           addReplyOptimisticComment(id, captured.replyToId, optimisticComment);
           pendingReplyScrollIdRef.current = optimisticCommentId;
         } else {
-          suppressedHighlightScrollRef.current = optimisticCommentId;
+          suppressedHighlightScrollRef.current = null;
           addTopLevelOptimisticComment(id, optimisticComment);
           if (focusedCommentId && focusedMode !== "full") {
             setFocusedMode("full");
           }
+          pendingReplyScrollIdRef.current = optimisticCommentId;
           pendingScrollToEndRef.current = true;
         }
         setHighlightedCommentId(optimisticCommentId);
