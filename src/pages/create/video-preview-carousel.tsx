@@ -99,6 +99,7 @@ export function VideoPreviewCarousel({
       >
         {mediaUris.map((uri) => {
           const upload = videoUploadState[uri];
+          const needsUpload = !upload;
           return (
             <Pressable
               key={uri}
@@ -147,9 +148,27 @@ export function VideoPreviewCarousel({
                 </View>
               )}
 
+              {needsUpload && (
+                <Pressable
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    onRetryUpload(uri);
+                  }}
+                  style={[styles.uploadedBadge, { backgroundColor: "rgba(234,179,8,0.9)" }]}
+                >
+                  <Feather name="refresh-cw" size={12} color="#fff" />
+                  <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
+                    Upload again
+                  </Text>
+                </Pressable>
+              )}
+
               {upload?.error && (
                 <Pressable
-                  onPress={() => onRetryUpload(uri)}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    onRetryUpload(uri);
+                  }}
                   style={[styles.uploadedBadge, { backgroundColor: "rgba(220,50,50,0.8)" }]}
                 >
                   <Feather name="refresh-cw" size={12} color="#fff" />

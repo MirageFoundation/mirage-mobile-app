@@ -60,6 +60,7 @@ export function CreateImagePreviewCarousel({
       >
         {mediaUris.map((uri) => {
           const upload = imageUploadState[uri];
+          const needsUpload = !upload;
           return (
             <View key={uri} style={[styles.videoPlayerWrapper, { height: 200, width: 200 }]}>
               <Image
@@ -86,6 +87,18 @@ export function CreateImagePreviewCarousel({
                     Uploaded
                   </Text>
                 </View>
+              )}
+
+              {needsUpload && (
+                <Pressable
+                  onPress={() => onRetryUpload(uri)}
+                  style={[styles.uploadedBadge, { backgroundColor: "rgba(234,179,8,0.9)" }]}
+                >
+                  <Feather name="refresh-cw" size={12} color="#fff" />
+                  <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
+                    Upload again
+                  </Text>
+                </Pressable>
               )}
 
               {upload?.error && (
