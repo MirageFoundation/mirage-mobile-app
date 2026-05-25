@@ -69,6 +69,23 @@ function shouldCaptureReactQueryError(error: unknown): boolean {
   return getErrorStatus(error) === undefined;
 }
 
+function addPersistedCacheRestoredBreadcrumb() {
+  const restoredQueries = queryClient.getQueryCache().findAll();
+  const restoredPostQueries = restoredQueries.filter(
+    (query) => query.queryKey[0] === "posts",
+  );
+
+  Sentry.addBreadcrumb({
+    category: "react-query",
+    message: "Persisted query cache restored",
+    level: "info",
+    data: {
+      restoredQueryCount: restoredQueries.length,
+      restoredPostQueryCount: restoredPostQueries.length,
+    },
+  });
+}
+
 const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (error, query) => {
@@ -169,7 +186,7 @@ export const QueryProvider = ({ children }: { children: React.ReactNode }) => {
           },
         },
       }}
-      onSuccess={() => {}}
+      onSuccess={addPersistedCacheRestoredBreadcrumb}
     >
       {children}
     </PersistQueryClientProvider>
