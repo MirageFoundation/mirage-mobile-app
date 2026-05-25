@@ -640,17 +640,25 @@ export function HomeScreen() {
     // so scrolling before the tab becomes visible (e.g. right after creating a
     // post from the Create tab) never took effect.
     if (!isHomeFocused) return;
+    // FlashList sometimes shows a blank viewport when the screen becomes
+    // focused after a tab change (e.g. returning to Home after creating a
+    // post). Issuing scrollToTop at several beats — including after a
+    // longer delay — forces the list to re-render its cells without
+    // requiring the user to touch the screen.
     const delay = Platform.OS === "android" ? 150 : 0;
-    const timer = setTimeout(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const runScroll = () => {
       tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
-      if (Platform.OS === "android") {
-        requestAnimationFrame(() => {
-          tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
-        });
-      }
+    };
+    timers.push(setTimeout(runScroll, delay));
+    timers.push(setTimeout(runScroll, delay + 120));
+    timers.push(setTimeout(() => {
+      runScroll();
       clearScrollToTop();
-    }, delay);
-    return () => clearTimeout(timer);
+    }, delay + 350));
+    return () => {
+      for (const t of timers) clearTimeout(t);
+    };
   }, [shouldScrollToTop, isHomeFocused, clearScrollToTop]);
 
   const setCardContext = useHomePostCardStore((state) => state.setCardContext);

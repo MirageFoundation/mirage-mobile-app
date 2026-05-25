@@ -432,13 +432,21 @@ export const HomeTabbedFeed = forwardRef<
     try {
       activeListRef.current?.scrollToOffset({ offset: 0, animated: options?.animated ?? true });
     } catch {}
-    if (Platform.OS === "android") {
+    // Some FlashList instances drop scroll commands while the screen is
+    // unfocused (e.g. when arriving from another tab). Issuing a tiny
+    // non-zero offset followed by 0 forces the list to re-layout its
+    // viewport so the user doesn't see a blank screen until they touch it.
+    requestAnimationFrame(() => {
+      try {
+        activeListRef.current?.scrollToOffset({ offset: 1, animated: false });
+      } catch {}
       requestAnimationFrame(() => {
         try {
           activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
+          activeListRef.current?.recordInteraction();
         } catch {}
       });
-    }
+    });
   }, []);
 
   const scrollToTopAndRefresh = useCallback(async () => {
