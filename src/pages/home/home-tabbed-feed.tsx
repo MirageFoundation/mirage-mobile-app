@@ -150,9 +150,6 @@ export const HomeTabbedFeed = forwardRef<
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
   const blockedTopicNames = useContentModerationStore((s) => s.blockedTopicNames);
 
-  const followedUsers = useHomePostCardStore((s) => s.followedUsers);
-  const followedTopics = useHomePostCardStore((s) => s.followedTopics);
-
   const allowedTags = useMemo(
     () => getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled),
     [selectedContentTypes, adultContentEnabled],
@@ -288,31 +285,13 @@ export const HomeTabbedFeed = forwardRef<
   );
 
   const magicPosts = useMemo(
-    () => {
-      const posts = transformPosts(magicQuery.data);
-      return baseFeed !== "following"
-        ? posts
-        : posts.filter(
-            (post) =>
-              followedUsers.has(post.author.id) ||
-              (post.topic && followedTopics.has(post.topic)),
-          );
-    },
-    [magicQuery.data, transformPosts, baseFeed, followedUsers, followedTopics],
+    () => transformPosts(magicQuery.data),
+    [magicQuery.data, transformPosts],
   );
 
   const latestPosts = useMemo(
-    () => {
-      const posts = transformPosts(latestQuery.data);
-      return baseFeed !== "following"
-        ? posts
-        : posts.filter(
-            (post) =>
-              followedUsers.has(post.author.id) ||
-              (post.topic && followedTopics.has(post.topic)),
-          );
-    },
-    [latestQuery.data, transformPosts, baseFeed, followedUsers, followedTopics],
+    () => transformPosts(latestQuery.data),
+    [latestQuery.data, transformPosts],
   );
 
   const handleRefresh = useCallback(async (options?: FeedRefreshOptions) => {
@@ -753,6 +732,21 @@ export const HomeTabbedFeed = forwardRef<
   const query = activeTabIndex === 0 ? magicQuery : latestQuery;
   const coldStartRefreshKey = `${feedContext}:${allowedTags ?? "all"}:${currentUser?.walletAddress ?? "anon"}`;
   const seededFeedContextRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (baseFeed !== "following") return;
+    if (posts.length >= INITIAL_PAGE_SIZE) return;
+    if (!query.hasNextPage || query.isFetching || query.isFetchingNextPage) return;
+
+    void query.fetchNextPage();
+  }, [
+    baseFeed,
+    posts.length,
+    query,
+    query.hasNextPage,
+    query.isFetching,
+    query.isFetchingNextPage,
+  ]);
 
   useEffect(() => {
     if (Date.now() - APP_STARTED_AT > COLD_START_FEED_REFRESH_WINDOW_MS) return;
