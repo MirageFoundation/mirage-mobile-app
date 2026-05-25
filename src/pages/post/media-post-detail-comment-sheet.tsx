@@ -472,16 +472,6 @@ export function MediaPostDetailCommentSheet({
                 { backgroundColor: theme.colors.background.subtle },
               ]}
             />
-
-            <Text size="md" weight="semibold" style={styles.commentsTitle}>
-              Comments ({post.comments})
-            </Text>
-            <View
-              style={[
-                styles.dividerThick,
-                { backgroundColor: theme.colors.background.subtle },
-              ]}
-            />
           </View>
         }
         renderItem={({ item }: { item: Comment }) => (
