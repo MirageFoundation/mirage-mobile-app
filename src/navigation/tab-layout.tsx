@@ -455,6 +455,25 @@ export default function TabLayout() {
         return;
       }
 
+      if (
+        isNotificationNavigationActive &&
+        !hasInitialShareIntent &&
+        !isOnInbox
+      ) {
+        Sentry.addBreadcrumb({
+          category: "navigation",
+          message: "Routing active notification launch to inbox tab",
+          data: {
+            pathname: currentPathname,
+            isNotificationNavigationActive,
+            isShareNavigationActive,
+          },
+          level: "info",
+        });
+        router.replace("/(tabs)/inbox");
+        return;
+      }
+
       if (hasInitialShareIntent && !isOnCreate) {
         Sentry.addBreadcrumb({
           category: "navigation",

@@ -18,6 +18,7 @@ import {
   signalRootLayoutUnmounted,
 } from "@/src/services/inbox-notifications";
 import { IS_FDROID_BUILD } from "@/src/config/build-flags";
+import { persistPendingShareIntent } from "@/src/navigation/pending-launch-intents";
 
 const navigationIntegration = Sentry.reactNavigationIntegration({
   enableTimeToInitialDisplay: true,
@@ -115,6 +116,7 @@ function AndroidShareIntentColdStartRefresh() {
           )
         );
         if (hasSharePayload) {
+          persistPendingShareIntent(resultRecord, "android-cold-start-refresh");
           markShareIntentNavigationActive("android-cold-start-refresh");
         }
         Sentry.addBreadcrumb({

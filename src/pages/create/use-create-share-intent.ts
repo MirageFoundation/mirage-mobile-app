@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Audio } from "expo-av";
 import { Paths, File as ExpoFile } from "expo-file-system";
 import { useShareIntentContext } from "expo-share-intent";
@@ -6,7 +6,17 @@ import ExpoShareIntentModule from "expo-share-intent/build/ExpoShareIntentModule
 import * as Sentry from "@sentry/react-native";
 
 import { router } from "@/src/navigation/guarded-router";
-import { getLastSharePath, isRecentSharePath } from "@/src/navigation/linking";
+import {
+  clearLastSharePath,
+  getLastSharePath,
+  isRecentSharePath,
+} from "@/src/navigation/linking";
+import {
+  clearPendingShareIntent,
+  getPendingShareIntent,
+  getPendingShareIntentKey,
+  persistPendingShareIntent,
+} from "@/src/navigation/pending-launch-intents";
 import { fetchLinkMeta } from "@/src/utils/fetch-link-meta";
 import { mergeAudioVideo } from "@/src/utils/merge-audio-video";
 import { sanitizeTopicName } from "@/src/utils/topic-validation";
@@ -87,12 +97,41 @@ export function useCreateShareIntent({
   updateDraft,
 }: UseCreateShareIntentParams) {
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
+  const [pendingShareIntent, setPendingShareIntent] = useState(() => getPendingShareIntent());
   const lastProcessedIntentRef = useRef<string | null>(null);
   const shareIntentRecoveryPathRef = useRef<string | null>(null);
   const shareTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (hasShareIntent || isEditMode) return;
+    if (!hasShareIntent || !shareIntent || isEditMode) return;
+    const pending = persistPendingShareIntent(shareIntent, "share-intent-context");
+    if (pending) {
+      setPendingShareIntent(pending);
+    }
+  }, [hasShareIntent, isEditMode, shareIntent]);
+
+  useEffect(() => {
+    if (hasShareIntent || pendingShareIntent || isEditMode) return;
+
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts += 1;
+      const pending = getPendingShareIntent();
+      if (pending) {
+        setPendingShareIntent(pending);
+        clearInterval(timer);
+        return;
+      }
+      if (attempts >= 12) {
+        clearInterval(timer);
+      }
+    }, 250);
+
+    return () => clearInterval(timer);
+  }, [hasShareIntent, isEditMode, pendingShareIntent]);
+
+  useEffect(() => {
+    if (hasShareIntent || pendingShareIntent || isEditMode) return;
     if (!isRecentSharePath(60_000)) return;
     const sharePath = getLastSharePath();
     if (!sharePath || sharePath === shareIntentRecoveryPathRef.current) return;
@@ -105,26 +144,37 @@ export function useCreateShareIntent({
       level: "info",
     });
     try {
-      ExpoShareIntentModule?.getShareIntent(sharePath);
+      const recoveredIntent = ExpoShareIntentModule?.getShareIntent(sharePath);
+      const pending = persistPendingShareIntent(
+        recoveredIntent && typeof recoveredIntent === "object" ? recoveredIntent : null,
+        "create-screen-recovery",
+        sharePath,
+      );
+      if (pending) {
+        setPendingShareIntent(pending);
+      }
     } catch (error) {
       Sentry.captureException(error, {
         tags: { feature: "share-intent", operation: "create-screen-recovery" },
       });
     }
-  }, [hasShareIntent, isEditMode]);
+  }, [hasShareIntent, isEditMode, pendingShareIntent]);
 
   useEffect(() => {
-    if (!hasShareIntent || !shareIntent || isEditMode) return;
+    const activeShareIntent = hasShareIntent ? shareIntent : pendingShareIntent;
+    const isRecoveredPendingShareIntent = !hasShareIntent && !!pendingShareIntent;
+    if (!activeShareIntent || isEditMode) return;
 
     if (isAuthInitializing) {
       Sentry.addBreadcrumb({
         category: "share-intent",
         message: "Waiting for auth initialization before handling share intent",
         data: {
-          type: shareIntent.type,
-          hasWebUrl: !!shareIntent.webUrl,
-          hasText: !!shareIntent.text,
-          fileCount: shareIntent.files?.length ?? 0,
+          type: activeShareIntent.type,
+          hasWebUrl: !!activeShareIntent.webUrl,
+          hasText: !!activeShareIntent.text,
+          fileCount: activeShareIntent.files?.length ?? 0,
+          isRecoveredPendingShareIntent,
         },
         level: "info",
       });
@@ -136,20 +186,25 @@ export function useCreateShareIntent({
         level: "info",
         tags: { feature: "share-intent", operation: "logged-out-redirect" },
         extra: {
-          type: shareIntent.type,
-          hasWebUrl: !!shareIntent.webUrl,
-          hasText: !!shareIntent.text,
-          fileCount: shareIntent.files?.length ?? 0,
+          type: activeShareIntent.type,
+          hasWebUrl: !!activeShareIntent.webUrl,
+          hasText: !!activeShareIntent.text,
+          fileCount: activeShareIntent.files?.length ?? 0,
+          isRecoveredPendingShareIntent,
         },
       });
       lastProcessedIntentRef.current = null;
-      resetShareIntent();
+      clearPendingShareIntent(getPendingShareIntentKey(activeShareIntent));
+      setPendingShareIntent(null);
+      if (hasShareIntent) {
+        resetShareIntent();
+      }
       router.replace("/(tabs)");
       showAuthSheet();
       return;
     }
 
-    const intentKey = shareIntent.webUrl ?? shareIntent.text ?? shareIntent.files?.[0]?.path ?? null;
+    const intentKey = getPendingShareIntentKey(activeShareIntent);
     if (!intentKey || intentKey === lastProcessedIntentRef.current) return;
     lastProcessedIntentRef.current = intentKey;
 
@@ -158,42 +213,63 @@ export function useCreateShareIntent({
       shareTimeoutRef.current = null;
     }
     const currentIntentKey = intentKey;
-    const sharedTextUrl = extractSharedUrl(shareIntent.text);
-    const sharedUrl = extractSharedUrl(shareIntent.webUrl) ?? sharedTextUrl;
+    const sharedTextUrl = extractSharedUrl(activeShareIntent.text);
+    const sharedUrl = extractSharedUrl(activeShareIntent.webUrl) ?? sharedTextUrl;
     const shouldImportSharedFiles = !sharedUrl;
+    const consumedLaunchPath = isRecoveredPendingShareIntent
+      ? pendingShareIntent?.launchPath
+      : getLastSharePath();
+
+    clearPendingShareIntent(currentIntentKey);
+    clearLastSharePath(consumedLaunchPath);
+    setPendingShareIntent(null);
+    Sentry.addBreadcrumb({
+      category: "share-intent",
+      message: "Cleared consumed share launch intent",
+      data: {
+        isRecoveredPendingShareIntent,
+        hadLaunchPath: !!consumedLaunchPath,
+        hasSharedUrl: !!sharedUrl,
+        shouldImportSharedFiles,
+      },
+      level: "info",
+    });
 
     console.log("[CreateScreen] Share intent received:", {
-      type: shareIntent.type,
-      webUrl: shareIntent.webUrl,
-      text: shareIntent.text,
-      files: shareIntent.files,
+      type: activeShareIntent.type,
+      webUrl: activeShareIntent.webUrl,
+      text: activeShareIntent.text,
+      files: activeShareIntent.files,
+      isRecoveredPendingShareIntent,
     });
 
     Sentry.addBreadcrumb({
       category: "share-intent",
       message: "Processing share intent",
       data: {
-        type: shareIntent.type,
-        webUrl: shareIntent.webUrl,
+        type: activeShareIntent.type,
+        webUrl: activeShareIntent.webUrl,
         sharedUrl,
         extractedUrlFromText: !!sharedTextUrl,
-        hasText: !!shareIntent.text,
-        textLength: shareIntent.text?.length ?? 0,
-        fileCount: shareIntent.files?.length ?? 0,
+        hasText: !!activeShareIntent.text,
+        textLength: activeShareIntent.text?.length ?? 0,
+        fileCount: activeShareIntent.files?.length ?? 0,
+        isRecoveredPendingShareIntent,
       },
       level: "info",
     });
 
-    if (!sharedUrl && (shareIntent.webUrl || shareIntent.text)) {
+    if (!sharedUrl && (activeShareIntent.webUrl || activeShareIntent.text)) {
       Sentry.captureMessage("Share intent URL extraction failed", {
         level: "warning",
         tags: { feature: "share-intent", operation: "url-extraction" },
         extra: {
-          type: shareIntent.type,
-          webUrl: shareIntent.webUrl,
-          textPreview: shareIntent.text?.slice(0, 300),
-          textLength: shareIntent.text?.length ?? 0,
-          fileCount: shareIntent.files?.length ?? 0,
+          type: activeShareIntent.type,
+          webUrl: activeShareIntent.webUrl,
+          textPreview: activeShareIntent.text?.slice(0, 300),
+          textLength: activeShareIntent.text?.length ?? 0,
+          fileCount: activeShareIntent.files?.length ?? 0,
+          isRecoveredPendingShareIntent,
         },
       });
     }
@@ -212,7 +288,7 @@ export function useCreateShareIntent({
       level: "info",
     });
 
-    const redditMatch = (sharedUrl ?? shareIntent.text ?? "").match(/reddit\.com\/r\/([^/]+)/i);
+    const redditMatch = (sharedUrl ?? activeShareIntent.text ?? "").match(/reddit\.com\/r\/([^/]+)/i);
     if (redditMatch) {
       const topicName = sanitizeTopicName(redditMatch[1]);
       if (topicName.length >= 2) {
@@ -230,8 +306,8 @@ export function useCreateShareIntent({
 
     shareTimeoutRef.current = setTimeout(() => {
       if (lastProcessedIntentRef.current !== currentIntentKey) return;
-      if (shareIntent.text && !sharedUrl) {
-        updateDraft({ body: shareIntent.text.slice(0, tierLimits.maxContentLength) });
+      if (activeShareIntent.text && !sharedUrl) {
+        updateDraft({ body: activeShareIntent.text.slice(0, tierLimits.maxContentLength) });
       }
       if (sharedUrl) {
         setIsProcessingShareLink(true);
@@ -677,23 +753,42 @@ export function useCreateShareIntent({
           if (lastProcessedIntentRef.current === currentIntentKey) {
             lastProcessedIntentRef.current = null;
             setIsProcessingShareLink(false);
-            resetShareIntent();
+            clearPendingShareIntent(currentIntentKey);
+            setPendingShareIntent(null);
+            if (hasShareIntent) {
+              resetShareIntent();
+            }
           }
         });
         return;
       }
-      if (shareIntent.files?.length && shouldImportSharedFiles) {
-        const file = shareIntent.files[0];
+      if (activeShareIntent.files?.length && shouldImportSharedFiles) {
+        const file = activeShareIntent.files[0];
+        if (!file.path) {
+          Sentry.captureMessage("Share intent file missing path", {
+            level: "warning",
+            tags: { feature: "share-intent", operation: "file-import" },
+            extra: {
+              mimeType: file.mimeType,
+              fileCount: activeShareIntent.files.length,
+              isRecoveredPendingShareIntent,
+            },
+          });
+        }
         Sentry.addBreadcrumb({
           category: "share-intent",
           message: "Importing shared file attachment",
-          data: { mimeType: file.mimeType, fileCount: shareIntent.files.length },
+          data: {
+            mimeType: file.mimeType,
+            fileCount: activeShareIntent.files.length,
+            isRecoveredPendingShareIntent,
+          },
           level: "info",
         });
-        if (file.mimeType?.startsWith("image/")) {
+        if (file.path && file.mimeType?.startsWith("image/")) {
           setAttachment("image", file.path);
           startImageUpload(file.path, true)?.catch(() => {});
-        } else if (file.mimeType?.startsWith("video/")) {
+        } else if (file.path && file.mimeType?.startsWith("video/")) {
           setAttachment("video", file.path);
           startVideoUpload(file.path);
         }
@@ -701,7 +796,11 @@ export function useCreateShareIntent({
       if (!sharedUrl && lastProcessedIntentRef.current === currentIntentKey) {
         lastProcessedIntentRef.current = null;
       }
-      resetShareIntent();
+      clearPendingShareIntent(currentIntentKey);
+      setPendingShareIntent(null);
+      if (hasShareIntent) {
+        resetShareIntent();
+      }
     }, 50);
 
     return () => {
@@ -723,6 +822,7 @@ export function useCreateShareIntent({
     resetVideoUploads,
     setAttachment,
     setIsProcessingShareLink,
+    pendingShareIntent,
     shareIntent,
     showAuthSheet,
     startImageUpload,

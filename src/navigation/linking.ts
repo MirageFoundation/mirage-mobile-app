@@ -131,6 +131,16 @@ export function getLastSharePath(): string | null {
   return storage.getString(LAST_SHARE_PATH_KEY) ?? null;
 }
 
+export function clearLastSharePath(expectedPath?: string | null): void {
+  if (expectedPath) {
+    const lastPath = storage.getString(LAST_SHARE_PATH_KEY);
+    if (lastPath && lastPath !== expectedPath) return;
+  }
+
+  storage.remove(LAST_SHARE_PATH_KEY);
+  storage.remove(LAST_SHARE_PATH_AT_KEY);
+}
+
 export function isRecentCreateDeepLink(
   withinMs = RECENT_CREATE_DEEP_LINK_TTL_MS,
 ): boolean {
