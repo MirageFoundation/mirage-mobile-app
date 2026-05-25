@@ -32,7 +32,7 @@ import { Box, Text } from "@/src/components/ui/primitives";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
 import { storage } from "@/src/stores";
 
-import { APP_FOREGROUND_REFRESH_THRESHOLD_MS, useAuthGuard, useBlockHandler, getBlockConfirmationMessage, useDeleteHandler, useFollowHandler, useLatestRef, useReportHandler, useVoteHandler, type VoteResult } from "@/src/hooks";
+import { useAuthGuard, useBlockHandler, getBlockConfirmationMessage, useDeleteHandler, useFollowHandler, useLatestRef, useReportHandler, useVoteHandler, type VoteResult } from "@/src/hooks";
 import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
@@ -95,27 +95,12 @@ export function FollowingScreen() {
         return;
       }
       if (nextState === "active" && backgroundTimeRef.current) {
-        const duration = Date.now() - backgroundTimeRef.current;
         backgroundTimeRef.current = null;
         storage.remove("app_was_backgrounded");
         useTimeTickStore.getState().bump();
-        if (duration >= APP_FOREGROUND_REFRESH_THRESHOLD_MS) {
-          setTimeout(async () => {
-            showBars();
-            tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
-            await tabbedFeedRef.current?.refresh({ fetchAllNew: true });
-            tabbedFeedRef.current?.dismissNewPosts();
-            setHasNewPosts(false);
-            requestAnimationFrame(() => {
-              tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
-              showBars();
-            });
-          }, 300);
-        } else {
-          setTimeout(() => {
-            tabbedFeedRef.current?.checkNewPosts();
-          }, 500);
-        }
+        setTimeout(() => {
+          tabbedFeedRef.current?.checkNewPosts();
+        }, 500);
       }
     };
     const sub = AppState.addEventListener("change", handleAppStateChange);

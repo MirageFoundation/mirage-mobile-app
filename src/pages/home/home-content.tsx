@@ -36,7 +36,6 @@ import { Box, Text } from "@/src/components/ui/primitives";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
 import { storage } from "@/src/stores";
 import {
-  APP_FOREGROUND_REFRESH_THRESHOLD_MS,
   useAuthGuard,
   useBlockHandler,
   getBlockConfirmationMessage,
@@ -84,7 +83,6 @@ export function HomeScreen() {
 
 
   const backgroundTimeRef = useRef<number | null>(null);
-  const isAutoRefreshingRef = useRef(false);
   const [isFeedRefreshing, setIsFeedRefreshing] = useState(false);
   const [hasNewPosts, setHasNewPosts] = useState(false);
   const [newPostAvatars, setNewPostAvatars] = useState<{ userId: string; username: string }[]>([]);
@@ -95,7 +93,6 @@ export function HomeScreen() {
   }, []);
 
   const handleNewPostsChange = useCallback((hasNew: boolean, avatars: { userId: string; username: string }[], count: number) => {
-    if (isAutoRefreshingRef.current) return;
     setHasNewPosts(hasNew);
     setNewPostAvatars(avatars);
     setNewPostCount(count);
@@ -121,30 +118,12 @@ export function HomeScreen() {
         return;
       }
       if (nextState === "active" && backgroundTimeRef.current) {
-        const duration = Date.now() - backgroundTimeRef.current;
         backgroundTimeRef.current = null;
         storage.remove("app_was_backgrounded");
         useTimeTickStore.getState().bump();
-        if (duration >= APP_FOREGROUND_REFRESH_THRESHOLD_MS) {
-          isAutoRefreshingRef.current = true;
-          setHasNewPosts(false);
-          setTimeout(async () => {
-            showBars();
-            tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
-            await tabbedFeedRef.current?.refresh({ fetchAllNew: true, silent: true });
-            tabbedFeedRef.current?.resetBaseline(null);
-            setHasNewPosts(false);
-            isAutoRefreshingRef.current = false;
-            requestAnimationFrame(() => {
-              tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
-              showBars();
-            });
-          }, 300);
-        } else {
-          setTimeout(() => {
-            tabbedFeedRef.current?.checkNewPosts();
-          }, 500);
-        }
+        setTimeout(() => {
+          tabbedFeedRef.current?.checkNewPosts();
+        }, 500);
       }
     };
     const sub = AppState.addEventListener("change", handleAppStateChange);
@@ -163,30 +142,10 @@ export function HomeScreen() {
     const wasBackgrounded = storage.getString("app_was_backgrounded");
     storage.remove("app_was_backgrounded");
     if (wasBackgrounded) {
-      const lastForeground = Number(storage.getString("app_last_foreground_time") ?? "0");
-      const elapsed = Date.now() - lastForeground;
-      if (elapsed >= APP_FOREGROUND_REFRESH_THRESHOLD_MS) {
-        isAutoRefreshingRef.current = true;
-        setHasNewPosts(false);
-        const timer = setTimeout(async () => {
-            showBars();
-            tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
-            await tabbedFeedRef.current?.refresh({ fetchAllNew: true, silent: true });
-            tabbedFeedRef.current?.resetBaseline(null);
-            setHasNewPosts(false);
-            isAutoRefreshingRef.current = false;
-            requestAnimationFrame(() => {
-              tabbedFeedRef.current?.scrollToTop(undefined, { animated: false });
-              showBars();
-            });
-          }, 300);
-        return () => clearTimeout(timer);
-      } else {
-        const timer = setTimeout(() => {
-            tabbedFeedRef.current?.checkNewPosts();
-          }, 300);
-        return () => clearTimeout(timer);
-      }
+      const timer = setTimeout(() => {
+        tabbedFeedRef.current?.checkNewPosts();
+      }, 300);
+      return () => clearTimeout(timer);
     }
   }, [showBars]);
 

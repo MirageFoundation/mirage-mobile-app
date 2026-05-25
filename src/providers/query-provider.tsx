@@ -33,7 +33,7 @@ const persister = createSyncStoragePersister({
   key: "mirage-query-cache",
 });
 
-const EXCLUDED_QUERY_KEYS = ["posts", "comments", "inbox", "topics"];
+const EXCLUDED_QUERY_KEYS = ["comments", "inbox", "topics"];
 
 function toSentryContext(value: unknown): unknown {
   try {
