@@ -6,7 +6,6 @@ import { URL_REGEX, looksLikeUrlWithoutProtocol } from "./create-screen-utils";
 type CreateComposeState = {
   showCommunityModal: boolean;
   showLinkInput: boolean;
-  linkName: string;
   linkUrl: string;
   linkError: string | null;
   showContentWarningModal: boolean;
@@ -16,7 +15,6 @@ type CreateComposeState = {
   openCommunityModal: () => void;
   closeCommunityModal: () => void;
   openLinkInput: () => void;
-  setLinkName: (value: string) => void;
   setLinkUrl: (value: string) => void;
   resetLinkInput: () => void;
   openContentWarningModal: () => void;
@@ -33,7 +31,6 @@ type CreateComposeState = {
 const initialState = {
   showCommunityModal: false,
   showLinkInput: false,
-  linkName: "",
   linkUrl: "",
   linkError: null,
   showContentWarningModal: false,
@@ -47,7 +44,6 @@ export const useCreateComposeState = create<CreateComposeState>((set) => ({
   openCommunityModal: () => set({ showCommunityModal: true }),
   closeCommunityModal: () => set({ showCommunityModal: false }),
   openLinkInput: () => set({ showLinkInput: true }),
-  setLinkName: (value) => set({ linkName: value }),
   setLinkUrl: (value) => {
     const trimmed = value.trim();
     let linkError: string | null = null;
@@ -67,7 +63,6 @@ export const useCreateComposeState = create<CreateComposeState>((set) => ({
   resetLinkInput: () =>
     set({
       showLinkInput: false,
-      linkName: "",
       linkUrl: "",
       linkError: null,
     }),

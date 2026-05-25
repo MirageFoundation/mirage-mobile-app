@@ -22,6 +22,7 @@ import { mergeAudioVideo } from "@/src/utils/merge-audio-video";
 import { sanitizeTopicName } from "@/src/utils/topic-validation";
 import { trimToMaxDuration } from "@/src/utils/video-processing";
 import { useDraftStore, type Community } from "@/src/stores/draft-store";
+import { useCreateComposeState } from "./create-compose-state";
 import { decodeHtmlEntities } from "./create-screen-utils";
 import { VIDEO_META, setHandledVideoParam } from "./create-upload-state";
 
@@ -61,13 +62,19 @@ const extractSharedUrl = (value?: string | null) => {
     .trim();
 };
 
-const shouldKeepSharedUrlInBody = (url: string | null) => {
+const shouldAutofillSharedUrlInLinkInput = (url: string | null) => {
   if (!url) return false;
   try {
     return new URL(url).hostname.replace(/^www\./, "") === "share.google";
   } catch {
     return false;
   }
+};
+
+const autofillSharedLinkInput = (url: string) => {
+  const { openLinkInput, setLinkUrl } = useCreateComposeState.getState();
+  openLinkInput();
+  setLinkUrl(url);
 };
 
 const isDirectDownloadableVideoUrl = (url: string) => {
@@ -215,6 +222,7 @@ export function useCreateShareIntent({
     const currentIntentKey = intentKey;
     const sharedTextUrl = extractSharedUrl(activeShareIntent.text);
     const sharedUrl = extractSharedUrl(activeShareIntent.webUrl) ?? sharedTextUrl;
+    const shouldAutofillLinkInput = shouldAutofillSharedUrlInLinkInput(sharedUrl);
     const shouldImportSharedFiles = !sharedUrl;
     const consumedLaunchPath = isRecoveredPendingShareIntent
       ? pendingShareIntent?.launchPath
@@ -281,10 +289,13 @@ export function useCreateShareIntent({
     resetImageUploads();
     VIDEO_META.clear();
     setHandledVideoParam(null);
+    if (sharedUrl && shouldAutofillLinkInput) {
+      autofillSharedLinkInput(sharedUrl);
+    }
     Sentry.addBreadcrumb({
       category: "share-intent",
       message: "Create draft reset for share intent",
-      data: { hasSharedUrl: !!sharedUrl, shouldImportSharedFiles },
+      data: { hasSharedUrl: !!sharedUrl, shouldAutofillLinkInput, shouldImportSharedFiles },
       level: "info",
     });
 
@@ -429,9 +440,6 @@ export function useCreateShareIntent({
           if (titleOverflow) {
             bodyParts.unshift(titleOverflow);
           }
-          if (shouldKeepSharedUrlInBody(sharedUrl) && !bodyParts.some((part) => part.includes(sharedUrl))) {
-            bodyParts.push(sharedUrl);
-          }
           const extractedBody = bodyParts.join("\n\n").trim();
           const finalBody = extractedBody.slice(0, tierLimits.maxContentLength);
           updateDraft({ title: finalTitle ?? "", body: finalBody });
@@ -449,7 +457,7 @@ export function useCreateShareIntent({
               titleLength: finalTitle?.length ?? 0,
               bodyLength: finalBody.length,
               hasBody: finalBody.length > 0,
-              keptSharedUrlInBody: finalBody.includes(sharedUrl),
+              autofilledSharedUrlInLinkInput: shouldAutofillLinkInput,
             },
             level: "info",
           });
@@ -697,8 +705,9 @@ export function useCreateShareIntent({
           }
 
           const shouldAddSharedUrlFallback =
-            (!videoDownloaded && hasVideoCandidate) ||
-            (!finalTitle && !finalBody && mediaCount === 0);
+            !shouldAutofillLinkInput &&
+            ((!videoDownloaded && hasVideoCandidate) ||
+              (!finalTitle && !finalBody && mediaCount === 0));
 
           if (shouldAddSharedUrlFallback) {
             const currentBody = useDraftStore.getState().draft.body;
@@ -736,6 +745,7 @@ export function useCreateShareIntent({
               hasVideoCandidate,
               mediaCount,
               addedSharedUrlFallback: shouldAddSharedUrlFallback,
+              autofilledSharedUrlInLinkInput: shouldAutofillLinkInput,
             },
             level: "info",
           });
@@ -745,9 +755,11 @@ export function useCreateShareIntent({
           }
         }).catch((err: any) => {
           if (lastProcessedIntentRef.current !== currentIntentKey) return;
-          updateDraft({
-            body: sharedUrl.slice(0, tierLimits.maxContentLength),
-          });
+          if (!shouldAutofillLinkInput) {
+            updateDraft({
+              body: sharedUrl.slice(0, tierLimits.maxContentLength),
+            });
+          }
           Sentry.captureException(err, { tags: { feature: "share-intent-meta" } });
         }).finally(() => {
           if (lastProcessedIntentRef.current === currentIntentKey) {

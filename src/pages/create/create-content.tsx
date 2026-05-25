@@ -93,7 +93,6 @@ export function CreateScreen() {
   const bodyInputRef = useRef<TextInput>(null);
   const bodySelectionRef = useRef({ start: 0, end: 0 });
   const [bodySelection, setBodySelection] = useState<{ start: number; end: number } | undefined>(undefined);
-  const linkInputRef = useRef<TextInput>(null);
   const linkUrlInputRef = useRef<TextInput>(null);
 
   const showLinkInput = useCreateComposeState((state) => state.showLinkInput);
@@ -488,7 +487,6 @@ export function CreateScreen() {
           <CreateContentWarningButton />
 
           <CreateLinkInput
-            linkInputRef={linkInputRef}
             linkUrlInputRef={linkUrlInputRef}
           />
 

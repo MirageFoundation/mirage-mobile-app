@@ -72,10 +72,6 @@ export const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.spacing.sm,
     minHeight: 44,
   },
-  linkNameInput: {
-    fontSize: 20,
-    fontWeight: "600",
-  },
   addLinkButton: {
     flex: 1,
     alignItems: "center",
