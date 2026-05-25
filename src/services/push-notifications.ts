@@ -38,6 +38,7 @@ let isRegisteringPush = false;
 let lastRegisterPushAt = 0;
 const REGISTER_PUSH_MIN_INTERVAL_MS = 30_000;
 let unhandledRejectionHandler: ((event: any) => void) | null = null;
+let pendingUnregisterFlushPromise: Promise<boolean> | null = null;
 
 type PendingUnregister = {
   id: string;
@@ -100,6 +101,16 @@ function isRetryablePushError(error: unknown): boolean {
     status === 429 ||
     (typeof errorCode === "string" && isRetryable(errorCode))
   );
+}
+
+function getPushErrorDetails(error: unknown): Record<string, unknown> {
+  const response = (error as any)?.response;
+  return {
+    code: (error as any)?.code,
+    status: response?.status,
+    errorCode: response?.data?.error_code,
+    message: error instanceof Error ? error.message : String(error),
+  };
 }
 
 function delay(ms: number): Promise<void> {
@@ -185,7 +196,7 @@ async function postUnregisterWithRetry(
   }
 }
 
-async function flushPendingUnregisters(): Promise<boolean> {
+async function performPendingUnregisterFlush(): Promise<boolean> {
   const pending = readPendingUnregisters();
   if (pending.length === 0) return true;
 
@@ -210,6 +221,10 @@ async function flushPendingUnregisters(): Promise<boolean> {
       };
 
       if (isRetryablePushError(error)) {
+        console.warn(
+          "[PushNotifications] Pending unregister still retryable:",
+          getPushErrorDetails(error),
+        );
         remaining.push(nextItem);
       } else {
         console.warn("[PushNotifications] Dropping non-retryable pending unregister:", error);
@@ -227,9 +242,24 @@ async function flushPendingUnregisters(): Promise<boolean> {
     category: "push-notifications",
     message: "Pending push unregister flush complete",
     level: remaining.length > 0 ? "warning" : "info",
-    data: { remaining: remaining.length },
+    data: {
+      remaining: remaining.length,
+      attempts: remaining.map((item) => item.attempts),
+    },
   });
   return remaining.length === 0;
+}
+
+async function flushPendingUnregisters(): Promise<boolean> {
+  if (pendingUnregisterFlushPromise) {
+    console.log("[PushNotifications] Reusing pending unregister flush");
+    return pendingUnregisterFlushPromise;
+  }
+
+  pendingUnregisterFlushPromise = performPendingUnregisterFlush().finally(() => {
+    pendingUnregisterFlushPromise = null;
+  });
+  return pendingUnregisterFlushPromise;
 }
 
 async function getExpoPushToken(): Promise<string | null> {
