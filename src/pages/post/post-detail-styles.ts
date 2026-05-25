@@ -24,6 +24,13 @@ export const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
+  headerTopicSkeleton: {
+    width: 120,
+    height: 22,
+    borderRadius: theme.radius.full,
+    backgroundColor: theme.colors.background.subtle,
+    opacity: 0.6,
+  },
   headerActions: {
     flexDirection: "row",
     alignItems: "center",

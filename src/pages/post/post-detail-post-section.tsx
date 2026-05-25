@@ -183,7 +183,7 @@ export function PostDetailPostSection({
   if (!post) {
     return (
       <View onLayout={onLayout}>
-        <MediaPostDetailSkeleton />
+        <MediaPostDetailSkeleton embedded showHeader={false} />
       </View>
     );
   }

@@ -8,6 +8,7 @@ import { styles } from "./post-detail-styles";
 
 type PostDetailHeaderProps = {
   topic?: string;
+  isLoadingTopic?: boolean;
   insetsTop: number;
   onBack: () => void;
   onTopicPress?: () => void;
@@ -16,6 +17,7 @@ type PostDetailHeaderProps = {
 
 export function PostDetailHeader({
   topic,
+  isLoadingTopic = false,
   insetsTop,
   onBack,
   onTopicPress,
@@ -30,7 +32,9 @@ export function PostDetailHeader({
           <AntDesign name="close" size={22} color={theme.colors.text.default} />
         </Pressable>
         <View style={styles.headerCenter}>
-          {topic ? (
+          {isLoadingTopic && !topic ? (
+            <View style={styles.headerTopicSkeleton} />
+          ) : topic ? (
             <Pressable onPress={onTopicPress} disabled={!onTopicPress}>
               <Text
                 size="lg"

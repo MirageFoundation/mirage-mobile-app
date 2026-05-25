@@ -79,41 +79,57 @@ const SkeletonBox = ({
   );
 };
 
+type MediaPostDetailSkeletonProps = {
+  embedded?: boolean;
+  showHeader?: boolean;
+};
+
 /**
  * Full-screen skeleton mirroring the immersive MediaPostDetailScreen layout:
  *   - header row (close / topic pill / more)
  *   - large media placeholder filling the middle
  *   - footer with author row, title lines, and action row
  */
-export const MediaPostDetailSkeleton = () => {
+export const MediaPostDetailSkeleton = ({
+  embedded = false,
+  showHeader = true,
+}: MediaPostDetailSkeletonProps = {}) => {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
 
-  const mediaHeight = Math.min(
-    SCREEN_HEIGHT - insets.top - insets.bottom - 220,
-    SCREEN_HEIGHT * 0.55,
-  );
+  const mediaHeight = embedded
+    ? Math.min(SCREEN_WIDTH * 0.55, 260)
+    : Math.min(
+        SCREEN_HEIGHT - insets.top - insets.bottom - 220,
+        SCREEN_HEIGHT * 0.55,
+      );
 
   return (
     <View
       style={[
         styles.container,
-        { paddingTop: insets.top, paddingBottom: insets.bottom },
+        embedded && styles.embeddedContainer,
+        {
+          paddingTop: showHeader ? insets.top : 0,
+          paddingBottom: embedded ? 0 : insets.bottom,
+        },
       ]}
     >
       {/* Header */}
-      <View style={styles.header}>
-        <SkeletonBox width={32} height={32} borderRadius={theme.radius.full} />
-        <SkeletonBox
-          width={120}
-          height={28}
-          borderRadius={theme.radius.full}
-        />
-        <SkeletonBox width={32} height={32} borderRadius={theme.radius.full} />
-      </View>
+      {showHeader && (
+        <View style={styles.header}>
+          <SkeletonBox width={32} height={32} borderRadius={theme.radius.full} />
+          <SkeletonBox
+            width={120}
+            height={28}
+            borderRadius={theme.radius.full}
+          />
+          <SkeletonBox width={32} height={32} borderRadius={theme.radius.full} />
+        </View>
+      )}
 
       {/* Media */}
-      <View style={styles.mediaWrap}>
+      <View style={[styles.mediaWrap, embedded && styles.embeddedMediaWrap]}>
         <SkeletonBox
           width="100%"
           height={mediaHeight}
@@ -168,6 +184,9 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     backgroundColor: theme.colors.background.base,
   },
+  embeddedContainer: {
+    flex: 0,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -179,6 +198,10 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     justifyContent: "center",
     paddingHorizontal: theme.spacing.md,
+  },
+  embeddedMediaWrap: {
+    flex: 0,
+    paddingTop: theme.spacing.md,
   },
   footer: {
     paddingHorizontal: theme.spacing.md,

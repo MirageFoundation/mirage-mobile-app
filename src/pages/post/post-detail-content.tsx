@@ -528,6 +528,7 @@ function LegacyPostDetailScreen() {
     () => (
       <PostDetailHeader
         topic={displayPost?.topic}
+        isLoadingTopic={!displayPost && isLoadingComments}
         insetsTop={insets.top}
         onBack={handleBack}
         onTopicPress={
@@ -543,7 +544,7 @@ function LegacyPostDetailScreen() {
         }
       />
     ),
-    [insets.top, handleBack, displayPost, router],
+    [insets.top, handleBack, displayPost, isLoadingComments, router],
   );
 
   const listHeader = useMemo(
