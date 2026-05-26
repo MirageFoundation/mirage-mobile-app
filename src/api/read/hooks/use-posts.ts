@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/react-native";
-import { useQuery, useInfiniteQuery, useIsRestoring, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { queryKeys } from "../query-keys";
 import {
   getPosts,
@@ -124,12 +124,10 @@ function getNextPostsPageParam(
  */
 export function useInfinitePosts(
   params?: Omit<GetPostsParams, "page" | "address">,
-  options?: { enabled?: boolean; pageLimit?: number; suppressInitialFetchIfCached?: boolean }
+  options?: { enabled?: boolean; pageLimit?: number }
 ) {
-  const walletAddress = useAuthStore((s) => s.user?.walletAddress ?? s.walletAddress);
+  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
   const isInitializing = useAuthStore((s) => s.isInitializing);
-  const isRestoring = useIsRestoring();
-  const queryClient = useQueryClient();
 
   const baseParams = {
     ...params,
@@ -137,23 +135,15 @@ export function useInfinitePosts(
   };
 
   const pageLimit = options?.pageLimit;
-  const queryKey = queryKeys.posts({ ...baseParams, page: undefined });
-  const cachedData = queryClient.getQueryData<{ pages?: unknown[] }>(queryKey);
-  const hasCachedData = Boolean(cachedData?.pages?.length);
-  const enabled =
-    !isRestoring &&
-    !isInitializing &&
-    (options?.enabled ?? true) &&
-    !(options?.suppressInitialFetchIfCached && hasCachedData);
 
   return useInfiniteQuery({
-    queryKey,
+    queryKey: queryKeys.posts({ ...baseParams, page: undefined }),
     queryFn: ({ pageParam = 1 }) =>
       getPosts({ ...baseParams, page: pageParam, limit: pageParam === 1 ? baseParams.limit : (pageLimit ?? baseParams.limit) }),
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) =>
       getNextPostsPageParam(lastPage, allPages, baseParams),
-    enabled,
+    enabled: !isInitializing && (options?.enabled ?? true),
     staleTime: 1000 * 60 * 2,
     gcTime: 1000 * 60 * 60 * 4,
     refetchOnWindowFocus: false,

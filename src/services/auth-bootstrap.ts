@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/react-native";
 
+import { getPosts } from "@/src/api/read/endpoints/posts";
 import { getUserStatus } from "@/src/api/read/endpoints/users";
 import { queryKeys } from "@/src/api/read/query-keys";
 import type { BootstrapResponse } from "@/src/api/read/endpoints/bootstrap";
@@ -7,6 +8,10 @@ import { queryClient } from "@/src/providers/query-provider";
 import { getTierName } from "@/src/utils/tiers";
 import { primeBootstrap } from "@/src/services/bootstrap";
 import { walletService } from "@/src/services/wallet-service";
+import {
+  getAllowedTagsFromContentTypes,
+  usePreferencesStore,
+} from "@/src/stores/preferences-store";
 
 export type AuthUserStatusSnapshot = {
   hasUsername: boolean;
@@ -27,10 +32,34 @@ export function addAuthBootstrapBreadcrumb(
   });
 }
 
+export function prefetchHomeFeed(address?: string): void {
+  const prefs = usePreferencesStore.getState();
+  const allowedTags =
+    getAllowedTagsFromContentTypes(
+      prefs.selectedContentTypes,
+      prefs.adultContentEnabled,
+    ) || undefined;
+  const prefetchParams = {
+    limit: 10,
+    feed: "home" as const,
+    by: "magic" as const,
+    allowed_tags: allowedTags,
+    ...(address ? { address } : {}),
+  };
+
+  queryClient.prefetchInfiniteQuery({
+    queryKey: queryKeys.posts({ ...prefetchParams, page: undefined }),
+    queryFn: ({ pageParam = 1 }) =>
+      getPosts({ ...prefetchParams, page: pageParam }),
+    initialPageParam: 1,
+  });
+}
+
 export async function bootstrapAnonymousStartup(): Promise<void> {
   addAuthBootstrapBreadcrumb("Anonymous startup bootstrap started");
   await primeBootstrap(queryClient);
   addAuthBootstrapBreadcrumb("Anonymous startup bootstrap finished");
+  prefetchHomeFeed();
 }
 
 export async function bootstrapAuthSession(
@@ -42,6 +71,7 @@ export async function bootstrapAuthSession(
   addAuthBootstrapBreadcrumb(`${label} bootstrap finished`, {
     usedUserStatusFromBootstrap: Boolean(bootstrapResponse?.user_status),
   });
+  prefetchHomeFeed(address);
   return bootstrapResponse;
 }
 

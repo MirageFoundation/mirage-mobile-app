@@ -58,7 +58,7 @@ import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 
 const APP_STARTED_AT = Date.now();
 const COLD_START_FEED_REFRESH_WINDOW_MS = 30_000;
-const coldStartPromptedFeedKeys = new Set<string>();
+const coldStartRefreshedFeedKeys = new Set<string>();
 
 type FeedRefreshOptions = {
   fetchAllNew?: boolean;
@@ -72,7 +72,6 @@ export type HomeTabbedFeedRef = {
   isRefreshing: () => boolean;
   hasNewPosts: () => boolean;
   handleNewPostsPress: () => Promise<void>;
-  handleRefreshFeedPress: () => Promise<void>;
   dismissNewPosts: () => void;
   checkNewPosts: () => void;
   resetBaseline: (newTimestamp: number | null) => void;
@@ -84,13 +83,12 @@ type HomeTabbedFeedProps = {
   ListHeaderExtra?: ReactNode;
   onRefreshingChange?: (refreshing: boolean) => void;
   onNewPostsChange?: (hasNew: boolean, avatars: NewPostAvatar[], count: number) => void;
-  onRefreshPromptChange?: (visible: boolean) => void;
 };
 
 export const HomeTabbedFeed = forwardRef<
   HomeTabbedFeedRef,
   HomeTabbedFeedProps
->(({ feedType: baseFeed, activeTabIndex = 0, ListHeaderExtra, onRefreshingChange, onNewPostsChange, onRefreshPromptChange }, ref) => {
+>(({ feedType: baseFeed, activeTabIndex = 0, ListHeaderExtra, onRefreshingChange, onNewPostsChange }, ref) => {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { scrollHandler, scrollY, registerHomeRefresh, registerFollowingRefresh, showBars } = useScrollAnimationContext();
@@ -169,14 +167,14 @@ export const HomeTabbedFeed = forwardRef<
     feed: baseFeed,
     by: "magic",
     allowed_tags: allowedTags || undefined,
-  }, { pageLimit: NEXT_PAGE_SIZE, suppressInitialFetchIfCached: true });
+  }, { pageLimit: NEXT_PAGE_SIZE });
 
   const latestQuery = useInfinitePosts({
     limit: INITIAL_PAGE_SIZE,
     feed: baseFeed,
     by: "newest",
     allowed_tags: allowedTags || undefined,
-  }, { enabled: latestTabActivated, pageLimit: NEXT_PAGE_SIZE, suppressInitialFetchIfCached: true });
+  }, { enabled: latestTabActivated, pageLimit: NEXT_PAGE_SIZE });
 
   const postEditOverrides = usePostEditStore((s) => s.overrides);
   const transformedPageCacheRef = useRef(new WeakMap<object, Post[]>());
@@ -304,7 +302,6 @@ export const HomeTabbedFeed = forwardRef<
     if (!options?.silent) {
       if (Platform.OS === "android" && !options?.skipHaptic) triggerHaptic("light");
       dismissNewPostsRef.current?.();
-      onRefreshPromptChange?.(false);
       setIsRefreshing(true);
       onRefreshingChange?.(true);
     }
@@ -408,7 +405,6 @@ export const HomeTabbedFeed = forwardRef<
     NEXT_PAGE_SIZE,
     queryClient,
     onRefreshingChange,
-    onRefreshPromptChange,
   ]);
   handleRefreshRef.current = handleRefresh;
 
@@ -504,11 +500,6 @@ export const HomeTabbedFeed = forwardRef<
     resetBaseline(null);
   }, [showBars, resetBaseline]);
 
-  const handleRefreshFeedPress = useCallback(async () => {
-    onRefreshPromptChange?.(false);
-    await handleNewPostsPress();
-  }, [handleNewPostsPress, onRefreshPromptChange]);
-
   useImperativeHandle(
     ref,
     () => ({
@@ -517,12 +508,11 @@ export const HomeTabbedFeed = forwardRef<
       isRefreshing: () => isRefreshingRef.current,
       hasNewPosts: () => hasNewPosts,
       handleNewPostsPress,
-      handleRefreshFeedPress,
       dismissNewPosts,
       checkNewPosts: checkNow,
       resetBaseline,
     }),
-    [scrollToTop, handleRefresh, hasNewPosts, handleNewPostsPress, handleRefreshFeedPress, dismissNewPosts, checkNow, resetBaseline],
+    [scrollToTop, handleRefresh, hasNewPosts, handleNewPostsPress, dismissNewPosts, checkNow, resetBaseline],
   );
 
   const lastMagicFetchTime = useRef(0);
@@ -761,15 +751,14 @@ export const HomeTabbedFeed = forwardRef<
 
   useEffect(() => {
     if (Date.now() - APP_STARTED_AT > COLD_START_FEED_REFRESH_WINDOW_MS) return;
-    if (coldStartPromptedFeedKeys.has(coldStartRefreshKey)) return;
-    if (posts.length === 0 || query.isPending || query.dataUpdatedAt >= APP_STARTED_AT) return;
+    if (coldStartRefreshedFeedKeys.has(coldStartRefreshKey)) return;
+    if (posts.length === 0 || query.isPending || query.isFetching || query.isFetchedAfterMount) return;
 
-    coldStartPromptedFeedKeys.add(coldStartRefreshKey);
-    onRefreshPromptChange?.(true);
+    coldStartRefreshedFeedKeys.add(coldStartRefreshKey);
 
     Sentry.addBreadcrumb({
       category: "home-feed",
-      message: "Cold-start cached feed refresh prompt shown",
+      message: "Cold-start cached feed refresh started",
       level: "info",
       data: {
         feed: baseFeed,
@@ -777,13 +766,19 @@ export const HomeTabbedFeed = forwardRef<
         postCount: posts.length,
       },
     });
+
+    const timer = setTimeout(() => {
+      handleRefreshRef.current?.({ fetchAllNew: true, skipHaptic: true });
+    }, 300);
+
+    return () => clearTimeout(timer);
   }, [
     activeTabIndex,
     baseFeed,
     coldStartRefreshKey,
-    onRefreshPromptChange,
     posts.length,
-    query.dataUpdatedAt,
+    query.isFetchedAfterMount,
+    query.isFetching,
     query.isPending,
   ]);
 
