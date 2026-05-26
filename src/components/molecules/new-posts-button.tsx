@@ -30,6 +30,7 @@ type NewPostsButtonProps = {
   avatars?: NewPostAvatar[];
   newPostCount?: number;
   loading?: boolean;
+  label?: string;
 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -41,6 +42,7 @@ export const NewPostsButton = ({
   avatars = [],
   newPostCount = 0,
   loading = false,
+  label = "New posts",
 }: NewPostsButtonProps) => {
   const insets = useSafeAreaInsets();
   const translateY = useSharedValue(-60);
@@ -123,7 +125,7 @@ export const NewPostsButton = ({
           </View>
         )}
         <Text size="sm" weight="semibold" style={styles.text}>
-          New posts
+          {label}
         </Text>
       </LinearGradient>
     </AnimatedPressable>

@@ -85,6 +85,7 @@ export function HomeScreen() {
   const backgroundTimeRef = useRef<number | null>(null);
   const [isFeedRefreshing, setIsFeedRefreshing] = useState(false);
   const [hasNewPosts, setHasNewPosts] = useState(false);
+  const [showRefreshFeedPrompt, setShowRefreshFeedPrompt] = useState(false);
   const [newPostAvatars, setNewPostAvatars] = useState<{ userId: string; username: string }[]>([]);
   const [newPostCount, setNewPostCount] = useState(0);
 
@@ -102,10 +103,15 @@ export function HomeScreen() {
 
   const handleNewPostsPress = useCallback(async () => {
     setIsBannerLoading(true);
-    await tabbedFeedRef.current?.handleNewPostsPress();
+    if (showRefreshFeedPrompt && !hasNewPosts) {
+      await tabbedFeedRef.current?.handleRefreshFeedPress();
+    } else {
+      await tabbedFeedRef.current?.handleNewPostsPress();
+    }
     setIsBannerLoading(false);
     setHasNewPosts(false);
-  }, []);
+    setShowRefreshFeedPrompt(false);
+  }, [hasNewPosts, showRefreshFeedPrompt]);
 
   useEffect(() => {
     const handleAppStateChange = (nextState: AppStateStatus) => {
@@ -780,15 +786,17 @@ export function HomeScreen() {
         activeTabIndex={feedTabIndex}
         ListHeaderExtra={moderationReminderHeader}
         onNewPostsChange={handleNewPostsChange}
+        onRefreshPromptChange={setShowRefreshFeedPrompt}
       />
 
       <NewPostsButton
-        visible={hasNewPosts}
+        visible={hasNewPosts || showRefreshFeedPrompt}
         onPress={handleNewPostsPress}
         topOffset={insets.top + 44}
-        avatars={newPostAvatars}
+        avatars={hasNewPosts ? newPostAvatars : []}
         newPostCount={newPostCount}
         loading={isBannerLoading}
+        label={hasNewPosts ? "New posts" : "Refresh feed"}
       />
 
       <UpdateBanner

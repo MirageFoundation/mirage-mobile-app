@@ -63,6 +63,7 @@ export function FollowingScreen() {
   const shareServer = usePreferencesStore((s) => s.apiServer);
 
   const [hasNewPosts, setHasNewPosts] = useState(false);
+  const [showRefreshFeedPrompt, setShowRefreshFeedPrompt] = useState(false);
   const [newPostAvatars, setNewPostAvatars] = useState<{ userId: string; username: string }[]>([]);
   const [newPostCount, setNewPostCount] = useState(0);
 
@@ -76,10 +77,15 @@ export function FollowingScreen() {
 
   const handleNewPostsPress = useCallback(async () => {
     setIsBannerLoading(true);
-    await tabbedFeedRef.current?.handleNewPostsPress();
+    if (showRefreshFeedPrompt && !hasNewPosts) {
+      await tabbedFeedRef.current?.handleRefreshFeedPress();
+    } else {
+      await tabbedFeedRef.current?.handleNewPostsPress();
+    }
     setIsBannerLoading(false);
     setHasNewPosts(false);
-  }, []);
+    setShowRefreshFeedPrompt(false);
+  }, [hasNewPosts, showRefreshFeedPrompt]);
 
   const tabbedFeedRef = useRef<HomeTabbedFeedRef>(null);
   const backgroundTimeRef = useRef<number | null>(null);
@@ -465,15 +471,17 @@ export function FollowingScreen() {
         feedType="following"
         activeTabIndex={feedTabIndex}
         onNewPostsChange={handleNewPostsChange}
+        onRefreshPromptChange={setShowRefreshFeedPrompt}
       />
 
       <NewPostsButton
-        visible={hasNewPosts}
+        visible={hasNewPosts || showRefreshFeedPrompt}
         onPress={handleNewPostsPress}
         topOffset={insets.top + 44}
-        avatars={newPostAvatars}
+        avatars={hasNewPosts ? newPostAvatars : []}
         newPostCount={newPostCount}
         loading={isBannerLoading}
+        label={hasNewPosts ? "New posts" : "Refresh feed"}
       />
 
       <PostOptionsSheet
