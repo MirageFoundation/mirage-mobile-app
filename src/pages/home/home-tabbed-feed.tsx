@@ -304,6 +304,7 @@ export const HomeTabbedFeed = forwardRef<
     if (!options?.silent) {
       if (Platform.OS === "android" && !options?.skipHaptic) triggerHaptic("light");
       dismissNewPostsRef.current?.();
+      onRefreshPromptChange?.(false);
       setIsRefreshing(true);
       onRefreshingChange?.(true);
     }
@@ -407,6 +408,7 @@ export const HomeTabbedFeed = forwardRef<
     NEXT_PAGE_SIZE,
     queryClient,
     onRefreshingChange,
+    onRefreshPromptChange,
   ]);
   handleRefreshRef.current = handleRefresh;
 

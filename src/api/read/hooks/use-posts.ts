@@ -126,7 +126,7 @@ export function useInfinitePosts(
   params?: Omit<GetPostsParams, "page" | "address">,
   options?: { enabled?: boolean; pageLimit?: number }
 ) {
-  const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const walletAddress = useAuthStore((s) => s.user?.walletAddress ?? s.walletAddress);
   const isInitializing = useAuthStore((s) => s.isInitializing);
 
   const baseParams = {
