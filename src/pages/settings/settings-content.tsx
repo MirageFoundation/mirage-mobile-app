@@ -27,6 +27,7 @@ import { runInboxCheckNow, sendTestNotification, resetAndTestInboxNotification, 
 import { useCloudflareErrorStore } from "@/src/stores/cloudflare-error-store";
 import * as Clipboard from "expo-clipboard";
 import { storage } from "@/src/stores/mmkv-storage";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 
 // Auto-collapse threshold options
 const collapseThresholdOptions: ValueOption<number | null>[] = [
@@ -159,9 +160,13 @@ const handleApiServerChange = useCallback(
         setShareServer(server);
         toast.success(`Switched to ${server}`);
         router.replace("/(tabs)");
+        setTimeout(() => {
+          useHomePostCardStore.getState().setSideMenuOpen(false);
+        }, 350);
       } catch (err) {
         Sentry.captureException(err, { tags: { feature: "settings", operation: "switch-server" } });
         toast.error("Failed to switch server");
+        useHomePostCardStore.getState().setSideMenuOpen(false);
       }
     },
     [switchServer, apiServer, toast, router, setShareServer]

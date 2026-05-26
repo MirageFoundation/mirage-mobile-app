@@ -79,7 +79,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  const isTopicDisabled = useIsTopicDisabled(post.topic);
  const shareServer = useShareServer();
  const allowAutoplay = useAllowAutoplay();
-  const feedActive = useFeedActive(feedScreen);
+ const feedActive = useFeedActive(feedScreen);
 
 // Store post data in ref to avoid recreating callbacks
  const postRef = useRef(post);

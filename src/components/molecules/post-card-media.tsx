@@ -127,9 +127,6 @@ export const PostCardMedia = memo(
         : globalMuted;
     const [mediaLoaded, setMediaLoaded] = useState(() => media?.uri ? MEDIA_LOADED_CACHE.has(media.uri) : false);
     const [videoReadyForDisplay, setVideoReadyForDisplay] = useState(false);
-    const [videoPlaybackPrepared, setVideoPlaybackPrepared] = useState(
-      media?.type !== "video",
-    );
     const videoMuted = media?.type === "video"
       ? (effectiveMuted || !videoReadyForDisplay || (!isPostDetail && !hasNativeAudioFocus))
       : effectiveMuted;
@@ -246,7 +243,6 @@ export const PostCardMedia = memo(
       const shouldOwnNativeAudioFocus =
         media?.type === "video" &&
         !isPostDetail &&
-        !globalMuted &&
         screenActive &&
         !shouldBlurContent &&
         isVisible &&
@@ -284,7 +280,6 @@ export const PostCardMedia = memo(
     }, [
       media?.type,
       isPostDetail,
-      globalMuted,
       screenActive,
       shouldBlurContent,
       isVisible,
@@ -347,7 +342,6 @@ export const PostCardMedia = memo(
         currentVideoPositionRef.current = 0;
         focusRecoveryRetryCountRef.current = 0;
         setVideoReadyForDisplay(false);
-        setVideoPlaybackPrepared(media?.type !== "video");
         setShowVideoPrepSpinner(false);
         const wasLoaded = resolvedMediaUri ? MEDIA_LOADED_CACHE.has(resolvedMediaUri) : false;
         setMediaLoaded(wasLoaded);
@@ -545,11 +539,54 @@ export const PostCardMedia = memo(
 
     const shouldAutoPlayYouTube = Platform.OS === "android" && allowAutoplay && (isPostDetail || isFocused);
 
+    const shouldPlayNativeVideo =
+      media?.type === "video" &&
+      isVideoPlaying &&
+      screenActive &&
+      !shouldBlurContent;
+
     useEffect(() => {
       if (videoRef.current && media?.type === "video") {
         videoRef.current.setStatusAsync({ isMuted: videoMuted }).catch(() => {});
       }
     }, [videoMuted, media?.type]);
+
+    useEffect(() => {
+      if (!shouldPlayNativeVideo) return;
+
+      let cancelled = false;
+      const play = async () => {
+        const video = videoRef.current;
+        if (!video) return;
+
+        try {
+          const status = await video.getStatusAsync();
+          if (cancelled || !status.isLoaded || status.isPlaying) return;
+
+          await video.setStatusAsync({
+            shouldPlay: true,
+            isMuted: videoMuted,
+          });
+          await video.playAsync();
+        } catch {
+          // expo-av can ignore the declarative shouldPlay prop after media
+          // source/session changes (e.g. switching API servers). A short
+          // retry mirrors the mute/unmute path, which starts playback by
+          // imperatively calling playAsync().
+          if (!cancelled) {
+            setTimeout(() => {
+              if (!cancelled) videoRef.current?.playAsync().catch(() => {});
+            }, 250);
+          }
+        }
+      };
+
+      void play();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [shouldPlayNativeVideo, videoMuted, resolvedMediaUri, mediaLoaded]);
 
     const wasScreenInactiveForVideoRef = useRef(false);
     useEffect(() => {
@@ -979,7 +1016,6 @@ export const PostCardMedia = memo(
             setIsVideoLoading(false);
             setMediaLoaded(false);
             setVideoReadyForDisplay(false);
-            setVideoPlaybackPrepared(false);
             videoProcessingAttemptsRef.current = 0;
             setMediaRetryKey((k) => k + 1);
             return;
@@ -1237,7 +1273,7 @@ export const PostCardMedia = memo(
                 source={mediaSource}
                 style={styles.media}
                 resizeMode={ResizeMode.COVER}
-                shouldPlay={videoPlaybackPrepared && videoReadyForDisplay && isVideoPlaying && screenActive}
+                shouldPlay={shouldPlayNativeVideo}
                 isLooping={true}
                 isMuted={videoMuted}
                 useNativeControls={false}
@@ -1254,24 +1290,26 @@ export const PostCardMedia = memo(
                         hasRestoredVideoPositionRef.current = true;
                         await videoRef.current.setStatusAsync({
                           positionMillis: saved * 1000,
-                          shouldPlay: false,
-                          isMuted: true,
+                          shouldPlay: shouldPlayNativeVideo,
+                          isMuted: shouldPlayNativeVideo ? videoMuted : true,
                         }).catch(() => {});
                         return;
                       }
                     }
 
                     await videoRef.current.setStatusAsync({
-                      shouldPlay: false,
-                      isMuted: true,
+                      shouldPlay: shouldPlayNativeVideo,
+                      isMuted: shouldPlayNativeVideo ? videoMuted : true,
                     }).catch(() => {});
+                    if (shouldPlayNativeVideo) {
+                      await videoRef.current.playAsync().catch(() => {});
+                    }
                   })();
                 }}
                 onReadyForDisplay={(event) => {
                   const { width, height } = event.naturalSize ?? {};
                   updateMediaAspectRatioFromSize(width, height);
                   setVideoReadyForDisplay(true);
-                  setVideoPlaybackPrepared(true);
                   setMediaLoaded(true);
                   if (resolvedMediaUri) MEDIA_LOADED_CACHE.add(resolvedMediaUri);
                   if (userInitiatedPlayRef.current) {
@@ -1332,7 +1370,6 @@ export const PostCardMedia = memo(
                     setImageError(false);
                     setMediaLoaded(false);
                     setVideoReadyForDisplay(false);
-                    setVideoPlaybackPrepared(false);
                     void stopNativeVideoPlayback();
                   } else {
                     setImageError(true);

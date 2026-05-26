@@ -146,6 +146,7 @@ export const HomeTabbedFeed = forwardRef<
   );
   const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const hideDownvotedPosts = usePreferencesStore((s) => s.hideDownvotedPosts);
+  const apiServer = usePreferencesStore((s) => s.apiServer);
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
   const blockedTopicNames = useContentModerationStore((s) => s.blockedTopicNames);
@@ -782,15 +783,20 @@ export const HomeTabbedFeed = forwardRef<
   ]);
 
   useEffect(() => {
+    // Include apiServer in the seed key so visibility is re-seeded after a
+    // server switch (posts get fully replaced with new IDs but feedContext
+    // doesn't change, which would otherwise short-circuit seeding and leave
+    // every feed video with isVisible/isActive=false → "stuck").
+    const seedKey = `${feedContext}:${apiServer}`;
     if (posts.length === 0) {
-      if (seededFeedContextRef.current === feedContext) {
+      if (seededFeedContextRef.current === seedKey) {
         seededFeedContextRef.current = null;
       }
       return;
     }
 
-    if (seededFeedContextRef.current === feedContext) return;
-    seededFeedContextRef.current = feedContext;
+    if (seededFeedContextRef.current === seedKey) return;
+    seededFeedContextRef.current = seedKey;
 
     const initialVisiblePosts = posts.slice(0, 5).filter(postHasPlayableVideo);
     const visibleVideoIds = new Set(initialVisiblePosts.map((post) => post.id));
@@ -801,7 +807,7 @@ export const HomeTabbedFeed = forwardRef<
       visibleVideoIds,
       activeVideoId,
     );
-  }, [feedContext, posts]);
+  }, [feedContext, posts, apiServer]);
 
   const tabListRef = activeTabIndex === 0 ? magicListRef : latestListRef;
   const combinedRefCallback = useCallback((instance: FlashListRef<Post> | null) => {
@@ -827,7 +833,7 @@ export const HomeTabbedFeed = forwardRef<
       <GestureDetector gesture={pullGesture}>
         <View style={{ flex: 1 }} collapsable={false}>
           <HomePostList
-            key={feedContext}
+            key={`${feedContext}:${apiServer}`}
             ref={combinedRefCallback}
             data={posts}
             contentContainerStyle={listContentStyle}

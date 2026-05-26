@@ -47,6 +47,7 @@ import {
 import { useApiServer } from "@/src/providers/api-server-provider";
 import { useToast } from "@/src/providers/toast-provider";
 import { useServerList } from "@/src/hooks/use-server-list";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
   useUserFollowed,
   useBatchUsernamesFromAddresses,
@@ -478,10 +479,14 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
           await switchServer(server);
           setShareServer(server);
           toast.success(`Switched to ${server}`);
-          close();
           router.replace("/(tabs)");
+          setTimeout(() => {
+            close();
+            useHomePostCardStore.getState().setSideMenuOpen(false);
+          }, 350);
         } catch {
           toast.error("Failed to switch server");
+          useHomePostCardStore.getState().setSideMenuOpen(false);
         }
       },
       [switchServer, apiServer, toast, router, setShareServer, close],

@@ -461,6 +461,7 @@ export function FollowingScreen() {
 
       <HomeTabbedFeed
         ref={tabbedFeedRef}
+        key={shareServer}
         feedType="following"
         activeTabIndex={feedTabIndex}
         onNewPostsChange={handleNewPostsChange}
