@@ -495,7 +495,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
           useHomePostCardStore.getState().setSideMenuOpen(false);
           Sentry.addBreadcrumb({
             category: "feed-video",
-            message: "Released feed playback after failed side-menu server switch",
+            message:
+              "Released feed playback after failed side-menu server switch",
             level: "warning",
             data: { server },
           });
@@ -782,7 +783,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 183
+                          update 184
                         </Text>
                         <Text
                           style={{
@@ -834,7 +835,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 183
+                          update 184
                         </Text>
                         <Text
                           style={{
