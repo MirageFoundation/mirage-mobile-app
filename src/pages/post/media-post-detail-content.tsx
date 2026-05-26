@@ -48,6 +48,7 @@ import {
 } from "@/src/stores";
 import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
+import * as Sentry from "@sentry/react-native";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { resolvePostContent } from "@/src/components/molecules/post-card-utils";
 import {
@@ -447,7 +448,8 @@ export default function MediaPostDetailScreen({
     // (index 0). If the user already had comments visible (index 1 or 2),
     // leave the sheet exactly where it is — snapping would cause the
     // half->full/full->half flash the user complained about.
-    if (animatedIndex.value < 0.5) {
+    const currentIndex = animatedIndex.value;
+    if (currentIndex < 0.5) {
       collapseMedia();
     }
     // Mark that we want to scroll to the new comment as soon as it lays out.
@@ -455,7 +457,13 @@ export default function MediaPostDetailScreen({
     // FlatList contents, and runs `scrollToEnd` once the optimistic comment
     // appears in `displayComments`.
     pendingScrollToEndRef.current = true;
-  }, [animatedIndex, collapseMedia, pendingScrollToEndRef]);
+    Sentry.addBreadcrumb({
+      category: "media-post-detail",
+      message: "Reveal comments after post submit",
+      level: "info",
+      data: { postId: post?.id, sheetIndex: currentIndex },
+    });
+  }, [animatedIndex, collapseMedia, pendingScrollToEndRef, post?.id]);
 
   const handleEditedComment = useCallback((commentId: string) => {
     suppressedHighlightScrollRef.current = null;

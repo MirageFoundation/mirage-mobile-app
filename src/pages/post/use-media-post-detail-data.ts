@@ -358,8 +358,41 @@ export function useMediaPostDetailData({
       if (comment.id === highlightedCommentId) return true;
       return comment.replies?.some(containsHighlighted) ?? false;
     };
-    if (!allDisplayComments.some(containsHighlighted)) return;
+    if (!allDisplayComments.some(containsHighlighted)) {
+      // Safety net: if the highlighted comment hasn't shown up within a
+      // few seconds we'll never scroll to it. Surface that so we can
+      // diagnose missed optimistic insertions / id swaps in Sentry.
+      const missingTimer = setTimeout(() => {
+        if (!pendingScrollToEndRef.current) return;
+        Sentry.captureMessage(
+          "Pending scroll-to-comment never resolved on media post detail",
+          {
+            level: "warning",
+            tags: { feature: "media-post-detail", operation: "scroll-after-post" },
+            extra: {
+              postId: id,
+              highlightedCommentId,
+              topLevelCount: allDisplayComments.length,
+              focusedCommentId,
+              focusedMode,
+            },
+          },
+        );
+        pendingScrollToEndRef.current = false;
+      }, 4000);
+      return () => clearTimeout(missingTimer);
+    }
     pendingScrollToEndRef.current = false;
+    Sentry.addBreadcrumb({
+      category: "media-post-detail",
+      message: "Scrolling to newly posted comment",
+      level: "info",
+      data: {
+        postId: id,
+        highlightedCommentId,
+        topLevelCount: allDisplayComments.length,
+      },
+    });
     requestAnimationFrame(() => {
       commentsListRef.current?.scrollToEnd?.({ animated: true });
     });
@@ -367,7 +400,7 @@ export function useMediaPostDetailData({
       commentsListRef.current?.scrollToEnd?.({ animated: true });
     }, 350);
     return () => clearTimeout(timer);
-  }, [allDisplayComments, commentsListRef, focusedCommentId, focusedMode, highlightedCommentId, pendingScrollToEndRef]);
+  }, [allDisplayComments, commentsListRef, focusedCommentId, focusedMode, highlightedCommentId, id, pendingScrollToEndRef]);
 
   const focusedThreadState = useMemo(() => {
     const isVisible = (comment: Comment) =>

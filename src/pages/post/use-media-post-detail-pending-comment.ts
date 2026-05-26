@@ -120,6 +120,17 @@ export function useMediaPostDetailPendingComment({
         highlightTimerRef.current = setTimeout(() => setHighlightedCommentId(null), 3000);
         if (revealCommentsAfterPost) revealCommentsAfterPost();
         else collapseMedia();
+        Sentry.addBreadcrumb({
+          category: "comment",
+          message: "Optimistic comment added to media post",
+          level: "info",
+          data: {
+            postId: id,
+            parentId,
+            isReply: !!captured.replyToId,
+            optimisticCommentId,
+          },
+        });
       },
       onSuccess: (result) => {
         const confirmedCommentId =
@@ -135,6 +146,30 @@ export function useMediaPostDetailPendingComment({
           pendingReplyScrollIdRef.current = confirmedCommentId;
           setHighlightedCommentId((prev) =>
             prev === optimisticCommentId ? confirmedCommentId : prev,
+          );
+          Sentry.addBreadcrumb({
+            category: "comment",
+            message: "Optimistic comment confirmed",
+            level: "info",
+            data: {
+              postId: id,
+              optimisticCommentId,
+              confirmedCommentId,
+            },
+          });
+        } else {
+          Sentry.captureMessage(
+            "Comment mutation succeeded without tx_hash on media post",
+            {
+              level: "warning",
+              tags: { feature: "comment", operation: "submit_comment_media_detail" },
+              extra: {
+                postId: id,
+                parentId,
+                optimisticCommentId,
+                resultType: typeof result,
+              },
+            },
           );
         }
         if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
