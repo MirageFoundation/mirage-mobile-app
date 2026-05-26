@@ -568,7 +568,15 @@ export const PostCardMedia = memo(
             isMuted: videoMuted,
           });
           await video.playAsync();
-        } catch {
+        } catch (error) {
+          Sentry.captureException(error, {
+            tags: {
+              feature: "feed-video",
+              component: "post-card-media",
+              action: "play-native-feed-video",
+            },
+            extra: { uri: resolvedMediaUri },
+          });
           // expo-av can ignore the declarative shouldPlay prop after media
           // source/session changes (e.g. switching API servers). A short
           // retry mirrors the mute/unmute path, which starts playback by

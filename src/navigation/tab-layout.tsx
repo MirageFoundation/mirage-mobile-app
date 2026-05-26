@@ -272,12 +272,30 @@ function TabNavigationVisibilityReset() {
       homePostCardStore.setActiveFeedScreen("home");
       homePostCardStore.setVideoViewability("following:magic", new Set(), null);
       homePostCardStore.setVideoViewability("following:latest", new Set(), null);
+      Sentry.addBreadcrumb({
+        category: "feed-video",
+        message: "Activated home feed playback",
+        level: "info",
+        data: { pathname },
+      });
     } else if (pathname.endsWith("/following")) {
       homePostCardStore.setActiveFeedScreen("following");
       homePostCardStore.setVideoViewability("home:magic", new Set(), null);
       homePostCardStore.setVideoViewability("home:latest", new Set(), null);
+      Sentry.addBreadcrumb({
+        category: "feed-video",
+        message: "Activated following feed playback",
+        level: "info",
+        data: { pathname },
+      });
     } else if (!pathname.startsWith("/topic/")) {
       homePostCardStore.setActiveFeedScreen(null);
+      Sentry.addBreadcrumb({
+        category: "feed-video",
+        message: "Disabled tab feed playback",
+        level: "info",
+        data: { pathname },
+      });
     }
     if (pathname.endsWith("/inbox")) {
       Sentry.addBreadcrumb({

@@ -89,14 +89,48 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         nearbyVideoPostIds: {},
         sideMenuOpen: true,
       });
+      Sentry.addBreadcrumb({
+        category: "feed-video",
+        message: "Suppressed feed playback during API server switch",
+        level: "info",
+        data: {
+          from: previousServer,
+          to: server,
+        },
+      });
 
       setApiServer(server);
       previousServerRef.current = server;
 
-      await Audio.setAudioModeAsync({
+      const audioModeResult = await Audio.setAudioModeAsync({
         playsInSilentModeIOS: true,
         staysActiveInBackground: false,
-      }).catch(() => {});
+      }).then(
+        () => "ok" as const,
+        (error) => {
+          Sentry.captureException(error, {
+            tags: {
+              feature: "feed-video",
+              action: "reset-audio-mode-after-server-switch",
+            },
+            extra: {
+              from: previousServer,
+              to: server,
+            },
+          });
+          return "failed" as const;
+        },
+      );
+      Sentry.addBreadcrumb({
+        category: "feed-video",
+        message: "Reset audio mode after API server switch",
+        level: audioModeResult === "ok" ? "info" : "warning",
+        data: {
+          result: audioModeResult,
+          from: previousServer,
+          to: server,
+        },
+      });
 
       await primeBootstrap(queryClient, wallet?.address);
 

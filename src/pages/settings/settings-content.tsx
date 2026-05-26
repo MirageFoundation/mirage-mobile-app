@@ -162,11 +162,23 @@ const handleApiServerChange = useCallback(
         router.replace("/(tabs)");
         setTimeout(() => {
           useHomePostCardStore.getState().setSideMenuOpen(false);
+          Sentry.addBreadcrumb({
+            category: "feed-video",
+            message: "Released feed playback after settings server switch",
+            level: "info",
+            data: { server },
+          });
         }, 350);
       } catch (err) {
         Sentry.captureException(err, { tags: { feature: "settings", operation: "switch-server" } });
         toast.error("Failed to switch server");
         useHomePostCardStore.getState().setSideMenuOpen(false);
+        Sentry.addBreadcrumb({
+          category: "feed-video",
+          message: "Released feed playback after failed settings server switch",
+          level: "warning",
+          data: { server },
+        });
       }
     },
     [switchServer, apiServer, toast, router, setShareServer]

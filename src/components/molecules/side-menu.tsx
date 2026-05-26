@@ -483,10 +483,22 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
           setTimeout(() => {
             close();
             useHomePostCardStore.getState().setSideMenuOpen(false);
+            Sentry.addBreadcrumb({
+              category: "feed-video",
+              message: "Released feed playback after side-menu server switch",
+              level: "info",
+              data: { server },
+            });
           }, 350);
         } catch {
           toast.error("Failed to switch server");
           useHomePostCardStore.getState().setSideMenuOpen(false);
+          Sentry.addBreadcrumb({
+            category: "feed-video",
+            message: "Released feed playback after failed side-menu server switch",
+            level: "warning",
+            data: { server },
+          });
         }
       },
       [switchServer, apiServer, toast, router, setShareServer, close],

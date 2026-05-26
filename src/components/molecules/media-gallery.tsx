@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Audio, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
+import * as Sentry from "@sentry/react-native";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -193,8 +194,26 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
       videoRef.current?.setStatusAsync({
         shouldPlay: false,
         isMuted: true,
-      }).catch(() => {});
-      videoRef.current?.pauseAsync().catch(() => {});
+      }).catch((error) => {
+        Sentry.captureException(error, {
+          tags: {
+            feature: "feed-video",
+            component: "media-gallery",
+            action: "pause-inactive-gallery-video",
+          },
+          extra: { uri: itemUri },
+        });
+      });
+      videoRef.current?.pauseAsync().catch((error) => {
+        Sentry.captureException(error, {
+          tags: {
+            feature: "feed-video",
+            component: "media-gallery",
+            action: "pause-inactive-gallery-video",
+          },
+          extra: { uri: itemUri },
+        });
+      });
       return;
     }
 
@@ -208,7 +227,15 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
         if (cancelled || !status.isLoaded || status.isPlaying) return;
         await video.setStatusAsync({ shouldPlay: true, isMuted: effectiveMuted });
         await video.playAsync();
-      } catch {
+      } catch (error) {
+        Sentry.captureException(error, {
+          tags: {
+            feature: "feed-video",
+            component: "media-gallery",
+            action: "play-active-gallery-video",
+          },
+          extra: { uri: itemUri },
+        });
         if (!cancelled) {
           setTimeout(() => {
             if (!cancelled) videoRef.current?.playAsync().catch(() => {});
