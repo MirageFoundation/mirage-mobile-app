@@ -17,6 +17,7 @@ type FocusedMode = "single" | "context" | "full";
 
 type UseMediaPostDetailPendingCommentOptions = {
   collapseMedia: () => void;
+  revealCommentsAfterPost?: () => void;
   focusedCommentId: string | null;
   focusedMode: FocusedMode;
   highlightTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
@@ -31,6 +32,7 @@ type UseMediaPostDetailPendingCommentOptions = {
 
 export function useMediaPostDetailPendingComment({
   collapseMedia,
+  revealCommentsAfterPost,
   focusedCommentId,
   focusedMode,
   highlightTimerRef,
@@ -116,7 +118,8 @@ export function useMediaPostDetailPendingComment({
         setHighlightedCommentId(optimisticCommentId);
         if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
         highlightTimerRef.current = setTimeout(() => setHighlightedCommentId(null), 3000);
-        collapseMedia();
+        if (revealCommentsAfterPost) revealCommentsAfterPost();
+        else collapseMedia();
       },
       onSuccess: (result) => {
         const confirmedCommentId =
@@ -128,7 +131,8 @@ export function useMediaPostDetailPendingComment({
             : null;
         if (confirmedCommentId) {
           replaceOptimisticCommentId(id, optimisticCommentId, confirmedCommentId);
-          suppressedHighlightScrollRef.current = confirmedCommentId;
+          suppressedHighlightScrollRef.current = null;
+          pendingReplyScrollIdRef.current = confirmedCommentId;
           setHighlightedCommentId((prev) =>
             prev === optimisticCommentId ? confirmedCommentId : prev,
           );
@@ -166,6 +170,7 @@ export function useMediaPostDetailPendingComment({
     replaceOptimisticCommentId,
     removeOptimisticComment,
     collapseMedia,
+    revealCommentsAfterPost,
     enqueue,
     setFocusedMode,
     setHighlightedCommentId,

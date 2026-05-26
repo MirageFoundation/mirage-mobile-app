@@ -353,7 +353,12 @@ export function useMediaPostDetailData({
   useEffect(() => {
     if (!pendingScrollToEndRef.current) return;
     if (focusedCommentId && focusedMode !== "full") return;
-    if (!allDisplayComments.some((comment) => comment.id === highlightedCommentId)) return;
+    if (!highlightedCommentId) return;
+    const containsHighlighted = (comment: Comment): boolean => {
+      if (comment.id === highlightedCommentId) return true;
+      return comment.replies?.some(containsHighlighted) ?? false;
+    };
+    if (!allDisplayComments.some(containsHighlighted)) return;
     pendingScrollToEndRef.current = false;
     requestAnimationFrame(() => {
       commentsListRef.current?.scrollToEnd?.({ animated: true });

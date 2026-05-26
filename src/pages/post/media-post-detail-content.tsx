@@ -442,6 +442,21 @@ export default function MediaPostDetailScreen({
     collapseMedia();
   }, [post, collapseMedia]);
 
+  const revealCommentsAfterPost = useCallback(() => {
+    // Only open the comments sheet if it's collapsed onto the post summary
+    // (index 0). If the user already had comments visible (index 1 or 2),
+    // leave the sheet exactly where it is — snapping would cause the
+    // half->full/full->half flash the user complained about.
+    if (animatedIndex.value < 0.5) {
+      collapseMedia();
+    }
+    // Mark that we want to scroll to the new comment as soon as it lays out.
+    // The effect in `use-media-post-detail-data` watches this ref and the
+    // FlatList contents, and runs `scrollToEnd` once the optimistic comment
+    // appears in `displayComments`.
+    pendingScrollToEndRef.current = true;
+  }, [animatedIndex, collapseMedia, pendingScrollToEndRef]);
+
   const handleEditedComment = useCallback((commentId: string) => {
     suppressedHighlightScrollRef.current = null;
     coarseScrollTargetRef.current = null;
@@ -453,6 +468,7 @@ export default function MediaPostDetailScreen({
 
   useMediaPostDetailPendingComment({
     collapseMedia,
+    revealCommentsAfterPost,
     focusedCommentId,
     focusedMode,
     highlightTimerRef,
