@@ -418,6 +418,24 @@ export default function MediaPostDetailScreen({
         UIManager.measureInWindow(target, (_x, y, _width, height) => {
           if (preciseScrollTargetRef.current !== scheduledTargetKey) return;
           if (height <= 0) {
+            if (isPendingPostedComment) {
+              Sentry.captureMessage(
+                "Posted media-detail comment layout measured with empty height",
+                {
+                  level: "warning",
+                  tags: {
+                    feature: "media-post-detail",
+                    operation: "scroll-after-comment-post",
+                  },
+                  extra: {
+                    postId: post?.id,
+                    highlightedCommentId,
+                    y,
+                    height,
+                  },
+                },
+              );
+            }
             preciseScrollTargetRef.current = null;
             return;
           }
@@ -425,6 +443,20 @@ export default function MediaPostDetailScreen({
           sheetRef.current?.snapToIndex?.(2, { duration: 1 });
           const desiredY = listTopY + 96;
           const delta = y - desiredY;
+          if (isPendingPostedComment) {
+            Sentry.addBreadcrumb({
+              category: "media-post-detail",
+              message: "Measured posted comment for reveal scroll",
+              level: "info",
+              data: {
+                postId: post?.id,
+                highlightedCommentId,
+                y,
+                height,
+                delta,
+              },
+            });
+          }
           if (Math.abs(delta) < 24) {
             preciseScrollTargetRef.current = `${highlightedCommentId}:done`;
             coarseScrollTargetRef.current = `${highlightedCommentId}:precise`;
@@ -446,7 +478,7 @@ export default function MediaPostDetailScreen({
         });
       }, isPendingPostedComment ? 80 : 500);
     },
-    [highlightedCommentId, listTopY, sheetRef],
+    [highlightedCommentId, listTopY, post?.id, sheetRef],
   );
 
   const handleAuthorPress = useCallback(() => {
@@ -499,6 +531,27 @@ export default function MediaPostDetailScreen({
       sheetRef.current?.snapToIndex?.(2, { duration: 1 });
     });
     pendingPostedCommentScrollRef.current = commentId;
+    setTimeout(() => {
+      if (pendingPostedCommentScrollRef.current !== commentId) return;
+      Sentry.captureMessage(
+        "Posted media-detail comment did not trigger reveal layout",
+        {
+          level: "warning",
+          tags: {
+            feature: "media-post-detail",
+            operation: "scroll-after-comment-post",
+          },
+          extra: {
+            postId: post?.id,
+            commentId,
+            isReply,
+            sheetIndexAtReveal: currentIndex,
+            displayCommentCount: displayCommentsLengthRef.current,
+          },
+        },
+      );
+      pendingPostedCommentScrollRef.current = null;
+    }, 4000);
     coarseScrollTargetRef.current = null;
     preciseScrollTargetRef.current = null;
     suppressedHighlightScrollRef.current = null;

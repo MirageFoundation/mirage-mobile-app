@@ -46,12 +46,43 @@ export function prefetchHomeFeed(address?: string): void {
     allowed_tags: allowedTags,
     ...(address ? { address } : {}),
   };
+  const queryKey = queryKeys.posts({ ...prefetchParams, page: undefined });
+  const cachedFeed = queryClient.getQueryData<{ pages?: unknown[] }>(queryKey);
 
-  queryClient.prefetchInfiniteQuery({
-    queryKey: queryKeys.posts({ ...prefetchParams, page: undefined }),
+  addAuthBootstrapBreadcrumb("Home feed prefetch requested", {
+    hasAddress: Boolean(address),
+    allowedTags: allowedTags ?? null,
+    cachedPageCount: cachedFeed?.pages?.length ?? 0,
+  });
+
+  void queryClient.prefetchInfiniteQuery({
+    queryKey,
     queryFn: ({ pageParam = 1 }) =>
       getPosts({ ...prefetchParams, page: pageParam }),
     initialPageParam: 1,
+  }).then(() => {
+    const prefetchedFeed = queryClient.getQueryData<{ pages?: { posts?: unknown[] }[] }>(queryKey);
+    addAuthBootstrapBreadcrumb("Home feed prefetch completed", {
+      hasAddress: Boolean(address),
+      pageCount: prefetchedFeed?.pages?.length ?? 0,
+      firstPagePostCount: prefetchedFeed?.pages?.[0]?.posts?.length ?? 0,
+    });
+  }).catch((error) => {
+    Sentry.addBreadcrumb({
+      category: "auth-bootstrap",
+      message: "Home feed prefetch failed",
+      level: "error",
+      data: {
+        hasAddress: Boolean(address),
+        error: String(error),
+      },
+    });
+    Sentry.captureException(error, {
+      tags: {
+        feature: "auth-bootstrap",
+        operation: "home-feed-prefetch",
+      },
+    });
   });
 }
 

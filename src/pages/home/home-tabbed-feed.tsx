@@ -317,6 +317,19 @@ export const HomeTabbedFeed = forwardRef<
         page: undefined,
       });
 
+      Sentry.addBreadcrumb({
+        category: "home-feed",
+        message: "Feed refresh requested",
+        level: "info",
+        data: {
+          feed: baseFeed,
+          sort: sortBy,
+          fetchAllNew: Boolean(options?.fetchAllNew),
+          silent: Boolean(options?.silent),
+          hasAddress: Boolean(currentUser?.walletAddress),
+        },
+      });
+
       const fetchPage = (page: number) =>
         getPosts({
           limit: page === 1 ? INITIAL_PAGE_SIZE : NEXT_PAGE_SIZE,
@@ -328,6 +341,7 @@ export const HomeTabbedFeed = forwardRef<
         });
 
       const newFirstPage = await fetchPage(1);
+      let refreshedPageCount = 1;
 
       if (options?.fetchAllNew) {
         const existingData: any = queryClient.getQueryData(postsQueryKey);
@@ -365,6 +379,7 @@ export const HomeTabbedFeed = forwardRef<
           pages: newPages,
           pageParams: newPageParams,
         });
+        refreshedPageCount = newPages.length;
         }
       } else {
         queryClient.setQueryData(postsQueryKey, (oldData: any) => {
@@ -387,8 +402,27 @@ export const HomeTabbedFeed = forwardRef<
           queryKey: queryKeys.rewardSummary(currentUser.walletAddress),
         });
       }
+
+      Sentry.addBreadcrumb({
+        category: "home-feed",
+        message: "Feed refresh completed",
+        level: "info",
+        data: {
+          feed: baseFeed,
+          sort: sortBy,
+          firstPagePostCount: newFirstPage.posts.length,
+          refreshedPageCount,
+          hasMore: newFirstPage.has_more,
+        },
+      });
     } catch (error) {
       Sentry.addBreadcrumb({ category: "home-feed", message: "Feed refresh failed", data: { error: String(error) }, level: "error" });
+      Sentry.captureException(error, {
+        tags: {
+          feature: "home-feed",
+          operation: "feed-refresh",
+        },
+      });
     } finally {
       isRefreshingRef.current = false;
       useTimeTickStore.getState().bump();
@@ -764,6 +798,8 @@ export const HomeTabbedFeed = forwardRef<
         feed: baseFeed,
         sort: activeTabIndex === 0 ? "magic" : "latest",
         postCount: posts.length,
+        dataUpdatedAt: query.dataUpdatedAt,
+        hasAddress: Boolean(currentUser?.walletAddress),
       },
     });
 
@@ -776,7 +812,9 @@ export const HomeTabbedFeed = forwardRef<
     activeTabIndex,
     baseFeed,
     coldStartRefreshKey,
+    currentUser?.walletAddress,
     posts.length,
+    query.dataUpdatedAt,
     query.isFetchedAfterMount,
     query.isFetching,
     query.isPending,
