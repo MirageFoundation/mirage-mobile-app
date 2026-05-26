@@ -47,6 +47,8 @@ export interface CreateCommentInput {
   tag?: ContentTag;
   /** Media URLs (max 10) */
   media?: string[];
+  /** Root post txhash for cache updates when replying to nested comments */
+  rootPostId?: string;
 }
 
 export interface EditPostInput {
@@ -69,6 +71,8 @@ export interface EditPostInput {
 export interface DeletePostInput {
   /** txhash of post/comment to delete */
   postId: string;
+  /** Root post txhash when deleting a comment */
+  rootPostId?: string;
 }
 
 // ============================================

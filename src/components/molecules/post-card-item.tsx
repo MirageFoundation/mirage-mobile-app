@@ -5,7 +5,7 @@ import { usePostEditStore } from "@/src/stores/post-edit-store";
 import {
   useCommentCountOverride,
   useVoteOverride,
-} from "@/src/pages/home/home-post-card-store";
+} from "@/src/stores/home-post-card-store";
 import { logPress } from "@/src/utils/press-logger";
 import { markSeen } from "@/src/services/seen-posts";
 

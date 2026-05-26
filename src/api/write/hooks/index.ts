@@ -22,7 +22,7 @@ export {
   useEdit,
   useDelete,
 } from "./use-post";
-export type { CreatePostMutationInput, UsePostOptions } from "./use-post";
+export type { CreatePostMutationInput, EditPostMutationInput, UsePostOptions } from "./use-post";
 
 // Follow
 export {

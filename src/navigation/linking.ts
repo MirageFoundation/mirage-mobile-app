@@ -1,4 +1,5 @@
 import * as Linking from "expo-linking";
+import ExpoShareIntentModule from "expo-share-intent/build/ExpoShareIntentModule";
 import * as Sentry from "@sentry/react-native";
 import { Alert } from "react-native";
 
@@ -6,6 +7,7 @@ import { useAuthStore, usePreferencesStore } from "@/src/stores";
 import { storage } from "@/src/stores/mmkv-storage";
 import { useDeepLinkStore } from "@/src/stores/deep-link-store";
 import { setShareScheme } from "@/src/utils/share-scheme";
+import { persistPendingShareIntent } from "@/src/navigation/pending-launch-intents";
 
 import {
   isAuthRoute,
@@ -13,7 +15,7 @@ import {
   resolveAuthNavigationTarget,
 } from "./auth-navigation";
 import { isAppRoute, resolveMirageUrl } from "./route-map";
-import { router } from "@/src/utils/guarded-router";
+import { router } from "@/src/navigation/guarded-router";
 
 function showLoginRequiredAlert(): void {
   Alert.alert(
@@ -107,6 +109,42 @@ function isShareIntentPath(path: string): boolean {
   return path.includes("dataUrl=") && path.includes("ShareKey");
 }
 
+function hasSharePayload(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return !!(
+    (typeof record.text === "string" && record.text.trim().length > 0) ||
+    (typeof record.webUrl === "string" && record.webUrl.trim().length > 0) ||
+    (Array.isArray(record.files) && record.files.length > 0)
+  );
+}
+
+function recoverInitialShareIntent(path: string): boolean {
+  try {
+    const result = ExpoShareIntentModule?.getShareIntent(path);
+    if (hasSharePayload(result)) {
+      persistPendingShareIntent(result, "initial-native-intent", path);
+      return true;
+    }
+
+    clearLastSharePath(path);
+    Sentry.addBreadcrumb({
+      category: "share-intent",
+      message: "Ignoring initial share launch path without payload",
+      data: { path: summarizeSharePath(path), hasResult: !!result },
+      level: "info",
+    });
+    return false;
+  } catch (error) {
+    clearLastSharePath(path);
+    Sentry.captureException(error, {
+      tags: { feature: "share-intent", operation: "initial-native-intent" },
+      extra: { path: summarizeSharePath(path) },
+    });
+    return false;
+  }
+}
+
 function getRepeatedSharePathAgeMs(path: string): number | null {
   const lastPath = storage.getString(LAST_SHARE_PATH_KEY);
   const lastHandledAt = storage.getNumber(LAST_SHARE_PATH_AT_KEY) ?? 0;
@@ -129,6 +167,16 @@ export function isRecentSharePath(withinMs = 10_000): boolean {
 
 export function getLastSharePath(): string | null {
   return storage.getString(LAST_SHARE_PATH_KEY) ?? null;
+}
+
+export function clearLastSharePath(expectedPath?: string | null): void {
+  if (expectedPath) {
+    const lastPath = storage.getString(LAST_SHARE_PATH_KEY);
+    if (lastPath && lastPath !== expectedPath) return;
+  }
+
+  storage.remove(LAST_SHARE_PATH_KEY);
+  storage.remove(LAST_SHARE_PATH_AT_KEY);
 }
 
 export function isRecentCreateDeepLink(
@@ -180,7 +228,11 @@ export async function redirectSystemPath({
   if (isShareIntentPath(path)) {
     const repeatedSharePathAgeMs = getRepeatedSharePathAgeMs(path);
 
-    if (shouldSkipRepeatedSharePath(path)) {
+    if (initial && !recoverInitialShareIntent(path)) {
+      return "/(tabs)";
+    }
+
+    if (!initial && shouldSkipRepeatedSharePath(path)) {
       Sentry.addBreadcrumb({
         category: "share-intent",
         message: "Routing repeated share launch path to create",
@@ -191,7 +243,6 @@ export async function redirectSystemPath({
         },
         level: "info",
       });
-      rememberSharePath(path);
       return "/(tabs)/create";
     }
 

@@ -1,8 +1,3 @@
-const PROFILE_GRADIENT_COLORS: readonly string[] = [
-  "rgb(102, 126, 234)",
-  "rgb(118, 75, 162)",
-  "#000000",
-];
 import { Ionicons } from "@expo/vector-icons";
 import AnimatedPressable from "@/src/components/ui/primitives/animated-pressable";
 import * as Clipboard from "expo-clipboard";
@@ -23,13 +18,19 @@ import Animated, {
   useAnimatedStyle,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StyleSheet } from "react-native-unistyles";
 
 import { ShareIcon } from "@/assets/figma-icons";
 import { Avatar, IconButton } from "@/src/components/atoms";
 import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { getTierName, getTierColor } from "@/src/utils/tiers";
+import { StyleSheet } from "react-native-unistyles";
+
+const PROFILE_GRADIENT_COLORS: readonly string[] = [
+  "rgb(102, 126, 234)",
+  "rgb(118, 75, 162)",
+  "#000000",
+];
 
 export const PROFILE_CONTENT_HEIGHT = 280;
 export const SCROLL_THRESHOLD = PROFILE_CONTENT_HEIGHT;

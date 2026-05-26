@@ -172,12 +172,13 @@ export const OnboardingProgress = ({
 
               {/* Progress bar for active step */}
               {step.status === "active" && (
-                <ProgressBar
-                  progress={0.4} // Indeterminate-ish
-                  size="sm"
-                  animated
-                  style={{ marginTop: 8 }}
-                />
+                <View style={{ marginTop: 8 }}>
+                  <ProgressBar
+                    progress={0.4} // Indeterminate-ish
+                    size="sm"
+                    animated
+                  />
+                </View>
               )}
 
               {/* Completed bar for complete steps */}
@@ -260,4 +261,3 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.spacing.md,
   },
 }));
-

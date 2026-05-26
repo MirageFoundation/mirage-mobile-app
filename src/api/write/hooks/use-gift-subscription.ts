@@ -5,12 +5,14 @@ import {
   giftSubscription,
   type GiftSubscriptionInput,
 } from "../endpoints/tokens";
+import { mutationKeys } from "../mutation-keys";
 
 export function useGiftSubscription() {
   const queryClient = useQueryClient();
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.tokens.giftSubscription(),
     mutationFn: async (input: GiftSubscriptionInput) => {
       const wallet = await getWallet();
       return giftSubscription(wallet, input);

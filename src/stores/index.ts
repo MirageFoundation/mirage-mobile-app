@@ -19,6 +19,7 @@ export { useContentModerationStore } from "./content-moderation-store";
 export { useCommentComposeStore } from "./comment-compose-store";
 export { useSavedPostsStore, type SavedPost, type SavedComment } from "./saved-posts-store";
 export { useHistoryStore, type HistoryEntry } from "./history-store";
+export { useHomePostCardStore } from "./home-post-card-store";
 export { useInboxStore } from "./inbox-store";
 export { useVideoMuteStore } from "./video-mute-store";
 export { useVideoPositionStore, buildVideoPositionKey } from "./video-position-store";

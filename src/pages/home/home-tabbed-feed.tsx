@@ -43,7 +43,7 @@ import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
 import { HomePostList } from "./home-post-list";
-import { useHomePostCardStore } from "./home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
   getAllowedTagsFromContentTypes,
   useAuthStore,
@@ -56,9 +56,19 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNewPostsChecker, type NewPostAvatar } from "@/src/hooks/use-new-posts-checker";
 import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 
+const APP_STARTED_AT = Date.now();
+const COLD_START_FEED_REFRESH_WINDOW_MS = 30_000;
+const coldStartRefreshedFeedKeys = new Set<string>();
+
+type FeedRefreshOptions = {
+  fetchAllNew?: boolean;
+  silent?: boolean;
+  skipHaptic?: boolean;
+};
+
 export type HomeTabbedFeedRef = {
   scrollToTop: (tabIndex?: number, options?: { animated?: boolean }) => void;
-  refresh: (options?: { fetchAllNew?: boolean; silent?: boolean }) => Promise<void>;
+  refresh: (options?: FeedRefreshOptions) => Promise<void>;
   isRefreshing: () => boolean;
   hasNewPosts: () => boolean;
   handleNewPostsPress: () => Promise<void>;
@@ -96,7 +106,7 @@ export const HomeTabbedFeed = forwardRef<
   const latestListRef = useRef<FlashListRef<Post>>(null);
   const activeListRef = useRef<FlashListRef<Post>>(null);
   const dismissNewPostsRef = useRef<(() => void) | null>(null);
-  const handleRefreshRef = useRef<((options?: { fetchAllNew?: boolean; silent?: boolean }) => Promise<void>) | null>(null);
+  const handleRefreshRef = useRef<((options?: FeedRefreshOptions) => Promise<void>) | null>(null);
   const triggerPullRefresh = useCallback(() => {
     handleRefreshRef.current?.();
   }, []);
@@ -139,9 +149,6 @@ export const HomeTabbedFeed = forwardRef<
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
   const blockedTopicNames = useContentModerationStore((s) => s.blockedTopicNames);
-
-  const followedUsers = useHomePostCardStore((s) => s.followedUsers);
-  const followedTopics = useHomePostCardStore((s) => s.followedTopics);
 
   const allowedTags = useMemo(
     () => getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled),
@@ -278,39 +285,21 @@ export const HomeTabbedFeed = forwardRef<
   );
 
   const magicPosts = useMemo(
-    () => {
-      const posts = transformPosts(magicQuery.data);
-      return baseFeed !== "following"
-        ? posts
-        : posts.filter(
-            (post) =>
-              followedUsers.has(post.author.id) ||
-              (post.topic && followedTopics.has(post.topic)),
-          );
-    },
-    [magicQuery.data, transformPosts, baseFeed, followedUsers, followedTopics],
+    () => transformPosts(magicQuery.data),
+    [magicQuery.data, transformPosts],
   );
 
   const latestPosts = useMemo(
-    () => {
-      const posts = transformPosts(latestQuery.data);
-      return baseFeed !== "following"
-        ? posts
-        : posts.filter(
-            (post) =>
-              followedUsers.has(post.author.id) ||
-              (post.topic && followedTopics.has(post.topic)),
-          );
-    },
-    [latestQuery.data, transformPosts, baseFeed, followedUsers, followedTopics],
+    () => transformPosts(latestQuery.data),
+    [latestQuery.data, transformPosts],
   );
 
-  const handleRefresh = useCallback(async (options?: { fetchAllNew?: boolean; silent?: boolean }) => {
+  const handleRefresh = useCallback(async (options?: FeedRefreshOptions) => {
     if (isRefreshingRef.current) return;
     isRefreshingRef.current = true;
     transformedPageCacheRef.current = new WeakMap();
     if (!options?.silent) {
-      if (Platform.OS === "android") triggerHaptic("light");
+      if (Platform.OS === "android" && !options?.skipHaptic) triggerHaptic("light");
       dismissNewPostsRef.current?.();
       setIsRefreshing(true);
       onRefreshingChange?.(true);
@@ -422,13 +411,21 @@ export const HomeTabbedFeed = forwardRef<
     try {
       activeListRef.current?.scrollToOffset({ offset: 0, animated: options?.animated ?? true });
     } catch {}
-    if (Platform.OS === "android") {
+    // Some FlashList instances drop scroll commands while the screen is
+    // unfocused (e.g. when arriving from another tab). Issuing a tiny
+    // non-zero offset followed by 0 forces the list to re-layout its
+    // viewport so the user doesn't see a blank screen until they touch it.
+    requestAnimationFrame(() => {
+      try {
+        activeListRef.current?.scrollToOffset({ offset: 1, animated: false });
+      } catch {}
       requestAnimationFrame(() => {
         try {
           activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
+          activeListRef.current?.recordInteraction();
         } catch {}
       });
-    }
+    });
   }, []);
 
   const scrollToTopAndRefresh = useCallback(async () => {
@@ -733,7 +730,56 @@ export const HomeTabbedFeed = forwardRef<
 
   const posts = activeTabIndex === 0 ? magicPosts : latestPosts;
   const query = activeTabIndex === 0 ? magicQuery : latestQuery;
+  const coldStartRefreshKey = `${feedContext}:${allowedTags ?? "all"}:${currentUser?.walletAddress ?? "anon"}`;
   const seededFeedContextRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (baseFeed !== "following") return;
+    if (posts.length >= INITIAL_PAGE_SIZE) return;
+    if (!query.hasNextPage || query.isFetching || query.isFetchingNextPage) return;
+
+    void query.fetchNextPage();
+  }, [
+    baseFeed,
+    posts.length,
+    query,
+    query.hasNextPage,
+    query.isFetching,
+    query.isFetchingNextPage,
+  ]);
+
+  useEffect(() => {
+    if (Date.now() - APP_STARTED_AT > COLD_START_FEED_REFRESH_WINDOW_MS) return;
+    if (coldStartRefreshedFeedKeys.has(coldStartRefreshKey)) return;
+    if (posts.length === 0 || query.isPending || query.isFetching || query.isFetchedAfterMount) return;
+
+    coldStartRefreshedFeedKeys.add(coldStartRefreshKey);
+
+    Sentry.addBreadcrumb({
+      category: "home-feed",
+      message: "Cold-start cached feed refresh started",
+      level: "info",
+      data: {
+        feed: baseFeed,
+        sort: activeTabIndex === 0 ? "magic" : "latest",
+        postCount: posts.length,
+      },
+    });
+
+    const timer = setTimeout(() => {
+      handleRefreshRef.current?.({ fetchAllNew: true, skipHaptic: true });
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [
+    activeTabIndex,
+    baseFeed,
+    coldStartRefreshKey,
+    posts.length,
+    query.isFetchedAfterMount,
+    query.isFetching,
+    query.isPending,
+  ]);
 
   useEffect(() => {
     if (posts.length === 0) {

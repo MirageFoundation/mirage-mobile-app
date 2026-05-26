@@ -255,7 +255,7 @@ export const ContentTypeSheet = forwardRef<
                         size="xs"
                         style={{ color: theme.colors.warning[500], flex: 1 }}
                       >
-                        Enable "Show Mature Content" toggle to see adult content
+                        Enable &quot;Show Mature Content&quot; toggle to see adult content
                       </Text>
                     </View>
                   )}

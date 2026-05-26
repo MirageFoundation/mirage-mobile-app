@@ -24,6 +24,7 @@ const TOAST_STACK_ID = "pow-queue-toast";
 const EMPTY_STATE_DISMISS_DELAY_MS = 400;
 const RESULT_DISPLAY_DURATION_MS = 500;
 const VOTE_RESULT_DISPLAY_DURATION_MS = 500;
+const ERROR_RESULT_DISPLAY_DURATION_MS = 1000;
 
 type PowPhase = "preparing" | "solving" | "submitting";
 
@@ -110,9 +111,13 @@ export const PowQueueToast = () => {
     transientResultAction ?? immediateResultAction ?? resultAction;
   const isVoteResult =
     activeResultAction !== null && VOTE_ACTION_TYPES.has(activeResultAction.type);
-  const resultDisplayDurationMs = isVoteResult
-    ? VOTE_RESULT_DISPLAY_DURATION_MS
-    : RESULT_DISPLAY_DURATION_MS;
+  const isErrorResult =
+    activeResultAction !== null && !activeResultAction.success;
+  const resultDisplayDurationMs = isErrorResult
+    ? ERROR_RESULT_DISPLAY_DURATION_MS
+    : isVoteResult
+      ? VOTE_RESULT_DISPLAY_DURATION_MS
+      : RESULT_DISPLAY_DURATION_MS;
   const isShowingResult =
     activeResultAction !== null &&
     (
@@ -208,9 +213,11 @@ export const PowQueueToast = () => {
       clearTimeout(transientResultTimeoutRef.current);
     }
 
-    const durationMs = VOTE_ACTION_TYPES.has(successOverlay.type)
-      ? VOTE_RESULT_DISPLAY_DURATION_MS
-      : RESULT_DISPLAY_DURATION_MS;
+    const durationMs = !successOverlay.success
+      ? ERROR_RESULT_DISPLAY_DURATION_MS
+      : VOTE_ACTION_TYPES.has(successOverlay.type)
+        ? VOTE_RESULT_DISPLAY_DURATION_MS
+        : RESULT_DISPLAY_DURATION_MS;
 
     transientResultTimeoutRef.current = setTimeout(() => {
       setTransientResultAction(null);

@@ -250,7 +250,7 @@ export const ProfileContentAnimated = memo(function ProfileContentAnimated({
                   <Pressable onPress={() => { triggerHaptic("light"); onEditUsernamePress(); }} style={styles.anonNoteContainer}>
                     <Ionicons name="information-circle" size={16} color="#F59E0B" />
                     <Text size="sm" style={styles.anonNoteText}>
-                      As a subscriber, you can now remove the "anon" prefix from your username. <Text size="sm" weight="bold" style={styles.anonNoteText}>Tap to edit.</Text>
+                      As a subscriber, you can now remove the &quot;anon&quot; prefix from your username. <Text size="sm" weight="bold" style={styles.anonNoteText}>Tap to edit.</Text>
                     </Text>
                   </Pressable>
                 )}

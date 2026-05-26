@@ -1,7 +1,7 @@
 {
   "name": "mirage",
   "main": "index.ts",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "scripts": {
     "start": "expo start",
     "postinstall": "patch-package",
@@ -10,7 +10,16 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "prebuild:fdroid": "EXPO_PUBLIC_FDROID=true expo prebuild --platform android --no-install",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "typecheck": "tsc --noEmit",
+    "check:lint": "bun run lint",
+    "check:file-sizes": "bun tools/check-file-sizes.mjs",
+    "check:stores": "bun tools/check-store-boundaries.mjs",
+    "check:boundaries": "bun tools/check-layer-boundaries.mjs",
+    "check:query-keys": "bun tools/check-query-key-literals.mjs",
+    "check:navigation": "bun tools/check-navigation.mjs",
+    "check:typecheck": "bun run typecheck",
+    "check:architecture": "bun tools/check-architecture.mjs"
   },
   "dependencies": {
     "@docren/react-native-markdown": "^0.8.5",

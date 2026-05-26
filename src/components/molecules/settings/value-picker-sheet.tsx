@@ -150,7 +150,7 @@ const handleSelect = useCallback(
                   weight={isSelected ? "semibold" : "regular"}
                   style={{
                     color: isSelected
-                      ? theme.colors.brand
+                      ? theme.colors.brand[500]
                       : theme.colors.text.default,
                   }}
                 >

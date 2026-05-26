@@ -1,6 +1,5 @@
 import type { StyleProp, ViewStyle } from "react-native";
 import { View } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
 import { useTheme } from "@/providers/theme-context";
 import Animated, {
   useSharedValue,
@@ -11,6 +10,7 @@ import Animated, {
   runOnJS,
 } from "react-native-reanimated";
 import { useEffect } from "react";
+import { StyleSheet } from "react-native-unistyles";
 
 type AnimationType =
   | "fade-in"

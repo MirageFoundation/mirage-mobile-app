@@ -1,0 +1,188 @@
+# AGENTS.md
+
+This file defines the working rules for coding agents in this repository.
+
+## Project Snapshot
+- App: Expo / React Native mobile app
+- Package manager: `bun`
+- Router: Expo Router
+- Server state: TanStack Query
+- Client state: Zustand
+- Current refactor status: Phases 1–8 in `docs/structural-refactor-plan.md` are complete. Use the guardrails before future structural changes.
+- Dependency policy: structural refactors must be dependency-neutral unless explicitly requested. Do not upgrade Expo/RN/video/native dependencies as part of cleanup work.
+
+## Non-Negotiable Working Rules
+
+### 1) Use Bun
+Always use `bun` for repo commands.
+
+Examples:
+- `bun run lint`
+- `bunx eslint ...`
+
+Do not introduce npm/yarn/pnpm commands in docs or scripts unless explicitly required.
+
+### 2) Respect the routing boundary
+- `app/` is for route wrappers, layouts, and route-level config only.
+- Route files should stay tiny and delegate to `src/pages/*`.
+- Do not move feature business logic back into `app/`.
+
+### 3) Respect the navigation boundary
+Navigation logic belongs in:
+- `src/navigation/route-map.ts`
+- `src/navigation/linking.ts`
+- `src/navigation/guarded-router.ts`
+- `src/navigation/auth-navigation.ts`
+
+Note: `src/utils/guarded-router.ts` remains only as a compatibility re-export. New callers should use `src/navigation/guarded-router.ts`.
+
+When touching deep links, route parsing, guarded navigation, or auth-aware navigation:
+- prefer changing `src/navigation/*`
+- do not reintroduce duplicate parsing logic elsewhere
+- do not add new direct deep-link parsing in page files or route wrappers
+
+### 4) Respect the store boundary
+`src/stores/*` must not import from:
+- `src/pages/*`
+- `src/components/*`
+
+Shared data model types should live in `src/domain/*`.
+
+Zustand is for client state only, especially:
+- auth/session metadata
+- preferences
+- drafts
+- UI state
+- local-only persisted state
+
+Do not put new query orchestration, endpoint fetch logic, or feature/page coupling into stores.
+
+### 5) Respect query/cache ownership
+Use centralized query helpers:
+- `src/api/read/query-keys.ts`
+- `src/api/write/mutation-keys.ts`
+- `src/api/cache/*`
+
+Rules:
+- do not introduce raw literal query keys like `['posts']`
+- do not introduce write hooks without `mutationKey`
+- prefer reusable cache helpers over page-local ad hoc cache mutation
+- prefer targeted invalidation/removal over `queryClient.clear()` in normal flows
+
+### 6) Prefer modular page structure
+Feature pages should be split into focused modules under `src/pages/<feature>/*`.
+
+Targets:
+- soft warning: files over **400** lines
+- strong refactor target: files over **600** lines
+
+When touching a large screen, prefer extracting:
+- feature components
+- feature hooks
+- utilities
+- overlay renderers
+- section renderers
+
+### 7) Avoid effect-heavy orchestration
+Do not start with effect cleanup while route implementations still live in `app/`. Extract ownership first, then reduce effects inside the smaller modules.
+
+When editing code, prefer:
+- derived state
+- event handlers
+- memoized selectors
+- query options (`enabled`, `select`, etc.)
+- centralized listeners/providers when truly app-global
+
+Avoid adding new `useEffect` chains that only synchronize derivable state.
+
+## Established Architecture
+
+### Directory intent
+- `app/` → Expo Router wrappers/layouts only
+- `src/pages/` → page containers and feature screens
+- `src/navigation/` → route parsing, guarded router, deep links, auth navigation
+- `src/api/read/` → read endpoints/hooks/query keys
+- `src/api/write/` → write endpoints/hooks/mutation keys
+- `src/api/cache/` → reusable cache update helpers
+- `src/domain/` → shared domain-safe model types
+- `src/stores/` → Zustand stores only
+- `src/components/` → UI building blocks and reusable feature UI
+
+### Current canonical paths to prefer
+- guarded router hook/proxy: `@/src/navigation/guarded-router`
+- deep-link helpers: `@/src/navigation/linking`
+- query keys: `@/src/api/read/query-keys`
+- mutation keys: `@/src/api/write/mutation-keys`
+- home post-card store: `@/src/stores/home-post-card-store`
+- domain types:
+  - `@/src/domain/posts/types`
+  - `@/src/domain/comments/types`
+  - `@/src/domain/content/types`
+
+## Code Change Guidance
+
+### When making edits
+Prefer small, behavior-preserving refactors.
+
+Good patterns:
+- extract a hook
+- extract a render component
+- extract a cache helper
+- replace duplicate logic with centralized helpers
+- replace wrapper imports with canonical imports
+
+Avoid:
+- broad rewrites without need
+- moving logic across boundaries without improving ownership
+- introducing new giant files
+- reintroducing duplicate router/cache/store logic
+
+### When touching large screens
+Before adding more code to a large screen, first ask:
+- can this become a feature hook?
+- can this become a dedicated section component?
+- can this become a helper/util file?
+- can this move to `src/api/cache/*` or `src/navigation/*` instead?
+
+## Verification Expectations
+Run focused verification for the area you touched.
+
+### Useful commands
+- `bun run lint`
+- `bun run check:file-sizes`
+- `bun run check:navigation`
+- `bun run check:stores`
+- `bun run check:query-keys`
+- `bun run check:architecture`
+
+### What checks mean
+- `check:file-sizes` → reports large page files
+- `check:navigation` → smoke-checks route/deep-link parsing
+- `check:stores` → ensures stores do not import pages/components
+- `check:query-keys` → guards against raw query-key literal regressions
+
+If you touch a narrow feature, prefer targeted eslint runs for those files instead of always linting the whole repo.
+
+## Current Remaining Structural Work
+The main structural refactor is complete. Future work should keep the boundaries intact, address guardrail failures immediately, and treat large implementation-file warnings as normal backlog rather than mixing them with unrelated feature work.
+
+## Quick Do / Don’t
+
+### Do
+- use `bun`
+- use `src/navigation/*` for navigation logic
+- use `src/api/read/query-keys.ts`
+- use `src/api/write/mutation-keys.ts`
+- use `src/api/cache/*` for reusable cache logic
+- use `src/domain/*` for shared model types
+- keep `app/` thin
+- keep stores page/component-free
+
+### Don’t
+- add raw query keys
+- add new mutation hooks without `mutationKey`
+- put server-fetch logic in stores
+- put feature logic back into `app/`
+- introduce duplicate deep-link parsing
+- introduce new huge page files
+- use `queryClient.clear()` as ordinary app flow control

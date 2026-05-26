@@ -1,4 +1,4 @@
-import axios, { type AxiosError, type AxiosInstance } from "axios";
+import axios, { AxiosError, type AxiosInstance } from "axios";
 import * as Sentry from "@sentry/react-native";
 import * as Network from "expo-network";
 import { walletService } from "@/src/services/wallet-service";
@@ -6,10 +6,7 @@ import { useInboxStore } from "@/src/stores/inbox-store";
 import { useCloudflareErrorStore } from "@/src/stores/cloudflare-error-store";
 import { isRetryable, isMaybeRetryable } from "@/src/utils/error-messages";
 
-const DEFAULT_NODES = [
-  "https://mirage.talk",
-  "https://mirage.talk", // fallback
-];
+const DEFAULT_NODE = "https://mirage.talk";
 
 const MAX_CONCURRENT_REQUESTS = 6;
 const RATE_LIMIT_RETRY_DELAY = 1000;
@@ -19,15 +16,23 @@ const RETRYABLE_ERROR_BASE_DELAY = 2000;
 const MAX_SERVER_ERROR_RETRIES = 2;
 const SERVER_ERROR_BASE_DELAY = 1500;
 
+function getNetworkDiagnostics(networkState: Network.NetworkState) {
+  return {
+    type: networkState.type,
+    isConnected: networkState.isConnected,
+    isInternetReachable: networkState.isInternetReachable,
+  };
+}
+
 class ApiClient {
   private client: AxiosInstance;
   private nodeList: string[];
   private currentNodeIndex: number;
   private activeRequests: number;
-  private requestQueue: Array<() => void>;
+  private requestQueue: (() => void)[];
 
   constructor() {
-    this.nodeList = DEFAULT_NODES;
+    this.nodeList = [DEFAULT_NODE];
     this.currentNodeIndex = 0;
     this.activeRequests = 0;
     this.requestQueue = [];
@@ -73,7 +78,9 @@ class ApiClient {
         return response;
       },
       async (error: AxiosError) => {
-        // On network error, try failover to next node
+        // On network error, retry only against the currently selected node.
+        // Do not silently fail over to another Mirage node; the selected API
+        // server is user-visible state and must stay authoritative.
         if (
           error.code === "ECONNABORTED" ||
           error.code === "ERR_NETWORK" ||
@@ -81,7 +88,17 @@ class ApiClient {
         ) {
           const originalRequest = error.config;
           if (originalRequest && !originalRequest.headers["X-Retry"]) {
-            await this.failover();
+            Sentry.addBreadcrumb({
+              category: "api",
+              message: "API request failed; retrying selected node",
+              data: {
+                code: error.code,
+                method: originalRequest.method,
+                url: originalRequest.url,
+                baseURL: originalRequest.baseURL,
+              },
+              level: "warning",
+            });
             originalRequest.baseURL = this.getBaseUrl();
             originalRequest.headers["X-Retry"] = "true";
             return this.client(originalRequest);
@@ -97,9 +114,21 @@ class ApiClient {
   }
 
   /**
-   * Switch to next node on failure
+   * Switch to next configured node on failure.
+   * Currently this is intentionally a no-op unless multiple nodes are
+   * explicitly configured. Runtime server selection should never drift from
+   * the user's selected API server.
    */
   async failover(): Promise<void> {
+    if (this.nodeList.length <= 1) {
+      Sentry.addBreadcrumb({
+        category: "api",
+        message: "Skipped node failover; only selected node is configured",
+        level: "warning",
+      });
+      return;
+    }
+
     this.currentNodeIndex = (this.currentNodeIndex + 1) % this.nodeList.length;
     this.client.defaults.baseURL = this.getBaseUrl();
     Sentry.addBreadcrumb({
@@ -114,7 +143,7 @@ class ApiClient {
    * Allow runtime URL change
    */
   setBaseUrl(url: string): void {
-    this.nodeList = [url, ...DEFAULT_NODES.filter((n) => n !== url)];
+    this.nodeList = [url];
     this.currentNodeIndex = 0;
     this.client.defaults.baseURL = url;
   }
@@ -202,7 +231,7 @@ class ApiClient {
   ): Promise<T> {
     const networkState = await Network.getNetworkStateAsync();
     if (!networkState.isConnected) {
-      throw new axios.AxiosError("Network Error", "ERR_NETWORK");
+      throw new AxiosError("Network Error", "ERR_NETWORK");
     }
     console.log(
       `[ApiClient] GET ${path}`,
@@ -222,8 +251,39 @@ class ApiClient {
       const errorMessage = error?.message;
       const status = error?.response?.status;
 
-      if (error?.code === "ERR_NETWORK" || errorMessage === "Network Error") {
-        console.log(`[ApiClient] GET ${path} skipped: offline`);
+      if (
+        error?.code === "ERR_NETWORK" ||
+        error?.code === "ECONNABORTED" ||
+        errorMessage === "Network Error"
+      ) {
+        console.log(`[ApiClient] GET ${path} failed: ${errorMessage}`);
+        Sentry.addBreadcrumb({
+          category: "api",
+          message: `GET ${path} transport failure`,
+          data: {
+            code: error?.code,
+            errorMessage,
+            retryCount,
+            baseUrl: this.getBaseUrl(),
+            network: getNetworkDiagnostics(networkState),
+          },
+          level: "warning",
+        });
+        Sentry.captureMessage("API GET transport failure", {
+          level: "warning",
+          tags: {
+            feature: "api",
+            api_method: "GET",
+            api_path: path,
+            error_code: error?.code ?? "unknown",
+          },
+          extra: {
+            path,
+            retryCount,
+            baseUrl: this.getBaseUrl(),
+            network: getNetworkDiagnostics(networkState),
+          },
+        });
         throw error;
       }
 
@@ -267,7 +327,13 @@ class ApiClient {
         }
         Sentry.captureException(error, {
           tags: { api_method: "GET", api_path: path },
-          extra: { status, errorData },
+          extra: {
+            status,
+            errorData,
+            retryCount,
+            baseUrl: this.getBaseUrl(),
+            network: getNetworkDiagnostics(networkState),
+          },
         });
       }
       if (status && status >= 400 && status < 500) {
@@ -289,7 +355,7 @@ class ApiClient {
   async post<T, D = unknown>(path: string, data?: D): Promise<T> {
     const networkState = await Network.getNetworkStateAsync();
     if (!networkState.isConnected) {
-      throw new axios.AxiosError("Network Error", "ERR_NETWORK");
+      throw new AxiosError("Network Error", "ERR_NETWORK");
     }
     console.log(`[ApiClient] POST ${path}`, data ? "with data" : "no data");
     try {
@@ -300,8 +366,37 @@ class ApiClient {
     } catch (error: any) {
       const status = error?.response?.status;
       const errorData = error?.response?.data;
-      if (error?.code === "ERR_NETWORK" || error?.message === "Network Error") {
-        console.log(`[ApiClient] POST ${path} skipped: offline`);
+      if (
+        error?.code === "ERR_NETWORK" ||
+        error?.code === "ECONNABORTED" ||
+        error?.message === "Network Error"
+      ) {
+        console.log(`[ApiClient] POST ${path} failed: ${error?.message}`);
+        Sentry.addBreadcrumb({
+          category: "api",
+          message: `POST ${path} transport failure`,
+          data: {
+            code: error?.code,
+            errorMessage: error?.message,
+            baseUrl: this.getBaseUrl(),
+            network: getNetworkDiagnostics(networkState),
+          },
+          level: "warning",
+        });
+        Sentry.captureMessage("API POST transport failure", {
+          level: "warning",
+          tags: {
+            feature: "api",
+            api_method: "POST",
+            api_path: path,
+            error_code: error?.code ?? "unknown",
+          },
+          extra: {
+            path,
+            baseUrl: this.getBaseUrl(),
+            network: getNetworkDiagnostics(networkState),
+          },
+        });
         throw error;
       }
 
@@ -340,7 +435,12 @@ class ApiClient {
         }
         Sentry.captureException(error, {
           tags: { api_method: "POST", api_path: path },
-          extra: { status, errorData },
+          extra: {
+            status,
+            errorData,
+            baseUrl: this.getBaseUrl(),
+            network: getNetworkDiagnostics(networkState),
+          },
         });
       }
       console.error(

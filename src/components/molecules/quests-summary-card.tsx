@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
@@ -20,10 +20,9 @@ import { useNodeConfig } from "@/src/api/read/hooks/use-parameters";
 import type { FlashQuest, RewardSummaryResponse } from "@/src/api/read/endpoints/rewards";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { usePreferencesStore } from "@/src/stores";
-import { useAuthStore } from "@/src/stores";
+import { useAuthStore, usePreferencesStore } from "@/src/stores";
 import { useScrollAnimationContext } from "@/src/providers/scroll-animation-context";
-import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 
 function formatTimeShort(seconds: number): string {
   const hours = Math.floor(seconds / 3600);

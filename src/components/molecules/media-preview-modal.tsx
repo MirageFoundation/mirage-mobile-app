@@ -26,7 +26,6 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { StyleSheet } from "react-native-unistyles";
 
 import type { ResolvedMedia } from "./post-card-utils";
 
@@ -43,6 +42,7 @@ import {
   type YouTubeAutoplayEmbedRef,
 } from "./youtube-autoplay-embed";
 import { extractYouTubeVideoId } from "./post-card-utils";
+import { StyleSheet } from "react-native-unistyles";
 
 const PreviewVideoItem = memo(function PreviewVideoItem({
   item,

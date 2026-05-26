@@ -1,2 +1,1 @@
-export { CommunitySelectionModal } from "./community-selection-modal";
-
+export { CommunitySelectionModal } from "@/src/components/molecules/community-selection-modal";

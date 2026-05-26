@@ -4,6 +4,7 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/src/api/client";
+import { resetServerScopedCache } from "@/src/api/cache/server-cache";
 import { usePreferencesStore, getApiBaseUrl, type ApiServer } from "@/src/stores";
 import { Text } from "@/src/components/ui/primitives";
 import { unregisterPush, registerPush } from "@/src/services/push-notifications";
@@ -34,8 +35,9 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const previousServerRef = useRef<ApiServer>(apiServer);
 
   useEffect(() => {
+    const baseUrl = getApiBaseUrl(apiServer);
+
     if (!initializedRef.current) {
-      const baseUrl = getApiBaseUrl(apiServer);
       apiClient.setBaseUrl(baseUrl);
       initializedRef.current = true;
       previousServerRef.current = apiServer;
@@ -43,6 +45,8 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     if (previousServerRef.current !== apiServer) {
+      apiClient.setBaseUrl(baseUrl);
+      resetServerScopedCache(queryClient);
       previousServerRef.current = apiServer;
     }
   }, [apiServer, queryClient]);
@@ -72,8 +76,7 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const baseUrl = getApiBaseUrl(server);
       apiClient.setBaseUrl(baseUrl);
 
-      queryClient.removeQueries();
-      queryClient.clear();
+      resetServerScopedCache(queryClient);
 
       setApiServer(server);
       previousServerRef.current = server;

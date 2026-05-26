@@ -1,6 +1,6 @@
 import { useAuthStore } from "@/src/stores/auth-store";
 import { useDeepLinkStore } from "@/src/stores/deep-link-store";
-import { router } from "@/src/utils/guarded-router";
+import { router } from "@/src/navigation/guarded-router";
 
 const AUTH_ROUTE_PREFIX = "/(auth)/";
 const LOGGED_OUT_FALLBACK_ROUTE = "/(tabs)";

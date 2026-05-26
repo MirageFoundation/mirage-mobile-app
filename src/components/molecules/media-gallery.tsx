@@ -11,10 +11,10 @@ import {
   Pressable,
   View,
 } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
 import { getVideoThumbnailUri, type ResolvedMedia } from "./post-card-utils";
 import { Text } from "@/src/components/ui/primitives";
 import { useVideoMuteStore } from "@/src/stores";
+import { StyleSheet } from "react-native-unistyles";
 
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -75,6 +75,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   isPostDetail?: boolean;
 }) {
   const videoRef = useRef<Video>(null);
+  const itemUri = item.uri;
   const [isPlaying, setIsPlaying] = useState(false);
   const globalMuted = useVideoMuteStore((s) => s.isMuted);
   const toggleMute = useVideoMuteStore((s) => s.toggleMute);
@@ -92,13 +93,14 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   const errorRetryCountRef = useRef(0);
 
   useEffect(() => {
-    if (GALLERY_LOADED_CACHE.has(item.uri)) return;
+    if (GALLERY_LOADED_CACHE.has(itemUri)) return;
+    const video = videoRef.current;
     loadingTimeoutRef.current = setTimeout(() => {
       setIsLoading(false);
-      GALLERY_LOADED_CACHE.add(item.uri);
+      GALLERY_LOADED_CACHE.add(itemUri);
     }, 8000);
     return () => {
-      videoRef.current?.pauseAsync().catch(() => {});
+      video?.pauseAsync().catch(() => {});
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
       }
@@ -109,7 +111,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
         clearTimeout(errorRetryRef.current);
       }
     };
-  }, []);
+  }, [itemUri]);
 
   useEffect(() => {
     if (isActive && screenActive && isVisible && (allowAutoplay || feedTappedToPlay)) {
@@ -427,7 +429,7 @@ export const MediaGallery = memo(function MediaGallery({
   );
 
   const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
+    ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
       if (viewableItems.length > 0 && viewableItems[0].index != null) {
         const newIndex = viewableItems[0].index;
         activeIndexRef.current = newIndex;

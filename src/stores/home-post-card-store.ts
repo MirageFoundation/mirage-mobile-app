@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import type { Post } from "@/src/components/molecules";
-import type { ShareServer } from "@/src/stores";
+import type { Post } from "@/src/domain/content";
+import type { ShareServer } from "./preferences-store";
 
 type VoteOverride = {
   hasLiked?: boolean;
@@ -44,6 +44,15 @@ type HomePostCardHandlers = {
   onReport?: (postId: string) => void;
 };
 
+type HomePostCardContext = {
+ currentUserId?: string;
+ followedUsers: Set<string>;
+ followedTopics: Set<string>;
+ revealedPosts: Set<string>;
+ shareServer: ShareServer;
+ allowAutoplay?: boolean;
+};
+
 type HomePostCardState = {
  currentUserId?: string;
  followedUsers: Set<string>;
@@ -68,6 +77,7 @@ type HomePostCardState = {
  setFollowedTopics: (topics: Set<string>) => void;
  setFollowLoadingUsers: (users: Set<string>) => void;
  setRevealedPosts: (posts: Set<string>) => void;
+ setCardContext: (context: HomePostCardContext) => void;
  setActiveVideoPostId: (feedScreen: string, postId: string | null) => void;
  setVisibleVideoPostIds: (feedScreen: string, postIds: Set<string>) => void;
  setVideoViewability: (feedScreen: string, visibleIds: Set<string>, activeId: string | null, nearbyIds?: Set<string>) => void;
@@ -114,6 +124,34 @@ export const useHomePostCardStore = create<HomePostCardState>((set) => ({
   setFollowedTopics: (topics) => set({ followedTopics: topics }),
   setFollowLoadingUsers: (users) => set({ followLoadingUsers: users }),
   setRevealedPosts: (posts) => set({ revealedPosts: posts }),
+ setCardContext: (context) =>
+   set((state) => {
+     const updates: Partial<HomePostCardState> = {};
+
+     if (state.currentUserId !== context.currentUserId) {
+       updates.currentUserId = context.currentUserId;
+     }
+     if (state.followedUsers !== context.followedUsers) {
+       updates.followedUsers = context.followedUsers;
+     }
+     if (state.followedTopics !== context.followedTopics) {
+       updates.followedTopics = context.followedTopics;
+     }
+     if (state.revealedPosts !== context.revealedPosts) {
+       updates.revealedPosts = context.revealedPosts;
+     }
+     if (state.shareServer !== context.shareServer) {
+       updates.shareServer = context.shareServer;
+     }
+     if (
+       context.allowAutoplay !== undefined &&
+       state.allowAutoplay !== context.allowAutoplay
+     ) {
+       updates.allowAutoplay = context.allowAutoplay;
+     }
+
+     return Object.keys(updates).length > 0 ? updates : state;
+   }),
  setActiveVideoPostId: (feedScreen, postId) =>
    set((state) => {
      if (state.activeVideoPostIds[feedScreen] === postId) return state;

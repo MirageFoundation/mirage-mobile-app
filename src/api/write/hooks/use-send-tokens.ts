@@ -13,6 +13,7 @@ import {
   type SendTokensInput,
   type SubscriptionLevel,
 } from "../endpoints/tokens";
+import { mutationKeys } from "../mutation-keys";
 import type { PoWProgress } from "../signing";
 
 // ============================================
@@ -32,6 +33,7 @@ export function useSendTokens(options: UseSendTokensOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.tokens.send(),
     mutationFn: async (input: SendTokensInput) => {
       const wallet = await getWallet();
       return sendTokens(wallet, input, options.onPoWProgress);
@@ -65,6 +67,7 @@ export function useUpgradeLevel() {
   const setUserLevel = useAuthStore((s) => s.setUserLevel);
 
   return useMutation({
+    mutationKey: mutationKeys.tokens.upgradeLevel(),
     mutationFn: async (level: SubscriptionLevel) => {
       const wallet = await getWallet();
       return upgradeLevel(wallet, level);
@@ -98,6 +101,7 @@ export function useSetAutoRenewal() {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.tokens.setAutoRenewal(),
     mutationFn: async (autoRenew: boolean) => {
       const wallet = await getWallet();
       return setAutoRenewal(wallet, autoRenew);

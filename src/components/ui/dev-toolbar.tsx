@@ -67,7 +67,7 @@ export const DevToolbar = () => {
   const clearQueryCache = async () => {
     try {
       setIsLoading(true);
-      queryClient.clear();
+      queryClient.removeQueries();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("Success", "Query cache cleared");
     } catch (error) {

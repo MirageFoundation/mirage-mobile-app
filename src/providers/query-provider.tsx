@@ -33,7 +33,7 @@ const persister = createSyncStoragePersister({
   key: "mirage-query-cache",
 });
 
-const EXCLUDED_QUERY_KEYS = ["posts", "comments", "inbox", "topics"];
+const EXCLUDED_QUERY_KEYS = ["comments", "inbox", "topics"];
 
 function toSentryContext(value: unknown): unknown {
   try {
@@ -67,6 +67,23 @@ function shouldCaptureReactQueryError(error: unknown): boolean {
   const code = (error as any)?.code;
   if (code === "ERR_NETWORK") return false;
   return getErrorStatus(error) === undefined;
+}
+
+function addPersistedCacheRestoredBreadcrumb() {
+  const restoredQueries = queryClient.getQueryCache().findAll();
+  const restoredPostQueries = restoredQueries.filter(
+    (query) => query.queryKey[0] === "posts",
+  );
+
+  Sentry.addBreadcrumb({
+    category: "react-query",
+    message: "Persisted query cache restored",
+    level: "info",
+    data: {
+      restoredQueryCount: restoredQueries.length,
+      restoredPostQueryCount: restoredPostQueries.length,
+    },
+  });
 }
 
 const queryClient = new QueryClient({
@@ -169,7 +186,7 @@ export const QueryProvider = ({ children }: { children: React.ReactNode }) => {
           },
         },
       }}
-      onSuccess={() => {}}
+      onSuccess={addPersistedCacheRestoredBreadcrumb}
     >
       {children}
     </PersistQueryClientProvider>

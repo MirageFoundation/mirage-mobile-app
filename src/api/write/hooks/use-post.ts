@@ -30,10 +30,12 @@ import {
   type EditPostInput,
   type DeletePostInput,
 } from "../endpoints/posts";
+import { mutationKeys } from "../mutation-keys";
 import type { PoWProgress } from "../signing";
 import * as Sentry from "@sentry/react-native";
 import type { PostDraft } from "@/src/stores/draft-store";
-import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
+import { getAllowedTagsFromContentTypes, usePreferencesStore } from "@/src/stores/preferences-store";
 
 // ============================================
 // Types
@@ -50,6 +52,16 @@ export type CreatePostMutationInput = CreatePostInput & {
   optimisticMediaUrls?: string[];
   optimisticPreviewMediaUrls?: string[];
   optimisticDraft?: PostDraft;
+};
+
+export type EditPostMutationInput = EditPostInput & {
+  optimisticActionId?: string;
+};
+
+type UpsertHomePostOptions = {
+  address?: string;
+  allowedTags?: string;
+  limit?: number;
 };
 
 const MEDIA_URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
@@ -144,8 +156,79 @@ export const buildOptimisticPost = (
   };
 };
 
-export const upsertHomePost = (queryClient: QueryClient, optimisticPost: ApiPost) => {
-  const postQueries = queryClient.getQueriesData({ queryKey: ["posts"] });
+const upsertPostIntoPostsResponse = (
+ queryData: PostsResponse,
+ optimisticPost: ApiPost,
+): PostsResponse => {
+ const matchingPostIndex = queryData.posts.findIndex(
+  (post) =>
+   post.post_id === optimisticPost.post_id ||
+   (!!optimisticPost.optimistic_action_id &&
+    post.optimistic_action_id === optimisticPost.optimistic_action_id),
+ );
+
+ if (matchingPostIndex === -1) {
+  return {
+   ...queryData,
+   posts: [optimisticPost, ...queryData.posts],
+   total: queryData.total + 1,
+  };
+ }
+
+ const existingPost = queryData.posts[matchingPostIndex];
+ if (
+  existingPost.post_id === optimisticPost.post_id ||
+  (optimisticPost.optimistic_status === "pending" &&
+   existingPost.optimistic_status !== "pending")
+ ) {
+  return queryData;
+ }
+
+ const posts = [...queryData.posts];
+ posts[matchingPostIndex] = optimisticPost;
+ return {
+  ...queryData,
+  posts,
+ };
+};
+
+const upsertPostIntoInfinitePostsData = (
+ queryData: { pages: PostsResponse[]; pageParams: unknown[] },
+ optimisticPost: ApiPost,
+) => {
+ const [firstPage, ...rest] = queryData.pages;
+ if (!firstPage) return queryData;
+ const nextFirstPage = upsertPostIntoPostsResponse(firstPage, optimisticPost);
+ if (nextFirstPage === firstPage) return queryData;
+
+ return {
+  ...queryData,
+  pages: [nextFirstPage, ...rest],
+ };
+};
+
+const buildSeededHomeFeedData = (
+ optimisticPost: ApiPost,
+ limit: number,
+): { pages: PostsResponse[]; pageParams: number[] } => ({
+ pages: [
+  {
+   posts: [optimisticPost],
+   total: 1,
+   page: 1,
+   limit,
+   has_more: false,
+  },
+ ],
+ pageParams: [1],
+});
+
+export const upsertHomePost = (
+ queryClient: QueryClient,
+ optimisticPost: ApiPost,
+ options?: UpsertHomePostOptions,
+) => {
+  const postQueries = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() });
   postQueries.forEach(([queryKey, queryData]) => {
     if (!queryData) return;
     const filters = queryKey[1] as PostFilters | undefined;
@@ -160,39 +243,46 @@ export const upsertHomePost = (queryClient: QueryClient, optimisticPost: ApiPost
         pages: PostsResponse[];
         pageParams: unknown[];
       };
-      const [firstPage, ...rest] = dataWithPages.pages;
-      if (!firstPage) return;
-      if (firstPage.posts.some((post) => post.post_id === optimisticPost.post_id)) {
-        return;
-      }
-
-      queryClient.setQueryData(queryKey, {
-        ...dataWithPages,
-        pages: [
-          {
-            ...firstPage,
-            posts: [optimisticPost, ...firstPage.posts],
-            total: firstPage.total + 1,
-          },
-          ...rest,
-        ],
-      });
+      const nextData = upsertPostIntoInfinitePostsData(dataWithPages, optimisticPost);
+      if (nextData !== dataWithPages) queryClient.setQueryData(queryKey, nextData);
     } else {
       const dataSingle = queryData as PostsResponse;
-      if (dataSingle.posts.some((post) => post.post_id === optimisticPost.post_id)) {
-        return;
-      }
-      queryClient.setQueryData(queryKey, {
-        ...dataSingle,
-        posts: [optimisticPost, ...dataSingle.posts],
-        total: dataSingle.total + 1,
-      });
+      const nextData = upsertPostIntoPostsResponse(dataSingle, optimisticPost);
+      if (nextData !== dataSingle) queryClient.setQueryData(queryKey, nextData);
     }
+  });
+
+  if (!options) return;
+
+  (["magic", "newest"] as const).forEach((by) => {
+    const queryKey = queryKeys.posts({
+      limit: options.limit ?? 10,
+      feed: "home",
+      by,
+      allowed_tags: options.allowedTags || undefined,
+      address: options.address,
+      page: undefined,
+    });
+
+    queryClient.setQueryData(queryKey, (oldData: unknown) => {
+      if (!oldData) return buildSeededHomeFeedData(optimisticPost, options.limit ?? 10);
+      if (
+        typeof oldData === "object" &&
+        oldData !== null &&
+        "pages" in oldData
+      ) {
+        return upsertPostIntoInfinitePostsData(
+          oldData as { pages: PostsResponse[]; pageParams: unknown[] },
+          optimisticPost,
+        );
+      }
+      return upsertPostIntoPostsResponse(oldData as PostsResponse, optimisticPost);
+    });
   });
 };
 
 export const removeOptimisticPostFromCache = (queryClient: QueryClient, postId: string) => {
-  updateQueriesWithReducer(queryClient, ["posts"], (data) => removePostFromPostsData(data, postId));
+  updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => removePostFromPostsData(data, postId));
 };
 
 export const markOptimisticPostError = (
@@ -200,7 +290,7 @@ export const markOptimisticPostError = (
   postId: string,
   errorMessage: string,
 ) => {
-  updateQueriesWithReducer(queryClient, ["posts"], (data) => {
+  updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => {
     if (!data) return { nextData: data, didUpdate: false };
     const markError = (post: ApiPost) =>
       post.post_id === postId
@@ -235,7 +325,7 @@ const replaceOrUpdateOptimisticPost = (
   nextPost: ApiPost,
 ) => {
   const nextPostId = nextPost.post_id;
-  updateQueriesWithReducer(queryClient, ["posts"], (data) => {
+  updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => {
     if (!data) return { nextData: data, didUpdate: false };
     const replace = (post: ApiPost) =>
       post.post_id === optimisticId ? nextPost : post;
@@ -296,7 +386,7 @@ const preserveLocalPreviewMedia = (
   previewMediaUrls: string[],
 ) => {
   if (!previewMediaUrls.length) return;
-  updateQueriesWithReducer(queryClient, ["posts"], (data) => {
+  updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => {
     if (!data) return { nextData: data, didUpdate: false };
     const preserve = (post: ApiPost) =>
       post.post_id === postId
@@ -304,6 +394,9 @@ const preserveLocalPreviewMedia = (
             ...post,
             thumbnail: previewMediaUrls[0] ?? post.thumbnail,
             media: previewMediaUrls,
+            optimistic_status: undefined,
+            optimistic_error: undefined,
+            optimistic_draft: undefined,
             optimistic_video_preview_until: Date.now() + 45000,
           }
         : post;
@@ -547,6 +640,55 @@ const applyCommentDeltaToPostsData = (
   };
 };
 
+const findPostInPostsData = (data: unknown, postId: string): ApiPost | null => {
+  if (!data) return null;
+  if (isInfinitePostsData(data)) {
+    for (const page of data.pages) {
+      const match = page.posts.find((post) => post.post_id === postId);
+      if (match) return match;
+    }
+    return null;
+  }
+
+  const singleData = data as PostsResponse;
+  return singleData.posts?.find((post) => post.post_id === postId) ?? null;
+};
+
+const addRootPostIdFromPost = (post: ApiPost | null, rootPostIds: Set<string>) => {
+  if (!post?.root_post_id || post.root_post_id === post.post_id) return;
+  rootPostIds.add(post.root_post_id);
+};
+
+const findRootPostIdsForCachedComment = (
+  queryClient: QueryClient,
+  commentId: string,
+): Set<string> => {
+  const rootPostIds = new Set<string>();
+
+  queryClient.getQueriesData({ queryKey: queryKeys.userPostsRoot() }).forEach(([, data]) => {
+    addRootPostIdFromPost(findPostInPostsData(data, commentId), rootPostIds);
+  });
+
+  queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }).forEach(([, data]) => {
+    addRootPostIdFromPost(findPostInPostsData(data, commentId), rootPostIds);
+  });
+
+  return rootPostIds;
+};
+
+const applyCommentDeltaToRootPostCaches = (
+  queryClient: QueryClient,
+  rootPostId: string,
+  delta: number,
+) => {
+  updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (queryData) =>
+    applyCommentDeltaToPostsData(queryData, rootPostId, delta),
+  );
+  updateQueriesWithReducer(queryClient, queryKeys.userPostsRoot(), (queryData) =>
+    applyCommentDeltaToPostsData(queryData, rootPostId, delta),
+  );
+};
+
 const removePostFromPostsData = (
   data: unknown,
   postId: string,
@@ -608,6 +750,68 @@ const updateQueriesWithReducer = (
   });
 };
 
+export const applyOptimisticPostEdit = (
+  queryClient: QueryClient,
+  input: EditPostMutationInput,
+  status: ApiPost["optimistic_status"],
+  errorMessage?: string,
+) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const updatePost = <T extends ApiPost>(post: T): T => {
+    if (post.post_id !== input.postId) return post;
+    return {
+      ...post,
+      title: input.title,
+      content: input.content,
+      tag: input.tag ?? post.tag,
+      topic: input.topic ?? post.topic,
+      media: input.media ?? post.media,
+      edited_at: nowSeconds,
+      optimistic_status: status,
+      optimistic_error: errorMessage,
+      optimistic_action_id: input.optimisticActionId,
+    } as T;
+  };
+
+  const applyToPostsData = (data: unknown): { nextData: unknown; didUpdate: boolean } => {
+    if (!data) return { nextData: data, didUpdate: false };
+    if (isInfinitePostsData(data)) {
+      let didUpdate = false;
+      const nextPages = data.pages.map((page) => {
+        let didUpdatePage = false;
+        const nextPosts = page.posts.map((post) => {
+          const updated = updatePost(post);
+          if (updated !== post) didUpdatePage = true;
+          return updated;
+        });
+        if (!didUpdatePage) return page;
+        didUpdate = true;
+        return { ...page, posts: nextPosts };
+      });
+      return { nextData: didUpdate ? { ...data, pages: nextPages } : data, didUpdate };
+    }
+    const singleData = data as PostsResponse;
+    let didUpdate = false;
+    const nextPosts = singleData.posts.map((post) => {
+      const updated = updatePost(post);
+      if (updated !== post) didUpdate = true;
+      return updated;
+    });
+    return { nextData: didUpdate ? { ...singleData, posts: nextPosts } : data, didUpdate };
+  };
+
+  updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), applyToPostsData);
+  updateQueriesWithReducer(queryClient, queryKeys.userPostsRoot(), applyToPostsData);
+
+  queryClient.getQueriesData<CommentsResponse>({ queryKey: queryKeys.commentsRoot() }).forEach(([queryKey, queryData]) => {
+    if (!queryData?.root || queryData.root.post_id !== input.postId) return;
+    queryClient.setQueryData<CommentsResponse>(queryKey, {
+      ...queryData,
+      root: updatePost(queryData.root),
+    });
+  });
+};
+
 const restoreQuerySnapshots = (
   queryClient: QueryClient,
   snapshots: Array<[QueryKey, unknown]> | undefined,
@@ -637,8 +841,11 @@ export function usePost(options: UsePostOptions = {}) {
   const queryClient = useQueryClient();
   const { getWallet, address } = useWallet();
   const username = useAuthStore((s) => s.user?.username);
+  const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
+  const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
 
   return useMutation({
+    mutationKey: mutationKeys.post.create(),
     mutationFn: async (input: CreatePostMutationInput) => {
       const wallet = await getWallet();
       const { optimisticId, optimisticActionId, optimisticMediaUrl, optimisticMediaUrls, optimisticPreviewMediaUrls, optimisticDraft, ...postInput } = input;
@@ -663,6 +870,17 @@ export function usePost(options: UsePostOptions = {}) {
         address,
         username,
       );
+      const confirmedPost = {
+        ...optimisticPost,
+        optimistic_status: undefined,
+        optimistic_error: undefined,
+        optimistic_draft: undefined,
+      };
+      const upsertOptions = {
+        address: address ?? undefined,
+        allowedTags: getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled) || undefined,
+        limit: 10,
+      };
 
       if (input.optimisticId) {
         Sentry.addBreadcrumb({
@@ -671,57 +889,34 @@ export function usePost(options: UsePostOptions = {}) {
           level: "info",
           data: {
             optimisticId: input.optimisticId,
-            confirmedPostId: optimisticPost.post_id,
+            confirmedPostId: confirmedPost.post_id,
             hasPreviewMedia: !!input.optimisticPreviewMediaUrls?.length,
           },
         });
-        replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, optimisticPost);
+        replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, confirmedPost);
+        upsertHomePost(queryClient, confirmedPost, upsertOptions);
         if (input.optimisticPreviewMediaUrls?.length) {
           Sentry.addBreadcrumb({
             category: "create-post",
             message: "Preserving local media preview after post success",
             level: "info",
             data: {
-              postId: optimisticPost.post_id,
+              postId: confirmedPost.post_id,
               previewCount: input.optimisticPreviewMediaUrls.length,
             },
           });
-          preserveLocalPreviewMedia(queryClient, optimisticPost.post_id, input.optimisticPreviewMediaUrls);
+          preserveLocalPreviewMedia(queryClient, confirmedPost.post_id, input.optimisticPreviewMediaUrls);
           [1000, 2500, 5000, 10000, 20000, 45000].forEach((delay) => {
             setTimeout(() => {
-              preserveLocalPreviewMedia(queryClient, optimisticPost.post_id, input.optimisticPreviewMediaUrls ?? []);
+              preserveLocalPreviewMedia(queryClient, confirmedPost.post_id, input.optimisticPreviewMediaUrls ?? []);
             }, delay);
           });
         }
         setTimeout(() => {
-          if (input.optimisticPreviewMediaUrls?.length) {
-            useHomePostCardStore.setState((state) => {
-              const screen = state.activeFeedScreen;
-              if (!screen) return state;
-              const visible = new Set(state.visibleVideoPostIds[screen] ?? []);
-              const nearby = new Set(state.nearbyVideoPostIds[screen] ?? []);
-              visible.add(optimisticPost.post_id);
-              nearby.add(optimisticPost.post_id);
-              return {
-                activeVideoPostIds: {
-                  ...state.activeVideoPostIds,
-                  [screen]: optimisticPost.post_id,
-                },
-                visibleVideoPostIds: {
-                  ...state.visibleVideoPostIds,
-                  [screen]: visible,
-                },
-                nearbyVideoPostIds: {
-                  ...state.nearbyVideoPostIds,
-                  [screen]: nearby,
-                },
-              };
-            });
-          }
-          updateQueriesWithReducer(queryClient, ["posts"], (queryData) => {
+          updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (queryData) => {
             if (!queryData) return { nextData: queryData, didUpdate: false };
             const clearStatus = (post: ApiPost) =>
-              post.post_id === optimisticPost.post_id
+              post.post_id === confirmedPost.post_id
                 ? {
                     ...post,
                     optimistic_status: undefined,
@@ -736,7 +931,7 @@ export function usePost(options: UsePostOptions = {}) {
               let didUpdate = false;
               const pages = queryData.pages.map((page) => {
                 const posts = page.posts.map((post) => {
-                  if (post.post_id !== optimisticPost.post_id) return post;
+                  if (post.post_id !== confirmedPost.post_id) return post;
                   didUpdate = true;
                   return clearStatus(post);
                 });
@@ -747,7 +942,7 @@ export function usePost(options: UsePostOptions = {}) {
             const singleData = queryData as PostsResponse;
             let didUpdate = false;
             const posts = singleData.posts.map((post) => {
-              if (post.post_id !== optimisticPost.post_id) return post;
+              if (post.post_id !== confirmedPost.post_id) return post;
               didUpdate = true;
               return clearStatus(post);
             });
@@ -755,13 +950,13 @@ export function usePost(options: UsePostOptions = {}) {
           });
         }, 2000);
       } else {
-        upsertHomePost(queryClient, optimisticPost);
+        upsertHomePost(queryClient, optimisticPost, upsertOptions);
       }
 
       // Keep the newly created post visible immediately in Home feeds.
       // Magic is reconciled back to backend ordering on refresh / new-posts reload.
       queryClient.invalidateQueries({
-        queryKey: ["posts"],
+        queryKey: queryKeys.postsRoot(),
         refetchType: "inactive",
       });
 
@@ -775,7 +970,7 @@ export function usePost(options: UsePostOptions = {}) {
 
       // Invalidate topics cache to include newly created topics
       queryClient.invalidateQueries({
-        queryKey: ["topics"],
+        queryKey: queryKeys.topicsRoot(),
         refetchType: "inactive",
       });
     },
@@ -822,18 +1017,27 @@ export function useComment(options: UsePostOptions = {}) {
   const username = useAuthStore((s) => s.user?.username);
 
   return useMutation({
+    mutationKey: mutationKeys.post.comment(),
     mutationFn: async (input: CreateCommentInput) => {
       const wallet = await getWallet();
       return createComment(wallet, input, options.onPoWProgress);
     },
     onMutate: async (input) => {
-      await queryClient.cancelQueries({ queryKey: ["comments"] });
+      await queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() });
+      await queryClient.cancelQueries({ queryKey: queryKeys.postsRoot() });
+      await queryClient.cancelQueries({ queryKey: queryKeys.userPostsRoot() });
 
       const previousComments = queryClient.getQueriesData<CommentsResponse>({
-        queryKey: ["comments"],
+        queryKey: queryKeys.commentsRoot(),
       }) as Array<[QueryKey, CommentsResponse | undefined]>;
+      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as [QueryKey, unknown][];
+      const previousUserPosts = queryClient.getQueriesData({ queryKey: queryKeys.userPostsRoot() }) as [QueryKey, unknown][];
 
       const optimisticCommentId = `optimistic-${Date.now()}`;
+      const affectedRootPostIds = new Set<string>();
+      if (input.rootPostId) {
+        affectedRootPostIds.add(input.rootPostId);
+      }
 
       previousComments.forEach(([queryKey, queryData]) => {
         if (!queryData?.root) return;
@@ -845,6 +1049,7 @@ export function useComment(options: UsePostOptions = {}) {
         );
 
         if (!isTopLevelComment && !isReplyToNestedComment) return;
+        affectedRootPostIds.add(queryData.root.post_id);
 
         queryClient.setQueryData<CommentsResponse>(queryKey, {
           ...queryData,
@@ -855,8 +1060,18 @@ export function useComment(options: UsePostOptions = {}) {
         });
       });
 
+      if (affectedRootPostIds.size === 0) {
+        affectedRootPostIds.add(input.parentId);
+      }
+
+      affectedRootPostIds.forEach((rootPostId) => {
+        applyCommentDeltaToRootPostCaches(queryClient, rootPostId, 1);
+      });
+
       return {
         previousComments,
+        previousPosts,
+        previousUserPosts,
         optimisticCommentId,
       };
     },
@@ -866,22 +1081,20 @@ export function useComment(options: UsePostOptions = {}) {
         extra: { parentId: _input.parentId },
       });
       restoreQuerySnapshots(queryClient, context?.previousComments);
+      restoreQuerySnapshots(queryClient, context?.previousPosts);
+      restoreQuerySnapshots(queryClient, context?.previousUserPosts);
     },
     onSuccess: () => {},
     onSettled: () => {
       queryClient.invalidateQueries({
-        queryKey: ["comments"],
-        refetchType: "active",
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["posts"],
+        queryKey: queryKeys.commentsRoot(),
         refetchType: "active",
       });
 
       if (address) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.userPosts(address),
-          refetchType: "active",
+          refetchType: "inactive",
         });
       }
     },
@@ -927,79 +1140,23 @@ export function useEdit(options: UsePostOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
-    mutationFn: async (input: EditPostInput) => {
+    mutationKey: mutationKeys.post.edit(),
+    mutationFn: async (input: EditPostMutationInput) => {
       const wallet = await getWallet();
       return editPost(wallet, input, options.onPoWProgress);
     },
     onMutate: async (input) => {
-      await queryClient.cancelQueries({ queryKey: ["posts"] });
-      await queryClient.cancelQueries({ queryKey: ["comments"] });
+      await queryClient.cancelQueries({ queryKey: queryKeys.postsRoot() });
+      await queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() });
       if (address) {
         await queryClient.cancelQueries({ queryKey: queryKeys.userPosts(address) });
       }
 
-      const previousPosts = queryClient.getQueriesData({ queryKey: ["posts"] }) as Array<[QueryKey, unknown]>;
-      const previousUserPosts = queryClient.getQueriesData({ queryKey: ["user", "posts"] }) as Array<[QueryKey, unknown]>;
-      const previousComments = queryClient.getQueriesData({ queryKey: ["comments"] }) as Array<[QueryKey, unknown]>;
+      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as Array<[QueryKey, unknown]>;
+      const previousUserPosts = queryClient.getQueriesData({ queryKey: queryKeys.userPostsRoot() }) as Array<[QueryKey, unknown]>;
+      const previousComments = queryClient.getQueriesData({ queryKey: queryKeys.commentsRoot() }) as Array<[QueryKey, unknown]>;
 
-      const nowSeconds = Math.floor(Date.now() / 1000);
-
-      const updatePost = (post: ApiPost): ApiPost => {
-        if (post.post_id !== input.postId) return post;
-        return {
-          ...post,
-          title: input.title,
-          content: input.content,
-          tag: input.tag ?? post.tag,
-          topic: input.topic ?? post.topic,
-          media: input.media ?? post.media,
-          edited_at: nowSeconds,
-        };
-      };
-
-      const applyToPostsData = (data: unknown): { nextData: unknown; didUpdate: boolean } => {
-        if (!data) return { nextData: data, didUpdate: false };
-        if (isInfinitePostsData(data)) {
-          let didUpdate = false;
-          const nextPages = data.pages.map((page) => {
-            const nextPosts = page.posts.map((p) => {
-              const updated = updatePost(p);
-              if (updated !== p) didUpdate = true;
-              return updated;
-            });
-            return { ...page, posts: nextPosts };
-          });
-          return { nextData: didUpdate ? { ...data, pages: nextPages } : data, didUpdate };
-        }
-        const singleData = data as PostsResponse;
-        let didUpdate = false;
-        const nextPosts = singleData.posts.map((p) => {
-          const updated = updatePost(p);
-          if (updated !== p) didUpdate = true;
-          return updated;
-        });
-        return { nextData: didUpdate ? { ...singleData, posts: nextPosts } : data, didUpdate };
-      };
-
-      updateQueriesWithReducer(queryClient, ["posts"], applyToPostsData);
-      updateQueriesWithReducer(queryClient, ["user", "posts"], applyToPostsData);
-
-      const commentsQueries = queryClient.getQueriesData<CommentsResponse>({ queryKey: ["comments"] });
-      commentsQueries.forEach(([queryKey, queryData]) => {
-        if (!queryData?.root || queryData.root.post_id !== input.postId) return;
-        queryClient.setQueryData<CommentsResponse>(queryKey, {
-          ...queryData,
-          root: {
-            ...queryData.root,
-            title: input.title,
-            content: input.content,
-            tag: input.tag ?? queryData.root.tag,
-            topic: input.topic ?? queryData.root.topic,
-            media: input.media ?? queryData.root.media,
-            edited_at: nowSeconds,
-          },
-        });
-      });
+      applyOptimisticPostEdit(queryClient, input, "pending");
 
       return { previousPosts, previousUserPosts, previousComments };
     },
@@ -1012,7 +1169,86 @@ export function useEdit(options: UsePostOptions = {}) {
       restoreQuerySnapshots(queryClient, context?.previousUserPosts);
       restoreQuerySnapshots(queryClient, context?.previousComments);
     },
-    onSettled: () => {
+    onSuccess: (_data, input) => {
+      applyOptimisticPostEdit(queryClient, input, "success");
+      setTimeout(() => {
+        updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (queryData) => {
+          if (!queryData) return { nextData: queryData, didUpdate: false };
+          const clearStatus = (post: ApiPost) =>
+            post.post_id === input.postId
+              ? {
+                  ...post,
+                  optimistic_status: undefined,
+                  optimistic_error: undefined,
+                  optimistic_action_id: undefined,
+                }
+              : post;
+          if (isInfinitePostsData(queryData)) {
+            let didUpdate = false;
+            const pages = queryData.pages.map((page) => {
+              const posts = page.posts.map((post) => {
+                if (post.post_id !== input.postId) return post;
+                didUpdate = true;
+                return clearStatus(post);
+              });
+              return didUpdate ? { ...page, posts } : page;
+            });
+            return { nextData: didUpdate ? { ...queryData, pages } : queryData, didUpdate };
+          }
+          const singleData = queryData as PostsResponse;
+          let didUpdate = false;
+          const posts = singleData.posts.map((post) => {
+            if (post.post_id !== input.postId) return post;
+            didUpdate = true;
+            return clearStatus(post);
+          });
+          return { nextData: didUpdate ? { ...singleData, posts } : queryData, didUpdate };
+        });
+        updateQueriesWithReducer(queryClient, queryKeys.userPostsRoot(), (queryData) => {
+          if (!queryData) return { nextData: queryData, didUpdate: false };
+          const clearStatus = (post: ApiPost) =>
+            post.post_id === input.postId
+              ? {
+                  ...post,
+                  optimistic_status: undefined,
+                  optimistic_error: undefined,
+                  optimistic_action_id: undefined,
+                }
+              : post;
+          if (isInfinitePostsData(queryData)) {
+            let didUpdate = false;
+            const pages = queryData.pages.map((page) => {
+              const posts = page.posts.map((post) => {
+                if (post.post_id !== input.postId) return post;
+                didUpdate = true;
+                return clearStatus(post);
+              });
+              return didUpdate ? { ...page, posts } : page;
+            });
+            return { nextData: didUpdate ? { ...queryData, pages } : queryData, didUpdate };
+          }
+          const singleData = queryData as PostsResponse;
+          let didUpdate = false;
+          const posts = singleData.posts.map((post) => {
+            if (post.post_id !== input.postId) return post;
+            didUpdate = true;
+            return clearStatus(post);
+          });
+          return { nextData: didUpdate ? { ...singleData, posts } : queryData, didUpdate };
+        });
+        queryClient.getQueriesData<CommentsResponse>({ queryKey: queryKeys.commentsRoot() }).forEach(([queryKey, queryData]) => {
+          if (!queryData?.root || queryData.root.post_id !== input.postId) return;
+          queryClient.setQueryData<CommentsResponse>(queryKey, {
+            ...queryData,
+            root: {
+              ...queryData.root,
+              optimistic_status: undefined,
+              optimistic_error: undefined,
+              optimistic_action_id: undefined,
+            },
+          });
+        });
+      }, 2000);
     },
   });
 }
@@ -1026,6 +1262,7 @@ export function useDelete(options: UsePostOptions = {}) {
   const { getWallet, address } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.post.delete(),
     mutationFn: async (input: DeletePostInput) => {
       const wallet = await getWallet();
       const maxAttempts = 3;
@@ -1048,19 +1285,24 @@ export function useDelete(options: UsePostOptions = {}) {
       throw new Error("Delete failed");
     },
     onMutate: async (input) => {
-      await queryClient.cancelQueries({ queryKey: ["comments"] });
-      await queryClient.cancelQueries({ queryKey: ["posts"] });
-      await queryClient.cancelQueries({ queryKey: ["user", "posts"] });
+      await queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() });
+      await queryClient.cancelQueries({ queryKey: queryKeys.postsRoot() });
+      await queryClient.cancelQueries({ queryKey: queryKeys.userPostsRoot() });
 
       const previousComments = queryClient.getQueriesData<CommentsResponse>({
-        queryKey: ["comments"],
+        queryKey: queryKeys.commentsRoot(),
       }) as Array<[QueryKey, CommentsResponse | undefined]>;
-      const previousPosts = queryClient.getQueriesData({ queryKey: ["posts"] }) as Array<
+      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as Array<
         [QueryKey, unknown]
       >;
       const previousUserPosts = queryClient.getQueriesData({
-        queryKey: ["user", "posts"],
+        queryKey: queryKeys.userPostsRoot(),
       }) as Array<[QueryKey, unknown]>;
+
+      const affectedRootPostIds = findRootPostIdsForCachedComment(queryClient, input.postId);
+      if (input.rootPostId) {
+        affectedRootPostIds.add(input.rootPostId);
+      }
 
       previousComments.forEach(([queryKey, queryData]) => {
         if (!queryData?.root || queryData.root.post_id === input.postId) {
@@ -1071,6 +1313,7 @@ export function useDelete(options: UsePostOptions = {}) {
         if (!removalResult.removed) {
           return;
         }
+        affectedRootPostIds.add(queryData.root.post_id);
 
         queryClient.setQueryData<CommentsResponse>(queryKey, {
           ...queryData,
@@ -1082,10 +1325,14 @@ export function useDelete(options: UsePostOptions = {}) {
         });
       });
 
-      updateQueriesWithReducer(queryClient, ["posts"], (queryData) =>
+      affectedRootPostIds.forEach((rootPostId) => {
+        applyCommentDeltaToRootPostCaches(queryClient, rootPostId, -1);
+      });
+
+      updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (queryData) =>
         removePostFromPostsData(queryData, input.postId),
       );
-      updateQueriesWithReducer(queryClient, ["user", "posts"], (queryData) =>
+      updateQueriesWithReducer(queryClient, queryKeys.userPostsRoot(), (queryData) =>
         removePostFromPostsData(queryData, input.postId),
       );
 
@@ -1105,8 +1352,8 @@ export function useDelete(options: UsePostOptions = {}) {
       restoreQuerySnapshots(queryClient, context?.previousUserPosts);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["posts"], refetchType: "inactive" });
-      queryClient.invalidateQueries({ queryKey: ["comments"], refetchType: "inactive" });
+      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot(), refetchType: "inactive" });
+      queryClient.invalidateQueries({ queryKey: queryKeys.commentsRoot(), refetchType: "inactive" });
 
       if (address) {
         queryClient.invalidateQueries({

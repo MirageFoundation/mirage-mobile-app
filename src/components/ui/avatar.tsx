@@ -36,7 +36,7 @@ export default function Avatar({
       seed === null || seed === undefined ? "default" : String(seed) || "default",
     );
     return {
-      url: `https://api.dicebear.com/9.x/identicon/svg?seed=${safeSeed}&scale=100`,
+      uri: `https://api.dicebear.com/9.x/identicon/svg?seed=${safeSeed}&scale=100`,
     };
   }, [source, seed]);
 

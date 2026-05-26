@@ -9,7 +9,7 @@ import { markSeen } from "@/src/services/seen-posts";
 import { getShareBaseUrl } from "@/src/stores";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { useDraftStore } from "@/src/stores/draft-store";
-import { router } from "@/src/utils/guarded-router";
+import { router } from "@/src/navigation/guarded-router";
 import { removeOptimisticPostFromCache } from "@/src/api/write/hooks/use-post";
 import {
   useHomePostCardStore,
@@ -24,7 +24,7 @@ import {
   useVoteOverride,
   useCommentCountOverride,
   useIsTopicDisabled,
-} from "./home-post-card-store";
+} from "@/src/stores/home-post-card-store";
 
 type HomePostCardItemProps = {
  post: Post;

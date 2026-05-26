@@ -2,8 +2,6 @@ import React, { useEffect, useRef } from "react";
 import { Animated } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams } from "expo-router";
-import { useTokenGradient } from "@/services/api/local/tokens";
 import { Box } from "./primitives";
 import type { ViewStyle, StyleProp } from "react-native";
 
@@ -22,6 +20,7 @@ const SendFlowGradient: React.FC<SendFlowGradientProps> = ({
   children,
   style,
   opacity = 0.7,
+  fallbackColor = "#6366f1",
   direction = "vertical",
   positions = "top",
   disabled = false,
@@ -30,33 +29,20 @@ const SendFlowGradient: React.FC<SendFlowGradientProps> = ({
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const animationRef = useRef<Animated.CompositeAnimation | null>(null);
 
-  // Get token data from route parameters or mint prop
-  const { coin } = useLocalSearchParams();
-
-  const targetMint = mint || (coin as string);
-
-  // Use the database gradient colors directly
-  const { data: gradientColors, isLoading } = useTokenGradient(
-    targetMint || "",
-    {
-      enabled: !disabled && !!targetMint,
-    }
-  );
-
   // Reset animation whenever component mounts or targetMint changes
   useEffect(() => {
-    if (!disabled && targetMint) {
+    if (!disabled && mint) {
       // Stop any ongoing animation
       if (animationRef.current) {
         animationRef.current.stop();
       }
       fadeAnim.setValue(0);
     }
-  }, [targetMint, disabled, fadeAnim]);
+  }, [mint, disabled, fadeAnim]);
 
   // Animate in when gradient colors are available
   useEffect(() => {
-    if (gradientColors && !isLoading && !disabled) {
+    if (!disabled) {
       // Stop any ongoing animation
       if (animationRef.current) {
         animationRef.current.stop();
@@ -79,7 +65,7 @@ const SendFlowGradient: React.FC<SendFlowGradientProps> = ({
         }
       };
     }
-  }, [gradientColors, isLoading, disabled, fadeAnim]);
+  }, [disabled, fadeAnim]);
 
   // Clean up animation on unmount
   useEffect(() => {
@@ -103,77 +89,39 @@ const SendFlowGradient: React.FC<SendFlowGradientProps> = ({
   }, [direction]);
 
   const gradientColors2 = React.useMemo((): string[] => {
-    if (!gradientColors) {
-      // Use fallback colors when no gradient is available
-      const fallbackPrimary = `rgba(99, 102, 241, ${opacity})`;
-      const fallbackSecondary = `rgba(99, 102, 241, ${opacity * 0.5})`;
-
-      switch (positions) {
-        case "top":
-          return [
-            fallbackPrimary,
-            fallbackSecondary,
-            "transparent",
-            "transparent",
-          ];
-        case "bottom":
-          return [
-            "transparent",
-            "transparent",
-            fallbackSecondary,
-            fallbackPrimary,
-          ];
-        case "center":
-          return [
-            "transparent",
-            fallbackPrimary,
-            fallbackSecondary,
-            "transparent",
-          ];
-        case "full":
-        default:
-          return [fallbackPrimary, fallbackSecondary];
-      }
-    }
+    const fallbackPrimary = `${fallbackColor}${Math.round(opacity * 255).toString(16).padStart(2, "0")}`;
+    const fallbackSecondary = `${fallbackColor}${Math.round(opacity * 0.5 * 255).toString(16).padStart(2, "0")}`;
 
     switch (positions) {
       case "top":
         return [
-          gradientColors.primary, // Strong at top (0%)
-          gradientColors.secondary || gradientColors.primary, // Medium at 30%
-          gradientColors.accent || "rgba(0,0,0,0.05)", // Subtle at 60%
-          "transparent", // Fully transparent at bottom (100%)
+          fallbackPrimary,
+          fallbackSecondary,
+          "transparent",
+          "transparent",
         ];
       case "bottom":
         return [
           "transparent",
           "transparent",
-          gradientColors.secondary || gradientColors.primary,
-          gradientColors.primary,
+          fallbackSecondary,
+          fallbackPrimary,
         ];
       case "center":
         return [
           "transparent",
-          gradientColors.primary,
-          gradientColors.secondary || gradientColors.primary,
+          fallbackPrimary,
+          fallbackSecondary,
           "transparent",
         ];
       case "full":
       default:
-        return [
-          gradientColors.primary,
-          gradientColors.secondary || gradientColors.primary,
-        ];
+        return [fallbackPrimary, fallbackSecondary];
     }
-  }, [gradientColors, positions, opacity]);
+  }, [fallbackColor, positions, opacity]);
 
   // If disabled, just render children without gradient
   if (disabled) {
-    return <Box style={style}>{children}</Box>;
-  }
-
-  // Show children while loading
-  if (isLoading) {
     return <Box style={style}>{children}</Box>;
   }
 

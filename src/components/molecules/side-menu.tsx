@@ -37,7 +37,7 @@ import {
   usePreferencesStore,
   type ApiServer,
 } from "@/src/stores";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { LogoutConfirmationPopup } from "./logout-confirmation-popup";
 import {
   ValuePickerSheet,
@@ -765,7 +765,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 163
+                          update 182
                         </Text>
                         <Text
                           style={{
@@ -775,11 +775,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          saved post not working fix,sharing external link to
-                          app whnen killed is not extracting the meta and is not
-                          navigating to create post on android fixed,
-                          notification not opening inbox when app is killed
-                          fixed, identicon container shape changed to square
+                          Major Codebase optimisations, full app optimisation
+                          and bug fixes
                         </Text>
                       </>
                     )}
@@ -820,7 +817,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 163
+                          update 182
                         </Text>
                         <Text
                           style={{
@@ -830,11 +827,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          saved post not working fix,sharing external link to
-                          app whnen killed is not extracting the meta and is not
-                          navigating to create post on android fixed,
-                          notification not opening inbox when app is killed
-                          fixed, identicon container shape changed to square
+                          Major Codebase optimisations, full app optimisation
+                          and bug fixes
                         </Text>
                       </>
                     )}

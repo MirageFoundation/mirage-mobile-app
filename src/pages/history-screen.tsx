@@ -1,7 +1,7 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -29,7 +29,7 @@ import {
   getShareBaseUrl,
 } from "@/src/stores";
 import { useHistoryStore, type HistoryEntry } from "@/src/stores/history-store";
-import { useHomePostCardStore } from "@/src/pages/home/home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 const HISTORY_FEED_CONTEXT = "history:posts";

@@ -1,0 +1,31 @@
+diff --git a/node_modules/expo-share-intent/build/useShareIntent.js b/node_modules/expo-share-intent/build/useShareIntent.js
+index c36bb79..77bdddc 100644
+--- a/node_modules/expo-share-intent/build/useShareIntent.js
++++ b/node_modules/expo-share-intent/build/useShareIntent.js
+@@ -49,11 +49,14 @@ export default function useShareIntent(options = SHAREINTENT_OPTIONS_DEFAULT) {
+                 console.debug("useShareIntent[refresh] not a valid refresh url");
+         }
+     };
++    const isShareIntentListenerReady = useRef(false);
+     useEffect(() => {
+         if (options.disabled)
+             return;
+         options.debug &&
+             console.debug("useShareIntent[mount]", getScheme(options), options);
++        if (!isShareIntentListenerReady.current)
++            return;
+         refreshShareIntent();
+     }, [url, options.disabled]);
+     /**
+@@ -109,8 +112,11 @@ export default function useShareIntent(options = SHAREINTENT_OPTIONS_DEFAULT) {
+             options.debug && console.debug("useShareIntent[error]", event?.value);
+             setError(event?.value);
+         });
++        isShareIntentListenerReady.current = true;
+         setIsReady(true);
++        refreshShareIntent();
+         return () => {
++            isShareIntentListenerReady.current = false;
+             changeSubscription.remove();
+             errorSubscription.remove();
+         };

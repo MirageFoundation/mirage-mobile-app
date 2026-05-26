@@ -1,11 +1,7 @@
-import { CopyTextField } from "@/components/molecules/copy-text-field";
-import { useSonner } from "@/hooks/use-sonner";
 import { BlurGradientBox, Box, Button, Icon, Text } from "@/primitives";
-import { formatBalanceDisplay } from "@/utils/format";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "@/src/utils/guarded-router";
-import { Dimensions, TouchableOpacity } from "react-native";
+import { Alert, Dimensions, TouchableOpacity } from "react-native";
 
 export type RouteCardProps = {
   id: string;
@@ -33,8 +29,17 @@ export const RouteCard = ({
   color,
   onPress,
 }: RouteCardProps) => {
-  const formattedBalance = formatBalanceDisplay(balance, 2);
-  const sonner = useSonner();
+  const absoluteBalance = Math.abs(balance);
+  const [integer = "0", decimal = "00"] = absoluteBalance
+    .toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+    .split(".");
+  const formattedBalance = {
+    integer: `${balance < 0 ? "-" : ""}${integer}`,
+    decimal,
+  };
 
   // Calculate card width based on screen width minus padding
   const screenWidth = Dimensions.get("window").width;
@@ -47,13 +52,11 @@ export const RouteCard = ({
     .replace(/\s+/g, "-")}`;
 
   const handleShare = () => {
-    // Navigate to the route share route
-    router.push(`/route/${id}/share`);
+    Alert.alert("Route link", routeLink);
   };
 
   const handleCreateInvoice = () => {
-    // Placeholder for creating invoice
-    sonner.info("Create invoice feature coming soon!");
+    Alert.alert("Coming soon", "Create invoice feature coming soon!");
   };
 
   return (
@@ -93,12 +96,11 @@ export const RouteCard = ({
           </Box>
 
           {/* Route Link Container */}
-          <CopyTextField
-            text={routeLink}
-             successMessage="Copied route link"
-            errorMessage="Failed to copy link"
-            size="sm"
-          />
+          <Box p="sm" rounded="md">
+            <Text size="sm" mode="subtle" numberOfLines={1}>
+              {routeLink}
+            </Text>
+          </Box>
         </Box>
 
         {/* Footer with action buttons */}

@@ -7,6 +7,7 @@
 import { useCallback, useRef, useState } from "react";
 import * as Sentry from "@sentry/react-native";
 import { useMutation } from "@tanstack/react-query";
+import { mutationKeys } from "@/src/api/write/mutation-keys";
 import {
   uploadImage,
   uploadVideo,
@@ -62,6 +63,7 @@ export interface VideoUploadState {
  */
 export function useUploadMedia(options: UseUploadMediaOptions = {}) {
   return useMutation({
+    mutationKey: mutationKeys.media.upload(),
     mutationFn: async (input: UploadMediaInput) => {
       const contentType =
         input.contentType ?? getContentTypeFromUri(input.uri);

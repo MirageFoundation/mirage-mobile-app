@@ -1,6 +1,6 @@
 import { Box, Button, Icon, Text } from "../primitives";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "@/src/utils/guarded-router";
+import { router } from "@/src/navigation/guarded-router";
 
 export const Header = ({ title }: { title: string }) => {
   return (

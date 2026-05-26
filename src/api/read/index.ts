@@ -9,6 +9,3 @@ export * from "./endpoints";
 
 // Utilities
 export * from "./utils";
-
-// Re-export utility functions
-export { calculateDisplayPoints } from "./endpoints/posts";

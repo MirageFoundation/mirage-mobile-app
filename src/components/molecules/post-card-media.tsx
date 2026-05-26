@@ -1,8 +1,6 @@
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
-import { BlurView } from "expo-blur";
-import axios from "axios";
 import * as Sentry from "@sentry/react-native";
 import { Audio, AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
@@ -16,20 +14,16 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { type ImageLoadEventData } from "expo-image";
 import {
   ActivityIndicator,
   AppState,
-  Dimensions,
   Linking,
   Platform,
   Pressable,
   View,
   type GestureResponderEvent,
 } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
 import YoutubePlayer from "react-native-youtube-iframe";
-import type { YoutubeIframeRef } from "react-native-youtube-iframe";
 import { extractYouTubeVideoId, getVideoThumbnailUri, type ResolvedMedia } from "./post-card-utils";
 import { MediaGallery } from "./media-gallery";
 import {
@@ -43,11 +37,27 @@ import {
   type YouTubeAutoplayEmbedRef,
 } from "./youtube-autoplay-embed";
 import { useNetworkState } from "@/src/hooks/use-network-state";
-
-
-const SCREEN_WIDTH = Dimensions.get("window").width;
-const MEDIA_MAX_HEIGHT = 450;
-const MEDIA_HORIZONTAL_PADDING = 32; // md padding * 2
+import { setLastPressedMediaTransition } from "@/src/utils/post-transition";
+import {
+  CLOUD_FLARE_PROCESSING_MAX_WAIT_MS,
+  CLOUD_FLARE_PROCESSING_POLL_INTERVAL_MS,
+  isCloudflareManifestReady,
+} from "./cloudflare-manifest";
+import {
+  MEDIA_ASPECT_RATIO_CACHE,
+  MEDIA_HORIZONTAL_PADDING,
+  MEDIA_LOADED_CACHE,
+  MEDIA_MAX_HEIGHT,
+  SCREEN_WIDTH,
+  getMediaAspectRatio,
+} from "./post-card-media-constants";
+import {
+  MediaBlurRevealOverlay,
+  MediaOfflineOverlay,
+  MediaProcessingOverlay,
+  MediaTypeBadge,
+} from "./post-card-media-overlays";
+import { StyleSheet } from "react-native-unistyles";
 
 export type PostCardMediaRef = {
   pauseVideo: () => void;
@@ -70,90 +80,14 @@ type PostCardMediaProps = {
   onGalleryMediaPress?: (index: number) => void;
   isPostDetail?: boolean;
   videoSyncScope?: string;
+  postId?: string;
 };
 
-const MEDIA_ASPECT_RATIO_CACHE = new Map<string, number>();
-const MEDIA_LOADED_CACHE = new Set<string>();
-const CLOUD_FLARE_PROCESSING_POLL_INTERVAL_MS = 2500;
-const CLOUD_FLARE_PROCESSING_MAX_WAIT_MS = 120000;
-const CLOUD_FLARE_PROCESSING_REQUEST_TIMEOUT_MS = 4000;
 let nextNativeAudioFocusId = 0;
 let activeNativeAudioFocus: {
   id: string;
   onLoseFocus: () => void;
 } | null = null;
-
-function extractFirstPlaylistUrl(manifestUrl: string, manifestText: string): string | null {
-  const lines = manifestText
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const playlistLine = lines.find(
-    (line) => !line.startsWith("#") && line.endsWith(".m3u8")
-  );
-
-  if (!playlistLine) return null;
-
-  try {
-    return new URL(playlistLine, manifestUrl).toString();
-  } catch {
-    return null;
-  }
-}
-
-async function isCloudflareManifestReady(manifestUrl: string, signal?: AbortSignal): Promise<boolean> {
-  const manifestResponse = await axios.get<string>(manifestUrl, {
-    timeout: CLOUD_FLARE_PROCESSING_REQUEST_TIMEOUT_MS,
-    responseType: "text",
-    signal,
-    headers: {
-      Accept: "application/vnd.apple.mpegurl,application/x-mpegURL,*/*",
-    },
-  });
-
-  const manifestText = typeof manifestResponse.data === "string"
-    ? manifestResponse.data
-    : String(manifestResponse.data ?? "");
-
-  if (!manifestText.includes("#EXTM3U")) return false;
-
-  const childPlaylistUrl = extractFirstPlaylistUrl(manifestUrl, manifestText);
-  if (!childPlaylistUrl) {
-    return manifestText.includes("#EXTINF") || manifestText.includes("#EXT-X-TARGETDURATION");
-  }
-
-  const childPlaylistResponse = await axios.get<string>(childPlaylistUrl, {
-    timeout: CLOUD_FLARE_PROCESSING_REQUEST_TIMEOUT_MS,
-    responseType: "text",
-    signal,
-    headers: {
-      Accept: "application/vnd.apple.mpegurl,application/x-mpegURL,*/*",
-    },
-  });
-
-  const childPlaylistText = typeof childPlaylistResponse.data === "string"
-    ? childPlaylistResponse.data
-    : String(childPlaylistResponse.data ?? "");
-
-  return childPlaylistText.includes("#EXTM3U") && (
-    childPlaylistText.includes("#EXTINF") || childPlaylistText.includes("#EXT-X-TARGETDURATION")
-  );
-}
-
-function getMediaAspectRatio(media?: ResolvedMedia): number {
-  if (!media) return 16 / 9;
-  const cached = media.uri
-    ? MEDIA_ASPECT_RATIO_CACHE.get(media.uri)
-    : undefined;
-  if (cached) return cached;
-  if (media.aspectRatio) return media.aspectRatio;
-  if (media.width && media.height) {
-    return media.width / media.height;
-  }
-  if (media.type === "video") return 4 / 3;
-  return 16 / 9;
-}
 
 export const PostCardMedia = memo(
   forwardRef<PostCardMediaRef, PostCardMediaProps>(function PostCardMedia(
@@ -174,6 +108,7 @@ export const PostCardMedia = memo(
       onGalleryMediaPress,
       isPostDetail = false,
       videoSyncScope,
+      postId,
     },
     ref,
   ) {
@@ -195,9 +130,6 @@ export const PostCardMedia = memo(
     const [videoPlaybackPrepared, setVideoPlaybackPrepared] = useState(
       media?.type !== "video",
     );
-    const [videoStartedPlayback, setVideoStartedPlayback] = useState(
-      media?.type !== "video",
-    );
     const videoMuted = media?.type === "video"
       ? (effectiveMuted || !videoReadyForDisplay || (!isPostDetail && !hasNativeAudioFocus))
       : effectiveMuted;
@@ -216,12 +148,12 @@ export const PostCardMedia = memo(
     const videoProcessingStartedAtRef = useRef<number | null>(null);
     const videoProcessingAttemptsRef = useRef(0);
     const focusRecoveryRetryCountRef = useRef(0);
+    const mediaFrameRef = useRef<View | null>(null);
 
     const aspectRatioLockedRef = useRef(false);
     const userInitiatedPlayRef = useRef(false);
     const prevShouldBlurRef = useRef(shouldBlurContent);
     const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
-    const feedTapCooldownRef = useRef(false);
 
     const youtubeVideoId = media?.type === "youtube" ? (extractYouTubeVideoId(media.uri) ?? "") : "";
     const youtubePositionKey = youtubeVideoId
@@ -310,6 +242,7 @@ export const PostCardMedia = memo(
     }, []);
 
     useEffect(() => {
+      const nativeAudioFocusId = nativeAudioFocusIdRef.current;
       const shouldOwnNativeAudioFocus =
         media?.type === "video" &&
         !isPostDetail &&
@@ -320,10 +253,10 @@ export const PostCardMedia = memo(
         isFocused;
 
       if (shouldOwnNativeAudioFocus) {
-        if (activeNativeAudioFocus?.id !== nativeAudioFocusIdRef.current) {
+        if (activeNativeAudioFocus?.id !== nativeAudioFocusId) {
           activeNativeAudioFocus?.onLoseFocus();
           activeNativeAudioFocus = {
-            id: nativeAudioFocusIdRef.current,
+            id: nativeAudioFocusId,
             onLoseFocus: () => {
               setHasNativeAudioFocus(false);
               void stopNativeVideoPlayback();
@@ -337,14 +270,14 @@ export const PostCardMedia = memo(
           setHasNativeAudioFocus(true);
         }
       } else if (!isPostDetail && hasNativeAudioFocus) {
-        if (activeNativeAudioFocus?.id === nativeAudioFocusIdRef.current) {
+        if (activeNativeAudioFocus?.id === nativeAudioFocusId) {
           activeNativeAudioFocus = null;
         }
         setHasNativeAudioFocus(false);
       }
 
       return () => {
-        if (activeNativeAudioFocus?.id === nativeAudioFocusIdRef.current) {
+        if (activeNativeAudioFocus?.id === nativeAudioFocusId) {
           activeNativeAudioFocus = null;
         }
       };
@@ -373,6 +306,7 @@ export const PostCardMedia = memo(
     }));
 
     useEffect(() => {
+      const nativeAudioFocusId = nativeAudioFocusIdRef.current;
       return () => {
         if (media?.type === "video" && videoPositionKey && currentVideoPositionRef.current > 500) {
           useVideoPositionStore.getState().setPosition(videoPositionKey, currentVideoPositionRef.current / 1000);
@@ -396,7 +330,7 @@ export const PostCardMedia = memo(
         if (videoProcessingPollTimeoutRef.current) {
           clearTimeout(videoProcessingPollTimeoutRef.current);
         }
-        if (activeNativeAudioFocus?.id === nativeAudioFocusIdRef.current) {
+        if (activeNativeAudioFocus?.id === nativeAudioFocusId) {
           activeNativeAudioFocus = null;
         }
       };
@@ -414,7 +348,6 @@ export const PostCardMedia = memo(
         focusRecoveryRetryCountRef.current = 0;
         setVideoReadyForDisplay(false);
         setVideoPlaybackPrepared(media?.type !== "video");
-        setVideoStartedPlayback(media?.type !== "video");
         setShowVideoPrepSpinner(false);
         const wasLoaded = resolvedMediaUri ? MEDIA_LOADED_CACHE.has(resolvedMediaUri) : false;
         setMediaLoaded(wasLoaded);
@@ -429,7 +362,7 @@ export const PostCardMedia = memo(
           }, 8000);
         }
       }
-    }, [resolvedMediaUri]);
+    }, [media?.type, resolvedMediaUri]);
 
     useEffect(() => {
       const needsVideoPrep =
@@ -462,7 +395,7 @@ export const PostCardMedia = memo(
           videoPrepSpinnerTimeoutRef.current = null;
         }
       };
-    }, [media?.type, isVideoPlaying, videoStartedPlayback, shouldBlurContent]);
+    }, [media?.type, isVideoPlaying, shouldBlurContent, videoReadyForDisplay]);
 
     const cachedAspectRatio = resolvedMediaUri
       ? MEDIA_ASPECT_RATIO_CACHE.get(resolvedMediaUri)
@@ -686,17 +619,59 @@ export const PostCardMedia = memo(
       [resolvedMediaUri],
     );
 
-    const shouldKeepAndroidFeedVideoMounted =
-      Platform.OS === "android" &&
+    const shouldKeepFeedVideoMounted =
       media?.type === "video" &&
-      (isFocused || feedTappedToPlay || isVideoPlaying || videoReadyForDisplay);
+      (isNearVisible || isFocused || feedTappedToPlay || isVideoPlaying);
 
     const shouldMountNativeVideo =
       !shouldDeferHeavyMedia && (
         isPostDetail ||
-        Platform.OS === "ios" ||
-        shouldKeepAndroidFeedVideoMounted
+        shouldKeepFeedVideoMounted
       );
+
+    const runWithMediaTransition = useCallback(
+      (targetMedia: ResolvedMedia | undefined, run: () => void) => {
+        if (isPostDetail || !postId || !targetMedia?.uri || !mediaFrameRef.current) {
+          run();
+          return;
+        }
+
+        let didRun = false;
+        const runOnce = () => {
+          if (didRun) return;
+          didRun = true;
+          run();
+        };
+        const fallback = setTimeout(runOnce, 80);
+
+        mediaFrameRef.current.measureInWindow((x, y, width, height) => {
+          clearTimeout(fallback);
+          if (width > 0 && height > 0) {
+            setLastPressedMediaTransition({
+              postId,
+              uri: targetMedia.uri,
+              previewUri: targetMedia.type === "video"
+                ? getVideoThumbnailUri(targetMedia.uri, targetMedia.posterUri)
+                : targetMedia.uri,
+              type: targetMedia.type,
+              x,
+              y,
+              width,
+              height,
+            });
+          }
+          runOnce();
+        });
+      },
+      [isPostDetail, postId],
+    );
+
+    const handleGalleryMediaPressWithTransition = useCallback(
+      (index: number) => {
+        runWithMediaTransition(mediaList?.[index], () => onGalleryMediaPress?.(index));
+      },
+      [runWithMediaTransition, mediaList, onGalleryMediaPress],
+    );
 
     const handleVideoToggle = useCallback(async () => {
       if (media?.type !== "video") return;
@@ -750,10 +725,12 @@ export const PostCardMedia = memo(
           return;
         }
         triggerHaptic("selection");
-        saveVideoPositionFresh();
-        onMediaPress?.();
+        runWithMediaTransition(media, () => {
+          saveVideoPositionFresh();
+          onMediaPress?.();
+        });
       },
-      [disabled, isPostDetail, shouldBlurContent, onRevealContent, allowAutoplay, isVideoPlaying, feedTappedToPlay, handleVideoToggle, onMediaPress, saveVideoPositionFresh],
+      [disabled, isPostDetail, shouldBlurContent, onRevealContent, allowAutoplay, isVideoPlaying, feedTappedToPlay, handleVideoToggle, runWithMediaTransition, media, onMediaPress, saveVideoPositionFresh],
     );
 
     const handleFeedYouTubeTap = useCallback(
@@ -770,9 +747,9 @@ export const PostCardMedia = memo(
           return;
         }
         triggerHaptic("selection");
-        onMediaPress?.();
+        runWithMediaTransition(media, () => onMediaPress?.());
       },
-      [disabled, isPostDetail, shouldBlurContent, onRevealContent, shouldAutoPlayYouTube, isVideoPlaying, feedTappedToPlay, onMediaPress],
+      [disabled, isPostDetail, shouldBlurContent, onRevealContent, shouldAutoPlayYouTube, isVideoPlaying, feedTappedToPlay, runWithMediaTransition, media, onMediaPress],
     );
 
     const resolvedMediaUriForCacheRef = useRef(media?.uri);
@@ -785,7 +762,6 @@ export const PostCardMedia = memo(
         }
         currentVideoPositionRef.current = status.positionMillis;
         if (status.isPlaying && !status.isBuffering) {
-          setVideoStartedPlayback(true);
           setShowVideoPrepSpinner(false);
           setIsVideoLoading(false);
           setMediaLoaded(true);
@@ -853,7 +829,7 @@ export const PostCardMedia = memo(
           } catch {}
         }
       },
-      [globalMuted, toggleMute, media?.type, shouldUseAndroidYouTubeEmbed, isFocused, isPostDetail, allowAutoplay, videoReadyForDisplay, hasNativeAudioFocus],
+      [globalMuted, toggleMute, media?.type, shouldUseAndroidYouTubeEmbed, isFocused, isPostDetail, allowAutoplay, videoReadyForDisplay],
     );
 
     const handleYouTubeTogglePlay = useCallback(
@@ -903,10 +879,12 @@ export const PostCardMedia = memo(
           return;
         }
         triggerHaptic("selection");
-        saveVideoPosition();
-        onMediaPress?.();
+        runWithMediaTransition(media, () => {
+          saveVideoPosition();
+          onMediaPress?.();
+        });
       },
-      [disabled, shouldBlurContent, onRevealContent, onMediaPress, saveVideoPosition],
+      [disabled, shouldBlurContent, onRevealContent, runWithMediaTransition, media, onMediaPress, saveVideoPosition],
     );
 
     const isCloudflareVideo =
@@ -957,7 +935,7 @@ export const PostCardMedia = memo(
       } else {
         wasOfflineRef.current = false;
       }
-    }, [isConnected]);
+    }, [imageError, isConnected, isVideoProcessing]);
 
     useEffect(() => {
       if (!isVideoProcessing || !isCloudflareVideo || !resolvedMediaUri) {
@@ -1067,36 +1045,19 @@ export const PostCardMedia = memo(
     if (mediaList && mediaList.length > 1) {
       return (
         <View style={styles.mediaContainer}>
-          <View style={styles.mediaWrapper}>
+          <View ref={mediaFrameRef} style={styles.mediaWrapper}>
             <MediaGallery
               media={mediaList}
-              onMediaPress={onGalleryMediaPress}
+              onMediaPress={handleGalleryMediaPressWithTransition}
               screenActive={screenActive}
               allowAutoplay={allowAutoplay}
               isVisible={isVisible}
               isFocused={isFocused}
               isPostDetail={isPostDetail}
-             shouldBlurContent={shouldBlurContent}
-             onRevealContent={onRevealContent}
+              shouldBlurContent={shouldBlurContent}
+              onRevealContent={onRevealContent}
             />
-            {!isConnected && !shouldBlurContent && !mediaLoaded && (
-              <View style={styles.processingOverlay}>
-                <Ionicons name="cloud-offline-outline" size={32} color="#fff" />
-                <Text
-                  size="sm"
-                  weight="semibold"
-                  style={{ color: "#fff", marginTop: 8 }}
-                >
-                  No internet connection
-                </Text>
-                <Text
-                  size="xs"
-                  style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}
-                >
-                  Check your network and try again
-                </Text>
-              </View>
-            )}
+            <MediaOfflineOverlay visible={!isConnected && !shouldBlurContent && !mediaLoaded} />
             <View style={styles.borderOverlay} pointerEvents="none" />
           </View>
         </View>
@@ -1113,7 +1074,7 @@ export const PostCardMedia = memo(
 
     return (
       <View style={styles.mediaContainer}>
-        <View style={[styles.mediaWrapper, mediaWrapperStyle]}>
+        <View ref={mediaFrameRef} style={[styles.mediaWrapper, mediaWrapperStyle]}>
           {media.type === "youtube" ? (
             <>
               {shouldLazyMountYouTube && (!isVisible || shouldDeferHeavyMedia) ? (
@@ -1520,43 +1481,12 @@ export const PostCardMedia = memo(
             </Pressable>
           )}
 
-          {isVideoProcessing && isRetryableVideo && isConnected && (
-            <View style={styles.processingOverlay}>
-              <ActivityIndicator size="large" color="#fff" />
-              <Text
-                size="sm"
-                weight="semibold"
-                style={{ color: "#fff", marginTop: 8 }}
-              >
-                {isRedgifsVideo ? "Loading video..." : "Video is still processing."}
-              </Text>
-              <Text
-                size="xs"
-                style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}
-              >
-                {isRedgifsVideo ? "Retrying..." : "It may take a few moments."}
-              </Text>
-            </View>
-          )}
+          <MediaProcessingOverlay
+            visible={Boolean(isVideoProcessing && isRetryableVideo && isConnected)}
+            isRedgifsVideo={Boolean(isRedgifsVideo)}
+          />
 
-          {!isConnected && !shouldBlurContent && !mediaLoaded && (
-            <View style={styles.processingOverlay}>
-              <Ionicons name="cloud-offline-outline" size={32} color="#fff" />
-              <Text
-                size="sm"
-                weight="semibold"
-                style={{ color: "#fff", marginTop: 8 }}
-              >
-                No internet connection
-              </Text>
-              <Text
-                size="xs"
-                style={{ color: "rgba(255,255,255,0.7)", marginTop: 4 }}
-              >
-                Check your network and try again
-              </Text>
-            </View>
-          )}
+          <MediaOfflineOverlay visible={!isConnected && !shouldBlurContent && !mediaLoaded} />
 
           {hasMultipleMedia && (
             <View style={styles.multiMediaBadge}>
@@ -1566,59 +1496,12 @@ export const PostCardMedia = memo(
             </View>
           )}
 
-          {/* Blur overlay with reveal button */}
-          {shouldBlurContent && (
-            <Pressable onPress={onRevealContent} style={styles.blurOverlay}>
-              {Platform.OS === "ios" ? (
-                <BlurView
-                  intensity={80}
-                  tint="dark"
-                  style={styles.blurViewFill}
-                >
-                  <View style={styles.revealTextContainer}>
-                    <Ionicons name="eye-outline" size={24} color="#fff" />
-                    <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                      Tap to reveal
-                    </Text>
-                  </View>
-                </BlurView>
-              ) : (
-                <View style={styles.androidBlurOverlay}>
-                  <Ionicons name="eye-outline" size={24} color="#fff" />
-                  <Text size="sm" weight="semibold" style={{ color: "#fff" }}>
-                    Tap to reveal
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-          )}
+          <MediaBlurRevealOverlay
+            visible={shouldBlurContent}
+            onRevealContent={onRevealContent}
+          />
 
-          {/* Video badge - placed after blur so it's always visible */}
-          {media.type === "video" && (
-            <View style={styles.videoBadge}>
-              <Text size="xs" weight="bold" style={{ color: "#fff" }}>
-                VIDEO
-              </Text>
-            </View>
-          )}
-
-          {/* GIF badge - placed after blur so it's always visible */}
-          {media.type === "gif" && (
-            <View style={styles.gifBadge}>
-              <Text size="xs" weight="bold" style={{ color: "#fff" }}>
-                GIF
-              </Text>
-            </View>
-          )}
-
-          {/* Image badge - placed after blur so it's always visible */}
-          {media.type === "image" && (
-            <View style={styles.imageBadge}>
-              <Text size="xs" weight="bold" style={{ color: "#fff" }}>
-                IMG
-              </Text>
-            </View>
-          )}
+          <MediaTypeBadge type={media.type} />
           <View style={styles.borderOverlay} pointerEvents="none" />
         </View>
       </View>

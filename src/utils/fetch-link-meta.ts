@@ -107,6 +107,29 @@ async function fetchHtml(url: string, signal: AbortSignal, useBot = false): Prom
   return res.text();
 }
 
+async function resolveRedirectUrl(url: string, signal: AbortSignal): Promise<string> {
+  try {
+    const res = await fetch(url, {
+      signal,
+      headers: { "User-Agent": BROWSER_UA, Accept: "text/html" },
+      redirect: "follow",
+    });
+    if (res.url && res.url !== url) return res.url;
+  } catch {}
+
+  try {
+    const res = await fetch(url, {
+      signal,
+      method: "HEAD",
+      headers: { "User-Agent": BROWSER_UA },
+      redirect: "follow",
+    });
+    if (res.url && res.url !== url) return res.url;
+  } catch {}
+
+  return url;
+}
+
 function isRedditUrl(url: string): boolean {
   try {
     const host = new URL(url).hostname.replace(/^www\./, "").replace(/^m\./, "").replace(/^old\./, "");
@@ -437,7 +460,7 @@ function extractInstagramImages(html: string): string[] {
     }
   };
 
-  const displayUrlPattern = /display_url["\s:\\]+["']?(https?:[^"'\s,\\]+)/gi;
+  const displayUrlPattern = /display_url["\s:\\]+["']?(https?:[^"'\s,]+)/gi;
   let match;
   while ((match = displayUrlPattern.exec(html)) !== null) {
     addUrl(match[1]);
@@ -447,7 +470,7 @@ function extractInstagramImages(html: string): string[] {
     const sidecarPattern = /edge_sidecar_to_children[\s\S]*?edges[\s\S]*?\[([\s\S]*?)\]/;
     const sidecar = html.match(sidecarPattern);
     if (sidecar) {
-      const urls = [...sidecar[1].matchAll(/display_url["\s:\\]+["']?(https?:[^"'\s,\\]+)/gi)];
+      const urls = [...sidecar[1].matchAll(/display_url["\s:\\]+["']?(https?:[^"'\s,]+)/gi)];
       for (const u of urls) addUrl(u[1]);
     }
   }
@@ -470,10 +493,53 @@ function extractInstagramImages(html: string): string[] {
   return images;
 }
 
+function extractInstagramVideos(html: string): string[] {
+  const videos: string[] = [];
+  const seen = new Set<string>();
+
+  const addUrl = (raw: string) => {
+    const cleaned = raw
+      .replace(/\\/g, "")
+      .replace(/u0026/g, "&")
+      .replace(/u00253D/g, "=")
+      .replace(/&amp;/g, "&");
+    if (!cleaned.startsWith("https://")) return;
+    const key = cleaned.split("?")[0];
+    if (seen.has(key)) return;
+    seen.add(key);
+    videos.push(cleaned);
+  };
+
+  const videoUrlPattern = /video_url[\"\s:\\]+[\"']?(https?:[^\"'\s,]+\.mp4[^\"'\s,]*)/gi;
+  let match;
+  while ((match = videoUrlPattern.exec(html)) !== null) {
+    addUrl(match[1]);
+  }
+
+  const sourceSrcPattern = /<source[^>]+src=[\"']([^\"']+\.mp4[^\"']*)[\"']/gi;
+  while ((match = sourceSrcPattern.exec(html)) !== null) {
+    addUrl(match[1]);
+  }
+
+  const videoSrcPattern = /<video[^>]+src=[\"']([^\"']+\.mp4[^\"']*)[\"']/gi;
+  while ((match = videoSrcPattern.exec(html)) !== null) {
+    addUrl(match[1]);
+  }
+
+  if (videos.length === 0) {
+    const mp4Pattern = /https?:\/\/[^\s\"'\\]+\.mp4[^\s\"'\\]*/gi;
+    const all = [...html.matchAll(mp4Pattern)];
+    for (const m of all) addUrl(m[0]);
+  }
+
+  return videos;
+}
+
 async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Partial<LinkMeta>> {
   let embedImage: string | null = null;
   let embedCaption: string | null = null;
   let allImages: string[] = [];
+  let allVideos: string[] = [];
   const shortcode = extractInstagramShortcode(url);
 
   if (shortcode) {
@@ -546,11 +612,16 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
         const embedImages = extractInstagramImages(html);
         if (embedImages.length > 0) allImages = embedImages;
 
+        const embedVideos = extractInstagramVideos(html);
+        if (embedVideos.length > 0) allVideos = embedVideos;
+
         if (videoUrl) {
+          if (allVideos.length === 0) allVideos = [videoUrl];
+          else if (!allVideos.includes(videoUrl)) allVideos = [videoUrl, ...allVideos];
           Sentry.addBreadcrumb({
             category: "link-meta",
             message: "Instagram video extracted from embed",
-            data: { shortcode, carouselCount: allImages.length },
+            data: { shortcode, carouselCount: allImages.length, videoCount: allVideos.length },
             level: "info",
           });
           return {
@@ -558,6 +629,7 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
             description: null,
             image: imageUrl,
             video: videoUrl,
+            videos: allVideos,
             images: allImages,
             siteName: "Instagram",
           };
@@ -619,10 +691,18 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
         if (pageImages.length > 0) allImages = pageImages;
       }
 
+      if (allVideos.length === 0) {
+        const pageVideos = extractInstagramVideos(html);
+        if (pageVideos.length > 0) allVideos = pageVideos;
+      }
+      if (videoUrl && !allVideos.includes(videoUrl)) {
+        allVideos = [videoUrl, ...allVideos];
+      }
+
       Sentry.addBreadcrumb({
         category: "link-meta",
         message: "Instagram meta from direct page",
-        data: { hasVideo: !!videoUrl, hasImage: !!imageUrl, carouselCount: allImages.length },
+        data: { hasVideo: !!videoUrl, hasImage: !!imageUrl, carouselCount: allImages.length, videoCount: allVideos.length },
         level: "info",
       });
 
@@ -631,6 +711,7 @@ async function fetchInstagramMeta(url: string, signal: AbortSignal): Promise<Par
         description,
         image: imageUrl ?? embedImage ?? null,
         video: videoUrl,
+        videos: allVideos,
         images: allImages,
         siteName: "Instagram",
       };
@@ -822,10 +903,22 @@ function extractJsonLd(html: string): Partial<LinkMeta> {
 }
 
 export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
-  const domain = new URL(url).hostname.replace(/^www\./, "");
+  let resolvedUrl = url;
+  let domain = new URL(url).hostname.replace(/^www\./, "");
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
+
+    if (domain === "share.google") {
+      resolvedUrl = await resolveRedirectUrl(url, controller.signal);
+      domain = new URL(resolvedUrl).hostname.replace(/^www\./, "");
+      Sentry.addBreadcrumb({
+        category: "link-meta",
+        message: "Resolved shared redirect URL",
+        data: { originalDomain: "share.google", resolvedDomain: domain, resolved: resolvedUrl !== url },
+        level: "info",
+      });
+    }
 
     let title: string | null = null;
     let description: string | null = null;
@@ -838,8 +931,8 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
     let siteName: string | null = null;
     let externalUrl: string | null = null;
 
-    if (isRedditUrl(url)) {
-      const reddit = await fetchRedditVideo(url, controller.signal);
+    if (isRedditUrl(resolvedUrl)) {
+      const reddit = await fetchRedditVideo(resolvedUrl, controller.signal);
       title = reddit.title ?? null;
       description = reddit.description ?? null;
       image = reddit.image ?? null;
@@ -852,18 +945,19 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       externalUrl = reddit.externalUrl ?? null;
     }
 
-    if (isInstagramUrl(url) && !video) {
-      const ig = await fetchInstagramMeta(url, controller.signal);
+    if (isInstagramUrl(resolvedUrl) && !video) {
+      const ig = await fetchInstagramMeta(resolvedUrl, controller.signal);
       if (ig.title) title = title ?? ig.title;
       if (ig.description) description = description ?? ig.description;
       if (ig.image) image = image ?? ig.image;
       if (ig.video) video = ig.video;
       if (ig.images?.length) images = ig.images;
+      if (ig.videos?.length) videos = ig.videos;
       siteName = siteName ?? ig.siteName ?? null;
     }
 
-    if (isTikTokUrl(url) && !video) {
-      const tt = await fetchTikTokMeta(url, controller.signal);
+    if (isTikTokUrl(resolvedUrl) && !video) {
+      const tt = await fetchTikTokMeta(resolvedUrl, controller.signal);
       if (tt.title) title = title ?? tt.title;
       if (tt.description) description = description ?? tt.description;
       if (tt.image) image = image ?? tt.image;
@@ -871,13 +965,13 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       siteName = siteName ?? tt.siteName ?? null;
     }
 
-    const fxUrl = getFxTwitterUrl(url);
+    const fxUrl = getFxTwitterUrl(resolvedUrl);
     let html: string | null = null;
     let shouldSkipGenericHtmlFallback = false;
 
     if (fxUrl) {
       try {
-        const tweetId = getTweetId(url);
+        const tweetId = getTweetId(resolvedUrl);
         if (tweetId) {
           try {
             const syndicationRes = await fetch(`https://cdn.syndication.twimg.com/tweet-result?id=${tweetId}&lang=en`, {
@@ -959,13 +1053,13 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
         }
       } catch {
         if (!title && !description && !image && !video) {
-          html = await fetchHtml(url, controller.signal);
+          html = await fetchHtml(resolvedUrl, controller.signal);
         }
       }
     }
 
     if (!shouldSkipGenericHtmlFallback && (!title || !description || !image || !video)) {
-      if (!html) html = await fetchHtml(url, controller.signal);
+      if (!html) html = await fetchHtml(resolvedUrl, controller.signal);
 
       if (!title) title = getMeta(html, "title");
       if (!description) description = getMeta(html, "description");
@@ -986,16 +1080,16 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
       }
 
       if (!image) {
-        image = extractImagesFromHtml(html, url);
+        image = extractImagesFromHtml(html, resolvedUrl);
       }
 
       if (!video) {
-        video = extractVideosFromHtml(html, url);
+        video = extractVideosFromHtml(html, resolvedUrl);
       }
     }
 
     if (!image || !video) {
-      const oembed = await fetchOembed(url, controller.signal);
+      const oembed = await fetchOembed(resolvedUrl, controller.signal);
       if (!title && oembed.title) title = oembed.title;
       if (!description && oembed.description) description = oembed.description;
       if (!image && oembed.image) image = oembed.image;

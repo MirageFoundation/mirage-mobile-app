@@ -13,6 +13,7 @@ import { Ionicons, Octicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { openUrlOrInternal } from "@/src/utils/internal-link-handler";
+import type { Comment } from "@/src/domain/content";
 import {
   ActivityIndicator,
   Dimensions,
@@ -65,8 +66,14 @@ const NEW_USER_COLOR = "rgb(94,194,106)";
  *
  * Avatar center y = paddingTop + AVATAR / 2.
  * ------------------------------------------------------------------ */
-const COMMENT_BASE_LEFT = 16;
-const COMMENT_INDENT = 22;
+const COMMENT_BASE_LEFT = 12;
+/* Tapered indent — keep early threads readable, shrink deeper levels
+   so long branches don't squeeze the comment body into a tiny column
+   on the right. Rails/elbow geometry stay consistent because both
+   ancestor rails and the J-curve read from `commentAvatarLeftPx`. */
+const COMMENT_INDENT_NEAR = 20; // depths 1-2
+const COMMENT_INDENT_MID = 14;  // depths 3-5
+const COMMENT_INDENT_FAR = 10;  // depths 6+
 const COMMENT_AVATAR_SIZE = 22;
 const COMMENT_CONTENT_GAP = 6;
 const COMMENT_RAIL_WIDTH = 1;
@@ -77,9 +84,19 @@ const COMMENT_AVATAR_CENTER_Y_EXPANDED =
 const COMMENT_AVATAR_CENTER_Y_COLLAPSED =
   COMMENT_PADDING_TOP_COLLAPSED + COMMENT_AVATAR_SIZE / 2; // 19
 
+function commentIndentForDepth(depth: number): number {
+  if (depth <= 2) return COMMENT_INDENT_NEAR;
+  if (depth <= 5) return COMMENT_INDENT_MID;
+  return COMMENT_INDENT_FAR;
+}
+
 function commentAvatarLeftPx(depth: number): number {
   const d = Math.max(depth, 0);
-  return COMMENT_BASE_LEFT + d * COMMENT_INDENT;
+  let left = COMMENT_BASE_LEFT;
+  for (let i = 1; i <= d; i++) {
+    left += commentIndentForDepth(i);
+  }
+  return left;
 }
 
 function commentContentLeftPx(depth: number): number {
@@ -92,33 +109,7 @@ function commentRailXPx(depth: number): number {
   return commentAvatarLeftPx(d - 1) + COMMENT_AVATAR_SIZE / 2;
 }
 
-export type CommentAuthor = {
-  id: string;
-  username: string;
-  avatarSeed?: string;
-  avatarUrl?: string;
-  level?: number;
-  isNewUser?: boolean;
-};
-
-export type Comment = {
-  id: string;
-  author: CommentAuthor;
-  content: string;
-  likes: number;
-  dislikes: number;
-  hasLiked?: boolean;
-  hasDisliked?: boolean;
-  createdAt: Date | string | number;
-  replies?: Comment[];
-  replyCount?: number;
-  parentId?: string | null;
-  depth?: number;
-  isFocusedContext?: boolean;
-  isFocusedComment?: boolean;
-  awards?: import("@/src/api/types").AwardBadge[];
-  hasMoreReplies?: boolean;
-};
+export type { Comment, CommentAuthor } from "@/src/domain/content";
 
 type CommentItemProps = {
   /** Comment data */

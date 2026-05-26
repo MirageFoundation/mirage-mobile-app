@@ -26,7 +26,7 @@ import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils
 import { useAppState } from "@/src/hooks";
 import { HomePostCardItem } from "./home-post-card-item";
 import { useFeedScrollStore, useTimeTickStore } from "@/src/stores";
-import { useHomePostCardStore } from "./home-post-card-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
   recordViewableItems,
   pauseAllDwellTimers,
@@ -108,6 +108,8 @@ const HomePostListInner = function HomePostListInner(
   const scrollOffsetRef = useRef(0);
   const seenSyncFrameRef = useRef<number | null>(null);
   const deferHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const retryRafRef = useRef<number | null>(null);
   const dataRef = useRef(data);
   dataRef.current = data;
 
@@ -366,6 +368,76 @@ const HomePostListInner = function HomePostListInner(
     resetSeenPostTracking(feedContext);
     setVideoViewability(feedContext, new Set(), null);
   }, [data, feedContext, setVideoViewability]);
+
+  const recomputeViewableFromLayout = useCallback(() => {
+    const list = listRef.current;
+    if (!list) return false;
+    const windowSize = list.getWindowSize();
+    const viewportHeight = windowSize.height;
+    if (!viewportHeight) return false;
+    const scrollOffset = list.getAbsoluteLastScrollOffset();
+    scrollOffsetRef.current = scrollOffset;
+    const currentData = dataRef.current;
+    const nextTokens = new Map<string, ViewToken>();
+    for (let index = 0; index < currentData.length; index++) {
+      const item = currentData[index];
+      if (!item?.id) continue;
+      const layout = list.getLayout(index);
+      if (!layout || layout.height <= 0) continue;
+      const itemTop = layout.y - scrollOffset;
+      const itemBottom = itemTop + layout.height;
+      const overlapTop = Math.max(0, itemTop);
+      const overlapBottom = Math.min(viewportHeight, itemBottom);
+      const overlap = Math.max(0, overlapBottom - overlapTop);
+      const ratio = overlap / layout.height;
+      if (ratio >= 0.2) {
+        nextTokens.set(item.id, {
+          item,
+          index,
+          isViewable: true,
+          key: item.id,
+        } as unknown as ViewToken);
+      }
+    }
+    currentViewableTokensRef.current = nextTokens;
+    pendingViewableRef.current = Array.from(nextTokens.values());
+    return true;
+  }, []);
+
+  useEffect(() => {
+    if (data.length === 0) return;
+    const validIds = new Set(data.map((post) => post.id));
+    let removedStale = false;
+    currentViewableTokensRef.current.forEach((_token, id) => {
+      if (!validIds.has(id)) removedStale = true;
+    });
+    const activeId = useHomePostCardStore.getState().activeVideoPostIds[feedScreenRef.current];
+    const activeMissing = !!activeId && !validIds.has(activeId);
+    if (!removedStale && !activeMissing) return;
+
+    cancelDeferredFlush();
+    const tryRecompute = () => {
+      if (recomputeViewableFromLayout()) {
+        flushViewability();
+        return true;
+      }
+      return false;
+    };
+    const raf1 = requestAnimationFrame(() => {
+      if (tryRecompute()) return;
+      const raf2 = requestAnimationFrame(() => {
+        tryRecompute();
+      });
+      retryRafRef.current = raf2;
+    });
+    rafRef.current = raf1;
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      if (retryRafRef.current != null) cancelAnimationFrame(retryRafRef.current);
+      rafRef.current = null;
+      retryRafRef.current = null;
+    };
+  }, [data, cancelDeferredFlush, flushViewability, recomputeViewableFromLayout]);
 
   const prevFeedContextRef = useRef(feedContext);
 

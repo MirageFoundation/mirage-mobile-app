@@ -5,6 +5,7 @@
 import { useMutation } from "@tanstack/react-query";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { report, type ReportInput } from "../endpoints/moderation";
+import { mutationKeys } from "../mutation-keys";
 import type { PoWProgress } from "../signing";
 
 // ============================================
@@ -29,6 +30,7 @@ export function useReport(options: UseReportOptions = {}) {
   const { getWallet } = useWallet();
 
   return useMutation({
+    mutationKey: mutationKeys.report.create(),
     mutationFn: async (input: ReportInput) => {
       const wallet = await getWallet();
       return report(wallet, input, options.onPoWProgress);

@@ -1,6 +1,6 @@
 import { EvilIcons } from "@expo/vector-icons";
 import * as Sentry from "@sentry/react-native";
-import { useRouter } from "@/src/hooks/use-router";
+import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, View } from "react-native";
 import Animated, {

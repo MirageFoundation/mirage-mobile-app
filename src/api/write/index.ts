@@ -13,6 +13,8 @@
  * ```
  */
 
+export { mutationKeys } from "./mutation-keys";
+
 // ============================================
 // Hooks (recommended for React components)
 // ============================================
@@ -68,6 +70,7 @@ export type {
   VoteMutationInput,
   UseVoteOptions,
   CreatePostMutationInput,
+  EditPostMutationInput,
   UsePostOptions,
   UseFollowOptions,
   UseBlockOptions,
