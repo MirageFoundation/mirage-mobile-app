@@ -132,6 +132,8 @@ export default function MediaPostDetailScreen({
   const focusedInitialScrollTargetRef = useRef<string | null>(null);
   const pendingScrollToEndRef = useRef(false);
   const pendingReplyScrollIdRef = useRef<string | null>(null);
+  const pendingPostedCommentScrollRef = useRef<string | null>(null);
+  const displayCommentsRef = useRef<Comment[]>([]);
   const displayCommentsLengthRef = useRef(0);
   const actionSheetsRef = useRef<MediaPostDetailActionSheetsRef>(null);
   const commentInputRef = useRef<CommentInputRef>(null);
@@ -297,6 +299,35 @@ export default function MediaPostDetailScreen({
   }, []);
 
   useEffect(() => {
+    displayCommentsRef.current = displayComments;
+  }, [displayComments]);
+
+  useEffect(() => {
+    const pendingTarget = pendingPostedCommentScrollRef.current;
+    if (!pendingTarget || displayComments.length === 0) return;
+    const index = displayComments.findIndex((comment) =>
+      findCommentInTree(comment, pendingTarget.id),
+    );
+    if (index < 0) {
+      if (Date.now() - pendingTarget.createdAt > 4000) {
+        pendingPostedCommentScrollRef.current = null;
+      }
+      return;
+    }
+
+    sheetRef.current?.snapToIndex?.(2);
+    coarseScrollTargetRef.current = `${pendingTarget.id}:pending`;
+    requestAnimationFrame(() => {
+      scrollCommentsToIndex(index, true);
+    });
+    const settleTimer = setTimeout(() => {
+      scrollCommentsToIndex(index, false);
+      pendingPostedCommentScrollRef.current = null;
+    }, 650);
+    return () => clearTimeout(settleTimer);
+  }, [displayComments, findCommentInTree, scrollCommentsToIndex, sheetRef]);
+
+  useEffect(() => {
     return () => {
       if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     };
@@ -345,31 +376,42 @@ export default function MediaPostDetailScreen({
     if (!highlightedCommentId || displayComments.length === 0) return;
     if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
     const isPendingOptimisticReply = pendingReplyScrollIdRef.current === highlightedCommentId;
-    if (highlightedCommentId.startsWith("optimistic-") && !isPendingOptimisticReply) return;
     const index = displayComments.findIndex((comment) =>
       findCommentInTree(comment, highlightedCommentId),
     );
     if (index < 0) return;
     const coarseTargetKey = `${highlightedCommentId}:${index}`;
     if (coarseScrollTargetRef.current?.startsWith(`${highlightedCommentId}:`)) return;
-    const timer = setTimeout(() => {
+    const scrollTarget = (animated = true) => {
       if (coarseScrollTargetRef.current?.startsWith(`${highlightedCommentId}:`)) return;
       if (index >= displayCommentsLengthRef.current) return;
       coarseScrollTargetRef.current = coarseTargetKey;
       if (isPendingOptimisticReply) pendingReplyScrollIdRef.current = null;
-      scrollCommentsToIndex(index);
-    }, 250);
-    return () => clearTimeout(timer);
+      scrollCommentsToIndex(index, animated);
+    };
+    const firstTimer = setTimeout(() => scrollTarget(true), 250);
+    const secondTimer = setTimeout(() => scrollTarget(false), 650);
+    return () => {
+      clearTimeout(firstTimer);
+      clearTimeout(secondTimer);
+    };
   }, [highlightedCommentId, displayComments, findCommentInTree, scrollCommentsToIndex]);
 
   const handleHighlightedCommentLayout = useCallback(
     (event: LayoutChangeEvent) => {
       if (!highlightedCommentId) return;
       if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
-      if (preciseScrollTargetRef.current?.startsWith(`${highlightedCommentId}:`)) return;
+      const isPendingPostedComment =
+        pendingPostedCommentScrollRef.current === highlightedCommentId;
+      if (
+        !isPendingPostedComment &&
+        preciseScrollTargetRef.current?.startsWith(`${highlightedCommentId}:`)
+      ) {
+        return;
+      }
       const target = (event.nativeEvent as { target?: number }).target;
       if (!target) return;
-      const scheduledTargetKey = `${highlightedCommentId}:scheduled`;
+      const scheduledTargetKey = `${highlightedCommentId}:${Date.now()}:scheduled`;
       preciseScrollTargetRef.current = scheduledTargetKey;
 
       setTimeout(() => {
@@ -380,11 +422,15 @@ export default function MediaPostDetailScreen({
             return;
           }
 
-          const desiredY = listTopY + 80;
+          sheetRef.current?.snapToIndex?.(2, { duration: 1 });
+          const desiredY = listTopY + 96;
           const delta = y - desiredY;
           if (Math.abs(delta) < 24) {
             preciseScrollTargetRef.current = `${highlightedCommentId}:done`;
             coarseScrollTargetRef.current = `${highlightedCommentId}:precise`;
+            if (isPendingPostedComment) {
+              pendingPostedCommentScrollRef.current = null;
+            }
             return;
           }
 
@@ -392,12 +438,15 @@ export default function MediaPostDetailScreen({
           coarseScrollTargetRef.current = `${highlightedCommentId}:precise`;
           commentsListRef.current?.scrollToOffset?.({
             offset: Math.max(0, commentsScrollYRef.current + delta),
-            animated: true,
+            animated: !isPendingPostedComment,
           });
+          if (isPendingPostedComment) {
+            pendingPostedCommentScrollRef.current = null;
+          }
         });
-      }, 500);
+      }, isPendingPostedComment ? 80 : 500);
     },
-    [highlightedCommentId, listTopY],
+    [highlightedCommentId, listTopY, sheetRef],
   );
 
   const handleAuthorPress = useCallback(() => {
@@ -443,27 +492,23 @@ export default function MediaPostDetailScreen({
     collapseMedia();
   }, [post, collapseMedia]);
 
-  const revealCommentsAfterPost = useCallback(() => {
-    // Only open the comments sheet if it's collapsed onto the post summary
-    // (index 0). If the user already had comments visible (index 1 or 2),
-    // leave the sheet exactly where it is — snapping would cause the
-    // half->full/full->half flash the user complained about.
+  const revealCommentsAfterPost = useCallback((commentId: string, isReply: boolean) => {
     const currentIndex = animatedIndex.value;
-    if (currentIndex < 0.5) {
-      collapseMedia();
-    }
-    // Mark that we want to scroll to the new comment as soon as it lays out.
-    // The effect in `use-media-post-detail-data` watches this ref and the
-    // FlatList contents, and runs `scrollToEnd` once the optimistic comment
-    // appears in `displayComments`.
-    pendingScrollToEndRef.current = true;
+    sheetRef.current?.snapToIndex?.(2, { duration: 1 });
+    requestAnimationFrame(() => {
+      sheetRef.current?.snapToIndex?.(2, { duration: 1 });
+    });
+    pendingPostedCommentScrollRef.current = commentId;
+    coarseScrollTargetRef.current = null;
+    preciseScrollTargetRef.current = null;
+    suppressedHighlightScrollRef.current = null;
     Sentry.addBreadcrumb({
       category: "media-post-detail",
       message: "Reveal comments after post submit",
       level: "info",
-      data: { postId: post?.id, sheetIndex: currentIndex },
+      data: { postId: post?.id, sheetIndex: currentIndex, commentId, isReply },
     });
-  }, [animatedIndex, collapseMedia, pendingScrollToEndRef, post?.id]);
+  }, [animatedIndex, post?.id, sheetRef]);
 
   const handleEditedComment = useCallback((commentId: string) => {
     suppressedHighlightScrollRef.current = null;

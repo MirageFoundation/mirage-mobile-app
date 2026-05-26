@@ -17,7 +17,7 @@ type FocusedMode = "single" | "context" | "full";
 
 type UseMediaPostDetailPendingCommentOptions = {
   collapseMedia: () => void;
-  revealCommentsAfterPost?: () => void;
+  revealCommentsAfterPost?: (commentId: string, isReply: boolean) => void;
   focusedCommentId: string | null;
   focusedMode: FocusedMode;
   highlightTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
@@ -118,7 +118,9 @@ export function useMediaPostDetailPendingComment({
         setHighlightedCommentId(optimisticCommentId);
         if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
         highlightTimerRef.current = setTimeout(() => setHighlightedCommentId(null), 3000);
-        if (revealCommentsAfterPost) revealCommentsAfterPost();
+        if (revealCommentsAfterPost) {
+          revealCommentsAfterPost(optimisticCommentId, !!captured.replyToId);
+        }
         else collapseMedia();
         Sentry.addBreadcrumb({
           category: "comment",
