@@ -169,14 +169,14 @@ export const HomeTabbedFeed = forwardRef<
     feed: baseFeed,
     by: "magic",
     allowed_tags: allowedTags || undefined,
-  }, { pageLimit: NEXT_PAGE_SIZE });
+  }, { pageLimit: NEXT_PAGE_SIZE, suppressInitialFetchIfCached: true });
 
   const latestQuery = useInfinitePosts({
     limit: INITIAL_PAGE_SIZE,
     feed: baseFeed,
     by: "newest",
     allowed_tags: allowedTags || undefined,
-  }, { enabled: latestTabActivated, pageLimit: NEXT_PAGE_SIZE });
+  }, { enabled: latestTabActivated, pageLimit: NEXT_PAGE_SIZE, suppressInitialFetchIfCached: true });
 
   const postEditOverrides = usePostEditStore((s) => s.overrides);
   const transformedPageCacheRef = useRef(new WeakMap<object, Post[]>());
@@ -762,7 +762,7 @@ export const HomeTabbedFeed = forwardRef<
   useEffect(() => {
     if (Date.now() - APP_STARTED_AT > COLD_START_FEED_REFRESH_WINDOW_MS) return;
     if (coldStartPromptedFeedKeys.has(coldStartRefreshKey)) return;
-    if (posts.length === 0 || query.isPending || query.isFetching || query.isFetchedAfterMount) return;
+    if (posts.length === 0 || query.isPending || query.dataUpdatedAt >= APP_STARTED_AT) return;
 
     coldStartPromptedFeedKeys.add(coldStartRefreshKey);
     onRefreshPromptChange?.(true);
@@ -783,8 +783,7 @@ export const HomeTabbedFeed = forwardRef<
     coldStartRefreshKey,
     onRefreshPromptChange,
     posts.length,
-    query.isFetchedAfterMount,
-    query.isFetching,
+    query.dataUpdatedAt,
     query.isPending,
   ]);
 
