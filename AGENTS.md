@@ -8,8 +8,7 @@ This file defines the working rules for coding agents in this repository.
 - Router: Expo Router
 - Server state: TanStack Query
 - Client state: Zustand
-- Current refactor status: Phases 1–8 in `docs/structural-refactor-plan.md` are complete. Use the guardrails before future structural changes.
-- Dependency policy: structural refactors must be dependency-neutral unless explicitly requested. Do not upgrade Expo/RN/video/native dependencies as part of cleanup work.
+- Dependency policy: structural changes must be dependency-neutral unless explicitly requested. Do not upgrade Expo/RN/video/native dependencies as part of cleanup work.
 
 ## Non-Negotiable Working Rules
 
@@ -84,8 +83,6 @@ When touching a large screen, prefer extracting:
 - section renderers
 
 ### 7) Avoid effect-heavy orchestration
-Do not start with effect cleanup while route implementations still live in `app/`. Extract ownership first, then reduce effects inside the smaller modules.
-
 When editing code, prefer:
 - derived state
 - event handlers
@@ -162,9 +159,6 @@ Run focused verification for the area you touched.
 - `check:query-keys` → guards against raw query-key literal regressions
 
 If you touch a narrow feature, prefer targeted eslint runs for those files instead of always linting the whole repo.
-
-## Current Remaining Structural Work
-The main structural refactor is complete. Future work should keep the boundaries intact, address guardrail failures immediately, and treat large implementation-file warnings as normal backlog rather than mixing them with unrelated feature work.
 
 ## Quick Do / Don’t
 
