@@ -17,6 +17,7 @@ type FocusedMode = "single" | "context" | "full";
 
 type UseMediaPostDetailPendingCommentOptions = {
   collapseMedia: () => void;
+  revealCommentsAfterPost?: (commentId: string, isReply: boolean) => void;
   focusedCommentId: string | null;
   focusedMode: FocusedMode;
   highlightTimerRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
@@ -31,6 +32,7 @@ type UseMediaPostDetailPendingCommentOptions = {
 
 export function useMediaPostDetailPendingComment({
   collapseMedia,
+  revealCommentsAfterPost,
   focusedCommentId,
   focusedMode,
   highlightTimerRef,
@@ -116,7 +118,21 @@ export function useMediaPostDetailPendingComment({
         setHighlightedCommentId(optimisticCommentId);
         if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
         highlightTimerRef.current = setTimeout(() => setHighlightedCommentId(null), 3000);
-        collapseMedia();
+        if (revealCommentsAfterPost) {
+          revealCommentsAfterPost(optimisticCommentId, !!captured.replyToId);
+        }
+        else collapseMedia();
+        Sentry.addBreadcrumb({
+          category: "comment",
+          message: "Optimistic comment added to media post",
+          level: "info",
+          data: {
+            postId: id,
+            parentId,
+            isReply: !!captured.replyToId,
+            optimisticCommentId,
+          },
+        });
       },
       onSuccess: (result) => {
         const confirmedCommentId =
@@ -128,9 +144,34 @@ export function useMediaPostDetailPendingComment({
             : null;
         if (confirmedCommentId) {
           replaceOptimisticCommentId(id, optimisticCommentId, confirmedCommentId);
-          suppressedHighlightScrollRef.current = confirmedCommentId;
+          suppressedHighlightScrollRef.current = null;
+          pendingReplyScrollIdRef.current = confirmedCommentId;
           setHighlightedCommentId((prev) =>
             prev === optimisticCommentId ? confirmedCommentId : prev,
+          );
+          Sentry.addBreadcrumb({
+            category: "comment",
+            message: "Optimistic comment confirmed",
+            level: "info",
+            data: {
+              postId: id,
+              optimisticCommentId,
+              confirmedCommentId,
+            },
+          });
+        } else {
+          Sentry.captureMessage(
+            "Comment mutation succeeded without tx_hash on media post",
+            {
+              level: "warning",
+              tags: { feature: "comment", operation: "submit_comment_media_detail" },
+              extra: {
+                postId: id,
+                parentId,
+                optimisticCommentId,
+                resultType: typeof result,
+              },
+            },
           );
         }
         if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
@@ -166,6 +207,7 @@ export function useMediaPostDetailPendingComment({
     replaceOptimisticCommentId,
     removeOptimisticComment,
     collapseMedia,
+    revealCommentsAfterPost,
     enqueue,
     setFocusedMode,
     setHighlightedCommentId,

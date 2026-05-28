@@ -47,6 +47,7 @@ import {
 import { useApiServer } from "@/src/providers/api-server-provider";
 import { useToast } from "@/src/providers/toast-provider";
 import { useServerList } from "@/src/hooks/use-server-list";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
   useUserFollowed,
   useBatchUsernamesFromAddresses,
@@ -478,10 +479,27 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
           await switchServer(server);
           setShareServer(server);
           toast.success(`Switched to ${server}`);
-          close();
           router.replace("/(tabs)");
+          setTimeout(() => {
+            close();
+            useHomePostCardStore.getState().setSideMenuOpen(false);
+            Sentry.addBreadcrumb({
+              category: "feed-video",
+              message: "Released feed playback after side-menu server switch",
+              level: "info",
+              data: { server },
+            });
+          }, 350);
         } catch {
           toast.error("Failed to switch server");
+          useHomePostCardStore.getState().setSideMenuOpen(false);
+          Sentry.addBreadcrumb({
+            category: "feed-video",
+            message:
+              "Released feed playback after failed side-menu server switch",
+            level: "warning",
+            data: { server },
+          });
         }
       },
       [switchServer, apiServer, toast, router, setShareServer, close],
@@ -765,7 +783,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 182
+                          update 191
                         </Text>
                         <Text
                           style={{
@@ -817,7 +835,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 182
+                          update 191
                         </Text>
                         <Text
                           style={{

@@ -775,6 +775,7 @@ export function HomeScreen() {
 
       <HomeTabbedFeed
         ref={tabbedFeedRef}
+        key={shareServer}
         feedType="home"
         activeTabIndex={feedTabIndex}
         ListHeaderExtra={moderationReminderHeader}

@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Audio, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
+import * as Sentry from "@sentry/react-native";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -101,6 +102,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
     }, 8000);
     return () => {
       video?.pauseAsync().catch(() => {});
+      video?.unloadAsync().catch(() => {});
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
       }
@@ -185,6 +187,70 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
     }
   }, [effectiveMuted]);
 
+  const shouldPlayVideo = isPlaying && isActive && screenActive && isVisible;
+
+  useEffect(() => {
+    if (!shouldPlayVideo) {
+      videoRef.current?.setStatusAsync({
+        shouldPlay: false,
+        isMuted: true,
+      }).catch((error) => {
+        Sentry.captureException(error, {
+          tags: {
+            feature: "feed-video",
+            component: "media-gallery",
+            action: "pause-inactive-gallery-video",
+          },
+          extra: { uri: itemUri },
+        });
+      });
+      videoRef.current?.pauseAsync().catch((error) => {
+        Sentry.captureException(error, {
+          tags: {
+            feature: "feed-video",
+            component: "media-gallery",
+            action: "pause-inactive-gallery-video",
+          },
+          extra: { uri: itemUri },
+        });
+      });
+      return;
+    }
+
+    let cancelled = false;
+    const play = async () => {
+      const video = videoRef.current;
+      if (!video) return;
+
+      try {
+        const status = await video.getStatusAsync();
+        if (cancelled || !status.isLoaded || status.isPlaying) return;
+        await video.setStatusAsync({ shouldPlay: true, isMuted: effectiveMuted });
+        await video.playAsync();
+      } catch (error) {
+        Sentry.captureException(error, {
+          tags: {
+            feature: "feed-video",
+            component: "media-gallery",
+            action: "play-active-gallery-video",
+          },
+          extra: { uri: itemUri },
+        });
+        if (!cancelled) {
+          setTimeout(() => {
+            if (!cancelled) videoRef.current?.playAsync().catch(() => {});
+          }, 250);
+        }
+      }
+    };
+
+    void play();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldPlayVideo, effectiveMuted, itemUri]);
+
   const thumbnailUri = getVideoThumbnailUri(item.uri, item.posterUri);
   const showThumbnail = thumbnailUri && !GALLERY_LOADED_CACHE.has(item.uri);
 
@@ -215,7 +281,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
         source={{ uri: item.uri }}
         style={[galleryStyles.itemMedia, { width, height }]}
         resizeMode={ResizeMode.COVER}
-        shouldPlay={isPlaying && isActive && screenActive}
+        shouldPlay={shouldPlayVideo}
         isMuted={effectiveMuted}
         isLooping
         useNativeControls={false}
@@ -464,7 +530,7 @@ export const MediaGallery = memo(function MediaGallery({
               item={item}
               width={GALLERY_WIDTH}
               height={itemHeight}
-              isActive={index === activeIndexRef.current}
+              isActive={index === activeIndex}
               screenActive={screenActive}
               onPress={() => onMediaPress?.(index)}
               onAspectRatioDetected={handleAspectRatioDetected}
@@ -485,7 +551,7 @@ export const MediaGallery = memo(function MediaGallery({
         </View>
       );
     },
-    [onMediaPress, maxHeight, getHeightForIndex, screenActive, handleAspectRatioDetected, allowAutoplay, isVisible, isFocused, isPostDetail, shouldBlurContent],
+    [onMediaPress, maxHeight, getHeightForIndex, activeIndex, screenActive, handleAspectRatioDetected, allowAutoplay, isVisible, isFocused, isPostDetail, shouldBlurContent],
   );
 
   const keyExtractor = useCallback(

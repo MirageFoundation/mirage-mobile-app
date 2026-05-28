@@ -146,6 +146,7 @@ export const HomeTabbedFeed = forwardRef<
   );
   const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const hideDownvotedPosts = usePreferencesStore((s) => s.hideDownvotedPosts);
+  const apiServer = usePreferencesStore((s) => s.apiServer);
   const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
   const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
   const blockedTopicNames = useContentModerationStore((s) => s.blockedTopicNames);
@@ -316,6 +317,19 @@ export const HomeTabbedFeed = forwardRef<
         page: undefined,
       });
 
+      Sentry.addBreadcrumb({
+        category: "home-feed",
+        message: "Feed refresh requested",
+        level: "info",
+        data: {
+          feed: baseFeed,
+          sort: sortBy,
+          fetchAllNew: Boolean(options?.fetchAllNew),
+          silent: Boolean(options?.silent),
+          hasAddress: Boolean(currentUser?.walletAddress),
+        },
+      });
+
       const fetchPage = (page: number) =>
         getPosts({
           limit: page === 1 ? INITIAL_PAGE_SIZE : NEXT_PAGE_SIZE,
@@ -327,6 +341,7 @@ export const HomeTabbedFeed = forwardRef<
         });
 
       const newFirstPage = await fetchPage(1);
+      let refreshedPageCount = 1;
 
       if (options?.fetchAllNew) {
         const existingData: any = queryClient.getQueryData(postsQueryKey);
@@ -364,6 +379,7 @@ export const HomeTabbedFeed = forwardRef<
           pages: newPages,
           pageParams: newPageParams,
         });
+        refreshedPageCount = newPages.length;
         }
       } else {
         queryClient.setQueryData(postsQueryKey, (oldData: any) => {
@@ -386,8 +402,27 @@ export const HomeTabbedFeed = forwardRef<
           queryKey: queryKeys.rewardSummary(currentUser.walletAddress),
         });
       }
+
+      Sentry.addBreadcrumb({
+        category: "home-feed",
+        message: "Feed refresh completed",
+        level: "info",
+        data: {
+          feed: baseFeed,
+          sort: sortBy,
+          firstPagePostCount: newFirstPage.posts.length,
+          refreshedPageCount,
+          hasMore: newFirstPage.has_more,
+        },
+      });
     } catch (error) {
       Sentry.addBreadcrumb({ category: "home-feed", message: "Feed refresh failed", data: { error: String(error) }, level: "error" });
+      Sentry.captureException(error, {
+        tags: {
+          feature: "home-feed",
+          operation: "feed-refresh",
+        },
+      });
     } finally {
       isRefreshingRef.current = false;
       useTimeTickStore.getState().bump();
@@ -763,6 +798,8 @@ export const HomeTabbedFeed = forwardRef<
         feed: baseFeed,
         sort: activeTabIndex === 0 ? "magic" : "latest",
         postCount: posts.length,
+        dataUpdatedAt: query.dataUpdatedAt,
+        hasAddress: Boolean(currentUser?.walletAddress),
       },
     });
 
@@ -775,22 +812,29 @@ export const HomeTabbedFeed = forwardRef<
     activeTabIndex,
     baseFeed,
     coldStartRefreshKey,
+    currentUser?.walletAddress,
     posts.length,
+    query.dataUpdatedAt,
     query.isFetchedAfterMount,
     query.isFetching,
     query.isPending,
   ]);
 
   useEffect(() => {
+    // Include apiServer in the seed key so visibility is re-seeded after a
+    // server switch (posts get fully replaced with new IDs but feedContext
+    // doesn't change, which would otherwise short-circuit seeding and leave
+    // every feed video with isVisible/isActive=false → "stuck").
+    const seedKey = `${feedContext}:${apiServer}`;
     if (posts.length === 0) {
-      if (seededFeedContextRef.current === feedContext) {
+      if (seededFeedContextRef.current === seedKey) {
         seededFeedContextRef.current = null;
       }
       return;
     }
 
-    if (seededFeedContextRef.current === feedContext) return;
-    seededFeedContextRef.current = feedContext;
+    if (seededFeedContextRef.current === seedKey) return;
+    seededFeedContextRef.current = seedKey;
 
     const initialVisiblePosts = posts.slice(0, 5).filter(postHasPlayableVideo);
     const visibleVideoIds = new Set(initialVisiblePosts.map((post) => post.id));
@@ -801,7 +845,7 @@ export const HomeTabbedFeed = forwardRef<
       visibleVideoIds,
       activeVideoId,
     );
-  }, [feedContext, posts]);
+  }, [feedContext, posts, apiServer]);
 
   const tabListRef = activeTabIndex === 0 ? magicListRef : latestListRef;
   const combinedRefCallback = useCallback((instance: FlashListRef<Post> | null) => {
@@ -827,7 +871,7 @@ export const HomeTabbedFeed = forwardRef<
       <GestureDetector gesture={pullGesture}>
         <View style={{ flex: 1 }} collapsable={false}>
           <HomePostList
-            key={feedContext}
+            key={`${feedContext}:${apiServer}`}
             ref={combinedRefCallback}
             data={posts}
             contentContainerStyle={listContentStyle}

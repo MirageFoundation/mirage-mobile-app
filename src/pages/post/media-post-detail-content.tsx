@@ -48,6 +48,7 @@ import {
 } from "@/src/stores";
 import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
+import * as Sentry from "@sentry/react-native";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { resolvePostContent } from "@/src/components/molecules/post-card-utils";
 import {
@@ -131,6 +132,8 @@ export default function MediaPostDetailScreen({
   const focusedInitialScrollTargetRef = useRef<string | null>(null);
   const pendingScrollToEndRef = useRef(false);
   const pendingReplyScrollIdRef = useRef<string | null>(null);
+  const pendingPostedCommentScrollRef = useRef<string | null>(null);
+  const displayCommentsRef = useRef<Comment[]>([]);
   const displayCommentsLengthRef = useRef(0);
   const actionSheetsRef = useRef<MediaPostDetailActionSheetsRef>(null);
   const commentInputRef = useRef<CommentInputRef>(null);
@@ -296,6 +299,35 @@ export default function MediaPostDetailScreen({
   }, []);
 
   useEffect(() => {
+    displayCommentsRef.current = displayComments;
+  }, [displayComments]);
+
+  useEffect(() => {
+    const pendingTarget = pendingPostedCommentScrollRef.current;
+    if (!pendingTarget || displayComments.length === 0) return;
+    const index = displayComments.findIndex((comment) =>
+      findCommentInTree(comment, pendingTarget.id),
+    );
+    if (index < 0) {
+      if (Date.now() - pendingTarget.createdAt > 4000) {
+        pendingPostedCommentScrollRef.current = null;
+      }
+      return;
+    }
+
+    sheetRef.current?.snapToIndex?.(2);
+    coarseScrollTargetRef.current = `${pendingTarget.id}:pending`;
+    requestAnimationFrame(() => {
+      scrollCommentsToIndex(index, true);
+    });
+    const settleTimer = setTimeout(() => {
+      scrollCommentsToIndex(index, false);
+      pendingPostedCommentScrollRef.current = null;
+    }, 650);
+    return () => clearTimeout(settleTimer);
+  }, [displayComments, findCommentInTree, scrollCommentsToIndex, sheetRef]);
+
+  useEffect(() => {
     return () => {
       if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
     };
@@ -344,46 +376,93 @@ export default function MediaPostDetailScreen({
     if (!highlightedCommentId || displayComments.length === 0) return;
     if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
     const isPendingOptimisticReply = pendingReplyScrollIdRef.current === highlightedCommentId;
-    if (highlightedCommentId.startsWith("optimistic-") && !isPendingOptimisticReply) return;
     const index = displayComments.findIndex((comment) =>
       findCommentInTree(comment, highlightedCommentId),
     );
     if (index < 0) return;
     const coarseTargetKey = `${highlightedCommentId}:${index}`;
     if (coarseScrollTargetRef.current?.startsWith(`${highlightedCommentId}:`)) return;
-    const timer = setTimeout(() => {
+    const scrollTarget = (animated = true) => {
       if (coarseScrollTargetRef.current?.startsWith(`${highlightedCommentId}:`)) return;
       if (index >= displayCommentsLengthRef.current) return;
       coarseScrollTargetRef.current = coarseTargetKey;
       if (isPendingOptimisticReply) pendingReplyScrollIdRef.current = null;
-      scrollCommentsToIndex(index);
-    }, 250);
-    return () => clearTimeout(timer);
+      scrollCommentsToIndex(index, animated);
+    };
+    const firstTimer = setTimeout(() => scrollTarget(true), 250);
+    const secondTimer = setTimeout(() => scrollTarget(false), 650);
+    return () => {
+      clearTimeout(firstTimer);
+      clearTimeout(secondTimer);
+    };
   }, [highlightedCommentId, displayComments, findCommentInTree, scrollCommentsToIndex]);
 
   const handleHighlightedCommentLayout = useCallback(
     (event: LayoutChangeEvent) => {
       if (!highlightedCommentId) return;
       if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
-      if (preciseScrollTargetRef.current?.startsWith(`${highlightedCommentId}:`)) return;
+      const isPendingPostedComment =
+        pendingPostedCommentScrollRef.current === highlightedCommentId;
+      if (
+        !isPendingPostedComment &&
+        preciseScrollTargetRef.current?.startsWith(`${highlightedCommentId}:`)
+      ) {
+        return;
+      }
       const target = (event.nativeEvent as { target?: number }).target;
       if (!target) return;
-      const scheduledTargetKey = `${highlightedCommentId}:scheduled`;
+      const scheduledTargetKey = `${highlightedCommentId}:${Date.now()}:scheduled`;
       preciseScrollTargetRef.current = scheduledTargetKey;
 
       setTimeout(() => {
         UIManager.measureInWindow(target, (_x, y, _width, height) => {
           if (preciseScrollTargetRef.current !== scheduledTargetKey) return;
           if (height <= 0) {
+            if (isPendingPostedComment) {
+              Sentry.captureMessage(
+                "Posted media-detail comment layout measured with empty height",
+                {
+                  level: "warning",
+                  tags: {
+                    feature: "media-post-detail",
+                    operation: "scroll-after-comment-post",
+                  },
+                  extra: {
+                    postId: post?.id,
+                    highlightedCommentId,
+                    y,
+                    height,
+                  },
+                },
+              );
+            }
             preciseScrollTargetRef.current = null;
             return;
           }
 
-          const desiredY = listTopY + 80;
+          sheetRef.current?.snapToIndex?.(2, { duration: 1 });
+          const desiredY = listTopY + 96;
           const delta = y - desiredY;
+          if (isPendingPostedComment) {
+            Sentry.addBreadcrumb({
+              category: "media-post-detail",
+              message: "Measured posted comment for reveal scroll",
+              level: "info",
+              data: {
+                postId: post?.id,
+                highlightedCommentId,
+                y,
+                height,
+                delta,
+              },
+            });
+          }
           if (Math.abs(delta) < 24) {
             preciseScrollTargetRef.current = `${highlightedCommentId}:done`;
             coarseScrollTargetRef.current = `${highlightedCommentId}:precise`;
+            if (isPendingPostedComment) {
+              pendingPostedCommentScrollRef.current = null;
+            }
             return;
           }
 
@@ -391,12 +470,15 @@ export default function MediaPostDetailScreen({
           coarseScrollTargetRef.current = `${highlightedCommentId}:precise`;
           commentsListRef.current?.scrollToOffset?.({
             offset: Math.max(0, commentsScrollYRef.current + delta),
-            animated: true,
+            animated: !isPendingPostedComment,
           });
+          if (isPendingPostedComment) {
+            pendingPostedCommentScrollRef.current = null;
+          }
         });
-      }, 500);
+      }, isPendingPostedComment ? 80 : 500);
     },
-    [highlightedCommentId, listTopY],
+    [highlightedCommentId, listTopY, post?.id, sheetRef],
   );
 
   const handleAuthorPress = useCallback(() => {
@@ -442,6 +524,45 @@ export default function MediaPostDetailScreen({
     collapseMedia();
   }, [post, collapseMedia]);
 
+  const revealCommentsAfterPost = useCallback((commentId: string, isReply: boolean) => {
+    const currentIndex = animatedIndex.value;
+    sheetRef.current?.snapToIndex?.(2, { duration: 1 });
+    requestAnimationFrame(() => {
+      sheetRef.current?.snapToIndex?.(2, { duration: 1 });
+    });
+    pendingPostedCommentScrollRef.current = commentId;
+    setTimeout(() => {
+      if (pendingPostedCommentScrollRef.current !== commentId) return;
+      Sentry.captureMessage(
+        "Posted media-detail comment did not trigger reveal layout",
+        {
+          level: "warning",
+          tags: {
+            feature: "media-post-detail",
+            operation: "scroll-after-comment-post",
+          },
+          extra: {
+            postId: post?.id,
+            commentId,
+            isReply,
+            sheetIndexAtReveal: currentIndex,
+            displayCommentCount: displayCommentsLengthRef.current,
+          },
+        },
+      );
+      pendingPostedCommentScrollRef.current = null;
+    }, 4000);
+    coarseScrollTargetRef.current = null;
+    preciseScrollTargetRef.current = null;
+    suppressedHighlightScrollRef.current = null;
+    Sentry.addBreadcrumb({
+      category: "media-post-detail",
+      message: "Reveal comments after post submit",
+      level: "info",
+      data: { postId: post?.id, sheetIndex: currentIndex, commentId, isReply },
+    });
+  }, [animatedIndex, post?.id, sheetRef]);
+
   const handleEditedComment = useCallback((commentId: string) => {
     suppressedHighlightScrollRef.current = null;
     coarseScrollTargetRef.current = null;
@@ -453,6 +574,7 @@ export default function MediaPostDetailScreen({
 
   useMediaPostDetailPendingComment({
     collapseMedia,
+    revealCommentsAfterPost,
     focusedCommentId,
     focusedMode,
     highlightTimerRef,

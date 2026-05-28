@@ -15,6 +15,7 @@ import {
 } from "@/src/providers/scroll-animation-context";
 import { useAuthStore, useUIStore } from "@/src/stores";
 import { useInboxStore } from "@/src/stores/inbox-store";
+import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { useShareIntentContext } from "expo-share-intent";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, usePathname } from "expo-router";
@@ -266,6 +267,36 @@ function TabNavigationVisibilityReset() {
 
   useEffect(() => {
     showBars();
+    const homePostCardStore = useHomePostCardStore.getState();
+    if (pathname === "/" || pathname.endsWith("/(tabs)") || pathname.endsWith("/(tabs)/") || pathname.endsWith("/index")) {
+      homePostCardStore.setActiveFeedScreen("home");
+      homePostCardStore.setVideoViewability("following:magic", new Set(), null);
+      homePostCardStore.setVideoViewability("following:latest", new Set(), null);
+      Sentry.addBreadcrumb({
+        category: "feed-video",
+        message: "Activated home feed playback",
+        level: "info",
+        data: { pathname },
+      });
+    } else if (pathname.endsWith("/following")) {
+      homePostCardStore.setActiveFeedScreen("following");
+      homePostCardStore.setVideoViewability("home:magic", new Set(), null);
+      homePostCardStore.setVideoViewability("home:latest", new Set(), null);
+      Sentry.addBreadcrumb({
+        category: "feed-video",
+        message: "Activated following feed playback",
+        level: "info",
+        data: { pathname },
+      });
+    } else if (!pathname.startsWith("/topic/")) {
+      homePostCardStore.setActiveFeedScreen(null);
+      Sentry.addBreadcrumb({
+        category: "feed-video",
+        message: "Disabled tab feed playback",
+        level: "info",
+        data: { pathname },
+      });
+    }
     if (pathname.endsWith("/inbox")) {
       Sentry.addBreadcrumb({
         category: "navigation",
