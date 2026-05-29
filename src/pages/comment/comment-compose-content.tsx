@@ -277,12 +277,40 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   }, [router, setWasDismissed]);
 
   const handleSubmit = useCallback(() => {
-    if (!canSubmit || didSubmitRef.current) return;
+    if (!canSubmit || didSubmitRef.current) {
+      if (didSubmitRef.current) {
+        Sentry.captureMessage("Duplicate comment compose submit blocked", {
+          level: "warning",
+          tags: { feature: "comment-compose", operation: "duplicate_submit_blocked" },
+          extra: {
+            postId,
+            replyToId: replyToId ?? null,
+            isEditMode,
+            hasImage: !!selectedImageUri,
+            hasGif: !!selectedGifUrl,
+            textLength: text.trim().length,
+          },
+        });
+      }
+      return;
+    }
     didSubmitRef.current = true;
     setIsSubmitting(true);
     triggerHaptic("medium");
     const resolvedImageUri = selectedImageUri ? imageUploadState.url ?? selectedImageUri : null;
     if (isEditMode && editCommentId && editParentId) {
+      Sentry.addBreadcrumb({
+        category: "comment-compose",
+        message: "Comment edit handed off",
+        level: "info",
+        data: {
+          postId,
+          commentId: editCommentId,
+          parentId: editParentId,
+          hasImage: !!resolvedImageUri,
+          hasGif: !!selectedGifUrl,
+        },
+      });
       setPendingEdit({
         postId: postId!,
         source: (editSource as "post" | "profile") || "post",
@@ -293,6 +321,18 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
         gifUrl: selectedGifUrl,
       });
     } else {
+      Sentry.addBreadcrumb({
+        category: "comment-compose",
+        message: "Comment submit handed off",
+        level: "info",
+        data: {
+          postId,
+          replyToId: replyToId ?? null,
+          isReply: !!replyToId,
+          hasImage: !!resolvedImageUri,
+          hasGif: !!selectedGifUrl,
+        },
+      });
       setPendingComment({
         postId: postId!,
         replyToId: replyToId ?? null,
@@ -316,6 +356,10 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
     isEditMode,
     editCommentId,
     editParentId,
+    editSource,
+    postId,
+    replyToId,
+    clearDraft,
     router,
   ]);
 

@@ -159,6 +159,20 @@ export const PostDetailCommentComposer = forwardRef<
 
         setReplyingTo(null);
 
+        Sentry.addBreadcrumb({
+          category: "comment",
+          message: "Comment action enqueued",
+          level: "info",
+          data: {
+            postId: id,
+            parentId,
+            isReply: !!replyTargetId,
+            hadExplicitReplyTarget: !!explicitReplyToId,
+            usedImplicitReplyTarget: !!implicitReplyTarget,
+            optimisticCommentId,
+          },
+        });
+
         enqueue({
           id: generateActionId(),
           type: "comment",
@@ -197,7 +211,20 @@ export const PostDetailCommentComposer = forwardRef<
                 ? (result as { tx_hash: string }).tx_hash
                 : null;
 
-            if (!confirmedCommentId) return;
+            if (!confirmedCommentId) {
+              Sentry.captureMessage("Comment mutation succeeded without tx_hash", {
+                level: "warning",
+                tags: { feature: "comment", operation: "submit_comment" },
+                extra: {
+                  postId: id,
+                  parentId,
+                  isReply: !!replyTargetId,
+                  optimisticCommentId,
+                  resultType: typeof result,
+                },
+              });
+              return;
+            }
 
             replaceOptimisticCommentId(optimisticThreadId, optimisticCommentId, confirmedCommentId);
             onConfirmedCommentId(optimisticCommentId, confirmedCommentId);
@@ -261,7 +288,27 @@ export const PostDetailCommentComposer = forwardRef<
     useEffect(() => {
       if (!pendingComment || pendingComment.postId !== id) return;
       const current = useCommentComposeStore.getState().consumePendingComment(id);
-      if (!current) return;
+      if (!current) {
+        Sentry.addBreadcrumb({
+          category: "comment",
+          message: "Pending comment already consumed",
+          level: "info",
+          data: { postId: id },
+        });
+        return;
+      }
+      Sentry.addBreadcrumb({
+        category: "comment",
+        message: "Pending comment consumed",
+        level: "info",
+        data: {
+          postId: id,
+          replyToId: current.replyToId ?? null,
+          isReply: !!current.replyToId,
+          hasImage: !!current.imageUri,
+          hasGif: !!current.gifUrl,
+        },
+      });
       markSeen(id, "reply");
       void handleSubmitComment(
         current.text,

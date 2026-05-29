@@ -64,7 +64,15 @@ export function useMediaPostDetailPendingComment({
   useEffect(() => {
     if (!pendingComment || !id || pendingComment.postId !== id || !currentUser) return;
     const captured = useCommentComposeStore.getState().consumePendingComment(id);
-    if (!captured) return;
+    if (!captured) {
+      Sentry.addBreadcrumb({
+        category: "comment",
+        message: "Pending media comment already consumed",
+        level: "info",
+        data: { postId: id },
+      });
+      return;
+    }
 
     const parentId = captured.replyToId ?? id;
     const optimisticMediaUrl = captured.imageUri || captured.gifUrl || null;
@@ -90,6 +98,20 @@ export function useMediaPostDetailPendingComment({
     };
 
     const actionId = generateActionId();
+    Sentry.addBreadcrumb({
+      category: "comment",
+      message: "Media comment action enqueued",
+      level: "info",
+      data: {
+        postId: id,
+        parentId,
+        isReply: !!captured.replyToId,
+        hasImage: !!captured.imageUri,
+        hasGif: !!captured.gifUrl,
+        actionId,
+        optimisticCommentId,
+      },
+    });
     enqueue({
       id: actionId,
       type: "comment",

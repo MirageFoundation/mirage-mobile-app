@@ -291,7 +291,14 @@ const executeWithNetworkRetry = async <T>(
       if (msg === PAUSED_SENTINEL) throw error;
       const stale = isStaleBlockHashError(error);
       const net = isNetworkError(error);
-      if (net && !retryNetworkErrors) throw error;
+      if (net && !retryNetworkErrors) {
+        Sentry.addBreadcrumb({
+          category: "pow",
+          message: "Network retry skipped for non-idempotent content action",
+          level: "warning",
+        });
+        throw error;
+      }
       if (!stale && !net) throw error;
       lastError = error;
       if (attempt < MAX_NETWORK_RETRIES) {
