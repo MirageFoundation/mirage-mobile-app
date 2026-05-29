@@ -48,7 +48,6 @@ export function useMediaPostDetailPendingComment({
   const enqueue = usePowQueueStore((state) => state.enqueue);
   const commentMutation = useComment({});
   const pendingComment = useCommentComposeStore((state) => state.pendingComment);
-  const clearPendingComment = useCommentComposeStore((state) => state.clearPendingComment);
   const addTopLevelOptimisticComment = usePostCommentOptimisticStore(
     (state) => state.addTopLevelComment,
   );
@@ -64,8 +63,8 @@ export function useMediaPostDetailPendingComment({
 
   useEffect(() => {
     if (!pendingComment || !id || pendingComment.postId !== id || !currentUser) return;
-    const captured = pendingComment;
-    clearPendingComment();
+    const captured = useCommentComposeStore.getState().consumePendingComment(id);
+    if (!captured) return;
 
     const parentId = captured.replyToId ?? id;
     const optimisticMediaUrl = captured.imageUri || captured.gifUrl || null;
@@ -199,7 +198,6 @@ export function useMediaPostDetailPendingComment({
     focusedCommentId,
     focusedMode,
     currentUser,
-    clearPendingComment,
     commentMutation,
     refetchComments,
     addReplyOptimisticComment,

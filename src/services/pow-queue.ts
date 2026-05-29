@@ -277,7 +277,9 @@ const waitForConnectivity = (): Promise<void> => {
 const executeWithNetworkRetry = async <T>(
   fn: () => Promise<T>,
   cancelPromise: Promise<never>,
+  options: { retryNetworkErrors?: boolean } = {},
 ): Promise<T> => {
+  const retryNetworkErrors = options.retryNetworkErrors ?? true;
   let lastError: unknown;
   for (let attempt = 0; attempt <= MAX_NETWORK_RETRIES; attempt++) {
     try {
@@ -289,6 +291,7 @@ const executeWithNetworkRetry = async <T>(
       if (msg === PAUSED_SENTINEL) throw error;
       const stale = isStaleBlockHashError(error);
       const net = isNetworkError(error);
+      if (net && !retryNetworkErrors) throw error;
       if (!stale && !net) throw error;
       lastError = error;
       if (attempt < MAX_NETWORK_RETRIES) {
@@ -316,7 +319,9 @@ const executeImmediately = async <T>(action: PowAction<T>): Promise<void> => {
   immediateActions.set(action.id, { reject: cancelReject, action: action as PowAction });
 
   try {
-    const result = await executeWithNetworkRetry(action.execute, cancelPromise);
+    const result = await executeWithNetworkRetry(action.execute, cancelPromise, {
+      retryNetworkErrors: !CONTENT_LOSS_TYPES.has(action.type),
+    });
 
     if (!immediateActions.has(action.id)) {
       return;
@@ -585,6 +590,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
           return executePromise;
         },
         cancelPromise,
+        { retryNetworkErrors: !CONTENT_LOSS_TYPES.has(nextAction.type) },
       );
 
       currentCancelReject = null;

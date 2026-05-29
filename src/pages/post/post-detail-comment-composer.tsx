@@ -255,9 +255,8 @@ export const PostDetailCommentComposer = forwardRef<
 
     useEffect(() => {
       if (!pendingComment || pendingComment.postId !== id) return;
-      const current = useCommentComposeStore.getState().pendingComment;
-      if (!current || current.postId !== id) return;
-      useCommentComposeStore.getState().clearPendingComment();
+      const current = useCommentComposeStore.getState().consumePendingComment(id);
+      if (!current) return;
       markSeen(id, "reply");
       void handleSubmitComment(current.text, current.imageUri, current.gifUrl);
     }, [pendingComment, id, handleSubmitComment]);

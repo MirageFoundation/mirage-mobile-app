@@ -162,6 +162,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const selectedImageUriRef = useRef<string | null>(selectedImageUri);
   const selectedGifUrlRef = useRef<string | null>(selectedGifUrl);
   const didSubmitRef = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMediaLoading, setIsMediaLoading] = useState(false);
   const [isPreviewVisible, setIsPreviewVisible] = useState(
     !!initialAttachment && HTTP_URL_REGEX.test(initialAttachment.url),
@@ -191,7 +192,11 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   const showImagePreviewBlockingOverlay =
     isPreparingImage ||
     (!!selectedImageUri && !imageUploadState.done && isMediaLoading && !isPreviewVisible);
-  const canSubmit = (text.trim().length > 0 || hasAttachment) && !editExpired && !imageUploadBlocked;
+  const canSubmit =
+    (text.trim().length > 0 || hasAttachment) &&
+    !editExpired &&
+    !imageUploadBlocked &&
+    !isSubmitting;
  const canAddLink = linkName.trim().length > 0 && linkUrl.trim().length > 0 && !linkError;
 
   useEffect(() => {
@@ -272,7 +277,9 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   }, [router, setWasDismissed]);
 
   const handleSubmit = useCallback(() => {
-    if (!canSubmit) return;
+    if (!canSubmit || didSubmitRef.current) return;
+    didSubmitRef.current = true;
+    setIsSubmitting(true);
     triggerHaptic("medium");
     const resolvedImageUri = selectedImageUri ? imageUploadState.url ?? selectedImageUri : null;
     if (isEditMode && editCommentId && editParentId) {
@@ -295,7 +302,6 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
       });
     }
     if (!isEditMode && postId) {
-      didSubmitRef.current = true;
       clearDraft(postId, replyToId ?? null);
     }
     router.back();
