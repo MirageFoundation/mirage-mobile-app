@@ -91,7 +91,7 @@ export const HomeTabbedFeed = forwardRef<
 >(({ feedType: baseFeed, activeTabIndex = 0, ListHeaderExtra, onRefreshingChange, onNewPostsChange }, ref) => {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { scrollHandler, scrollY, registerHomeRefresh, registerFollowingRefresh, showBars } = useScrollAnimationContext();
+  const { scrollHandler, scrollY, scrollOffsetY, registerHomeRefresh, registerFollowingRefresh, showBars } = useScrollAnimationContext();
   const setContextScrolling = useFeedScrollStore((state) => state.setContextScrolling);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -112,7 +112,7 @@ export const HomeTabbedFeed = forwardRef<
   }, []);
 
   const { pullDistance, pullGesture } = useAndroidPullIndicator({
-    scrollY,
+    scrollY: scrollOffsetY,
     refreshing: isRefreshing,
     onTriggerRefresh: triggerPullRefresh,
   });
