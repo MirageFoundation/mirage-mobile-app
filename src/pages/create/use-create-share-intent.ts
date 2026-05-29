@@ -561,6 +561,18 @@ export function useCreateShareIntent({
 
                 const arrayBuffer = await response.arrayBuffer();
                 if (arrayBuffer.byteLength <= 1000) continue;
+                Sentry.addBreadcrumb({
+                  category: "share-intent",
+                  message: "Shared link video downloaded",
+                  level: "info",
+                  data: {
+                    domain: meta.domain,
+                    videoIndex: vi,
+                    byteLength: arrayBuffer.byteLength,
+                    contentType,
+                    resolvedUrl: response.url,
+                  },
+                });
 
                 let audioMerged = false;
                 if (vi === 0) {
@@ -656,7 +668,13 @@ export function useCreateShareIntent({
                 Sentry.addBreadcrumb({
                   category: "share-intent",
                   message: "Shared link video attached",
-                  data: { domain: meta.domain, videoIndex: vi, mediaCount },
+                  data: {
+                    domain: meta.domain,
+                    videoIndex: vi,
+                    mediaCount,
+                    sourceUrl: vidUrl,
+                    localFileName: finalUri.split("/").pop() ?? finalUri,
+                  },
                   level: "info",
                 });
               }

@@ -9,6 +9,10 @@ import {
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useToast } from "@/src/providers/toast-provider";
 import { useDraftStore } from "@/src/stores/draft-store";
+import {
+  isCloudflareStreamUrl,
+  waitForCloudflareManifestReady,
+} from "@/src/utils/cloudflare-manifest";
 import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 import { IMAGE_UPLOADS, VIDEO_UPLOADS } from "./create-upload-state";
 
@@ -311,7 +315,7 @@ export function useCreateMediaUploads() {
         [uri]: { ...prev[uri], progress: clamped },
       }));
     }, controller.signal)
-      .then((url) => {
+      .then(async (url) => {
         if (videoUploadSessionRef.current !== sessionId) {
           Sentry.addBreadcrumb({
             category: "video-upload",
@@ -324,10 +328,63 @@ export function useCreateMediaUploads() {
           });
           return;
         }
+
+        if (isCloudflareStreamUrl(url)) {
+          const entry = VIDEO_UPLOADS.get(uri);
+          if (entry?.sessionId === sessionId) {
+            VIDEO_UPLOADS.set(uri, { ...entry, url, uploading: true, progress: 99, error: null });
+          }
+          videoUploadStateRef.current((prev) => ({
+            ...prev,
+            [uri]: { progress: 99, uploading: true, done: false, error: null },
+          }));
+          Sentry.addBreadcrumb({
+            category: "video-upload",
+            message: "Waiting for Cloudflare video processing",
+            level: "info",
+            data: {
+              ...getVideoUploadDebugData(uri, sessionId),
+              url,
+            },
+          });
+          await waitForCloudflareManifestReady(url, {
+            signal: controller.signal,
+            onAttempt: ({ attempt, ready, error }) => {
+              if (attempt === 0 || ready || attempt % 5 === 0) {
+                Sentry.addBreadcrumb({
+                  category: "video-upload",
+                  message: ready
+                    ? "Cloudflare video processing ready"
+                    : "Cloudflare video processing still pending",
+                  level: ready ? "info" : "warning",
+                  data: {
+                    ...getVideoUploadDebugData(uri, sessionId),
+                    attempt,
+                    url,
+                    error: error instanceof Error ? error.message : error ? String(error) : undefined,
+                  },
+                });
+              }
+            },
+          });
+        }
+
+        if (videoUploadSessionRef.current !== sessionId || controller.signal.aborted) {
+          Sentry.addBreadcrumb({
+            category: "video-upload",
+            message: "Ignored stale video processing success",
+            level: "info",
+            data: {
+              ...getVideoUploadDebugData(uri, sessionId),
+              hasUrl: !!url,
+            },
+          });
+          return;
+        }
         videoUploadControllersRef.current.delete(uri);
         Sentry.addBreadcrumb({
           category: "video-upload",
-          message: "Create video upload succeeded",
+          message: "Create video upload and processing succeeded",
           level: "info",
           data: {
             ...getVideoUploadDebugData(uri, sessionId),
@@ -362,6 +419,7 @@ export function useCreateMediaUploads() {
         const serverError = err?.response?.data?.error ?? err?.responseText;
         const msg = err?.response?.data?.error_code ? getApiErrorMessage(err) : (err instanceof Error ? err.message : "Upload failed");
         const isServerError = !!status && status >= 400;
+        const isProcessingTimeout = msg.includes("Video processing timed out");
         Sentry.addBreadcrumb({
           category: "video-upload",
           message: "Create video upload failed",
@@ -372,9 +430,25 @@ export function useCreateMediaUploads() {
             responseText: err?.responseText,
             serverError,
             isServerError,
+            isProcessingTimeout,
             silent,
           },
           level: "error",
+        });
+        Sentry.captureException(err, {
+          tags: {
+            feature: "create-post",
+            operation: isProcessingTimeout ? "cloudflare-video-processing" : "video-upload",
+            serverError: String(isServerError),
+            processingTimeout: String(isProcessingTimeout),
+          },
+          extra: {
+            ...getVideoUploadDebugData(uri, sessionId),
+            status,
+            responseText: err?.responseText,
+            serverError,
+            cause: err?.cause instanceof Error ? err.cause.message : err?.cause ? String(err.cause) : undefined,
+          },
         });
         VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg, isServerError, sessionId });
         videoUploadStateRef.current((prev) => ({

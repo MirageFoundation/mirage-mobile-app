@@ -333,6 +333,30 @@ export const PostCardMedia = memo(
 
     const resolvedMediaUri = media?.uri;
 
+    const getVideoDiagnostics = useCallback(() => ({
+      postId,
+      mediaType: media?.type,
+      mediaUri: media?.uri,
+      resolvedMediaUri,
+      isPostDetail,
+      isVisible,
+      isFocused,
+      isConnected,
+      mediaRetryKey,
+      videoErrorRetryCount: videoErrorRetryCountRef.current,
+      processingAttempts: videoProcessingAttemptsRef.current,
+    }), [
+      postId,
+      media?.type,
+      media?.uri,
+      resolvedMediaUri,
+      isPostDetail,
+      isVisible,
+      isFocused,
+      isConnected,
+      mediaRetryKey,
+    ]);
+
     const resolvedMediaUriRef = useRef(resolvedMediaUri);
     useEffect(() => {
       const uriChanged = resolvedMediaUriRef.current !== resolvedMediaUri;
@@ -994,6 +1018,13 @@ export const PostCardMedia = memo(
 
       if (!videoProcessingStartedAtRef.current) {
         videoProcessingStartedAtRef.current = Date.now();
+        console.log("[PostCardMedia] Cloudflare processing poll started", getVideoDiagnostics());
+        Sentry.addBreadcrumb({
+          category: "post-media",
+          message: "Cloudflare video processing poll started",
+          level: "info",
+          data: getVideoDiagnostics(),
+        });
       }
 
       let cancelled = false;
@@ -1004,12 +1035,18 @@ export const PostCardMedia = memo(
           const ready = await isCloudflareManifestReady(resolvedMediaUri, controller.signal);
           if (cancelled) return;
 
+          console.log("[PostCardMedia] Cloudflare manifest poll result", {
+            ...getVideoDiagnostics(),
+            ready,
+          });
+
           if (ready) {
             Sentry.addBreadcrumb({
               category: "post-media",
               message: "Cloudflare video manifest became ready",
               level: "info",
               data: {
+                ...getVideoDiagnostics(),
                 uri: resolvedMediaUri,
                 attempts: videoProcessingAttemptsRef.current,
               },
@@ -1028,8 +1065,12 @@ export const PostCardMedia = memo(
             setMediaRetryKey((k) => k + 1);
             return;
           }
-        } catch {
+        } catch (error) {
           if (cancelled) return;
+          console.log("[PostCardMedia] Cloudflare manifest poll failed", {
+            ...getVideoDiagnostics(),
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
 
         if (cancelled) return;
@@ -1044,6 +1085,7 @@ export const PostCardMedia = memo(
               operation: "cloudflare-video-processing",
             },
             extra: {
+              ...getVideoDiagnostics(),
               uri: resolvedMediaUri,
               attempts: videoProcessingAttemptsRef.current,
               maxWaitMs: CLOUD_FLARE_PROCESSING_MAX_WAIT_MS,
@@ -1074,7 +1116,7 @@ export const PostCardMedia = memo(
           videoProcessingPollTimeoutRef.current = null;
         }
       };
-    }, [isVideoProcessing, isCloudflareVideo, resolvedMediaUri]);
+    }, [isVideoProcessing, isCloudflareVideo, resolvedMediaUri, getVideoDiagnostics]);
 
     const containerWidth = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
     const calculatedHeight = containerWidth / effectiveAspectRatio;
@@ -1310,7 +1352,7 @@ export const PostCardMedia = memo(
                       isMuted: shouldPlayNativeVideo ? videoMuted : true,
                     }).catch(() => {});
                     if (shouldPlayNativeVideo) {
-                      await videoRef.current.playAsync().catch(() => {});
+                      await videoRef.current?.playAsync().catch(() => {});
                     }
                   })();
                 }}
@@ -1361,6 +1403,7 @@ export const PostCardMedia = memo(
                       retryable: String(isCloudflare || isRedgifs),
                     },
                     extra: {
+                      ...getVideoDiagnostics(),
                       uri: mediaSource.uri,
                       error,
                       isCloudflare,

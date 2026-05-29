@@ -334,11 +334,6 @@ export function useCreateSubmitFlow({
         clearDraft();
         setIsSubmitting(false);
         triggerScrollToTop();
-        [500, 1500, 3000, 6000].forEach((delay) => {
-          setTimeout(() => {
-            triggerScrollToTop();
-          }, delay);
-        });
         useHomePostCardStore.getState().setSkipNextRefresh(true);
         router.replace("/");
         return;
