@@ -45,8 +45,10 @@ import {
 } from "@/src/services/inbox-notifications";
 import {
   isRecentCreateDeepLink,
+  isRecentInitialTabDeepLink,
   isRecentSharePath,
 } from "@/src/navigation/linking";
+import { getPendingShareIntent } from "@/src/navigation/pending-launch-intents";
 
 // Tabs that require authentication
 const PROTECTED_TABS = ["following", "create", "inbox", "profile"];
@@ -434,16 +436,27 @@ export default function TabLayout() {
       if (hasHandledInitialRouteRef.current) return;
       hasHandledInitialRouteRef.current = true;
 
+      const hasPendingShareIntent = !!getPendingShareIntent();
       const hasInitialShareIntent =
         initialShareIntentRef.current ||
         hasShareIntent ||
-        isRecentSharePath(60_000) ||
-        isShareIntentNavigationActive();
+        hasPendingShareIntent;
       const hasInitialCreateIntent =
         hasInitialShareIntent || isRecentCreateDeepLink();
+      const hasInitialTabDeepLink = isRecentInitialTabDeepLink();
       const currentPathname = latestPathnameRef.current || pathname;
+      const isOnHomeTab =
+        currentPathname === "/" ||
+        currentPathname.endsWith("/(tabs)") ||
+        currentPathname.endsWith("/(tabs)/") ||
+        currentPathname.endsWith("/index");
       const isOnCreate = currentPathname.endsWith("/create");
       const isOnInbox = currentPathname.endsWith("/inbox");
+      const isOnNonHomeTab =
+        isOnCreate ||
+        isOnInbox ||
+        currentPathname.endsWith("/following") ||
+        currentPathname.endsWith("/profile");
       const isNotificationNavigationActive = isInboxNotificationNavigationActive();
       const isShareNavigationActive = isShareIntentNavigationActive();
 
@@ -454,37 +467,17 @@ export default function TabLayout() {
           pathname: currentPathname,
           hasInitialCreateIntent,
           hasInitialShareIntent,
+          hasPendingShareIntent,
+          hasInitialTabDeepLink,
+          isOnHomeTab,
           isOnCreate,
+          isOnInbox,
+          isOnNonHomeTab,
           isNotificationNavigationActive,
           isShareNavigationActive,
         },
         level: "info",
       });
-
-      if (isOnCreate && !hasInitialCreateIntent) {
-        if (isOnInbox || isNotificationNavigationActive || isShareNavigationActive) {
-          Sentry.addBreadcrumb({
-            category: "navigation",
-            message: "Skipped stale create redirect during active route intent",
-            data: {
-              pathname: currentPathname,
-              isNotificationNavigationActive,
-              isShareNavigationActive,
-            },
-            level: "info",
-          });
-          return;
-        }
-
-        Sentry.addBreadcrumb({
-          category: "navigation",
-          message: "Redirecting stale initial create route to home",
-          data: { pathname: currentPathname },
-          level: "info",
-        });
-        router.replace("/(tabs)");
-        return;
-      }
 
       if (
         isNotificationNavigationActive &&
@@ -512,6 +505,7 @@ export default function TabLayout() {
           data: {
             pathname: currentPathname,
             hasShareIntent,
+            hasPendingShareIntent,
             hadInitialShareIntent: initialShareIntentRef.current,
             detectedRecentSharePath: isRecentSharePath(10_000),
           },
@@ -523,11 +517,28 @@ export default function TabLayout() {
           extra: {
             pathname: currentPathname,
             hasShareIntent,
+            hasPendingShareIntent,
             hadInitialShareIntent: initialShareIntentRef.current,
             detectedRecentSharePath: isRecentSharePath(10_000),
           },
         });
         router.replace("/(tabs)/create");
+      }
+
+      if (
+        isOnNonHomeTab &&
+        !hasInitialTabDeepLink &&
+        !hasInitialCreateIntent &&
+        !isNotificationNavigationActive &&
+        !isShareNavigationActive
+      ) {
+        Sentry.addBreadcrumb({
+          category: "navigation",
+          message: "Redirecting stale initial tab route to home",
+          data: { pathname: currentPathname },
+          level: "info",
+        });
+        router.replace("/(tabs)");
       }
     };
 
