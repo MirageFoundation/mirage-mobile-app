@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
 
 import { useEdit, usePost, type CreatePostMutationInput, type EditPostMutationInput } from "@/src/api/write";
-import { applyOptimisticPostEdit, buildOptimisticPost, markOptimisticPostError, upsertHomePost } from "@/src/api/write/hooks/use-post";
+import { applyOptimisticPostEdit, buildOptimisticPost, markOptimisticPostError, markOptimisticVideoProcessingComplete, upsertHomePost } from "@/src/api/write/hooks/use-post";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useTransactionProgress } from "@/src/hooks/use-transaction-progress";
 import { router } from "@/src/navigation/guarded-router";
@@ -17,6 +17,7 @@ import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { getAllowedTagsFromContentTypes, usePreferencesStore } from "@/src/stores/preferences-store";
 import { markEditJustCompleted } from "@/src/utils/edit-post";
+import { isCloudflareStreamUrl, waitForCloudflareManifestReady } from "@/src/utils/cloudflare-manifest";
 import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 import { isPowCancelled } from "@/src/wallet";
 import { useCreateComposeState } from "./create-compose-state";
@@ -266,6 +267,44 @@ export function useCreateSubmitFlow({
                 Sentry.addBreadcrumb({ category: "image-upload", message: "Image upload failed", data: { error: String(error) }, level: "error" });
                 throw error;
               }
+            }
+            const cloudflareVideoUrls = uploadedMediaUrls.filter(isCloudflareStreamUrl);
+            if (cloudflareVideoUrls.length > 0) {
+              Sentry.addBreadcrumb({
+                category: "create-post",
+                message: "Waiting for Cloudflare video processing before network post",
+                level: "info",
+                data: {
+                  optimisticId,
+                  actionId,
+                  videoCount: cloudflareVideoUrls.length,
+                },
+              });
+              await Promise.all(
+                cloudflareVideoUrls.map((url) =>
+                  waitForCloudflareManifestReady(url, {
+                    onAttempt: ({ attempt, ready, error }) => {
+                      if (attempt === 0 || ready || attempt % 5 === 0) {
+                        Sentry.addBreadcrumb({
+                          category: "create-post",
+                          message: ready
+                            ? "Cloudflare video processing ready before post"
+                            : "Cloudflare video processing pending before post",
+                          level: ready ? "info" : "warning",
+                          data: {
+                            optimisticId,
+                            actionId,
+                            attempt,
+                            url,
+                            error: error instanceof Error ? error.message : error ? String(error) : undefined,
+                          },
+                        });
+                      }
+                    },
+                  }),
+                ),
+              );
+              markOptimisticVideoProcessingComplete(queryClient, optimisticId);
             }
             return postMutation.mutateAsync({
               ...postInput,

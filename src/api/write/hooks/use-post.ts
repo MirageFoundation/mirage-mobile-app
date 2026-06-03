@@ -37,10 +37,6 @@ import type { PostDraft } from "@/src/stores/draft-store";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
 import { getAllowedTagsFromContentTypes, usePreferencesStore } from "@/src/stores/preferences-store";
-import {
-  isCloudflareStreamUrl,
-  waitForCloudflareManifestReady,
-} from "@/src/utils/cloudflare-manifest";
 
 // ============================================
 // Types
@@ -415,6 +411,49 @@ export const markOptimisticPostSuccess = (
 ) => {
   setOptimisticPostStatus(queryClient, postId, "success", { previewMediaUrls });
   scheduleClearOptimisticPostStatus(queryClient, postId, previewMediaUrls);
+};
+
+export const markOptimisticVideoProcessingComplete = (
+  queryClient: QueryClient,
+  postId: string,
+) => {
+  const persistedPost = usePendingPostsStore
+    .getState()
+    .posts.find((post) => post.post_id === postId);
+  if (persistedPost) {
+    usePendingPostsStore.getState().upsertPost({
+      ...persistedPost,
+      optimistic_video_preview_until: undefined,
+    });
+  }
+
+  updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => {
+    if (!data) return { nextData: data, didUpdate: false };
+    const updatePost = (post: ApiPost) =>
+      post.post_id === postId
+        ? { ...post, optimistic_video_preview_until: undefined }
+        : post;
+    if (isInfinitePostsData(data)) {
+      let didUpdate = false;
+      const pages = data.pages.map((page) => {
+        const posts = page.posts.map((post) => {
+          if (post.post_id !== postId) return post;
+          didUpdate = true;
+          return updatePost(post);
+        });
+        return didUpdate ? { ...page, posts } : page;
+      });
+      return { nextData: didUpdate ? { ...data, pages } : data, didUpdate };
+    }
+    const singleData = data as PostsResponse;
+    let didUpdate = false;
+    const posts = singleData.posts.map((post) => {
+      if (post.post_id !== postId) return post;
+      didUpdate = true;
+      return updatePost(post);
+    });
+    return { nextData: didUpdate ? { ...singleData, posts } : data, didUpdate };
+  });
 };
 
 const replaceOrUpdateOptimisticPost = (
@@ -982,9 +1021,6 @@ export function usePost(options: UsePostOptions = {}) {
         allowedTags: getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled) || undefined,
         limit: 10,
       };
-      const cloudflareVideoUrls = (input.media ?? []).filter(isCloudflareStreamUrl);
-      const shouldWaitForVideoProcessing = cloudflareVideoUrls.length > 0;
-
       if (input.optimisticId) {
         Sentry.addBreadcrumb({
           category: "create-post",
@@ -996,18 +1032,16 @@ export function usePost(options: UsePostOptions = {}) {
             hasPreviewMedia: !!input.optimisticPreviewMediaUrls?.length,
           },
         });
-        const postAfterNetworkConfirmation = shouldWaitForVideoProcessing
-          ? {
-              ...confirmedPost,
-              optimistic_status: "pending" as const,
-              optimistic_error: undefined,
-              optimistic_draft: input.optimisticDraft,
-              optimistic_action_id: input.optimisticActionId,
-              optimistic_video_preview_until: input.optimisticPreviewMediaUrls?.length
-                ? Date.now() + 130000
-                : confirmedPost.optimistic_video_preview_until,
-            }
-          : confirmedPost;
+        const postAfterNetworkConfirmation = {
+          ...confirmedPost,
+          optimistic_status: "success" as const,
+          optimistic_error: undefined,
+          optimistic_draft: input.optimisticDraft,
+          optimistic_action_id: input.optimisticActionId,
+          optimistic_video_preview_until: input.optimisticPreviewMediaUrls?.length
+            ? Date.now() + 45000
+            : confirmedPost.optimistic_video_preview_until,
+        };
         usePendingPostsStore.getState().removePost(input.optimisticId);
         usePendingPostsStore.getState().upsertPost(postAfterNetworkConfirmation);
         replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, postAfterNetworkConfirmation);
@@ -1029,65 +1063,11 @@ export function usePost(options: UsePostOptions = {}) {
             }, delay);
           });
         }
-        if (shouldWaitForVideoProcessing) {
-          Promise.all(
-            cloudflareVideoUrls.map((url) =>
-              waitForCloudflareManifestReady(url, {
-                onAttempt: ({ attempt, ready, error }) => {
-                  if (attempt === 0 || ready || attempt % 5 === 0) {
-                    Sentry.addBreadcrumb({
-                      category: "create-post",
-                      message: ready
-                        ? "Cloudflare video processing ready after post"
-                        : "Cloudflare video processing pending after post",
-                      level: ready ? "info" : "warning",
-                      data: {
-                        postId: confirmedPost.post_id,
-                        attempt,
-                        url,
-                        error: error instanceof Error ? error.message : error ? String(error) : undefined,
-                      },
-                    });
-                  }
-                },
-              }),
-            ),
-          )
-            .then(() => {
-              setOptimisticPostStatus(queryClient, confirmedPost.post_id, "success", {
-                previewMediaUrls: input.optimisticPreviewMediaUrls,
-              });
-              scheduleClearOptimisticPostStatus(
-                queryClient,
-                confirmedPost.post_id,
-                input.optimisticPreviewMediaUrls,
-              );
-            })
-            .catch((error) => {
-              Sentry.captureException(error, {
-                tags: {
-                  feature: "create-post",
-                  operation: "post-cloudflare-video-processing",
-                },
-                extra: {
-                  postId: confirmedPost.post_id,
-                  optimisticId: input.optimisticId,
-                  videoCount: cloudflareVideoUrls.length,
-                },
-              });
-              markOptimisticPostError(
-                queryClient,
-                confirmedPost.post_id,
-                "Video processing failed. Please try posting again.",
-              );
-            });
-        } else {
-          scheduleClearOptimisticPostStatus(
-            queryClient,
-            confirmedPost.post_id,
-            input.optimisticPreviewMediaUrls,
-          );
-        }
+        scheduleClearOptimisticPostStatus(
+          queryClient,
+          confirmedPost.post_id,
+          input.optimisticPreviewMediaUrls,
+        );
       } else {
         upsertHomePost(queryClient, optimisticPost, upsertOptions);
       }

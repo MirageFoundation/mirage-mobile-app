@@ -236,11 +236,12 @@ export const PostCard = memo(function PostCard({
     !!post.optimisticActionId &&
     isOptimisticPostQueued &&
     currentPowActionId !== post.optimisticActionId;
+  const isOptimisticVideoProcessing =
+    !!post.optimisticVideoPreviewUntil && post.optimisticVideoPreviewUntil > Date.now();
   const isOptimisticVideoPost =
-    post.optimisticDraft?.attachmentType === "video" ||
-    (!!post.optimisticVideoPreviewUntil && post.optimisticVideoPreviewUntil > Date.now());
+    post.optimisticDraft?.attachmentType === "video" || isOptimisticVideoProcessing;
   const isOptimisticPostFinalizingNetwork =
-    post.optimisticStatus === "pending" && post.id.startsWith("optimistic-post-");
+    post.optimisticStatus === "pending" && post.id.startsWith("optimistic-post-") && !isOptimisticVideoProcessing;
   const isOptimisticEdit = !!post.optimisticStatus && !post.optimisticDraft && !isOptimisticVideoPost;
   const disablePostInteractions = !!post.optimisticStatus && post.optimisticStatus !== "success";
   const keepOptimisticMediaMounted =
@@ -388,10 +389,10 @@ export const PostCard = memo(function PostCard({
               ? "Waiting for internet connection before publishing your post."
               : isOptimisticPostWaitingForQueue
               ? "Waiting for other actions to finish before publishing your post."
+              : isOptimisticVideoProcessing
+              ? "Processing your video. Please keep the app open until it's completed."
               : isOptimisticPostFinalizingNetwork
               ? "Finalizing your post on the network. This can take a few moments."
-              : isOptimisticVideoPost
-              ? "Processing your video. Please keep the app open until it's completed."
               : "Finalizing your post on the network. This can take a few moments."}
           </Text>
         </View>
