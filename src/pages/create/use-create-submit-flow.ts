@@ -13,6 +13,7 @@ import { generateActionId, getActionLabel, usePowQueueStore } from "@/src/servic
 import { useAuthStore } from "@/src/stores/auth-store";
 import { useDraftStore, type PostDraft } from "@/src/stores/draft-store";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
+import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { getAllowedTagsFromContentTypes, usePreferencesStore } from "@/src/stores/preferences-store";
 import { markEditJustCompleted } from "@/src/utils/edit-post";
@@ -297,12 +298,8 @@ export function useCreateSubmitFlow({
                 mediaCount: draft.mediaUris.length,
               },
             });
+            usePendingPostsStore.getState().upsertPost(optimisticPost);
             upsertHomePost(queryClient, optimisticPost, upsertOptions);
-            [500, 1500, 3000].forEach((delay) => {
-              setTimeout(() => {
-                upsertHomePost(queryClient, optimisticPost, upsertOptions);
-              }, delay);
-            });
           },
           onError: (err) => {
             const toastMessage = getApiErrorMessage(err);

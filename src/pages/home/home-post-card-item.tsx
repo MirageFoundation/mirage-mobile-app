@@ -10,7 +10,8 @@ import { getShareBaseUrl } from "@/src/stores";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { useDraftStore } from "@/src/stores/draft-store";
 import { router } from "@/src/navigation/guarded-router";
-import { removeOptimisticPostFromCache } from "@/src/api/write/hooks/use-post";
+import { markOptimisticPostError, removeOptimisticPostFromCache } from "@/src/api/write/hooks/use-post";
+import { usePowQueueStore } from "@/src/services/pow-queue";
 import {
   useHomePostCardStore,
   useAllowAutoplay,
@@ -58,6 +59,14 @@ function areHomePostCardItemPropsEqual(
 
 // Get handlers from store without subscribing to changes
 const getHandlers = () => useHomePostCardStore.getState().handlers;
+const APP_STARTED_AT = Date.now();
+
+const getCreatedAtMs = (createdAt: Post["createdAt"]): number => {
+  if (typeof createdAt === "number") return createdAt;
+  if (createdAt instanceof Date) return createdAt.getTime();
+  const parsed = Date.parse(createdAt);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 
 export const HomePostCardItem = memo(function HomePostCardItem({
  post,
@@ -80,6 +89,12 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  const shareServer = useShareServer();
  const allowAutoplay = useAllowAutoplay();
  const feedActive = useFeedActive(feedScreen);
+ const currentPowActionId = usePowQueueStore((state) => state.currentAction?.id);
+ const isOptimisticActionQueued = usePowQueueStore((state) =>
+   post.optimisticActionId
+     ? state.queue.some((action) => action.id === post.optimisticActionId)
+     : false,
+ );
 
 // Store post data in ref to avoid recreating callbacks
  const postRef = useRef(post);
@@ -93,6 +108,45 @@ export const HomePostCardItem = memo(function HomePostCardItem({
    isTopicFollowedRef.current = isTopicFollowed;
    voteOverrideRef.current = voteOverride;
  });
+
+ useEffect(() => {
+   if (post.optimisticStatus !== "pending") return;
+   if (
+     post.optimisticActionId &&
+     (currentPowActionId === post.optimisticActionId || isOptimisticActionQueued)
+   ) {
+     return;
+   }
+   const optimisticCreatedAt = post.id.startsWith("optimistic-post-")
+     ? Number(post.id.replace("optimistic-post-", ""))
+     : NaN;
+   if (Number.isFinite(optimisticCreatedAt) && Date.now() - optimisticCreatedAt < 15000) {
+     return;
+   }
+   if (
+     post.optimisticDraft?.attachmentType === "video" &&
+     post.optimisticVideoPreviewUntil &&
+     post.optimisticVideoPreviewUntil > Date.now() &&
+     getCreatedAtMs(post.createdAt) >= APP_STARTED_AT - 5000
+   ) {
+     return;
+   }
+   markOptimisticPostError(
+     queryClient,
+     post.id,
+     "Posting was interrupted. Please try posting again.",
+   );
+ }, [
+   currentPowActionId,
+   isOptimisticActionQueued,
+   post.id,
+   post.optimisticActionId,
+   post.createdAt,
+   post.optimisticDraft?.attachmentType,
+   post.optimisticStatus,
+   post.optimisticVideoPreviewUntil,
+   queryClient,
+ ]);
 
   // Stable callbacks that read from refs
   const handlePostPress = useCallback(() => {
