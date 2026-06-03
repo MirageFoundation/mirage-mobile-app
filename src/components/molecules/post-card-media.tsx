@@ -150,7 +150,15 @@ export const PostCardMedia = memo(
     const aspectRatioLockedRef = useRef(false);
     const userInitiatedPlayRef = useRef(false);
     const prevShouldBlurRef = useRef(shouldBlurContent);
-    const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
+    const isLocalFileMedia = !!media?.uri && media.uri.startsWith("file://");
+    const [feedTappedToPlay, setFeedTappedToPlay] = useState(isLocalFileMedia);
+
+    useEffect(() => {
+      if (isLocalFileMedia) {
+        setFeedTappedToPlay(true);
+        setIsVideoPlaying(true);
+      }
+    }, [isLocalFileMedia, media?.uri]);
 
     const youtubeVideoId = media?.type === "youtube" ? (extractYouTubeVideoId(media.uri) ?? "") : "";
     const youtubePositionKey = youtubeVideoId
@@ -441,7 +449,7 @@ export const PostCardMedia = memo(
       const canAutoPlayCurrentMedia =
         media?.type === "youtube"
           ? ((Platform.OS === "android" && canAutoPlayFeedMedia) || feedTappedToPlay)
-          : (canAutoPlayFeedMedia || feedTappedToPlay);
+          : (isLocalFileMedia || canAutoPlayFeedMedia || feedTappedToPlay);
       if (!isPlayable || shouldBlurContent) {
         setIsVideoPlaying(false);
         setIsVideoLoading(false);
@@ -458,7 +466,7 @@ export const PostCardMedia = memo(
         setIsVideoPlaying(true);
       }
 
-      if (isVisible && screenActive && canAutoPlayCurrentMedia) {
+      if ((isVisible || isLocalFileMedia) && screenActive && canAutoPlayCurrentMedia) {
         if (pauseDelayRef.current) {
           clearTimeout(pauseDelayRef.current);
           pauseDelayRef.current = null;
@@ -495,7 +503,7 @@ export const PostCardMedia = memo(
         setIsVideoLoading(false);
         userInitiatedPlayRef.current = false;
         void stopNativeVideoPlayback();
-      } else if (!isVisible || (!isPostDetail && !canAutoPlayCurrentMedia)) {
+      } else if ((!isVisible && !isLocalFileMedia) || (!isPostDetail && !canAutoPlayCurrentMedia)) {
         if (pauseDelayRef.current) {
           clearTimeout(pauseDelayRef.current);
           pauseDelayRef.current = null;
@@ -518,6 +526,7 @@ export const PostCardMedia = memo(
       screenActive,
       resolvedMediaUri,
       feedTappedToPlay,
+      isLocalFileMedia,
       isPostDetail,
       isFocused,
       saveYouTubePositionSync,
@@ -525,10 +534,10 @@ export const PostCardMedia = memo(
     ]);
 
     useEffect(() => {
-      if (!isPostDetail && !isVisible && feedTappedToPlay) {
+      if (!isPostDetail && !isVisible && !isLocalFileMedia && feedTappedToPlay) {
         setFeedTappedToPlay(false);
       }
-    }, [isPostDetail, isVisible, feedTappedToPlay]);
+    }, [isPostDetail, isVisible, isLocalFileMedia, feedTappedToPlay]);
 
     const mediaWasCached = !!(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri));
     const shouldAttemptVideoRecovery =
@@ -565,7 +574,7 @@ export const PostCardMedia = memo(
 
     const shouldPlayNativeVideo =
       media?.type === "video" &&
-      isVideoPlaying &&
+      (isVideoPlaying || isLocalFileMedia) &&
       screenActive &&
       !shouldBlurContent;
 
@@ -690,7 +699,7 @@ export const PostCardMedia = memo(
 
     const shouldKeepFeedVideoMounted =
       media?.type === "video" &&
-      (isNearVisible || isFocused || feedTappedToPlay || isVideoPlaying);
+      (isLocalFileMedia || isNearVisible || isFocused || feedTappedToPlay || isVideoPlaying);
 
     const shouldMountNativeVideo =
       !shouldDeferHeavyMedia && (
