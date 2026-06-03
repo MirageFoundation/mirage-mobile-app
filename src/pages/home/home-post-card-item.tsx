@@ -11,6 +11,7 @@ import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { useDraftStore } from "@/src/stores/draft-store";
 import { router } from "@/src/navigation/guarded-router";
 import { markOptimisticPostError, removeOptimisticPostFromCache } from "@/src/api/write/hooks/use-post";
+import { useCreateComposeState } from "@/src/pages/create/create-compose-state";
 import { usePowQueueStore } from "@/src/services/pow-queue";
 import {
   useHomePostCardStore,
@@ -264,6 +265,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     const p = postRef.current;
     if (p.optimisticDraft) {
       useDraftStore.setState({ draft: p.optimisticDraft, hasDraft: true });
+      useCreateComposeState.getState().setSelectedStickers(p.optimisticDraft.stickerUrls ?? []);
     }
     removeOptimisticPostFromCache(queryClient, p.id);
     router.replace("/(tabs)/create");

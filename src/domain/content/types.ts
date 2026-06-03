@@ -27,6 +27,7 @@ export type PostDraft = {
   body: string;
   contentWarning: string[];
   mediaUris: string[];
+  stickerUrls?: string[];
   linkUrl: string | null;
   attachmentType: AttachmentType;
   tags: string[];

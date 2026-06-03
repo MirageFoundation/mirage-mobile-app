@@ -28,6 +28,7 @@ const emptyDraft: PostDraft = {
   body: "",
   contentWarning: [],
   mediaUris: [],
+  stickerUrls: [],
   linkUrl: null,
   attachmentType: null,
   tags: [],

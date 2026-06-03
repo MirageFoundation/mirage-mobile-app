@@ -221,7 +221,7 @@ export function useCreateSubmitFlow({
         return;
       } else {
         const optimisticId = `optimistic-post-${Date.now()}`;
-        const optimisticDraft: PostDraft = { ...draft };
+        const optimisticDraft: PostDraft = { ...draft, stickerUrls: selectedStickers };
         const actionId = generateActionId();
         const optimisticPreviewMediaUrls =
           (draft.attachmentType === "image" || draft.attachmentType === "video") && draft.mediaUris.length > 0
