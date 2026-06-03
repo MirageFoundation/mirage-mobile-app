@@ -87,6 +87,12 @@ export async function waitForCloudflareManifestReady(
   let attempt = 0;
   let lastError: unknown;
 
+  console.log("[VideoTiming] cloudflare manifest wait start", {
+    manifestUrl,
+    intervalMs,
+    timeoutMs,
+  });
+
   while (Date.now() - startedAt < timeoutMs) {
     if (options.signal?.aborted) {
       throw new Error("Video processing check aborted");
@@ -95,10 +101,29 @@ export async function waitForCloudflareManifestReady(
     try {
       const ready = await isCloudflareManifestReady(manifestUrl, options.signal);
       options.onAttempt?.({ attempt, ready });
-      if (ready) return;
+      console.log("[VideoTiming] cloudflare manifest attempt", {
+        manifestUrl,
+        attempt,
+        ready,
+        elapsedMs: Date.now() - startedAt,
+      });
+      if (ready) {
+        console.log("[VideoTiming] cloudflare manifest ready", {
+          manifestUrl,
+          attempts: attempt + 1,
+          totalDurationMs: Date.now() - startedAt,
+        });
+        return;
+      }
     } catch (error) {
       lastError = error;
       options.onAttempt?.({ attempt, ready: false, error });
+      console.log("[VideoTiming] cloudflare manifest attempt failed", {
+        manifestUrl,
+        attempt,
+        elapsedMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     attempt += 1;
@@ -108,6 +133,12 @@ export async function waitForCloudflareManifestReady(
   }
 
   const error = new Error("Video processing timed out. Please retry the upload.");
+  console.log("[VideoTiming] cloudflare manifest timed out", {
+    manifestUrl,
+    attempts: attempt,
+    totalDurationMs: Date.now() - startedAt,
+    lastError: lastError instanceof Error ? lastError.message : lastError ? String(lastError) : undefined,
+  });
   (error as Error & { cause?: unknown }).cause = lastError;
   throw error;
 }

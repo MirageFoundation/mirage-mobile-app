@@ -455,7 +455,10 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     set({
       preparingAction: action as PowAction,
       isProcessing: true,
-      totalCount: Math.max(get().totalCount, 1),
+      completedCount: 0,
+      totalCount: 1,
+      currentProgress: 0,
+      lastError: null,
     });
   },
 

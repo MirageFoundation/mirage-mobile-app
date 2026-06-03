@@ -121,14 +121,11 @@ export const PowQueueToast = () => {
       ? VOTE_RESULT_DISPLAY_DURATION_MS
       : RESULT_DISPLAY_DURATION_MS;
   const isShowingResult =
-    activeResultAction !== null &&
-    (
-      transientResultAction !== null ||
-      immediateResultAction !== null ||
-      !hasQueuedOrActiveWork
-    );
+    activeResultAction !== null && !hasQueuedOrActiveWork;
   const hasActiveResultAction = activeResultAction !== null;
   const isShowingProcessing = hasPendingWork && !isShowingResult;
+  const isShowingPreparingAction =
+    isShowingProcessing && visiblePreparingAction !== null && visibleCurrentAction === null;
   const isOfflineProcessing = isShowingProcessing && !isConnected;
 
   const displayLabel = isShowingResult
@@ -253,18 +250,24 @@ export const PowQueueToast = () => {
       setHashRate(0);
       setPhase("preparing");
       powStartedRef.current = false;
+      lastElapsedMsRef.current = 0;
+      lastHashRateRef.current = 0;
       animateIn();
     }
   }, [hasPendingWork, isVisible, successOverlay]);
 
   useEffect(() => {
-    if (visibleCurrentAction) {
+    if (visibleCurrentAction || visiblePreparingAction) {
       setElapsedMs(0);
       setHashRate(0);
       setPhase("preparing");
       powStartedRef.current = false;
+      lastElapsedMsRef.current = 0;
+      lastHashRateRef.current = 0;
+      setTransientResultAction(null);
+      setDisplayedCompletedAction(null);
     }
-  }, [visibleCurrentAction]);
+  }, [visibleCurrentAction, visiblePreparingAction]);
 
   useEffect(() => {
     if (!hasPendingWork && isVisible) {
@@ -294,6 +297,7 @@ export const PowQueueToast = () => {
 
   useEffect(() => {
     if (isShowingProcessing && isVisible) {
+      if (isShowingPreparingAction) return;
       if (!isConnected) return;
 
       const interval = setInterval(async () => {
@@ -324,7 +328,7 @@ export const PowQueueToast = () => {
       }, 200);
       return () => clearInterval(interval);
     }
-  }, [isConnected, isShowingProcessing, isVisible]);
+  }, [isConnected, isShowingPreparingAction, isShowingProcessing, isVisible]);
 
   if (!isVisible) return null;
 

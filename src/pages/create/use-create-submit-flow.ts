@@ -221,6 +221,7 @@ export function useCreateSubmitFlow({
         router.back();
         return;
       } else {
+        const submitStartedAt = Date.now();
         const optimisticId = `optimistic-post-${Date.now()}`;
         const optimisticDraft: PostDraft = { ...draft, stickerUrls: selectedStickers };
         const actionId = generateActionId();
@@ -269,11 +270,26 @@ export function useCreateSubmitFlow({
           upsertHomePost(queryClient, optimisticPost, upsertOptions);
         };
         const enqueueNetworkPost = (resolvedMediaUrls: string[], skipOptimisticUpdate = false) => {
+          console.log("[VideoTiming] enqueue network post", {
+            optimisticId,
+            actionId,
+            attachmentType: draft.attachmentType,
+            elapsedSinceSubmitMs: Date.now() - submitStartedAt,
+            mediaCount: resolvedMediaUrls.length,
+            skipOptimisticUpdate,
+          });
           usePowQueueStore.getState().enqueue({
             id: actionId,
             type: "post",
             label: getActionLabel("post"),
             execute: async () => {
+              const networkStartedAt = Date.now();
+              console.log("[VideoTiming] network post execute start", {
+                optimisticId,
+                actionId,
+                attachmentType: draft.attachmentType,
+                elapsedSinceSubmitMs: Date.now() - submitStartedAt,
+              });
               Sentry.addBreadcrumb({
                 category: "create-post",
                 message: "Executing queued create post action",
@@ -296,12 +312,30 @@ export function useCreateSubmitFlow({
                   throw error;
                 }
               }
-              return postMutation.mutateAsync({
-                ...postInput,
-                media: uploadedMediaUrls.length > 0 ? uploadedMediaUrls : undefined,
-                optimisticMediaUrl: uploadedMediaUrls[0] ?? postInput.optimisticMediaUrl,
-                optimisticMediaUrls: uploadedMediaUrls.length > 0 ? uploadedMediaUrls : postInput.optimisticMediaUrls,
-              });
+              try {
+                const result = await postMutation.mutateAsync({
+                  ...postInput,
+                  media: uploadedMediaUrls.length > 0 ? uploadedMediaUrls : undefined,
+                  optimisticMediaUrl: uploadedMediaUrls[0] ?? postInput.optimisticMediaUrl,
+                  optimisticMediaUrls: uploadedMediaUrls.length > 0 ? uploadedMediaUrls : postInput.optimisticMediaUrls,
+                });
+                console.log("[VideoTiming] network post execute complete", {
+                  optimisticId,
+                  actionId,
+                  durationMs: Date.now() - networkStartedAt,
+                  elapsedSinceSubmitMs: Date.now() - submitStartedAt,
+                });
+                return result;
+              } catch (error) {
+                console.log("[VideoTiming] network post execute failed", {
+                  optimisticId,
+                  actionId,
+                  durationMs: Date.now() - networkStartedAt,
+                  elapsedSinceSubmitMs: Date.now() - submitStartedAt,
+                  error: error instanceof Error ? error.message : String(error),
+                });
+                throw error;
+              }
             },
             onOptimisticUpdate: skipOptimisticUpdate ? undefined : insertOptimisticPost,
             onError: (err) => {
@@ -328,6 +362,13 @@ export function useCreateSubmitFlow({
         };
         const cloudflareVideoUrls = mediaUrls.filter(isCloudflareStreamUrl);
         if (cloudflareVideoUrls.length > 0) {
+          const cloudflareWaitStartedAt = Date.now();
+          console.log("[VideoTiming] post submit video processing start", {
+            optimisticId,
+            actionId,
+            videoCount: cloudflareVideoUrls.length,
+            elapsedSinceSubmitMs: Date.now() - submitStartedAt,
+          });
           insertOptimisticPost();
           usePowQueueStore.getState().showPreparing({
             id: actionId,
@@ -371,10 +412,23 @@ export function useCreateSubmitFlow({
                   }),
                 ),
               );
+              console.log("[VideoTiming] post submit video processing complete", {
+                optimisticId,
+                actionId,
+                durationMs: Date.now() - cloudflareWaitStartedAt,
+                elapsedSinceSubmitMs: Date.now() - submitStartedAt,
+              });
               markOptimisticVideoProcessingComplete(queryClient, optimisticId);
               usePowQueueStore.getState().clearPreparing(actionId);
               enqueueNetworkPost(mediaUrls, true);
             } catch (err) {
+              console.log("[VideoTiming] post submit video processing failed", {
+                optimisticId,
+                actionId,
+                durationMs: Date.now() - cloudflareWaitStartedAt,
+                elapsedSinceSubmitMs: Date.now() - submitStartedAt,
+                error: err instanceof Error ? err.message : String(err),
+              });
               usePowQueueStore.getState().clearPreparing(actionId);
               Sentry.captureException(err, {
                 tags: {

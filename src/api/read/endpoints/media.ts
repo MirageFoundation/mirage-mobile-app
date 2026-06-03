@@ -374,6 +374,7 @@ export async function uploadVideoToSignedUrl(
   onProgress?: UploadProgressCallback,
   signal?: AbortSignal
 ): Promise<void> {
+  const signedUploadStartedAt = Date.now();
   console.log("[VideoUpload] Starting upload to signed URL");
 
   const normalizedUri = normalizeFileUri(localUri);
@@ -407,6 +408,12 @@ export async function uploadVideoToSignedUrl(
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           console.log("[VideoUpload] Android XHR upload complete, status:", xhr.status);
+          console.log("[VideoTiming] signed upload complete", {
+            fileName: filename,
+            platform: Platform.OS,
+            status: xhr.status,
+            durationMs: Date.now() - signedUploadStartedAt,
+          });
           settle(resolve);
           return;
         }
@@ -505,6 +512,12 @@ export async function uploadVideoToSignedUrl(
         );
       }
       console.log("[VideoUpload] Upload complete, status:", result.status);
+      console.log("[VideoTiming] signed upload complete", {
+        fileName: filename,
+        platform: Platform.OS,
+        status: result.status,
+        durationMs: Date.now() - signedUploadStartedAt,
+      });
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
     }
@@ -522,20 +535,34 @@ export async function uploadVideo(
   onProgress?: UploadProgressCallback,
   signal?: AbortSignal
 ): Promise<UploadVideoResult> {
+  const uploadStartedAt = Date.now();
+  const fileName = getFileNameFromUri(localUri);
   console.log("[VideoUpload] uploadVideo called with:", { localUri, contentType });
+  console.log("[VideoTiming] upload start", {
+    fileName,
+    contentType,
+    platform: Platform.OS,
+  });
   Sentry.addBreadcrumb({
     category: "media-upload",
     message: "Starting video upload",
     level: "info",
     data: {
-      fileName: getFileNameFromUri(localUri),
+      fileName,
       contentType,
     },
   });
 
   let uploadResponse: VideoUploadResponse;
   try {
+    const uploadUrlStartedAt = Date.now();
     uploadResponse = await getVideoUploadUrl();
+    console.log("[VideoTiming] upload URL ready", {
+      fileName,
+      durationMs: Date.now() - uploadUrlStartedAt,
+      totalDurationMs: Date.now() - uploadStartedAt,
+      uid: uploadResponse.uid,
+    });
     console.log("[VideoUpload] Got upload response:", JSON.stringify(uploadResponse, null, 2));
 
     if (!uploadResponse.streamCustomer && uploadResponse.stream_customer) {
@@ -572,6 +599,12 @@ export async function uploadVideo(
   const finalUrl = getVideoUrl(uploadResponse);
   const thumbnailUrl = getVideoThumbnailUrl(uploadResponse);
   console.log("[VideoUpload] Final URL:", finalUrl);
+  console.log("[VideoTiming] upload complete", {
+    fileName,
+    uid: uploadResponse.uid,
+    totalDurationMs: Date.now() - uploadStartedAt,
+    finalUrl,
+  });
 
   return {
     url: finalUrl,

@@ -58,6 +58,7 @@ async function compressVideoForUpload(
   options: ProcessVideoOptions,
   fileName: string,
 ): Promise<ProcessVideoResult> {
+  const compressionStartedAt = Date.now();
   console.log("[VideoProcessing] Compressing video for upload...");
   Sentry.addBreadcrumb({
     category: 'video-processing',
@@ -87,6 +88,14 @@ async function compressVideoForUpload(
     },
   );
 
+  console.log("[VideoTiming] compression complete", {
+    fileName,
+    durationMs: Date.now() - compressionStartedAt,
+    wasCompressed: !!outputUri && outputUri !== inputUri,
+    inputUri,
+    outputUri: outputUri || inputUri,
+  });
+
   return {
     uri: outputUri || inputUri,
     wasProcessed: !!outputUri && outputUri !== inputUri,
@@ -104,6 +113,7 @@ export async function processVideo(
   inputUri: string,
   options: ProcessVideoOptions
 ): Promise<ProcessVideoResult> {
+  const processingStartedAt = Date.now();
   const shouldTrim = needsTrimming(options);
   const shouldRemoveAudio = options.removeAudio === true;
   const shouldCompress = options.compressForUpload !== false;
@@ -131,8 +141,13 @@ export async function processVideo(
   });
 
   // Validate the file first
+  const validationStartedAt = Date.now();
   try {
     const validationResult = await isValidFile(inputUri);
+    console.log("[VideoTiming] validation complete", {
+      fileName,
+      durationMs: Date.now() - validationStartedAt,
+    });
     const isValid = typeof validationResult === 'boolean' ? validationResult : Boolean(validationResult);
     if (!isValid) {
       console.error("[VideoProcessing] Invalid video file");
@@ -145,6 +160,11 @@ export async function processVideo(
       return { uri: inputUri, wasProcessed: false };
     }
   } catch (e) {
+    console.log("[VideoTiming] validation failed", {
+      fileName,
+      durationMs: Date.now() - validationStartedAt,
+      error: String(e),
+    });
     console.warn("[VideoProcessing] Could not validate file:", e);
     Sentry.addBreadcrumb({
       category: 'video-processing',
@@ -162,6 +182,7 @@ export async function processVideo(
 
   if (shouldTrim) {
     try {
+      const trimStartedAt = Date.now();
       const startTime = options.trimStartMs ?? 0;
       const endTime = options.trimEndMs ?? options.totalDurationMs ?? 0;
 
@@ -178,6 +199,12 @@ export async function processVideo(
       });
       
       console.log("[VideoProcessing] Trim success! Output:", result);
+      console.log("[VideoTiming] trim complete", {
+        fileName,
+        durationMs: Date.now() - trimStartedAt,
+        startTime,
+        endTime,
+      });
       
       const outputUri = typeof result === 'string' ? result : (result as any).outputPath;
       if (outputUri) {
@@ -203,11 +230,25 @@ export async function processVideo(
   }
 
   if (!shouldCompress) {
+    console.log("[VideoTiming] processing complete", {
+      fileName,
+      totalDurationMs: Date.now() - processingStartedAt,
+      wasProcessed,
+      outputUri: currentUri,
+      skippedCompression: true,
+    });
     return { uri: currentUri, wasProcessed };
   }
 
   try {
     const compressed = await compressVideoForUpload(currentUri, options, fileName);
+    console.log("[VideoTiming] processing complete", {
+      fileName,
+      totalDurationMs: Date.now() - processingStartedAt,
+      wasProcessed: wasProcessed || compressed.wasProcessed,
+      outputUri: compressed.uri,
+      skippedCompression: false,
+    });
     return {
       uri: compressed.uri,
       wasProcessed: wasProcessed || compressed.wasProcessed,
@@ -225,6 +266,13 @@ export async function processVideo(
         maxSize: UPLOAD_VIDEO_MAX_SIZE,
         bitrate: UPLOAD_VIDEO_BITRATE,
       },
+    });
+    console.log("[VideoTiming] processing complete", {
+      fileName,
+      totalDurationMs: Date.now() - processingStartedAt,
+      wasProcessed,
+      outputUri: currentUri,
+      compressionFailed: true,
     });
     return { uri: currentUri, wasProcessed };
   }
