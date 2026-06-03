@@ -88,13 +88,42 @@ async function compressVideoForUpload(
     },
   );
 
+  const compressionDurationMs = Date.now() - compressionStartedAt;
+
   console.log("[VideoTiming] compression complete", {
     fileName,
-    durationMs: Date.now() - compressionStartedAt,
+    durationMs: compressionDurationMs,
     wasCompressed: !!outputUri && outputUri !== inputUri,
     inputUri,
     outputUri: outputUri || inputUri,
   });
+  Sentry.addBreadcrumb({
+    category: 'video-processing',
+    message: 'Video compression complete',
+    level: 'info',
+    data: {
+      fileName,
+      durationMs: compressionDurationMs,
+      wasCompressed: !!outputUri && outputUri !== inputUri,
+      maxSize: UPLOAD_VIDEO_MAX_SIZE,
+      bitrate: UPLOAD_VIDEO_BITRATE,
+    },
+  });
+  if (compressionDurationMs > 15000) {
+    Sentry.captureMessage('Video compression was slow', {
+      level: 'warning',
+      tags: {
+        feature: 'video-posting',
+        operation: 'video-compression',
+      },
+      extra: {
+        fileName,
+        durationMs: compressionDurationMs,
+        maxSize: UPLOAD_VIDEO_MAX_SIZE,
+        bitrate: UPLOAD_VIDEO_BITRATE,
+      },
+    });
+  }
 
   return {
     uri: outputUri || inputUri,
@@ -230,24 +259,48 @@ export async function processVideo(
   }
 
   if (!shouldCompress) {
+    const totalDurationMs = Date.now() - processingStartedAt;
     console.log("[VideoTiming] processing complete", {
       fileName,
-      totalDurationMs: Date.now() - processingStartedAt,
+      totalDurationMs,
       wasProcessed,
       outputUri: currentUri,
       skippedCompression: true,
+    });
+    Sentry.addBreadcrumb({
+      category: 'video-processing',
+      message: 'Video processing complete',
+      level: 'info',
+      data: {
+        fileName,
+        totalDurationMs,
+        wasProcessed,
+        skippedCompression: true,
+      },
     });
     return { uri: currentUri, wasProcessed };
   }
 
   try {
     const compressed = await compressVideoForUpload(currentUri, options, fileName);
+    const totalDurationMs = Date.now() - processingStartedAt;
     console.log("[VideoTiming] processing complete", {
       fileName,
-      totalDurationMs: Date.now() - processingStartedAt,
+      totalDurationMs,
       wasProcessed: wasProcessed || compressed.wasProcessed,
       outputUri: compressed.uri,
       skippedCompression: false,
+    });
+    Sentry.addBreadcrumb({
+      category: 'video-processing',
+      message: 'Video processing complete',
+      level: 'info',
+      data: {
+        fileName,
+        totalDurationMs,
+        wasProcessed: wasProcessed || compressed.wasProcessed,
+        skippedCompression: false,
+      },
     });
     return {
       uri: compressed.uri,
@@ -267,12 +320,23 @@ export async function processVideo(
         bitrate: UPLOAD_VIDEO_BITRATE,
       },
     });
+    const totalDurationMs = Date.now() - processingStartedAt;
     console.log("[VideoTiming] processing complete", {
       fileName,
-      totalDurationMs: Date.now() - processingStartedAt,
+      totalDurationMs,
       wasProcessed,
       outputUri: currentUri,
       compressionFailed: true,
+    });
+    Sentry.addBreadcrumb({
+      category: 'video-processing',
+      message: 'Video processing completed after compression failure',
+      level: 'warning',
+      data: {
+        fileName,
+        totalDurationMs,
+        wasProcessed,
+      },
     });
     return { uri: currentUri, wasProcessed };
   }

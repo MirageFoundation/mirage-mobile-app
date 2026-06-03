@@ -87,6 +87,39 @@ export function InboxScreen() {
   } = useInfiniteInbox({ limit: 25 });
   const [hasInitialLoadTimedOut, setHasInitialLoadTimedOut] = useState(false);
   const hasCapturedInitialLoadTimeoutRef = useRef(false);
+  const hasCapturedInitialLoadErrorRef = useRef(false);
+
+  useEffect(() => {
+    if (!isError) {
+      hasCapturedInitialLoadErrorRef.current = false;
+      return;
+    }
+    if (hasCapturedInitialLoadErrorRef.current) return;
+    hasCapturedInitialLoadErrorRef.current = true;
+    Sentry.addBreadcrumb({
+      category: "inbox",
+      message: "Inbox initial load failed",
+      level: "warning",
+      data: {
+        platform: Platform.OS,
+        errorMessage: error instanceof Error ? error.message : String(error ?? ""),
+      },
+    });
+    Sentry.captureMessage("Inbox initial load failed", {
+      level: "warning",
+      tags: {
+        feature: "inbox",
+        operation: "initial-load",
+        platform: Platform.OS,
+        outcome: "error",
+      },
+      extra: {
+        walletAddress: walletAddress ? `${walletAddress.slice(0, 12)}…` : null,
+        errorName: error instanceof Error ? error.name : null,
+        errorMessage: error instanceof Error ? error.message : String(error ?? ""),
+      },
+    });
+  }, [error, isError, walletAddress]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -99,12 +132,23 @@ export function InboxScreen() {
       setHasInitialLoadTimedOut(true);
       if (hasCapturedInitialLoadTimeoutRef.current) return;
       hasCapturedInitialLoadTimeoutRef.current = true;
+      Sentry.addBreadcrumb({
+        category: "inbox",
+        message: "Inbox initial load timed out",
+        level: "warning",
+        data: {
+          platform: Platform.OS,
+          isFetching,
+          isError,
+        },
+      });
       Sentry.captureMessage("Inbox initial load timed out", {
         level: "warning",
         tags: {
           feature: "inbox",
           operation: "initial-load",
           platform: Platform.OS,
+          outcome: "timeout",
         },
         extra: {
           walletAddress: walletAddress ? `${walletAddress.slice(0, 12)}…` : null,
@@ -386,6 +430,16 @@ export function InboxScreen() {
             rounded="full"
             haptics="selection"
             onPress={() => {
+              Sentry.addBreadcrumb({
+                category: "inbox",
+                message: "Inbox error fallback retry tapped",
+                level: "info",
+                data: {
+                  platform: Platform.OS,
+                  hasInitialLoadTimedOut,
+                  isError,
+                },
+              });
               setHasInitialLoadTimedOut(false);
               void refetch();
             }}

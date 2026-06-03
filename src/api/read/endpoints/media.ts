@@ -407,12 +407,24 @@ export async function uploadVideoToSignedUrl(
       };
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
+          const durationMs = Date.now() - signedUploadStartedAt;
           console.log("[VideoUpload] Android XHR upload complete, status:", xhr.status);
           console.log("[VideoTiming] signed upload complete", {
             fileName: filename,
             platform: Platform.OS,
             status: xhr.status,
-            durationMs: Date.now() - signedUploadStartedAt,
+            durationMs,
+          });
+          Sentry.addBreadcrumb({
+            category: "media-upload",
+            message: "Video signed upload complete",
+            level: "info",
+            data: {
+              fileName: filename,
+              platform: Platform.OS,
+              status: xhr.status,
+              durationMs,
+            },
           });
           settle(resolve);
           return;
@@ -511,12 +523,24 @@ export async function uploadVideoToSignedUrl(
           { status: result.status, responseText: result.body }
         );
       }
+      const durationMs = Date.now() - signedUploadStartedAt;
       console.log("[VideoUpload] Upload complete, status:", result.status);
       console.log("[VideoTiming] signed upload complete", {
         fileName: filename,
         platform: Platform.OS,
         status: result.status,
-        durationMs: Date.now() - signedUploadStartedAt,
+        durationMs,
+      });
+      Sentry.addBreadcrumb({
+        category: "media-upload",
+        message: "Video signed upload complete",
+        level: "info",
+        data: {
+          fileName: filename,
+          platform: Platform.OS,
+          status: result.status,
+          durationMs,
+        },
       });
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
@@ -557,11 +581,24 @@ export async function uploadVideo(
   try {
     const uploadUrlStartedAt = Date.now();
     uploadResponse = await getVideoUploadUrl();
+    const uploadUrlDurationMs = Date.now() - uploadUrlStartedAt;
     console.log("[VideoTiming] upload URL ready", {
       fileName,
-      durationMs: Date.now() - uploadUrlStartedAt,
+      durationMs: uploadUrlDurationMs,
       totalDurationMs: Date.now() - uploadStartedAt,
       uid: uploadResponse.uid,
+    });
+    Sentry.addBreadcrumb({
+      category: "media-upload",
+      message: "Video upload URL ready",
+      level: "info",
+      data: {
+        fileName,
+        durationMs: uploadUrlDurationMs,
+        totalDurationMs: Date.now() - uploadStartedAt,
+        uid: uploadResponse.uid,
+        provider: uploadResponse.provider,
+      },
     });
     console.log("[VideoUpload] Got upload response:", JSON.stringify(uploadResponse, null, 2));
 
@@ -599,12 +636,39 @@ export async function uploadVideo(
   const finalUrl = getVideoUrl(uploadResponse);
   const thumbnailUrl = getVideoThumbnailUrl(uploadResponse);
   console.log("[VideoUpload] Final URL:", finalUrl);
+  const totalUploadDurationMs = Date.now() - uploadStartedAt;
   console.log("[VideoTiming] upload complete", {
     fileName,
     uid: uploadResponse.uid,
-    totalDurationMs: Date.now() - uploadStartedAt,
+    totalDurationMs: totalUploadDurationMs,
     finalUrl,
   });
+  Sentry.addBreadcrumb({
+    category: "media-upload",
+    message: "Video upload complete",
+    level: "info",
+    data: {
+      fileName,
+      uid: uploadResponse.uid,
+      totalDurationMs: totalUploadDurationMs,
+      finalUrl,
+    },
+  });
+  if (totalUploadDurationMs > 30000) {
+    Sentry.captureMessage("Video upload was slow", {
+      level: "warning",
+      tags: {
+        feature: "video-posting",
+        operation: "video-upload",
+      },
+      extra: {
+        fileName,
+        uid: uploadResponse.uid,
+        totalDurationMs: totalUploadDurationMs,
+        finalUrl,
+      },
+    });
+  }
 
   return {
     url: finalUrl,

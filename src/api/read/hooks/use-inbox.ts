@@ -1,4 +1,6 @@
 import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
+import * as Sentry from "@sentry/react-native";
+import { Platform } from "react-native";
 import { queryKeys } from "../query-keys";
 import { getInbox, type GetInboxParams } from "../endpoints/inbox";
 import { useAuthStore } from "@/src/stores";
@@ -14,11 +16,26 @@ export function useInbox(params?: Omit<GetInboxParams, "address">) {
 
   return useQuery({
     queryKey: queryKeys.inbox(walletAddress ?? "", params?.page),
-    queryFn: () =>
-      getInbox({
-        address: walletAddress!,
-        ...params,
-      }),
+    queryFn: async () => {
+      try {
+        return await getInbox({
+          address: walletAddress!,
+          ...params,
+        });
+      } catch (err) {
+        Sentry.addBreadcrumb({
+          category: "inbox",
+          message: "getInbox request failed",
+          level: "warning",
+          data: {
+            platform: Platform.OS,
+            page: params?.page,
+            errorMessage: err instanceof Error ? err.message : String(err),
+          },
+        });
+        throw err;
+      }
+    },
     enabled: !!walletAddress,
     retry: 1,
     staleTime: 1000 * 30, // 30 seconds
@@ -36,12 +53,27 @@ export function useInfiniteInbox(
 
   return useInfiniteQuery({
     queryKey: queryKeys.inboxInfinite(walletAddress ?? ""),
-    queryFn: ({ pageParam = 1 }) =>
-      getInbox({
-        address: walletAddress!,
-        page: pageParam,
-        ...params,
-      }),
+    queryFn: async ({ pageParam = 1 }) => {
+      try {
+        return await getInbox({
+          address: walletAddress!,
+          page: pageParam,
+          ...params,
+        });
+      } catch (err) {
+        Sentry.addBreadcrumb({
+          category: "inbox",
+          message: "getInbox (infinite) request failed",
+          level: "warning",
+          data: {
+            platform: Platform.OS,
+            page: pageParam,
+            errorMessage: err instanceof Error ? err.message : String(err),
+          },
+        });
+        throw err;
+      }
+    },
     initialPageParam: 1,
     getNextPageParam: (lastPage) => {
       if (!lastPage?.has_more) return undefined;

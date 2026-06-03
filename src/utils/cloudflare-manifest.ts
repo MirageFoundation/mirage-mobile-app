@@ -1,4 +1,5 @@
 import axios from "axios";
+import * as Sentry from "@sentry/react-native";
 
 export const CLOUD_FLARE_PROCESSING_POLL_INTERVAL_MS = 2500;
 export const CLOUD_FLARE_PROCESSING_MAX_WAIT_MS = 120000;
@@ -92,6 +93,12 @@ export async function waitForCloudflareManifestReady(
     intervalMs,
     timeoutMs,
   });
+  Sentry.addBreadcrumb({
+    category: "video-processing",
+    message: "Cloudflare manifest wait started",
+    level: "info",
+    data: { manifestUrl, intervalMs, timeoutMs },
+  });
 
   while (Date.now() - startedAt < timeoutMs) {
     if (options.signal?.aborted) {
@@ -108,11 +115,36 @@ export async function waitForCloudflareManifestReady(
         elapsedMs: Date.now() - startedAt,
       });
       if (ready) {
+        const totalDurationMs = Date.now() - startedAt;
         console.log("[VideoTiming] cloudflare manifest ready", {
           manifestUrl,
           attempts: attempt + 1,
-          totalDurationMs: Date.now() - startedAt,
+          totalDurationMs,
         });
+        Sentry.addBreadcrumb({
+          category: "video-processing",
+          message: "Cloudflare manifest ready",
+          level: "info",
+          data: {
+            manifestUrl,
+            attempts: attempt + 1,
+            totalDurationMs,
+          },
+        });
+        if (totalDurationMs > 30000) {
+          Sentry.captureMessage("Cloudflare video processing was slow", {
+            level: "warning",
+            tags: {
+              feature: "video-posting",
+              operation: "cloudflare-manifest-wait",
+            },
+            extra: {
+              manifestUrl,
+              attempts: attempt + 1,
+              totalDurationMs,
+            },
+          });
+        }
         return;
       }
     } catch (error) {
@@ -124,6 +156,19 @@ export async function waitForCloudflareManifestReady(
         elapsedMs: Date.now() - startedAt,
         error: error instanceof Error ? error.message : String(error),
       });
+      if (attempt === 0 || attempt % 10 === 0) {
+        Sentry.addBreadcrumb({
+          category: "video-processing",
+          message: "Cloudflare manifest not ready",
+          level: "warning",
+          data: {
+            manifestUrl,
+            attempt,
+            elapsedMs: Date.now() - startedAt,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
     }
 
     attempt += 1;
@@ -138,6 +183,18 @@ export async function waitForCloudflareManifestReady(
     attempts: attempt,
     totalDurationMs: Date.now() - startedAt,
     lastError: lastError instanceof Error ? lastError.message : lastError ? String(lastError) : undefined,
+  });
+  Sentry.captureException(error, {
+    tags: {
+      feature: "video-posting",
+      operation: "cloudflare-manifest-wait",
+    },
+    extra: {
+      manifestUrl,
+      attempts: attempt,
+      totalDurationMs: Date.now() - startedAt,
+      lastError: lastError instanceof Error ? lastError.message : lastError ? String(lastError) : undefined,
+    },
   });
   (error as Error & { cause?: unknown }).cause = lastError;
   throw error;

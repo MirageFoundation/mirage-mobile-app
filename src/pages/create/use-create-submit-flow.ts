@@ -278,6 +278,19 @@ export function useCreateSubmitFlow({
             mediaCount: resolvedMediaUrls.length,
             skipOptimisticUpdate,
           });
+          Sentry.addBreadcrumb({
+            category: "create-post",
+            message: "Enqueueing create post network action",
+            level: "info",
+            data: {
+              optimisticId,
+              actionId,
+              attachmentType: draft.attachmentType,
+              elapsedSinceSubmitMs: Date.now() - submitStartedAt,
+              mediaCount: resolvedMediaUrls.length,
+              skipOptimisticUpdate,
+            },
+          });
           usePowQueueStore.getState().enqueue({
             id: actionId,
             type: "post",
@@ -319,20 +332,47 @@ export function useCreateSubmitFlow({
                   optimisticMediaUrl: uploadedMediaUrls[0] ?? postInput.optimisticMediaUrl,
                   optimisticMediaUrls: uploadedMediaUrls.length > 0 ? uploadedMediaUrls : postInput.optimisticMediaUrls,
                 });
+                const networkDurationMs = Date.now() - networkStartedAt;
                 console.log("[VideoTiming] network post execute complete", {
                   optimisticId,
                   actionId,
-                  durationMs: Date.now() - networkStartedAt,
+                  durationMs: networkDurationMs,
                   elapsedSinceSubmitMs: Date.now() - submitStartedAt,
+                });
+                Sentry.addBreadcrumb({
+                  category: "create-post",
+                  message: "Create post network action completed",
+                  level: "info",
+                  data: {
+                    optimisticId,
+                    actionId,
+                    attachmentType: draft.attachmentType,
+                    durationMs: networkDurationMs,
+                    elapsedSinceSubmitMs: Date.now() - submitStartedAt,
+                  },
                 });
                 return result;
               } catch (error) {
+                const networkDurationMs = Date.now() - networkStartedAt;
                 console.log("[VideoTiming] network post execute failed", {
                   optimisticId,
                   actionId,
-                  durationMs: Date.now() - networkStartedAt,
+                  durationMs: networkDurationMs,
                   elapsedSinceSubmitMs: Date.now() - submitStartedAt,
                   error: error instanceof Error ? error.message : String(error),
+                });
+                Sentry.addBreadcrumb({
+                  category: "create-post",
+                  message: "Create post network action failed",
+                  level: "error",
+                  data: {
+                    optimisticId,
+                    actionId,
+                    attachmentType: draft.attachmentType,
+                    durationMs: networkDurationMs,
+                    elapsedSinceSubmitMs: Date.now() - submitStartedAt,
+                    error: error instanceof Error ? error.message : String(error),
+                  },
                 });
                 throw error;
               }
@@ -368,6 +408,17 @@ export function useCreateSubmitFlow({
             actionId,
             videoCount: cloudflareVideoUrls.length,
             elapsedSinceSubmitMs: Date.now() - submitStartedAt,
+          });
+          Sentry.addBreadcrumb({
+            category: "create-post",
+            message: "Video post pre-PoW processing started",
+            level: "info",
+            data: {
+              optimisticId,
+              actionId,
+              videoCount: cloudflareVideoUrls.length,
+              elapsedSinceSubmitMs: Date.now() - submitStartedAt,
+            },
           });
           insertOptimisticPost();
           usePowQueueStore.getState().showPreparing({
@@ -412,20 +463,50 @@ export function useCreateSubmitFlow({
                   }),
                 ),
               );
+              const processingDurationMs = Date.now() - cloudflareWaitStartedAt;
               console.log("[VideoTiming] post submit video processing complete", {
                 optimisticId,
                 actionId,
-                durationMs: Date.now() - cloudflareWaitStartedAt,
+                durationMs: processingDurationMs,
                 elapsedSinceSubmitMs: Date.now() - submitStartedAt,
               });
+              Sentry.addBreadcrumb({
+                category: "create-post",
+                message: "Video post pre-PoW processing completed",
+                level: "info",
+                data: {
+                  optimisticId,
+                  actionId,
+                  videoCount: cloudflareVideoUrls.length,
+                  durationMs: processingDurationMs,
+                  elapsedSinceSubmitMs: Date.now() - submitStartedAt,
+                },
+              });
+              if (processingDurationMs > 30000) {
+                Sentry.captureMessage("Video post processing before PoW was slow", {
+                  level: "warning",
+                  tags: {
+                    feature: "video-posting",
+                    operation: "pre-pow-video-processing",
+                  },
+                  extra: {
+                    optimisticId,
+                    actionId,
+                    videoCount: cloudflareVideoUrls.length,
+                    durationMs: processingDurationMs,
+                    elapsedSinceSubmitMs: Date.now() - submitStartedAt,
+                  },
+                });
+              }
               markOptimisticVideoProcessingComplete(queryClient, optimisticId);
               usePowQueueStore.getState().clearPreparing(actionId);
               enqueueNetworkPost(mediaUrls, true);
             } catch (err) {
+              const processingDurationMs = Date.now() - cloudflareWaitStartedAt;
               console.log("[VideoTiming] post submit video processing failed", {
                 optimisticId,
                 actionId,
-                durationMs: Date.now() - cloudflareWaitStartedAt,
+                durationMs: processingDurationMs,
                 elapsedSinceSubmitMs: Date.now() - submitStartedAt,
                 error: err instanceof Error ? err.message : String(err),
               });
@@ -439,6 +520,8 @@ export function useCreateSubmitFlow({
                   optimisticId,
                   actionId,
                   videoCount: cloudflareVideoUrls.length,
+                  durationMs: processingDurationMs,
+                  elapsedSinceSubmitMs: Date.now() - submitStartedAt,
                 },
               });
               markOptimisticPostError(queryClient, optimisticId, getPostFailureDetails(err));
