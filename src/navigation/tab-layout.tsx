@@ -459,23 +459,27 @@ export default function TabLayout() {
         currentPathname.endsWith("/profile");
       const isNotificationNavigationActive = isInboxNotificationNavigationActive();
       const isShareNavigationActive = isShareIntentNavigationActive();
+      const initialRouteDiagnostics = {
+        pathname: currentPathname,
+        hasInitialCreateIntent,
+        hasInitialShareIntent,
+        hasPendingShareIntent,
+        hasInitialTabDeepLink,
+        isOnHomeTab,
+        isOnCreate,
+        isOnInbox,
+        isOnNonHomeTab,
+        isNotificationNavigationActive,
+        isShareNavigationActive,
+        hasShareIntent,
+        hadInitialShareIntent: initialShareIntentRef.current,
+        detectedRecentSharePath: isRecentSharePath(10_000),
+      };
 
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Initial tab route check",
-        data: {
-          pathname: currentPathname,
-          hasInitialCreateIntent,
-          hasInitialShareIntent,
-          hasPendingShareIntent,
-          hasInitialTabDeepLink,
-          isOnHomeTab,
-          isOnCreate,
-          isOnInbox,
-          isOnNonHomeTab,
-          isNotificationNavigationActive,
-          isShareNavigationActive,
-        },
+        data: initialRouteDiagnostics,
         level: "info",
       });
 
@@ -535,8 +539,17 @@ export default function TabLayout() {
         Sentry.addBreadcrumb({
           category: "navigation",
           message: "Redirecting stale initial tab route to home",
-          data: { pathname: currentPathname },
-          level: "info",
+          data: initialRouteDiagnostics,
+          level: "warning",
+        });
+        Sentry.captureMessage("Unexpected initial non-home tab route recovered", {
+          level: "warning",
+          tags: {
+            feature: "navigation",
+            operation: "initial-tab-route-recovery",
+            initial_tab_route: isOnCreate ? "create" : isOnInbox ? "inbox" : "other",
+          },
+          extra: initialRouteDiagnostics,
         });
         router.replace("/(tabs)");
       }
