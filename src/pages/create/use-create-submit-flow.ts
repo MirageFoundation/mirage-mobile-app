@@ -241,38 +241,105 @@ export function useCreateSubmitFlow({
           optimisticPreviewMediaUrls,
           optimisticDraft,
         };
-        usePowQueueStore.getState().enqueue({
-          id: actionId,
-          type: "post",
-          label: getActionLabel("post"),
-          execute: async () => {
-            Sentry.addBreadcrumb({
-              category: "create-post",
-              message: "Executing queued create post action",
-              level: "info",
-              data: {
-                optimisticId,
-                actionId,
-                attachmentType: draft.attachmentType,
-                mediaCount: draft.mediaUris.length,
-                hasOptimisticPreview: !!optimisticPreviewMediaUrls?.length,
-              },
-            });
-            let uploadedMediaUrls = mediaUrls;
-            if (draft.attachmentType === "image" && draft.mediaUris.length > 0) {
-              try {
-                const uploads = await getUploadedImageUrls(draft.mediaUris);
-                uploadedMediaUrls = [...mediaUrls, ...uploads];
-              } catch (error) {
-                Sentry.addBreadcrumb({ category: "image-upload", message: "Image upload failed", data: { error: String(error) }, level: "error" });
-                throw error;
-              }
-            }
-            const cloudflareVideoUrls = uploadedMediaUrls.filter(isCloudflareStreamUrl);
-            if (cloudflareVideoUrls.length > 0) {
+        const insertOptimisticPost = () => {
+          const optimisticPost = buildOptimisticPost(
+            undefined,
+            postInput,
+            currentUser?.walletAddress ?? currentUser?.id ?? null,
+            currentUser?.username,
+            "pending",
+          );
+          const upsertOptions = {
+            address: currentUser?.walletAddress,
+            allowedTags: getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled) || undefined,
+            limit: 10,
+          };
+          Sentry.addBreadcrumb({
+            category: "create-post",
+            message: "Inserted optimistic post into home feed",
+            level: "info",
+            data: {
+              optimisticId,
+              actionId,
+              attachmentType: draft.attachmentType,
+              mediaCount: draft.mediaUris.length,
+            },
+          });
+          usePendingPostsStore.getState().upsertPost(optimisticPost);
+          upsertHomePost(queryClient, optimisticPost, upsertOptions);
+        };
+        const enqueueNetworkPost = (resolvedMediaUrls: string[], skipOptimisticUpdate = false) => {
+          usePowQueueStore.getState().enqueue({
+            id: actionId,
+            type: "post",
+            label: getActionLabel("post"),
+            execute: async () => {
               Sentry.addBreadcrumb({
                 category: "create-post",
-                message: "Waiting for Cloudflare video processing before network post",
+                message: "Executing queued create post action",
+                level: "info",
+                data: {
+                  optimisticId,
+                  actionId,
+                  attachmentType: draft.attachmentType,
+                  mediaCount: draft.mediaUris.length,
+                  hasOptimisticPreview: !!optimisticPreviewMediaUrls?.length,
+                },
+              });
+              let uploadedMediaUrls = resolvedMediaUrls;
+              if (draft.attachmentType === "image" && draft.mediaUris.length > 0) {
+                try {
+                  const uploads = await getUploadedImageUrls(draft.mediaUris);
+                  uploadedMediaUrls = [...resolvedMediaUrls, ...uploads];
+                } catch (error) {
+                  Sentry.addBreadcrumb({ category: "image-upload", message: "Image upload failed", data: { error: String(error) }, level: "error" });
+                  throw error;
+                }
+              }
+              return postMutation.mutateAsync({
+                ...postInput,
+                media: uploadedMediaUrls.length > 0 ? uploadedMediaUrls : undefined,
+                optimisticMediaUrl: uploadedMediaUrls[0] ?? postInput.optimisticMediaUrl,
+                optimisticMediaUrls: uploadedMediaUrls.length > 0 ? uploadedMediaUrls : postInput.optimisticMediaUrls,
+              });
+            },
+            onOptimisticUpdate: skipOptimisticUpdate ? undefined : insertOptimisticPost,
+            onError: (err) => {
+              const toastMessage = getApiErrorMessage(err);
+              const postErrorDetails = getPostFailureDetails(err);
+              Sentry.captureException(err, {
+                tags: {
+                  feature: "create-post",
+                  operation: "queued-create-post",
+                },
+                extra: {
+                  optimisticId,
+                  actionId,
+                  attachmentType: draft.attachmentType,
+                  mediaCount: draft.mediaUris.length,
+                  toastMessage,
+                  postErrorDetails,
+                },
+              });
+              markOptimisticPostError(queryClient, optimisticId, postErrorDetails);
+              toast.error("Post wasn't created", toastMessage);
+            },
+          });
+        };
+        const cloudflareVideoUrls = mediaUrls.filter(isCloudflareStreamUrl);
+        if (cloudflareVideoUrls.length > 0) {
+          insertOptimisticPost();
+          usePowQueueStore.getState().showPreparing({
+            id: actionId,
+            type: "post",
+            label: getActionLabel("post"),
+            execute: async () => undefined,
+          });
+          void (async () => {
+            try {
+              Sentry.addBreadcrumb({
+                category: "create-post",
+                message: "Waiting for Cloudflare video processing before enqueueing PoW",
                 level: "info",
                 data: {
                   optimisticId,
@@ -288,8 +355,8 @@ export function useCreateSubmitFlow({
                         Sentry.addBreadcrumb({
                           category: "create-post",
                           message: ready
-                            ? "Cloudflare video processing ready before post"
-                            : "Cloudflare video processing pending before post",
+                            ? "Cloudflare video processing ready before PoW"
+                            : "Cloudflare video processing pending before PoW",
                           level: ready ? "info" : "warning",
                           data: {
                             optimisticId,
@@ -305,63 +372,27 @@ export function useCreateSubmitFlow({
                 ),
               );
               markOptimisticVideoProcessingComplete(queryClient, optimisticId);
+              usePowQueueStore.getState().clearPreparing(actionId);
+              enqueueNetworkPost(mediaUrls, true);
+            } catch (err) {
+              usePowQueueStore.getState().clearPreparing(actionId);
+              Sentry.captureException(err, {
+                tags: {
+                  feature: "create-post",
+                  operation: "pre-pow-video-processing",
+                },
+                extra: {
+                  optimisticId,
+                  actionId,
+                  videoCount: cloudflareVideoUrls.length,
+                },
+              });
+              markOptimisticPostError(queryClient, optimisticId, getPostFailureDetails(err));
             }
-            return postMutation.mutateAsync({
-              ...postInput,
-              media: uploadedMediaUrls.length > 0 ? uploadedMediaUrls : undefined,
-              optimisticMediaUrl: uploadedMediaUrls[0] ?? postInput.optimisticMediaUrl,
-              optimisticMediaUrls: uploadedMediaUrls.length > 0 ? uploadedMediaUrls : postInput.optimisticMediaUrls,
-            });
-          },
-          onOptimisticUpdate: () => {
-            const optimisticPost = buildOptimisticPost(
-              undefined,
-              postInput,
-              currentUser?.walletAddress ?? currentUser?.id ?? null,
-              currentUser?.username,
-              "pending",
-            );
-            const upsertOptions = {
-              address: currentUser?.walletAddress,
-              allowedTags: getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled) || undefined,
-              limit: 10,
-            };
-            Sentry.addBreadcrumb({
-              category: "create-post",
-              message: "Inserted optimistic post into home feed",
-              level: "info",
-              data: {
-                optimisticId,
-                actionId,
-                attachmentType: draft.attachmentType,
-                mediaCount: draft.mediaUris.length,
-              },
-            });
-            usePendingPostsStore.getState().upsertPost(optimisticPost);
-            upsertHomePost(queryClient, optimisticPost, upsertOptions);
-          },
-          onError: (err) => {
-            const toastMessage = getApiErrorMessage(err);
-            const postErrorDetails = getPostFailureDetails(err);
-            Sentry.captureException(err, {
-              tags: {
-                feature: "create-post",
-                operation: "queued-create-post",
-              },
-              extra: {
-                optimisticId,
-                actionId,
-                attachmentType: draft.attachmentType,
-                mediaCount: draft.mediaUris.length,
-                toastMessage,
-                postErrorDetails,
-              },
-            });
-            markOptimisticPostError(queryClient, optimisticId, postErrorDetails);
-            toast.error("Post wasn't created", toastMessage);
-          },
-        });
-
+          })();
+        } else {
+          enqueueNetworkPost(mediaUrls);
+        }
         resetComposeState();
         resetVideoUploads();
         resetImageUploads();

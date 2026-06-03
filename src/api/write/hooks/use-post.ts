@@ -152,7 +152,7 @@ export const buildOptimisticPost = (
     optimistic_action_id: input.optimisticActionId,
     optimistic_draft: input.optimisticDraft,
     optimistic_video_preview_until: input.optimisticPreviewMediaUrls?.length
-      ? Date.now() + 45000
+      ? Date.now() + 130000
       : undefined,
   };
 };
@@ -1034,6 +1034,10 @@ export function usePost(options: UsePostOptions = {}) {
         });
         const postAfterNetworkConfirmation = {
           ...confirmedPost,
+          thumbnail: input.optimisticPreviewMediaUrls?.[0] ?? confirmedPost.thumbnail,
+          media: input.optimisticPreviewMediaUrls?.length
+            ? input.optimisticPreviewMediaUrls
+            : confirmedPost.media,
           optimistic_status: "success" as const,
           optimistic_error: undefined,
           optimistic_draft: input.optimisticDraft,

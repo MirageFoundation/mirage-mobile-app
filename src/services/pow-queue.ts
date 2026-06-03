@@ -56,6 +56,7 @@ export interface PowAction<T = unknown> {
 export interface PowQueueState {
   queue: PowAction[];
   currentAction: PowAction | null;
+  preparingAction: PowAction | null;
   isProcessing: boolean;
   completedCount: number;
   totalCount: number;
@@ -67,6 +68,8 @@ export interface PowQueueState {
 
 export interface PowQueueActions {
   enqueue: <T>(action: PowAction<T>) => void;
+  showPreparing: <T>(action: PowAction<T>) => void;
+  clearPreparing: (actionId?: string) => void;
   processNext: () => Promise<void>;
   updateProgress: (progress: number) => void;
   clear: () => void;
@@ -412,6 +415,7 @@ const executeImmediately = async <T>(action: PowAction<T>): Promise<void> => {
 export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   queue: [],
   currentAction: null,
+  preparingAction: null,
   isProcessing: false,
   completedCount: 0,
   totalCount: 0,
@@ -444,6 +448,28 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
         setTimeout(() => get().processNext(), 16);
       });
     }
+  },
+
+  showPreparing: <T>(action: PowAction<T>) => {
+    if (action.showProgress === false) return;
+    set({
+      preparingAction: action as PowAction,
+      isProcessing: true,
+      totalCount: Math.max(get().totalCount, 1),
+    });
+  },
+
+  clearPreparing: (actionId?: string) => {
+    const state = get();
+    if (!state.preparingAction) return;
+    if (actionId && state.preparingAction.id !== actionId) return;
+    const hasVisibleQueue = state.queue.some((action) => action.showProgress !== false);
+    const hasVisibleCurrent = !!state.currentAction && state.currentAction.showProgress !== false;
+    set({
+      preparingAction: null,
+      isProcessing: hasVisibleCurrent || hasVisibleQueue,
+      totalCount: hasVisibleCurrent || hasVisibleQueue ? state.totalCount : 0,
+    });
   },
 
   cancelAction: (actionId: string): boolean => {
@@ -746,6 +772,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
 
     set({
       queue: [],
+      preparingAction: null,
       totalCount: state.completedCount,
     });
   },
@@ -759,6 +786,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     set({
       queue: [],
       currentAction: null,
+      preparingAction: null,
       isProcessing: false,
       completedCount: 0,
       totalCount: 0,
@@ -772,12 +800,12 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
 
 export function waitForQueueDrain(): Promise<void> {
  const state = usePowQueueStore.getState();
- if (!state.isProcessing && state.queue.length === 0 && !state.currentAction) {
+ if (!state.isProcessing && state.queue.length === 0 && !state.currentAction && !state.preparingAction) {
   return Promise.resolve();
  }
  return new Promise<void>((resolve) => {
   const unsub = usePowQueueStore.subscribe((s) => {
-   if (!s.isProcessing && s.queue.length === 0 && !s.currentAction) {
+   if (!s.isProcessing && s.queue.length === 0 && !s.currentAction && !s.preparingAction) {
     unsub();
     resolve();
    }
@@ -795,11 +823,12 @@ export const usePowQueue = () => {
     reset: store.reset,
     isProcessing: store.isProcessing,
     currentAction: store.currentAction,
+    preparingAction: store.preparingAction,
     queueLength: store.queue.length,
     completedCount: store.completedCount,
     totalCount: store.totalCount,
     currentProgress: store.currentProgress,
-   pendingCount: store.queue.length + (store.currentAction ? 1 : 0),
+   pendingCount: store.queue.length + (store.currentAction ? 1 : 0) + (store.preparingAction ? 1 : 0),
    lastCompletedAction: store.lastCompletedAction,
    successOverlay: store.successOverlay,
  };

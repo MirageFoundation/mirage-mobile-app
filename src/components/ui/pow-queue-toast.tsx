@@ -60,6 +60,7 @@ export const PowQueueToast = () => {
 
   const {
     currentAction,
+    preparingAction,
     completedCount,
     totalCount,
     lastCompletedAction,
@@ -96,8 +97,9 @@ export const PowQueueToast = () => {
   const { offset, onLayout } = useTopToastStack(TOAST_STACK_ID, isVisible);
 
   const visibleCurrentAction = currentAction?.showProgress === false ? null : currentAction;
+  const visiblePreparingAction = preparingAction?.showProgress === false ? null : preparingAction;
   const visibleQueue = queue.filter((action) => action.showProgress !== false);
-  const hasQueuedOrActiveWork = visibleCurrentAction !== null || visibleQueue.length > 0;
+  const hasQueuedOrActiveWork = visibleCurrentAction !== null || visiblePreparingAction !== null || visibleQueue.length > 0;
   const hasPendingWork = hasQueuedOrActiveWork;
   const resultAction = lastCompletedAction ?? displayedCompletedAction;
   const immediateResultAction = successOverlay
@@ -134,6 +136,7 @@ export const PowQueueToast = () => {
       ? getSuccessLabel(activeResultAction.type as any)
       : activeResultAction.errorMessage || "Failed"
     : visibleCurrentAction?.label ||
+      visiblePreparingAction?.label ||
       visibleQueue[0]?.label ||
       (activeResultAction
         ? activeResultAction.success
@@ -273,6 +276,7 @@ export const PowQueueToast = () => {
         const state = usePowQueueStore.getState();
         const hasVisibleWork =
           state.currentAction?.showProgress !== false && state.currentAction !== null ||
+          state.preparingAction?.showProgress !== false && state.preparingAction !== null ||
           state.queue.some((action) => action.showProgress !== false);
 
         if (!hasVisibleWork) {

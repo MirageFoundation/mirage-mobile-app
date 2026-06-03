@@ -220,28 +220,28 @@ export function VideoEditorScreen() {
     
     let processedUri = videoUri;
     
-    // Check if we need to process the video (trim or mute)
+    // Always process selected videos so Android/iOS uploads are compressed for
+    // faster Cloudflare processing. The helper trims only when needed.
     const needsTrim = trimStart > 100 || (duration > 0 && trimEnd < duration - 100);
     
-    if (needsTrim) {
-      setIsProcessing(true);
-      try {
-        console.log("[VideoEditor] Processing video:", {
-          trimStart,
-          trimEnd,
-          duration,
-          needsTrim,
-        });
-        
-        const result = await processVideo(videoUri, {
-          trimStartMs: trimStart,
-          trimEndMs: trimEnd,
-          totalDurationMs: duration,
-        });
-        processedUri = result.uri;
-      } catch (error) {
-        Sentry.captureException(error, { tags: { feature: "video-editor", operation: "process" } });
-      }
+    setIsProcessing(true);
+    try {
+      console.log("[VideoEditor] Processing video:", {
+        trimStart,
+        trimEnd,
+        duration,
+        needsTrim,
+      });
+      
+      const result = await processVideo(videoUri, {
+        trimStartMs: trimStart,
+        trimEndMs: trimEnd,
+        totalDurationMs: duration,
+      });
+      processedUri = result.uri;
+    } catch (error) {
+      Sentry.captureException(error, { tags: { feature: "video-editor", operation: "process" } });
+    } finally {
       setIsProcessing(false);
     }
     
