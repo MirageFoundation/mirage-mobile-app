@@ -20,6 +20,7 @@ export function useInbox(params?: Omit<GetInboxParams, "address">) {
         ...params,
       }),
     enabled: !!walletAddress,
+    retry: 1,
     staleTime: 1000 * 30, // 30 seconds
     gcTime: 1000 * 60 * 60, // 1 hour
   });
@@ -47,6 +48,7 @@ export function useInfiniteInbox(
       return (lastPage?.page ?? 0) + 1;
     },
     enabled: !!walletAddress,
+    retry: 1,
     staleTime: 1000 * 30, // 30 seconds
   });
 }
