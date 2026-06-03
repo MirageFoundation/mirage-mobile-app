@@ -347,7 +347,7 @@ const styles = StyleSheet.create((theme, rt) => ({
     top: -1000,
     left: 0,
     right: 0,
-    bottom: 0,
+    height: 1000,
   },
   gradientWrapper: {
     ...StyleSheet.absoluteFillObject,
