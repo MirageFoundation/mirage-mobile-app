@@ -191,6 +191,37 @@ const isStaleBlockHashError = (error: unknown): boolean => {
   return /invalid\s*last\s*block\s*hash/i.test(msg);
 };
 
+const reportContentWriteBackgroundHandling = (
+  message: string,
+  action: Pick<PowAction, "id" | "type" | "label" | "showProgress"> | null | undefined,
+  extra: Record<string, unknown> = {},
+) => {
+  const powType = action?.type ?? "unknown";
+  const data = {
+    actionId: action?.id,
+    label: action?.label,
+    powType,
+    showProgress: action?.showProgress,
+    ...extra,
+  };
+
+  Sentry.addBreadcrumb({
+    category: "pow",
+    message,
+    level: "warning",
+    data,
+  });
+  Sentry.captureMessage(message, {
+    level: "warning",
+    tags: {
+      feature: "pow",
+      operation: "content_write_background_resume",
+      pow_type: powType,
+    },
+    extra: data,
+  });
+};
+
 
 function setupPowQueueAppStateHandling(): void {
   if (appStateSubscription) return;
@@ -204,20 +235,47 @@ function setupPowQueueAppStateHandling(): void {
         message: "App backgrounded, pausing PoW queue",
         level: "info",
       });
-      // Tear down the currently-running PoW computation. The action will be
-      // re-prepended to the queue from the catch block in processNext.
+      // Tear down the currently-running PoW computation. For content writes,
+      // do not force-reject the action: it may already be in the non-abortable
+      // POST /core/post phase, and auto-retrying would duplicate the write.
       try {
         cancelPow();
       } catch {}
-      if (currentCancelReject) {
+      const currentAction = usePowQueueStore.getState().currentAction;
+      if (currentCancelReject && CONTENT_LOSS_TYPES.has(currentAction?.type as PowActionType)) {
+        reportContentWriteBackgroundHandling(
+          "Content write left in-flight after app backgrounded",
+          currentAction,
+          {
+            source: "current_action",
+            queueLength: usePowQueueStore.getState().queue.length,
+            immediateActionCount: immediateActions.size,
+          },
+        );
+      }
+      if (currentCancelReject && !CONTENT_LOSS_TYPES.has(currentAction?.type as PowActionType)) {
         currentCancelReject(new Error(PAUSED_SENTINEL));
         currentCancelReject = null;
       }
-      // Same for any in-flight skip-PoW actions.
-      immediateActions.forEach(({ reject }) => {
+      // Same for any in-flight skip-PoW actions. Content writes may already be
+      // in their POST phase, so let them settle instead of re-enqueueing.
+      immediateActions.forEach(({ reject, action }, actionId) => {
+        if (CONTENT_LOSS_TYPES.has(action.type)) {
+          reportContentWriteBackgroundHandling(
+            "Immediate content write left in-flight after app backgrounded",
+            action,
+            {
+              source: "immediate_action",
+              actionId,
+              queueLength: usePowQueueStore.getState().queue.length,
+              immediateActionCount: immediateActions.size,
+            },
+          );
+          return;
+        }
         reject(new Error(PAUSED_SENTINEL));
+        immediateActions.delete(actionId);
       });
-      immediateActions.clear();
     } else if (nextState === "active") {
       if (!isPausedByAppState) return;
       isPausedByAppState = false;
@@ -678,6 +736,22 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
         }));
       } else if (msg === "pow_cancelled" || isPowCancelled(error)) {
         wasCancelled = true;
+        if (CONTENT_LOSS_TYPES.has(nextAction.type) && isPausedByAppState) {
+          reportContentWriteBackgroundHandling(
+            "Content PoW cancelled by app background; action requeued to resume",
+            nextAction,
+            {
+              source: "pow_cancelled_before_post",
+              queueLength: get().queue.length,
+            },
+          );
+          set((s) => ({
+            queue: [nextAction, ...s.queue],
+            currentAction: null,
+            currentProgress: 0,
+          }));
+          return;
+        }
         if (CONTENT_LOSS_TYPES.has(nextAction.type)) {
           Sentry.captureException(
             new Error(`PoW cancelled during ${nextAction.type}`),
