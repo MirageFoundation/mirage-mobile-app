@@ -221,8 +221,15 @@ export function MediaPostDetailCommentSheet({
       animatedPosition={animatedPosition}
       animationConfigs={animationConfigs}
       enableDynamicSizing={false}
-      enablePanDownToClose={true}
-      enableOverDrag={true}
+      // The collapsed snap point is the floor of this sheet; the screen
+      // itself owns dismissal (back button / swipe-down on the media area).
+      // Allowing pan-to-close here means a fast downward fling on the sheet
+      // dismisses it entirely and triggers the screen's onClose handler,
+      // which in turn calls router.back() — closing the whole media post
+      // detail screen. Disable pan-to-close so a hard swipe at most lands
+      // on the lowest (half) snap point and never tears down the screen.
+      enablePanDownToClose={false}
+      enableOverDrag={false}
       enableHandlePanningGesture
       enableContentPanningGesture
       onClose={onClose}

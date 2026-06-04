@@ -102,8 +102,10 @@ function isTabRoute(route: string): boolean {
 const LAST_SHARE_PATH_KEY = "last-share-path";
 const LAST_SHARE_PATH_AT_KEY = "last-share-path-at";
 const LAST_CREATE_DEEP_LINK_AT_KEY = "last-create-deep-link-at";
+const LAST_INITIAL_TAB_DEEP_LINK_AT_KEY = "last-initial-tab-deep-link-at";
 const REPEATED_SHARE_PATH_TTL_MS = 2 * 60_000;
 const RECENT_CREATE_DEEP_LINK_TTL_MS = 60_000;
+const RECENT_INITIAL_TAB_DEEP_LINK_TTL_MS = 60_000;
 
 function isShareIntentPath(path: string): boolean {
   return path.includes("dataUrl=") && path.includes("ShareKey");
@@ -189,6 +191,16 @@ export function isRecentCreateDeepLink(
   return age >= 0 && age < withinMs;
 }
 
+export function isRecentInitialTabDeepLink(
+  withinMs = RECENT_INITIAL_TAB_DEEP_LINK_TTL_MS,
+): boolean {
+  const lastHandledAt = storage.getNumber(LAST_INITIAL_TAB_DEEP_LINK_AT_KEY) ?? 0;
+  if (lastHandledAt <= 0) return false;
+
+  const age = Date.now() - lastHandledAt;
+  return age >= 0 && age < withinMs;
+}
+
 function shouldSkipRepeatedSharePath(path: string): boolean {
   const ageMs = getRepeatedSharePathAgeMs(path);
   return ageMs !== null && ageMs < REPEATED_SHARE_PATH_TTL_MS;
@@ -209,6 +221,16 @@ function rememberCreateDeepLink(path: string): void {
     category: "deep-link",
     message: "Routing create deep link to create tab",
     data: { path: summarizeSharePath(path) },
+    level: "info",
+  });
+}
+
+function rememberInitialTabDeepLink(path: string, route: string): void {
+  storage.set(LAST_INITIAL_TAB_DEEP_LINK_AT_KEY, Date.now());
+  Sentry.addBreadcrumb({
+    category: "deep-link",
+    message: "Routing initial tab deep link",
+    data: { path: summarizeSharePath(path), route },
     level: "info",
   });
 }
@@ -266,6 +288,9 @@ export async function redirectSystemPath({
       useDeepLinkStore.getState().setPendingRoute(path);
       return "/(tabs)";
     }
+    if (initial && isTabRoute(path)) {
+      rememberInitialTabDeepLink(path, path);
+    }
     return path;
   }
 
@@ -308,6 +333,10 @@ export async function redirectSystemPath({
 
   if (match.type === "create") {
     rememberCreateDeepLink(path);
+  }
+
+  if (initial && isTabRoute(target)) {
+    rememberInitialTabDeepLink(path, target);
   }
 
   return target;

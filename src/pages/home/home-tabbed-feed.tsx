@@ -29,6 +29,7 @@ import {
   useInfinitePosts,
 } from "@/src/api";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
+import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import {
   PostCardSkeleton,
@@ -91,7 +92,7 @@ export const HomeTabbedFeed = forwardRef<
 >(({ feedType: baseFeed, activeTabIndex = 0, ListHeaderExtra, onRefreshingChange, onNewPostsChange }, ref) => {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { scrollHandler, scrollY, registerHomeRefresh, registerFollowingRefresh, showBars } = useScrollAnimationContext();
+  const { scrollHandler, scrollY, scrollOffsetY, registerHomeRefresh, registerFollowingRefresh, showBars } = useScrollAnimationContext();
   const setContextScrolling = useFeedScrollStore((state) => state.setContextScrolling);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -112,7 +113,7 @@ export const HomeTabbedFeed = forwardRef<
   }, []);
 
   const { pullDistance, pullGesture } = useAndroidPullIndicator({
-    scrollY,
+    scrollY: scrollOffsetY,
     refreshing: isRefreshing,
     onTriggerRefresh: triggerPullRefresh,
   });
@@ -176,6 +177,7 @@ export const HomeTabbedFeed = forwardRef<
     allowed_tags: allowedTags || undefined,
   }, { enabled: latestTabActivated, pageLimit: NEXT_PAGE_SIZE });
 
+  const pendingApiPosts = usePendingPostsStore((s) => s.posts);
   const postEditOverrides = usePostEditStore((s) => s.overrides);
   const transformedPageCacheRef = useRef(new WeakMap<object, Post[]>());
 
@@ -233,13 +235,35 @@ export const HomeTabbedFeed = forwardRef<
     currentUsername,
     hiddenPostIds,
     hideDownvotedPosts,
+    pendingApiPosts,
   ]);
 
   const transformPosts = useCallback(
     (data: { pages?: { posts: any[] }[] } | undefined) => {
-      if (!data?.pages) return [];
       const uniquePostIds = new Set<string>();
+      const uniqueOptimisticActionIds = new Set<string>();
       const transformedPosts: Post[] = [];
+      const pendingPosts = transformApiPosts(pendingApiPosts, {
+        currentUser: currentUserId
+          ? { id: currentUserId, username: currentUsername }
+          : undefined,
+      }).filter(
+        (post) =>
+          !hiddenPostIds.has(post.id) &&
+          !blockedUserIds.has(post.author.id) &&
+          !(post.topic && blockedTopicNames.has(post.topic.toLowerCase())),
+      );
+
+      for (const post of pendingPosts) {
+        if (uniquePostIds.has(post.id)) continue;
+        uniquePostIds.add(post.id);
+        if (post.optimisticActionId) {
+          uniqueOptimisticActionIds.add(post.optimisticActionId);
+        }
+        transformedPosts.push(post);
+      }
+
+      if (!data?.pages) return transformedPosts;
 
       for (const page of data.pages) {
         let cachedPagePosts = transformedPageCacheRef.current.get(page);
@@ -267,7 +291,11 @@ export const HomeTabbedFeed = forwardRef<
 
         for (const post of cachedPagePosts) {
           if (uniquePostIds.has(post.id)) continue;
+          if (post.optimisticActionId && uniqueOptimisticActionIds.has(post.optimisticActionId)) continue;
           uniquePostIds.add(post.id);
+          if (post.optimisticActionId) {
+            uniqueOptimisticActionIds.add(post.optimisticActionId);
+          }
           transformedPosts.push(post);
         }
       }
@@ -282,6 +310,7 @@ export const HomeTabbedFeed = forwardRef<
       currentUsername,
       hiddenPostIds,
       hideDownvotedPosts,
+      pendingApiPosts,
     ],
   );
 

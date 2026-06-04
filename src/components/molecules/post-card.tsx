@@ -236,8 +236,25 @@ export const PostCard = memo(function PostCard({
     !!post.optimisticActionId &&
     isOptimisticPostQueued &&
     currentPowActionId !== post.optimisticActionId;
-  const isOptimisticEdit = !!post.optimisticStatus && !post.optimisticDraft;
+  const isOptimisticVideoProcessing =
+    !!post.optimisticVideoPreviewUntil && post.optimisticVideoPreviewUntil > Date.now();
+  const isOptimisticVideoPost =
+    post.optimisticDraft?.attachmentType === "video" || isOptimisticVideoProcessing;
+  const optimisticResolvedMedia =
+    isOptimisticVideoPost && resolvedContent.resolvedMedia
+      ? { ...resolvedContent.resolvedMedia, type: "video" as const }
+      : resolvedContent.resolvedMedia;
+  const optimisticResolvedMediaList =
+    isOptimisticVideoPost && resolvedContent.resolvedMediaList
+      ? resolvedContent.resolvedMediaList.map((item) => ({ ...item, type: "video" as const }))
+      : resolvedContent.resolvedMediaList;
+  const isOptimisticPostFinalizingNetwork =
+    post.optimisticStatus === "pending" && post.id.startsWith("optimistic-post-") && !isOptimisticVideoProcessing;
+  const isOptimisticEdit = !!post.optimisticStatus && !post.optimisticDraft && !isOptimisticVideoPost;
   const disablePostInteractions = !!post.optimisticStatus && post.optimisticStatus !== "success";
+  // Allow video playback interactions for optimistic video posts (pending/error)
+  // so users can tap-to-play the local video preview while it's being posted.
+  const disableMediaInteractions = disablePostInteractions && !isOptimisticVideoPost;
   const keepOptimisticMediaMounted =
     post.optimisticStatus === "success" ||
     (!!post.optimisticVideoPreviewUntil && post.optimisticVideoPreviewUntil > Date.now());
@@ -383,6 +400,10 @@ export const PostCard = memo(function PostCard({
               ? "Waiting for internet connection before publishing your post."
               : isOptimisticPostWaitingForQueue
               ? "Waiting for other actions to finish before publishing your post."
+              : isOptimisticVideoProcessing
+              ? "Processing your video. Please keep the app open until it's completed."
+              : isOptimisticPostFinalizingNetwork
+              ? "Finalizing your post on the network. This can take a few moments."
               : "Finalizing your post on the network. This can take a few moments."}
           </Text>
         </View>
@@ -414,8 +435,8 @@ export const PostCard = memo(function PostCard({
 
       <PostCardMedia
         key={`${post.id}:${videoSyncScope ?? "default"}:${resolvedContent.resolvedMedia?.uri ?? "none"}`}
-        media={resolvedContent.resolvedMedia}
-        mediaList={resolvedContent.resolvedMediaList}
+        media={optimisticResolvedMedia}
+        mediaList={optimisticResolvedMediaList}
         isVisible={primeOptimisticVideo || isVisible}
         isFocused={primeOptimisticVideo || (isFocused ?? isVisible)}
         isNearVisible={keepOptimisticMediaMounted || (isNearVisible ?? isVisible)}
@@ -424,8 +445,8 @@ export const PostCard = memo(function PostCard({
         extraMediaCount={resolvedContent.extraMediaCount}
         allowAutoplay={allowAutoplay}
         screenActive={screenActive && !showMediaPreview}
-        disabled={disablePostInteractions}
-        onRevealContent={disablePostInteractions ? undefined : onRevealContent}
+        disabled={disableMediaInteractions}
+        onRevealContent={disableMediaInteractions ? undefined : onRevealContent}
         onMediaPress={disablePostInteractions ? undefined : handleMediaPress}
         isPostDetail={isPostDetail}
         videoSyncScope={videoSyncScope}

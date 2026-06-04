@@ -32,6 +32,7 @@ type ScrollAnimationContextType = {
   headerTranslateY: SharedValue<number>;
   tabBarTranslateY: SharedValue<number>;
   scrollY: SharedValue<number>;
+  scrollOffsetY: SharedValue<number>;
   registerHomeRefresh: (callback: () => void) => void;
   registerFollowingRefresh: (callback: () => void) => void;
   registerProfileRefresh: (callback: () => void) => void;
@@ -52,6 +53,7 @@ export const ScrollAnimationProvider = ({
 }) => {
   const insets = useSafeAreaInsets();
   const lastScrollY = useSharedValue(0);
+  const scrollOffsetY = useSharedValue(0);
   const headerTranslateY = useSharedValue(0);
   const tabBarTranslateY = useSharedValue(0);
   const isHidden = useSharedValue(false);
@@ -70,6 +72,13 @@ export const ScrollAnimationProvider = ({
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       const currentY = event.contentOffset.y;
+
+      // Always-accurate scroll offset for consumers that must know the real
+      // list position (e.g. the Android pull-to-refresh gate). Unlike
+      // `lastScrollY`, this is updated on every scroll event and is never
+      // reset by `showBars()`, so it cannot momentarily read 0 while the
+      // list is still scrolled mid-feed.
+      scrollOffsetY.value = currentY;
 
       if (isFirstScroll.value) {
         isFirstScroll.value = false;
@@ -168,6 +177,7 @@ export const ScrollAnimationProvider = ({
       headerTranslateY,
       tabBarTranslateY,
       scrollY: lastScrollY,
+      scrollOffsetY,
       registerHomeRefresh,
       registerFollowingRefresh,
       registerProfileRefresh,
@@ -183,6 +193,7 @@ export const ScrollAnimationProvider = ({
       headerTranslateY,
       tabBarTranslateY,
       lastScrollY,
+      scrollOffsetY,
       registerHomeRefresh,
       registerFollowingRefresh,
       registerProfileRefresh,

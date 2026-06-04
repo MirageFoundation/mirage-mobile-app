@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Sentry from "@sentry/react-native";
 import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
+import { BlurView } from "expo-blur";
 import { useLocalSearchParams } from "expo-router";
 import { router } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -32,7 +33,8 @@ const MIN_TRIM_DURATION = 1000; // 1 second minimum
 const MAX_TRIM_DURATION = 59000; // 59 seconds maximum
 
 export function VideoEditorScreen() {
-  const { theme } = useUnistyles();
+  const { theme, rt } = useUnistyles();
+  const isDark = rt.themeName === "dark";
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ uri: string; width?: string; height?: string; initialTrimStart?: string; initialTrimEnd?: string; replacingUri?: string; returnTo?: string }>();
   
@@ -220,28 +222,28 @@ export function VideoEditorScreen() {
     
     let processedUri = videoUri;
     
-    // Check if we need to process the video (trim or mute)
+    // Always process selected videos so Android/iOS uploads are compressed for
+    // faster Cloudflare processing. The helper trims only when needed.
     const needsTrim = trimStart > 100 || (duration > 0 && trimEnd < duration - 100);
     
-    if (needsTrim) {
-      setIsProcessing(true);
-      try {
-        console.log("[VideoEditor] Processing video:", {
-          trimStart,
-          trimEnd,
-          duration,
-          needsTrim,
-        });
-        
-        const result = await processVideo(videoUri, {
-          trimStartMs: trimStart,
-          trimEndMs: trimEnd,
-          totalDurationMs: duration,
-        });
-        processedUri = result.uri;
-      } catch (error) {
-        Sentry.captureException(error, { tags: { feature: "video-editor", operation: "process" } });
-      }
+    setIsProcessing(true);
+    try {
+      console.log("[VideoEditor] Processing video:", {
+        trimStart,
+        trimEnd,
+        duration,
+        needsTrim,
+      });
+      
+      const result = await processVideo(videoUri, {
+        trimStartMs: trimStart,
+        trimEndMs: trimEnd,
+        totalDurationMs: duration,
+      });
+      processedUri = result.uri;
+    } catch (error) {
+      Sentry.captureException(error, { tags: { feature: "video-editor", operation: "process" } });
+    } finally {
       setIsProcessing(false);
     }
     
@@ -429,13 +431,27 @@ export function VideoEditorScreen() {
       {/* Processing overlay */}
       {isProcessing && (
         <View style={styles.processingOverlay}>
-          <View style={styles.processingContent}>
-            <ActivityIndicator size="large" color={theme.colors.brand[500]} />
-            <Text size="md" weight="medium" style={{ marginTop: 16 }}>
-              Processing video...
+          <BlurView
+            intensity={50}
+            tint={isDark ? "dark" : "light"}
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+          />
+          <View
+            style={[
+              styles.processingContent,
+              {
+                backgroundColor: isDark
+                  ? "rgba(25, 25, 25, 0.98)"
+                  : "rgba(255, 255, 255, 0.98)",
+              },
+            ]}
+          >
+            <ActivityIndicator size="large" color={isDark ? "#fff" : theme.colors.brand[500]} />
+            <Text size="lg" weight="bold" style={styles.processingTitle}>
+              Processing Video
             </Text>
-            <Text size="sm" mode="subtle" style={{ marginTop: 4 }}>
-              Trimming video
+            <Text size="sm" style={styles.processingText}>
+              This may take a moment...
             </Text>
           </View>
         </View>
@@ -571,12 +587,32 @@ const styles = StyleSheet.create((theme) => ({
   },
   processingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    zIndex: 100,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
     alignItems: "center",
     justifyContent: "center",
+    padding: theme.spacing.lg,
   },
   processingContent: {
-    alignItems: "center",
+    width: "100%",
+    maxWidth: 340,
+    borderRadius: theme.radius.xl,
     padding: theme.spacing.xl,
+    paddingTop: theme.spacing.xxl,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.3,
+    shadowRadius: 32,
+    elevation: 16,
+  },
+  processingTitle: {
+    textAlign: "center" as const,
+    marginBottom: theme.spacing.xs,
+    marginTop: theme.spacing.md,
+  },
+  processingText: {
+    textAlign: "center" as const,
+    paddingHorizontal: theme.spacing.md,
   },
 }));

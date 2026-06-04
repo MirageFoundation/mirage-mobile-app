@@ -119,14 +119,20 @@ export const PostDetailCommentComposer = forwardRef<
     }, []);
 
     const handleSubmitComment = useCallback(
-      async (text: string, imageUri?: string | null, gifUrl?: string | null) => {
+      async (
+        text: string,
+        imageUri?: string | null,
+        gifUrl?: string | null,
+        explicitReplyToId?: string | null,
+      ) => {
         if (!currentUser || !id) return;
 
         const implicitReplyTarget =
-          !replyingTo && isViewingComment && implicitReplyRoot
+          !explicitReplyToId && !replyingTo && isViewingComment && implicitReplyRoot
             ? transformApiComment(implicitReplyRoot)
             : null;
-        const parentId = replyingTo?.id ?? implicitReplyTarget?.id ?? id;
+        const replyTargetId = explicitReplyToId ?? replyingTo?.id ?? implicitReplyTarget?.id ?? null;
+        const parentId = replyTargetId ?? id;
         const optimisticMediaUrl = imageUri || gifUrl || null;
         const optimisticContent = composeCommentContent(text, optimisticMediaUrl);
         const optimisticCommentId = `optimistic-${Date.now()}`;
@@ -147,12 +153,25 @@ export const PostDetailCommentComposer = forwardRef<
           parentId,
         };
 
-        const replyTarget = replyingTo ?? implicitReplyTarget;
         const capturedImageUri = imageUri;
         const capturedGifUrl = gifUrl;
         const capturedText = text;
 
         setReplyingTo(null);
+
+        Sentry.addBreadcrumb({
+          category: "comment",
+          message: "Comment action enqueued",
+          level: "info",
+          data: {
+            postId: id,
+            parentId,
+            isReply: !!replyTargetId,
+            hadExplicitReplyTarget: !!explicitReplyToId,
+            usedImplicitReplyTarget: !!implicitReplyTarget,
+            optimisticCommentId,
+          },
+        });
 
         enqueue({
           id: generateActionId(),
@@ -169,9 +188,9 @@ export const PostDetailCommentComposer = forwardRef<
             });
           },
           onOptimisticUpdate: () => {
-            const shouldSuppressHighlightScroll = !replyTarget;
-            if (replyTarget) {
-              addReplyOptimisticComment(optimisticThreadId, replyTarget.id, optimisticComment);
+            const shouldSuppressHighlightScroll = !replyTargetId;
+            if (replyTargetId) {
+              addReplyOptimisticComment(optimisticThreadId, replyTargetId, optimisticComment);
             } else {
               addTopLevelOptimisticComment(optimisticThreadId, optimisticComment);
               if (focusedCommentId && showFocusedThread) {
@@ -192,7 +211,20 @@ export const PostDetailCommentComposer = forwardRef<
                 ? (result as { tx_hash: string }).tx_hash
                 : null;
 
-            if (!confirmedCommentId) return;
+            if (!confirmedCommentId) {
+              Sentry.captureMessage("Comment mutation succeeded without tx_hash", {
+                level: "warning",
+                tags: { feature: "comment", operation: "submit_comment" },
+                extra: {
+                  postId: id,
+                  parentId,
+                  isReply: !!replyTargetId,
+                  optimisticCommentId,
+                  resultType: typeof result,
+                },
+              });
+              return;
+            }
 
             replaceOptimisticCommentId(optimisticThreadId, optimisticCommentId, confirmedCommentId);
             onConfirmedCommentId(optimisticCommentId, confirmedCommentId);
@@ -255,11 +287,35 @@ export const PostDetailCommentComposer = forwardRef<
 
     useEffect(() => {
       if (!pendingComment || pendingComment.postId !== id) return;
-      const current = useCommentComposeStore.getState().pendingComment;
-      if (!current || current.postId !== id) return;
-      useCommentComposeStore.getState().clearPendingComment();
+      const current = useCommentComposeStore.getState().consumePendingComment(id);
+      if (!current) {
+        Sentry.addBreadcrumb({
+          category: "comment",
+          message: "Pending comment already consumed",
+          level: "info",
+          data: { postId: id },
+        });
+        return;
+      }
+      Sentry.addBreadcrumb({
+        category: "comment",
+        message: "Pending comment consumed",
+        level: "info",
+        data: {
+          postId: id,
+          replyToId: current.replyToId ?? null,
+          isReply: !!current.replyToId,
+          hasImage: !!current.imageUri,
+          hasGif: !!current.gifUrl,
+        },
+      });
       markSeen(id, "reply");
-      void handleSubmitComment(current.text, current.imageUri, current.gifUrl);
+      void handleSubmitComment(
+        current.text,
+        current.imageUri,
+        current.gifUrl,
+        current.replyToId,
+      );
     }, [pendingComment, id, handleSubmitComment]);
 
     return (

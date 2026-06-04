@@ -11,7 +11,87 @@ import Animated, {
   useSharedValue,
   withRepeat,
   withTiming,
+  useEvent,
+  useHandler,
+  interpolateColor,
 } from "react-native-reanimated";
+import type { SharedValue } from "react-native-reanimated";
+
+const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
+
+function AnimatedTabLabel({
+  index,
+  label,
+  scrollPosition,
+  activeColor,
+  inactiveColor,
+}: {
+  index: number;
+  label: string;
+  scrollPosition: SharedValue<number>;
+  activeColor: string;
+  inactiveColor: string;
+}) {
+  const boldStyle = useAnimatedStyle(() => {
+    const distance = Math.abs(scrollPosition.value - index);
+    const t = Math.min(distance, 1);
+    return {
+      opacity: 1 - t,
+      color: interpolateColor(t, [0, 1], [activeColor, inactiveColor]),
+    };
+  });
+  const mediumStyle = useAnimatedStyle(() => {
+    const distance = Math.abs(scrollPosition.value - index);
+    const t = Math.min(distance, 1);
+    return {
+      opacity: t,
+      color: interpolateColor(t, [0, 1], [activeColor, inactiveColor]),
+    };
+  });
+  return (
+    <View>
+      <Animated.Text
+        style={[
+          { fontSize: 13, fontWeight: "700", textAlign: "center" },
+          boldStyle,
+        ]}
+      >
+        {label}
+      </Animated.Text>
+      <Animated.Text
+        style={[
+          {
+            fontSize: 13,
+            fontWeight: "500",
+            textAlign: "center",
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+          },
+          mediumStyle,
+        ]}
+      >
+        {label}
+      </Animated.Text>
+    </View>
+  );
+}
+
+function usePagerScrollHandler(handlers: { onPageScroll: (e: any, ctx: any) => void }, deps?: unknown[]) {
+  const { context, doDependenciesDiffer } = useHandler(handlers as any, deps);
+  return useEvent(
+    (event: any) => {
+      "worklet";
+      const { onPageScroll } = handlers;
+      if (onPageScroll && event.eventName.endsWith("onPageScroll")) {
+        onPageScroll(event, context);
+      }
+    },
+    ["onPageScroll"],
+    doDependenciesDiffer,
+  );
+}
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -299,6 +379,24 @@ export function BlockedListScreen() {
     id: string;
   } | null>(null);
 
+  const scrollPosition = useSharedValue(0);
+  const [tabBarWidth, setTabBarWidth] = useState(0);
+
+  const pagerScrollHandler = usePagerScrollHandler({
+    onPageScroll: (e) => {
+      "worklet";
+      scrollPosition.value = e.position + e.offset;
+    },
+  });
+
+  const indicatorStyle = useAnimatedStyle(() => {
+    const tabWidth = tabBarWidth / TABS.length;
+    return {
+      width: tabWidth,
+      transform: [{ translateX: scrollPosition.value * tabWidth }],
+    };
+  });
+
   const blockedUsers = useMemo(
     () => blockedData?.blocked_users ?? [],
     [blockedData?.blocked_users],
@@ -515,48 +613,50 @@ export function BlockedListScreen() {
           </Text>
         </View>
 
-        <View style={styles.tabBar}>
+        <View
+          style={styles.tabBar}
+          onLayout={(e) => setTabBarWidth(e.nativeEvent.layout.width)}
+        >
           {TABS.map((tab) => {
-            const isActive = activeTab === tab.key;
             const count = tabCounts[tab.key];
             const hasCount = !isLoading && blockedData;
+            const tabIndex = TABS.findIndex((t) => t.key === tab.key);
+            const labelText = `${tab.label}${hasCount ? ` (${count})` : ""}`;
             return (
               <Pressable
                 key={tab.key}
                 onPress={() => handleTabPress(tab.key)}
                 style={styles.tab}
               >
-                <Text
-                  size="sm"
-                  weight={isActive ? "bold" : "medium"}
-                  style={{
-                    color: isActive
-                      ? theme.colors.text.default
-                      : theme.colors.text.subtle,
-                  }}
-                >
-                  {tab.label}
-                  {hasCount ? ` (${count})` : ""}
-                </Text>
-                {isActive && (
-                  <View
-                    style={[
-                      styles.tabIndicator,
-                      { backgroundColor: theme.colors.text.default },
-                    ]}
-                  />
-                )}
+                <AnimatedTabLabel
+                  index={tabIndex}
+                  label={labelText}
+                  scrollPosition={scrollPosition}
+                  activeColor={theme.colors.text.default}
+                  inactiveColor={theme.colors.text.subtle}
+                />
               </Pressable>
             );
           })}
+          {tabBarWidth > 0 && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.tabIndicator,
+                { backgroundColor: theme.colors.text.default },
+                indicatorStyle,
+              ]}
+            />
+          )}
         </View>
       </View>
 
-      <PagerView
+      <AnimatedPagerView
         ref={pagerRef}
         style={{ flex: 1 }}
         initialPage={0}
         onPageSelected={handlePageSelected}
+        onPageScroll={pagerScrollHandler}
       >
         <View key="users" style={{ flex: 1 }}>
           <FlatList
@@ -596,7 +696,7 @@ export function BlockedListScreen() {
             ListEmptyComponent={topicsListEmpty}
           />
         </View>
-      </PagerView>
+      </AnimatedPagerView>
 
       <ConfirmationPopup
         visible={!!confirmTarget}
@@ -635,7 +735,6 @@ const styles = StyleSheet.create((theme) => ({
     position: "absolute",
     bottom: 0,
     left: 0,
-    right: 0,
     height: 2,
   },
   row: {

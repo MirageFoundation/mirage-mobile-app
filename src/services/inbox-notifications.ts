@@ -105,6 +105,18 @@ function markInboxNotificationNavigationActive(): void {
   lastInboxNotificationNavigationAt = Date.now();
 }
 
+function getNotificationResponseAgeMs(
+  response: Notifications.NotificationResponse,
+): number | null {
+  const notificationDate = response.notification?.date;
+  if (typeof notificationDate !== "number" || !Number.isFinite(notificationDate)) {
+    return null;
+  }
+
+  const timestampMs = notificationDate < 1e12 ? notificationDate * 1000 : notificationDate;
+  return Date.now() - timestampMs;
+}
+
 export function markShareIntentNavigationActive(reason = "share-intent"): void {
   lastShareIntentNavigationAt = Date.now();
   Sentry.addBreadcrumb({
@@ -677,7 +689,7 @@ function handleNotificationResponse(
       return;
     }
     const notificationId = getInboxNotificationResponseId(response, notificationData);
-    markInboxNotificationNavigationActive();
+    const notificationAgeMs = getNotificationResponseAgeMs(response);
     Sentry.addBreadcrumb({
       category: "notifications",
       message: "Inbox notification response received",
@@ -688,6 +700,7 @@ function handleNotificationResponse(
         actionIdentifier: response.actionIdentifier,
         appState: AppState.currentState,
         notificationDate: response.notification?.date,
+        notificationAgeMs,
         requestIdentifier: response.notification?.request?.identifier,
         dataKeys: getNotificationDataKeys(notificationData),
         hasNotificationType: !!notificationData.notificationType,
@@ -707,10 +720,12 @@ function handleNotificationResponse(
         category: "notifications",
         message: "Inbox notification response already handled",
         level: "info",
-        data: { notificationId },
+        data: { notificationId, source, notificationAgeMs },
       });
+      void Notifications.clearLastNotificationResponseAsync?.().catch(() => undefined);
       return;
     }
+    markInboxNotificationNavigationActive();
     if (!useAuthStore.getState().walletAddress) {
       console.log("[InboxNotifications] Deferring notification response until wallet is ready");
       Sentry.addBreadcrumb({

@@ -5,11 +5,11 @@ import ExpoShareIntentModule from "expo-share-intent/build/ExpoShareIntentModule
 import { AuthSheet } from "@/src/components/molecules";
 import { ForceUpdatePopup } from "@/src/components/molecules/force-update-popup";
 import { ThemedStatusBar } from "@/src/components/ui/themed-status-bar";
-import { Platform } from "react-native";
+import { BackHandler, Platform, ToastAndroid } from "react-native";
 import * as Sentry from '@sentry/react-native';
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { getShareScheme } from "@/src/utils/share-scheme";
 import { useForceUpdate } from "@/src/hooks/use-force-update";
 import {
@@ -32,6 +32,7 @@ const buildNumber = Platform.select({
   default: undefined,
 });
 const updateId = Updates.updateId ?? "embedded";
+const ANDROID_EXIT_BACK_PRESS_WINDOW_MS = 2000;
 
 function isKnownHandledError(event: Sentry.ErrorEvent): boolean {
   const message = event.exception?.values?.[0]?.value?.toLowerCase() ?? '';
@@ -149,9 +150,38 @@ function AndroidShareIntentColdStartRefresh() {
   return null;
 }
 
+function useAndroidDoubleBackExitGuard(ref: ReturnType<typeof useNavigationContainerRef>) {
+  const lastExitBackPressAtRef = useRef(0);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (ref.current?.canGoBack()) {
+        lastExitBackPressAtRef.current = 0;
+        return false;
+      }
+
+      const now = Date.now();
+      if (now - lastExitBackPressAtRef.current <= ANDROID_EXIT_BACK_PRESS_WINDOW_MS) {
+        BackHandler.exitApp();
+        return true;
+      }
+
+      lastExitBackPressAtRef.current = now;
+      ToastAndroid.show("Press back again to exit", ToastAndroid.SHORT);
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [ref]);
+}
+
 export default Sentry.wrap(function RootLayout() {
   const ref = useNavigationContainerRef();
   const { reason: forceUpdateReason, remoteVersion, isRequired } = useForceUpdate();
+  useAndroidDoubleBackExitGuard(ref);
+
   useEffect(() => {
     signalRootLayoutReady();
     if (!IS_FDROID_BUILD && ref?.current) {

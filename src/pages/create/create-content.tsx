@@ -391,8 +391,9 @@ export function CreateScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["videos"],
         allowsEditing: false,
-        quality: 1,
-        videoExportPreset: ImagePicker.VideoExportPreset.HighestQuality,
+        quality: 0.75,
+        videoExportPreset: ImagePicker.VideoExportPreset.H264_1280x720,
+        videoQuality: ImagePicker.UIImagePickerControllerQualityType.IFrame1280x720,
         preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Automatic,
       });
 

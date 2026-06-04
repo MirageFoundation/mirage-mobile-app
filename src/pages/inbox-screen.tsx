@@ -17,7 +17,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import type { InboxReply } from "@/src/api/types";
 import { InboxItem } from "@/src/components/molecules/inbox-item";
 import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
-import { Box, Text } from "@/src/components/ui/primitives";
+import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { useAuthStore } from "@/src/stores";
 import { useInboxStore } from "@/src/stores/inbox-store";
 import { useShallow } from "zustand/react/shallow";
@@ -79,9 +79,88 @@ export function InboxScreen() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isError,
+    error,
+    isFetching,
     isLoading,
     refetch,
   } = useInfiniteInbox({ limit: 25 });
+  const [hasInitialLoadTimedOut, setHasInitialLoadTimedOut] = useState(false);
+  const hasCapturedInitialLoadTimeoutRef = useRef(false);
+  const hasCapturedInitialLoadErrorRef = useRef(false);
+
+  useEffect(() => {
+    if (!isError) {
+      hasCapturedInitialLoadErrorRef.current = false;
+      return;
+    }
+    if (hasCapturedInitialLoadErrorRef.current) return;
+    hasCapturedInitialLoadErrorRef.current = true;
+    Sentry.addBreadcrumb({
+      category: "inbox",
+      message: "Inbox initial load failed",
+      level: "warning",
+      data: {
+        platform: Platform.OS,
+        errorMessage: error instanceof Error ? error.message : String(error ?? ""),
+      },
+    });
+    Sentry.captureMessage("Inbox initial load failed", {
+      level: "warning",
+      tags: {
+        feature: "inbox",
+        operation: "initial-load",
+        platform: Platform.OS,
+        outcome: "error",
+      },
+      extra: {
+        walletAddress: walletAddress ? `${walletAddress.slice(0, 12)}…` : null,
+        errorName: error instanceof Error ? error.name : null,
+        errorMessage: error instanceof Error ? error.message : String(error ?? ""),
+      },
+    });
+  }, [error, isError, walletAddress]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setHasInitialLoadTimedOut(false);
+      hasCapturedInitialLoadTimeoutRef.current = false;
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setHasInitialLoadTimedOut(true);
+      if (hasCapturedInitialLoadTimeoutRef.current) return;
+      hasCapturedInitialLoadTimeoutRef.current = true;
+      Sentry.addBreadcrumb({
+        category: "inbox",
+        message: "Inbox initial load timed out",
+        level: "warning",
+        data: {
+          platform: Platform.OS,
+          isFetching,
+          isError,
+        },
+      });
+      Sentry.captureMessage("Inbox initial load timed out", {
+        level: "warning",
+        tags: {
+          feature: "inbox",
+          operation: "initial-load",
+          platform: Platform.OS,
+          outcome: "timeout",
+        },
+        extra: {
+          walletAddress: walletAddress ? `${walletAddress.slice(0, 12)}…` : null,
+          isFetching,
+          isError,
+          errorMessage: error instanceof Error ? error.message : String(error ?? ""),
+        },
+      });
+    }, Platform.OS === "android" ? 10_000 : 15_000);
+
+    return () => clearTimeout(timeoutId);
+  }, [error, isError, isFetching, isLoading, walletAddress]);
 
   const replies = useMemo(() => {
     const items: InboxReply[] = [];
@@ -326,8 +405,57 @@ export function InboxScreen() {
   );
 
   const ListEmptyComponent = useCallback(() => {
-    if (isLoading) {
+    if (isLoading && !hasInitialLoadTimedOut) {
       return <ProfilePostsSkeleton count={6} type="comments" />;
+    }
+
+    if (isError || hasInitialLoadTimedOut) {
+      return (
+        <View style={styles.emptyContainer}>
+          <View style={styles.errorIconWrapper}>
+            <Ionicons
+              name="cloud-offline-outline"
+              size={28}
+              color={theme.colors.text.subtle}
+            />
+          </View>
+          <Text size="md" weight="semibold" style={styles.emptyTitle}>
+            Could not load inbox
+          </Text>
+          <Text size="sm" mode="subtle" style={styles.emptySubtitle}>
+            Check your connection and try again.
+          </Text>
+          <Button
+            size="sm"
+            rounded="full"
+            haptics="selection"
+            onPress={() => {
+              Sentry.addBreadcrumb({
+                category: "inbox",
+                message: "Inbox error fallback retry tapped",
+                level: "info",
+                data: {
+                  platform: Platform.OS,
+                  hasInitialLoadTimedOut,
+                  isError,
+                },
+              });
+              setHasInitialLoadTimedOut(false);
+              void refetch();
+            }}
+            style={styles.retryButton}
+          >
+            <Button.Icon>
+              <Ionicons
+                name="refresh"
+                size={14}
+                color={theme.colors.background.default}
+              />
+            </Button.Icon>
+            <Button.Text weight="semibold">Retry</Button.Text>
+          </Button>
+        </View>
+      );
     }
 
     if (!isLoggedIn) {
@@ -368,7 +496,15 @@ export function InboxScreen() {
         </Text>
       </View>
     );
-  }, [isLoading, isLoggedIn, theme.colors.text.subtle]);
+  }, [
+    hasInitialLoadTimedOut,
+    isError,
+    isLoading,
+    isLoggedIn,
+    refetch,
+    theme.colors.background.default,
+    theme.colors.text.subtle,
+  ]);
 
   const ListFooterComponent = useCallback(() => {
     if (isFetchingNextPage) {
@@ -480,5 +616,18 @@ const styles = StyleSheet.create((theme) => ({
     marginTop: theme.spacing.xs,
     textAlign: "center",
     lineHeight: 20,
+  },
+  retryButton: {
+    marginTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  errorIconWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.background.subtle,
+    marginBottom: theme.spacing.sm,
   },
 }));

@@ -150,7 +150,15 @@ export const PostCardMedia = memo(
     const aspectRatioLockedRef = useRef(false);
     const userInitiatedPlayRef = useRef(false);
     const prevShouldBlurRef = useRef(shouldBlurContent);
-    const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
+    const isLocalFileMedia = !!media?.uri && media.uri.startsWith("file://");
+    const [feedTappedToPlay, setFeedTappedToPlay] = useState(isLocalFileMedia);
+
+    useEffect(() => {
+      if (isLocalFileMedia) {
+        setFeedTappedToPlay(true);
+        setIsVideoPlaying(true);
+      }
+    }, [isLocalFileMedia, media?.uri]);
 
     const youtubeVideoId = media?.type === "youtube" ? (extractYouTubeVideoId(media.uri) ?? "") : "";
     const youtubePositionKey = youtubeVideoId
@@ -333,6 +341,30 @@ export const PostCardMedia = memo(
 
     const resolvedMediaUri = media?.uri;
 
+    const getVideoDiagnostics = useCallback(() => ({
+      postId,
+      mediaType: media?.type,
+      mediaUri: media?.uri,
+      resolvedMediaUri,
+      isPostDetail,
+      isVisible,
+      isFocused,
+      isConnected,
+      mediaRetryKey,
+      videoErrorRetryCount: videoErrorRetryCountRef.current,
+      processingAttempts: videoProcessingAttemptsRef.current,
+    }), [
+      postId,
+      media?.type,
+      media?.uri,
+      resolvedMediaUri,
+      isPostDetail,
+      isVisible,
+      isFocused,
+      isConnected,
+      mediaRetryKey,
+    ]);
+
     const resolvedMediaUriRef = useRef(resolvedMediaUri);
     useEffect(() => {
       const uriChanged = resolvedMediaUriRef.current !== resolvedMediaUri;
@@ -417,7 +449,7 @@ export const PostCardMedia = memo(
       const canAutoPlayCurrentMedia =
         media?.type === "youtube"
           ? ((Platform.OS === "android" && canAutoPlayFeedMedia) || feedTappedToPlay)
-          : (canAutoPlayFeedMedia || feedTappedToPlay);
+          : (isLocalFileMedia || canAutoPlayFeedMedia || feedTappedToPlay);
       if (!isPlayable || shouldBlurContent) {
         setIsVideoPlaying(false);
         setIsVideoLoading(false);
@@ -434,7 +466,7 @@ export const PostCardMedia = memo(
         setIsVideoPlaying(true);
       }
 
-      if (isVisible && screenActive && canAutoPlayCurrentMedia) {
+      if ((isVisible || isLocalFileMedia) && screenActive && canAutoPlayCurrentMedia) {
         if (pauseDelayRef.current) {
           clearTimeout(pauseDelayRef.current);
           pauseDelayRef.current = null;
@@ -471,7 +503,7 @@ export const PostCardMedia = memo(
         setIsVideoLoading(false);
         userInitiatedPlayRef.current = false;
         void stopNativeVideoPlayback();
-      } else if (!isVisible || (!isPostDetail && !canAutoPlayCurrentMedia)) {
+      } else if ((!isVisible && !isLocalFileMedia) || (!isPostDetail && !canAutoPlayCurrentMedia)) {
         if (pauseDelayRef.current) {
           clearTimeout(pauseDelayRef.current);
           pauseDelayRef.current = null;
@@ -494,6 +526,7 @@ export const PostCardMedia = memo(
       screenActive,
       resolvedMediaUri,
       feedTappedToPlay,
+      isLocalFileMedia,
       isPostDetail,
       isFocused,
       saveYouTubePositionSync,
@@ -501,10 +534,10 @@ export const PostCardMedia = memo(
     ]);
 
     useEffect(() => {
-      if (!isPostDetail && !isVisible && feedTappedToPlay) {
+      if (!isPostDetail && !isVisible && !isLocalFileMedia && feedTappedToPlay) {
         setFeedTappedToPlay(false);
       }
-    }, [isPostDetail, isVisible, feedTappedToPlay]);
+    }, [isPostDetail, isVisible, isLocalFileMedia, feedTappedToPlay]);
 
     const mediaWasCached = !!(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri));
     const shouldAttemptVideoRecovery =
@@ -541,7 +574,7 @@ export const PostCardMedia = memo(
 
     const shouldPlayNativeVideo =
       media?.type === "video" &&
-      isVideoPlaying &&
+      (isVideoPlaying || isLocalFileMedia) &&
       screenActive &&
       !shouldBlurContent;
 
@@ -666,7 +699,7 @@ export const PostCardMedia = memo(
 
     const shouldKeepFeedVideoMounted =
       media?.type === "video" &&
-      (isNearVisible || isFocused || feedTappedToPlay || isVideoPlaying);
+      (isLocalFileMedia || isNearVisible || isFocused || feedTappedToPlay || isVideoPlaying);
 
     const shouldMountNativeVideo =
       !shouldDeferHeavyMedia && (
@@ -994,6 +1027,13 @@ export const PostCardMedia = memo(
 
       if (!videoProcessingStartedAtRef.current) {
         videoProcessingStartedAtRef.current = Date.now();
+        console.log("[PostCardMedia] Cloudflare processing poll started", getVideoDiagnostics());
+        Sentry.addBreadcrumb({
+          category: "post-media",
+          message: "Cloudflare video processing poll started",
+          level: "info",
+          data: getVideoDiagnostics(),
+        });
       }
 
       let cancelled = false;
@@ -1004,12 +1044,18 @@ export const PostCardMedia = memo(
           const ready = await isCloudflareManifestReady(resolvedMediaUri, controller.signal);
           if (cancelled) return;
 
+          console.log("[PostCardMedia] Cloudflare manifest poll result", {
+            ...getVideoDiagnostics(),
+            ready,
+          });
+
           if (ready) {
             Sentry.addBreadcrumb({
               category: "post-media",
               message: "Cloudflare video manifest became ready",
               level: "info",
               data: {
+                ...getVideoDiagnostics(),
                 uri: resolvedMediaUri,
                 attempts: videoProcessingAttemptsRef.current,
               },
@@ -1028,8 +1074,12 @@ export const PostCardMedia = memo(
             setMediaRetryKey((k) => k + 1);
             return;
           }
-        } catch {
+        } catch (error) {
           if (cancelled) return;
+          console.log("[PostCardMedia] Cloudflare manifest poll failed", {
+            ...getVideoDiagnostics(),
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
 
         if (cancelled) return;
@@ -1044,6 +1094,7 @@ export const PostCardMedia = memo(
               operation: "cloudflare-video-processing",
             },
             extra: {
+              ...getVideoDiagnostics(),
               uri: resolvedMediaUri,
               attempts: videoProcessingAttemptsRef.current,
               maxWaitMs: CLOUD_FLARE_PROCESSING_MAX_WAIT_MS,
@@ -1074,7 +1125,7 @@ export const PostCardMedia = memo(
           videoProcessingPollTimeoutRef.current = null;
         }
       };
-    }, [isVideoProcessing, isCloudflareVideo, resolvedMediaUri]);
+    }, [isVideoProcessing, isCloudflareVideo, resolvedMediaUri, getVideoDiagnostics]);
 
     const containerWidth = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
     const calculatedHeight = containerWidth / effectiveAspectRatio;
@@ -1310,7 +1361,7 @@ export const PostCardMedia = memo(
                       isMuted: shouldPlayNativeVideo ? videoMuted : true,
                     }).catch(() => {});
                     if (shouldPlayNativeVideo) {
-                      await videoRef.current.playAsync().catch(() => {});
+                      await videoRef.current?.playAsync().catch(() => {});
                     }
                   })();
                 }}
@@ -1361,6 +1412,7 @@ export const PostCardMedia = memo(
                       retryable: String(isCloudflare || isRedgifs),
                     },
                     extra: {
+                      ...getVideoDiagnostics(),
                       uri: mediaSource.uri,
                       error,
                       isCloudflare,

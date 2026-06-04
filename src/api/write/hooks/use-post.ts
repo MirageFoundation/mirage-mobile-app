@@ -35,6 +35,7 @@ import type { PoWProgress } from "../signing";
 import * as Sentry from "@sentry/react-native";
 import type { PostDraft } from "@/src/stores/draft-store";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
+import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
 import { getAllowedTagsFromContentTypes, usePreferencesStore } from "@/src/stores/preferences-store";
 
 // ============================================
@@ -151,7 +152,7 @@ export const buildOptimisticPost = (
     optimistic_action_id: input.optimisticActionId,
     optimistic_draft: input.optimisticDraft,
     optimistic_video_preview_until: input.optimisticPreviewMediaUrls?.length
-      ? Date.now() + 45000
+      ? Date.now() + 130000
       : undefined,
   };
 };
@@ -176,7 +177,13 @@ const upsertPostIntoPostsResponse = (
  }
 
  const existingPost = queryData.posts[matchingPostIndex];
+ const isStaleLocalOptimisticPost =
+  optimisticPost.post_id.startsWith("optimistic-post-") &&
+  !existingPost.post_id.startsWith("optimistic-post-") &&
+  !!optimisticPost.optimistic_action_id &&
+  optimisticPost.optimistic_action_id === existingPost.optimistic_action_id;
  if (
+  isStaleLocalOptimisticPost ||
   existingPost.post_id === optimisticPost.post_id ||
   (optimisticPost.optimistic_status === "pending" &&
    existingPost.optimistic_status !== "pending")
@@ -282,6 +289,7 @@ export const upsertHomePost = (
 };
 
 export const removeOptimisticPostFromCache = (queryClient: QueryClient, postId: string) => {
+  usePendingPostsStore.getState().removePost(postId);
   updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => removePostFromPostsData(data, postId));
 };
 
@@ -290,6 +298,7 @@ export const markOptimisticPostError = (
   postId: string,
   errorMessage: string,
 ) => {
+  usePendingPostsStore.getState().markPostError(postId, errorMessage);
   updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => {
     if (!data) return { nextData: data, didUpdate: false };
     const markError = (post: ApiPost) =>
@@ -314,6 +323,134 @@ export const markOptimisticPostError = (
       if (post.post_id !== postId) return post;
       didUpdate = true;
       return markError(post);
+    });
+    return { nextData: didUpdate ? { ...singleData, posts } : data, didUpdate };
+  });
+};
+
+const setOptimisticPostStatus = (
+  queryClient: QueryClient,
+  postId: string,
+  status: ApiPost["optimistic_status"] | undefined,
+  options: {
+    errorMessage?: string;
+    previewMediaUrls?: string[];
+    keepDraft?: boolean;
+  } = {},
+) => {
+  if (status === "pending" || status === "error") {
+    const persistedPost = usePendingPostsStore
+      .getState()
+      .posts.find((post) => post.post_id === postId);
+    if (persistedPost) {
+      usePendingPostsStore.getState().upsertPost({
+        ...persistedPost,
+        optimistic_status: status,
+        optimistic_error: options.errorMessage,
+        optimistic_draft: options.keepDraft ? persistedPost.optimistic_draft : undefined,
+        optimistic_video_preview_until: options.previewMediaUrls?.length
+          ? Date.now() + 45000
+          : persistedPost.optimistic_video_preview_until,
+      });
+    }
+  } else {
+    usePendingPostsStore.getState().removePost(postId);
+  }
+
+  updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => {
+    if (!data) return { nextData: data, didUpdate: false };
+    const updatePost = (post: ApiPost) =>
+      post.post_id === postId
+        ? {
+            ...post,
+            optimistic_status: status,
+            optimistic_error: options.errorMessage,
+            optimistic_draft: options.keepDraft || status === "success" ? post.optimistic_draft : undefined,
+            optimistic_video_preview_until: options.previewMediaUrls?.length
+              ? Date.now() + 45000
+              : post.optimistic_video_preview_until,
+          }
+        : post;
+    if (isInfinitePostsData(data)) {
+      let didUpdate = false;
+      const pages = data.pages.map((page) => {
+        const posts = page.posts.map((post) => {
+          if (post.post_id !== postId) return post;
+          didUpdate = true;
+          return updatePost(post);
+        });
+        return didUpdate ? { ...page, posts } : page;
+      });
+      return { nextData: didUpdate ? { ...data, pages } : data, didUpdate };
+    }
+    const singleData = data as PostsResponse;
+    let didUpdate = false;
+    const posts = singleData.posts.map((post) => {
+      if (post.post_id !== postId) return post;
+      didUpdate = true;
+      return updatePost(post);
+    });
+    return { nextData: didUpdate ? { ...singleData, posts } : data, didUpdate };
+  });
+};
+
+const scheduleClearOptimisticPostStatus = (
+  queryClient: QueryClient,
+  postId: string,
+  previewMediaUrls?: string[],
+) => {
+  setTimeout(() => {
+    setOptimisticPostStatus(queryClient, postId, undefined, { previewMediaUrls });
+  }, 2000);
+};
+
+export const markOptimisticPostSuccess = (
+  queryClient: QueryClient,
+  postId: string,
+  previewMediaUrls?: string[],
+) => {
+  setOptimisticPostStatus(queryClient, postId, "success", { previewMediaUrls });
+  scheduleClearOptimisticPostStatus(queryClient, postId, previewMediaUrls);
+};
+
+export const markOptimisticVideoProcessingComplete = (
+  queryClient: QueryClient,
+  postId: string,
+) => {
+  const persistedPost = usePendingPostsStore
+    .getState()
+    .posts.find((post) => post.post_id === postId);
+  if (persistedPost) {
+    usePendingPostsStore.getState().upsertPost({
+      ...persistedPost,
+      optimistic_video_preview_until: undefined,
+    });
+  }
+
+  updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => {
+    if (!data) return { nextData: data, didUpdate: false };
+    const updatePost = (post: ApiPost) =>
+      post.post_id === postId
+        ? { ...post, optimistic_video_preview_until: undefined }
+        : post;
+    if (isInfinitePostsData(data)) {
+      let didUpdate = false;
+      const pages = data.pages.map((page) => {
+        const posts = page.posts.map((post) => {
+          if (post.post_id !== postId) return post;
+          didUpdate = true;
+          return updatePost(post);
+        });
+        return didUpdate ? { ...page, posts } : page;
+      });
+      return { nextData: didUpdate ? { ...data, pages } : data, didUpdate };
+    }
+    const singleData = data as PostsResponse;
+    let didUpdate = false;
+    const posts = singleData.posts.map((post) => {
+      if (post.post_id !== postId) return post;
+      didUpdate = true;
+      return updatePost(post);
     });
     return { nextData: didUpdate ? { ...singleData, posts } : data, didUpdate };
   });
@@ -394,10 +531,13 @@ const preserveLocalPreviewMedia = (
             ...post,
             thumbnail: previewMediaUrls[0] ?? post.thumbnail,
             media: previewMediaUrls,
-            optimistic_status: undefined,
-            optimistic_error: undefined,
-            optimistic_draft: undefined,
-            optimistic_video_preview_until: Date.now() + 45000,
+            optimistic_status: post.optimistic_status,
+            optimistic_error: post.optimistic_error,
+            optimistic_draft: post.optimistic_draft,
+            optimistic_video_preview_until: Math.max(
+              post.optimistic_video_preview_until ?? 0,
+              Date.now() + 45000,
+            ),
           }
         : post;
     if (isInfinitePostsData(data)) {
@@ -881,7 +1021,6 @@ export function usePost(options: UsePostOptions = {}) {
         allowedTags: getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled) || undefined,
         limit: 10,
       };
-
       if (input.optimisticId) {
         Sentry.addBreadcrumb({
           category: "create-post",
@@ -893,8 +1032,24 @@ export function usePost(options: UsePostOptions = {}) {
             hasPreviewMedia: !!input.optimisticPreviewMediaUrls?.length,
           },
         });
-        replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, confirmedPost);
-        upsertHomePost(queryClient, confirmedPost, upsertOptions);
+        const postAfterNetworkConfirmation = {
+          ...confirmedPost,
+          thumbnail: input.optimisticPreviewMediaUrls?.[0] ?? confirmedPost.thumbnail,
+          media: input.optimisticPreviewMediaUrls?.length
+            ? input.optimisticPreviewMediaUrls
+            : confirmedPost.media,
+          optimistic_status: "success" as const,
+          optimistic_error: undefined,
+          optimistic_draft: input.optimisticDraft,
+          optimistic_action_id: input.optimisticActionId,
+          optimistic_video_preview_until: input.optimisticPreviewMediaUrls?.length
+            ? Date.now() + 45000
+            : confirmedPost.optimistic_video_preview_until,
+        };
+        usePendingPostsStore.getState().removePost(input.optimisticId);
+        usePendingPostsStore.getState().upsertPost(postAfterNetworkConfirmation);
+        replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, postAfterNetworkConfirmation);
+        upsertHomePost(queryClient, postAfterNetworkConfirmation, upsertOptions);
         if (input.optimisticPreviewMediaUrls?.length) {
           Sentry.addBreadcrumb({
             category: "create-post",
@@ -912,53 +1067,14 @@ export function usePost(options: UsePostOptions = {}) {
             }, delay);
           });
         }
-        setTimeout(() => {
-          updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (queryData) => {
-            if (!queryData) return { nextData: queryData, didUpdate: false };
-            const clearStatus = (post: ApiPost) =>
-              post.post_id === confirmedPost.post_id
-                ? {
-                    ...post,
-                    optimistic_status: undefined,
-                    optimistic_error: undefined,
-                    optimistic_draft: undefined,
-                    optimistic_video_preview_until: input.optimisticPreviewMediaUrls?.length
-                      ? Date.now() + 45000
-                      : post.optimistic_video_preview_until,
-                  }
-                : post;
-            if (isInfinitePostsData(queryData)) {
-              let didUpdate = false;
-              const pages = queryData.pages.map((page) => {
-                const posts = page.posts.map((post) => {
-                  if (post.post_id !== confirmedPost.post_id) return post;
-                  didUpdate = true;
-                  return clearStatus(post);
-                });
-                return didUpdate ? { ...page, posts } : page;
-              });
-              return { nextData: didUpdate ? { ...queryData, pages } : queryData, didUpdate };
-            }
-            const singleData = queryData as PostsResponse;
-            let didUpdate = false;
-            const posts = singleData.posts.map((post) => {
-              if (post.post_id !== confirmedPost.post_id) return post;
-              didUpdate = true;
-              return clearStatus(post);
-            });
-            return { nextData: didUpdate ? { ...singleData, posts } : queryData, didUpdate };
-          });
-        }, 2000);
+        scheduleClearOptimisticPostStatus(
+          queryClient,
+          confirmedPost.post_id,
+          input.optimisticPreviewMediaUrls,
+        );
       } else {
         upsertHomePost(queryClient, optimisticPost, upsertOptions);
       }
-
-      // Keep the newly created post visible immediately in Home feeds.
-      // Magic is reconciled back to backend ordering on refresh / new-posts reload.
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.postsRoot(),
-        refetchType: "inactive",
-      });
 
      // Invalidate user posts
       if (address) {

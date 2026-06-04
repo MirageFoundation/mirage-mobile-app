@@ -280,7 +280,7 @@ const HomePostListInner = function HomePostListInner(
       return max;
     }, -1);
     if (maxIndex >= 0) onItemVisibleRef.current?.(maxIndex);
-  }, [setVideoViewability, syncSeenViewability]);
+  }, [feedContext, setVideoViewability, syncSeenViewability]);
 
   const itemVisibleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -521,7 +521,13 @@ const HomePostListInner = function HomePostListInner(
 
   const handleScrollEndDrag = useCallback(() => {
     scheduleScrollStop();
-  }, [scheduleScrollStop]);
+    requestAnimationFrame(() => {
+      if (isMomentumScrollingRef.current) return;
+      if (recomputeViewableFromLayout()) {
+        flushViewability();
+      }
+    });
+  }, [flushViewability, recomputeViewableFromLayout, scheduleScrollStop]);
 
   const handleMomentumScrollBegin = useCallback(() => {
     cancelScrollStop();

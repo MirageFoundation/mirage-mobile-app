@@ -60,6 +60,7 @@ export const PowQueueToast = () => {
 
   const {
     currentAction,
+    preparingAction,
     completedCount,
     totalCount,
     lastCompletedAction,
@@ -96,8 +97,9 @@ export const PowQueueToast = () => {
   const { offset, onLayout } = useTopToastStack(TOAST_STACK_ID, isVisible);
 
   const visibleCurrentAction = currentAction?.showProgress === false ? null : currentAction;
+  const visiblePreparingAction = preparingAction?.showProgress === false ? null : preparingAction;
   const visibleQueue = queue.filter((action) => action.showProgress !== false);
-  const hasQueuedOrActiveWork = visibleCurrentAction !== null || visibleQueue.length > 0;
+  const hasQueuedOrActiveWork = visibleCurrentAction !== null || visiblePreparingAction !== null || visibleQueue.length > 0;
   const hasPendingWork = hasQueuedOrActiveWork;
   const resultAction = lastCompletedAction ?? displayedCompletedAction;
   const immediateResultAction = successOverlay
@@ -119,14 +121,11 @@ export const PowQueueToast = () => {
       ? VOTE_RESULT_DISPLAY_DURATION_MS
       : RESULT_DISPLAY_DURATION_MS;
   const isShowingResult =
-    activeResultAction !== null &&
-    (
-      transientResultAction !== null ||
-      immediateResultAction !== null ||
-      !hasQueuedOrActiveWork
-    );
+    activeResultAction !== null && !hasQueuedOrActiveWork;
   const hasActiveResultAction = activeResultAction !== null;
   const isShowingProcessing = hasPendingWork && !isShowingResult;
+  const isShowingPreparingAction =
+    isShowingProcessing && visiblePreparingAction !== null && visibleCurrentAction === null;
   const isOfflineProcessing = isShowingProcessing && !isConnected;
 
   const displayLabel = isShowingResult
@@ -134,6 +133,7 @@ export const PowQueueToast = () => {
       ? getSuccessLabel(activeResultAction.type as any)
       : activeResultAction.errorMessage || "Failed"
     : visibleCurrentAction?.label ||
+      visiblePreparingAction?.label ||
       visibleQueue[0]?.label ||
       (activeResultAction
         ? activeResultAction.success
@@ -250,18 +250,24 @@ export const PowQueueToast = () => {
       setHashRate(0);
       setPhase("preparing");
       powStartedRef.current = false;
+      lastElapsedMsRef.current = 0;
+      lastHashRateRef.current = 0;
       animateIn();
     }
   }, [hasPendingWork, isVisible, successOverlay]);
 
   useEffect(() => {
-    if (visibleCurrentAction) {
+    if (visibleCurrentAction || visiblePreparingAction) {
       setElapsedMs(0);
       setHashRate(0);
       setPhase("preparing");
       powStartedRef.current = false;
+      lastElapsedMsRef.current = 0;
+      lastHashRateRef.current = 0;
+      setTransientResultAction(null);
+      setDisplayedCompletedAction(null);
     }
-  }, [visibleCurrentAction]);
+  }, [visibleCurrentAction, visiblePreparingAction]);
 
   useEffect(() => {
     if (!hasPendingWork && isVisible) {
@@ -273,6 +279,7 @@ export const PowQueueToast = () => {
         const state = usePowQueueStore.getState();
         const hasVisibleWork =
           state.currentAction?.showProgress !== false && state.currentAction !== null ||
+          state.preparingAction?.showProgress !== false && state.preparingAction !== null ||
           state.queue.some((action) => action.showProgress !== false);
 
         if (!hasVisibleWork) {
@@ -290,6 +297,7 @@ export const PowQueueToast = () => {
 
   useEffect(() => {
     if (isShowingProcessing && isVisible) {
+      if (isShowingPreparingAction) return;
       if (!isConnected) return;
 
       const interval = setInterval(async () => {
@@ -320,7 +328,7 @@ export const PowQueueToast = () => {
       }, 200);
       return () => clearInterval(interval);
     }
-  }, [isConnected, isShowingProcessing, isVisible]);
+  }, [isConnected, isShowingPreparingAction, isShowingProcessing, isVisible]);
 
   if (!isVisible) return null;
 

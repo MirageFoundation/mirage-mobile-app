@@ -43,6 +43,7 @@ type CommentComposeState = {
   pendingComment: PendingComment | null;
   setPendingComment: (comment: PendingComment | null) => void;
   clearPendingComment: () => void;
+  consumePendingComment: (postId: string) => PendingComment | null;
   pendingEdit: PendingEdit | null;
   setPendingEdit: (edit: PendingEdit | null) => void;
   clearPendingEdit: () => void;
@@ -61,6 +62,12 @@ export const useCommentComposeStore = create<CommentComposeState>()(
       pendingComment: null,
       setPendingComment: (comment) => set({ pendingComment: comment }),
       clearPendingComment: () => set({ pendingComment: null }),
+      consumePendingComment: (postId) => {
+        const comment = get().pendingComment;
+        if (!comment || comment.postId !== postId) return null;
+        set({ pendingComment: null });
+        return comment;
+      },
       pendingEdit: null,
       setPendingEdit: (edit) => set({ pendingEdit: edit }),
       clearPendingEdit: () => set({ pendingEdit: null }),

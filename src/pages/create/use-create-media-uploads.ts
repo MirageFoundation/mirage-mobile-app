@@ -324,10 +324,22 @@ export function useCreateMediaUploads() {
           });
           return;
         }
+        if (videoUploadSessionRef.current !== sessionId || controller.signal.aborted) {
+          Sentry.addBreadcrumb({
+            category: "video-upload",
+            message: "Ignored stale video upload completion",
+            level: "info",
+            data: {
+              ...getVideoUploadDebugData(uri, sessionId),
+              hasUrl: !!url,
+            },
+          });
+          return;
+        }
         videoUploadControllersRef.current.delete(uri);
         Sentry.addBreadcrumb({
           category: "video-upload",
-          message: "Create video upload succeeded",
+          message: "Create video upload URL ready",
           level: "info",
           data: {
             ...getVideoUploadDebugData(uri, sessionId),
@@ -375,6 +387,20 @@ export function useCreateMediaUploads() {
             silent,
           },
           level: "error",
+        });
+        Sentry.captureException(err, {
+          tags: {
+            feature: "create-post",
+            operation: "video-upload",
+            serverError: String(isServerError),
+          },
+          extra: {
+            ...getVideoUploadDebugData(uri, sessionId),
+            status,
+            responseText: err?.responseText,
+            serverError,
+            cause: err?.cause instanceof Error ? err.cause.message : err?.cause ? String(err.cause) : undefined,
+          },
         });
         VIDEO_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg, isServerError, sessionId });
         videoUploadStateRef.current((prev) => ({

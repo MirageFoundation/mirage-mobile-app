@@ -62,6 +62,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     "expo-sqlite",
     "@react-native-community/datetimepicker",
     "react-native-cloud-storage",
+    "react-native-compressor",
     "react-native-edge-to-edge",
     [
       "expo-font",
@@ -101,7 +102,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name,
     slug,
-    version: "1.0.15",
+    version: "1.0.16",
     orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: scheme,
