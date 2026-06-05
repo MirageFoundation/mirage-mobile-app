@@ -353,7 +353,9 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       }
     }, [isLoggedIn]);
 
-    const { data: userStatus, refetch: refetchUserStatus } = useUserStatus({ enabled: visible });
+    const { data: userStatus, refetch: refetchUserStatus } = useUserStatus({
+      enabled: visible,
+    });
     const balance = userStatus?.balance
       ? Math.floor(userStatus.balance / 1_000_000)
       : 0;
@@ -797,7 +799,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 197
+                          update 198
                         </Text>
                         <Text
                           style={{
@@ -849,7 +851,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 197
+                          update 198
                         </Text>
                         <Text
                           style={{
