@@ -351,7 +351,14 @@ export function SubscriptionScreen() {
       });
 
       if (planIndex === 0) {
-        if (!effectiveAutoRenew) return;
+        if (!effectiveAutoRenew) {
+          setSubscribingPlanId(null);
+          Alert.alert(
+            "Downgrade Already Scheduled",
+            "Auto-renew is already off. Your current perks stay active until the subscription expires."
+          );
+          return;
+        }
         setAutoRenewProcessing(true);
         autoRenewalMutation.mutate(false, {
           onSuccess: () => {
@@ -359,6 +366,10 @@ export function SubscriptionScreen() {
             setAutoRenewProcessing(false);
             setOptimisticAutoRenew(false);
             triggerHaptic("success");
+            Alert.alert(
+              "Downgrade Scheduled",
+              "Auto-renew is now off. Your current perks stay active until the subscription expires."
+            );
           },
           onError: (error) => {
             setSubscribingPlanId(null);
