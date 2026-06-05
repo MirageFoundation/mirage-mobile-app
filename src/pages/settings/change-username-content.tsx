@@ -1,7 +1,6 @@
 import { useFocusEffect } from "@react-navigation/native";
 import * as Sentry from "@sentry/react-native";
 import { EvilIcons, Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -29,6 +28,7 @@ import {
 } from "@/src/api/cache";
 import { setUsername as setUsernameOnChain } from "@/src/api/write";
 import { TransactionProgressModal } from "@/src/components/molecules";
+import DicebearAvatar from "@/src/components/ui/dicebear-avatar";
 import {
   Box,
   Button,
@@ -312,9 +312,7 @@ export function ChangeUsernameScreen() {
     username.length >= 1 &&
     !isSubmitting;
 
-  const initials = currentUsername
-    ? currentUsername.slice(0, 2).toUpperCase()
-    : "??";
+  const avatarSeed = user?.walletAddress ?? currentUsername ?? "";
 
   return (
     <Box flex background="base">
@@ -366,14 +364,22 @@ export function ChangeUsernameScreen() {
         >
           <View style={styles.centerContent}>
             <View style={styles.avatarContainer}>
-              <LinearGradient
-                colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.avatar}
+              <View
+                style={[
+                  styles.avatarRing,
+                  {
+                    backgroundColor: theme.colors.background.subtle,
+                    borderColor: theme.colors.border.subtle,
+                  },
+                ]}
               >
-                <Text style={styles.avatarText}>{initials}</Text>
-              </LinearGradient>
+                <DicebearAvatar
+                  seed={avatarSeed}
+                  size={48}
+                  rounded="none"
+                  border="none"
+                />
+              </View>
             </View>
 
             <View
@@ -470,59 +476,50 @@ export function ChangeUsernameScreen() {
                 style={[
                   styles.upgradeCard,
                   {
-                    backgroundColor: `${theme.colors.warning[500]}10`,
-                    borderColor: `${theme.colors.warning[500]}25`,
+                    backgroundColor: theme.colors.background.subtle,
+                    borderColor: theme.colors.border.subtle,
                   },
                 ]}
               >
-                <View style={styles.upgradeIconRow}>
-                  <Ionicons
-                    name="lock-closed"
-                    size={18}
-                    color={theme.colors.warning[500]}
-                  />
-                  <Text
-                    size="sm"
-                    weight="semibold"
-                    style={{ color: theme.colors.warning[500], marginLeft: 8 }}
-                  >
-                    Premium Feature
-                  </Text>
-                </View>
-                <Text
-                  size="sm"
-                  style={{
-                    color: theme.colors.warning[500],
-                    lineHeight: 20,
-                    marginTop: 6,
-                    opacity: 0.85,
-                  }}
-                >
-                  Upgrade your plan to change your username.
-                </Text>
-                {Platform.OS !== "ios" && (
-                  <Pressable
-                    onPress={() => router.push("/subscription")}
-                    style={({ pressed }) => [
-                      styles.upgradeButton,
-                      pressed && { opacity: 0.8 },
+                <View style={styles.upgradeHeaderRow}>
+                  <View
+                    style={[
+                      styles.upgradeIconBadge,
+                      {
+                        backgroundColor: `${theme.colors.brand[500]}15`,
+                        borderColor: `${theme.colors.brand[500]}30`,
+                      },
                     ]}
                   >
-                    <LinearGradient
-                      colors={["rgb(102, 126, 234)", "rgb(118, 75, 162)"]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.upgradeGradient}
+                    <Ionicons
+                      name="sparkles"
+                      size={16}
+                      color={theme.colors.brand[500]}
+                    />
+                  </View>
+                  <View style={styles.upgradeHeaderText}>
+                    <Text size="sm" weight="semibold">
+                      Premium Feature
+                    </Text>
+                    <Text
+                      size="xs"
+                      mode="subtle"
+                      style={styles.upgradeSubtitle}
                     >
-                      <Text
-                        size="sm"
-                        weight="semibold"
-                        style={{ color: "#FFFFFF" }}
-                      >
-                        Upgrade Now
-                      </Text>
-                    </LinearGradient>
-                  </Pressable>
+                      Upgrade your plan to change your username
+                    </Text>
+                  </View>
+                </View>
+                {Platform.OS !== "ios" && (
+                  <Button
+                    size="sm"
+                    rounded="full"
+                    mode="brand"
+                    onPress={() => router.push("/subscription")}
+                    style={styles.upgradeButton}
+                  >
+                    <Button.Text weight="semibold">Upgrade Plan</Button.Text>
+                  </Button>
                 )}
               </View>
             )}
@@ -584,20 +581,14 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     marginBottom: theme.spacing.lg,
   },
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+  avatarRing: {
+    padding: theme.spacing.md,
+    width: 84,
+    height: 84,
     alignItems: "center",
     justifyContent: "center",
-  },
-  avatarText: {
-    color: "#FFFFFF",
-    fontSize: 26,
-    fontWeight: "700",
-    lineHeight: 30,
-    includeFontPadding: false,
-    textAlignVertical: "center",
+    borderRadius: 999,
+    borderWidth: 1,
   },
   currentBadge: {
     alignItems: "center",
@@ -649,19 +640,27 @@ const styles = StyleSheet.create((theme) => ({
     borderWidth: 1,
     marginTop: theme.spacing.lg,
   },
-  upgradeIconRow: {
+  upgradeHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: theme.spacing.sm,
+  },
+  upgradeIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  upgradeHeaderText: {
+    flex: 1,
+  },
+  upgradeSubtitle: {
+    marginTop: 2,
+    lineHeight: 16,
   },
   upgradeButton: {
-    marginTop: 12,
-    borderRadius: 10,
-    overflow: "hidden",
-    alignSelf: "flex-start",
-  },
-  upgradeGradient: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
+    marginTop: theme.spacing.md,
   },
 }));
