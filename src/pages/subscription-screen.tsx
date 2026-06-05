@@ -393,6 +393,7 @@ export function SubscriptionScreen() {
       if (targetLevel === undefined) return;
 
       setOptimisticLevel(targetLevel);
+      setOptimisticAutoRenew(true);
 
       upgradeMutation.mutate(targetLevel as 1 | 10, {
         onSuccess: () => {
@@ -402,6 +403,7 @@ export function SubscriptionScreen() {
         onError: (error) => {
           setSubscribingPlanId(null);
           setOptimisticLevel(null);
+          setOptimisticAutoRenew(null);
           console.error("[SubscriptionScreen] Failed to subscribe:", error);
           captureSubscriptionException(error, "upgrade-plan", {
             planId,
@@ -424,6 +426,12 @@ export function SubscriptionScreen() {
       setOptimisticLevel(null);
     }
   }, [userStatus?.user_level, optimisticLevel]);
+
+  useEffect(() => {
+    if (optimisticAutoRenew !== null && userStatus?.auto_renew === optimisticAutoRenew) {
+      setOptimisticAutoRenew(null);
+    }
+  }, [userStatus?.auto_renew, optimisticAutoRenew]);
 
   const handleToggleAutoRenew = useCallback(() => {
     const newValue = !effectiveAutoRenew;
