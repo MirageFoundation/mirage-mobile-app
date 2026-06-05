@@ -40,8 +40,27 @@ const FOREGROUND_INTERVAL_MS = FETCH_INTERVAL_SECONDS * 1000;
 const SIGNAL_THROTTLE_MS = 15_000;
 const INBOX_NAVIGATION_READY_TIMEOUT_MS = 3_000;
 const INBOX_NAVIGATION_ACTIVE_WATCHDOG_MS = 8_000;
+const INBOX_NAVIGATION_ARRIVAL_TIMEOUT_MS = 5_000;
 const INBOX_NOTIFICATION_NAVIGATION_ACTIVE_MS = 10_000;
 const SHARE_INTENT_NAVIGATION_ACTIVE_MS = 15_000;
+
+type PendingInboxNotificationNavigation = {
+  timeoutId: ReturnType<typeof setTimeout>;
+  dispatchedAt: number;
+  replyId: string | null;
+  rootPostId: string | null;
+  areTabsReady: boolean;
+};
+
+type InboxNotificationArrivalDebugData = {
+  hasTargetReply?: boolean;
+  hasFetchedTargetReply?: boolean;
+  hasPreviewReply?: boolean;
+  visibleReplyCount?: number;
+  platform?: string;
+};
+
+type InboxNotificationNavigationEventLevel = "info" | "warning" | "error";
 
 let isCheckInFlight = false;
 let lastSignalCheckAt = 0;
@@ -54,6 +73,10 @@ let isInboxNotificationsInitialized = false;
 let isInitializingInboxNotifications = false;
 let lastInboxNotificationNavigationAt = 0;
 let lastShareIntentNavigationAt = 0;
+const pendingInboxNotificationNavigations = new Map<
+  string,
+  PendingInboxNotificationNavigation
+>();
 
 let _rootLayoutReadyResolve: (() => void) | null = null;
 let _rootLayoutReadyPromise: Promise<void> = new Promise<void>((resolve) => {
@@ -140,8 +163,137 @@ function getNavigationReadinessDebugData(): Record<string, unknown> {
     isInboxNotificationsInitialized,
     isInitializingInboxNotifications,
     hasNotificationResponseSubscription: !!notificationResponseSubscription,
+    pendingInboxNotificationNavigationCount: pendingInboxNotificationNavigations.size,
     isShareIntentNavigationActive: isShareIntentNavigationActive(),
   };
+}
+
+function captureInboxNotificationNavigationEvent(
+  message: string,
+  level: InboxNotificationNavigationEventLevel,
+  operation: string,
+  extra: Record<string, unknown> = {},
+): void {
+  Sentry.captureMessage(message, {
+    level,
+    tags: {
+      feature: "inbox-notifications",
+      operation,
+    },
+    extra: {
+      ...extra,
+      ...getNavigationReadinessDebugData(),
+    },
+  });
+}
+
+function getNotificationResponseDebugData(
+  response: Notifications.NotificationResponse,
+  notificationData: Record<string, unknown>,
+  source: "live-listener" | "last-response" | "wallet-deferred",
+  notificationId?: string,
+  notificationAgeMs?: number | null,
+): Record<string, unknown> {
+  return {
+    notificationId,
+    source,
+    actionIdentifier: response.actionIdentifier,
+    appState: AppState.currentState,
+    notificationDate: response.notification?.date,
+    notificationAgeMs,
+    requestIdentifier: response.notification?.request?.identifier,
+    dataKeys: getNotificationDataKeys(notificationData),
+    hasNotificationType: !!notificationData.notificationType,
+    notificationType: toOptionalString(notificationData.notificationType),
+    hasReplyId: !!toOptionalString(notificationData.replyId),
+    hasRootPostId: !!toOptionalString(notificationData.rootPostId),
+    hasInboxReply: !!notificationData.inboxReply,
+  };
+}
+
+function clearPendingInboxNotificationNavigation(notificationId: string): void {
+  const pending = pendingInboxNotificationNavigations.get(notificationId);
+  if (!pending) return;
+  clearTimeout(pending.timeoutId);
+  pendingInboxNotificationNavigations.delete(notificationId);
+}
+
+function watchInboxNotificationArrival(
+  notificationId: string,
+  options: {
+    replyId: string | null;
+    rootPostId: string | null;
+    areTabsReady: boolean;
+  },
+): void {
+  clearPendingInboxNotificationNavigation(notificationId);
+  const dispatchedAt = Date.now();
+  const timeoutId = setTimeout(() => {
+    const pending = pendingInboxNotificationNavigations.get(notificationId);
+    if (!pending) return;
+    pendingInboxNotificationNavigations.delete(notificationId);
+    Sentry.captureMessage(
+      "Inbox notification navigation dispatched but inbox did not confirm arrival",
+      {
+        level: "warning",
+        tags: {
+          feature: "inbox-notifications",
+          operation: "notification-arrival-watchdog",
+        },
+        extra: {
+          notificationId,
+          elapsedMs: Date.now() - pending.dispatchedAt,
+          hasReplyId: !!pending.replyId,
+          hasRootPostId: !!pending.rootPostId,
+          areTabsReady: pending.areTabsReady,
+          ...getNavigationReadinessDebugData(),
+        },
+      },
+    );
+  }, INBOX_NAVIGATION_ARRIVAL_TIMEOUT_MS);
+
+  pendingInboxNotificationNavigations.set(notificationId, {
+    timeoutId,
+    dispatchedAt,
+    replyId: options.replyId,
+    rootPostId: options.rootPostId,
+    areTabsReady: options.areTabsReady,
+  });
+}
+
+export function confirmInboxNotificationNavigation(
+  notificationId: string | null | undefined,
+  debugData: InboxNotificationArrivalDebugData = {},
+): void {
+  if (!notificationId) return;
+  const pending = pendingInboxNotificationNavigations.get(notificationId);
+  if (!pending) {
+    Sentry.addBreadcrumb({
+      category: "navigation",
+      message: "Inbox notification navigation arrival had no pending dispatch",
+      level: "info",
+      data: { notificationId, ...debugData, ...getNavigationReadinessDebugData() },
+    });
+    return;
+  }
+
+  clearPendingInboxNotificationNavigation(notificationId);
+  Sentry.captureMessage("Inbox notification navigation arrived", {
+    level: "info",
+    tags: {
+      feature: "inbox-notifications",
+      operation: "notification-arrival",
+    },
+    extra: {
+      notificationId,
+      elapsedMs: Date.now() - pending.dispatchedAt,
+      hasReplyId: !!pending.replyId,
+      hasRootPostId: !!pending.rootPostId,
+      areTabsReady: pending.areTabsReady,
+      ...debugData,
+      ...getNavigationReadinessDebugData(),
+    },
+  });
 }
 
 export function signalTabsUnmounted(): void {
@@ -655,73 +807,105 @@ function handleNotificationResponse(
     const notificationData = getNotificationData(response);
     if (isAndroidShareIntentNotificationData(notificationData)) {
       markShareIntentNavigationActive("android-intent-extra-in-notification-response");
+      const debugData = getNotificationResponseDebugData(
+        response,
+        notificationData,
+        source,
+      );
       Sentry.addBreadcrumb({
         category: "inbox-notifications",
         message: "Ignoring Android share intent in notification response handler",
         level: "info",
         data: {
-          source,
-          actionIdentifier: response.actionIdentifier,
-          requestIdentifier: response.notification?.request?.identifier,
-          notificationDate: response.notification?.date,
-          dataKeys: getNotificationDataKeys(notificationData),
+          ...debugData,
           hasSharedText: !!toOptionalString(notificationData["android.intent.extra.TEXT"]),
           ...getNavigationReadinessDebugData(),
         },
       });
+      captureInboxNotificationNavigationEvent(
+        "Inbox notification response ignored as Android share intent",
+        "info",
+        "ignored-share-intent",
+        {
+          ...debugData,
+          hasSharedText: !!toOptionalString(notificationData["android.intent.extra.TEXT"]),
+        },
+      );
       return;
     }
     if (source === "last-response" && isShareIntentNavigationActive()) {
+      const debugData = getNotificationResponseDebugData(
+        response,
+        notificationData,
+        source,
+      );
       Sentry.addBreadcrumb({
         category: "inbox-notifications",
         message: "Ignoring stale last notification response during share intent",
         level: "info",
         data: {
-          source,
-          actionIdentifier: response.actionIdentifier,
-          requestIdentifier: response.notification?.request?.identifier,
-          notificationDate: response.notification?.date,
-          dataKeys: getNotificationDataKeys(notificationData),
+          ...debugData,
           ...getNavigationReadinessDebugData(),
         },
       });
+      captureInboxNotificationNavigationEvent(
+        "Inbox notification response ignored during share intent",
+        "info",
+        "ignored-stale-share-intent-response",
+        debugData,
+      );
       void Notifications.clearLastNotificationResponseAsync?.().catch(() => undefined);
       return;
     }
     const notificationId = getInboxNotificationResponseId(response, notificationData);
     const notificationAgeMs = getNotificationResponseAgeMs(response);
+    const responseDebugData = getNotificationResponseDebugData(
+      response,
+      notificationData,
+      source,
+      notificationId,
+      notificationAgeMs,
+    );
     Sentry.addBreadcrumb({
       category: "notifications",
       message: "Inbox notification response received",
       level: "info",
       data: {
-        notificationId,
-        source,
-        actionIdentifier: response.actionIdentifier,
-        appState: AppState.currentState,
-        notificationDate: response.notification?.date,
-        notificationAgeMs,
-        requestIdentifier: response.notification?.request?.identifier,
-        dataKeys: getNotificationDataKeys(notificationData),
-        hasNotificationType: !!notificationData.notificationType,
-        hasReplyId: !!toOptionalString(notificationData.replyId),
-        hasRootPostId: !!toOptionalString(notificationData.rootPostId),
-        hasInboxReply: !!notificationData.inboxReply,
+        ...responseDebugData,
         ...getNavigationReadinessDebugData(),
       },
     });
+    captureInboxNotificationNavigationEvent(
+      "Inbox notification response received",
+      "info",
+      "notification-response-received",
+      responseDebugData,
+    );
     const handledNotificationIds = getHandledNotificationIds();
+    const wasPersistedHandled = handledNotificationIds.has(notificationId);
+    const wasInFlight = handledNotificationIdsInFlight.has(notificationId);
     if (
-      handledNotificationIds.has(notificationId) ||
-      handledNotificationIdsInFlight.has(notificationId)
+      wasPersistedHandled ||
+      wasInFlight
     ) {
       console.log("[InboxNotifications] Already handled notification:", notificationId);
       Sentry.addBreadcrumb({
         category: "notifications",
         message: "Inbox notification response already handled",
         level: "info",
-        data: { notificationId, source, notificationAgeMs },
+        data: { notificationId, source, notificationAgeMs, wasPersistedHandled, wasInFlight },
       });
+      captureInboxNotificationNavigationEvent(
+        "Inbox notification response ignored because it was already handled",
+        "warning",
+        "duplicate-notification-response",
+        {
+          ...responseDebugData,
+          wasPersistedHandled,
+          wasInFlight,
+          handledIdsCount: handledNotificationIds.size,
+        },
+      );
       void Notifications.clearLastNotificationResponseAsync?.().catch(() => undefined);
       return;
     }
@@ -734,6 +918,12 @@ function handleNotificationResponse(
         level: "info",
         data: { notificationId, source, ...getNavigationReadinessDebugData() },
       });
+      captureInboxNotificationNavigationEvent(
+        "Inbox notification navigation deferred because wallet was not ready",
+        "info",
+        "wallet-not-ready",
+        responseDebugData,
+      );
       deferNotificationResponseUntilWallet(response, notificationId);
       return;
     }
@@ -765,6 +955,14 @@ function handleNotificationResponse(
         hasRootPostId: !!rootPostId,
       },
     });
+    if (!replyId && !rootPostId && !previewReply) {
+      captureInboxNotificationNavigationEvent(
+        "Inbox notification target resolved without reply or root post ids",
+        "warning",
+        "target-resolution-missing-ids",
+        responseDebugData,
+      );
+    }
     useInboxStore.getState().setNotificationTarget({
       notificationId,
       replyId,
@@ -789,6 +987,16 @@ function handleNotificationResponse(
             error: error instanceof Error ? error.message : String(error),
           },
         });
+        captureInboxNotificationNavigationEvent(
+          "Inbox prefetch before notification navigation failed",
+          "warning",
+          "prefetch-before-navigation",
+          {
+            notificationId,
+            errorName: error instanceof Error ? error.name : null,
+            errorMessage: error instanceof Error ? error.message : String(error),
+          },
+        );
       });
       const areTabsReady = await waitForTabsReady(INBOX_NAVIGATION_READY_TIMEOUT_MS);
       if (!areTabsReady) {
@@ -817,6 +1025,11 @@ function handleNotificationResponse(
           fromNotification: notificationId,
           replyId: replyId ?? undefined,
         },
+      });
+      watchInboxNotificationArrival(notificationId, {
+        replyId,
+        rootPostId,
+        areTabsReady,
       });
       Sentry.captureMessage("Inbox notification navigation dispatched", {
         level: "info",
