@@ -26,9 +26,9 @@
  */
 
 import { useState, useCallback, useRef } from "react";
-import axios from "axios";
 import * as Sentry from "@sentry/react-native";
 import { waitForQueueDrain, usePowQueueStore } from "@/src/services/pow-queue";
+import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 import type {
   TransactionPhase,
   TransactionProgress,
@@ -303,20 +303,16 @@ export async function executeWithProgress<TResult extends string | { tx_hash: st
   } catch (err) {
     Sentry.captureException(err, { tags: { feature: "transaction-progress" } });
     let errorMessage = err instanceof Error ? err.message : "Transaction failed";
-    if (axios.isAxiosError(err)) {
-      const data = err.response?.data as unknown;
-      if (typeof data === "string" && data.trim()) {
-        errorMessage = data;
-      } else if (data && typeof data === "object") {
-        const maybeError =
-          (data as any).error ??
-          (data as any).message ??
-          (data as any).error_details ??
-          (data as any).raw_log;
-        if (maybeError) {
-          errorMessage = String(maybeError);
-        }
-      }
+    const responseData = (err as any)?.response?.data;
+    const isTransportNetworkError =
+      (err as any)?.code === "ERR_NETWORK" ||
+      (err as any)?.message === "Network Error";
+    if (isTransportNetworkError) {
+      errorMessage = "No internet connection";
+    } else if (responseData && typeof responseData === "object") {
+      errorMessage = getApiErrorMessage(err);
+    } else if (typeof responseData === "string" && responseData.trim()) {
+      errorMessage = responseData;
     }
     setError(errorMessage);
     return { success: false, error: errorMessage };
