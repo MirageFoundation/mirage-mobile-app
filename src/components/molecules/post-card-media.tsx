@@ -39,7 +39,6 @@ import {
 import { useNetworkState } from "@/src/hooks/use-network-state";
 import { setLastPressedMediaTransition } from "@/src/utils/post-transition";
 import {
-  CLOUD_FLARE_PROCESSING_MAX_WAIT_MS,
   CLOUD_FLARE_PROCESSING_POLL_INTERVAL_MS,
   isCloudflareManifestReady,
 } from "./cloudflare-manifest";
@@ -1083,28 +1082,6 @@ export const PostCardMedia = memo(
         }
 
         if (cancelled) return;
-        if (
-          videoProcessingStartedAtRef.current &&
-          Date.now() - videoProcessingStartedAtRef.current >= CLOUD_FLARE_PROCESSING_MAX_WAIT_MS
-        ) {
-          Sentry.captureMessage("Cloudflare video manifest was not ready before timeout", {
-            level: "warning",
-            tags: {
-              feature: "post-media",
-              operation: "cloudflare-video-processing",
-            },
-            extra: {
-              ...getVideoDiagnostics(),
-              uri: resolvedMediaUri,
-              attempts: videoProcessingAttemptsRef.current,
-              maxWaitMs: CLOUD_FLARE_PROCESSING_MAX_WAIT_MS,
-            },
-          });
-          videoProcessingStartedAtRef.current = null;
-          setIsVideoProcessing(false);
-          return;
-        }
-
         const nextDelay = Math.min(
           CLOUD_FLARE_PROCESSING_POLL_INTERVAL_MS * (videoProcessingAttemptsRef.current + 1),
           10000,

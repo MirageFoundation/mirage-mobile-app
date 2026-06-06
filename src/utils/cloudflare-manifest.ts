@@ -2,7 +2,6 @@ import axios from "axios";
 import * as Sentry from "@sentry/react-native";
 
 export const CLOUD_FLARE_PROCESSING_POLL_INTERVAL_MS = 2500;
-export const CLOUD_FLARE_PROCESSING_MAX_WAIT_MS = 120000;
 
 const CLOUD_FLARE_PROCESSING_REQUEST_TIMEOUT_MS = 4000;
 
@@ -73,7 +72,7 @@ export async function isCloudflareManifestReady(
 
 type WaitForCloudflareManifestReadyOptions = {
   intervalMs?: number;
-  timeoutMs?: number;
+  timeoutMs?: number | null;
   signal?: AbortSignal;
   onAttempt?: (details: { attempt: number; ready: boolean; error?: unknown }) => void;
 };
@@ -83,7 +82,7 @@ export async function waitForCloudflareManifestReady(
   options: WaitForCloudflareManifestReadyOptions = {},
 ): Promise<void> {
   const intervalMs = options.intervalMs ?? CLOUD_FLARE_PROCESSING_POLL_INTERVAL_MS;
-  const timeoutMs = options.timeoutMs ?? CLOUD_FLARE_PROCESSING_MAX_WAIT_MS;
+  const timeoutMs = options.timeoutMs;
   const startedAt = Date.now();
   let attempt = 0;
   let lastError: unknown;
@@ -100,7 +99,7 @@ export async function waitForCloudflareManifestReady(
     data: { manifestUrl, intervalMs, timeoutMs },
   });
 
-  while (Date.now() - startedAt < timeoutMs) {
+  while (timeoutMs == null || Date.now() - startedAt < timeoutMs) {
     if (options.signal?.aborted) {
       throw new Error("Video processing check aborted");
     }
@@ -172,9 +171,13 @@ export async function waitForCloudflareManifestReady(
     }
 
     attempt += 1;
-    const remainingMs = timeoutMs - (Date.now() - startedAt);
-    if (remainingMs <= 0) break;
-    await new Promise((resolve) => setTimeout(resolve, Math.min(intervalMs, remainingMs)));
+    if (timeoutMs == null) {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    } else {
+      const remainingMs = timeoutMs - (Date.now() - startedAt);
+      if (remainingMs <= 0) break;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(intervalMs, remainingMs)));
+    }
   }
 
   const error = new Error("Video processing timed out. Please retry the upload.");

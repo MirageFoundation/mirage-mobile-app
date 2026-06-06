@@ -17,6 +17,8 @@ export interface ProcessVideoOptions {
   removeAudio?: boolean;
   /** Compress video for faster upload and Cloudflare processing */
   compressForUpload?: boolean;
+  /** Throw instead of falling back to the original/current file when compression fails */
+  failOnCompressionError?: boolean;
   /** Trim start time in milliseconds */
   trimStartMs?: number;
   /** Trim end time in milliseconds */
@@ -307,7 +309,10 @@ export async function processVideo(
       wasProcessed: wasProcessed || compressed.wasProcessed,
     };
   } catch (error) {
-    console.warn("[VideoProcessing] Compression failed, using current file:", error);
+    console.warn("[VideoProcessing] Compression failed:", error);
+    if (options.failOnCompressionError) {
+      throw error;
+    }
     Sentry.captureException(error, {
       tags: {
         feature: 'video-processing',

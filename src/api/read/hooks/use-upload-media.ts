@@ -8,9 +8,10 @@ import { useCallback, useRef, useState } from "react";
 import * as Sentry from "@sentry/react-native";
 import { useMutation } from "@tanstack/react-query";
 import { mutationKeys } from "@/src/api/write/mutation-keys";
+import { processVideo } from "@/src/utils/video-processing";
 import {
   uploadImage,
-  uploadVideo,
+  uploadVideo as uploadVideoEndpoint,
   getContentTypeFromUri,
   isVideoFile,
   type UploadImageResult,
@@ -54,6 +55,42 @@ export interface VideoUploadState {
   result: UploadVideoResult | null;
 }
 
+async function prepareVideoForUpload(
+  uri: string,
+  contentType: string,
+  signal?: AbortSignal,
+): Promise<{ uri: string; contentType: string }> {
+  if (signal?.aborted) {
+    throw new Error("Video upload aborted");
+  }
+
+  Sentry.addBreadcrumb({
+    category: "media-upload",
+    message: "Preparing video for upload",
+    level: "info",
+    data: {
+      fileName: uri.split("/").pop() ?? uri,
+      contentType,
+    },
+  });
+
+  const processed = await processVideo(uri, {
+    compressForUpload: true,
+    failOnCompressionError: true,
+  });
+  if (signal?.aborted) {
+    throw new Error("Video upload aborted");
+  }
+
+  const processedContentType = getContentTypeFromUri(processed.uri);
+  return {
+    uri: processed.uri,
+    contentType: processedContentType === "application/octet-stream"
+      ? contentType
+      : processedContentType,
+  };
+}
+
 // ============================================
 // Hooks
 // ============================================
@@ -95,6 +132,7 @@ export function useUploadMedia(options: UseUploadMediaOptions = {}) {
  * ```
  */
 export function useUploadVideo(options: UseUploadVideoOptions = {}) {
+  const { onError, onProgress, onSuccess } = options;
   const [state, setState] = useState<VideoUploadState>({
     isUploading: false,
     progress: 0,
@@ -108,9 +146,9 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
     (progress: number) => {
       const clampedProgress = Math.min(100, Math.max(0, progress));
       setState((prev) => ({ ...prev, progress: clampedProgress }));
-      options.onProgress?.(clampedProgress);
+      onProgress?.(clampedProgress);
     },
-    [options.onProgress]
+    [onProgress]
   );
 
   const uploadVideoFn = useCallback(
@@ -127,10 +165,15 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
       try {
         const contentType =
           input.contentType ?? getContentTypeFromUri(input.uri);
-
-        const result = await uploadVideo(
+        const preparedVideo = await prepareVideoForUpload(
           input.uri,
           contentType,
+          abortControllerRef.current.signal,
+        );
+
+        const result = await uploadVideoEndpoint(
+          preparedVideo.uri,
+          preparedVideo.contentType,
           handleProgress,
           abortControllerRef.current.signal
         );
@@ -142,7 +185,7 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
           result,
         }));
 
-        options.onSuccess?.(result);
+        onSuccess?.(result);
         return result;
       } catch (error) {
         const err = error instanceof Error ? error : new Error("Upload failed");
@@ -152,11 +195,11 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
           isUploading: false,
           error: err,
         }));
-        options.onError?.(err);
+        onError?.(err);
         throw err;
       }
     },
-    [handleProgress, options]
+    [handleProgress, onError, onSuccess]
   );
 
   const cancelUpload = useCallback(() => {
@@ -222,7 +265,13 @@ export async function uploadVideoAndGetUrl(
   signal?: AbortSignal
 ): Promise<string> {
   const contentType = getContentTypeFromUri(uri);
-  const result = await uploadVideo(uri, contentType, onProgress, signal);
+  const preparedVideo = await prepareVideoForUpload(uri, contentType, signal);
+  const result = await uploadVideoEndpoint(
+    preparedVideo.uri,
+    preparedVideo.contentType,
+    onProgress,
+    signal,
+  );
   return result.url;
 }
 
