@@ -401,7 +401,7 @@ export const PostCard = memo(function PostCard({
               : isOptimisticPostWaitingForQueue
               ? "Waiting for other actions to finish before publishing your post."
               : isOptimisticVideoProcessing
-              ? "Processing your video. Please keep the app open until it's completed."
+              ? "Finalizing your post on the network. This can take a few moments."
               : isOptimisticPostFinalizingNetwork
               ? "Finalizing your post on the network. This can take a few moments."
               : "Finalizing your post on the network. This can take a few moments."}
