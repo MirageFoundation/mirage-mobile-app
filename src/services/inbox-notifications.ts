@@ -2,7 +2,7 @@ import * as Notifications from "expo-notifications";
 import * as BackgroundFetch from "expo-background-fetch";
 import * as TaskManager from "expo-task-manager";
 import { AppState, Platform } from "react-native";
-import { router } from "@/src/navigation/guarded-router";
+import { navigateBypass } from "@/src/navigation/guarded-router";
 import type { InfiniteData } from "@tanstack/react-query";
 
 import * as Sentry from "@sentry/react-native";
@@ -43,13 +43,19 @@ const INBOX_NAVIGATION_ACTIVE_WATCHDOG_MS = 8_000;
 const INBOX_NAVIGATION_ARRIVAL_TIMEOUT_MS = 5_000;
 const INBOX_NOTIFICATION_NAVIGATION_ACTIVE_MS = 10_000;
 const SHARE_INTENT_NAVIGATION_ACTIVE_MS = 15_000;
+const INBOX_NAVIGATION_RETRY_MS = 250;
+const INBOX_NAVIGATION_MAX_RETRIES = 2;
 
 type PendingInboxNotificationNavigation = {
-  timeoutId: ReturnType<typeof setTimeout>;
+  arrivalTimeoutId: ReturnType<typeof setTimeout>;
+  retryTimeoutId: ReturnType<typeof setTimeout> | null;
   dispatchedAt: number;
   replyId: string | null;
   rootPostId: string | null;
   areTabsReady: boolean;
+  retriesLeft: number;
+  markHandled: () => void;
+  retryNavigate: () => void;
 };
 
 type InboxNotificationArrivalDebugData = {
@@ -214,7 +220,8 @@ function getNotificationResponseDebugData(
 function clearPendingInboxNotificationNavigation(notificationId: string): void {
   const pending = pendingInboxNotificationNavigations.get(notificationId);
   if (!pending) return;
-  clearTimeout(pending.timeoutId);
+  clearTimeout(pending.arrivalTimeoutId);
+  if (pending.retryTimeoutId) clearTimeout(pending.retryTimeoutId);
   pendingInboxNotificationNavigations.delete(notificationId);
 }
 
@@ -224,11 +231,13 @@ function watchInboxNotificationArrival(
     replyId: string | null;
     rootPostId: string | null;
     areTabsReady: boolean;
+    markHandled: () => void;
+    retryNavigate: () => void;
   },
 ): void {
   clearPendingInboxNotificationNavigation(notificationId);
   const dispatchedAt = Date.now();
-  const timeoutId = setTimeout(() => {
+  const arrivalTimeoutId = setTimeout(() => {
     const pending = pendingInboxNotificationNavigations.get(notificationId);
     if (!pending) return;
     pendingInboxNotificationNavigations.delete(notificationId);
@@ -246,19 +255,60 @@ function watchInboxNotificationArrival(
           hasReplyId: !!pending.replyId,
           hasRootPostId: !!pending.rootPostId,
           areTabsReady: pending.areTabsReady,
+          retriesLeft: pending.retriesLeft,
           ...getNavigationReadinessDebugData(),
         },
       },
     );
   }, INBOX_NAVIGATION_ARRIVAL_TIMEOUT_MS);
 
+  const scheduleRetry = () => {
+    const pending = pendingInboxNotificationNavigations.get(notificationId);
+    if (!pending) return;
+    if (pending.retriesLeft <= 0) return;
+    pending.retryTimeoutId = setTimeout(() => {
+      const stillPending = pendingInboxNotificationNavigations.get(notificationId);
+      if (!stillPending) return;
+      stillPending.retriesLeft -= 1;
+      Sentry.captureMessage(
+        "Retrying inbox notification navigation after no arrival",
+        {
+          level: "warning",
+          tags: {
+            feature: "inbox-notifications",
+            operation: "notification-navigate-retry",
+          },
+          extra: {
+            notificationId,
+            elapsedMs: Date.now() - stillPending.dispatchedAt,
+            retriesLeft: stillPending.retriesLeft,
+            ...getNavigationReadinessDebugData(),
+          },
+        },
+      );
+      try {
+        stillPending.retryNavigate();
+      } catch (error) {
+        Sentry.captureException(error, {
+          tags: { feature: "inbox-notifications", action: "notification_navigate_retry" },
+        });
+      }
+      scheduleRetry();
+    }, INBOX_NAVIGATION_RETRY_MS);
+  };
+
   pendingInboxNotificationNavigations.set(notificationId, {
-    timeoutId,
+    arrivalTimeoutId,
+    retryTimeoutId: null,
     dispatchedAt,
     replyId: options.replyId,
     rootPostId: options.rootPostId,
     areTabsReady: options.areTabsReady,
+    retriesLeft: INBOX_NAVIGATION_MAX_RETRIES,
+    markHandled: options.markHandled,
+    retryNavigate: options.retryNavigate,
   });
+  scheduleRetry();
 }
 
 export function confirmInboxNotificationNavigation(
@@ -290,10 +340,18 @@ export function confirmInboxNotificationNavigation(
       hasReplyId: !!pending.replyId,
       hasRootPostId: !!pending.rootPostId,
       areTabsReady: pending.areTabsReady,
+      retriesLeft: pending.retriesLeft,
       ...debugData,
       ...getNavigationReadinessDebugData(),
     },
   });
+  try {
+    pending.markHandled();
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: { feature: "inbox-notifications", action: "mark_handled" },
+    });
+  }
 }
 
 export function signalTabsUnmounted(): void {
@@ -1019,17 +1077,32 @@ function handleNotificationResponse(
           ...getNavigationReadinessDebugData(),
         },
       });
-      router.navigate({
-        pathname: "/(tabs)/inbox",
-        params: {
-          fromNotification: notificationId,
-          replyId: replyId ?? undefined,
-        },
-      });
+      const dispatchNavigate = () => {
+        // Re-mark active right before each dispatch so any concurrent
+        // initial-route recovery in tab-layout sees the notification flow as
+        // still in progress.
+        markInboxNotificationNavigationActive();
+        navigateBypass({
+          pathname: "/(tabs)/inbox",
+          params: {
+            fromNotification: notificationId,
+            replyId: replyId ?? undefined,
+          },
+        });
+      };
+      const markHandled = () => {
+        const ids = getHandledNotificationIds();
+        ids.add(notificationId);
+        saveHandledNotificationIds(ids);
+        handledNotificationIdsInFlight.delete(notificationId);
+      };
+      dispatchNavigate();
       watchInboxNotificationArrival(notificationId, {
         replyId,
         rootPostId,
         areTabsReady,
+        markHandled,
+        retryNavigate: dispatchNavigate,
       });
       Sentry.captureMessage("Inbox notification navigation dispatched", {
         level: "info",
@@ -1046,8 +1119,6 @@ function handleNotificationResponse(
           ...getNavigationReadinessDebugData(),
         },
       });
-      handledNotificationIds.add(notificationId);
-      saveHandledNotificationIds(handledNotificationIds);
       void Notifications.clearLastNotificationResponseAsync?.().catch(() => undefined);
     };
     const runNavigateToInbox = () => {
