@@ -9,6 +9,7 @@ import { TransactionProgressModal } from "@/src/components/molecules";
 import { Box, Button, Input, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { executeWithProgress, useTransactionProgress, useServerList } from "@/src/hooks";
+import { trackEvent } from "@/src/services/analytics";
 import { walletService } from "@/src/services/wallet-service";
 import { useAuthStore, type ApiServer } from "@/src/stores";
 import { apiClient } from "@/src/api/client";
@@ -87,6 +88,14 @@ export default function UsernameScreen() {
 
   const walletConfirmedRef = useRef(false);
   const txProgress = useTransactionProgress();
+
+  useEffect(() => {
+    trackEvent("onboarding_started", {
+      is_referral: !!searchParams.ref,
+      has_invite_param: !!searchParams.invite,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     console.log("[UsernameScreen] activeServer:", activeServer);
@@ -352,6 +361,14 @@ export default function UsernameScreen() {
       }
 
       setHasUsername(true, `anon-${username}`);
+
+      trackEvent("username_set", {
+        sign_up_path: isReferralMode
+          ? "referral"
+          : inviteCodeRequired
+            ? "invite_code"
+            : "open",
+      });
 
       triggerHaptic("success");
 

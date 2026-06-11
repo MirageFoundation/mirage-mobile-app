@@ -15,6 +15,7 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { consumePendingVideoResult } from "@/src/stores/video-editor-result-store";
+import { trackEvent } from "@/src/services/analytics";
 import { Box } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useToast } from "@/src/providers/toast-provider";
@@ -80,6 +81,12 @@ export function CreateScreen() {
 
   const isEditMode = !!params.editPostId;
   const editPostId = params.editPostId ?? "";
+
+  useEffect(() => {
+    if (isEditMode) return;
+    trackEvent("post_create_opened");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const editability = useMemo(() => {
     if (!isEditMode || !params.editCreatedAt) return null;

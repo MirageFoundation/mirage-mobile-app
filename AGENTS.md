@@ -180,3 +180,41 @@ If you touch a narrow feature, prefer targeted eslint runs for those files inste
 - introduce duplicate deep-link parsing
 - introduce new huge page files
 - use `queryClient.clear()` as ordinary app flow control
+
+## Analytics (Mixpanel)
+
+This project uses Mixpanel for product analytics via `mixpanel-react-native`.
+
+### Rules
+- ALL analytics calls go through `src/services/analytics.ts`. Never import `mixpanel-react-native` directly anywhere else.
+- Tracking is **consent-gated** (EU users). The SDK only initializes after the user opts in (`analyticsConsent` in `src/stores/preferences-store.ts`). Never add tracking that bypasses this gate.
+- Token: `EXPO_PUBLIC_MIXPANEL_TOKEN` env var, with the production token as fallback in `src/services/analytics.ts`.
+- Identity: `distinct_id` = wallet address. `identifyUser()` fires on wallet creation confirm, wallet import, and logged-in startup (`src/stores/auth-store.ts`). `resetAnalyticsIdentity()` fires on logout.
+
+### Event conventions
+- Event names: `object_verb` past tense, `snake_case` (e.g. `post_created`, `vote_cast`).
+- Property names: `snake_case`, lowercase string values. No `$` or `mp_` prefixes.
+- Never construct event names dynamically.
+- Omit properties that don't apply — never send `null`, `""`, or `"N/A"` (the wrapper strips these).
+- Add new event names to the `AnalyticsEventName` union in `src/services/analytics.ts`.
+- Place `trackEvent()` calls in mutation `onSuccess` handlers or action success callbacks — not on button press (avoids counting failed actions).
+
+### Current events
+| Event | Fires in |
+|---|---|
+| `onboarding_started` | `username-content.tsx` mount (signup funnel entry) |
+| `username_set` | `username-content.tsx` after on-chain username success |
+| `recovery_phrase_viewed` | `recovery-phrase-page.tsx` mount (onboarding only) |
+| `sign_up_completed` | `auth-store.ts` → `confirmWalletCreation` |
+| `login_completed` | `auth-store.ts` → `importWallet` |
+| `post_create_opened` | `create-content.tsx` mount (create mode only) |
+| `post_created` (Value Moment) | `use-post.ts` → `usePost` onSuccess |
+| `comment_posted` | `use-post.ts` → `useComment` onSuccess |
+| `vote_cast` | `use-vote-handler.ts` → POW queue onSuccess |
+| `user_followed` | `use-follow.ts` → follow/toggle onSuccess (follows only) |
+| `topic_followed` | `use-follow.ts` → follow/toggle onSuccess (follows only) |
+
+Onboarding funnel: `onboarding_started` → `username_set` → `recovery_phrase_viewed` → `sign_up_completed`.
+Creation funnel: `post_create_opened` → `post_created`.
+
+Super properties: `platform`, `app_version`, `tier`. User profile: `username`, `tier`. No PII, no wallet balances.

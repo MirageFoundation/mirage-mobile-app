@@ -24,6 +24,7 @@ import { usePreferencesStore, type ThemeMode, type ApiServer, type VideoAutoplay
 import { isAdultContentEnabled } from "@/src/stores/preferences-store";
 import { useServerList } from "@/src/hooks/use-server-list";
 import { runInboxCheckNow, sendTestNotification, resetAndTestInboxNotification, getNotificationDebugInfo } from "@/src/services/inbox-notifications";
+import { setAnalyticsTrackingEnabled } from "@/src/services/analytics";
 import { useCloudflareErrorStore } from "@/src/stores/cloudflare-error-store";
 import * as Clipboard from "expo-clipboard";
 import { storage } from "@/src/stores/mmkv-storage";
@@ -96,7 +97,17 @@ export function SettingsScreen() {
     setVideoAutoplayNetwork,
     apiServer,
     setShareServer,
+    analyticsConsent,
+    setAnalyticsConsent,
   } = usePreferencesStore();
+
+  const handleAnalyticsToggle = useCallback(
+    (value: boolean) => {
+      setAnalyticsConsent(value);
+      setAnalyticsTrackingEnabled(value);
+    },
+    [setAnalyticsConsent],
+  );
 
   const adultContentActive = isAdultContentEnabled(selectedContentTypes);
   const hasAnyContentEnabled = selectedContentTypes.length > 0;
@@ -367,6 +378,24 @@ const handleApiServerChange = useCallback(
           id: "theme",
           component: (
             <ThemeSelector value={themeMode} onChange={handleThemeChange} />
+          ),
+        },
+      ],
+    },
+    {
+      title: "Privacy",
+      data: [
+        {
+          id: "analytics-consent",
+          component: (
+            <SettingRow
+              type="toggle"
+              icon="analytics-outline"
+              title="Usage Analytics"
+              subtitle="Share anonymous usage data to help improve Mirage"
+              value={analyticsConsent}
+              onValueChange={handleAnalyticsToggle}
+            />
           ),
         },
       ],
