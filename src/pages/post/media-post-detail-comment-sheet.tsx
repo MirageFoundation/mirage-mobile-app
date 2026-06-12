@@ -59,6 +59,7 @@ type MediaPostDetailCommentSheetProps = {
   onAuthorPress: () => void;
   onAuthorIdPress: (authorId: string) => void;
   onFollowAuthor: () => void;
+  onFollowCommentAuthor: (authorId: string, isCurrentlyFollowing: boolean) => void;
   onFollowTopic: () => void;
   onUpvote: () => void;
   onDownvote: () => void;
@@ -129,6 +130,7 @@ export function MediaPostDetailCommentSheet({
   onAuthorPress,
   onAuthorIdPress,
   onFollowAuthor,
+  onFollowCommentAuthor,
   onFollowTopic,
   onUpvote,
   onDownvote,
@@ -490,6 +492,7 @@ export function MediaPostDetailCommentSheet({
             onAuthorPress={onAuthorIdPress}
             onLikePress={onCommentUpvote}
             onDislikePress={onCommentDownvote}
+            onFollowPress={onFollowCommentAuthor}
             onReplyPress={onReplyPress}
             onMorePress={onMorePress}
             onHighlightedLayout={onHighlightedLayout}
