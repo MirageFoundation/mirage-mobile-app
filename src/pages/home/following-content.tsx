@@ -147,8 +147,32 @@ export function FollowingScreen() {
     () => followedData?.followed_topics ?? [],
     [followedData]
   );
+  const followUserOverrides = useHomePostCardStore((state) => state.followUserOverrides);
+  const setFollowUserOverride = useHomePostCardStore((state) => state.setFollowUserOverride);
+  const clearFollowUserOverride = useHomePostCardStore((state) => state.clearFollowUserOverride);
+  const displayFollowedUsers = useMemo(() => {
+    const overrides = Object.entries(followUserOverrides);
+    if (overrides.length === 0) return followedUsers;
 
-  const { handleFollowUser: handleFollowPress, handleFollowTopic: handleFollowTopicFromCard } = useFollowHandler({});
+    const next = new Set(followedUsers);
+    overrides.forEach(([userId, isFollowing]) => {
+      if (isFollowing) {
+        next.add(userId);
+      } else {
+        next.delete(userId);
+      }
+    });
+    return Array.from(next);
+  }, [followedUsers, followUserOverrides]);
+
+  const { handleFollowUser: handleFollowPress, handleFollowTopic: handleFollowTopicFromCard } = useFollowHandler({
+    onOptimisticFollowUser: (userId, isFollowing) => {
+      setFollowUserOverride(userId, isFollowing);
+    },
+    onRollbackFollowUser: (userId) => {
+      clearFollowUserOverride(userId);
+    },
+  });
 
   const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
   const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
@@ -342,9 +366,9 @@ export function FollowingScreen() {
     if (!selectedPost) return;
     const authorId = selectedPost.author.id;
     const authorUsername = selectedPost.author.username;
-    const isCurrentlyFollowing = followedUsers.includes(authorId);
+    const isCurrentlyFollowing = displayFollowedUsers.includes(authorId);
     handleFollowPress(authorId, authorUsername, isCurrentlyFollowing);
-  }, [selectedPost, followedUsers, handleFollowPress]);
+  }, [selectedPost, displayFollowedUsers, handleFollowPress]);
 
   const handleShowFewer = useCallback(() => {
     console.log("Show fewer posts like:", selectedPost?.id);
@@ -487,7 +511,7 @@ export function FollowingScreen() {
         }
         isFollowingUser={
           selectedPost?.author.id
-            ? followedUsers.includes(selectedPost.author.id)
+            ? displayFollowedUsers.includes(selectedPost.author.id)
             : false
         }
         onShowFewer={handleShowFewer}
