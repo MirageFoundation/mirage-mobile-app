@@ -28,6 +28,7 @@ import {
   getNotificationDataKeys,
   getNotificationTitle,
   isAndroidShareIntentNotificationData,
+  isFallbackInboxNotificationResponseId,
   toOptionalString,
 } from "@/src/services/inbox-notification-content";
 
@@ -916,6 +917,7 @@ function handleNotificationResponse(
       return;
     }
     const notificationId = getInboxNotificationResponseId(response, notificationData);
+    const isFallbackNotificationId = isFallbackInboxNotificationResponseId(notificationId);
     const notificationAgeMs = getNotificationResponseAgeMs(response);
     const responseDebugData = getNotificationResponseDebugData(
       response,
@@ -924,6 +926,23 @@ function handleNotificationResponse(
       notificationId,
       notificationAgeMs,
     );
+    if (isFallbackNotificationId) {
+      captureInboxNotificationNavigationEvent(
+        "Inbox notification response arrived without identifiable payload",
+        "warning",
+        "empty-notification-response",
+        {
+          ...responseDebugData,
+          hasNotification: !!response.notification,
+          hasRequestContent: !!response.notification?.request?.content,
+          hasTitle: !!response.notification?.request?.content?.title,
+          hasBody: !!response.notification?.request?.content?.body,
+          triggerType: toOptionalString(
+            (response.notification?.request?.trigger as { type?: unknown } | null)?.type,
+          ),
+        },
+      );
+    }
     Sentry.addBreadcrumb({
       category: "notifications",
       message: "Inbox notification response received",
@@ -940,7 +959,10 @@ function handleNotificationResponse(
       responseDebugData,
     );
     const handledNotificationIds = getHandledNotificationIds();
-    const wasPersistedHandled = handledNotificationIds.has(notificationId);
+    // Fallback ids are not stable across taps (and a constant poisoned id may
+    // already be persisted on devices), so never dedupe them against storage.
+    const wasPersistedHandled =
+      !isFallbackNotificationId && handledNotificationIds.has(notificationId);
     const wasInFlight = handledNotificationIdsInFlight.has(notificationId);
     if (
       wasPersistedHandled ||
@@ -963,6 +985,24 @@ function handleNotificationResponse(
           wasInFlight,
           handledIdsCount: handledNotificationIds.size,
         },
+      );
+      void Notifications.clearLastNotificationResponseAsync?.().catch(() => undefined);
+      return;
+    }
+    if (
+      isFallbackNotificationId &&
+      source === "last-response" &&
+      isInboxNotificationNavigationActive()
+    ) {
+      // Data-less responses no longer share a stable id, so the in-flight set
+      // cannot dedupe a cold-start replay of the same tap. If an inbox
+      // notification navigation was dispatched moments ago, treat this
+      // last-response as that same tap.
+      captureInboxNotificationNavigationEvent(
+        "Inbox notification last-response ignored during active navigation",
+        "info",
+        "ignored-fallback-last-response",
+        responseDebugData,
       );
       void Notifications.clearLastNotificationResponseAsync?.().catch(() => undefined);
       return;
@@ -1091,9 +1131,11 @@ function handleNotificationResponse(
         });
       };
       const markHandled = () => {
-        const ids = getHandledNotificationIds();
-        ids.add(notificationId);
-        saveHandledNotificationIds(ids);
+        if (!isFallbackNotificationId) {
+          const ids = getHandledNotificationIds();
+          ids.add(notificationId);
+          saveHandledNotificationIds(ids);
+        }
         handledNotificationIdsInFlight.delete(notificationId);
       };
       dispatchNavigate();

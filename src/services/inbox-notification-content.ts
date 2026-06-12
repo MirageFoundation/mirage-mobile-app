@@ -57,11 +57,20 @@ export function isAndroidShareIntentNotificationData(data: Record<string, unknow
   );
 }
 
+const FALLBACK_INBOX_NOTIFICATION_RESPONSE_ID_PREFIX = "inbox-notification:";
+
+export function isFallbackInboxNotificationResponseId(id: string): boolean {
+  return id.startsWith(FALLBACK_INBOX_NOTIFICATION_RESPONSE_ID_PREFIX);
+}
+
 function getFallbackInboxNotificationResponseId(
   response: Notifications.NotificationResponse,
   data: Record<string, unknown>,
 ): string {
-  const notificationDate = response.notification?.date ?? Date.now();
+  // Android can deliver cold-start responses with date: 0, which is not
+  // nullish — `??` would keep the 0 and make every data-less tap produce the
+  // exact same fallback id. Use `||` so 0 also falls back to Date.now().
+  const notificationDate = response.notification?.date || Date.now();
   const dataKeys = getNotificationDataKeys(data).join(",") || "no-data";
   Sentry.addBreadcrumb({
     category: "inbox-notifications",
@@ -78,7 +87,7 @@ function getFallbackInboxNotificationResponseId(
       hasInboxReply: !!data.inboxReply,
     },
   });
-  return `inbox-notification:${response.actionIdentifier}:${notificationDate}:${dataKeys}`;
+  return `${FALLBACK_INBOX_NOTIFICATION_RESPONSE_ID_PREFIX}${response.actionIdentifier}:${notificationDate}:${dataKeys}`;
 }
 
 export function getInboxNotificationResponseId(
