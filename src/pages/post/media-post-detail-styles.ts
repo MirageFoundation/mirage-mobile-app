@@ -123,7 +123,7 @@ export const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingVertical: 8,
+    paddingVertical: 4,
     paddingHorizontal: 12,
   },
   bodyRow: {
