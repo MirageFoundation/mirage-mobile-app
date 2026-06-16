@@ -455,6 +455,58 @@ export function InboxScreen() {
     }
     if (!activeNotificationId || !targetReplyId) return;
     const targetReply = visibleReplies.find((reply) => reply.reply_id === targetReplyId);
+    const isActionNotification =
+      targetReply?.type === "donation" ||
+      targetReply?.type === "follow" ||
+      targetReply?.type === "subscription_gift";
+    if (targetReply && isActionNotification) {
+      const autoOpenKey = `${activeNotificationId}:${targetReplyId}`;
+      const autoOpenedNotificationReplies = autoOpenedNotificationRepliesRef.current;
+      if (autoOpenedNotificationReplies.has(autoOpenKey)) {
+        console.log("[InboxNotifFlow] inbox action notification already handled", { autoOpenKey });
+        return;
+      }
+      autoOpenedNotificationReplies.add(autoOpenKey);
+      console.log("[InboxNotifFlow] inbox action notification -> target", {
+        activeNotificationId,
+        targetReplyId,
+        type: targetReply.type,
+        replyOwner: targetReply.reply_owner,
+      });
+      Sentry.captureMessage("Inbox action notification opened", {
+        level: "info",
+        tags: {
+          feature: "inbox-notifications",
+          operation: "inbox-action-notification-open",
+          notification_type: targetReply.type ?? "unknown",
+        },
+        extra: {
+          notificationId: activeNotificationId,
+          replyId: targetReply.reply_id,
+          type: targetReply.type,
+          replyOwner: targetReply.reply_owner,
+          routeOpenReply,
+          visibleRepliesCount: visibleReplies.length,
+        },
+      });
+
+      let didRun = false;
+      let cancelled = false;
+      const task = InteractionManager.runAfterInteractions(() => {
+        if (cancelled) return;
+        didRun = true;
+        clearNotificationTarget(activeNotificationId);
+        handleItemPress(targetReply);
+      });
+
+      return () => {
+        cancelled = true;
+        task.cancel();
+        if (!didRun) {
+          autoOpenedNotificationReplies.delete(autoOpenKey);
+        }
+      };
+    }
     if (!targetReply?.reply_content?.trim()) {
       console.log("[InboxNotifFlow] inbox auto-open waiting for target reply", {
         activeNotificationId,

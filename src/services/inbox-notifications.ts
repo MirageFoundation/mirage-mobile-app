@@ -2,7 +2,7 @@ import * as Notifications from "expo-notifications";
 import * as BackgroundFetch from "expo-background-fetch";
 import * as TaskManager from "expo-task-manager";
 import { AppState, Platform } from "react-native";
-import { pushBypass, replaceBypass } from "@/src/navigation/guarded-router";
+import { navigateBypass, pushBypass, replaceBypass } from "@/src/navigation/guarded-router";
 import type { InfiniteData } from "@tanstack/react-query";
 
 import * as Sentry from "@sentry/react-native";
@@ -1149,32 +1149,35 @@ function handleNotificationResponse(
         // initial-route recovery in tab-layout sees the notification flow as
         // still in progress.
         markInboxNotificationNavigationActive();
-        console.log("[InboxNotifFlow] replace -> inbox", {
+        console.log("[InboxNotifFlow] inbox nav dispatch", {
           notificationId,
           replyId,
           rootPostId,
+          action: canOpenReplyDetailImmediately ? "replace" : "navigate",
           openReply: canOpenReplyDetailImmediately ? "0" : "1",
         });
         Sentry.addBreadcrumb({
           category: "navigation",
-          message: "Replacing to inbox for notification",
+          message: "Dispatching inbox route for notification",
           level: "info",
           data: {
             notificationId,
             replyId,
             rootPostId,
+            action: canOpenReplyDetailImmediately ? "replace" : "navigate",
             openReply: canOpenReplyDetailImmediately ? "0" : "1",
             ...getNavigationReadinessDebugData(),
           },
         });
-        replaceBypass({
-          pathname: "/(tabs)/inbox",
-          params: {
-            fromNotification: notificationId,
-            replyId: replyId ?? undefined,
-            openReply: canOpenReplyDetailImmediately ? "0" : "1",
-          },
-        });
+        const inboxHref =
+          `/(tabs)/inbox?fromNotification=${encodeURIComponent(notificationId)}` +
+          `${replyId ? `&replyId=${encodeURIComponent(replyId)}` : ""}` +
+          `&openReply=${canOpenReplyDetailImmediately ? "0" : "1"}`;
+        if (canOpenReplyDetailImmediately) {
+          replaceBypass(inboxHref);
+          return;
+        }
+        navigateBypass(inboxHref);
       };
       const dispatchReplyDetail = () => {
         console.log("[InboxNotifFlow] detail dispatch check", {
