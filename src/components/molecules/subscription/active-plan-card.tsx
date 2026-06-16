@@ -5,6 +5,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { formatCompactNumber } from "@/src/utils/format-number";
 
 type ActivePlanCardProps = {
   planTitle: string;
@@ -243,7 +244,7 @@ export const ActivePlanCard = memo(function ActivePlanCard({
             </Box>
             <Box direction="row" alignItems="center">
               <Text size="xxl" weight="semibold">
-                {balance.toLocaleString()}
+                {formatCompactNumber(balance)}
               </Text>
             </Box>
           </Box>
@@ -268,7 +269,7 @@ export const ActivePlanCard = memo(function ActivePlanCard({
             </Box>
             <Box direction="row" alignItems="center">
               <Text size="xxl" weight="semibold">
-                {reserve.toLocaleString()}
+                {formatCompactNumber(reserve)}
               </Text>
             </Box>
           </Box>

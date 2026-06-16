@@ -1,10 +1,8 @@
-import { Ionicons } from "@expo/vector-icons";
-import { EvilIcons } from "@expo/vector-icons";
+import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "@/src/navigation/guarded-router";
 import * as Sentry from "@sentry/react-native";
 import { useCallback, useEffect, useState } from "react";
-import { Keyboard } from "react-native";
-import { Pressable, View } from "react-native";
+import { Keyboard, Pressable, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -18,6 +16,7 @@ import { deleteUser } from "@/src/api/write/endpoints/delete-user";
 import { useAuthStore } from "@/src/stores";
 import { useToast } from "@/src/providers/toast-provider";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
+import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 
 export function DeleteAccountScreen() {
   const router = useRouter();
@@ -64,13 +63,26 @@ export function DeleteAccountScreen() {
           toast.success("Delete account requested");
           router.replace("/(tabs)");
         }, 500);
+      } else {
+        toast.error("Failed to delete account", txResult.error ?? "Please try again.");
       }
     } catch (err) {
       Sentry.captureException(err, {
         tags: { feature: "delete-account", operation: "delete-account" },
       });
       triggerHaptic("error");
-      toast.error("Failed to delete account");
+      const responseData = (err as any)?.response?.data;
+      const isTransportNetworkError =
+        (err as any)?.code === "ERR_NETWORK" ||
+        (err as any)?.message === "Network Error";
+      const errorMessage = isTransportNetworkError
+        ? "No internet connection"
+        : responseData
+          ? getApiErrorMessage(err)
+          : err instanceof Error
+            ? err.message
+            : "Please try again.";
+      toast.error("Failed to delete account", errorMessage);
     }
   }, [isConfirmed, txProgress, getWallet, router, toast, closeSideMenu]);
 

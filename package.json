@@ -1,7 +1,7 @@
 {
   "name": "mirage",
   "main": "index.ts",
-  "version": "1.0.16",
+  "version": "1.1.0",
   "scripts": {
     "start": "expo start",
     "postinstall": "patch-package",
@@ -10,6 +10,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "prebuild:fdroid": "EXPO_PUBLIC_FDROID=true expo prebuild --platform android --no-install",
+    "update:sentry": "bun scripts/update-with-sentry.ts",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "check:lint": "bun run lint",
@@ -80,6 +81,7 @@
     "expo-web-browser": "~15.0.10",
     "fast-text-encoding": "^1.0.6",
     "lodash": "^4.17.21",
+    "mixpanel-react-native": "^3.3.0",
     "mp4box": "^2.3.0",
     "mqtt": "^5.14.1",
     "react": "19.1.0",

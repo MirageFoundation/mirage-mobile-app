@@ -16,6 +16,7 @@ import {
 import type { PoWProgress, WriteResponse } from "../signing";
 import * as Sentry from "@sentry/react-native";
 import { parseApiError } from "@/src/utils/parse-api-error";
+import { trackEvent } from "@/src/services/analytics";
 import { mutationKeys } from "../mutation-keys";
 
 const addFollowBreadcrumb = (
@@ -66,6 +67,7 @@ export function useFollowUser(options: UseFollowOptions = {}) {
       return followUser(wallet, userAddress, options.onPoWProgress);
     },
     onSuccess: () => {
+      trackEvent("user_followed");
       if (address) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.userFollowed(address),
@@ -119,6 +121,7 @@ export function useFollowTopic(options: UseFollowOptions = {}) {
       return followTopic(wallet, topic, options.onPoWProgress);
     },
     onSuccess: () => {
+      trackEvent("topic_followed");
       if (address) {
         queryClient.invalidateQueries({
           queryKey: queryKeys.userFollowed(address),
@@ -306,6 +309,10 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
         } ${topic}`
       );
 
+      if (!isCurrentlyFollowing) {
+        trackEvent("topic_followed", { topic });
+      }
+
       // Delay the query invalidation to give the indexer time to process
       setTimeout(() => {
         console.log(`[FollowTopic] Delayed refetch after successful follow`);
@@ -457,6 +464,10 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
           isCurrentlyFollowing ? "Unfollowed" : "Followed"
         } ${userAddress}`
       );
+
+      if (!isCurrentlyFollowing) {
+        trackEvent("user_followed");
+      }
 
       // Delay the query invalidation to give the indexer time to process
       // The optimistic update will show the correct state immediately

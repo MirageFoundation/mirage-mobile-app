@@ -64,6 +64,7 @@ type HomePostCardState = {
  nearbyVideoPostIds: Record<string, Set<string>>;
  voteOverrides: Record<string, VoteOverride>;
  commentCountOverrides: Record<string, CommentCountOverride>;
+ followUserOverrides: Record<string, boolean>;
  handlers: HomePostCardHandlers;
  shareServer: ShareServer;
  allowAutoplay: boolean;
@@ -83,6 +84,8 @@ type HomePostCardState = {
  setVideoViewability: (feedScreen: string, visibleIds: Set<string>, activeId: string | null, nearbyIds?: Set<string>) => void;
  setVoteOverride: (postId: string, override: VoteOverride) => void;
  clearVoteOverride: (postId: string) => void;
+ setFollowUserOverride: (userId: string, isFollowing: boolean) => void;
+ clearFollowUserOverride: (userId: string) => void;
  incrementCommentCount: (postId: string, currentComments: number) => void;
  decrementCommentCount: (postId: string, currentComments: number) => void;
  clearCommentCountOverride: (postId: string) => void;
@@ -111,6 +114,7 @@ export const useHomePostCardStore = create<HomePostCardState>((set) => ({
  nearbyVideoPostIds: {},
  voteOverrides: {},
  commentCountOverrides: {},
+ followUserOverrides: {},
  handlers: {},
  shareServer: "mirage.talk",
  allowAutoplay: true,
@@ -213,6 +217,18 @@ setVoteOverride: (postId, override) =>
       const { [postId]: _, ...rest } = state.voteOverrides;
       return { voteOverrides: rest };
     }),
+ setFollowUserOverride: (userId, isFollowing) =>
+   set((state) => ({
+     followUserOverrides: {
+       ...state.followUserOverrides,
+       [userId]: isFollowing,
+     },
+   })),
+ clearFollowUserOverride: (userId) =>
+   set((state) => {
+     const { [userId]: _, ...rest } = state.followUserOverrides;
+     return { followUserOverrides: rest };
+   }),
  incrementCommentCount: (postId, currentComments) =>
    set((state) => {
      const current = state.commentCountOverrides[postId];
@@ -278,6 +294,7 @@ setVoteOverride: (postId, override) =>
    nearbyVideoPostIds: {},
    voteOverrides: {},
    commentCountOverrides: {},
+   followUserOverrides: {},
    shouldScrollToTop: false,
   skipNextRefresh: false,
    disabledTopicName: undefined,
@@ -307,7 +324,9 @@ export const useIsFollowLoading = (authorId: string) =>
   useHomePostCardStore((state) => state.followLoadingUsers.has(authorId));
 
 export const useIsFollowing = (authorId: string) =>
-  useHomePostCardStore((state) => state.followedUsers.has(authorId));
+  useHomePostCardStore((state) =>
+    state.followUserOverrides[authorId] ?? state.followedUsers.has(authorId),
+  );
 
 export const useIsTopicFollowed = (topic?: string) =>
   useHomePostCardStore((state) => topic ? state.followedTopics.has(topic) : false);

@@ -37,6 +37,7 @@ import {
   usePreferencesStore,
   type ApiServer,
 } from "@/src/stores";
+import { usePathname } from "expo-router";
 import { useRouter } from "@/src/navigation/guarded-router";
 import { LogoutConfirmationPopup } from "./logout-confirmation-popup";
 import {
@@ -326,6 +327,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     const { theme } = useUnistyles();
     const insets = useSafeAreaInsets();
     const router = useRouter();
+    const pathname = usePathname();
     const [visible, setVisible] = useState(false);
     const [showLogoutPopup, setShowLogoutPopup] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -351,10 +353,24 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       }
     }, [isLoggedIn]);
 
-    const { data: userStatus } = useUserStatus({ enabled: visible });
+    const { data: userStatus, refetch: refetchUserStatus } = useUserStatus({
+      enabled: visible,
+    });
     const balance = userStatus?.balance
       ? Math.floor(userStatus.balance / 1_000_000)
       : 0;
+
+    useEffect(() => {
+      if (!visible) return;
+
+      void refetchUserStatus();
+
+      const refreshAfterIndexerLag = setTimeout(() => {
+        void refetchUserStatus();
+      }, 3000);
+
+      return () => clearTimeout(refreshAfterIndexerLag);
+    }, [visible, pathname, refetchUserStatus]);
 
     const { topicsBeforeShowMore, peopleBeforeShowMore } =
       usePreferencesStore();
@@ -783,7 +799,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 196
+                          update 202
                         </Text>
                         <Text
                           style={{
@@ -835,7 +851,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                           size="sm"
                           weight="light"
                         >
-                          update 196
+                          update 202
                         </Text>
                         <Text
                           style={{

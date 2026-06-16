@@ -19,7 +19,7 @@ import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { useShareIntentContext } from "expo-share-intent";
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, usePathname } from "expo-router";
-import { router } from "@/src/navigation/guarded-router";
+import { router, replaceBypass } from "@/src/navigation/guarded-router";
 import * as Sentry from "@sentry/react-native";
 import {
   Pressable,
@@ -418,7 +418,7 @@ export default function TabLayout() {
           hasForcedShareIntentRoute: hasForcedShareIntentRouteRef.current,
         },
       });
-      router.replace("/(tabs)/create");
+      replaceBypass("/(tabs)/create");
     } else {
       Sentry.addBreadcrumb({
         category: "navigation",
@@ -498,7 +498,7 @@ export default function TabLayout() {
           },
           level: "info",
         });
-        router.replace("/(tabs)/inbox");
+        replaceBypass("/(tabs)/inbox");
         return;
       }
 

@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as Sentry from "@sentry/react-native";
 
 import { useEdit, usePost, type CreatePostMutationInput, type EditPostMutationInput } from "@/src/api/write";
-import { applyOptimisticPostEdit, buildOptimisticPost, markOptimisticPostError, markOptimisticVideoProcessingComplete, upsertHomePost } from "@/src/api/write/hooks/use-post";
+import { applyOptimisticPostEdit, buildOptimisticPost, markOptimisticPostError, upsertHomePost } from "@/src/api/write/hooks/use-post";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useTransactionProgress } from "@/src/hooks/use-transaction-progress";
 import { router } from "@/src/navigation/guarded-router";
@@ -17,7 +17,6 @@ import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { getAllowedTagsFromContentTypes, usePreferencesStore } from "@/src/stores/preferences-store";
 import { markEditJustCompleted } from "@/src/utils/edit-post";
-import { isCloudflareStreamUrl, waitForCloudflareManifestReady } from "@/src/utils/cloudflare-manifest";
 import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 import { isPowCancelled } from "@/src/wallet";
 import { useCreateComposeState } from "./create-compose-state";
@@ -400,136 +399,7 @@ export function useCreateSubmitFlow({
             },
           });
         };
-        const cloudflareVideoUrls = mediaUrls.filter(isCloudflareStreamUrl);
-        if (cloudflareVideoUrls.length > 0) {
-          const cloudflareWaitStartedAt = Date.now();
-          console.log("[VideoTiming] post submit video processing start", {
-            optimisticId,
-            actionId,
-            videoCount: cloudflareVideoUrls.length,
-            elapsedSinceSubmitMs: Date.now() - submitStartedAt,
-          });
-          Sentry.addBreadcrumb({
-            category: "create-post",
-            message: "Video post pre-PoW processing started",
-            level: "info",
-            data: {
-              optimisticId,
-              actionId,
-              videoCount: cloudflareVideoUrls.length,
-              elapsedSinceSubmitMs: Date.now() - submitStartedAt,
-            },
-          });
-          insertOptimisticPost();
-          usePowQueueStore.getState().showPreparing({
-            id: actionId,
-            type: "post",
-            label: getActionLabel("post"),
-            execute: async () => undefined,
-          });
-          void (async () => {
-            try {
-              Sentry.addBreadcrumb({
-                category: "create-post",
-                message: "Waiting for Cloudflare video processing before enqueueing PoW",
-                level: "info",
-                data: {
-                  optimisticId,
-                  actionId,
-                  videoCount: cloudflareVideoUrls.length,
-                },
-              });
-              await Promise.all(
-                cloudflareVideoUrls.map((url) =>
-                  waitForCloudflareManifestReady(url, {
-                    onAttempt: ({ attempt, ready, error }) => {
-                      if (attempt === 0 || ready || attempt % 5 === 0) {
-                        Sentry.addBreadcrumb({
-                          category: "create-post",
-                          message: ready
-                            ? "Cloudflare video processing ready before PoW"
-                            : "Cloudflare video processing pending before PoW",
-                          level: ready ? "info" : "warning",
-                          data: {
-                            optimisticId,
-                            actionId,
-                            attempt,
-                            url,
-                            error: error instanceof Error ? error.message : error ? String(error) : undefined,
-                          },
-                        });
-                      }
-                    },
-                  }),
-                ),
-              );
-              const processingDurationMs = Date.now() - cloudflareWaitStartedAt;
-              console.log("[VideoTiming] post submit video processing complete", {
-                optimisticId,
-                actionId,
-                durationMs: processingDurationMs,
-                elapsedSinceSubmitMs: Date.now() - submitStartedAt,
-              });
-              Sentry.addBreadcrumb({
-                category: "create-post",
-                message: "Video post pre-PoW processing completed",
-                level: "info",
-                data: {
-                  optimisticId,
-                  actionId,
-                  videoCount: cloudflareVideoUrls.length,
-                  durationMs: processingDurationMs,
-                  elapsedSinceSubmitMs: Date.now() - submitStartedAt,
-                },
-              });
-              if (processingDurationMs > 30000) {
-                Sentry.captureMessage("Video post processing before PoW was slow", {
-                  level: "warning",
-                  tags: {
-                    feature: "video-posting",
-                    operation: "pre-pow-video-processing",
-                  },
-                  extra: {
-                    optimisticId,
-                    actionId,
-                    videoCount: cloudflareVideoUrls.length,
-                    durationMs: processingDurationMs,
-                    elapsedSinceSubmitMs: Date.now() - submitStartedAt,
-                  },
-                });
-              }
-              markOptimisticVideoProcessingComplete(queryClient, optimisticId);
-              usePowQueueStore.getState().clearPreparing(actionId);
-              enqueueNetworkPost(mediaUrls, true);
-            } catch (err) {
-              const processingDurationMs = Date.now() - cloudflareWaitStartedAt;
-              console.log("[VideoTiming] post submit video processing failed", {
-                optimisticId,
-                actionId,
-                durationMs: processingDurationMs,
-                elapsedSinceSubmitMs: Date.now() - submitStartedAt,
-                error: err instanceof Error ? err.message : String(err),
-              });
-              usePowQueueStore.getState().clearPreparing(actionId);
-              Sentry.captureException(err, {
-                tags: {
-                  feature: "create-post",
-                  operation: "pre-pow-video-processing",
-                },
-                extra: {
-                  optimisticId,
-                  actionId,
-                  videoCount: cloudflareVideoUrls.length,
-                  durationMs: processingDurationMs,
-                  elapsedSinceSubmitMs: Date.now() - submitStartedAt,
-                },
-              });
-              markOptimisticPostError(queryClient, optimisticId, getPostFailureDetails(err));
-            }
-          })();
-        } else {
-          enqueueNetworkPost(mediaUrls);
-        }
+        enqueueNetworkPost(mediaUrls);
         resetComposeState();
         resetVideoUploads();
         resetImageUploads();

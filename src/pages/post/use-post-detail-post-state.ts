@@ -7,6 +7,8 @@ import { usePostDetailActionStateStore } from "@/src/stores/post-detail-action-s
 
 type UsePostDetailPostStateParams = {
   id?: string;
+  onOptimisticFollowUser?: (userId: string, isFollowing: boolean) => void;
+  onRollbackFollowUser?: (userId: string) => void;
   post: Post | null;
 };
 
@@ -19,22 +21,28 @@ type UsePostDetailPostStateResult = {
 
 export function usePostDetailPostState({
   id,
+  onOptimisticFollowUser,
+  onRollbackFollowUser,
   post,
 }: UsePostDetailPostStateParams): UsePostDetailPostStateResult {
   const [localPostUpdates, setLocalPostUpdates] = useState<Partial<Post>>({});
+  const actionPostId = post?.id ?? id;
   const postFollowOverride = usePostDetailActionStateStore((state) =>
-    id ? state.postFollowOverrides[id] : undefined,
+    actionPostId ? state.postFollowOverrides[actionPostId] : undefined,
   );
 
   const {
     handleFollowUser: handleFollowUserViaQueue,
-  } = useFollowHandler();
+  } = useFollowHandler({
+    onOptimisticFollowUser,
+    onRollbackFollowUser,
+  });
 
   const sharedVoteOverride = useHomePostCardStore((state) =>
-    id ? state.voteOverrides[id] : undefined,
+    actionPostId ? state.voteOverrides[actionPostId] : undefined,
   );
   const sharedCommentCountOverride = useHomePostCardStore((state) =>
-    id ? state.commentCountOverrides[id] : undefined,
+    actionPostId ? state.commentCountOverrides[actionPostId] : undefined,
   );
 
   const displayPost = useMemo(() => {

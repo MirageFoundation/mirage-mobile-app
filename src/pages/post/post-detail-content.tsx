@@ -226,13 +226,30 @@ function LegacyPostDetailScreen() {
     () => followedData?.followed_topics ?? [],
     [followedData],
   );
+  const [followUserOverrides, setFollowUserOverrides] = useState<
+    Record<string, boolean>
+  >({});
+  const displayFollowedUsers = useMemo(() => {
+    const overrides = Object.entries(followUserOverrides);
+    if (overrides.length === 0) return followedUsers;
+
+    const next = new Set(followedUsers);
+    overrides.forEach(([userId, isFollowing]) => {
+      if (isFollowing) {
+        next.add(userId);
+      } else {
+        next.delete(userId);
+      }
+    });
+    return Array.from(next);
+  }, [followedUsers, followUserOverrides]);
 
   const { post } = usePostDetailResolvedPost({
     actualRootPost,
     actualRootPostId,
     commentsData,
     currentUser,
-    followedUsers,
+    followedUsers: displayFollowedUsers,
     id,
     isViewingComment,
     queryClient,
@@ -244,6 +261,16 @@ function LegacyPostDetailScreen() {
     setLocalPostUpdates,
   } = usePostDetailPostState({
     id,
+    onOptimisticFollowUser: (userId, isFollowing) => {
+      setFollowUserOverrides((prev) => ({ ...prev, [userId]: isFollowing }));
+    },
+    onRollbackFollowUser: (userId) => {
+      setFollowUserOverrides((prev) => {
+        const next = { ...prev };
+        delete next[userId];
+        return next;
+      });
+    },
     post,
   });
 
@@ -666,7 +693,7 @@ function LegacyPostDetailScreen() {
           commentsCount={commentsData?.children?.length ?? 0}
           contentBottomPadding={insets.bottom + 60}
           currentUserId={currentUser?.id}
-          followedUsers={followedUsers}
+          followedUsers={displayFollowedUsers}
           followLoadingUsers={followLoadingUsers}
           highlightedCommentId={highlightedCommentId}
           isCommentsError={isCommentsError}
@@ -723,7 +750,7 @@ function LegacyPostDetailScreen() {
           actualRootPostId={actualRootPostId}
           currentUserId={currentUser?.id}
           followedTopics={followedTopics}
-          followedUsers={followedUsers}
+          followedUsers={displayFollowedUsers}
           highlight={highlight}
           id={id}
           post={displayPost}

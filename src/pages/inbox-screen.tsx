@@ -24,6 +24,7 @@ import { useShallow } from "zustand/react/shallow";
 import { markRepliesAsNotified } from "@/src/services/inbox-notified-ids";
 import { markInboxViewed } from "@/src/api/write/endpoints/inbox";
 import { walletService } from "@/src/services/wallet-service";
+import { confirmInboxNotificationNavigation } from "@/src/services/inbox-notifications";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
@@ -34,7 +35,7 @@ export function InboxScreen() {
   const { theme } = useUnistyles();
   const router = useRouter();
   const queryClient = useQueryClient();
-  useLocalSearchParams<{
+  const { fromNotification: routeNotificationId } = useLocalSearchParams<{
     fromNotification?: string;
     replyId?: string;
   }>();
@@ -154,7 +155,7 @@ export function InboxScreen() {
           walletAddress: walletAddress ? `${walletAddress.slice(0, 12)}…` : null,
           isFetching,
           isError,
-          errorMessage: error instanceof Error ? error.message : String(error ?? ""),
+          errorMessage: String(error ?? ""),
         },
       });
     }, Platform.OS === "android" ? 10_000 : 15_000);
@@ -176,6 +177,7 @@ export function InboxScreen() {
   }, [data]);
 
   const activeNotificationId = notificationTarget?.notificationId;
+  const arrivalNotificationId = activeNotificationId ?? routeNotificationId;
   const targetReplyId = notificationTarget?.replyId;
   const previewReply = notificationTarget?.previewReply ?? null;
   const hasFetchedTargetReply = useMemo(
@@ -188,6 +190,28 @@ export function InboxScreen() {
     }
     return [previewReply, ...replies];
   }, [previewReply, replies]);
+
+  const confirmedNotificationArrivalsRef = useRef(new Set<string>());
+  useFocusEffect(
+    useCallback(() => {
+      if (!arrivalNotificationId) return;
+      if (confirmedNotificationArrivalsRef.current.has(arrivalNotificationId)) return;
+      confirmedNotificationArrivalsRef.current.add(arrivalNotificationId);
+      confirmInboxNotificationNavigation(arrivalNotificationId, {
+        hasTargetReply: !!targetReplyId,
+        hasFetchedTargetReply,
+        hasPreviewReply: !!previewReply,
+        visibleReplyCount: visibleReplies.length,
+        platform: Platform.OS,
+      });
+    }, [
+      arrivalNotificationId,
+      hasFetchedTargetReply,
+      previewReply,
+      targetReplyId,
+      visibleReplies.length,
+    ]),
+  );
 
   const fromNotificationRef = useRef(activeNotificationId);
   fromNotificationRef.current = activeNotificationId;

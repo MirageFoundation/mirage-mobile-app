@@ -1,11 +1,23 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import { router as expoRouter, useRouter as useExpoRouter } from "expo-router";
 import * as Sentry from "@sentry/react-native";
 
 const GUARD_MS = 500;
-let lastNavTime = 0;
 
 type NavigationAction = "push" | "navigate" | "replace";
+
+type BypassOptions = {
+  /**
+   * When true, the next navigation call skips the dedup guard AND resets the
+   * global last-nav timestamp so it cannot be suppressed by any in-flight
+   * navigation. Intended for high-priority flows such as notification handling
+   * and cold-start route recovery.
+   */
+  bypassGuard?: boolean;
+};
+
+let lastNavTime = 0;
+let lastNavKey: string | null = null;
 
 function describeNavigationTarget(args: unknown[]): string {
   const target = args[0];
@@ -17,30 +29,90 @@ function describeNavigationTarget(args: unknown[]): string {
   return typeof target;
 }
 
-function guard<T extends (...args: any[]) => any>(action: NavigationAction, fn: T): T {
-  return ((...args: Parameters<T>) => {
+function buildNavigationKey(action: NavigationAction, args: unknown[]): string {
+  const target = args[0];
+  if (typeof target === "string") return `${action}:${target}`;
+  if (target && typeof target === "object") {
+    const record = target as Record<string, unknown>;
+    const pathname =
+      typeof record.pathname === "string" ? record.pathname : "?";
+    return `${action}:${pathname}`;
+  }
+  return `${action}:${typeof target}`;
+}
+
+function isBypassOptions(value: unknown): value is BypassOptions {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    Object.prototype.hasOwnProperty.call(value, "bypassGuard")
+  );
+}
+
+function extractBypass(args: unknown[]): { args: unknown[]; bypass: boolean } {
+  if (args.length < 2) return { args, bypass: false };
+  const last = args[args.length - 1];
+  if (isBypassOptions(last)) {
+    return { args: args.slice(0, -1), bypass: !!last.bypassGuard };
+  }
+  return { args, bypass: false };
+}
+
+/**
+ * Reset the global navigation guard so the next dispatch always wins.
+ * Use sparingly — intended for notification/share-intent recovery paths.
+ */
+export function resetNavigationGuard(reason: string): void {
+  lastNavTime = 0;
+  lastNavKey = null;
+  Sentry.addBreadcrumb({
+    category: "navigation",
+    message: "Navigation guard reset",
+    data: { reason },
+    level: "info",
+  });
+}
+
+function guard<T extends (...args: any[]) => any>(
+  action: NavigationAction,
+  fn: T,
+): T {
+  return ((...rawArgs: Parameters<T>) => {
+    const { args, bypass } = extractBypass(rawArgs as unknown[]);
     const now = Date.now();
     const target = describeNavigationTarget(args);
-    if (now - lastNavTime < GUARD_MS) {
+    const key = buildNavigationKey(action, args);
+
+    // Only suppress when the SAME navigation target is repeated within the
+    // guard window. Different targets must never suppress each other, e.g. a
+    // notification's `navigate("/(tabs)/inbox")` should never be dropped just
+    // because a share-intent `replace("/(tabs)/create")` just fired.
+    if (!bypass && now - lastNavTime < GUARD_MS && lastNavKey === key) {
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Duplicate navigation suppressed",
-        data: { action, target, guardMs: GUARD_MS },
+        data: { action, target, guardMs: GUARD_MS, key },
         level: "info",
       });
       return;
     }
+
     lastNavTime = now;
+    lastNavKey = key;
+
     try {
       Sentry.addBreadcrumb({
         category: "navigation",
-        message: "Navigation dispatched",
-        data: { action, target },
+        message: bypass
+          ? "Navigation dispatched (guard bypassed)"
+          : "Navigation dispatched",
+        data: { action, target, key, bypass },
         level: "info",
       });
-      return fn(...args);
+      return (fn as (...a: unknown[]) => unknown)(...args);
     } catch (error) {
       lastNavTime = 0;
+      lastNavKey = null;
       Sentry.captureException(error, {
         tags: { feature: "navigation", action },
         extra: { target, args },
@@ -60,47 +132,45 @@ export const router = new Proxy(expoRouter, {
   },
 });
 
+/**
+ * High-priority navigation helpers that always win the guard. Use for
+ * notification handling, share-intent recovery, and other flows where the
+ * navigation must NOT be silently dropped by a recent unrelated dispatch.
+ */
+export const navigateBypass: typeof expoRouter.navigate = ((...args: unknown[]) =>
+  (router.navigate as unknown as (...a: unknown[]) => unknown)(
+    ...args,
+    { bypassGuard: true },
+  )) as typeof expoRouter.navigate;
+
+export const replaceBypass: typeof expoRouter.replace = ((...args: unknown[]) =>
+  (router.replace as unknown as (...a: unknown[]) => unknown)(
+    ...args,
+    { bypassGuard: true },
+  )) as typeof expoRouter.replace;
+
+export const pushBypass: typeof expoRouter.push = ((...args: unknown[]) =>
+  (router.push as unknown as (...a: unknown[]) => unknown)(
+    ...args,
+    { bypassGuard: true },
+  )) as typeof expoRouter.push;
+
 export const useRouter = () => {
   const router = useExpoRouter();
-  const lastNavRef = useRef(0);
 
-  const guardHookNavigation = useCallback(<T extends (...args: any[]) => any>(action: NavigationAction, fn: T) => {
-    return ((...args: Parameters<T>) => {
-      const now = Date.now();
-      const target = describeNavigationTarget(args);
-      if (now - lastNavRef.current < GUARD_MS) {
-        Sentry.addBreadcrumb({
-          category: "navigation",
-          message: "Duplicate navigation suppressed",
-          data: { action, target, guardMs: GUARD_MS },
-          level: "info",
-        });
-        return;
-      }
-      lastNavRef.current = now;
-      try {
-        Sentry.addBreadcrumb({
-          category: "navigation",
-          message: "Navigation dispatched",
-          data: { action, target },
-          level: "info",
-        });
-        return fn(...args);
-      } catch (error) {
-        lastNavRef.current = 0;
-        Sentry.captureException(error, {
-          tags: { feature: "navigation", action },
-          extra: { target, args },
-        });
-        throw error;
-      }
-    }) as T;
-  }, []);
+  const guardHookNavigation = useCallback(
+    <T extends (...args: any[]) => any>(action: NavigationAction, fn: T) =>
+      guard(action, fn),
+    [],
+  );
 
-  return {
-    ...router,
-    push: guardHookNavigation("push", router.push),
-    navigate: guardHookNavigation("navigate", router.navigate),
-    replace: guardHookNavigation("replace", router.replace),
-  };
+  return useMemo(
+    () => ({
+      ...router,
+      push: guardHookNavigation("push", router.push),
+      navigate: guardHookNavigation("navigate", router.navigate),
+      replace: guardHookNavigation("replace", router.replace),
+    }),
+    [router, guardHookNavigation],
+  );
 };

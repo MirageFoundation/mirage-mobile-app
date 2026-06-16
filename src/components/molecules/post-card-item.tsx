@@ -182,8 +182,8 @@ onPostPress,
 
   const handleFollowUser = useCallback(() => {
     logPress({ name: "post_follow_user", postId: post.id });
-    onFollowUser?.(post.author.id, post.author.username, post.isFollowing ?? false);
-  }, [onFollowUser, post.id, post.author.id, post.author.username, post.isFollowing]);
+    onFollowUser?.(post.author.id, post.author.username, displayPost.isFollowing ?? false);
+  }, [onFollowUser, post.id, post.author.id, post.author.username, displayPost.isFollowing]);
 
   const handleFollowTopic = useCallback(() => {
     if (!post.topic) return;

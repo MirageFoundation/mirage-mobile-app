@@ -351,7 +351,14 @@ export function SubscriptionScreen() {
       });
 
       if (planIndex === 0) {
-        if (!effectiveAutoRenew) return;
+        if (!effectiveAutoRenew) {
+          setSubscribingPlanId(null);
+          Alert.alert(
+            "Downgrade Already Scheduled",
+            "Auto-renew is already off. Your current perks stay active until the subscription expires."
+          );
+          return;
+        }
         setAutoRenewProcessing(true);
         autoRenewalMutation.mutate(false, {
           onSuccess: () => {
@@ -359,6 +366,10 @@ export function SubscriptionScreen() {
             setAutoRenewProcessing(false);
             setOptimisticAutoRenew(false);
             triggerHaptic("success");
+            Alert.alert(
+              "Downgrade Scheduled",
+              "Auto-renew is now off. Your current perks stay active until the subscription expires."
+            );
           },
           onError: (error) => {
             setSubscribingPlanId(null);
@@ -382,6 +393,7 @@ export function SubscriptionScreen() {
       if (targetLevel === undefined) return;
 
       setOptimisticLevel(targetLevel);
+      setOptimisticAutoRenew(true);
 
       upgradeMutation.mutate(targetLevel as 1 | 10, {
         onSuccess: () => {
@@ -391,6 +403,7 @@ export function SubscriptionScreen() {
         onError: (error) => {
           setSubscribingPlanId(null);
           setOptimisticLevel(null);
+          setOptimisticAutoRenew(null);
           console.error("[SubscriptionScreen] Failed to subscribe:", error);
           captureSubscriptionException(error, "upgrade-plan", {
             planId,
@@ -413,6 +426,12 @@ export function SubscriptionScreen() {
       setOptimisticLevel(null);
     }
   }, [userStatus?.user_level, optimisticLevel]);
+
+  useEffect(() => {
+    if (optimisticAutoRenew !== null && userStatus?.auto_renew === optimisticAutoRenew) {
+      setOptimisticAutoRenew(null);
+    }
+  }, [userStatus?.auto_renew, optimisticAutoRenew]);
 
   const handleToggleAutoRenew = useCallback(() => {
     const newValue = !effectiveAutoRenew;

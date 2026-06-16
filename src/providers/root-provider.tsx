@@ -16,6 +16,7 @@ import { CloudflareErrorToast } from "@/src/components/cloudflare-error-toast";
 import { WalletProvider } from "./wallet-provider";
 import { cleanupInboxNotificationsForLogout, initInboxNotifications } from "@/src/services/inbox-notifications";
 import { initPushNotifications, registerPush } from "@/src/services/push-notifications";
+import { identifyUser, setAnalyticsTrackingEnabled } from "@/src/services/analytics";
 import { initSeenPosts, teardownSeenPosts } from "@/src/services/seen-posts";
 import { useAuthStore, usePreferencesStore, useVideoPositionStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
@@ -25,7 +26,7 @@ import {
 } from "@/src/navigation/auth-navigation";
 import { startTimeTicking, stopTimeTicking } from "@/src/stores/time-tick-store";
 import * as Sentry from "@sentry/react-native";
-import { AppState } from "react-native";
+import { Alert, AppState } from "react-native";
 
 const CoreProviders = memo(({ children }: { children: React.ReactNode }) => (
   <ThemeContextProvider>
@@ -62,6 +63,48 @@ export const RootProvider = memo(
         stopTimeTicking();
       };
     }, []);
+
+    // Analytics: init when consent is granted; one-time opt-in prompt (EU)
+    const analyticsConsent = usePreferencesStore((s) => s.analyticsConsent);
+    const analyticsConsentAsked = usePreferencesStore(
+      (s) => s.analyticsConsentAsked,
+    );
+
+    useEffect(() => {
+      if (!analyticsConsent) return;
+      setAnalyticsTrackingEnabled(true).then(() => {
+        const { walletAddress: address, user } = useAuthStore.getState();
+        if (address) {
+          identifyUser(address, {
+            username: user?.username,
+            tier: user?.tier,
+          });
+        }
+      });
+    }, [analyticsConsent]);
+
+    useEffect(() => {
+      if (analyticsConsentAsked) return;
+      const timer = setTimeout(() => {
+        const { setAnalyticsConsent } = usePreferencesStore.getState();
+        Alert.alert(
+          "Help improve Mirage",
+          "Allow anonymous usage analytics? No personal data or wallet contents are collected, and you can change this anytime in Settings.",
+          [
+            {
+              text: "Not now",
+              style: "cancel",
+              onPress: () => setAnalyticsConsent(false),
+            },
+            {
+              text: "Allow",
+              onPress: () => setAnalyticsConsent(true),
+            },
+          ],
+        );
+      }, 3000);
+      return () => clearTimeout(timer);
+    }, [analyticsConsentAsked]);
 
     useEffect(() => {
       const sub = AppState.addEventListener("change", (nextState) => {

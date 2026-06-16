@@ -494,7 +494,7 @@ export function canonBaseSendTokens(params: SendTokensParams): Uint8Array {
   );
 }
 
-// --- MsgUpgradeLevel (No PoW) ---
+// --- MsgSubscribe (self-subscribe, no PoW) ---
 
 export interface UpgradeLevelParams {
   pubkey33: Uint8Array;
@@ -506,8 +506,11 @@ export interface UpgradeLevelParams {
 }
 
 /**
- * Build canonical base bytes for MsgUpgradeLevel
- * NOTE: difficulty is always 0 for upgrade
+ * Build canonical base bytes for self-subscription.
+ *
+ * The protocol renamed MsgUpgradeLevel to MsgSubscribe. Keep the exported
+ * function name for existing mobile call sites, but sign the current message.
+ * NOTE: difficulty is always 0 for paid subscription operations.
  */
 export function canonBaseUpgradeLevel(params: UpgradeLevelParams): Uint8Array {
   const baseParams: BaseParams = {
@@ -519,7 +522,7 @@ export function canonBaseUpgradeLevel(params: UpgradeLevelParams): Uint8Array {
   };
 
   return concatBytes(
-    prefix("MsgUpgradeLevel"),
+    prefix("MsgSubscribe"),
     encodeHeader(baseParams),
     encU64(100, params.level)
   );

@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { useVote, type VoteDirection } from "@/src/api/write";
+import { trackEvent } from "@/src/services/analytics";
 import {
   usePowQueueStore,
   generateActionId,
@@ -127,6 +128,12 @@ function getDirectionFromState(hasLiked: boolean, hasDisliked: boolean): number 
   return 0;
 }
 
+function getVoteTypeLabel(direction: VoteDirection): "up" | "down" | "remove" {
+  if (direction === 1) return "up";
+  if (direction === -1) return "down";
+  return "remove";
+}
+
 export function useVoteHandler(
   options: UseVoteHandlerOptions = {}
 ): UseVoteHandlerReturn {
@@ -213,6 +220,9 @@ export function useVoteHandler(
             },
             onSuccess: () => {
               pendingVotes.current.delete(targetId);
+              trackEvent("vote_cast", {
+                vote_type: getVoteTypeLabel(newResult.direction),
+              });
               onSuccess?.(targetId);
             },
             onError: () => {
@@ -268,6 +278,9 @@ export function useVoteHandler(
           },
           onSuccess: () => {
             pendingVotes.current.delete(targetId);
+            trackEvent("vote_cast", {
+              vote_type: getVoteTypeLabel(resultWithLikes.direction),
+            });
             onSuccess?.(targetId);
           },
           onError: () => {

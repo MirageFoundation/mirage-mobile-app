@@ -4,6 +4,7 @@ import {
 import { Box, Button, Checkbox, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useAuthStore, usePreferencesStore, getApiBaseUrl } from "@/src/stores";
+import { trackEvent } from "@/src/services/analytics";
 import { apiClient } from "@/src/api/client";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
@@ -35,6 +36,12 @@ useEffect(() => {
       router.dismissTo("/(auth)/username");
     }
  }, [recoveryPhrase, isConfirming, router]);
+
+  useEffect(() => {
+    if (!recoveryPhrase) return;
+    trackEvent("recovery_phrase_viewed");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleCheckboxChange = useCallback(() => {
     triggerHaptic("selection");

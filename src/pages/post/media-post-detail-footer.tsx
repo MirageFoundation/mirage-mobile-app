@@ -6,6 +6,7 @@ import { useUnistyles } from "react-native-unistyles";
 
 import { Avatar, TimeAgo } from "@/src/components/atoms";
 import { PostActions, type Post } from "@/src/components/molecules";
+import { resolvePostContent } from "@/src/components/molecules/post-card-utils";
 import { Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { getUsernameColor } from "@/src/utils/tiers";
@@ -106,6 +107,7 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
   const { theme } = useUnistyles();
   const tierColor =
     post.author.level != null ? getUsernameColor(post.author.level) : undefined;
+  const displayBody = resolvePostContent(post.body, post.media).bodyWithoutUrl ?? "";
 
   return (
     <View style={styles.footerBlock}>
@@ -148,7 +150,7 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
         {post.title}
       </Text>
 
-      {post.body ? (
+      {displayBody ? (
         isExpanded ? (
           <Animated.View
             key="media-post-detail-body-expanded"
@@ -158,7 +160,7 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
             // single-line variant exactly.
             style={{ marginTop: 4, marginBottom: -theme.spacing.md }}
           >
-            <MarkdownContent content={post.body} />
+            <MarkdownContent content={displayBody} />
           </Animated.View>
         ) : (
           <Animated.View
@@ -171,9 +173,9 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
               numberOfLines={1}
               style={{ flex: 1, color: theme.colors.text.default }}
             >
-              {renderInlineBody(post.body)}
+              {renderInlineBody(displayBody)}
             </Text>
-            {hasMoreBodyContent(post.body) ? (
+            {hasMoreBodyContent(displayBody) ? (
               <Pressable onPress={onMoreLink} hitSlop={4}>
                 <Text
                   size="md"

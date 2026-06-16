@@ -9,6 +9,13 @@ import { useContentModerationStore } from "./content-moderation-store";
 import { useInboxStore } from "./inbox-store";
 import { useDraftStore } from "./draft-store";
 import { unregisterPush } from "@/src/services/push-notifications";
+import {
+  identifyUser,
+  registerTierSuperProperty,
+  resetAnalyticsIdentity,
+  trackEvent,
+  updateUserProfile,
+} from "@/src/services/analytics";
 import { getTierName } from "@/src/utils/tiers";
 import {
   addAuthBootstrapBreadcrumb,
@@ -172,6 +179,7 @@ export const useAuthStore = create<AuthState>()(
             Sentry.setUser({
               id: metadata.address,
             });
+            identifyUser(metadata.address);
             set({
               isLoggedIn: true,
               isBootstrapping: true,
@@ -201,6 +209,10 @@ export const useAuthStore = create<AuthState>()(
                   hasUsername: snapshot.hasUsername,
                   userLevel: snapshot.userLevel,
                   user: buildUserFromStatus(metadata.address, snapshot),
+                });
+                updateUserProfile({
+                  username: snapshot.username,
+                  tier: snapshot.tier,
                 });
               })
               .catch((apiError) => {
@@ -298,6 +310,8 @@ export const useAuthStore = create<AuthState>()(
             message: "Wallet imported successfully",
             level: "info",
           });
+          identifyUser(metadata.address);
+          trackEvent("login_completed", { login_method: "wallet_import" });
           set({
             isLoggedIn: true,
             isBootstrapping: true,
@@ -326,6 +340,10 @@ export const useAuthStore = create<AuthState>()(
             userLevel: snapshot.userLevel,
             user: buildUserFromStatus(metadata.address, snapshot),
           });
+          updateUserProfile({
+            username: snapshot.username,
+            tier: snapshot.tier,
+          });
         } catch (error) {
           set({ isBootstrapping: false });
           console.error("[AuthStore] Failed to import wallet:", error);
@@ -346,6 +364,9 @@ export const useAuthStore = create<AuthState>()(
         }
 
         walletService.confirmWallet();
+
+        identifyUser(walletAddress);
+        trackEvent("sign_up_completed", { sign_up_method: "wallet_created" });
 
         set({
           isLoggedIn: true,
@@ -395,6 +416,7 @@ export const useAuthStore = create<AuthState>()(
           message: "User logged out",
           level: "info",
         });
+        resetAnalyticsIdentity();
         set({
           user: null,
           isLoggedIn: false,
@@ -432,10 +454,14 @@ export const useAuthStore = create<AuthState>()(
       setUserLevel: (level) => {
         set({ userLevel: level });
 
+        const tierName = getTierName(level);
+        registerTierSuperProperty(tierName);
+        updateUserProfile({ tier: tierName });
+
         const { user } = get();
         if (user) {
           set({
-            user: { ...user, tier: getTierName(level) },
+            user: { ...user, tier: tierName },
           });
         }
       },

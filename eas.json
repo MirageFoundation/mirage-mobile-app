@@ -12,7 +12,8 @@
         "image": "sdk-54"
       },
       "env": {
-        "EXPO_PUBLIC_ENV": "dev"
+        "EXPO_PUBLIC_ENV": "dev",
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "e7862d41388bd49a1f8ad11025792672"
       },
       "channel": "sim",
       "android": {
@@ -24,7 +25,8 @@
       "channel": "dev",
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_ENV": "dev"
+        "EXPO_PUBLIC_ENV": "dev",
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "e7862d41388bd49a1f8ad11025792672"
       },
       "android": {
         "resourceClass": "large"
@@ -34,7 +36,8 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_ENV": "preview"
+        "EXPO_PUBLIC_ENV": "preview",
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "e7862d41388bd49a1f8ad11025792672"
       },
       "android": {
         "resourceClass": "large"
@@ -43,6 +46,9 @@
     "production": {
       "autoIncrement": true,
       "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_MIXPANEL_TOKEN": "e7862d41388bd49a1f8ad11025792672"
+      },
       "ios": {
         "image": "sdk-54",
         "node": "24.4.0"

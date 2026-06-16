@@ -16,6 +16,14 @@ export interface ApiError {
  raw: unknown;
 }
 
+function getBackendErrorMessage(data: Record<string, unknown>): string | null {
+ const backendMessage = data.error ?? data.message ?? data.error_details ?? data.raw_log;
+ if (typeof backendMessage !== "string") return null;
+ const trimmed = backendMessage.trim();
+ if (!trimmed) return null;
+ return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
 export function parseApiError(error: unknown): ApiError {
  const axiosError = error as any;
  const data = axiosError?.response?.data;
@@ -33,6 +41,7 @@ export function parseApiError(error: unknown): ApiError {
  }
 
  const errorCode: string | null = data.error_code ?? null;
+ const backendMessage = getBackendErrorMessage(data);
 
  if (!errorCode) {
   Sentry.addBreadcrumb({
@@ -42,7 +51,7 @@ export function parseApiError(error: unknown): ApiError {
   });
   return {
    errorCode: null,
-   message: DEFAULT_MESSAGE,
+   message: backendMessage ?? DEFAULT_MESSAGE,
    httpStatus,
    retryable: false,
    context: {},
@@ -59,10 +68,16 @@ export function parseApiError(error: unknown): ApiError {
  }
 
  const { error: _err, error_code: _code, ...context } = data;
+ const message =
+  errorCode === "internal_error" && backendMessage
+   ? backendMessage
+   : isKnownErrorCode(errorCode)
+    ? getErrorMessage(errorCode)
+    : backendMessage ?? getErrorMessage(errorCode);
 
  return {
   errorCode,
-  message: getErrorMessage(errorCode),
+  message,
   httpStatus,
   retryable: isRetryable(errorCode) || isMaybeRetryable(errorCode),
   context,

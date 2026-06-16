@@ -39,6 +39,16 @@ export const MediaPostDetailFollowMenuButton = memo(function MediaPostDetailFoll
     ? !!(isFollowing || isTopicFollowed) && !isFollowingAll
     : false;
 
+  const followMenuMinWidth = Math.max(
+    180,
+    Math.max(
+      topic ? `${isTopicFollowed ? "Unfollow" : "Follow"} #${topic}`.length : 0,
+      `${isFollowing ? "Unfollow" : "Follow"} @${username}`.length,
+    ) *
+      10 +
+      60,
+  );
+
   return (
     <Menu>
       <MenuTrigger
@@ -97,7 +107,7 @@ export const MediaPostDetailFollowMenuButton = memo(function MediaPostDetailFoll
           optionsContainer: {
             backgroundColor: theme.colors.background.default,
             borderRadius: theme.radius.lg,
-            minWidth: 200,
+            minWidth: followMenuMinWidth,
             shadowColor: theme.colors.contrast.base,
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: 0.15,

@@ -59,11 +59,11 @@ export const PlanCard = memo(function PlanCard({
   }, [isExpanded, expandProgress]);
 
   const handleSubscribe = useCallback(() => {
-    if (!isActive && !hasInsufficientFunds && onSubscribe) {
+    if (!isActive && !hasInsufficientFunds && !(isLowerPlan && isDowngradeDisabled) && onSubscribe) {
       triggerHaptic("medium");
       onSubscribe(plan.id);
     }
-  }, [isActive, hasInsufficientFunds, onSubscribe, plan.id]);
+  }, [isActive, hasInsufficientFunds, isLowerPlan, isDowngradeDisabled, onSubscribe, plan.id]);
 
   const expandedContentStyle = useAnimatedStyle(() => {
     return {
@@ -135,7 +135,7 @@ export const PlanCard = memo(function PlanCard({
     }
     if (isLowerPlan && isDowngradeDisabled) {
       return {
-        text: "Downgrade",
+        text: "Downgrade Scheduled",
         disabled: true,
         variant: "ghost" as const,
         mode: "secondary" as const,

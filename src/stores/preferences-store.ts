@@ -85,6 +85,10 @@ type PreferencesState = {
   ageVerified: boolean;
   hideDownvotedPosts: boolean;
 
+  // Analytics (opt-in; EU consent requirement)
+  analyticsConsent: boolean;
+  analyticsConsentAsked: boolean;
+
   // Comments
   autoCollapseThreshold: number | null; // -10, -5, -3, -1, 0, or null (never)
 
@@ -121,6 +125,7 @@ type PreferencesState = {
   setBlurSensitiveMedia: (blur: boolean) => void;
   setAgeVerified: (verified: boolean) => void;
   setHideDownvotedPosts: (hide: boolean) => void;
+  setAnalyticsConsent: (granted: boolean) => void;
   setAutoCollapseThreshold: (threshold: number | null) => void;
   setTopicsBeforeShowMore: (count: number) => void;
   setPeopleBeforeShowMore: (count: number) => void;
@@ -153,6 +158,10 @@ export const usePreferencesStore = create<PreferencesState>()(
       blurSensitiveMedia: false,
       ageVerified: false,
       hideDownvotedPosts: false,
+
+      // Analytics
+      analyticsConsent: false,
+      analyticsConsentAsked: false,
 
       // Comments
       autoCollapseThreshold: -5,
@@ -255,6 +264,8 @@ export const usePreferencesStore = create<PreferencesState>()(
       setBlurSensitiveMedia: (blur) => set({ blurSensitiveMedia: blur }),
       setAgeVerified: (verified) => set({ ageVerified: verified }),
       setHideDownvotedPosts: (hide) => set({ hideDownvotedPosts: hide }),
+      setAnalyticsConsent: (granted) =>
+        set({ analyticsConsent: granted, analyticsConsentAsked: true }),
       setAutoCollapseThreshold: (threshold) =>
         set({ autoCollapseThreshold: threshold }),
       setTopicsBeforeShowMore: (count) => set({ topicsBeforeShowMore: count }),
@@ -270,7 +281,7 @@ export const usePreferencesStore = create<PreferencesState>()(
    {
      name: "preferences-storage",
       storage: createJSONStorage(() => mmkvStorage),
-      version: 5,
+      version: 6,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<PreferencesState>;
         
@@ -309,6 +320,11 @@ export const usePreferencesStore = create<PreferencesState>()(
             state.moderationReminderUnderstoodByUser ?? {};
           state.moderationReminderSnoozedUntilByUser =
             state.moderationReminderSnoozedUntilByUser ?? {};
+        }
+
+        if (version < 6) {
+          state.analyticsConsent = false;
+          state.analyticsConsentAsked = false;
         }
 
         return state as PreferencesState;

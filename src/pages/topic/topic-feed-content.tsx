@@ -142,6 +142,23 @@ export function TopicFeedScreen() {
     () => followedData?.followed_topics ?? [],
     [followedData],
   );
+  const followUserOverrides = useHomePostCardStore((state) => state.followUserOverrides);
+  const setFollowUserOverride = useHomePostCardStore((state) => state.setFollowUserOverride);
+  const clearFollowUserOverride = useHomePostCardStore((state) => state.clearFollowUserOverride);
+  const displayFollowedUsers = useMemo(() => {
+    const overrides = Object.entries(followUserOverrides);
+    if (overrides.length === 0) return followedUsers;
+
+    const next = new Set(followedUsers);
+    overrides.forEach(([userId, isFollowing]) => {
+      if (isFollowing) {
+        next.add(userId);
+      } else {
+        next.delete(userId);
+      }
+    });
+    return Array.from(next);
+  }, [followedUsers, followUserOverrides]);
 
   const [optimisticFollowedTopic, setOptimisticFollowedTopic] = useState<
     boolean | null
@@ -158,6 +175,12 @@ export function TopicFeedScreen() {
     handleFollowUser: handleFollowPress,
     handleFollowTopic: handleFollowTopicFromCard,
   } = useFollowHandler({
+    onOptimisticFollowUser: (userId, isFollowing) => {
+      setFollowUserOverride(userId, isFollowing);
+    },
+    onRollbackFollowUser: (userId) => {
+      clearFollowUserOverride(userId);
+    },
     onOptimisticFollowTopic: (_topic, isFollowing) => {
       setOptimisticFollowedTopic(isFollowing);
     },
@@ -473,9 +496,9 @@ export function TopicFeedScreen() {
     if (!selectedPost) return;
     const authorId = selectedPost.author.id;
     const authorUsername = selectedPost.author.username;
-    const isCurrentlyFollowing = followedUsers.includes(authorId);
+    const isCurrentlyFollowing = displayFollowedUsers.includes(authorId);
     handleFollowPress(authorId, authorUsername, isCurrentlyFollowing);
-  }, [selectedPost, followedUsers, handleFollowPress]);
+  }, [selectedPost, displayFollowedUsers, handleFollowPress]);
 
   const handleShowFewer = useCallback(() => {
     toast.success("Got it", "We'll show fewer posts like this.");
@@ -805,7 +828,7 @@ export function TopicFeedScreen() {
         }
         isFollowingUser={
           selectedPost?.author.id
-            ? followedUsers.includes(selectedPost.author.id)
+            ? displayFollowedUsers.includes(selectedPost.author.id)
             : false
         }
         onShowFewer={handleShowFewer}

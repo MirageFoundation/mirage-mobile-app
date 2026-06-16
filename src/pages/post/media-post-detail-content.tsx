@@ -189,8 +189,47 @@ export default function MediaPostDetailScreen({
     pendingScrollToEndRef,
   });
 
+  const [followUserOverrides, setFollowUserOverrides] = useState<
+    Record<string, boolean>
+  >({});
   const { handleFollowUser: followUser, handleFollowTopic: followTopic } =
-    useFollowHandler({});
+    useFollowHandler({
+      onOptimisticFollowUser: (userId, isFollowing) => {
+        setFollowUserOverrides((prev) => ({ ...prev, [userId]: isFollowing }));
+      },
+      onRollbackFollowUser: (userId) => {
+        setFollowUserOverrides((prev) => {
+          const next = { ...prev };
+          delete next[userId];
+          return next;
+        });
+      },
+    });
+
+  const displayFollowedUsers = useMemo(() => {
+    const overrides = Object.entries(followUserOverrides);
+    if (overrides.length === 0) return followedUsers;
+
+    const next = new Set(followedUsers);
+    overrides.forEach(([userId, isFollowing]) => {
+      if (isFollowing) {
+        next.add(userId);
+      } else {
+        next.delete(userId);
+      }
+    });
+    return Array.from(next);
+  }, [followedUsers, followUserOverrides]);
+
+  const displayPost = useMemo(() => {
+    if (!post) return null;
+    const isAuthorInFollowedList = displayFollowedUsers.includes(post.author.id);
+    const isFollowing =
+      followUserOverrides[post.author.id] ??
+      (isAuthorInFollowedList ? true : post.isFollowing ?? false);
+    if (post.isFollowing === isFollowing) return post;
+    return { ...post, isFollowing };
+  }, [displayFollowedUsers, followUserOverrides, post]);
 
   const handleRemoveComment = useCallback(
     (commentId: string) => {
@@ -524,6 +563,13 @@ export default function MediaPostDetailScreen({
     collapseMedia();
   }, [post, collapseMedia]);
 
+  const handleFollowCommentAuthor = useCallback(
+    (authorId: string, isCurrentlyFollowing: boolean) => {
+      followUser(authorId, "", isCurrentlyFollowing);
+    },
+    [followUser],
+  );
+
   const revealCommentsAfterPost = useCallback((commentId: string, isReply: boolean) => {
     const currentIndex = animatedIndex.value;
     sheetRef.current?.snapToIndex?.(2, { duration: 1 });
@@ -643,9 +689,9 @@ export default function MediaPostDetailScreen({
             sheetRef={sheetRef}
             commentsListRef={commentsListRef}
             displayComments={displayComments}
-            post={post}
+            post={displayPost ?? post}
             currentUserId={currentUser?.id ?? null}
-            followedUsers={followedUsers}
+            followedUsers={displayFollowedUsers}
             followedTopics={followedTopics}
             inputDockTotalH={inputDockTotalH}
             shouldOpenSheetInitially={shouldOpenSheetInitially}
@@ -675,9 +721,10 @@ export default function MediaPostDetailScreen({
               followUser(
                 post.author.id,
                 post.author.username,
-                post.isFollowing ?? false,
+                displayPost?.isFollowing ?? false,
               )
             }
+            onFollowCommentAuthor={handleFollowCommentAuthor}
             onFollowTopic={() => {
               if (post.topic) {
                 followTopic(post.topic, followedTopics.includes(post.topic));
@@ -775,10 +822,10 @@ export default function MediaPostDetailScreen({
           <MediaPostDetailActionSheets
             ref={actionSheetsRef}
             followedTopics={followedTopics}
-            followedUsers={followedUsers}
+            followedUsers={displayFollowedUsers}
             onBlockCommentAuthor={blockCommentAuthor}
             onRemoveComment={handleRemoveComment}
-            post={post}
+            post={displayPost ?? post}
             reserveComposeNavigation={reserveComposeNavigation}
           />
         </Box>

@@ -31,6 +31,7 @@ import {
   type DeletePostInput,
 } from "../endpoints/posts";
 import { mutationKeys } from "../mutation-keys";
+import { trackEvent } from "@/src/services/analytics";
 import type { PoWProgress } from "../signing";
 import * as Sentry from "@sentry/react-native";
 import type { PostDraft } from "@/src/stores/draft-store";
@@ -1004,6 +1005,12 @@ export function usePost(options: UsePostOptions = {}) {
           hasPreviewMedia: !!input.optimisticPreviewMediaUrls?.length,
         },
       });
+      trackEvent("post_created", {
+        topic: input.topic,
+        media_count: input.media?.length ?? 0,
+        has_content_warning: !!input.tag,
+        content_warning: input.tag || undefined,
+      });
       const optimisticPost = buildOptimisticPost(
         data?.tx_hash,
         input,
@@ -1200,7 +1207,12 @@ export function useComment(options: UsePostOptions = {}) {
       restoreQuerySnapshots(queryClient, context?.previousPosts);
       restoreQuerySnapshots(queryClient, context?.previousUserPosts);
     },
-    onSuccess: () => {},
+    onSuccess: (_data, input) => {
+      trackEvent("comment_posted", {
+        is_reply: !!input.rootPostId && input.rootPostId !== input.parentId,
+        has_media: (input.media?.length ?? 0) > 0,
+      });
+    },
     onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.commentsRoot(),
