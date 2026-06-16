@@ -311,7 +311,6 @@ function LegacyPostDetailScreen() {
       fullThreadCommentsData,
       isLoadingContext,
       isViewingComment,
-      revealFocusedBranch,
       showFocusedThread,
     });
   }, [
@@ -325,7 +324,6 @@ function LegacyPostDetailScreen() {
     contextComments,
     contextDepth,
     isLoadingContext,
-    revealFocusedBranch,
   ]);
 
   const availableFocusedContextCount = useMemo(() => {
@@ -358,12 +356,6 @@ function LegacyPostDetailScreen() {
     return fullCount > focusedCount;
   }, [focusedCommentId, comments, post?.comments, actualRootPost?.comments]);
 
-  const [threadActionLoading, setThreadActionLoading] = useState<
-    "context" | "full" | null
-  >(null);
-  useEffect(() => {
-    setThreadActionLoading(null);
-  }, [id]);
   const optimisticTopLevelComments = useOptimisticTopLevelComments(optimisticThreadId);
   const optimisticReplyComments = useOptimisticReplyComments(optimisticThreadId);
   const addTopLevelOptimisticComment = usePostCommentOptimisticStore(
@@ -579,7 +571,6 @@ function LegacyPostDetailScreen() {
     () => (
       <PostDetailPostSection
         actionSheetsRef={actionSheetsRef}
-        actualRootPostId={actualRootPostId}
         contentInitiallyRevealed={reveal === "true"}
         currentUserId={currentUser?.id}
         focusedCommentId={focusedCommentId}
@@ -602,14 +593,11 @@ function LegacyPostDetailScreen() {
         postEnteringStyle={postEnteringStyle}
         recentContextDone={recentContextDone}
         screenActive={screenActive}
-        setThreadActionLoading={setThreadActionLoading}
         shareServer={shareServer}
-        threadActionLoading={threadActionLoading}
         videoSyncScope={videoSyncScope}
       />
     ),
     [
-      actualRootPostId,
       currentUser?.id,
       displayPost,
       focusedCommentId,
@@ -626,7 +614,6 @@ function LegacyPostDetailScreen() {
       screenActive,
       shareServer,
       suppressHighlightAutoScroll,
-      threadActionLoading,
       videoSyncScope,
     ],
   );

@@ -1,5 +1,5 @@
 import { useCallback, useState, type RefObject } from "react";
-import { ActivityIndicator, LayoutChangeEvent, Pressable, View } from "react-native";
+import { LayoutChangeEvent, Pressable, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useUnistyles } from "react-native-unistyles";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,7 +16,6 @@ import { styles } from "./post-detail-styles";
 
 type PostDetailPostSectionProps = {
   actionSheetsRef: RefObject<PostDetailActionSheetsRef | null>;
-  actualRootPostId?: string | null;
   contentInitiallyRevealed: boolean;
   currentUserId?: string;
   focusedCommentId?: string | null;
@@ -32,15 +31,12 @@ type PostDetailPostSectionProps = {
   postEnteringStyle: any;
   recentContextDone: boolean;
   screenActive: boolean;
-  setThreadActionLoading: (value: "context" | "full" | null) => void;
   shareServer: string;
-  threadActionLoading: "context" | "full" | null;
   videoSyncScope?: string;
 };
 
 export function PostDetailPostSection({
   actionSheetsRef,
-  actualRootPostId,
   contentInitiallyRevealed,
   currentUserId,
   focusedCommentId,
@@ -56,9 +52,7 @@ export function PostDetailPostSection({
   postEnteringStyle,
   recentContextDone,
   screenActive,
-  setThreadActionLoading,
   shareServer,
-  threadActionLoading,
   videoSyncScope,
 }: PostDetailPostSectionProps) {
   const { theme } = useUnistyles();
@@ -88,7 +82,6 @@ export function PostDetailPostSection({
   const fullThreadActionAvailable = hasFullThreadBeyondFocus;
   const shouldShowThreadReminder = !!(
     focusedCommentId &&
-    actualRootPostId &&
     (contextActionAvailable || fullThreadActionAvailable)
   );
 
@@ -235,38 +228,28 @@ export function PostDetailPostSection({
             <View style={styles.threadReminderButtonSlot}>
               <Pressable
                 onPress={() => {
-                  const contextDisabled =
-                    !contextActionAvailable || threadActionLoading !== null;
-                  if (contextDisabled) return;
-                  setThreadActionLoading("context");
-                  void loadFocusedContext(10).finally(() => setThreadActionLoading(null));
+                  void loadFocusedContext(10);
                 }}
-                disabled={!contextActionAvailable || threadActionLoading !== null}
+                disabled={!contextActionAvailable}
                 style={({ pressed }) => [
                   styles.threadReminderButton,
                   pressed && styles.threadReminderButtonPressed,
-                  threadActionLoading === "context" && styles.threadReminderButtonActive,
-                  (!contextActionAvailable || threadActionLoading !== null) &&
-                    styles.threadReminderButtonDisabled,
+                  !contextActionAvailable && styles.threadReminderButtonDisabled,
                 ]}
               >
-                {threadActionLoading === "context" ? (
-                  <ActivityIndicator size="small" color={theme.colors.text.default} />
-                ) : (
-                  <Ionicons
-                    name={recentContextDone ? "checkmark-outline" : "arrow-up-outline"}
-                    size={14}
-                    color={
-                      !contextActionAvailable || threadActionLoading !== null
-                        ? theme.colors.text.subtle
-                        : theme.colors.text.default
-                    }
-                  />
-                )}
+                <Ionicons
+                  name={recentContextDone ? "checkmark-outline" : "arrow-up-outline"}
+                  size={14}
+                  color={
+                    !contextActionAvailable
+                      ? theme.colors.text.subtle
+                      : theme.colors.text.default
+                  }
+                />
                 <Text
                   size="xs"
                   weight="semibold"
-                  mode={!contextActionAvailable || threadActionLoading !== null ? "subtle" : undefined}
+                  mode={!contextActionAvailable ? "subtle" : undefined}
                 >
                   Recent context
                 </Text>
@@ -274,33 +257,23 @@ export function PostDetailPostSection({
             </View>
             <View style={styles.threadReminderButtonSlot}>
               <Pressable
-                onPress={() => {
-                  if (threadActionLoading || !fullThreadActionAvailable) return;
-                  setThreadActionLoading("full");
-                  onShowFullThread();
-                  setTimeout(() => setThreadActionLoading(null), 150);
-                }}
-                disabled={threadActionLoading !== null || !fullThreadActionAvailable}
+                onPress={onShowFullThread}
+                disabled={!fullThreadActionAvailable}
                 style={({ pressed }) => [
                   styles.threadReminderButton,
                   pressed && styles.threadReminderButtonPressed,
-                  threadActionLoading === "full" && styles.threadReminderButtonActive,
                   !fullThreadActionAvailable && styles.threadReminderButtonDisabled,
                 ]}
               >
-                {threadActionLoading === "full" ? (
-                  <ActivityIndicator size="small" color={theme.colors.text.default} />
-                ) : (
-                  <Ionicons
-                    name="list-outline"
-                    size={14}
-                    color={
-                      fullThreadActionAvailable
-                        ? theme.colors.text.default
-                        : theme.colors.text.subtle
-                    }
-                  />
-                )}
+                <Ionicons
+                  name="list-outline"
+                  size={14}
+                  color={
+                    fullThreadActionAvailable
+                      ? theme.colors.text.default
+                      : theme.colors.text.subtle
+                  }
+                />
                 <Text
                   size="xs"
                   weight="semibold"
