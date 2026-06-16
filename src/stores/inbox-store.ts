@@ -21,6 +21,7 @@ interface InboxState {
   _suppressUntil: number;
   readReplyIds: string[];
   notificationTarget: InboxNotificationTarget | null;
+  notificationNavigationStartedAt: number;
   setUnreadCount: (count: number) => void;
   setLatestInboxTimestamp: (timestamp: number) => void;
   markAsViewed: (serverTimestamp?: number) => void;
@@ -29,6 +30,7 @@ interface InboxState {
   setInboxActive: (active: boolean) => void;
   setNotificationTarget: (target: Omit<InboxNotificationTarget, "receivedAt">) => void;
   clearNotificationTarget: (notificationId?: string) => void;
+  markNotificationNavigationActive: () => void;
   resetForLogout: () => void;
 }
 
@@ -44,6 +46,7 @@ export const useInboxStore = create<InboxState>()(
       _suppressUntil: 0,
       readReplyIds: [],
       notificationTarget: null,
+      notificationNavigationStartedAt: 0,
 
       setUnreadCount: (count: number) => {
         if (Date.now() < get()._suppressUntil) return;
@@ -102,6 +105,9 @@ export const useInboxStore = create<InboxState>()(
           return { notificationTarget: null };
         }),
 
+      markNotificationNavigationActive: () =>
+        set({ notificationNavigationStartedAt: Date.now() }),
+
       resetForLogout: () =>
         set({
           unreadCount: 0,
@@ -112,6 +118,7 @@ export const useInboxStore = create<InboxState>()(
           _suppressUntil: 0,
           readReplyIds: [],
           notificationTarget: null,
+          notificationNavigationStartedAt: 0,
         }),
     }),
     {
@@ -132,6 +139,7 @@ export const useInboxStore = create<InboxState>()(
         _suppressUntil: 0,
         readReplyIds: persisted?.readReplyIds ?? [],
         notificationTarget: null,
+        notificationNavigationStartedAt: 0,
       }),
     },
   ),

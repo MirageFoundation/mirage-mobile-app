@@ -20,6 +20,7 @@ import {
   usePostCommentOptimisticStore,
 } from "@/src/stores/post-comment-optimistic-store";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
+import { useInboxStore } from "@/src/stores/inbox-store";
 import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/navigation/guarded-router";
@@ -60,19 +61,48 @@ import { usePostDetailPostState } from "./use-post-detail-post-state";
 import { usePostDetailResolvedPost } from "./use-post-detail-resolved-post";
 import { usePostDetailStickyHeader } from "./use-post-detail-sticky-header";
 import { styles } from "./post-detail-styles";
+import { isInboxNotificationNavigationActive } from "@/src/services/inbox-notifications";
 
 export default function PostDetailScreen() {
   const params = useLocalSearchParams<{
     id: string;
     highlight?: string;
     depth?: string;
+    fromNotification?: string;
   }>();
+  const notificationNavigationStartedAt = useInboxStore(
+    (s) => s.notificationNavigationStartedAt,
+  );
+
   const {
     isResolvingFocusedMediaRoute,
     routeHighlightCommentId,
     routeRootPostId,
     useImmersive,
   } = usePostDetailMediaRoute(params);
+
+  const isNotificationNavigationActive =
+    Date.now() - notificationNavigationStartedAt < 10_000 ||
+    isInboxNotificationNavigationActive();
+
+  console.log("[InboxNotifFlow] post detail route", {
+    id: params.id,
+    highlight: params.highlight,
+    fromNotification: params.fromNotification,
+    isNotificationNavigationActive,
+    routeRootPostId,
+    routeHighlightCommentId,
+    useImmersive,
+    isResolvingFocusedMediaRoute,
+  });
+
+  if (isNotificationNavigationActive && !params.fromNotification) {
+    console.log("[InboxNotifFlow] suppressing stale post detail during notification", {
+      id: params.id,
+      highlight: params.highlight,
+    });
+    return <MediaPostDetailSkeleton />;
+  }
 
   if (!useImmersive && isResolvingFocusedMediaRoute) {
     return <MediaPostDetailSkeleton />;

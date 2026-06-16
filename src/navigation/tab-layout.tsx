@@ -452,6 +452,7 @@ export default function TabLayout() {
         currentPathname.endsWith("/index");
       const isOnCreate = currentPathname.endsWith("/create");
       const isOnInbox = currentPathname.endsWith("/inbox");
+      const isOnPostDetail = currentPathname.startsWith("/post/");
       const isOnNonHomeTab =
         isOnCreate ||
         isOnInbox ||
@@ -468,6 +469,7 @@ export default function TabLayout() {
         isOnHomeTab,
         isOnCreate,
         isOnInbox,
+        isOnPostDetail,
         isOnNonHomeTab,
         isNotificationNavigationActive,
         isShareNavigationActive,
@@ -482,12 +484,19 @@ export default function TabLayout() {
         data: initialRouteDiagnostics,
         level: "info",
       });
+      console.log("[InboxNotifFlow] tab initial route check", initialRouteDiagnostics);
 
       if (
         isNotificationNavigationActive &&
         !hasInitialShareIntent &&
-        !isOnInbox
+        !isOnInbox &&
+        !isOnPostDetail
       ) {
+        console.log("[InboxNotifFlow] tab recovery replacing to inbox", {
+          pathname: currentPathname,
+          isNotificationNavigationActive,
+          isShareNavigationActive,
+        });
         Sentry.addBreadcrumb({
           category: "navigation",
           message: "Routing active notification launch to inbox tab",
