@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useIsFocused } from "@react-navigation/native";
-import { getPosts } from "@/src/api";
+import { getPosts, type PostsResponse } from "@/src/api";
 import { useAuthStore } from "@/src/stores";
 import { useAppState } from "./use-app-state";
 
@@ -36,6 +36,7 @@ export function useNewPostsChecker({
   latestPostTimestampRef.current = latestPostTimestamp;
   const hasNewPostsRef = useRef(false);
   const checkGenerationRef = useRef(0);
+  const prefetchedNewPostsResponseRef = useRef<PostsResponse | null>(null);
   const isFocused = useIsFocused();
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
 
@@ -60,6 +61,7 @@ export function useNewPostsChecker({
     setHasNewPosts(false);
     setNewPostAvatars([]);
     setNewPostCount(0);
+    prefetchedNewPostsResponseRef.current = null;
     baselineTimestampRef.current = latestPostTimestampRef.current;
   }, [feed, by, topic]);
 
@@ -84,6 +86,7 @@ export function useNewPostsChecker({
       const newerPosts = result.posts.filter((p) => p.timestamp > baseline);
 
       if (newerPosts.length > 0) {
+        prefetchedNewPostsResponseRef.current = result;
         const avatars: NewPostAvatar[] = [];
         const seen = new Set<string>();
         for (const post of newerPosts) {
@@ -123,6 +126,7 @@ export function useNewPostsChecker({
     setHasNewPosts(false);
     setNewPostAvatars([]);
     setNewPostCount(0);
+    prefetchedNewPostsResponseRef.current = null;
     baselineTimestampRef.current = null;
   }, []);
 
@@ -132,11 +136,25 @@ export function useNewPostsChecker({
     setHasNewPosts(false);
     setNewPostAvatars([]);
     setNewPostCount(0);
+    prefetchedNewPostsResponseRef.current = null;
     if (newTimestamp == null) {
       pendingBaselineRestore.current = true;
     }
     baselineTimestampRef.current = newTimestamp;
   }, []);
 
-  return { hasNewPosts, newPostAvatars, newPostCount, dismiss, resetBaseline, checkNow: checkForNewPosts };
+  const getPrefetchedNewPostsResponse = useCallback(
+    () => prefetchedNewPostsResponseRef.current,
+    [],
+  );
+
+  return {
+    hasNewPosts,
+    newPostAvatars,
+    newPostCount,
+    dismiss,
+    resetBaseline,
+    checkNow: checkForNewPosts,
+    getPrefetchedNewPostsResponse,
+  };
 }

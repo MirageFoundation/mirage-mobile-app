@@ -27,6 +27,7 @@ import {
   queryKeys,
   transformApiPosts,
   useInfinitePosts,
+  type PostsResponse,
 } from "@/src/api";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
@@ -57,14 +58,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNewPostsChecker, type NewPostAvatar } from "@/src/hooks/use-new-posts-checker";
 import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 
-const APP_STARTED_AT = Date.now();
-const COLD_START_FEED_REFRESH_WINDOW_MS = 30_000;
-const coldStartRefreshedFeedKeys = new Set<string>();
+const coldStartCheckedFeedKeys = new Set<string>();
 
 type FeedRefreshOptions = {
   fetchAllNew?: boolean;
   silent?: boolean;
   skipHaptic?: boolean;
+  prefetchedFirstPage?: PostsResponse | null;
 };
 
 export type HomeTabbedFeedRef = {
@@ -168,14 +168,14 @@ export const HomeTabbedFeed = forwardRef<
     feed: baseFeed,
     by: "magic",
     allowed_tags: allowedTags || undefined,
-  }, { pageLimit: NEXT_PAGE_SIZE });
+  }, { pageLimit: NEXT_PAGE_SIZE, disableAutoFetchWhenCached: true });
 
   const latestQuery = useInfinitePosts({
     limit: INITIAL_PAGE_SIZE,
     feed: baseFeed,
     by: "newest",
     allowed_tags: allowedTags || undefined,
-  }, { enabled: latestTabActivated, pageLimit: NEXT_PAGE_SIZE });
+  }, { enabled: latestTabActivated, pageLimit: NEXT_PAGE_SIZE, disableAutoFetchWhenCached: true });
 
   const pendingApiPosts = usePendingPostsStore((s) => s.posts);
   const postEditOverrides = usePostEditStore((s) => s.overrides);
@@ -369,7 +369,7 @@ export const HomeTabbedFeed = forwardRef<
           page,
         });
 
-      const newFirstPage = await fetchPage(1);
+      const newFirstPage = options?.prefetchedFirstPage ?? await fetchPage(1);
       let refreshedPageCount = 1;
 
       if (options?.fetchAllNew) {
@@ -531,7 +531,15 @@ export const HomeTabbedFeed = forwardRef<
     return maxTs > 0 ? maxTs : null;
   }, [activeQuery.data?.pages]);
 
-  const { hasNewPosts, newPostAvatars, newPostCount, dismiss: dismissNewPosts, resetBaseline, checkNow } = useNewPostsChecker({
+  const {
+    hasNewPosts,
+    newPostAvatars,
+    newPostCount,
+    dismiss: dismissNewPosts,
+    resetBaseline,
+    checkNow,
+    getPrefetchedNewPostsResponse,
+  } = useNewPostsChecker({
     feed: baseFeed,
     by: activeSortBy as "magic" | "newest",
     allowed_tags: allowedTags || undefined,
@@ -551,8 +559,18 @@ export const HomeTabbedFeed = forwardRef<
 
     showBars();
 
-    const minDelay = new Promise<void>((r) => setTimeout(r, 600));
-    await Promise.all([handleRefreshRef.current?.({ silent: true, fetchAllNew: true }), minDelay]);
+    const prefetchedFirstPage = getPrefetchedNewPostsResponse();
+    const minDelay = prefetchedFirstPage
+      ? Promise.resolve()
+      : new Promise<void>((r) => setTimeout(r, 600));
+    await Promise.all([
+      handleRefreshRef.current?.({
+        silent: true,
+        fetchAllNew: true,
+        prefetchedFirstPage,
+      }),
+      minDelay,
+    ]);
 
     requestAnimationFrame(() => {
       try {
@@ -561,7 +579,7 @@ export const HomeTabbedFeed = forwardRef<
       showBars();
     });
     resetBaseline(null);
-  }, [showBars, resetBaseline]);
+  }, [showBars, resetBaseline, getPrefetchedNewPostsResponse]);
 
   useImperativeHandle(
     ref,
@@ -794,7 +812,7 @@ export const HomeTabbedFeed = forwardRef<
 
   const posts = activeTabIndex === 0 ? magicPosts : latestPosts;
   const query = activeTabIndex === 0 ? magicQuery : latestQuery;
-  const coldStartRefreshKey = `${feedContext}:${allowedTags ?? "all"}:${currentUser?.walletAddress ?? "anon"}`;
+  const coldStartCheckKey = `${feedContext}:${allowedTags ?? "all"}:${currentUser?.walletAddress ?? "anon"}`;
   const seededFeedContextRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -813,15 +831,14 @@ export const HomeTabbedFeed = forwardRef<
   ]);
 
   useEffect(() => {
-    if (Date.now() - APP_STARTED_AT > COLD_START_FEED_REFRESH_WINDOW_MS) return;
-    if (coldStartRefreshedFeedKeys.has(coldStartRefreshKey)) return;
+    if (coldStartCheckedFeedKeys.has(coldStartCheckKey)) return;
     if (posts.length === 0 || query.isPending || query.isFetching || query.isFetchedAfterMount) return;
 
-    coldStartRefreshedFeedKeys.add(coldStartRefreshKey);
+    coldStartCheckedFeedKeys.add(coldStartCheckKey);
 
     Sentry.addBreadcrumb({
       category: "home-feed",
-      message: "Cold-start cached feed refresh started",
+      message: "Cold-start cached feed new-post check started",
       level: "info",
       data: {
         feed: baseFeed,
@@ -833,14 +850,15 @@ export const HomeTabbedFeed = forwardRef<
     });
 
     const timer = setTimeout(() => {
-      handleRefreshRef.current?.({ fetchAllNew: true, skipHaptic: true });
+      checkNow();
     }, 300);
 
     return () => clearTimeout(timer);
   }, [
     activeTabIndex,
     baseFeed,
-    coldStartRefreshKey,
+    checkNow,
+    coldStartCheckKey,
     currentUser?.walletAddress,
     posts.length,
     query.dataUpdatedAt,
