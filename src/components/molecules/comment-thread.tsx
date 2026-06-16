@@ -1,16 +1,38 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePreferencesStore } from "@/src/stores";
-import { View, type LayoutChangeEvent } from "react-native";
+import { Pressable, View, type LayoutChangeEvent } from "react-native";
 import Animated, {
   FadeIn,
   FadeOut,
   LinearTransition,
 } from "react-native-reanimated";
 import { StyleSheet } from "react-native-unistyles";
+import { Text } from "@/src/components/ui/primitives";
 import { CommentItem, type Comment } from "./comment-item";
 
 const EMPTY_LOADING_SET = new Set<string>();
 const EMPTY_DEPTHS: number[] = [];
+const INITIAL_VISIBLE_REPLY_DEPTH = 5;
+const REPLY_DEPTH_INCREMENT = 10;
+
+function findRelativeDepthToComment(
+  comment: Comment,
+  targetId: string,
+  currentRelativeDepth: number,
+): number | null {
+  if (comment.id === targetId) return currentRelativeDepth;
+
+  for (const reply of comment.replies ?? []) {
+    const replyDepth = findRelativeDepthToComment(
+      reply,
+      targetId,
+      currentRelativeDepth + 1,
+    );
+    if (replyDepth !== null) return replyDepth;
+  }
+
+  return null;
+}
 
 type CommentThreadProps = {
   comment: Comment;
@@ -51,6 +73,9 @@ type CommentThreadProps = {
   onHighlightedLayout?: (event: LayoutChangeEvent) => void;
   showDivider?: boolean;
   focusedContextMode?: boolean;
+  branchRootDepth?: number;
+  visibleReplyDepth?: number;
+  onLoadMoreReplyDepth?: () => void;
 };
 
 export const CommentThread = ({
@@ -72,10 +97,27 @@ export const CommentThread = ({
   onHighlightedLayout,
   showDivider = true,
   focusedContextMode = false,
+  branchRootDepth: branchRootDepthProp,
+  visibleReplyDepth: visibleReplyDepthProp,
+  onLoadMoreReplyDepth,
 }: CommentThreadProps) => {
   const autoCollapseThreshold = usePreferencesStore(
     (s) => s.autoCollapseThreshold,
   );
+  const [localVisibleReplyDepth, setLocalVisibleReplyDepth] = useState(
+    INITIAL_VISIBLE_REPLY_DEPTH,
+  );
+  const branchRootDepth = branchRootDepthProp ?? depth;
+  const visibleReplyDepth = visibleReplyDepthProp ?? localVisibleReplyDepth;
+  const handleLoadMoreReplyDepth = useCallback(() => {
+    if (onLoadMoreReplyDepth) {
+      onLoadMoreReplyDepth();
+      return;
+    }
+    setLocalVisibleReplyDepth((currentDepth) =>
+      currentDepth + REPLY_DEPTH_INCREMENT,
+    );
+  }, [onLoadMoreReplyDepth]);
   const score = comment.likes;
   const shouldAutoCollapse =
     autoCollapseThreshold !== null && score <= autoCollapseThreshold;
@@ -90,6 +132,17 @@ export const CommentThread = ({
     };
     return containsComment(comment);
   }, [comment, highlightedCommentId]);
+  const highlightedRelativeDepth = useMemo(() => {
+    if (!highlightedCommentId) return null;
+    return findRelativeDepthToComment(comment, highlightedCommentId, 0);
+  }, [comment, highlightedCommentId]);
+
+  useEffect(() => {
+    if (visibleReplyDepthProp !== undefined || highlightedRelativeDepth === null) return;
+    setLocalVisibleReplyDepth((currentDepth) =>
+      Math.max(currentDepth, highlightedRelativeDepth),
+    );
+  }, [highlightedRelativeDepth, visibleReplyDepthProp]);
 
   useEffect(() => {
     if (containsHighlightedComment) {
@@ -158,6 +211,10 @@ export const CommentThread = ({
           exiting={FadeOut.duration(120)}
         >
           {replies.map((reply, idx) => {
+            const replyDepth = depth + 1;
+            const replyRelativeDepth = replyDepth - branchRootDepth;
+            if (replyRelativeDepth > visibleReplyDepth) return null;
+
             const replyIsLast = idx === replies.length - 1;
             // Once we descend past the focused comment, its actual
             // replies render as a normal thread, not parent chain.
@@ -179,7 +236,7 @@ export const CommentThread = ({
               <CommentThread
                 key={reply.id}
                 comment={reply}
-                depth={depth + 1}
+                depth={replyDepth}
                 maxDepth={maxDepth}
                 activeDepths={replyActiveDepths}
                 isLastChild={replyIsLast}
@@ -196,9 +253,27 @@ export const CommentThread = ({
                 onHighlightedLayout={onHighlightedLayout}
                 showDivider={false}
                 focusedContextMode={childInFocusedContext}
+                branchRootDepth={branchRootDepth}
+                visibleReplyDepth={visibleReplyDepth}
+                onLoadMoreReplyDepth={handleLoadMoreReplyDepth}
               />
             );
           })}
+          {depth + 1 - branchRootDepth > visibleReplyDepth ? (
+            <Pressable
+              onPress={handleLoadMoreReplyDepth}
+              style={[
+                styles.loadMoreRepliesButton,
+                { marginLeft: Math.min(12 + depth * 14, 96) },
+              ]}
+            >
+              <Text size="xs" weight="semibold" mode="brand">
+                {visibleReplyDepth === INITIAL_VISIBLE_REPLY_DEPTH
+                  ? "Show more replies"
+                  : "Load more replies"}
+              </Text>
+            </Pressable>
+          ) : null}
         </Animated.View>
       )}
 
@@ -210,6 +285,11 @@ export const CommentThread = ({
 const styles = StyleSheet.create((theme) => ({
   container: {},
   repliesContainer: {},
+  loadMoreRepliesButton: {
+    alignSelf: "flex-start",
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
   divider: {
     height: 5,
     backgroundColor: theme.colors.background.subtle,
