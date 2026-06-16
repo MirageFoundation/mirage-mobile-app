@@ -96,10 +96,53 @@ export default function PostDetailScreen() {
     isResolvingFocusedMediaRoute,
   });
 
+  useEffect(() => {
+    if (!params.fromNotification && !isNotificationNavigationActive) return;
+    Sentry.addBreadcrumb({
+      category: "navigation",
+      message: "Post detail rendered during notification flow",
+      level: "info",
+      data: {
+        id: params.id,
+        highlight: params.highlight,
+        fromNotification: params.fromNotification,
+        isNotificationNavigationActive,
+        routeRootPostId,
+        routeHighlightCommentId,
+        useImmersive,
+        isResolvingFocusedMediaRoute,
+      },
+    });
+  }, [
+    isNotificationNavigationActive,
+    isResolvingFocusedMediaRoute,
+    params.fromNotification,
+    params.highlight,
+    params.id,
+    routeHighlightCommentId,
+    routeRootPostId,
+    useImmersive,
+  ]);
+
   if (isNotificationNavigationActive && !params.fromNotification) {
     console.log("[InboxNotifFlow] suppressing stale post detail during notification", {
       id: params.id,
       highlight: params.highlight,
+    });
+    Sentry.captureMessage("Stale post detail suppressed during notification flow", {
+      level: "warning",
+      tags: {
+        feature: "inbox-notifications",
+        operation: "stale-post-detail-suppressed",
+      },
+      extra: {
+        id: params.id,
+        highlight: params.highlight,
+        routeRootPostId,
+        routeHighlightCommentId,
+        useImmersive,
+        isResolvingFocusedMediaRoute,
+      },
     });
     return <MediaPostDetailSkeleton />;
   }

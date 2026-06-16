@@ -197,6 +197,24 @@ export function InboxScreen() {
   }, [previewReply, replies]);
 
   useEffect(() => {
+    if (activeNotificationId) {
+      Sentry.addBreadcrumb({
+        category: "inbox",
+        message: "Inbox notification state changed",
+        level: "info",
+        data: {
+          routeNotificationId,
+          routeReplyId,
+          routeOpenReply,
+          activeNotificationId,
+          targetReplyId,
+          hasPreviewReply: !!previewReply,
+          repliesCount: replies.length,
+          visibleRepliesCount: visibleReplies.length,
+          hasFetchedTargetReply,
+        },
+      });
+    }
     console.log("[InboxNotifFlow] inbox state", {
       routeNotificationId,
       routeReplyId,
@@ -427,6 +445,12 @@ export function InboxScreen() {
         activeNotificationId,
         targetReplyId,
       });
+      Sentry.addBreadcrumb({
+        category: "inbox",
+        message: "Inbox auto-open skipped by route flag",
+        level: "info",
+        data: { activeNotificationId, targetReplyId, routeOpenReply },
+      });
       return;
     }
     if (!activeNotificationId || !targetReplyId) return;
@@ -437,6 +461,18 @@ export function InboxScreen() {
         targetReplyId,
         visibleRepliesCount: visibleReplies.length,
         hasTargetReply: !!targetReply,
+      });
+      Sentry.addBreadcrumb({
+        category: "inbox",
+        message: "Inbox auto-open waiting for target reply",
+        level: "warning",
+        data: {
+          activeNotificationId,
+          targetReplyId,
+          visibleRepliesCount: visibleReplies.length,
+          hasTargetReply: !!targetReply,
+          hasPreviewReply: !!previewReply,
+        },
       });
       return;
     }
@@ -459,6 +495,21 @@ export function InboxScreen() {
       activeNotificationId,
       targetReplyId,
       rootPostId: targetReply.root_post_id,
+    });
+    Sentry.captureMessage("Inbox fallback auto-opening notification reply", {
+      level: "info",
+      tags: {
+        feature: "inbox-notifications",
+        operation: "inbox-fallback-auto-open",
+      },
+      extra: {
+        notificationId: activeNotificationId,
+        replyId: targetReply.reply_id,
+        rootPostId: targetReply.root_post_id,
+        routeOpenReply,
+        visibleRepliesCount: visibleReplies.length,
+        hasPreviewReply: !!previewReply,
+      },
     });
 
     Sentry.addBreadcrumb({
@@ -493,6 +544,7 @@ export function InboxScreen() {
     activeNotificationId,
     clearNotificationTarget,
     handleItemPress,
+    previewReply,
     routeOpenReply,
     targetReplyId,
     visibleReplies,

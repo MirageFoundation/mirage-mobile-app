@@ -486,6 +486,17 @@ export default function TabLayout() {
       });
       console.log("[InboxNotifFlow] tab initial route check", initialRouteDiagnostics);
 
+      if (isNotificationNavigationActive && isOnPostDetail) {
+        Sentry.captureMessage("Tab initial route recovery skipped on notification post detail", {
+          level: "info",
+          tags: {
+            feature: "inbox-notifications",
+            operation: "tab-route-recovery-skip-post-detail",
+          },
+          extra: initialRouteDiagnostics,
+        });
+      }
+
       if (
         isNotificationNavigationActive &&
         !hasInitialShareIntent &&
@@ -506,6 +517,14 @@ export default function TabLayout() {
             isShareNavigationActive,
           },
           level: "info",
+        });
+        Sentry.captureMessage("Tab initial route recovery replacing to inbox", {
+          level: "warning",
+          tags: {
+            feature: "inbox-notifications",
+            operation: "tab-route-recovery-to-inbox",
+          },
+          extra: initialRouteDiagnostics,
         });
         replaceBypass("/(tabs)/inbox");
         return;

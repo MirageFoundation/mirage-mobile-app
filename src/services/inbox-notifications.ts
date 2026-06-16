@@ -1072,6 +1072,25 @@ function handleNotificationResponse(
         hasPreviewReply: !!previewReply,
         hasReplyId: !!replyId,
         hasRootPostId: !!rootPostId,
+        targetType,
+        canOpenReplyDetailImmediately,
+      },
+    });
+    Sentry.captureMessage("Inbox notification target resolved", {
+      level: "info",
+      tags: {
+        feature: "inbox-notifications",
+        operation: "target-resolved",
+        immediate_detail: String(canOpenReplyDetailImmediately),
+      },
+      extra: {
+        notificationId,
+        replyId,
+        rootPostId,
+        targetType,
+        hasPreviewReply: !!previewReply,
+        notificationDataKeys: getNotificationDataKeys(notificationData),
+        ...getNavigationReadinessDebugData(),
       },
     });
     if (!replyId && !rootPostId && !previewReply) {
@@ -1094,6 +1113,12 @@ function handleNotificationResponse(
       console.log("[InboxNotifFlow] prefetch inbox start", { notificationId, address });
       await fetchAndSeedInboxCache(address, 25);
       console.log("[InboxNotifFlow] prefetch inbox done", { notificationId });
+      Sentry.addBreadcrumb({
+        category: "notifications",
+        message: "Inbox prefetch before notification navigation succeeded",
+        level: "info",
+        data: { notificationId },
+      });
     };
     const navigateToInbox = async () => {
       markInboxNotificationNavigationActive();
@@ -1130,6 +1155,18 @@ function handleNotificationResponse(
           rootPostId,
           openReply: canOpenReplyDetailImmediately ? "0" : "1",
         });
+        Sentry.addBreadcrumb({
+          category: "navigation",
+          message: "Replacing to inbox for notification",
+          level: "info",
+          data: {
+            notificationId,
+            replyId,
+            rootPostId,
+            openReply: canOpenReplyDetailImmediately ? "0" : "1",
+            ...getNavigationReadinessDebugData(),
+          },
+        });
         replaceBypass({
           pathname: "/(tabs)/inbox",
           params: {
@@ -1146,7 +1183,24 @@ function handleNotificationResponse(
           rootPostId,
           canOpenReplyDetailImmediately,
         });
-        if (!canOpenReplyDetailImmediately || !replyId || !rootPostId) return;
+        if (!canOpenReplyDetailImmediately || !replyId || !rootPostId) {
+          Sentry.captureMessage("Inbox notification detail push skipped", {
+            level: "warning",
+            tags: {
+              feature: "inbox-notifications",
+              operation: "detail-push-skipped",
+            },
+            extra: {
+              notificationId,
+              replyId,
+              rootPostId,
+              targetType,
+              canOpenReplyDetailImmediately,
+              ...getNavigationReadinessDebugData(),
+            },
+          });
+          return;
+        }
         markInboxNotificationNavigationActive();
         if (previewReply) {
           seedFocusedCommentFromInbox(
@@ -1174,6 +1228,21 @@ function handleNotificationResponse(
           replyId,
           rootPostId,
           hasPreviewReply: !!previewReply,
+        });
+        Sentry.captureMessage("Inbox notification reply detail pushed", {
+          level: "info",
+          tags: {
+            feature: "inbox-notifications",
+            operation: "detail-push",
+          },
+          extra: {
+            notificationId,
+            replyId,
+            rootPostId,
+            targetType,
+            hasPreviewReply: !!previewReply,
+            ...getNavigationReadinessDebugData(),
+          },
         });
         useInboxStore.getState().clearNotificationTarget(notificationId);
         clearPendingInboxNotificationNavigation(notificationId);
@@ -1212,6 +1281,12 @@ function handleNotificationResponse(
         dispatchNavigate();
         if (canOpenReplyDetailImmediately) {
           console.log("[InboxNotifFlow] scheduling detail push", { notificationId, delayMs: 50 });
+          Sentry.addBreadcrumb({
+            category: "navigation",
+            message: "Scheduling notification reply detail push",
+            level: "info",
+            data: { notificationId, replyId, rootPostId, delayMs: 50 },
+          });
           setTimeout(dispatchReplyDetail, 50);
         }
       } catch (error) {
