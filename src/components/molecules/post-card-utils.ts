@@ -333,7 +333,10 @@ export function resolvePostContent(
       }
     : resolvedMedia;
 
-  const isBodyUrlRenderedAsMedia = bodyVideoUrl || (extractedUrl && getMediaTypeFromUrl(extractedUrl) === "gif");
+  const isBodyUrlRenderedAsMedia =
+    !!bodyVideoUrl ||
+    (!!extractedUrl &&
+      (getMediaTypeFromUrl(extractedUrl) === "gif" || isDirectMediaUrl(extractedUrl)));
 
   return {
     extractedUrl,
