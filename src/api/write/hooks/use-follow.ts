@@ -31,12 +31,22 @@ const addFollowBreadcrumb = (
   });
 };
 
-const markPostsStaleWithoutRefetch = (queryClient: ReturnType<typeof useQueryClient>) => {
+const markPostsStaleAfterFollow = (queryClient: ReturnType<typeof useQueryClient>) => {
   queryClient.invalidateQueries({
     queryKey: queryKeys.postsRoot(),
     refetchType: "none",
   });
-  addFollowBreadcrumb("Posts marked stale without active refetch");
+  queryClient.invalidateQueries({
+    queryKey: queryKeys.postsRoot(),
+    refetchType: "active",
+    predicate: (query) => {
+      const filters = query.queryKey[1];
+      return !!filters
+        && typeof filters === "object"
+        && (filters as { feed?: unknown }).feed === "following";
+    },
+  });
+  addFollowBreadcrumb("Posts marked stale; active following feeds refetched");
 };
 
 // ============================================
@@ -76,8 +86,8 @@ export function useFollowUser(options: UseFollowOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      // Following can affect feed composition, but don't refetch the visible feed.
-      markPostsStaleWithoutRefetch(queryClient);
+      // Following changes feed composition; keep home stale and refresh active Following feeds.
+      markPostsStaleAfterFollow(queryClient);
     },
   });
 }
@@ -101,7 +111,7 @@ export function useUnfollowUser(options: UseFollowOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      markPostsStaleWithoutRefetch(queryClient);
+      markPostsStaleAfterFollow(queryClient);
     },
   });
 }
@@ -130,8 +140,8 @@ export function useFollowTopic(options: UseFollowOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      // Topic following can affect feed composition, but don't refetch the visible feed.
-      markPostsStaleWithoutRefetch(queryClient);
+      // Topic follows change feed composition; keep home stale and refresh active Following feeds.
+      markPostsStaleAfterFollow(queryClient);
     },
   });
 }
@@ -155,7 +165,7 @@ export function useUnfollowTopic(options: UseFollowOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      markPostsStaleWithoutRefetch(queryClient);
+      markPostsStaleAfterFollow(queryClient);
     },
   });
 }
@@ -183,8 +193,8 @@ export function useEnableAgent(options: UseFollowOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      // Enabling agents affects content filtering, but don't refetch the visible feed.
-      markPostsStaleWithoutRefetch(queryClient);
+      // Agent changes affect filtering; keep home stale and refresh active Following feeds.
+      markPostsStaleAfterFollow(queryClient);
     },
   });
 }
@@ -208,7 +218,7 @@ export function useDisableAgent(options: UseFollowOptions = {}) {
           queryKey: queryKeys.profile(address),
         });
       }
-      markPostsStaleWithoutRefetch(queryClient);
+      markPostsStaleAfterFollow(queryClient);
     },
   });
 }
@@ -322,7 +332,7 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
             refetchType: "active",
           });
         }
-        markPostsStaleWithoutRefetch(queryClient);
+        markPostsStaleAfterFollow(queryClient);
       }, 5000);
     },
     onError: (err, { topic, isCurrentlyFollowing }, context) => {
@@ -356,7 +366,7 @@ export function useToggleFollowTopic(options: UseFollowOptions = {}) {
       }
     },
     onSettled: (_data, error) => {
-      markPostsStaleWithoutRefetch(queryClient);
+      markPostsStaleAfterFollow(queryClient);
 
       if (error) {
         const parsed = parseApiError(error);
@@ -484,7 +494,7 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
             refetchType: "none",
           });
         }
-        markPostsStaleWithoutRefetch(queryClient);
+        markPostsStaleAfterFollow(queryClient);
       }, 5000);
     },
     onError: (err, { userAddress, isCurrentlyFollowing }, context) => {
@@ -518,7 +528,7 @@ export function useToggleFollowUser(options: UseFollowOptions = {}) {
       }
     },
     onSettled: (_data, error) => {
-      markPostsStaleWithoutRefetch(queryClient);
+      markPostsStaleAfterFollow(queryClient);
 
       if (error) {
         const parsed = parseApiError(error);

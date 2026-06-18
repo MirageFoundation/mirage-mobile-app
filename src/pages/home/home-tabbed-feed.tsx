@@ -411,18 +411,9 @@ export const HomeTabbedFeed = forwardRef<
         refreshedPageCount = newPages.length;
         }
       } else {
-        queryClient.setQueryData(postsQueryKey, (oldData: any) => {
-          if (!oldData || sortBy === "magic") {
-            return {
-              pages: [newFirstPage],
-              pageParams: [1],
-            };
-          }
-          return {
-            ...oldData,
-            pages: [newFirstPage, ...oldData.pages.slice(1)],
-            pageParams: [1, ...oldData.pageParams.slice(1)],
-          };
+        queryClient.setQueryData(postsQueryKey, {
+          pages: [newFirstPage],
+          pageParams: [1],
         });
       }
 
