@@ -110,8 +110,17 @@ export const HomeTabbedFeed = forwardRef<
   const dismissNewPostsRef = useRef<(() => void) | null>(null);
   const handleRefreshRef = useRef<((options?: FeedRefreshOptions) => Promise<void>) | null>(null);
   const triggerPullRefresh = useCallback(() => {
+    Sentry.addBreadcrumb({
+      category: "home-feed",
+      message: "Android pull-to-refresh triggered",
+      level: "info",
+      data: {
+        feed: baseFeed,
+        tab: activeTabIndexRef.current === 0 ? "magic" : "latest",
+      },
+    });
     handleRefreshRef.current?.();
-  }, []);
+  }, [baseFeed]);
 
   const { pullDistance, pullGesture } = useAndroidPullIndicator({
     scrollY: scrollOffsetY,
