@@ -417,6 +417,22 @@ export function InboxScreen() {
         return;
       }
 
+      if (!reply.reply_content?.trim()) {
+        Sentry.addBreadcrumb({
+          category: "inbox",
+          message: "Inbox item opened post without comment highlight",
+          level: "info",
+          data: {
+            replyId: reply.reply_id,
+            rootPostId: reply.root_post_id,
+            parentId: reply.parent_id,
+            type: reply.type ?? "reply",
+          },
+        });
+        routerRef.current.push(`/post/${reply.root_post_id}`);
+        return;
+      }
+
       Sentry.addBreadcrumb({
         category: "inbox",
         message: "Inbox reply opened focused comment detail",
@@ -428,11 +444,6 @@ export function InboxScreen() {
           type: reply.type ?? "reply",
         },
       });
-      if (!reply.reply_content?.trim()) {
-        routerRef.current.push(`/post/${reply.root_post_id}`);
-        return;
-      }
-
       seedFocusedComment(reply);
       routerRef.current.push(`/post/${reply.root_post_id}?highlight=${reply.reply_id}`);
     },

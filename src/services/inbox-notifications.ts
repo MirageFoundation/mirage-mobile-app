@@ -1076,9 +1076,23 @@ function handleNotificationResponse(
         hasReplyId: !!replyId,
         hasRootPostId: !!rootPostId,
         targetType,
+        previewReplyHasContent,
         canOpenReplyDetailImmediately,
       },
     });
+    if (previewReply && replyId && rootPostId && !previewReplyHasContent) {
+      Sentry.addBreadcrumb({
+        category: "notifications",
+        message: "Inbox notification will use inbox tap behavior without highlight",
+        level: "info",
+        data: {
+          notificationId,
+          replyId,
+          rootPostId,
+          targetType,
+        },
+      });
+    }
     Sentry.captureMessage("Inbox notification target resolved", {
       level: "info",
       tags: {
@@ -1092,6 +1106,7 @@ function handleNotificationResponse(
         rootPostId,
         targetType,
         hasPreviewReply: !!previewReply,
+        previewReplyHasContent,
         notificationDataKeys: getNotificationDataKeys(notificationData),
         ...getNavigationReadinessDebugData(),
       },
