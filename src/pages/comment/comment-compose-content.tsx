@@ -256,6 +256,9 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
 
   useEffect(() => {
     return () => {
+      if (!didSubmitRef.current) {
+        setWasDismissed(true);
+      }
       if (!isEditMode && postId && !didSubmitRef.current) {
         saveDraft(postId, replyToId ?? null, {
           text: textRef.current,
@@ -264,7 +267,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
         });
       }
     };
-  }, [isEditMode, postId, replyToId, saveDraft]);
+  }, [isEditMode, postId, replyToId, saveDraft, setWasDismissed]);
 
   const replyPreview = useMemo(() => {
     if (!replyToContent) return null;
