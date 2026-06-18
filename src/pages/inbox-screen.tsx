@@ -35,9 +35,14 @@ export function InboxScreen() {
   const { theme } = useUnistyles();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { fromNotification: routeNotificationId } = useLocalSearchParams<{
+  const {
+    fromNotification: routeNotificationId,
+    replyId: routeReplyId,
+    openReply: routeOpenReply,
+  } = useLocalSearchParams<{
     fromNotification?: string;
     replyId?: string;
+    openReply?: string;
   }>();
   const isLoggedIn = !!useAuthStore((s) => s.user);
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
@@ -176,9 +181,9 @@ export function InboxScreen() {
     return items;
   }, [data]);
 
-  const activeNotificationId = notificationTarget?.notificationId;
-  const arrivalNotificationId = activeNotificationId ?? routeNotificationId;
-  const targetReplyId = notificationTarget?.replyId;
+  const activeNotificationId = notificationTarget?.notificationId ?? routeNotificationId;
+  const arrivalNotificationId = activeNotificationId;
+  const targetReplyId = notificationTarget?.replyId ?? routeReplyId;
   const previewReply = notificationTarget?.previewReply ?? null;
   const hasFetchedTargetReply = useMemo(
     () => (targetReplyId ? replies.some((item) => item.reply_id === targetReplyId) : false),
@@ -191,7 +196,50 @@ export function InboxScreen() {
     return [previewReply, ...replies];
   }, [previewReply, replies]);
 
+  useEffect(() => {
+    if (activeNotificationId) {
+      Sentry.addBreadcrumb({
+        category: "inbox",
+        message: "Inbox notification state changed",
+        level: "info",
+        data: {
+          routeNotificationId,
+          routeReplyId,
+          routeOpenReply,
+          activeNotificationId,
+          targetReplyId,
+          hasPreviewReply: !!previewReply,
+          repliesCount: replies.length,
+          visibleRepliesCount: visibleReplies.length,
+          hasFetchedTargetReply,
+        },
+      });
+    }
+    console.log("[InboxNotifFlow] inbox state", {
+      routeNotificationId,
+      routeReplyId,
+      routeOpenReply,
+      activeNotificationId,
+      targetReplyId,
+      hasPreviewReply: !!previewReply,
+      repliesCount: replies.length,
+      visibleRepliesCount: visibleReplies.length,
+      hasFetchedTargetReply,
+    });
+  }, [
+    activeNotificationId,
+    hasFetchedTargetReply,
+    previewReply,
+    replies.length,
+    routeNotificationId,
+    routeOpenReply,
+    routeReplyId,
+    targetReplyId,
+    visibleReplies.length,
+  ]);
+
   const confirmedNotificationArrivalsRef = useRef(new Set<string>());
+  const autoOpenedNotificationRepliesRef = useRef(new Set<string>());
   useFocusEffect(
     useCallback(() => {
       if (!arrivalNotificationId) return;
@@ -390,6 +438,169 @@ export function InboxScreen() {
     },
     [markReplyAsRead, seedFocusedComment],
   );
+
+  useEffect(() => {
+    if (routeOpenReply === "0") {
+      console.log("[InboxNotifFlow] inbox auto-open skipped by route flag", {
+        activeNotificationId,
+        targetReplyId,
+      });
+      Sentry.addBreadcrumb({
+        category: "inbox",
+        message: "Inbox auto-open skipped by route flag",
+        level: "info",
+        data: { activeNotificationId, targetReplyId, routeOpenReply },
+      });
+      return;
+    }
+    if (!activeNotificationId || !targetReplyId) return;
+    const targetReply = visibleReplies.find((reply) => reply.reply_id === targetReplyId);
+    const isActionNotification =
+      targetReply?.type === "donation" ||
+      targetReply?.type === "follow" ||
+      targetReply?.type === "subscription_gift";
+    if (targetReply && isActionNotification) {
+      const autoOpenKey = `${activeNotificationId}:${targetReplyId}`;
+      const autoOpenedNotificationReplies = autoOpenedNotificationRepliesRef.current;
+      if (autoOpenedNotificationReplies.has(autoOpenKey)) {
+        console.log("[InboxNotifFlow] inbox action notification already handled", { autoOpenKey });
+        return;
+      }
+      autoOpenedNotificationReplies.add(autoOpenKey);
+      console.log("[InboxNotifFlow] inbox action notification -> target", {
+        activeNotificationId,
+        targetReplyId,
+        type: targetReply.type,
+        replyOwner: targetReply.reply_owner,
+      });
+      Sentry.captureMessage("Inbox action notification opened", {
+        level: "info",
+        tags: {
+          feature: "inbox-notifications",
+          operation: "inbox-action-notification-open",
+          notification_type: targetReply.type ?? "unknown",
+        },
+        extra: {
+          notificationId: activeNotificationId,
+          replyId: targetReply.reply_id,
+          type: targetReply.type,
+          replyOwner: targetReply.reply_owner,
+          routeOpenReply,
+          visibleRepliesCount: visibleReplies.length,
+        },
+      });
+
+      let didRun = false;
+      let cancelled = false;
+      const task = InteractionManager.runAfterInteractions(() => {
+        if (cancelled) return;
+        didRun = true;
+        clearNotificationTarget(activeNotificationId);
+        handleItemPress(targetReply);
+      });
+
+      return () => {
+        cancelled = true;
+        task.cancel();
+        if (!didRun) {
+          autoOpenedNotificationReplies.delete(autoOpenKey);
+        }
+      };
+    }
+    if (!targetReply?.reply_content?.trim()) {
+      console.log("[InboxNotifFlow] inbox auto-open waiting for target reply", {
+        activeNotificationId,
+        targetReplyId,
+        visibleRepliesCount: visibleReplies.length,
+        hasTargetReply: !!targetReply,
+      });
+      Sentry.addBreadcrumb({
+        category: "inbox",
+        message: "Inbox auto-open waiting for target reply",
+        level: "warning",
+        data: {
+          activeNotificationId,
+          targetReplyId,
+          visibleRepliesCount: visibleReplies.length,
+          hasTargetReply: !!targetReply,
+          hasPreviewReply: !!previewReply,
+        },
+      });
+      return;
+    }
+    if (
+      targetReply.type === "donation" ||
+      targetReply.type === "follow" ||
+      targetReply.type === "subscription_gift"
+    ) {
+      return;
+    }
+
+    const autoOpenKey = `${activeNotificationId}:${targetReplyId}`;
+    const autoOpenedNotificationReplies = autoOpenedNotificationRepliesRef.current;
+    if (autoOpenedNotificationReplies.has(autoOpenKey)) {
+      console.log("[InboxNotifFlow] inbox auto-open already handled", { autoOpenKey });
+      return;
+    }
+    autoOpenedNotificationReplies.add(autoOpenKey);
+    console.log("[InboxNotifFlow] inbox auto-open -> detail", {
+      activeNotificationId,
+      targetReplyId,
+      rootPostId: targetReply.root_post_id,
+    });
+    Sentry.captureMessage("Inbox fallback auto-opening notification reply", {
+      level: "info",
+      tags: {
+        feature: "inbox-notifications",
+        operation: "inbox-fallback-auto-open",
+      },
+      extra: {
+        notificationId: activeNotificationId,
+        replyId: targetReply.reply_id,
+        rootPostId: targetReply.root_post_id,
+        routeOpenReply,
+        visibleRepliesCount: visibleReplies.length,
+        hasPreviewReply: !!previewReply,
+      },
+    });
+
+    Sentry.addBreadcrumb({
+      category: "inbox",
+      message: "Auto-opening notification reply from inbox",
+      level: "info",
+      data: {
+        notificationId: activeNotificationId,
+        replyId: targetReply.reply_id,
+        rootPostId: targetReply.root_post_id,
+        type: targetReply.type ?? "reply",
+      },
+    });
+
+    let didRun = false;
+    let cancelled = false;
+    const task = InteractionManager.runAfterInteractions(() => {
+      if (cancelled) return;
+      didRun = true;
+      clearNotificationTarget(activeNotificationId);
+      handleItemPress(targetReply);
+    });
+
+    return () => {
+      cancelled = true;
+      task.cancel();
+      if (!didRun) {
+        autoOpenedNotificationReplies.delete(autoOpenKey);
+      }
+    };
+  }, [
+    activeNotificationId,
+    clearNotificationTarget,
+    handleItemPress,
+    previewReply,
+    routeOpenReply,
+    targetReplyId,
+    visibleReplies,
+  ]);
 
   const lastFetchTime = useRef(0);
   const isFetchingRef = useRef(false);

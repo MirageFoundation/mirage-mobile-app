@@ -98,7 +98,6 @@ type BuildPostDetailCommentsInput = {
   fullThreadCommentsData?: CommentsResponse;
   isLoadingContext: boolean;
   isViewingComment: boolean;
-  revealFocusedBranch?: boolean;
   showFocusedThread: boolean;
 };
 
@@ -112,7 +111,6 @@ export function buildPostDetailComments({
   fullThreadCommentsData,
   isLoadingContext,
   isViewingComment,
-  revealFocusedBranch = false,
   showFocusedThread,
 }: BuildPostDetailCommentsInput): Comment[] {
   if (!showFocusedThread && isViewingComment) {
@@ -147,10 +145,16 @@ export function buildPostDetailComments({
       ? fullThreadCommentsData?.children ?? []
       : commentsData?.children ?? [];
     const supplementalComments = transformApiComments(supplementalSource);
-    const expandedFocusedBranch = revealFocusedBranch
-      ? findTopLevelBranchForComment(supplementalComments, focusedCommentId)
-      : null;
-    if (expandedFocusedBranch) return [expandedFocusedBranch];
+    const expandedFocusedBranch = findTopLevelBranchForComment(
+      supplementalComments,
+      focusedCommentId,
+    );
+    if (expandedFocusedBranch) {
+      return appendSupplementalCommentsForMinimum(
+        [expandedFocusedBranch],
+        supplementalComments,
+      );
+    }
     const focusedFromFullBranch = context.length > 5
       ? findCommentById(supplementalComments, focusedCommentId)
       : null;

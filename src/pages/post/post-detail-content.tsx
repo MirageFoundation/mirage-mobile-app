@@ -20,6 +20,7 @@ import {
   usePostCommentOptimisticStore,
 } from "@/src/stores/post-comment-optimistic-store";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
+import { useInboxStore } from "@/src/stores/inbox-store";
 import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/navigation/guarded-router";
@@ -60,19 +61,91 @@ import { usePostDetailPostState } from "./use-post-detail-post-state";
 import { usePostDetailResolvedPost } from "./use-post-detail-resolved-post";
 import { usePostDetailStickyHeader } from "./use-post-detail-sticky-header";
 import { styles } from "./post-detail-styles";
+import { isInboxNotificationNavigationActive } from "@/src/services/inbox-notifications";
 
 export default function PostDetailScreen() {
   const params = useLocalSearchParams<{
     id: string;
     highlight?: string;
     depth?: string;
+    fromNotification?: string;
   }>();
+  const notificationNavigationStartedAt = useInboxStore(
+    (s) => s.notificationNavigationStartedAt,
+  );
+
   const {
     isResolvingFocusedMediaRoute,
     routeHighlightCommentId,
     routeRootPostId,
     useImmersive,
   } = usePostDetailMediaRoute(params);
+
+  const isNotificationNavigationActive =
+    Date.now() - notificationNavigationStartedAt < 10_000 ||
+    isInboxNotificationNavigationActive();
+
+  console.log("[InboxNotifFlow] post detail route", {
+    id: params.id,
+    highlight: params.highlight,
+    fromNotification: params.fromNotification,
+    isNotificationNavigationActive,
+    routeRootPostId,
+    routeHighlightCommentId,
+    useImmersive,
+    isResolvingFocusedMediaRoute,
+  });
+
+  useEffect(() => {
+    if (!params.fromNotification && !isNotificationNavigationActive) return;
+    Sentry.addBreadcrumb({
+      category: "navigation",
+      message: "Post detail rendered during notification flow",
+      level: "info",
+      data: {
+        id: params.id,
+        highlight: params.highlight,
+        fromNotification: params.fromNotification,
+        isNotificationNavigationActive,
+        routeRootPostId,
+        routeHighlightCommentId,
+        useImmersive,
+        isResolvingFocusedMediaRoute,
+      },
+    });
+  }, [
+    isNotificationNavigationActive,
+    isResolvingFocusedMediaRoute,
+    params.fromNotification,
+    params.highlight,
+    params.id,
+    routeHighlightCommentId,
+    routeRootPostId,
+    useImmersive,
+  ]);
+
+  if (isNotificationNavigationActive && !params.fromNotification) {
+    console.log("[InboxNotifFlow] suppressing stale post detail during notification", {
+      id: params.id,
+      highlight: params.highlight,
+    });
+    Sentry.captureMessage("Stale post detail suppressed during notification flow", {
+      level: "warning",
+      tags: {
+        feature: "inbox-notifications",
+        operation: "stale-post-detail-suppressed",
+      },
+      extra: {
+        id: params.id,
+        highlight: params.highlight,
+        routeRootPostId,
+        routeHighlightCommentId,
+        useImmersive,
+        isResolvingFocusedMediaRoute,
+      },
+    });
+    return <MediaPostDetailSkeleton />;
+  }
 
   if (!useImmersive && isResolvingFocusedMediaRoute) {
     return <MediaPostDetailSkeleton />;
@@ -311,7 +384,6 @@ function LegacyPostDetailScreen() {
       fullThreadCommentsData,
       isLoadingContext,
       isViewingComment,
-      revealFocusedBranch,
       showFocusedThread,
     });
   }, [
@@ -325,7 +397,6 @@ function LegacyPostDetailScreen() {
     contextComments,
     contextDepth,
     isLoadingContext,
-    revealFocusedBranch,
   ]);
 
   const availableFocusedContextCount = useMemo(() => {
@@ -358,12 +429,6 @@ function LegacyPostDetailScreen() {
     return fullCount > focusedCount;
   }, [focusedCommentId, comments, post?.comments, actualRootPost?.comments]);
 
-  const [threadActionLoading, setThreadActionLoading] = useState<
-    "context" | "full" | null
-  >(null);
-  useEffect(() => {
-    setThreadActionLoading(null);
-  }, [id]);
   const optimisticTopLevelComments = useOptimisticTopLevelComments(optimisticThreadId);
   const optimisticReplyComments = useOptimisticReplyComments(optimisticThreadId);
   const addTopLevelOptimisticComment = usePostCommentOptimisticStore(
@@ -579,7 +644,6 @@ function LegacyPostDetailScreen() {
     () => (
       <PostDetailPostSection
         actionSheetsRef={actionSheetsRef}
-        actualRootPostId={actualRootPostId}
         contentInitiallyRevealed={reveal === "true"}
         currentUserId={currentUser?.id}
         focusedCommentId={focusedCommentId}
@@ -602,14 +666,11 @@ function LegacyPostDetailScreen() {
         postEnteringStyle={postEnteringStyle}
         recentContextDone={recentContextDone}
         screenActive={screenActive}
-        setThreadActionLoading={setThreadActionLoading}
         shareServer={shareServer}
-        threadActionLoading={threadActionLoading}
         videoSyncScope={videoSyncScope}
       />
     ),
     [
-      actualRootPostId,
       currentUser?.id,
       displayPost,
       focusedCommentId,
@@ -626,7 +687,6 @@ function LegacyPostDetailScreen() {
       screenActive,
       shareServer,
       suppressHighlightAutoScroll,
-      threadActionLoading,
       videoSyncScope,
     ],
   );

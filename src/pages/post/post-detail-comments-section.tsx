@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { FlatList, NativeScrollEvent, NativeSyntheticEvent, Platform, RefreshControl } from "react-native";
+import { FlatList, NativeScrollEvent, NativeSyntheticEvent, RefreshControl } from "react-native";
 import Animated, { FadeInUp, LinearTransition } from "react-native-reanimated";
 import { useUnistyles } from "react-native-unistyles";
 
@@ -200,7 +200,12 @@ export const PostDetailCommentsSection = forwardRef<
             });
           }, 100);
         }}
-        removeClippedSubviews={Platform.OS === "android"}
+        // Disabled on all platforms: nested CommentThread rows with Reanimated
+        // `entering` (FadeInUp) + `layout` animations get incorrectly clipped on
+        // Android, hiding the focused reply when opening a post from the inbox
+        // (parent renders, but the deeper highlighted child stays clipped until
+        // the FlatList is remounted). See REACT-NATIVE-BZ.
+        removeClippedSubviews={false}
         maxToRenderPerBatch={10}
         windowSize={10}
         initialNumToRender={5}

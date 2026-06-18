@@ -2,13 +2,14 @@ import * as Notifications from "expo-notifications";
 import * as BackgroundFetch from "expo-background-fetch";
 import * as TaskManager from "expo-task-manager";
 import { AppState, Platform } from "react-native";
-import { navigateBypass } from "@/src/navigation/guarded-router";
+import { navigateBypass, pushBypass, replaceBypass } from "@/src/navigation/guarded-router";
 import type { InfiniteData } from "@tanstack/react-query";
 
 import * as Sentry from "@sentry/react-native";
 import * as Network from "expo-network";
 import { isAxiosError } from "axios";
 import { api } from "@/src/api/client";
+import { seedFocusedCommentFromInbox } from "@/src/api/cache";
 import { queryKeys } from "@/src/api/read/query-keys";
 import type { InboxResponse } from "@/src/api/types";
 import { queryClient } from "@/src/providers/query-provider";
@@ -133,6 +134,7 @@ export function isInboxNotificationNavigationActive(): boolean {
 
 function markInboxNotificationNavigationActive(): void {
   lastInboxNotificationNavigationAt = Date.now();
+  useInboxStore.getState().markNotificationNavigationActive();
 }
 
 function getNotificationResponseAgeMs(
@@ -1042,6 +1044,25 @@ function handleNotificationResponse(
       (typeof notificationData?.rootPostId === "string"
         ? notificationData.rootPostId
         : null);
+    const targetType =
+      previewReply?.type ??
+      (typeof notificationData?.type === "string" ? notificationData.type : "reply");
+    const canOpenReplyDetailImmediately = !!(
+      replyId &&
+      rootPostId &&
+      targetType !== "donation" &&
+      targetType !== "follow" &&
+      targetType !== "subscription_gift"
+    );
+    console.log("[InboxNotifFlow] target resolved", {
+      notificationId,
+      replyId,
+      rootPostId,
+      targetType,
+      hasPreviewReply: !!previewReply,
+      canOpenReplyDetailImmediately,
+      appState: AppState.currentState,
+    });
     Sentry.addBreadcrumb({
       category: "notifications",
       message: "Inbox notification target resolved",
@@ -1051,6 +1072,25 @@ function handleNotificationResponse(
         hasPreviewReply: !!previewReply,
         hasReplyId: !!replyId,
         hasRootPostId: !!rootPostId,
+        targetType,
+        canOpenReplyDetailImmediately,
+      },
+    });
+    Sentry.captureMessage("Inbox notification target resolved", {
+      level: "info",
+      tags: {
+        feature: "inbox-notifications",
+        operation: "target-resolved",
+        immediate_detail: String(canOpenReplyDetailImmediately),
+      },
+      extra: {
+        notificationId,
+        replyId,
+        rootPostId,
+        targetType,
+        hasPreviewReply: !!previewReply,
+        notificationDataKeys: getNotificationDataKeys(notificationData),
+        ...getNavigationReadinessDebugData(),
       },
     });
     if (!replyId && !rootPostId && !previewReply) {
@@ -1070,7 +1110,15 @@ function handleNotificationResponse(
     const prefetchInbox = async () => {
       const address = useAuthStore.getState().walletAddress;
       if (!address) return;
+      console.log("[InboxNotifFlow] prefetch inbox start", { notificationId, address });
       await fetchAndSeedInboxCache(address, 25);
+      console.log("[InboxNotifFlow] prefetch inbox done", { notificationId });
+      Sentry.addBreadcrumb({
+        category: "notifications",
+        message: "Inbox prefetch before notification navigation succeeded",
+        level: "info",
+        data: { notificationId },
+      });
     };
     const navigateToInbox = async () => {
       markInboxNotificationNavigationActive();
@@ -1096,41 +1144,115 @@ function handleNotificationResponse(
           },
         );
       });
-      const areTabsReady = await waitForTabsReady(INBOX_NAVIGATION_READY_TIMEOUT_MS);
-      if (!areTabsReady) {
-        Sentry.addBreadcrumb({
-          category: "navigation",
-          message: "Proceeding with inbox notification navigation after tabs wait timeout",
-          level: "warning",
-          data: { notificationId, ...getNavigationReadinessDebugData() },
-        });
-      }
-      Sentry.addBreadcrumb({
-        category: "navigation",
-        message: "Dispatching inbox notification navigation",
-        level: "info",
-        data: {
-          notificationId,
-          hasReplyId: !!replyId,
-          hasRootPostId: !!rootPostId,
-          areTabsReady,
-          ...getNavigationReadinessDebugData(),
-        },
-      });
       const dispatchNavigate = () => {
         // Re-mark active right before each dispatch so any concurrent
         // initial-route recovery in tab-layout sees the notification flow as
         // still in progress.
         markInboxNotificationNavigationActive();
-        navigateBypass({
-          pathname: "/(tabs)/inbox",
-          params: {
-            fromNotification: notificationId,
-            replyId: replyId ?? undefined,
+        console.log("[InboxNotifFlow] inbox nav dispatch", {
+          notificationId,
+          replyId,
+          rootPostId,
+          action: canOpenReplyDetailImmediately ? "replace" : "navigate",
+          openReply: canOpenReplyDetailImmediately ? "0" : "1",
+        });
+        Sentry.addBreadcrumb({
+          category: "navigation",
+          message: "Dispatching inbox route for notification",
+          level: "info",
+          data: {
+            notificationId,
+            replyId,
+            rootPostId,
+            action: canOpenReplyDetailImmediately ? "replace" : "navigate",
+            openReply: canOpenReplyDetailImmediately ? "0" : "1",
+            ...getNavigationReadinessDebugData(),
           },
         });
+        const inboxHref =
+          `/(tabs)/inbox?fromNotification=${encodeURIComponent(notificationId)}` +
+          `${replyId ? `&replyId=${encodeURIComponent(replyId)}` : ""}` +
+          `&openReply=${canOpenReplyDetailImmediately ? "0" : "1"}`;
+        if (canOpenReplyDetailImmediately) {
+          replaceBypass(inboxHref);
+          return;
+        }
+        navigateBypass(inboxHref);
+      };
+      const dispatchReplyDetail = () => {
+        console.log("[InboxNotifFlow] detail dispatch check", {
+          notificationId,
+          replyId,
+          rootPostId,
+          canOpenReplyDetailImmediately,
+        });
+        if (!canOpenReplyDetailImmediately || !replyId || !rootPostId) {
+          Sentry.captureMessage("Inbox notification detail push skipped", {
+            level: "warning",
+            tags: {
+              feature: "inbox-notifications",
+              operation: "detail-push-skipped",
+            },
+            extra: {
+              notificationId,
+              replyId,
+              rootPostId,
+              targetType,
+              canOpenReplyDetailImmediately,
+              ...getNavigationReadinessDebugData(),
+            },
+          });
+          return;
+        }
+        markInboxNotificationNavigationActive();
+        if (previewReply) {
+          seedFocusedCommentFromInbox(
+            queryClient,
+            previewReply,
+            useAuthStore.getState().walletAddress ?? undefined,
+          );
+        }
+        Sentry.addBreadcrumb({
+          category: "navigation",
+          message: "Opening notification reply detail after inbox",
+          level: "info",
+          data: {
+            notificationId,
+            replyId,
+            rootPostId,
+            hasPreviewReply: !!previewReply,
+          },
+        });
+        pushBypass(
+          `/post/${encodeURIComponent(rootPostId)}?highlight=${encodeURIComponent(replyId)}&fromNotification=${encodeURIComponent(notificationId)}`,
+        );
+        console.log("[InboxNotifFlow] push -> detail", {
+          notificationId,
+          replyId,
+          rootPostId,
+          hasPreviewReply: !!previewReply,
+        });
+        Sentry.captureMessage("Inbox notification reply detail pushed", {
+          level: "info",
+          tags: {
+            feature: "inbox-notifications",
+            operation: "detail-push",
+          },
+          extra: {
+            notificationId,
+            replyId,
+            rootPostId,
+            targetType,
+            hasPreviewReply: !!previewReply,
+            ...getNavigationReadinessDebugData(),
+          },
+        });
+        useInboxStore.getState().clearNotificationTarget(notificationId);
+        clearPendingInboxNotificationNavigation(notificationId);
+        markHandled();
       };
       const markHandled = () => {
+        console.log("[InboxNotifFlow] mark handled", { notificationId });
         if (!isFallbackNotificationId) {
           const ids = getHandledNotificationIds();
           ids.add(notificationId);
@@ -1138,13 +1260,50 @@ function handleNotificationResponse(
         }
         handledNotificationIdsInFlight.delete(notificationId);
       };
-      dispatchNavigate();
+      const areTabsReadyAtDispatch = _areTabsReady;
+      Sentry.addBreadcrumb({
+        category: "navigation",
+        message: "Dispatching inbox notification navigation immediately",
+        level: "info",
+        data: {
+          notificationId,
+          hasReplyId: !!replyId,
+          hasRootPostId: !!rootPostId,
+          areTabsReady: areTabsReadyAtDispatch,
+          ...getNavigationReadinessDebugData(),
+        },
+      });
       watchInboxNotificationArrival(notificationId, {
         replyId,
         rootPostId,
-        areTabsReady,
+        areTabsReady: areTabsReadyAtDispatch,
         markHandled,
         retryNavigate: dispatchNavigate,
+      });
+      try {
+        dispatchNavigate();
+        if (canOpenReplyDetailImmediately) {
+          console.log("[InboxNotifFlow] scheduling detail push", { notificationId, delayMs: 50 });
+          Sentry.addBreadcrumb({
+            category: "navigation",
+            message: "Scheduling notification reply detail push",
+            level: "info",
+            data: { notificationId, replyId, rootPostId, delayMs: 50 },
+          });
+          setTimeout(dispatchReplyDetail, 50);
+        }
+      } catch (error) {
+        clearPendingInboxNotificationNavigation(notificationId);
+        throw error;
+      }
+      void waitForTabsReady(INBOX_NAVIGATION_READY_TIMEOUT_MS).then((areTabsReady) => {
+        if (areTabsReady) return;
+        Sentry.addBreadcrumb({
+          category: "navigation",
+          message: "Inbox notification navigation dispatched before tabs were ready",
+          level: "warning",
+          data: { notificationId, ...getNavigationReadinessDebugData() },
+        });
       });
       Sentry.captureMessage("Inbox notification navigation dispatched", {
         level: "info",
@@ -1156,7 +1315,7 @@ function handleNotificationResponse(
           notificationId,
           hasReplyId: !!replyId,
           hasRootPostId: !!rootPostId,
-          areTabsReady,
+          areTabsReady: areTabsReadyAtDispatch,
           appState: AppState.currentState,
           ...getNavigationReadinessDebugData(),
         },

@@ -502,11 +502,14 @@ export function useMediaPostDetailData({
     if (isLoadingFocusedContextThread) return [];
     const focused = focusedThreadState.focused;
     if (!focused) return [];
-    const expandedFocusedBranch = focusedContextDepth > 5
+    const expandedFocusedBranch = focusedMode === "context"
       ? findTopLevelBranchForComment(allDisplayComments, focusedCommentId)
       : null;
     if (expandedFocusedBranch && focusedMode === "context") {
-      return [expandedFocusedBranch];
+      return appendSupplementalCommentsForMinimum(
+        [expandedFocusedBranch],
+        allDisplayComments,
+      );
     }
     if (focusedMode !== "context" || focusedThreadState.parents.length === 0) {
       return appendSupplementalCommentsForMinimum([focused], allDisplayComments);
@@ -528,7 +531,7 @@ export function useMediaPostDetailData({
       [{ ...thread, isFocusedContext: true }],
       allDisplayComments,
     );
-  }, [focusedCommentId, focusedMode, allDisplayComments, isLoadingFocusedContextThread, focusedThreadState, focusedContextDepth]);
+  }, [focusedCommentId, focusedMode, allDisplayComments, isLoadingFocusedContextThread, focusedThreadState]);
 
   displayCommentsLengthRef.current = displayComments.length;
 
