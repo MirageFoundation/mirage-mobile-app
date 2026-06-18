@@ -59,6 +59,7 @@ import { useNewPostsChecker, type NewPostAvatar } from "@/src/hooks/use-new-post
 import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 
 const coldStartCheckedFeedKeys = new Set<string>();
+const STALE_CACHED_PAGE_GAP_SECONDS = 60 * 60 * 2;
 
 type FeedRefreshOptions = {
   fetchAllNew?: boolean;
@@ -411,6 +412,33 @@ export const HomeTabbedFeed = forwardRef<
         refreshedPageCount = newPages.length;
         }
       } else {
+        const existingData: any = queryClient.getQueryData(postsQueryKey);
+        const firstPageOldestTimestamp = Math.min(
+          ...newFirstPage.posts.map((post) => post.timestamp),
+        );
+        const nextCachedPageNewestTimestamp = existingData?.pages?.[1]?.posts?.[0]?.timestamp;
+        const cachedPageGapSeconds = Number.isFinite(firstPageOldestTimestamp)
+          && Number.isFinite(nextCachedPageNewestTimestamp)
+          ? firstPageOldestTimestamp - nextCachedPageNewestTimestamp
+          : 0;
+
+        if (sortBy === "newest" && cachedPageGapSeconds >= STALE_CACHED_PAGE_GAP_SECONDS) {
+          Sentry.captureMessage("Stale cached latest feed pages discarded", {
+            level: "warning",
+            tags: {
+              feature: "home-feed",
+              feed: baseFeed,
+              sort: sortBy,
+            },
+            extra: {
+              cachedPageGapSeconds,
+              cachedPageCount: existingData?.pages?.length ?? 0,
+              firstPagePostCount: newFirstPage.posts.length,
+              hasAddress: Boolean(currentUser?.walletAddress),
+            },
+          });
+        }
+
         queryClient.setQueryData(postsQueryKey, {
           pages: [newFirstPage],
           pageParams: [1],
