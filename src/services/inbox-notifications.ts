@@ -220,6 +220,18 @@ function getNotificationResponseDebugData(
   };
 }
 
+function hasInboxNotificationPayload(
+  notificationData: Record<string, unknown>,
+): boolean {
+  return !!(
+    toOptionalString(notificationData.notificationType) === "inbox" ||
+    toOptionalString(notificationData.notificationId) ||
+    toOptionalString(notificationData.replyId) ||
+    toOptionalString(notificationData.rootPostId) ||
+    notificationData.inboxReply
+  );
+}
+
 function clearPendingInboxNotificationNavigation(notificationId: string): void {
   const pending = pendingInboxNotificationNavigations.get(notificationId);
   if (!pending) return;
@@ -944,6 +956,20 @@ function handleNotificationResponse(
           ),
         },
       );
+    }
+    if (isFallbackNotificationId && !hasInboxNotificationPayload(notificationData)) {
+      // Android may replay launcher/remote-intent metadata through
+      // getLastNotificationResponseAsync() on cold start or resume. If it has
+      // no inbox marker and no stable notification id, it is not an actionable
+      // inbox notification tap.
+      captureInboxNotificationNavigationEvent(
+        "Inbox notification response ignored without inbox payload",
+        "info",
+        "ignored-unidentified-response",
+        responseDebugData,
+      );
+      void Notifications.clearLastNotificationResponseAsync?.().catch(() => undefined);
+      return;
     }
     Sentry.addBreadcrumb({
       category: "notifications",
