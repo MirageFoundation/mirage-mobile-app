@@ -132,6 +132,12 @@ export const HomeTabbedFeed = forwardRef<
         setLatestTabActivated(true);
       }
       showBars();
+      // The list remounts on tab switch (keyed by feedContext), so the new
+      // tab is logically at offset 0 even though no scroll event will fire
+      // to update the shared offset. Reset it explicitly so the Android
+      // pull-to-refresh gate (`scrollOffsetY <= TOP_TOLERANCE`) doesn't read
+      // a stale value from the previous tab and reject valid pull gestures.
+      scrollOffsetY.value = 0;
       requestAnimationFrame(() => {
         activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
       });
@@ -140,7 +146,7 @@ export const HomeTabbedFeed = forwardRef<
         setTimeout(() => handleRefreshRef.current?.(), 100);
       }
     }
-  }, [activeTabIndex, showBars, baseFeed, setContextScrolling]);
+  }, [activeTabIndex, showBars, baseFeed, setContextScrolling, scrollOffsetY]);
 
   const currentUser = useAuthStore((s) => s.user);
   const selectedContentTypes = usePreferencesStore(
