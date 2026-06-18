@@ -257,6 +257,16 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
   useEffect(() => {
     return () => {
       if (!didSubmitRef.current) {
+        Sentry.addBreadcrumb({
+          category: "comment-compose",
+          message: "Comment compose dismissed without submit",
+          level: "info",
+          data: {
+            postId: postId ?? null,
+            replyToId: replyToId ?? null,
+            isEditMode,
+          },
+        });
         setWasDismissed(true);
       }
       if (!isEditMode && postId && !didSubmitRef.current) {
