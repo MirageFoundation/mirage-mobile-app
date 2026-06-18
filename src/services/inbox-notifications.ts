@@ -1047,9 +1047,11 @@ function handleNotificationResponse(
     const targetType =
       previewReply?.type ??
       (typeof notificationData?.type === "string" ? notificationData.type : "reply");
+    const previewReplyHasContent = !!previewReply?.reply_content?.trim();
     const canOpenReplyDetailImmediately = !!(
       replyId &&
       rootPostId &&
+      previewReplyHasContent &&
       targetType !== "donation" &&
       targetType !== "follow" &&
       targetType !== "subscription_gift"
@@ -1060,6 +1062,7 @@ function handleNotificationResponse(
       rootPostId,
       targetType,
       hasPreviewReply: !!previewReply,
+      previewReplyHasContent,
       canOpenReplyDetailImmediately,
       appState: AppState.currentState,
     });

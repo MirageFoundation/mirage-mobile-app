@@ -507,12 +507,13 @@ export function InboxScreen() {
         }
       };
     }
-    if (!targetReply?.reply_content?.trim()) {
+    if (!targetReply || (!targetReply.reply_content?.trim() && !hasFetchedTargetReply)) {
       console.log("[InboxNotifFlow] inbox auto-open waiting for target reply", {
         activeNotificationId,
         targetReplyId,
         visibleRepliesCount: visibleReplies.length,
         hasTargetReply: !!targetReply,
+        hasFetchedTargetReply,
       });
       Sentry.addBreadcrumb({
         category: "inbox",
@@ -523,6 +524,7 @@ export function InboxScreen() {
           targetReplyId,
           visibleRepliesCount: visibleReplies.length,
           hasTargetReply: !!targetReply,
+          hasFetchedTargetReply,
           hasPreviewReply: !!previewReply,
         },
       });
@@ -596,6 +598,7 @@ export function InboxScreen() {
     activeNotificationId,
     clearNotificationTarget,
     handleItemPress,
+    hasFetchedTargetReply,
     previewReply,
     routeOpenReply,
     targetReplyId,
