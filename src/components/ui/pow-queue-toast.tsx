@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import * as Sentry from "@sentry/react-native";
 
 import { usePowQueueStore, getSuccessLabel } from "@/src/services/pow-queue";
 import { getPowProgress } from "@/src/wallet";
@@ -93,6 +94,7 @@ export const PowQueueToast = () => {
   const transientResultTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const powStartedRef = useRef(false);
   const activeActionStartedAtRef = useRef(Date.now());
+  const staleProgressBreadcrumbSentRef = useRef(false);
   const lastElapsedMsRef = useRef(0);
   const lastHashRateRef = useRef(0);
   const { offset, onLayout } = useTopToastStack(TOAST_STACK_ID, isVisible);
@@ -254,6 +256,7 @@ export const PowQueueToast = () => {
       setPhase("preparing");
       powStartedRef.current = false;
       activeActionStartedAtRef.current = Date.now();
+      staleProgressBreadcrumbSentRef.current = false;
       lastElapsedMsRef.current = 0;
       lastHashRateRef.current = 0;
       animateIn();
@@ -267,6 +270,7 @@ export const PowQueueToast = () => {
       setPhase("preparing");
       powStartedRef.current = false;
       activeActionStartedAtRef.current = Date.now();
+      staleProgressBreadcrumbSentRef.current = false;
       lastElapsedMsRef.current = 0;
       lastHashRateRef.current = 0;
       setTransientResultAction(null);
@@ -311,6 +315,21 @@ export const PowQueueToast = () => {
           const { elapsedMs: elapsed, attempts: att } = progress;
           const actionElapsedMs = Date.now() - activeActionStartedAtRef.current;
           if (elapsed > actionElapsedMs + 1000) {
+            if (!staleProgressBreadcrumbSentRef.current) {
+              staleProgressBreadcrumbSentRef.current = true;
+              Sentry.addBreadcrumb({
+                category: "pow",
+                message: "Ignored stale native PoW progress for new action",
+                level: "info",
+                data: {
+                  actionElapsedMs,
+                  nativeElapsedMs: elapsed,
+                  attempts: att,
+                  actionType: visibleCurrentAction?.type,
+                  actionId: visibleCurrentAction?.id,
+                },
+              });
+            }
             return;
           }
 
@@ -337,7 +356,14 @@ export const PowQueueToast = () => {
       }, 200);
       return () => clearInterval(interval);
     }
-  }, [isConnected, isShowingPreparingAction, isShowingProcessing, isVisible]);
+  }, [
+    isConnected,
+    isShowingPreparingAction,
+    isShowingProcessing,
+    isVisible,
+    visibleCurrentAction?.id,
+    visibleCurrentAction?.type,
+  ]);
 
   if (!isVisible) return null;
 
