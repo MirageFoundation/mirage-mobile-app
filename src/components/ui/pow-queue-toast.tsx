@@ -92,6 +92,7 @@ export const PowQueueToast = () => {
   const dismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transientResultTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const powStartedRef = useRef(false);
+  const activeActionStartedAtRef = useRef(Date.now());
   const lastElapsedMsRef = useRef(0);
   const lastHashRateRef = useRef(0);
   const { offset, onLayout } = useTopToastStack(TOAST_STACK_ID, isVisible);
@@ -250,6 +251,7 @@ export const PowQueueToast = () => {
       setHashRate(0);
       setPhase("preparing");
       powStartedRef.current = false;
+      activeActionStartedAtRef.current = Date.now();
       lastElapsedMsRef.current = 0;
       lastHashRateRef.current = 0;
       animateIn();
@@ -262,6 +264,7 @@ export const PowQueueToast = () => {
       setHashRate(0);
       setPhase("preparing");
       powStartedRef.current = false;
+      activeActionStartedAtRef.current = Date.now();
       lastElapsedMsRef.current = 0;
       lastHashRateRef.current = 0;
       setTransientResultAction(null);
@@ -304,6 +307,10 @@ export const PowQueueToast = () => {
         try {
           const progress = await getPowProgress();
           const { elapsedMs: elapsed, attempts: att } = progress;
+          const actionElapsedMs = Date.now() - activeActionStartedAtRef.current;
+          if (elapsed > actionElapsedMs + 1000) {
+            return;
+          }
 
           if (att > 0 && !powStartedRef.current) {
             powStartedRef.current = true;

@@ -287,6 +287,7 @@ export const PostCard = memo(function PostCard({
     ? bodyText.slice(0, MAX_BODY_LENGTH)
     : bodyText;
   const previousOptimisticStatusRef = useRef<typeof post.optimisticStatus>(undefined);
+  const mediaComponentKey = `${post.optimisticActionId ?? post.id}:${videoSyncScope ?? "default"}:${resolvedContent.resolvedMedia?.type ?? "none"}`;
 
   useEffect(() => {
     if (!shouldPrimeOptimisticVideo) {
@@ -434,7 +435,7 @@ export const PostCard = memo(function PostCard({
       />
 
       <PostCardMedia
-        key={`${post.id}:${videoSyncScope ?? "default"}:${resolvedContent.resolvedMedia?.uri ?? "none"}`}
+        key={mediaComponentKey}
         media={optimisticResolvedMedia}
         mediaList={optimisticResolvedMediaList}
         isVisible={primeOptimisticVideo || isVisible}

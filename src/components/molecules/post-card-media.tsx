@@ -125,6 +125,7 @@ export const PostCardMedia = memo(
         ? (globalMuted || !isFocused)
         : globalMuted;
     const [mediaLoaded, setMediaLoaded] = useState(() => media?.uri ? MEDIA_LOADED_CACHE.has(media.uri) : false);
+    const hasDisplayedMediaRef = useRef(mediaLoaded);
     const [videoReadyForDisplay, setVideoReadyForDisplay] = useState(false);
     const videoMuted = media?.type === "video"
       ? (effectiveMuted || !videoReadyForDisplay || (!isPostDetail && !hasNativeAudioFocus))
@@ -375,7 +376,7 @@ export const PostCardMedia = memo(
         setVideoReadyForDisplay(false);
         setShowVideoPrepSpinner(false);
         const wasLoaded = resolvedMediaUri ? MEDIA_LOADED_CACHE.has(resolvedMediaUri) : false;
-        setMediaLoaded(wasLoaded);
+        setMediaLoaded(wasLoaded || hasDisplayedMediaRef.current);
         if (!wasLoaded) {
           if (loadingTimeoutRef.current) {
             clearTimeout(loadingTimeoutRef.current);
@@ -388,6 +389,12 @@ export const PostCardMedia = memo(
         }
       }
     }, [media?.type, resolvedMediaUri]);
+
+    useEffect(() => {
+      if (mediaLoaded) {
+        hasDisplayedMediaRef.current = true;
+      }
+    }, [mediaLoaded]);
 
     useEffect(() => {
       const needsVideoPrep =
@@ -1429,7 +1436,6 @@ export const PostCardMedia = memo(
                 style={styles.media}
                 contentFit="cover"
                 cachePolicy="memory-disk"
-                recyclingKey={resolvedMediaUri}
                 onLoad={({ source }) => {
                   updateMediaAspectRatioFromSize(source?.width, source?.height);
                   setMediaLoaded(true);

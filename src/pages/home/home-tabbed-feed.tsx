@@ -197,6 +197,13 @@ export const HomeTabbedFeed = forwardRef<
   const postEditOverrides = usePostEditStore((s) => s.overrides);
   const transformedPageCacheRef = useRef(new WeakMap<object, Post[]>());
 
+  useEffect(() => {
+    if (!pendingApiPosts.some((post) => post.optimistic_status === "success")) {
+      return;
+    }
+    showBars();
+  }, [pendingApiPosts, showBars]);
+
   const feedRefreshParamsList = useMemo(() => [
     {
       feed: baseFeed,

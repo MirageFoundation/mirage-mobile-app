@@ -314,17 +314,12 @@ export function useCreateSubmitFlow({
                   hasOptimisticPreview: !!optimisticPreviewMediaUrls?.length,
                 },
               });
-              let uploadedMediaUrls = resolvedMediaUrls;
-              if (draft.attachmentType === "image" && draft.mediaUris.length > 0) {
-                try {
+              try {
+                let uploadedMediaUrls = resolvedMediaUrls;
+                if (draft.attachmentType === "image" && draft.mediaUris.length > 0) {
                   const uploads = await getUploadedImageUrls(draft.mediaUris);
                   uploadedMediaUrls = [...resolvedMediaUrls, ...uploads];
-                } catch (error) {
-                  Sentry.addBreadcrumb({ category: "image-upload", message: "Image upload failed", data: { error: String(error) }, level: "error" });
-                  throw error;
                 }
-              }
-              try {
                 const result = await postMutation.mutateAsync({
                   ...postInput,
                   media: uploadedMediaUrls.length > 0 ? uploadedMediaUrls : undefined,
@@ -374,6 +369,10 @@ export function useCreateSubmitFlow({
                   },
                 });
                 throw error;
+              } finally {
+                if (draft.attachmentType === "image") {
+                  resetImageUploads();
+                }
               }
             },
             onOptimisticUpdate: skipOptimisticUpdate ? undefined : insertOptimisticPost,
@@ -402,7 +401,9 @@ export function useCreateSubmitFlow({
         enqueueNetworkPost(mediaUrls);
         resetComposeState();
         resetVideoUploads();
-        resetImageUploads();
+        if (draft.attachmentType !== "image") {
+          resetImageUploads();
+        }
         VIDEO_META.clear();
         setHandledVideoParam(null);
         clearDraft();

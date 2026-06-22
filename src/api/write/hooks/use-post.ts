@@ -109,6 +109,11 @@ const getFirstMediaUrl = (content: string): string | null => {
   return null;
 };
 
+const getVideoPreviewMediaUrls = (input: CreatePostMutationInput) =>
+  input.optimisticDraft?.attachmentType === "video"
+    ? input.optimisticPreviewMediaUrls
+    : undefined;
+
 export const buildOptimisticPost = (
   txHash: string | undefined,
   input: CreatePostMutationInput,
@@ -121,9 +126,11 @@ export const buildOptimisticPost = (
   const mediaUrl =
     input.optimisticMediaUrl?.trim() || fallbackMediaUrl || null;
   const postId = txHash ?? input.optimisticId ?? `local-${Date.now()}`;
+  const videoPreviewMediaUrls = getVideoPreviewMediaUrls(input);
   const shouldUsePreviewMedia =
-    (status === "pending" || status === "success") &&
-    !!input.optimisticPreviewMediaUrls?.length;
+    !!input.optimisticPreviewMediaUrls?.length &&
+    (status === "pending" ||
+      (status === "success" && !!videoPreviewMediaUrls?.length));
   const media = shouldUsePreviewMedia
     ? input.optimisticPreviewMediaUrls
     : input.optimisticMediaUrls ?? (mediaUrl ? [mediaUrl] : []);
@@ -152,7 +159,7 @@ export const buildOptimisticPost = (
     optimistic_status: status,
     optimistic_action_id: input.optimisticActionId,
     optimistic_draft: input.optimisticDraft,
-    optimistic_video_preview_until: input.optimisticPreviewMediaUrls?.length
+    optimistic_video_preview_until: videoPreviewMediaUrls?.length
       ? Date.now() + 130000
       : undefined,
   };
@@ -1029,6 +1036,7 @@ export function usePost(options: UsePostOptions = {}) {
         limit: 10,
       };
       if (input.optimisticId) {
+        const videoPreviewMediaUrls = getVideoPreviewMediaUrls(input);
         Sentry.addBreadcrumb({
           category: "create-post",
           message: "Replacing optimistic post with confirmed post",
@@ -1037,19 +1045,20 @@ export function usePost(options: UsePostOptions = {}) {
             optimisticId: input.optimisticId,
             confirmedPostId: confirmedPost.post_id,
             hasPreviewMedia: !!input.optimisticPreviewMediaUrls?.length,
+            hasVideoPreviewMedia: !!videoPreviewMediaUrls?.length,
           },
         });
         const postAfterNetworkConfirmation = {
           ...confirmedPost,
-          thumbnail: input.optimisticPreviewMediaUrls?.[0] ?? confirmedPost.thumbnail,
-          media: input.optimisticPreviewMediaUrls?.length
-            ? input.optimisticPreviewMediaUrls
+          thumbnail: videoPreviewMediaUrls?.[0] ?? confirmedPost.thumbnail,
+          media: videoPreviewMediaUrls?.length
+            ? videoPreviewMediaUrls
             : confirmedPost.media,
           optimistic_status: "success" as const,
           optimistic_error: undefined,
           optimistic_draft: input.optimisticDraft,
           optimistic_action_id: input.optimisticActionId,
-          optimistic_video_preview_until: input.optimisticPreviewMediaUrls?.length
+          optimistic_video_preview_until: videoPreviewMediaUrls?.length
             ? Date.now() + 45000
             : confirmedPost.optimistic_video_preview_until,
         };
@@ -1057,27 +1066,27 @@ export function usePost(options: UsePostOptions = {}) {
         usePendingPostsStore.getState().upsertPost(postAfterNetworkConfirmation);
         replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, postAfterNetworkConfirmation);
         upsertHomePost(queryClient, postAfterNetworkConfirmation, upsertOptions);
-        if (input.optimisticPreviewMediaUrls?.length) {
+        if (videoPreviewMediaUrls?.length) {
           Sentry.addBreadcrumb({
             category: "create-post",
             message: "Preserving local media preview after post success",
             level: "info",
             data: {
               postId: confirmedPost.post_id,
-              previewCount: input.optimisticPreviewMediaUrls.length,
+              previewCount: videoPreviewMediaUrls.length,
             },
           });
-          preserveLocalPreviewMedia(queryClient, confirmedPost.post_id, input.optimisticPreviewMediaUrls);
+          preserveLocalPreviewMedia(queryClient, confirmedPost.post_id, videoPreviewMediaUrls);
           [1000, 2500, 5000, 10000, 20000, 45000].forEach((delay) => {
             setTimeout(() => {
-              preserveLocalPreviewMedia(queryClient, confirmedPost.post_id, input.optimisticPreviewMediaUrls ?? []);
+              preserveLocalPreviewMedia(queryClient, confirmedPost.post_id, videoPreviewMediaUrls ?? []);
             }, delay);
           });
         }
         scheduleClearOptimisticPostStatus(
           queryClient,
           confirmedPost.post_id,
-          input.optimisticPreviewMediaUrls,
+          videoPreviewMediaUrls,
         );
       } else {
         upsertHomePost(queryClient, optimisticPost, upsertOptions);
