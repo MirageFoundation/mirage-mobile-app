@@ -1,4 +1,5 @@
 import { useLocalSearchParams } from "expo-router";
+import type { Href } from "expo-router";
 import { useRouter } from "@/src/navigation/guarded-router";
 import * as Sentry from "@sentry/react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -334,6 +335,24 @@ export function InboxScreen() {
       await refetch();
       if (cancelled) return;
       if (attempts >= maxAttempts) {
+        Sentry.captureMessage("Inbox notification target fetch exhausted", {
+          level: targetReplyId ? "warning" : "info",
+          tags: {
+            feature: "inbox-notifications",
+            operation: "inbox-target-fetch",
+          },
+          extra: {
+            notificationId: activeNotificationId,
+            targetReplyId,
+            attempts,
+            maxAttempts,
+            hasFetchedTargetReply,
+            hasPreviewReply: !!previewReply,
+            visibleRepliesCount: visibleReplies.length,
+            routeOpenReply,
+            platform: Platform.OS,
+          },
+        });
         setIsNotificationLoading(false);
         return;
       }
@@ -355,8 +374,11 @@ export function InboxScreen() {
     activeNotificationId,
     clearNotificationTarget,
     hasFetchedTargetReply,
+    previewReply,
     refetch,
+    routeOpenReply,
     targetReplyId,
+    visibleReplies.length,
   ]);
 
   useEffect(() => {
@@ -393,9 +415,26 @@ export function InboxScreen() {
     [queryClient, walletAddress],
   );
 
+  const buildPostHref = useCallback(
+    (rootPostId: string, options: { highlight?: string } = {}) => {
+      const queryParams: string[] = [];
+      if (options.highlight) {
+        queryParams.push(`highlight=${encodeURIComponent(options.highlight)}`);
+      }
+      const notificationId = fromNotificationRef.current;
+      if (notificationId) {
+        queryParams.push(`fromNotification=${encodeURIComponent(notificationId)}`);
+      }
+      const query = queryParams.length > 0 ? `?${queryParams.join("&")}` : "";
+      return `/post/${encodeURIComponent(rootPostId)}${query}` as Href;
+    },
+    [],
+  );
+
   const handleItemPress = useCallback(
     (reply: InboxReply) => {
       markReplyAsRead(reply.reply_id);
+      const notificationId = fromNotificationRef.current;
 
       if (reply.type === "donation") {
         routerRef.current.navigate("/(tabs)/profile");
@@ -427,9 +466,11 @@ export function InboxScreen() {
             rootPostId: reply.root_post_id,
             parentId: reply.parent_id,
             type: reply.type ?? "reply",
+            notificationId,
+            hasFromNotification: !!notificationId,
           },
         });
-        routerRef.current.push(`/post/${reply.root_post_id}`);
+        routerRef.current.push(buildPostHref(reply.root_post_id));
         return;
       }
 
@@ -442,12 +483,14 @@ export function InboxScreen() {
           rootPostId: reply.root_post_id,
           parentId: reply.parent_id,
           type: reply.type ?? "reply",
+          notificationId,
+          hasFromNotification: !!notificationId,
         },
       });
       seedFocusedComment(reply);
-      routerRef.current.push(`/post/${reply.root_post_id}?highlight=${reply.reply_id}`);
+      routerRef.current.push(buildPostHref(reply.root_post_id, { highlight: reply.reply_id }));
     },
-    [markReplyAsRead, seedFocusedComment],
+    [buildPostHref, markReplyAsRead, seedFocusedComment],
   );
 
   useEffect(() => {
