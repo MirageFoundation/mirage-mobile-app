@@ -121,8 +121,10 @@ export const PowQueueToast = () => {
     : isVoteResult
       ? VOTE_RESULT_DISPLAY_DURATION_MS
       : RESULT_DISPLAY_DURATION_MS;
+  const hasInlineResultOverlay =
+    transientResultAction !== null || immediateResultAction !== null;
   const isShowingResult =
-    activeResultAction !== null && !hasQueuedOrActiveWork;
+    activeResultAction !== null && (!hasQueuedOrActiveWork || hasInlineResultOverlay);
   const hasActiveResultAction = activeResultAction !== null;
   const isShowingProcessing = hasPendingWork && !isShowingResult;
   const isShowingPreparingAction =

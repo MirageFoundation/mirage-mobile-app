@@ -10,14 +10,26 @@ import { useAgents } from "@/src/api/read/hooks/use-agents";
 import { useUserFollowed } from "@/src/api/read/hooks/use-user-lists";
 import type { AgentInfo } from "@/src/api/read/endpoints/agents";
 import { Box, Text } from "@/src/components/ui/primitives";
-import { TransactionProgressModal } from "@/src/components/molecules";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { executeWithProgress, useTransactionProgress } from "@/src/hooks";
-import { setAgents as setAgentsApi } from "@/src/api/write/endpoints/social";
+import {
+  disableAgent as disableAgentApi,
+  enableAgent as enableAgentApi,
+  setAgents as setAgentsApi,
+} from "@/src/api/write/endpoints/social";
 import { useWallet } from "@/src/hooks/use-wallet";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { Avatar } from "@/src/components/atoms";
+import {
+  generateActionId,
+  getActionLabel,
+  usePowQueueStore,
+} from "@/src/services/pow-queue";
+
+function sameOrderedList(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+}
 
 function formatTimeAgo(ts: number | null): string {
   if (!ts) return "Inactive";
@@ -212,12 +224,22 @@ export function AgentsScreen() {
 
   const { data: agentsData, isLoading: isLoadingAgents } = useAgents();
   const { data: followedData } = useUserFollowed();
-  const txProgress = useTransactionProgress();
+  const enqueue = usePowQueueStore((state) => state.enqueue);
+  const cancelAction = usePowQueueStore((state) => state.cancelAction);
   const [togglingAgent, setTogglingAgent] = useState<string | null>(null);
   const [localOrder, setLocalOrder] = useState<string[] | null>(null);
   const invalidationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Per-agent in-flight toggle actions. Opposite toggles for the same agent can
+  // cancel each other, while different agents still queue independently.
+  const pendingToggleActionsRef = useRef<
+    Map<string, { actionId: string; type: "enable_agent" | "disable_agent" }>
+  >(new Map());
+  const pendingOrderActionIdRef = useRef<string | null>(null);
 
-  const serverEnabledList = followedData?.enabled_agents ?? [];
+  const serverEnabledList = useMemo(
+    () => followedData?.enabled_agents ?? [],
+    [followedData?.enabled_agents],
+  );
 
   const currentEnabledList = localOrder ?? serverEnabledList;
 
@@ -292,115 +314,326 @@ export function AgentsScreen() {
     [localOrder, serverEnabledList],
   );
 
-  const submitAgentList = useCallback(
-    async (newList: string[]) => {
+  const updateEnabledAgentsCache = useCallback(
+    (enabledAgents: string[]) => {
+      if (!address) return;
+      queryClient.setQueryData(
+        queryKeys.userFollowed(address),
+        (old: any) => {
+          if (!old) {
+            return {
+              enabled_agents: enabledAgents,
+              followed_topics: [],
+              followed_users: [],
+            };
+          }
+          return { ...old, enabled_agents: enabledAgents };
+        },
+      );
+    },
+    [address, queryClient],
+  );
+
+  // Always read the latest (optimistically-updated) enabled list so rapid
+  // taps compute their next state from the freshest value, not a stale render
+  // closure.
+  const readEnabledListFromCache = useCallback((): string[] => {
+    if (address) {
+      const cached = queryClient.getQueryData<{ enabled_agents?: string[] }>(
+        queryKeys.userFollowed(address),
+      );
+      if (cached?.enabled_agents) return cached.enabled_agents;
+    }
+    return serverEnabledList;
+  }, [address, queryClient, serverEnabledList]);
+
+  const scheduleAgentsInvalidation = useCallback(() => {
+    const addr = address;
+    invalidationTimerRef.current = setTimeout(() => {
+      if (addr) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.userFollowed(addr),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.profile(addr),
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
+    }, 15000);
+  }, [address, queryClient]);
+
+  const submitAgentToggle = useCallback(
+    (
+      agentAddress: string,
+      newList: string[],
+      previousList: string[],
+      actionType: "enable_agent" | "disable_agent",
+    ) => {
       if (invalidationTimerRef.current) {
         clearTimeout(invalidationTimerRef.current);
         invalidationTimerRef.current = null;
       }
       if (address) {
-        await queryClient.cancelQueries({
+        void queryClient.cancelQueries({
           queryKey: queryKeys.userFollowed(address),
         });
-        queryClient.setQueryData(
-          queryKeys.userFollowed(address),
-          (old: any) => {
-            if (!old) return old;
-            return { ...old, enabled_agents: newList };
-          },
-        );
       }
 
-      try {
-        const txResult = await executeWithProgress(
-          txProgress,
-          async (onPoWProgress) => {
-            const wallet = await getWallet();
-            return setAgentsApi(wallet, newList, onPoWProgress);
+      const existing = pendingToggleActionsRef.current.get(agentAddress);
+      if (existing) {
+        pendingToggleActionsRef.current.delete(agentAddress);
+        const cancelled = cancelAction(existing.actionId);
+        Sentry.addBreadcrumb({
+          category: "agents",
+          message: "Superseded agent toggle cancelled",
+          level: cancelled ? "info" : "warning",
+          data: {
+            previousActionId: existing.actionId,
+            previousType: existing.type,
+            nextType: actionType,
+            enabledCount: newList.length,
+            cancelled,
           },
-        );
-
-        if (!txResult.success) {
-          if (address) {
-            queryClient.setQueryData(
-              queryKeys.userFollowed(address),
-              (old: any) => {
-                if (!old) return old;
-                return { ...old, enabled_agents: serverEnabledList };
-              },
-            );
-          }
-          return;
-        }
-        setLocalOrder(null);
-        triggerHaptic("success");
-        const addr = address;
-        invalidationTimerRef.current = setTimeout(() => {
-          if (addr) {
-            queryClient.invalidateQueries({
-              queryKey: queryKeys.userFollowed(addr),
-            });
-            queryClient.invalidateQueries({
-              queryKey: queryKeys.profile(addr),
-            });
-          }
-          queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot() });
-        }, 15000);
-       } catch (error) {
-        Sentry.captureException(error, {
-          tags: { feature: "agents", operation: "set-agents" },
         });
-        if (address) {
-          queryClient.setQueryData(
-            queryKeys.userFollowed(address),
-            (old: any) => {
-              if (!old) return old;
-              return { ...old, enabled_agents: serverEnabledList };
+        if (!cancelled) {
+          Sentry.captureMessage("Agent toggle cancel failed", {
+            level: "warning",
+            tags: { feature: "agents", operation: "cancel-toggle" },
+            extra: {
+              previousActionId: existing.actionId,
+              previousType: existing.type,
+              nextType: actionType,
             },
-          );
+          });
         }
-        triggerHaptic("error");
+        updateEnabledAgentsCache(newList);
+        setLocalOrder(null);
+        triggerHaptic("light");
+        return;
       }
+
+      const previousIndex = previousList.indexOf(agentAddress);
+      const actionId = generateActionId();
+      pendingToggleActionsRef.current.set(agentAddress, { actionId, type: actionType });
+      Sentry.addBreadcrumb({
+        category: "agents",
+        message: "Agent toggle enqueued",
+        level: "info",
+        data: {
+          actionId,
+          type: actionType,
+          enabledCount: newList.length,
+          previousEnabledCount: previousList.length,
+        },
+      });
+      enqueue({
+        id: actionId,
+        type: actionType,
+        label: getActionLabel(actionType),
+        execute: async () => {
+          const wallet = await getWallet();
+          return actionType === "enable_agent"
+            ? enableAgentApi(wallet, agentAddress)
+            : disableAgentApi(wallet, agentAddress);
+        },
+        onOptimisticUpdate: () => {
+          updateEnabledAgentsCache(newList);
+        },
+        onSuccess: () => {
+          const pending = pendingToggleActionsRef.current.get(agentAddress);
+          if (pending?.actionId === actionId) {
+            pendingToggleActionsRef.current.delete(agentAddress);
+          }
+          Sentry.addBreadcrumb({
+            category: "agents",
+            message: "Agent toggle succeeded",
+            level: "info",
+            data: { actionId, type: actionType, enabledCount: newList.length },
+          });
+          triggerHaptic("success");
+          scheduleAgentsInvalidation();
+        },
+        onError: (error) => {
+          Sentry.captureException(error, {
+            tags: { feature: "agents", operation: actionType },
+          });
+          triggerHaptic("error");
+        },
+        onRollback: () => {
+          const pending = pendingToggleActionsRef.current.get(agentAddress);
+          if (pending?.actionId !== actionId) return;
+          pendingToggleActionsRef.current.delete(agentAddress);
+          Sentry.addBreadcrumb({
+            category: "agents",
+            message: "Agent toggle rolled back",
+            level: "warning",
+            data: { actionId, type: actionType },
+          });
+          const current = readEnabledListFromCache();
+          const rolledBack = actionType === "enable_agent"
+            ? current.filter((addr) => addr !== agentAddress)
+            : (() => {
+                const withoutAgent = current.filter((addr) => addr !== agentAddress);
+                const next = [...withoutAgent];
+                next.splice(
+                  previousIndex >= 0 ? Math.min(previousIndex, next.length) : next.length,
+                  0,
+                  agentAddress,
+                );
+                return next;
+              })();
+          updateEnabledAgentsCache(rolledBack);
+        },
+      });
     },
-    [address, txProgress, getWallet, queryClient, serverEnabledList],
+    [
+      address,
+      cancelAction,
+      enqueue,
+      getWallet,
+      queryClient,
+      readEnabledListFromCache,
+      scheduleAgentsInvalidation,
+      updateEnabledAgentsCache,
+    ],
+  );
+
+  const submitAgentOrder = useCallback(
+    (newList: string[], previousList: string[]) => {
+      if (invalidationTimerRef.current) {
+        clearTimeout(invalidationTimerRef.current);
+        invalidationTimerRef.current = null;
+      }
+      if (address) {
+        void queryClient.cancelQueries({
+          queryKey: queryKeys.userFollowed(address),
+        });
+      }
+      if (sameOrderedList(newList, previousList)) return;
+
+      if (pendingOrderActionIdRef.current) {
+        const previousActionId = pendingOrderActionIdRef.current;
+        const cancelled = cancelAction(previousActionId);
+        Sentry.addBreadcrumb({
+          category: "agents",
+          message: "Superseded agent order update cancelled",
+          level: cancelled ? "info" : "warning",
+          data: { previousActionId, enabledCount: newList.length, cancelled },
+        });
+        if (!cancelled) {
+          Sentry.captureMessage("Agent order cancel failed", {
+            level: "warning",
+            tags: { feature: "agents", operation: "cancel-order" },
+            extra: { previousActionId, enabledCount: newList.length },
+          });
+        }
+        pendingOrderActionIdRef.current = null;
+      }
+
+      const actionId = generateActionId();
+      pendingOrderActionIdRef.current = actionId;
+      Sentry.addBreadcrumb({
+        category: "agents",
+        message: "Agent order update enqueued",
+        level: "info",
+        data: {
+          actionId,
+          enabledCount: newList.length,
+          previousEnabledCount: previousList.length,
+        },
+      });
+      enqueue({
+        id: actionId,
+        type: "set_agents",
+        label: getActionLabel("set_agents"),
+        execute: async () => {
+          const wallet = await getWallet();
+          return setAgentsApi(wallet, newList);
+        },
+        onOptimisticUpdate: () => {
+          updateEnabledAgentsCache(newList);
+        },
+        onSuccess: () => {
+          if (pendingOrderActionIdRef.current === actionId) {
+            pendingOrderActionIdRef.current = null;
+          }
+          setLocalOrder(null);
+          Sentry.addBreadcrumb({
+            category: "agents",
+            message: "Agent order update succeeded",
+            level: "info",
+            data: { actionId, enabledCount: newList.length },
+          });
+          triggerHaptic("success");
+          scheduleAgentsInvalidation();
+        },
+        onError: (error) => {
+          if (pendingOrderActionIdRef.current === actionId) {
+            pendingOrderActionIdRef.current = null;
+          }
+          Sentry.captureException(error, {
+            tags: { feature: "agents", operation: "set-agents" },
+          });
+          triggerHaptic("error");
+        },
+        onRollback: () => {
+          if (pendingOrderActionIdRef.current === actionId) {
+            pendingOrderActionIdRef.current = null;
+            Sentry.addBreadcrumb({
+              category: "agents",
+              message: "Agent order update rolled back",
+              level: "warning",
+              data: { actionId, enabledCount: previousList.length },
+            });
+            updateEnabledAgentsCache(previousList);
+          }
+        },
+      });
+    },
+    [
+      address,
+      cancelAction,
+      enqueue,
+      getWallet,
+      queryClient,
+      scheduleAgentsInvalidation,
+      updateEnabledAgentsCache,
+    ],
   );
 
   const handleToggleAgent = useCallback(
-    async (agent: AgentInfo) => {
-      const isCurrentlyEnabled = enabledSet.has(agent.address);
-      const current = currentEnabledList;
-      let newList: string[];
-
-      if (isCurrentlyEnabled) {
-        newList = current.filter((a) => a !== agent.address);
-      } else {
-        newList = [...current, agent.address];
-      }
+    (agent: AgentInfo) => {
+      const current = readEnabledListFromCache();
+      const isCurrentlyEnabled = current.includes(agent.address);
+      const newList = isCurrentlyEnabled
+        ? current.filter((a) => a !== agent.address)
+        : [...current, agent.address];
 
       triggerHaptic("medium");
-      setTogglingAgent(agent.address);
       setLocalOrder(null);
-      requestAnimationFrame(async () => {
-        await submitAgentList(newList);
-        setTogglingAgent(null);
+      requestAnimationFrame(() => {
+        submitAgentToggle(
+          agent.address,
+          newList,
+          current,
+          isCurrentlyEnabled ? "disable_agent" : "enable_agent",
+        );
       });
     },
-    [enabledSet, currentEnabledList, submitAgentList],
+    [readEnabledListFromCache, submitAgentToggle],
   );
 
-  const handleApplyOrder = useCallback(async () => {
+  const handleApplyOrder = useCallback(() => {
     if (!localOrder || !hasOrderChanges) return;
+    const previousList = readEnabledListFromCache();
+    const orderToApply = localOrder;
     triggerHaptic("medium");
     setTogglingAgent("__reorder__");
-    requestAnimationFrame(async () => {
-      await submitAgentList(localOrder);
+    requestAnimationFrame(() => {
+      submitAgentOrder(orderToApply, previousList);
       setTogglingAgent(null);
     });
-  }, [localOrder, hasOrderChanges, submitAgentList]);
-
-  const handleDismiss = useCallback(() => {
-    txProgress.hideModal();
-  }, [txProgress]);
+  }, [localOrder, hasOrderChanges, readEnabledListFromCache, submitAgentOrder]);
 
   const handleBack = useCallback(() => {
     triggerHaptic("light");
@@ -576,15 +809,6 @@ export function AgentsScreen() {
         />
       )}
 
-      <TransactionProgressModal
-        visible={txProgress.isVisible}
-        progress={txProgress.progress}
-        title="Updating Agents"
-        description="Saving your agent preferences on-chain"
-        onDismiss={handleDismiss}
-        showTxHash={false}
-        autoDismissDelay={500}
-      />
     </Box>
   );
 }

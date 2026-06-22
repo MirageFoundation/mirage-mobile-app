@@ -33,6 +33,9 @@ export type PowActionType =
   | "delete"
   | "follow"
   | "unfollow"
+  | "enable_agent"
+  | "disable_agent"
+  | "set_agents"
   | "block"
   | "unblock"
   | "report"
@@ -117,6 +120,12 @@ export const getActionLabel = (type: PowActionType): string => {
       return "Following";
     case "unfollow":
       return "Unfollowing";
+    case "enable_agent":
+      return "Enabling agent";
+    case "disable_agent":
+      return "Disabling agent";
+    case "set_agents":
+      return "Updating agents";
     case "block":
       return "Blocking";
     case "unblock":
@@ -150,6 +159,12 @@ export const getSuccessLabel = (type: PowActionType): string => {
       return "Followed";
     case "unfollow":
       return "Unfollowed";
+    case "enable_agent":
+      return "Agent enabled";
+    case "disable_agent":
+      return "Agent disabled";
+    case "set_agents":
+      return "Agents updated";
     case "block":
       return "Blocked";
     case "unblock":
