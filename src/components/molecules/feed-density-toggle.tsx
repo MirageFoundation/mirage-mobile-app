@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Sentry from "@sentry/react-native";
 import { View } from "react-native";
 import {
   Menu,
@@ -88,6 +89,12 @@ export const FeedDensityToggle = ({ iconSize = 22 }: FeedDensityToggleProps) => 
                 onSelect={() => {
                   if (option.value === density) return;
                   triggerHaptic("light");
+                  Sentry.addBreadcrumb({
+                    category: "feed-density",
+                    message: "User changed feed density",
+                    level: "info",
+                    data: { from: density, to: option.value },
+                  });
                   setDensity(option.value);
                 }}
               >

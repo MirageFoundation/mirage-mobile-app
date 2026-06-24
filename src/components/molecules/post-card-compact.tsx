@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Sentry from "@sentry/react-native";
 import { Image } from "expo-image";
 import { memo, useCallback, useMemo, useRef } from "react";
 import {
@@ -259,6 +260,19 @@ export const PostCardCompact = memo(function PostCardCompact({
                 blurRadius={shouldBlurContent ? 24 : 0}
                 transition={120}
                 cachePolicy="memory-disk"
+                onError={(event) => {
+                  Sentry.addBreadcrumb({
+                    category: "compact-thumb",
+                    message: "Compact post thumbnail failed to load",
+                    level: "warning",
+                    data: {
+                      postId: post.id,
+                      mediaType: resolvedMedia?.type,
+                      uri: thumbUri,
+                      error: String(event?.error ?? "unknown"),
+                    },
+                  });
+                }}
               />
               {(isVideoThumb || isGifThumb) && !shouldBlurContent && (
                 <View style={styles.thumbBadge}>

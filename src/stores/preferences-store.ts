@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react-native";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { mmkvStorage } from "./mmkv-storage";
@@ -334,6 +335,12 @@ export const usePreferencesStore = create<PreferencesState>()(
 
         if (version < 7) {
           state.feedDensity = state.feedDensity ?? "card";
+          Sentry.addBreadcrumb({
+            category: "preferences",
+            message: "Migrated preferences to v7 (feedDensity)",
+            level: "info",
+            data: { from: version, to: 7 },
+          });
         }
 
         return state as PreferencesState;
