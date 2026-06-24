@@ -30,7 +30,7 @@ import {
   resolvePostContent,
 } from "./post-card-utils";
 
-const THUMB_SIZE = 84;
+const THUMB_SIZE = 72;
 
 type PostCardCompactProps = {
   post: Post;
@@ -294,7 +294,7 @@ export const PostCardCompact = memo(function PostCardCompact({
                 disabled={disableInteractions || topicDisabled}
               >
                 <Text
-                  size="xs"
+                  size="sm"
                   weight="semibold"
                   numberOfLines={1}
                   style={{ color: theme.colors.text.subtle }}
@@ -304,7 +304,7 @@ export const PostCardCompact = memo(function PostCardCompact({
               </Pressable>
             ) : null}
             {topic ? (
-              <Text size="xs" style={{ color: theme.colors.text.subtle }}>
+              <Text size="sm" style={{ color: theme.colors.text.subtle }}>
                 ·
               </Text>
             ) : null}
@@ -314,7 +314,7 @@ export const PostCardCompact = memo(function PostCardCompact({
               disabled={disableInteractions}
             >
               <Text
-                size="xs"
+                size="sm"
                 weight="semibold"
                 numberOfLines={1}
                 style={{ color: usernameColor }}
@@ -322,12 +322,12 @@ export const PostCardCompact = memo(function PostCardCompact({
                 @{author.username}
               </Text>
             </Pressable>
-            <Text size="xs" style={{ color: theme.colors.text.subtle }}>
+            <Text size="sm" style={{ color: theme.colors.text.subtle }}>
               ·
             </Text>
             <TimeAgo
               timestamp={createdAt}
-              size="xs"
+              size="sm"
               style={{ color: theme.colors.text.subtle }}
             />
           </View>
@@ -458,6 +458,12 @@ const styles = StyleSheet.create((theme) => ({
   },
   actions: {
     marginTop: theme.spacing.xs,
+    // Action row must inherit the right column width — otherwise its
+    // intrinsic content size can push the trailing buttons (share / more
+    // menu) past the right edge on narrow Android devices.
+    alignSelf: "stretch",
+    width: "100%",
+    overflow: "hidden",
   },
   retryButton: {
     alignSelf: "flex-start",

@@ -83,11 +83,13 @@ type PostActionsProps = {
 
 const SIZE_CONFIG = {
   sm: {
-    iconSize: 12,
-    gap: 10,
+    iconSize: 14,
+    gap: 6,
     textSize: "xs" as const,
-    pillHeight: 24,
+    pillHeight: 28,
     voteTextSize: "xs" as const,
+    voteButtonPadX: 8,
+    iconOnlyPad: 6,
   },
   md: {
     iconSize: 16,
@@ -95,6 +97,8 @@ const SIZE_CONFIG = {
     textSize: "sm" as const,
     pillHeight: 30,
     voteTextSize: "sm" as const,
+    voteButtonPadX: 10,
+    iconOnlyPad: 8,
   },
   lg: {
     iconSize: 18,
@@ -102,6 +106,8 @@ const SIZE_CONFIG = {
     textSize: "sm" as const,
     pillHeight: 32,
     voteTextSize: "sm" as const,
+    voteButtonPadX: 10,
+    iconOnlyPad: 9,
   },
 };
 
@@ -149,7 +155,21 @@ export const PostActions = memo(function PostActions({
   hideCommentAction = false,
 }: PostActionsProps) {
   const { theme } = useUnistyles();
-  const { iconSize, gap, pillHeight, voteTextSize } = SIZE_CONFIG[size];
+  const {
+    iconSize,
+    gap,
+    pillHeight,
+    voteTextSize,
+    voteButtonPadX,
+    iconOnlyPad,
+  } = SIZE_CONFIG[size];
+  const voteButtonStyle = { paddingHorizontal: voteButtonPadX };
+  // Icon-only pills (share, ban) get equal horizontal + vertical padding
+  // so they render as visually-round circles inside the pill border.
+  const iconOnlyButtonStyle = {
+    paddingHorizontal: iconOnlyPad,
+    paddingVertical: iconOnlyPad,
+  };
 
   const blockMenuMinWidth = Math.max(180, `Block @${authorUsername || ""}`.length * 10 + 60);
 
@@ -265,7 +285,7 @@ export const PostActions = memo(function PostActions({
           onPress={handleLikePress}
           disabled={disabled}
           hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-          style={[styles.voteButton, disabled && styles.disabled]}
+          style={[styles.voteButton, voteButtonStyle, disabled && styles.disabled]}
         >
           <Animated.View
             style={{
@@ -288,12 +308,20 @@ export const PostActions = memo(function PostActions({
           onPress={handleLikePress}
           disabled={disabled}
           hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-          style={[styles.voteButton, disabled && styles.disabled]}
+          style={[styles.voteButton, voteButtonStyle, disabled && styles.disabled]}
         >
           <Text
             size={voteTextSize}
             weight="bold"
-            style={{ color: upvoteColor }}
+            style={{
+              color: upvoteColor,
+              // Cap line-height to the icon size so the count baseline
+              // aligns with the up/down arrows. Without this, the Text
+              // default lineHeight (≈ 1.5x fontSize) pushes the count
+              // visually lower than the icons.
+              lineHeight: iconSize,
+              marginTop: -1,
+            }}
           >
             {formatCount(likes)}
           </Text>
@@ -307,7 +335,7 @@ export const PostActions = memo(function PostActions({
           onPress={handleDislikePress}
           disabled={disabled}
           hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-          style={[styles.voteButton, disabled && styles.disabled]}
+          style={[styles.voteButton, voteButtonStyle, disabled && styles.disabled]}
         >
           <Animated.View
             style={{
@@ -334,13 +362,17 @@ export const PostActions = memo(function PostActions({
             {...makePressHandlers(commentPillScale)}
             disabled={disabled}
             hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-            style={[styles.voteButton, disabled && styles.disabled]}
+            style={[styles.voteButton, voteButtonStyle, disabled && styles.disabled]}
           >
             <CommentIcon size={iconSize} color={defaultColor} />
             <Text
               size={voteTextSize}
               weight="bold"
-              style={{ marginLeft: 8, color: defaultColor, marginTop: -2 }}
+              style={{
+                marginLeft: size === "sm" ? 4 : 8,
+                color: defaultColor,
+                marginTop: -2,
+              }}
             >
               {formatCount(comments)}
             </Text>
@@ -357,7 +389,7 @@ export const PostActions = memo(function PostActions({
           onPress={handleShare}
           {...makePressHandlers(sharePillScale)}
           disabled={disabled}
-          style={[styles.voteButton, disabled && styles.disabled]}
+          style={[styles.voteButton, iconOnlyButtonStyle, disabled && styles.disabled]}
         >
           <ShareIcon size={iconSize} color={defaultColor} />
         </Pressable>
@@ -376,7 +408,7 @@ export const PostActions = memo(function PostActions({
             }}
           >
             <Animated.View style={[styles.votePill, { height: pillHeight, transform: [{ scale: banPillScale }] }]}>
-             <View style={[styles.voteButton, disabled && styles.disabled]}>
+             <View style={[styles.voteButton, iconOnlyButtonStyle, disabled && styles.disabled]}>
                <Ionicons
                   name="ban-outline"
                  size={iconSize}
