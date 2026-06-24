@@ -3,6 +3,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { mmkvStorage } from "./mmkv-storage";
 
 export type FeedType = "home" | "popular" | "news" | "watch" | "latest";
+export type FeedDensity = "card" | "compact";
 export type ThemeMode = "light" | "dark" | "system";
 export type ShareServer = string;
 export type ApiServer = string;
@@ -70,6 +71,7 @@ type PreferencesState = {
   // Feed
   feedType: FeedType;
   followingFeedType: FeedType;
+  feedDensity: FeedDensity;
 
   // Theme
   theme: ThemeMode;
@@ -114,6 +116,7 @@ type PreferencesState = {
 // Actions
  setFeedType: (type: FeedType) => void;
   setFollowingFeedType: (type: FeedType) => void;
+  setFeedDensity: (density: FeedDensity) => void;
   setTheme: (theme: ThemeMode) => void;
   setAdultContent: (enabled: boolean) => void;
   setHasSeenAdultPrompt: () => void;
@@ -144,6 +147,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       // Feed
       feedType: "home",
       followingFeedType: "home",
+      feedDensity: "card",
 
       // Theme
       theme: "system",
@@ -188,6 +192,7 @@ export const usePreferencesStore = create<PreferencesState>()(
     // Actions
      setFeedType: (type) => set({ feedType: type }),
       setFollowingFeedType: (type) => set({ followingFeedType: type }),
+      setFeedDensity: (density) => set({ feedDensity: density }),
       setTheme: (theme) => set({ theme }),
       setAdultContent: (enabled) =>
         set((state) => {
@@ -281,7 +286,7 @@ export const usePreferencesStore = create<PreferencesState>()(
    {
      name: "preferences-storage",
       storage: createJSONStorage(() => mmkvStorage),
-      version: 6,
+      version: 7,
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as Partial<PreferencesState>;
         
@@ -327,8 +332,18 @@ export const usePreferencesStore = create<PreferencesState>()(
           state.analyticsConsentAsked = false;
         }
 
+        if (version < 7) {
+          state.feedDensity = state.feedDensity ?? "card";
+        }
+
         return state as PreferencesState;
       },
     }
   )
 );
+
+export const useFeedDensity = (): [FeedDensity, (density: FeedDensity) => void] => {
+  const density = usePreferencesStore((s) => s.feedDensity);
+  const setDensity = usePreferencesStore((s) => s.setFeedDensity);
+  return [density, setDensity];
+};

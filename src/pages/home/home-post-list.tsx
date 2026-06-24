@@ -25,7 +25,7 @@ import type { Post } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { useAppState } from "@/src/hooks";
 import { HomePostCardItem } from "./home-post-card-item";
-import { useFeedScrollStore, useTimeTickStore } from "@/src/stores";
+import { useFeedDensity, useFeedScrollStore, useTimeTickStore } from "@/src/stores";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
   recordViewableItems,
@@ -39,7 +39,8 @@ const AnimatedFlashList = Animated.createAnimatedComponent(
   FlashList as ComponentType<any>,
 );
 
-const ESTIMATED_ITEM_SIZE = 420;
+const ESTIMATED_ITEM_SIZE_CARD = 420;
+const ESTIMATED_ITEM_SIZE_COMPACT = 132;
 const ACTIVE_ZONE_TOP_RATIO = 0.08;
 const ACTIVE_ZONE_BOTTOM_RATIO = 0.15;
 const GLANCE_VISIBLE_RATIO = 0.4;
@@ -77,6 +78,11 @@ const HomePostListInner = function HomePostListInner(
   }: HomePostListProps,
   ref: Ref<FlashListRef<Post>>,
 ) {
+  const [feedDensity] = useFeedDensity();
+  const estimatedItemSize =
+    feedDensity === "compact"
+      ? ESTIMATED_ITEM_SIZE_COMPACT
+      : ESTIMATED_ITEM_SIZE_CARD;
   const setVideoViewability = useHomePostCardStore(
     (state) => state.setVideoViewability,
   );
@@ -558,12 +564,13 @@ const HomePostListInner = function HomePostListInner(
 
   return (
     <AnimatedFlashList
+      key={feedDensity}
       ref={setListRef}
       data={data}
       renderItem={renderItem}
       keyExtractor={keyExtractor}
       getItemType={getItemType}
-      estimatedItemSize={ESTIMATED_ITEM_SIZE}
+      estimatedItemSize={estimatedItemSize}
       drawDistance={Platform.OS === "android" ? 1500 : 1200}
       onScroll={composedScrollHandler || onScroll}
       scrollEventThrottle={Platform.OS === "ios" ? 64 : 32}

@@ -16,6 +16,7 @@ import { Text } from "@/src/components/ui/primitives";
 import { HEADER_HEIGHT } from "@/src/hooks/use-scroll-animation";
 import { formatCompactNumber } from "@/src/utils/format-number";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { FeedDensityToggle } from "./feed-density-toggle";
 
 type FeedOption = {
   label: string;
@@ -204,6 +205,7 @@ export const FeedHeader = ({
         </View>
 
         <View style={styles.rightSection}>
+          <FeedDensityToggle />
           <AnimatedPressable
             scaleAmount={0.85}
             onPress={onSearchPress}

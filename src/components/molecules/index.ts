@@ -15,6 +15,8 @@ export {
 } from "./post-card";
 export { MediaPreviewModal } from "./media-preview-modal";
 export { PostCardItem } from "./post-card-item";
+export { PostCardCompact } from "./post-card-compact";
+export { FeedDensityToggle } from "./feed-density-toggle";
 export { PostCardSkeleton, PostCardSkeletonList } from "./post-card-skeleton";
 export { MediaPostDetailSkeleton } from "./media-post-detail-skeleton";
 

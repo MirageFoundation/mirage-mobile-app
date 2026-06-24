@@ -1,11 +1,13 @@
 import { memo, useCallback, useMemo } from "react";
 import { PostCard } from "./post-card";
+import { PostCardCompact } from "./post-card-compact";
 import type { Post } from "./post-card-types";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import {
   useCommentCountOverride,
   useVoteOverride,
 } from "@/src/stores/home-post-card-store";
+import { useFeedDensity } from "@/src/stores";
 import { logPress } from "@/src/utils/press-logger";
 import { markSeen } from "@/src/services/seen-posts";
 
@@ -108,6 +110,7 @@ onPostPress,
   const editOverride = usePostEditStore((s) => s.overrides[post.id]);
   const voteOverride = useVoteOverride(post.id);
   const commentCountOverride = useCommentCountOverride(post.id);
+  const [feedDensity] = useFeedDensity();
   const displayPost = useMemo(() => {
     let result = post;
 
@@ -223,6 +226,34 @@ onPostPress,
     logPress({ name: "post_topic_press", postId: post.id });
     onTopicPress?.(post.topic);
   }, [onTopicPress, post.topic, post.id]);
+
+ if (feedDensity === "compact") {
+   return (
+     <PostCardCompact
+       post={displayPost}
+       isOwnPost={isOwnPost}
+       isTopicFollowed={isTopicFollowed}
+       showFollowButton={showFollowButton}
+       contentRevealed={contentRevealed}
+       shareUrl={shareUrl}
+       onPress={handlePostPress}
+       onAuthorPress={handleAuthorPress}
+       onMorePress={handleMorePress}
+       onLikePress={handleLikePress}
+       onDislikePress={handleDislikePress}
+       onCommentPress={handleCommentPress}
+       onFollowUser={handleFollowUser}
+       onFollowTopic={handleFollowTopic}
+       onRevealContent={handleRevealContent}
+       onBlockUser={handleBlockUser}
+       onBlockPost={handleBlockPost}
+       onBlockTopic={handleBlockTopic}
+       onReport={handleReport}
+       onTopicPress={handleTopicPress}
+       onMediaPress={handlePostPress}
+     />
+   );
+ }
 
  return (
    <PostCard

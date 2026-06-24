@@ -25,6 +25,7 @@ import {
   type PostOptionsSheetRef,
   CommentOptionsSheet,
   type CommentOptionsSheetRef,
+  FeedDensityToggle,
 } from "@/src/components/molecules";
 import { PostCardItem } from "@/src/components/molecules/post-card-item";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
@@ -917,7 +918,7 @@ export function SavedPostsScreen() {
         <Text size="lg" weight="bold">
           Saved
         </Text>
-        <View style={styles.placeholder} />
+        <FeedDensityToggle />
       </View>
 
       <View style={[styles.headerDivider, { backgroundColor: theme.colors.border.subtle }]} />

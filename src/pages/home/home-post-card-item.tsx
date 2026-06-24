@@ -2,11 +2,11 @@ import { memo, useCallback, useMemo, useRef, useEffect } from "react";
 import type { LayoutChangeEvent } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Post } from "@/src/components/molecules";
-import { PostCard } from "@/src/components/molecules";
+import { PostCard, PostCardCompact } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { logPress } from "@/src/utils/press-logger";
 import { markSeen } from "@/src/services/seen-posts";
-import { getShareBaseUrl } from "@/src/stores";
+import { getShareBaseUrl, useFeedDensity } from "@/src/stores";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { useDraftStore } from "@/src/stores/draft-store";
 import { router } from "@/src/navigation/guarded-router";
@@ -90,6 +90,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  const shareServer = useShareServer();
  const allowAutoplay = useAllowAutoplay();
  const feedActive = useFeedActive(feedScreen);
+ const [feedDensity] = useFeedDensity();
  const currentPowActionId = usePowQueueStore((state) => state.currentAction?.id);
  const isOptimisticActionQueued = usePowQueueStore((state) =>
    post.optimisticActionId
@@ -303,6 +304,40 @@ export const HomePostCardItem = memo(function HomePostCardItem({
     }
     return result;
   }, [post, isFollowing, voteOverride, commentCountOverride, editOverride]);
+
+  if (feedDensity === "compact") {
+    return (
+      <PostCardCompact
+        post={displayPost}
+        isOwnPost={isOwnPost}
+        isTopicFollowed={isTopicFollowed}
+        topicDisabled={isTopicDisabled}
+        contentRevealed={contentRevealed}
+        shareUrl={`${getShareBaseUrl(shareServer)}/p/${post.id}`}
+        onPress={handlePostPress}
+        onAuthorPress={handleAuthorPress}
+        onTopicPress={handleTopicPress}
+        onMorePress={handleMorePress}
+        onLikePress={handleLikePress}
+        onDislikePress={handleDislikePress}
+        onCommentPress={handleCommentPress}
+        onFollowUser={handleFollowUser}
+        onFollowTopic={handleFollowTopic}
+        onRevealContent={handleRevealContent}
+        onBlockUser={handleBlockUser}
+        onBlockPost={handleBlockPost}
+        onBlockTopic={handleBlockTopic}
+        onReport={handleReport}
+        onMediaPress={handlePostPress}
+        onLayout={handleLayout}
+        onOptimisticRetryPress={
+          displayPost.optimisticStatus === "error"
+            ? handleOptimisticRetryPress
+            : undefined
+        }
+      />
+    );
+  }
 
   return (
    <PostCard
