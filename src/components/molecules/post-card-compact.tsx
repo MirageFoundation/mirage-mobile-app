@@ -18,6 +18,9 @@ import { logPress } from "@/src/utils/press-logger";
 import { setLastPressedPostY } from "@/src/utils/post-transition";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { usePreferencesStore } from "@/src/stores";
+import { getUsernameColor } from "@/src/utils/tiers";
+
+const NEW_USER_COLOR = "rgb(94,194,106)";
 
 import { PostActions } from "./post-actions";
 import type { Post } from "./post-card-types";
@@ -164,6 +167,15 @@ export const PostCardCompact = memo(function PostCardCompact({
   const hasMediaSlot = !!thumbUri;
   const avatarSeed = author.avatarSeed ?? author.id ?? author.username;
 
+  const usernameColor = useMemo(() => {
+    if (author.isNewUser) return NEW_USER_COLOR;
+    if (author.level != null) {
+      const tierColor = getUsernameColor(author.level);
+      if (tierColor) return tierColor;
+    }
+    return theme.colors.text.subtle;
+  }, [author.isNewUser, author.level, theme.colors.text.subtle]);
+
   const disableInteractions =
     !!optimisticStatus && optimisticStatus !== "success";
 
@@ -305,7 +317,7 @@ export const PostCardCompact = memo(function PostCardCompact({
                 size="xs"
                 weight="semibold"
                 numberOfLines={1}
-                style={{ color: theme.colors.text.subtle }}
+                style={{ color: usernameColor }}
               >
                 @{author.username}
               </Text>
