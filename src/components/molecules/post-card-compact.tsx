@@ -235,10 +235,7 @@ export const PostCardCompact = memo(function PostCardCompact({
           disabled={disableInteractions}
           style={[
             styles.thumb,
-            {
-              backgroundColor: theme.colors.background.subtle,
-              borderColor: theme.colors.border.subtle,
-            },
+            { backgroundColor: theme.colors.background.subtle },
           ]}
         >
           {hasMediaSlot ? (
@@ -403,11 +400,11 @@ const styles = StyleSheet.create((theme) => ({
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
   },
   thumbImage: {
     width: "100%",
     height: "100%",
+    borderRadius: theme.radius.md,
   },
   avatarContainer: {
     borderWidth: 0,

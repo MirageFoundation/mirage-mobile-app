@@ -27,6 +27,11 @@ const SHOW_THRESHOLD = 15;
 // estimated item size) or tab/page switches. We ignore those for the
 // hide/show accounting so they don't toggle the bars unintentionally.
 const MAX_LEGIT_DIFF = 150;
+// Minimum time between bar visibility transitions. Stops the
+// header/tab-bar/new-posts-button from flickering when FlashList emits
+// rapid back-and-forth scroll events while a pagination footer / new
+// page is rendering.
+const TRANSITION_LOCKOUT_MS = 350;
 
 type ScrollableRef = FlatList<any> | ScrollView | null;
 
@@ -67,6 +72,12 @@ export const ScrollAnimationProvider = ({
   const isFirstScroll = useSharedValue(true);
   const accumulatedDist = useSharedValue(0);
   const lastDir = useSharedValue(0);
+  const lastTransitionAt = useSharedValue(0);
+  // Tracks whether the user is actively interacting with the scroll
+  // surface (finger down or fling in flight). Scroll events that arrive
+  // when this is false are layout-driven (footer/skeleton render, page
+  // insert, recycling) and must not toggle the bars.
+  const isUserScrolling = useSharedValue(false);
 
   const homeRefreshRef = useRef<(() => void) | null>(null);
   const followingRefreshRef = useRef<(() => void) | null>(null);
@@ -76,6 +87,23 @@ export const ScrollAnimationProvider = ({
   const fullTabBarHeight = TAB_BAR_HEIGHT + insets.bottom;
 
   const scrollHandler = useAnimatedScrollHandler({
+    onBeginDrag: () => {
+      isUserScrolling.value = true;
+    },
+    onMomentumBegin: () => {
+      isUserScrolling.value = true;
+    },
+    onEndDrag: (event) => {
+      // If the touch ends without throwing a fling, momentum won't begin,
+      // so the bar logic must release here.
+      const v = event?.velocity?.y ?? 0;
+      if (Math.abs(v) < 0.1) {
+        isUserScrolling.value = false;
+      }
+    },
+    onMomentumEnd: () => {
+      isUserScrolling.value = false;
+    },
     onScroll: (event) => {
       const currentY = event.contentOffset.y;
 
@@ -97,12 +125,17 @@ export const ScrollAnimationProvider = ({
 
       if (diff === 0) return;
 
+      // Only react to scroll events while the user is actively driving
+      // the scroll. Outside that window the events come from layout
+      // (footer skeleton, page insert, recycling) and would otherwise
+      // toggle the bars.
+      if (!isUserScrolling.value) return;
+
       const absDiff = Math.abs(diff);
-      // Skip phantom jumps from FlashList re-layout (and similar non-user
-      // offset corrections) so they don't toggle the bars. We still update
-      // lastScrollY above so a real subsequent scroll calculates the right
-      // diff from the new position.
+      // Belt-and-braces: skip oversized jumps too.
       if (absDiff > MAX_LEGIT_DIFF) return;
+
+      const now = Date.now();
 
       const dir = diff > 0 ? 1 : -1;
       if (dir !== lastDir.value) {
@@ -111,9 +144,14 @@ export const ScrollAnimationProvider = ({
       }
       accumulatedDist.value = accumulatedDist.value + Math.abs(diff);
 
+      const sinceLastTransition = now - lastTransitionAt.value;
+
       if (dir === 1 && currentY > SCROLL_THRESHOLD && !isHidden.value) {
         if (isProgrammaticScroll.value) return;
-        if (accumulatedDist.value > HIDE_THRESHOLD) {
+        if (
+          accumulatedDist.value > HIDE_THRESHOLD &&
+          sinceLastTransition > TRANSITION_LOCKOUT_MS
+        ) {
           headerTranslateY.value = withTiming(-fullHeaderHeight, {
             duration: 200,
           });
@@ -122,13 +160,18 @@ export const ScrollAnimationProvider = ({
           });
           isHidden.value = true;
           accumulatedDist.value = 0;
+          lastTransitionAt.value = now;
         }
       } else if (dir === -1 && isHidden.value) {
-        if (accumulatedDist.value > SHOW_THRESHOLD) {
+        if (
+          accumulatedDist.value > SHOW_THRESHOLD &&
+          sinceLastTransition > TRANSITION_LOCKOUT_MS
+        ) {
           headerTranslateY.value = withTiming(0, { duration: 200 });
           tabBarTranslateY.value = withTiming(0, { duration: 200 });
           isHidden.value = false;
           accumulatedDist.value = 0;
+          lastTransitionAt.value = now;
         }
       }
     },
@@ -148,11 +191,13 @@ export const ScrollAnimationProvider = ({
     isHidden.value = false;
     isFirstScroll.value = true;
     lastScrollY.value = 0;
+    lastTransitionAt.value = Date.now();
+    isUserScrolling.value = false;
     isProgrammaticScroll.value = true;
     setTimeout(() => {
       isProgrammaticScroll.value = false;
     }, 2000);
-  }, [headerTranslateY, tabBarTranslateY]);
+  }, [headerTranslateY, tabBarTranslateY, isUserScrolling, isHidden, isFirstScroll, lastScrollY, lastTransitionAt, isProgrammaticScroll]);
 
   const registerHomeRefresh = useCallback((callback: () => void) => {
     homeRefreshRef.current = callback;
