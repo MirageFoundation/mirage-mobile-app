@@ -32,6 +32,7 @@ const IS_DEV = __DEV__;
 
 export type AnalyticsEventName =
   | "analytics_consent_granted"
+  | "app_opened"
   | "onboarding_started"
   | "username_set"
   | "recovery_phrase_viewed"

@@ -16,7 +16,7 @@ import { CloudflareErrorToast } from "@/src/components/cloudflare-error-toast";
 import { WalletProvider } from "./wallet-provider";
 import { cleanupInboxNotificationsForLogout, initInboxNotifications } from "@/src/services/inbox-notifications";
 import { initPushNotifications, registerPush } from "@/src/services/push-notifications";
-import { identifyUser, setAnalyticsTrackingEnabled } from "@/src/services/analytics";
+import { identifyUser, setAnalyticsTrackingEnabled, trackEvent } from "@/src/services/analytics";
 import { initSeenPosts, teardownSeenPosts } from "@/src/services/seen-posts";
 import { useAuthStore, usePreferencesStore, useVideoPositionStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
@@ -51,6 +51,7 @@ export const RootProvider = memo(
     const walletAddress = useAuthStore((s) => s.walletAddress);
     const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
     const hadLoggedInSessionRef = useRef(isLoggedIn);
+    const appStateRef = useRef(AppState.currentState);
 
     useEffect(() => {
       initInboxNotifications();
@@ -80,6 +81,10 @@ export const RootProvider = memo(
             tier: user?.tier,
           });
         }
+        trackEvent("app_opened", {
+          source: "launch",
+          is_logged_in: Boolean(address),
+        });
       });
     }, [analyticsConsent]);
 
@@ -108,12 +113,27 @@ export const RootProvider = memo(
 
     useEffect(() => {
       const sub = AppState.addEventListener("change", (nextState) => {
+        const previousState = appStateRef.current;
+        appStateRef.current = nextState;
+
         if (nextState.match(/inactive|background/)) {
           useVideoPositionStore.getState().clearAll();
         }
+
+        if (
+          analyticsConsent &&
+          nextState === "active" &&
+          previousState.match(/inactive|background/)
+        ) {
+          const { walletAddress: address } = useAuthStore.getState();
+          trackEvent("app_opened", {
+            source: "foreground",
+            is_logged_in: Boolean(address),
+          });
+        }
       });
       return () => sub.remove();
-    }, []);
+    }, [analyticsConsent]);
 
     const hasSeenAdultPrompt = usePreferencesStore((s) => s.hasSeenAdultPrompt);
 
