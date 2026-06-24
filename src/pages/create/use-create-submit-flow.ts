@@ -314,17 +314,54 @@ export function useCreateSubmitFlow({
                   hasOptimisticPreview: !!optimisticPreviewMediaUrls?.length,
                 },
               });
-              let uploadedMediaUrls = resolvedMediaUrls;
-              if (draft.attachmentType === "image" && draft.mediaUris.length > 0) {
-                try {
+              try {
+                let uploadedMediaUrls = resolvedMediaUrls;
+                if (draft.attachmentType === "image" && draft.mediaUris.length > 0) {
+                  const imageResolveStartedAt = Date.now();
+                  Sentry.addBreadcrumb({
+                    category: "image-upload",
+                    message: "Resolving queued post image uploads before POW",
+                    level: "info",
+                    data: {
+                      optimisticId,
+                      actionId,
+                      mediaCount: draft.mediaUris.length,
+                      preResolvedCount: resolvedMediaUrls.length,
+                    },
+                  });
                   const uploads = await getUploadedImageUrls(draft.mediaUris);
                   uploadedMediaUrls = [...resolvedMediaUrls, ...uploads];
-                } catch (error) {
-                  Sentry.addBreadcrumb({ category: "image-upload", message: "Image upload failed", data: { error: String(error) }, level: "error" });
-                  throw error;
+                  const imageResolveDurationMs = Date.now() - imageResolveStartedAt;
+                  Sentry.addBreadcrumb({
+                    category: "image-upload",
+                    message: "Queued post image uploads resolved before POW",
+                    level: "info",
+                    data: {
+                      optimisticId,
+                      actionId,
+                      durationMs: imageResolveDurationMs,
+                      uploadCount: uploads.length,
+                      totalMediaCount: uploadedMediaUrls.length,
+                    },
+                  });
+                  if (imageResolveDurationMs > 3000) {
+                    Sentry.captureMessage("Image post waited on media upload before POW", {
+                      level: "warning",
+                      tags: {
+                        feature: "create-post",
+                        operation: "queued-image-upload-before-pow",
+                      },
+                      extra: {
+                        optimisticId,
+                        actionId,
+                        durationMs: imageResolveDurationMs,
+                        mediaCount: draft.mediaUris.length,
+                        preResolvedCount: resolvedMediaUrls.length,
+                        elapsedSinceSubmitMs: Date.now() - submitStartedAt,
+                      },
+                    });
+                  }
                 }
-              }
-              try {
                 const result = await postMutation.mutateAsync({
                   ...postInput,
                   media: uploadedMediaUrls.length > 0 ? uploadedMediaUrls : undefined,
@@ -374,6 +411,19 @@ export function useCreateSubmitFlow({
                   },
                 });
                 throw error;
+              } finally {
+                if (draft.attachmentType === "image") {
+                  Sentry.addBreadcrumb({
+                    category: "image-upload",
+                    message: "Clearing queued post image upload state",
+                    level: "info",
+                    data: {
+                      optimisticId,
+                      actionId,
+                    },
+                  });
+                  resetImageUploads();
+                }
               }
             },
             onOptimisticUpdate: skipOptimisticUpdate ? undefined : insertOptimisticPost,
@@ -402,7 +452,9 @@ export function useCreateSubmitFlow({
         enqueueNetworkPost(mediaUrls);
         resetComposeState();
         resetVideoUploads();
-        resetImageUploads();
+        if (draft.attachmentType !== "image") {
+          resetImageUploads();
+        }
         VIDEO_META.clear();
         setHandledVideoParam(null);
         clearDraft();

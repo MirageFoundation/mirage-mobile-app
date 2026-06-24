@@ -1,4 +1,5 @@
 import { useLocalSearchParams } from "expo-router";
+import type { Href } from "expo-router";
 import { useRouter } from "@/src/navigation/guarded-router";
 import * as Sentry from "@sentry/react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -334,6 +335,24 @@ export function InboxScreen() {
       await refetch();
       if (cancelled) return;
       if (attempts >= maxAttempts) {
+        Sentry.captureMessage("Inbox notification target fetch exhausted", {
+          level: targetReplyId ? "warning" : "info",
+          tags: {
+            feature: "inbox-notifications",
+            operation: "inbox-target-fetch",
+          },
+          extra: {
+            notificationId: activeNotificationId,
+            targetReplyId,
+            attempts,
+            maxAttempts,
+            hasFetchedTargetReply,
+            hasPreviewReply: !!previewReply,
+            visibleRepliesCount: visibleReplies.length,
+            routeOpenReply,
+            platform: Platform.OS,
+          },
+        });
         setIsNotificationLoading(false);
         return;
       }
@@ -355,8 +374,11 @@ export function InboxScreen() {
     activeNotificationId,
     clearNotificationTarget,
     hasFetchedTargetReply,
+    previewReply,
     refetch,
+    routeOpenReply,
     targetReplyId,
+    visibleReplies.length,
   ]);
 
   useEffect(() => {
@@ -393,9 +415,26 @@ export function InboxScreen() {
     [queryClient, walletAddress],
   );
 
+  const buildPostHref = useCallback(
+    (rootPostId: string, options: { highlight?: string } = {}) => {
+      const queryParams: string[] = [];
+      if (options.highlight) {
+        queryParams.push(`highlight=${encodeURIComponent(options.highlight)}`);
+      }
+      const notificationId = fromNotificationRef.current;
+      if (notificationId) {
+        queryParams.push(`fromNotification=${encodeURIComponent(notificationId)}`);
+      }
+      const query = queryParams.length > 0 ? `?${queryParams.join("&")}` : "";
+      return `/post/${encodeURIComponent(rootPostId)}${query}` as Href;
+    },
+    [],
+  );
+
   const handleItemPress = useCallback(
     (reply: InboxReply) => {
       markReplyAsRead(reply.reply_id);
+      const notificationId = fromNotificationRef.current;
 
       if (reply.type === "donation") {
         routerRef.current.navigate("/(tabs)/profile");
@@ -417,6 +456,24 @@ export function InboxScreen() {
         return;
       }
 
+      if (!reply.reply_content?.trim()) {
+        Sentry.addBreadcrumb({
+          category: "inbox",
+          message: "Inbox item opened post without comment highlight",
+          level: "info",
+          data: {
+            replyId: reply.reply_id,
+            rootPostId: reply.root_post_id,
+            parentId: reply.parent_id,
+            type: reply.type ?? "reply",
+            notificationId,
+            hasFromNotification: !!notificationId,
+          },
+        });
+        routerRef.current.push(buildPostHref(reply.root_post_id));
+        return;
+      }
+
       Sentry.addBreadcrumb({
         category: "inbox",
         message: "Inbox reply opened focused comment detail",
@@ -426,17 +483,14 @@ export function InboxScreen() {
           rootPostId: reply.root_post_id,
           parentId: reply.parent_id,
           type: reply.type ?? "reply",
+          notificationId,
+          hasFromNotification: !!notificationId,
         },
       });
-      if (!reply.reply_content?.trim()) {
-        routerRef.current.push(`/post/${reply.root_post_id}`);
-        return;
-      }
-
       seedFocusedComment(reply);
-      routerRef.current.push(`/post/${reply.root_post_id}?highlight=${reply.reply_id}`);
+      routerRef.current.push(buildPostHref(reply.root_post_id, { highlight: reply.reply_id }));
     },
-    [markReplyAsRead, seedFocusedComment],
+    [buildPostHref, markReplyAsRead, seedFocusedComment],
   );
 
   useEffect(() => {
@@ -507,12 +561,13 @@ export function InboxScreen() {
         }
       };
     }
-    if (!targetReply?.reply_content?.trim()) {
+    if (!targetReply || (!targetReply.reply_content?.trim() && !hasFetchedTargetReply)) {
       console.log("[InboxNotifFlow] inbox auto-open waiting for target reply", {
         activeNotificationId,
         targetReplyId,
         visibleRepliesCount: visibleReplies.length,
         hasTargetReply: !!targetReply,
+        hasFetchedTargetReply,
       });
       Sentry.addBreadcrumb({
         category: "inbox",
@@ -523,6 +578,7 @@ export function InboxScreen() {
           targetReplyId,
           visibleRepliesCount: visibleReplies.length,
           hasTargetReply: !!targetReply,
+          hasFetchedTargetReply,
           hasPreviewReply: !!previewReply,
         },
       });
@@ -596,6 +652,7 @@ export function InboxScreen() {
     activeNotificationId,
     clearNotificationTarget,
     handleItemPress,
+    hasFetchedTargetReply,
     previewReply,
     routeOpenReply,
     targetReplyId,

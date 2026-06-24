@@ -256,6 +256,19 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
 
   useEffect(() => {
     return () => {
+      if (!didSubmitRef.current) {
+        Sentry.addBreadcrumb({
+          category: "comment-compose",
+          message: "Comment compose dismissed without submit",
+          level: "info",
+          data: {
+            postId: postId ?? null,
+            replyToId: replyToId ?? null,
+            isEditMode,
+          },
+        });
+        setWasDismissed(true);
+      }
       if (!isEditMode && postId && !didSubmitRef.current) {
         saveDraft(postId, replyToId ?? null, {
           text: textRef.current,
@@ -264,7 +277,7 @@ const setPendingComment = useCommentComposeStore((s) => s.setPendingComment);
         });
       }
     };
-  }, [isEditMode, postId, replyToId, saveDraft]);
+  }, [isEditMode, postId, replyToId, saveDraft, setWasDismissed]);
 
   const replyPreview = useMemo(() => {
     if (!replyToContent) return null;

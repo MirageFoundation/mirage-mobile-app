@@ -13,10 +13,11 @@
  * - reset() on logout
  */
 
-import { Mixpanel } from "mixpanel-react-native";
+import { Mixpanel, type MixpanelAsyncStorage } from "mixpanel-react-native";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
 import * as Sentry from "@sentry/react-native";
+import { storage } from "@/src/stores/mmkv-storage";
 
 const MIXPANEL_TOKEN =
   process.env.EXPO_PUBLIC_MIXPANEL_TOKEN ??
@@ -51,6 +52,25 @@ type AnalyticsProperties = Record<
 let mixpanel: Mixpanel | null = null;
 let initializing: Promise<void> | null = null;
 
+const mixpanelStorage: MixpanelAsyncStorage = {
+  getItem: async (key) => storage.getString(key) ?? null,
+  setItem: async (key, value) => {
+    storage.set(key, value);
+  },
+  removeItem: async (key) => {
+    storage.remove(key);
+  },
+};
+
+const MixpanelWithStorage = Mixpanel as unknown as {
+  new (
+    token: string,
+    trackAutomaticEvents: boolean,
+    useNative?: boolean,
+    storage?: MixpanelAsyncStorage,
+  ): Mixpanel;
+};
+
 function stripUndefined(props?: AnalyticsProperties): Record<string, unknown> {
   if (!props) return {};
   const result: Record<string, unknown> = {};
@@ -72,7 +92,12 @@ export async function initAnalytics(): Promise<void> {
 
   initializing = (async () => {
     try {
-      const instance = new Mixpanel(MIXPANEL_TOKEN, TRACK_AUTOMATIC_EVENTS);
+      const instance = new MixpanelWithStorage(
+        MIXPANEL_TOKEN,
+        TRACK_AUTOMATIC_EVENTS,
+        true,
+        mixpanelStorage,
+      );
       await instance.init();
       if (IS_DEV) {
         instance.setLoggingEnabled(true);

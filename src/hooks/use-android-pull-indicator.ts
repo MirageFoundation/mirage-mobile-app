@@ -8,9 +8,21 @@ import {
   type SharedValue,
 } from "react-native-reanimated";
 
-const TOP_TOLERANCE = 12;
+// Android FlashList throttles `onScroll` (scrollEventThrottle=32), so the
+// shared `scrollY` can lag the real list position by a frame or two when the
+// user flicks back to the top and immediately tries to pull. A generous
+// tolerance avoids rejecting those legitimate pulls.
+const TOP_TOLERANCE = 24;
 const ACTIVATE_DISTANCE = 2;
-const HORIZONTAL_FAIL_DISTANCE = 24;
+// Horizontal-fail must be lenient enough to allow slightly diagonal pulls
+// (very common on phones) but strict enough to release the gesture to
+// horizontal swipers (tab pager). We require both a real horizontal travel
+// AND a horizontal-dominant direction before failing.
+const HORIZONTAL_FAIL_DISTANCE = 36;
+const HORIZONTAL_DOMINANCE_RATIO = 1.5;
+// Once the user has clearly moved vertically, stop competing with horizontal
+// swipers — they're pulling, not swiping.
+const VERTICAL_COMMIT_DISTANCE = 16;
 const TRIGGER_DISTANCE = 56;
 const MAX_PULL_DISTANCE = 120;
 const RESET_DURATION = 120;
@@ -75,9 +87,11 @@ export function useAndroidPullIndicator({
         const dx = touch.absoluteX - startX.value;
         const dy = touch.absoluteY - startY.value;
         const isAtTop = scrollY.value <= TOP_TOLERANCE;
+        const hasCommittedVertical = dy >= VERTICAL_COMMIT_DISTANCE;
         const isMostlyHorizontal =
-          Math.abs(dx) > HORIZONTAL_FAIL_DISTANCE
-          && Math.abs(dx) > Math.abs(dy) * 1.2;
+          !hasCommittedVertical
+          && Math.abs(dx) > HORIZONTAL_FAIL_DISTANCE
+          && Math.abs(dx) > Math.abs(dy) * HORIZONTAL_DOMINANCE_RATIO;
 
         if (isMostlyHorizontal) {
           pullDistance.value = withTiming(0, { duration: RESET_DURATION });

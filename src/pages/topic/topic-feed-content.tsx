@@ -526,6 +526,15 @@ export function TopicFeedScreen() {
 
   const handleRefresh = useCallback(async () => {
     if (Platform.OS === "android") triggerHaptic("light");
+    Sentry.addBreadcrumb({
+      category: "topic-feed",
+      message: "Refresh requested",
+      level: "info",
+      data: {
+        platform: Platform.OS,
+        topic: topicName,
+      },
+    });
     setIsManualRefreshing(true);
     try {
       await refetch();
@@ -536,7 +545,7 @@ export function TopicFeedScreen() {
       dismissNewPostsRef.current?.();
       useTimeTickStore.getState().bump();
     }
-  }, [refetch]);
+  }, [refetch, topicName]);
 
   const handleNewPostsPress = useCallback(async () => {
     setIsBannerLoading(true);

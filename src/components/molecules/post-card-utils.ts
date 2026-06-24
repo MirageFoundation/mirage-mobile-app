@@ -241,6 +241,10 @@ export function isDirectMediaUrl(url: string): boolean {
     if (parsedUrl.hostname.includes("cloudflarestream.com")) return true;
     if (parsedUrl.hostname.includes("videodelivery.net")) return true;
     if (parsedUrl.hostname.includes("redgifs.com")) return true;
+    // Cloudflare Images (used for uploaded images and meme stickers). URLs look
+    // like https://imagedelivery.net/<account>/<id>/<variant> and have no file
+    // extension, but always resolve to an image.
+    if (parsedUrl.hostname.includes("imagedelivery.net")) return true;
     const ext = parsedUrl.pathname.toLowerCase().split(".").pop() ?? "";
     return IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
   } catch {
@@ -249,6 +253,7 @@ export function isDirectMediaUrl(url: string): boolean {
     if (url.includes("cloudflarestream.com")) return true;
     if (url.includes("videodelivery.net")) return true;
     if (url.includes("redgifs.com")) return true;
+    if (url.includes("imagedelivery.net")) return true;
     return IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
   }
 }
@@ -333,7 +338,10 @@ export function resolvePostContent(
       }
     : resolvedMedia;
 
-  const isBodyUrlRenderedAsMedia = bodyVideoUrl || (extractedUrl && getMediaTypeFromUrl(extractedUrl) === "gif");
+  const isBodyUrlRenderedAsMedia =
+    !!bodyVideoUrl ||
+    (!!extractedUrl &&
+      (getMediaTypeFromUrl(extractedUrl) === "gif" || isDirectMediaUrl(extractedUrl)));
 
   return {
     extractedUrl,

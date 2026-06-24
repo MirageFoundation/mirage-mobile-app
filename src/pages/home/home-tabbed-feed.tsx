@@ -59,6 +59,7 @@ import { useNewPostsChecker, type NewPostAvatar } from "@/src/hooks/use-new-post
 import { usePostDataRefresher } from "@/src/hooks/use-post-data-refresher";
 
 const coldStartCheckedFeedKeys = new Set<string>();
+const STALE_CACHED_PAGE_GAP_SECONDS = 60 * 60 * 2;
 
 type FeedRefreshOptions = {
   fetchAllNew?: boolean;
@@ -109,8 +110,17 @@ export const HomeTabbedFeed = forwardRef<
   const dismissNewPostsRef = useRef<(() => void) | null>(null);
   const handleRefreshRef = useRef<((options?: FeedRefreshOptions) => Promise<void>) | null>(null);
   const triggerPullRefresh = useCallback(() => {
+    Sentry.addBreadcrumb({
+      category: "home-feed",
+      message: "Android pull-to-refresh triggered",
+      level: "info",
+      data: {
+        feed: baseFeed,
+        tab: activeTabIndexRef.current === 0 ? "magic" : "latest",
+      },
+    });
     handleRefreshRef.current?.();
-  }, []);
+  }, [baseFeed]);
 
   const { pullDistance, pullGesture } = useAndroidPullIndicator({
     scrollY: scrollOffsetY,
@@ -131,6 +141,12 @@ export const HomeTabbedFeed = forwardRef<
         setLatestTabActivated(true);
       }
       showBars();
+      // The list remounts on tab switch (keyed by feedContext), so the new
+      // tab is logically at offset 0 even though no scroll event will fire
+      // to update the shared offset. Reset it explicitly so the Android
+      // pull-to-refresh gate (`scrollOffsetY <= TOP_TOLERANCE`) doesn't read
+      // a stale value from the previous tab and reject valid pull gestures.
+      scrollOffsetY.value = 0;
       requestAnimationFrame(() => {
         activeListRef.current?.scrollToOffset({ offset: 0, animated: false });
       });
@@ -139,7 +155,7 @@ export const HomeTabbedFeed = forwardRef<
         setTimeout(() => handleRefreshRef.current?.(), 100);
       }
     }
-  }, [activeTabIndex, showBars, baseFeed, setContextScrolling]);
+  }, [activeTabIndex, showBars, baseFeed, setContextScrolling, scrollOffsetY]);
 
   const currentUser = useAuthStore((s) => s.user);
   const selectedContentTypes = usePreferencesStore(
@@ -180,6 +196,13 @@ export const HomeTabbedFeed = forwardRef<
   const pendingApiPosts = usePendingPostsStore((s) => s.posts);
   const postEditOverrides = usePostEditStore((s) => s.overrides);
   const transformedPageCacheRef = useRef(new WeakMap<object, Post[]>());
+
+  useEffect(() => {
+    if (!pendingApiPosts.some((post) => post.optimistic_status === "success")) {
+      return;
+    }
+    showBars();
+  }, [pendingApiPosts, showBars]);
 
   const feedRefreshParamsList = useMemo(() => [
     {
@@ -411,18 +434,36 @@ export const HomeTabbedFeed = forwardRef<
         refreshedPageCount = newPages.length;
         }
       } else {
-        queryClient.setQueryData(postsQueryKey, (oldData: any) => {
-          if (!oldData || sortBy === "magic") {
-            return {
-              pages: [newFirstPage],
-              pageParams: [1],
-            };
-          }
-          return {
-            ...oldData,
-            pages: [newFirstPage, ...oldData.pages.slice(1)],
-            pageParams: [1, ...oldData.pageParams.slice(1)],
-          };
+        const existingData: any = queryClient.getQueryData(postsQueryKey);
+        const firstPageOldestTimestamp = Math.min(
+          ...newFirstPage.posts.map((post) => post.timestamp),
+        );
+        const nextCachedPageNewestTimestamp = existingData?.pages?.[1]?.posts?.[0]?.timestamp;
+        const cachedPageGapSeconds = Number.isFinite(firstPageOldestTimestamp)
+          && Number.isFinite(nextCachedPageNewestTimestamp)
+          ? firstPageOldestTimestamp - nextCachedPageNewestTimestamp
+          : 0;
+
+        if (sortBy === "newest" && cachedPageGapSeconds >= STALE_CACHED_PAGE_GAP_SECONDS) {
+          Sentry.captureMessage("Stale cached latest feed pages discarded", {
+            level: "warning",
+            tags: {
+              feature: "home-feed",
+              feed: baseFeed,
+              sort: sortBy,
+            },
+            extra: {
+              cachedPageGapSeconds,
+              cachedPageCount: existingData?.pages?.length ?? 0,
+              firstPagePostCount: newFirstPage.posts.length,
+              hasAddress: Boolean(currentUser?.walletAddress),
+            },
+          });
+        }
+
+        queryClient.setQueryData(postsQueryKey, {
+          pages: [newFirstPage],
+          pageParams: [1],
         });
       }
 
