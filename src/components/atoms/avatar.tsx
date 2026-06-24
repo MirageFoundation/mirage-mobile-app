@@ -33,7 +33,10 @@ const DICEBEAR_BASE = "https://api.dicebear.com/9.x";
 function buildDicebearSvgUrl(seed: string | undefined) {
   const rawSeed = seed === null || seed === undefined ? "" : String(seed);
   const safeSeed = encodeURIComponent(rawSeed || "default");
-  return `${DICEBEAR_BASE}/identicon/svg?seed=${safeSeed}`;
+  // Request a transparent background so the avatar's themed container
+  // surface shows through (matches dark mode in compact post cards and
+  // anywhere else the avatar sits on a non-white surface).
+  return `${DICEBEAR_BASE}/identicon/svg?seed=${safeSeed}&backgroundColor=transparent`;
 }
 
 // In-memory SVG cache so each seed is fetched at most once per app

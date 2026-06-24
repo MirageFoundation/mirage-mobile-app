@@ -21,6 +21,12 @@ const TAB_BAR_HEIGHT = 56;
 const SCROLL_THRESHOLD = 50;
 const HIDE_THRESHOLD = 10;
 const SHOW_THRESHOLD = 15;
+// Per-event diff cap: real flings rarely exceed ~150px per scroll event.
+// Larger jumps almost always come from list re-layout (FlashList recycling
+// adjusts the scroll offset when measured row heights differ from the
+// estimated item size) or tab/page switches. We ignore those for the
+// hide/show accounting so they don't toggle the bars unintentionally.
+const MAX_LEGIT_DIFF = 150;
 
 type ScrollableRef = FlatList<any> | ScrollView | null;
 
@@ -90,6 +96,13 @@ export const ScrollAnimationProvider = ({
       lastScrollY.value = currentY;
 
       if (diff === 0) return;
+
+      const absDiff = Math.abs(diff);
+      // Skip phantom jumps from FlashList re-layout (and similar non-user
+      // offset corrections) so they don't toggle the bars. We still update
+      // lastScrollY above so a real subsequent scroll calculates the right
+      // diff from the new position.
+      if (absDiff > MAX_LEGIT_DIFF) return;
 
       const dir = diff > 0 ? 1 : -1;
       if (dir !== lastDir.value) {

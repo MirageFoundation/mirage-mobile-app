@@ -386,7 +386,9 @@ export const PowQueueToast = () => {
     }
     return {
       icon: theme.colors.primary[500],
-      border: theme.colors.primary[500] + "40",
+      border: isDark
+        ? theme.colors.primary[500] + "40"
+        : theme.colors.border.default,
     };
   };
 

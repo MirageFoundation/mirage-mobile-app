@@ -411,6 +411,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   avatarContainer: {
     borderWidth: 0,
+    backgroundColor: "transparent",
   },
   thumbBadge: {
     position: "absolute",
