@@ -277,7 +277,7 @@ export const PostActions = memo(function PostActions({
   const downvoteColor = hasDisliked ? DOWNVOTE_COLOR : defaultColor;
 
   return (
-    <View style={[styles.container, { gap }, style]}>
+    <View style={[styles.container, styles.containerSpaced, style]}>
       {/* Vote pill container */}
       <View style={[styles.votePill, { height: pillHeight }]}>
         {/* Like button */}
@@ -380,10 +380,7 @@ export const PostActions = memo(function PostActions({
         </Animated.View>
       )}
 
-      {/* Spacer to push share to the right */}
-      <View style={styles.spacer} />
-
-      {/* Share pill container */}
+      {/* Share pill container — sits next to comment */}
       <Animated.View style={[styles.votePill, { height: pillHeight, transform: [{ scale: sharePillScale }] }]}>
         <Pressable
           onPress={handleShare}
@@ -400,7 +397,6 @@ export const PostActions = memo(function PostActions({
         <Menu>
           <MenuTrigger
             customStyles={{
-              triggerOuterWrapper: { marginLeft: -3 },
               triggerTouchable: {
                 hitSlop: { top: 6, bottom: 6, left: 6, right: 6 },
                 ...makePressHandlers(banPillScale),
@@ -517,6 +513,9 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
   },
+  containerSpaced: {
+    justifyContent: "space-between",
+  },
   votePill: {
     flexDirection: "row",
     alignItems: "center",
@@ -526,6 +525,7 @@ const styles = StyleSheet.create((theme) => ({
     borderColor: theme.colors.border.default,
     paddingHorizontal: 2,
   },
+
   voteButton: {
     flexDirection: "row",
     alignItems: "center",
