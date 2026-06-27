@@ -13,6 +13,8 @@ import * as Notifications from "expo-notifications";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useInfiniteInbox } from "@/src/api/read/hooks/use-inbox";
+import { getRootPostId } from "@/src/api/read/endpoints/posts";
+import { queryKeys } from "@/src/api/read/query-keys";
 import { seedFocusedCommentFromInbox } from "@/src/api/cache";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import type { InboxReply } from "@/src/api/types";
@@ -30,6 +32,17 @@ import { confirmInboxNotificationNavigation } from "@/src/services/inbox-notific
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
 const MemoizedInboxItem = InboxItem;
+
+function isValidPostId(value?: string | null): value is string {
+  const normalized = value?.trim();
+  return !!normalized && normalized !== "undefined" && normalized !== "null";
+}
+
+type RootPostResolution = {
+  rootPostId: string;
+  source: "inbox-payload" | "root-post-id-query";
+  elapsedMs: number;
+};
 
 export function InboxScreen() {
   const insets = useSafeAreaInsets();
@@ -431,10 +444,131 @@ export function InboxScreen() {
     [],
   );
 
+  const resolveRootPostId = useCallback(
+    async (reply: InboxReply): Promise<RootPostResolution | null> => {
+      const startedAt = Date.now();
+      if (isValidPostId(reply.root_post_id)) {
+        return {
+          rootPostId: reply.root_post_id.trim(),
+          source: "inbox-payload",
+          elapsedMs: Date.now() - startedAt,
+        };
+      }
+
+      Sentry.addBreadcrumb({
+        category: "inbox",
+        message: "Inbox item missing root post id; resolving from reply id",
+        level: "warning",
+        data: {
+          replyId: reply.reply_id,
+          rootPostId: reply.root_post_id,
+          parentId: reply.parent_id,
+          type: reply.type ?? "reply",
+          platform: Platform.OS,
+        },
+      });
+
+      try {
+        const res = await queryClient.fetchQuery({
+          queryKey: queryKeys.rootPostId(reply.reply_id),
+          queryFn: () => getRootPostId({ comment_id: reply.reply_id }),
+          staleTime: 1000 * 60 * 60,
+        });
+        if (isValidPostId(res.root_post_id)) {
+          const elapsedMs = Date.now() - startedAt;
+          Sentry.captureMessage("Inbox item root post id resolved from reply id", {
+            level: "info",
+            tags: {
+              feature: "inbox",
+              operation: "resolve-root-post-id",
+              platform: Platform.OS,
+              outcome: "resolved",
+            },
+            extra: {
+              replyId: reply.reply_id,
+              resolvedRootPostId: res.root_post_id,
+              parentId: reply.parent_id,
+              type: reply.type ?? "reply",
+              elapsedMs,
+              hadNotificationContext: !!fromNotificationRef.current,
+            },
+          });
+          return {
+            rootPostId: res.root_post_id.trim(),
+            source: "root-post-id-query",
+            elapsedMs,
+          };
+        }
+        Sentry.captureMessage("Inbox root post id query returned invalid id", {
+          level: "warning",
+          tags: {
+            feature: "inbox",
+            operation: "resolve-root-post-id",
+            platform: Platform.OS,
+            outcome: "invalid-response",
+          },
+          extra: {
+            replyId: reply.reply_id,
+            rootPostId: reply.root_post_id,
+            resolvedRootPostId: res.root_post_id,
+            parentId: reply.parent_id,
+            type: reply.type ?? "reply",
+            elapsedMs: Date.now() - startedAt,
+            hadNotificationContext: !!fromNotificationRef.current,
+          },
+        });
+      } catch (error) {
+        Sentry.captureException(error, {
+          tags: { feature: "inbox", operation: "resolve-root-post-id" },
+          extra: {
+            replyId: reply.reply_id,
+            rootPostId: reply.root_post_id,
+            parentId: reply.parent_id,
+            platform: Platform.OS,
+            elapsedMs: Date.now() - startedAt,
+            hadNotificationContext: !!fromNotificationRef.current,
+          },
+        });
+      }
+
+      Sentry.captureMessage("Inbox item could not resolve root post", {
+        level: "warning",
+        tags: { feature: "inbox", operation: "open-reply" },
+        extra: {
+          replyId: reply.reply_id,
+          rootPostId: reply.root_post_id,
+          parentId: reply.parent_id,
+          type: reply.type ?? "reply",
+          platform: Platform.OS,
+          elapsedMs: Date.now() - startedAt,
+          hadNotificationContext: !!fromNotificationRef.current,
+        },
+      });
+      return null;
+    },
+    [queryClient],
+  );
+
   const handleItemPress = useCallback(
-    (reply: InboxReply) => {
+    async (reply: InboxReply) => {
       markReplyAsRead(reply.reply_id);
       const notificationId = fromNotificationRef.current;
+      Sentry.addBreadcrumb({
+        category: "inbox",
+        message: "Inbox item press received",
+        level: "info",
+        data: {
+          replyId: reply.reply_id,
+          rootPostId: reply.root_post_id,
+          hasValidRootPostId: isValidPostId(reply.root_post_id),
+          parentId: reply.parent_id,
+          type: reply.type ?? "reply",
+          hasReplyContent: !!reply.reply_content?.trim(),
+          notificationId,
+          hasFromNotification: !!notificationId,
+          platform: Platform.OS,
+        },
+      });
 
       if (reply.type === "donation") {
         routerRef.current.navigate("/(tabs)/profile");
@@ -456,41 +590,111 @@ export function InboxScreen() {
         return;
       }
 
+      const rootResolution = await resolveRootPostId(reply);
+      if (!rootResolution) return;
+      const { rootPostId } = rootResolution;
+      const replyForNavigation =
+        reply.root_post_id === rootPostId ? reply : { ...reply, root_post_id: rootPostId };
+
       if (!reply.reply_content?.trim()) {
+        const href = buildPostHref(rootPostId);
         Sentry.addBreadcrumb({
           category: "inbox",
           message: "Inbox item opened post without comment highlight",
           level: "info",
           data: {
             replyId: reply.reply_id,
-            rootPostId: reply.root_post_id,
+            rootPostId,
             parentId: reply.parent_id,
             type: reply.type ?? "reply",
             notificationId,
             hasFromNotification: !!notificationId,
+            rootResolutionSource: rootResolution.source,
+            rootResolutionElapsedMs: rootResolution.elapsedMs,
+            href,
           },
         });
-        routerRef.current.push(buildPostHref(reply.root_post_id));
+        Sentry.captureMessage("Inbox item detail navigation dispatched", {
+          level: "info",
+          tags: {
+            feature: "inbox",
+            operation: "open-post-detail",
+            platform: Platform.OS,
+            route_type: "post",
+            root_resolution_source: rootResolution.source,
+          },
+          extra: {
+            replyId: reply.reply_id,
+            rootPostId,
+            parentId: reply.parent_id,
+            type: reply.type ?? "reply",
+            notificationId,
+            hasFromNotification: !!notificationId,
+            href,
+            rootResolutionElapsedMs: rootResolution.elapsedMs,
+          },
+        });
+        try {
+          routerRef.current.push(href);
+        } catch (error) {
+          Sentry.captureException(error, {
+            tags: { feature: "inbox", operation: "open-post-detail" },
+            extra: { replyId: reply.reply_id, rootPostId, href, platform: Platform.OS },
+          });
+          throw error;
+        }
         return;
       }
 
+      const href = buildPostHref(rootPostId, { highlight: reply.reply_id });
       Sentry.addBreadcrumb({
         category: "inbox",
         message: "Inbox reply opened focused comment detail",
         level: "info",
         data: {
           replyId: reply.reply_id,
-          rootPostId: reply.root_post_id,
+          rootPostId,
           parentId: reply.parent_id,
           type: reply.type ?? "reply",
           notificationId,
           hasFromNotification: !!notificationId,
+          rootResolutionSource: rootResolution.source,
+          rootResolutionElapsedMs: rootResolution.elapsedMs,
+          href,
         },
       });
-      seedFocusedComment(reply);
-      routerRef.current.push(buildPostHref(reply.root_post_id, { highlight: reply.reply_id }));
+      seedFocusedComment(replyForNavigation);
+      Sentry.captureMessage("Inbox item detail navigation dispatched", {
+        level: "info",
+        tags: {
+          feature: "inbox",
+          operation: "open-post-detail",
+          platform: Platform.OS,
+          route_type: "focused-comment",
+          root_resolution_source: rootResolution.source,
+        },
+        extra: {
+          replyId: reply.reply_id,
+          rootPostId,
+          parentId: reply.parent_id,
+          type: reply.type ?? "reply",
+          notificationId,
+          hasFromNotification: !!notificationId,
+          href,
+          rootResolutionElapsedMs: rootResolution.elapsedMs,
+        },
+      });
+      try {
+        routerRef.current.push(href);
+      } catch (error) {
+        Sentry.captureException(error, {
+          tags: { feature: "inbox", operation: "open-focused-comment-detail" },
+          extra: { replyId: reply.reply_id, rootPostId, href, platform: Platform.OS },
+        });
+        throw error;
+      }
     },
-    [buildPostHref, markReplyAsRead, seedFocusedComment],
+    [buildPostHref, markReplyAsRead, resolveRootPostId, seedFocusedComment],
   );
 
   useEffect(() => {
