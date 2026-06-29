@@ -10,6 +10,7 @@ import {
   getUserStatus,
 } from "@/src/api/read/endpoints/users";
 import { queryKeys } from "@/src/api/read/query-keys";
+import type { UserFollowedResponse } from "@/src/api/types";
 
 type BootstrapSection = keyof BootstrapResponse;
 
@@ -51,6 +52,16 @@ function addBootstrapFallbackBreadcrumb(
   });
 }
 
+function normalizeUserFollowed(response: UserFollowedResponse): UserFollowedResponse {
+  return {
+    ...response,
+    enabled_agents: Array.from(new Set([
+      ...(response.enabled_agents ?? []),
+      ...(response.auto_enabled_agents ?? []),
+    ])),
+  };
+}
+
 export function hydrateBootstrapCache(
   queryClient: QueryClient,
   response: BootstrapResponse,
@@ -66,7 +77,7 @@ export function hydrateBootstrapCache(
     queryClient.setQueryData(queryKeys.userStatus(address), response.user_status);
   }
   if (response.user_followed) {
-    queryClient.setQueryData(queryKeys.userFollowed(address), response.user_followed);
+    queryClient.setQueryData(queryKeys.userFollowed(address), normalizeUserFollowed(response.user_followed));
   }
   if (response.user_blocked) {
     queryClient.setQueryData(queryKeys.userBlocked(address), response.user_blocked);

@@ -149,13 +149,16 @@ export function transformApiPost(
           const w = meta?.w;
           const h = meta?.h;
           const type = getMediaTypeFromUrl(url);
+          const posterUri = meta?.posterUrl ?? meta?.poster_url;
+          const downloadUri = meta?.downloadUrl ?? meta?.download_url;
           return {
           uri: url,
           type,
             width: w,
             height: h,
             aspectRatio: w && h ? w / h : undefined,
-            posterUri: type === "gif" ? url : undefined,
+            posterUri: posterUri ?? (type === "gif" ? url : undefined),
+            downloadUri,
           };
         })
       : apiPost.thumbnail

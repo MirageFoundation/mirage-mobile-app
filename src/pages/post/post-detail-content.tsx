@@ -2,6 +2,8 @@ import { transformApiComments, useComments, useUserFollowed } from "@/src/api/re
 import * as Sentry from "@sentry/react-native";
 import { parseApiError } from "@/src/utils/parse-api-error";
 import { queryKeys } from "@/src/api/read/query-keys";
+import { getTxStatus } from "@/src/api/read/endpoints/tx";
+import type { CommentsResponse } from "@/src/api/types";
 import {
   Comment,
   MediaPostDetailSkeleton,
@@ -21,6 +23,7 @@ import {
 } from "@/src/stores/post-comment-optimistic-store";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { useInboxStore } from "@/src/stores/inbox-store";
+import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
 import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/navigation/guarded-router";
@@ -240,6 +243,64 @@ function LegacyPostDetailScreen() {
   }, [commentsError]);
 
   const isPostNotFound = commentsApiError?.errorCode === "post_not_found" || commentsApiError?.httpStatus === 404;
+  const optimisticPost = usePendingPostsStore((state) =>
+    id ? state.posts.find((post) => post.post_id.toLowerCase() === id.toLowerCase()) : undefined,
+  );
+  const shouldUseOptimisticRootFallback = isPostNotFound && !!optimisticPost;
+  const effectiveCommentsData = useMemo<CommentsResponse | undefined>(() => {
+    if (commentsData) return commentsData;
+    if (!shouldUseOptimisticRootFallback || !optimisticPost) return undefined;
+    return {
+      root: {
+        ...optimisticPost,
+        root_post_id: optimisticPost.root_post_id || optimisticPost.post_id,
+        children: [],
+      },
+      children: [],
+    };
+  }, [commentsData, optimisticPost, shouldUseOptimisticRootFallback]);
+
+  useEffect(() => {
+    usePendingPostsStore.getState().removeExpiredPosts();
+  }, []);
+
+  useEffect(() => {
+    if (!id || !commentsData?.root) return;
+    usePendingPostsStore.getState().removePost(id);
+  }, [commentsData?.root, id]);
+
+  useEffect(() => {
+    if (!id || !shouldUseOptimisticRootFallback) return;
+
+    let cancelled = false;
+    const retryDelays = [1500, 5000, 15000, 30000];
+    const timers = retryDelays.map((delay) =>
+      setTimeout(async () => {
+        if (cancelled) return;
+        try {
+          const txStatus = await getTxStatus({ hash: id });
+          if (cancelled) return;
+          if (txStatus.found && txStatus.code !== undefined && txStatus.code !== 0) {
+            usePendingPostsStore
+              .getState()
+              .markPostError(id, txStatus.error_details || "Transaction was rejected by the chain.");
+            return;
+          }
+          const result = await refetchComments();
+          if (!cancelled && result.data?.root) {
+            usePendingPostsStore.getState().removePost(id);
+          }
+        } catch {
+          // Keep the optimistic detail fallback until the bounded cache expires.
+        }
+      }, delay),
+    );
+
+    return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+    };
+  }, [id, refetchComments, shouldUseOptimisticRootFallback]);
 
   const {
     lastCommentsFetchRef,
@@ -249,16 +310,16 @@ function LegacyPostDetailScreen() {
     currentUserWallet: currentUser?.walletAddress ?? undefined,
     id,
     isFetchingComments,
-    isPostNotFound,
+    isPostNotFound: isPostNotFound && !shouldUseOptimisticRootFallback,
     queryClient,
     refetchComments,
   });
 
   const isViewingComment = useMemo(() => {
-    const root = commentsData?.root;
+    const root = effectiveCommentsData?.root;
     if (!root?.post_id || !root.root_post_id) return false;
     return root.root_post_id.toLowerCase() !== root.post_id.toLowerCase();
-  }, [commentsData?.root]);
+  }, [effectiveCommentsData?.root]);
 
   const {
     actualRootPost,
@@ -279,7 +340,7 @@ function LegacyPostDetailScreen() {
     setShowFocusedThread,
     showFocusedThread,
   } = usePostDetailFocusedThread({
-    commentsData,
+    commentsData: effectiveCommentsData,
     currentUserWallet: currentUser?.walletAddress ?? undefined,
     depth,
     highlight,
@@ -320,7 +381,7 @@ function LegacyPostDetailScreen() {
   const { post } = usePostDetailResolvedPost({
     actualRootPost,
     actualRootPostId,
-    commentsData,
+    commentsData: effectiveCommentsData,
     currentUser,
     followedUsers: displayFollowedUsers,
     id,
@@ -376,7 +437,7 @@ function LegacyPostDetailScreen() {
   const comments = useMemo(() => {
     return buildPostDetailComments({
       actualRootPostId,
-      commentsData,
+      commentsData: effectiveCommentsData,
       contextComments,
       contextDepth,
       focusedCommentData,
@@ -387,7 +448,7 @@ function LegacyPostDetailScreen() {
       showFocusedThread,
     });
   }, [
-    commentsData,
+    effectiveCommentsData,
     focusedCommentData,
     fullThreadCommentsData,
     focusedCommentId,
@@ -455,7 +516,7 @@ function LegacyPostDetailScreen() {
   // Clean up optimistic comments when server data is refreshed
   // This prevents duplicates when user pulls to refresh after posting
   useEffect(() => {
-    if (!id || !commentsData?.children) return;
+    if (!id || !effectiveCommentsData?.children) return;
     if (focusedCommentId && showFocusedThread) return;
 
     if (!hasInitialCommentsLoaded.current) {
@@ -464,7 +525,7 @@ function LegacyPostDetailScreen() {
     }
 
     pruneCommentsPresentOnServer(optimisticThreadId, comments);
-  }, [commentsData?.children, comments, focusedCommentId, id, optimisticThreadId, pruneCommentsPresentOnServer, showFocusedThread]);
+  }, [effectiveCommentsData?.children, comments, focusedCommentId, id, optimisticThreadId, pruneCommentsPresentOnServer, showFocusedThread]);
   const {
     commentVoteOverrides,
     handleDislikeComment,
@@ -501,9 +562,9 @@ function LegacyPostDetailScreen() {
   const fullBranchComments = useMemo(() => {
     const source = isViewingComment
       ? fullThreadCommentsData?.children
-      : commentsData?.children;
+      : effectiveCommentsData?.children;
     return transformApiComments(source ?? []);
-  }, [isViewingComment, fullThreadCommentsData?.children, commentsData?.children]);
+  }, [isViewingComment, fullThreadCommentsData?.children, effectiveCommentsData?.children]);
 
   const hasFocusedBranchReplies = useMemo(
     () => hasMoreRepliesInBranch(comments, fullBranchComments, focusedCommentId),
@@ -721,7 +782,7 @@ function LegacyPostDetailScreen() {
     refetchCommentsRef.current?.(true);
   }, []);
 
-  if (isPostNotFound) {
+  if (isPostNotFound && !shouldUseOptimisticRootFallback) {
     return (
       <PostDetailNotFound
         header={renderHeader}
@@ -750,13 +811,13 @@ function LegacyPostDetailScreen() {
         <PostDetailCommentsSection
           ref={commentsSectionRef}
           comments={allComments}
-          commentsCount={commentsData?.children?.length ?? 0}
+          commentsCount={effectiveCommentsData?.children?.length ?? 0}
           contentBottomPadding={insets.bottom + 60}
           currentUserId={currentUser?.id}
           followedUsers={displayFollowedUsers}
           followLoadingUsers={followLoadingUsers}
           highlightedCommentId={highlightedCommentId}
-          isCommentsError={isCommentsError}
+          isCommentsError={isCommentsError && !shouldUseOptimisticRootFallback}
           isFetchingComments={isFetchingComments}
           isLoadingComments={isLoadingComments}
           isLoadingContext={isLoadingContext}
@@ -785,7 +846,7 @@ function LegacyPostDetailScreen() {
           decrementCommentCount={decrementCommentCount}
           focusedCommentId={focusedCommentId}
           id={id}
-          implicitReplyRoot={commentsData?.root}
+          implicitReplyRoot={effectiveCommentsData?.root}
           incrementCommentCount={incrementCommentCount}
           isLoggedIn={isLoggedIn}
           isViewingComment={isViewingComment}
@@ -814,7 +875,7 @@ function LegacyPostDetailScreen() {
           highlight={highlight}
           id={id}
           post={displayPost}
-          rootPost={commentsData?.root}
+          rootPost={effectiveCommentsData?.root}
         />
       </Box>
     </KeyboardAvoidingView>

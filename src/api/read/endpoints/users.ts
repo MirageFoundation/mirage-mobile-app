@@ -58,7 +58,15 @@ export interface GetUserFollowedParams {
 export async function getUserFollowed(
   params: GetUserFollowedParams
 ): Promise<UserFollowedResponse> {
-  return api.get<UserFollowedResponse>("/get_user_followed", params);
+  const response = await api.get<UserFollowedResponse>("/get_user_followed", params);
+  const enabledAgents = Array.from(new Set([
+    ...(response.enabled_agents ?? []),
+    ...(response.auto_enabled_agents ?? []),
+  ]));
+  return {
+    ...response,
+    enabled_agents: enabledAgents,
+  };
 }
 
 export interface GetUserBlockedParams {

@@ -49,6 +49,7 @@ export type PostMedia = {
   height?: number;
   aspectRatio?: number;
   posterUri?: string;
+  downloadUri?: string;
 };
 
 export type Post = {

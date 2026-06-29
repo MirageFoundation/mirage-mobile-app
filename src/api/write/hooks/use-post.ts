@@ -152,10 +152,10 @@ export const buildOptimisticPost = (
     edited_at: 0,
     thumbnail,
     media,
-    points: 0,
+    points: 1,
     comments: 0,
     user_vote: 1,
-    user_weight: 0,
+    user_weight: 1,
     optimistic_status: status,
     optimistic_action_id: input.optimisticActionId,
     optimistic_draft: input.optimisticDraft,
@@ -997,7 +997,14 @@ export function usePost(options: UsePostOptions = {}) {
     mutationFn: async (input: CreatePostMutationInput) => {
       const wallet = await getWallet();
       const { optimisticId, optimisticActionId, optimisticMediaUrl, optimisticMediaUrls, optimisticPreviewMediaUrls, optimisticDraft, ...postInput } = input;
-      return createPost(wallet, postInput, options.onPoWProgress);
+      const result = await createPost(wallet, postInput, options.onPoWProgress);
+      if (result.code !== undefined && result.code !== 0) {
+        throw Object.assign(
+          new Error(result.raw_log || "Transaction was rejected by the chain."),
+          { response: { data: { error_code: "transaction_rejected", error_details: result.raw_log } } },
+        );
+      }
+      return result;
     },
     onSuccess: (data, input) => {
       Sentry.addBreadcrumb({
@@ -1018,8 +1025,9 @@ export function usePost(options: UsePostOptions = {}) {
         has_content_warning: !!input.tag,
         content_warning: input.tag || undefined,
       });
+      const confirmedPostId = (data?.post_id ?? data?.tx_hash)?.toLowerCase();
       const optimisticPost = buildOptimisticPost(
-        data?.tx_hash,
+        confirmedPostId,
         input,
         address,
         username,

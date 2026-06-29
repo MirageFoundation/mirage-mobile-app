@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUnistyles } from "react-native-unistyles";
 
 import {
+  useNodeConfig,
   useUserFollowed,
 } from "@/src/api";
 
@@ -210,6 +211,8 @@ export function HomeScreen() {
 
   const isInitializing = useAuthStore((s) => s.isInitializing);
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const { data: nodeConfig } = useNodeConfig();
+  const openBrowsingEnabled = nodeConfig?.open_browsing_enabled ?? false;
 
   const { networkType } = useNetworkState();
 
@@ -248,6 +251,18 @@ export function HomeScreen() {
       clearFollowUserOverride(userId);
     },
   });
+  const handleGuardedFollowPress = useCallback(
+    (authorId: string, username: string, isFollowing: boolean) => {
+      requireAuth(() => handleFollowPress(authorId, username, isFollowing));
+    },
+    [handleFollowPress, requireAuth],
+  );
+  const handleGuardedFollowTopicFromCard = useCallback(
+    (topic: string, isFollowed: boolean) => {
+      requireAuth(() => handleFollowTopicFromCard(topic, isFollowed));
+    },
+    [handleFollowTopicFromCard, requireAuth],
+  );
 
   const showAdultPopup = !!currentUser && !hasSeenAdultPrompt;
   const moderationReminderShownForRef = useRef<string | null>(null);
@@ -405,6 +420,18 @@ export function HomeScreen() {
       [clearVoteOverride]
     ),
   });
+  const handleGuardedUpvote = useCallback(
+    (postId: string, liked: boolean, disliked: boolean, likes: number) => {
+      requireAuth(() => handleUpvote(postId, liked, disliked, likes));
+    },
+    [handleUpvote, requireAuth],
+  );
+  const handleGuardedDownvote = useCallback(
+    (postId: string, liked: boolean, disliked: boolean, likes: number) => {
+      requireAuth(() => handleDownvote(postId, liked, disliked, likes));
+    },
+    [handleDownvote, requireAuth],
+  );
 
   const handleEnableAdultContent = useCallback(() => {
     const dismissedAt = Date.now();
@@ -545,64 +572,74 @@ export function HomeScreen() {
   }, [reportHandler.showReportSheet]);
 
   const handleReport = useCallback(() => {
-    if (selectedPost) {
-      reportHandler.requestReport(selectedPost.id, "post");
-    }
-  }, [selectedPost, reportHandler]);
+    requireAuth(() => {
+      if (selectedPost) {
+        reportHandler.requestReport(selectedPost.id, "post");
+      }
+    });
+  }, [selectedPost, reportHandler, requireAuth]);
 
   const handleBlockUser = useCallback(() => {
-    if (selectedPost) {
-      blockHandler.requestBlockUser(
-        selectedPost.author.id,
-        selectedPost.author.username
-      );
-    }
-  }, [selectedPost, blockHandler]);
+    requireAuth(() => {
+      if (selectedPost) {
+        blockHandler.requestBlockUser(
+          selectedPost.author.id,
+          selectedPost.author.username
+        );
+      }
+    });
+  }, [selectedPost, blockHandler, requireAuth]);
 
   const handleHidePost = useCallback(() => {
-    if (selectedPost) {
-      blockHandler.requestBlockPost(selectedPost.id);
-    }
-  }, [selectedPost, blockHandler]);
+    requireAuth(() => {
+      if (selectedPost) {
+        blockHandler.requestBlockPost(selectedPost.id);
+      }
+    });
+  }, [selectedPost, blockHandler, requireAuth]);
 
   const handleBlockUserFromCard = useCallback(
     (postId: string, authorId: string, authorUsername: string) => {
-      blockHandler.requestBlockUser(authorId, authorUsername);
+      requireAuth(() => blockHandler.requestBlockUser(authorId, authorUsername));
     },
-    [blockHandler]
+    [blockHandler, requireAuth]
   );
 
   const handleBlockPostFromCard = useCallback(
     (postId: string) => {
-      blockHandler.requestBlockPost(postId);
+      requireAuth(() => blockHandler.requestBlockPost(postId));
     },
-    [blockHandler]
+    [blockHandler, requireAuth]
   );
 
   const handleBlockTopicFromCard = useCallback(
     (_postId: string, topic: string) => {
-      blockHandler.requestBlockTopic(topic);
+      requireAuth(() => blockHandler.requestBlockTopic(topic));
     },
-    [blockHandler]
+    [blockHandler, requireAuth]
   );
 
   const handleReportFromCard = useCallback(
     (postId: string) => {
-      reportHandler.requestReport(postId, "post");
+      requireAuth(() => reportHandler.requestReport(postId, "post"));
     },
-    [reportHandler]
+    [reportHandler, requireAuth]
   );
 
   const handleEditPost = useCallback(() => {
-    if (!selectedPost) return;
-    navigateToEditPost(router, selectedPost);
-  }, [selectedPost, router]);
+    requireAuth(() => {
+      if (!selectedPost) return;
+      navigateToEditPost(router, selectedPost);
+    });
+  }, [selectedPost, router, requireAuth]);
 
   const handleDeletePost = useCallback(() => {
-    if (selectedPost) {
-      deleteHandler.requestDelete(selectedPost.id, "post");
-    }
-  }, [selectedPost, deleteHandler]);
+    requireAuth(() => {
+      if (selectedPost) {
+        deleteHandler.requestDelete(selectedPost.id, "post");
+      }
+    });
+  }, [selectedPost, deleteHandler, requireAuth]);
 
   const handleSavePost = useCallback(() => {
     if (!selectedPost) return;
@@ -618,11 +655,13 @@ export function HomeScreen() {
   }, [toast]);
 
   const handleFollowTopic = useCallback(() => {
-    if (!selectedPost?.topic) return;
-    const topic = selectedPost.topic;
-    const isCurrentlyFollowed = followedTopics.includes(topic);
-    handleFollowTopicFromCard(topic, isCurrentlyFollowed);
-  }, [selectedPost?.topic, followedTopics, handleFollowTopicFromCard]);
+    requireAuth(() => {
+      if (!selectedPost?.topic) return;
+      const topic = selectedPost.topic;
+      const isCurrentlyFollowed = followedTopics.includes(topic);
+      handleFollowTopicFromCard(topic, isCurrentlyFollowed);
+    });
+  }, [selectedPost?.topic, followedTopics, handleFollowTopicFromCard, requireAuth]);
 
   const handleShowFewer = useCallback(() => {
     console.log("Show fewer posts like:", selectedPost?.id);
@@ -638,12 +677,14 @@ export function HomeScreen() {
   );
 
   const handleFollowUserFromSheet = useCallback(() => {
-    if (!selectedPost) return;
-    const authorId = selectedPost.author.id;
-    const authorUsername = selectedPost.author.username;
-    const isCurrentlyFollowing = displayFollowedUsers.includes(authorId);
-    handleFollowPress(authorId, authorUsername, isCurrentlyFollowing);
-  }, [selectedPost, displayFollowedUsers, handleFollowPress]);
+    requireAuth(() => {
+      if (!selectedPost) return;
+      const authorId = selectedPost.author.id;
+      const authorUsername = selectedPost.author.username;
+      const isCurrentlyFollowing = displayFollowedUsers.includes(authorId);
+      handleFollowPress(authorId, authorUsername, isCurrentlyFollowing);
+    });
+  }, [selectedPost, displayFollowedUsers, handleFollowPress, requireAuth]);
 
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
@@ -736,11 +777,11 @@ export function HomeScreen() {
     handleAuthorPress,
     handleTopicPress,
     handleMorePress,
-    handleUpvote,
-    handleDownvote,
+    handleGuardedUpvote,
+    handleGuardedDownvote,
     handleCommentPress,
-    handleFollowPress,
-    handleFollowTopicFromCard,
+    handleGuardedFollowPress,
+    handleGuardedFollowTopicFromCard,
     handleRevealContent,
     handleBlockUserFromCard,
     handleBlockPostFromCard,
@@ -756,14 +797,14 @@ export function HomeScreen() {
         onTopicPress: (topic) => handlersRef.current.handleTopicPress(topic),
         onMorePress: (post) => handlersRef.current.handleMorePress(post),
         onLikePress: (postId, liked, disliked, likes) =>
-          handlersRef.current.handleUpvote(postId, liked, disliked, likes),
+          handlersRef.current.handleGuardedUpvote(postId, liked, disliked, likes),
         onDislikePress: (postId, liked, disliked, likes) =>
-          handlersRef.current.handleDownvote(postId, liked, disliked, likes),
+          handlersRef.current.handleGuardedDownvote(postId, liked, disliked, likes),
         onCommentPress: (postId) => handlersRef.current.handleCommentPress(postId),
         onFollowUser: (authorId, username, isFollowing) =>
-          handlersRef.current.handleFollowPress(authorId, username, isFollowing),
+          handlersRef.current.handleGuardedFollowPress(authorId, username, isFollowing),
         onFollowTopic: (topic, isFollowed) =>
-          handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
+          handlersRef.current.handleGuardedFollowTopicFromCard(topic, isFollowed),
         onRevealContent: (postId) => handlersRef.current.handleRevealContent(postId),
         onBlockUser: (postId, authorId, authorUsername) =>
           handlersRef.current.handleBlockUserFromCard(postId, authorId, authorUsername),
@@ -774,7 +815,7 @@ export function HomeScreen() {
     }, [handlersRef, setHandlers])
   );
 
-  if (!isLoggedIn && !isInitializing) {
+  if (!isLoggedIn && !isInitializing && !openBrowsingEnabled) {
     return <LoggedOutHome />;
   }
 

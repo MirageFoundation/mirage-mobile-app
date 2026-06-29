@@ -8,6 +8,7 @@ const TAB_HOME_ROUTE = "/(tabs)";
 const KNOWN_APP_ROUTE_PREFIXES = [
   "/(auth)/",
   "/(tabs)",
+  "/p/",
   "/post/",
   "/user/",
   "/topic/",
@@ -125,8 +126,8 @@ export function mapMiragePathToRoute(
       return {
         type: "post",
         hostname: "",
-        route: `/post/${resourceId}${postSearch}`,
-        requiresAuth: true,
+        route: `/p/${resourceId}${postSearch}`,
+        requiresAuth: false,
         resourceId,
       };
     }
