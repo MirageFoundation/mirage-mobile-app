@@ -13,7 +13,7 @@ import {
 } from "expo-file-system/legacy";
 import type { FileSystemUploadResult } from "expo-file-system/legacy";
 import { AppState, Platform } from "react-native";
-import { Image as CompressorImage } from "react-native-compressor";
+import { Image as CompressorImage, getVideoMetaData } from "react-native-compressor";
 import type { ImageUploadResponse, VideoUploadResponse } from "@/src/api/types";
 
 // ============================================
@@ -43,6 +43,8 @@ interface UploadMediaResponse {
   posterUrl?: string;
   poster_url?: string;
 }
+
+type UploadMediaParameters = Record<string, string>;
 
 // ============================================
 // Constants
@@ -167,6 +169,32 @@ async function prepareImageForUpload(
   }
 }
 
+async function getVideoUploadParameters(localUri: string): Promise<UploadMediaParameters> {
+  const startedAt = Date.now();
+  const meta = await getVideoMetaData(localUri);
+  const duration = Math.round(Number(meta.duration) || 0);
+  const width = Math.round(Number(meta.width) || 0);
+  const height = Math.round(Number(meta.height) || 0);
+
+  console.log("[VideoTiming] metadata complete", {
+    fileName: getFileNameFromUri(localUri),
+    durationMs: Date.now() - startedAt,
+    duration,
+    width,
+    height,
+  });
+
+  if (!duration || !height) {
+    throw new Error("Could not read video duration and height for upload.");
+  }
+
+  return {
+    duration: String(duration),
+    width: String(width),
+    height: String(height),
+  };
+}
+
 function normalizeFileUri(uri: string): string {
   if (!uri.startsWith("file://") && !uri.startsWith("content://") && !uri.startsWith("http")) {
     return `file://${uri}`;
@@ -260,7 +288,8 @@ export async function uploadMedia(
   mediaType: MediaType,
   contentType: string,
   onProgress?: UploadProgressCallback,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  parameters: UploadMediaParameters = {},
 ): Promise<UploadMediaResponse> {
   const normalizedUri = normalizeFileUri(localUri);
   const filename = getFileNameFromUri(localUri) || (mediaType === "video" ? "video.mp4" : "image.jpg");
@@ -275,7 +304,7 @@ export async function uploadMedia(
         uploadType: FileSystemUploadType.MULTIPART,
         fieldName: "file",
         mimeType: contentType,
-        parameters: { kind: mediaType },
+        parameters: { kind: mediaType, ...parameters },
         headers: {},
         sessionType: FileSystemSessionType.FOREGROUND,
         httpMethod: "POST",
@@ -739,12 +768,14 @@ export async function uploadVideo(
 
   try {
     const uploadUrlStartedAt = Date.now();
+    const videoParameters = await getVideoUploadParameters(localUri);
     const uploadResponse = await uploadMedia(
       localUri,
       "video",
       contentType,
       onProgress,
       signal,
+      videoParameters,
     );
     const uploadUrlDurationMs = Date.now() - uploadUrlStartedAt;
     console.log("[VideoTiming] upload URL ready", {
