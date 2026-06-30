@@ -261,11 +261,32 @@ function LegacyPostDetailScreen() {
   }, [commentsData, optimisticPost, shouldUseOptimisticRootFallback]);
 
   useEffect(() => {
+    if (!id || !shouldUseOptimisticRootFallback || !optimisticPost) return;
+    Sentry.addBreadcrumb({
+      category: "post-detail",
+      message: "Using optimistic root post fallback",
+      level: "info",
+      data: {
+        postId: id,
+        status: optimisticPost.optimistic_status,
+        hasDraft: !!optimisticPost.optimistic_draft,
+        mediaCount: optimisticPost.media?.length ?? 0,
+      },
+    });
+  }, [id, optimisticPost, shouldUseOptimisticRootFallback]);
+
+  useEffect(() => {
     usePendingPostsStore.getState().removeExpiredPosts();
   }, []);
 
   useEffect(() => {
     if (!id || !commentsData?.root) return;
+    Sentry.addBreadcrumb({
+      category: "post-detail",
+      message: "Optimistic root post reconciled from detail fetch",
+      level: "info",
+      data: { postId: id },
+    });
     usePendingPostsStore.getState().removePost(id);
   }, [commentsData?.root, id]);
 
@@ -281,6 +302,16 @@ function LegacyPostDetailScreen() {
           const txStatus = await getTxStatus({ hash: id });
           if (cancelled) return;
           if (txStatus.found && txStatus.code !== undefined && txStatus.code !== 0) {
+            Sentry.addBreadcrumb({
+              category: "post-detail",
+              message: "Optimistic root post transaction rejected",
+              level: "warning",
+              data: {
+                postId: id,
+                code: txStatus.code,
+                hasErrorDetails: !!txStatus.error_details,
+              },
+            });
             usePendingPostsStore
               .getState()
               .markPostError(id, txStatus.error_details || "Transaction was rejected by the chain.");
@@ -288,9 +319,25 @@ function LegacyPostDetailScreen() {
           }
           const result = await refetchComments();
           if (!cancelled && result.data?.root) {
+            Sentry.addBreadcrumb({
+              category: "post-detail",
+              message: "Optimistic root post fallback reconciled on retry",
+              level: "info",
+              data: { postId: id, delayMs: delay },
+            });
             usePendingPostsStore.getState().removePost(id);
           }
-        } catch {
+        } catch (error) {
+          Sentry.addBreadcrumb({
+            category: "post-detail",
+            message: "Optimistic root post fallback retry failed",
+            level: "warning",
+            data: {
+              postId: id,
+              delayMs: delay,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
           // Keep the optimistic detail fallback until the bounded cache expires.
         }
       }, delay),

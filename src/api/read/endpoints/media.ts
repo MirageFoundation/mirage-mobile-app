@@ -99,6 +99,18 @@ function captureMediaUploadException(
   });
 }
 
+function getUploadErrorCode(responseText: string): string | undefined {
+  try {
+    const parsed = responseText ? JSON.parse(responseText) : undefined;
+    if (!parsed || typeof parsed !== "object") return undefined;
+    const error = parsed as { error?: unknown; error_code?: unknown; code?: unknown; message?: unknown };
+    const code = error.error_code ?? error.code ?? error.error ?? error.message;
+    return code === undefined ? undefined : String(code);
+  } catch {
+    return undefined;
+  }
+}
+
 function buildUploadError(status: number, responseText: string): Error {
   let data: unknown;
   try {
@@ -347,8 +359,32 @@ export async function uploadMedia(
         fileName: filename,
       });
       if (result.status < 200 || result.status >= 300) {
+        const errorCode = getUploadErrorCode(result.body);
+        Sentry.addBreadcrumb({
+          category: "media-upload",
+          message: "upload_media rejected upload",
+          level: "warning",
+          data: {
+            mediaType,
+            fileName: filename,
+            status: result.status,
+            errorCode,
+            uploadsDisabled: errorCode === "uploads_disabled",
+          },
+        });
         throw buildUploadError(result.status, result.body);
       }
+      Sentry.addBreadcrumb({
+        category: "media-upload",
+        message: "upload_media upload complete",
+        level: "info",
+        data: {
+          mediaType,
+          fileName: filename,
+          status: result.status,
+          parameterCount: Object.keys(parameters).length,
+        },
+      });
       return parseUploadMediaResponse(result.body);
     } finally {
       if (timeoutId) clearTimeout(timeoutId);

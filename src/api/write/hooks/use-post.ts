@@ -297,6 +297,12 @@ export const upsertHomePost = (
 };
 
 export const removeOptimisticPostFromCache = (queryClient: QueryClient, postId: string) => {
+  Sentry.addBreadcrumb({
+    category: "create-post",
+    message: "Removing optimistic post from cache",
+    level: "info",
+    data: { postId },
+  });
   usePendingPostsStore.getState().removePost(postId);
   updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => removePostFromPostsData(data, postId));
 };
@@ -306,6 +312,15 @@ export const markOptimisticPostError = (
   postId: string,
   errorMessage: string,
 ) => {
+  Sentry.addBreadcrumb({
+    category: "create-post",
+    message: "Marking optimistic post as error",
+    level: "warning",
+    data: {
+      postId,
+      errorMessage,
+    },
+  });
   usePendingPostsStore.getState().markPostError(postId, errorMessage);
   updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => {
     if (!data) return { nextData: data, didUpdate: false };
@@ -417,6 +432,15 @@ export const markOptimisticPostSuccess = (
   postId: string,
   previewMediaUrls?: string[],
 ) => {
+  Sentry.addBreadcrumb({
+    category: "create-post",
+    message: "Marking optimistic post as success",
+    level: "info",
+    data: {
+      postId,
+      previewCount: previewMediaUrls?.length ?? 0,
+    },
+  });
   setOptimisticPostStatus(queryClient, postId, "success", { previewMediaUrls });
   scheduleClearOptimisticPostStatus(queryClient, postId, previewMediaUrls);
 };
@@ -999,6 +1023,17 @@ export function usePost(options: UsePostOptions = {}) {
       const { optimisticId, optimisticActionId, optimisticMediaUrl, optimisticMediaUrls, optimisticPreviewMediaUrls, optimisticDraft, ...postInput } = input;
       const result = await createPost(wallet, postInput, options.onPoWProgress);
       if (result.code !== undefined && result.code !== 0) {
+        Sentry.addBreadcrumb({
+          category: "create-post",
+          message: "Create post transaction rejected",
+          level: "warning",
+          data: {
+            code: result.code,
+            hasRawLog: !!result.raw_log,
+            optimisticId,
+            optimisticActionId,
+          },
+        });
         throw Object.assign(
           new Error(result.raw_log || "Transaction was rejected by the chain."),
           { response: { data: { error_code: "transaction_rejected", error_details: result.raw_log } } },
@@ -1112,6 +1147,17 @@ export function usePost(options: UsePostOptions = {}) {
       queryClient.invalidateQueries({
         queryKey: queryKeys.topicsRoot(),
         refetchType: "inactive",
+      });
+    },
+    onError: (error, input) => {
+      Sentry.captureException(error, {
+        tags: { feature: "posts", operation: "create" },
+        extra: {
+          optimisticId: input.optimisticId,
+          optimisticActionId: input.optimisticActionId,
+          mediaCount: input.media?.length ?? 0,
+          hasPreviewMedia: !!input.optimisticPreviewMediaUrls?.length,
+        },
       });
     },
   });

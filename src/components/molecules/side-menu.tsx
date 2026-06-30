@@ -411,6 +411,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
 
       shouldCloseAfterAuthRef.current = false;
       if (visible) {
+        Sentry.addBreadcrumb({
+          category: "side-menu",
+          message: "Closing side menu after auth success",
+          level: "info",
+        });
         close();
       }
     }, [close, isLoggedIn, visible]);
@@ -459,19 +464,40 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     const handleCreateAccount = useCallback(() => {
       triggerHaptic("light");
       shouldCloseAfterAuthRef.current = true;
+      Sentry.addBreadcrumb({
+        category: "side-menu",
+        message: "Create account started from side menu",
+        level: "info",
+      });
       router.push("/(auth)/username");
     }, [router]);
 
     const handleLogin = useCallback(() => {
       triggerHaptic("light");
       shouldCloseAfterAuthRef.current = true;
+      Sentry.addBreadcrumb({
+        category: "side-menu",
+        message: "Login started from side menu",
+        level: "info",
+      });
       router.push("/(auth)/login");
     }, [router]);
 
     const handleLogoutConfirm = useCallback(async () => {
+      Sentry.addBreadcrumb({
+        category: "side-menu",
+        message: "Logout confirmation submitted",
+        level: "info",
+        data: { hasLogoutHandler: !!onLogout },
+      });
       setIsLoggingOut(true);
       try {
         await onLogout?.();
+        Sentry.addBreadcrumb({
+          category: "side-menu",
+          message: "Logout completed from side menu",
+          level: "info",
+        });
         setShowLogoutPopup(false);
         close();
       } catch (error) {
@@ -486,16 +512,34 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     }, [close, onLogout, toast]);
 
     const handleServerPress = useCallback(() => {
+      Sentry.addBreadcrumb({
+        category: "side-menu",
+        message: "Node selector opened",
+        level: "info",
+        data: { serverCount: servers.length, currentServer: apiServer },
+      });
       setShowServerModal(true);
-    }, []);
+    }, [apiServer, servers.length]);
 
     const handleApiServerChange = useCallback(
       async (server: ApiServer) => {
         if (server === apiServer) return;
+        Sentry.addBreadcrumb({
+          category: "side-menu",
+          message: "Node switch started",
+          level: "info",
+          data: { fromServer: apiServer, toServer: server },
+        });
         setSwitchingServer(server);
         try {
           await switchServer(server);
           setShareServer(server);
+          Sentry.addBreadcrumb({
+            category: "side-menu",
+            message: "Node switch succeeded",
+            level: "info",
+            data: { fromServer: apiServer, toServer: server },
+          });
           toast.success(`Switched to ${server}`);
           router.replace("/(tabs)");
           setTimeout(() => {
@@ -508,7 +552,11 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
               data: { server },
             });
           }, 350);
-        } catch {
+        } catch (error) {
+          Sentry.captureException(error, {
+            tags: { feature: "side-menu", operation: "switch-node" },
+            extra: { fromServer: apiServer, toServer: server },
+          });
           toast.error("Failed to switch server");
           useHomePostCardStore.getState().setSideMenuOpen(false);
           Sentry.addBreadcrumb({

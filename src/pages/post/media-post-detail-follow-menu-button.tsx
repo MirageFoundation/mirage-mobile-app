@@ -9,6 +9,7 @@ import {
   MenuTrigger,
 } from "react-native-popup-menu";
 import { useUnistyles } from "react-native-unistyles";
+import * as Sentry from "@sentry/react-native";
 
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
@@ -101,6 +102,12 @@ export const MediaPostDetailFollowMenuButton = memo(function MediaPostDetailFoll
       <Pressable
         onPress={() => {
           triggerHaptic("medium");
+          Sentry.addBreadcrumb({
+            category: "auth-gate",
+            message: "Auth required for media detail follow action",
+            level: "info",
+            data: { hasTopic: !!topic },
+          });
           showAuthSheet();
         }}
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
