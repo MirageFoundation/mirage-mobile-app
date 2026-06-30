@@ -1,9 +1,17 @@
+import type { ContentWarningType } from "@/src/domain/content";
 import type { PostMedia } from "./post-card-types";
 
 const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
 const MARKDOWN_LINK_REGEX = /!?\[[^\]]*\]\([^)]+\)/g;
 // Regex to find standalone URLs (not inside markdown links)
 const STANDALONE_URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]()]+/gi;
+const MATURE_CONTENT_WARNING_TYPES = new Set<ContentWarningType>([
+  "adult",
+  "violence",
+  "gore",
+  "death",
+  "nsfw",
+]);
 
 const VIDEO_EXTENSIONS = new Set([
   "mp4",
@@ -37,6 +45,18 @@ export type ResolvedPostContent = {
   hasMultipleMedia: boolean;
   extraMediaCount: number;
 };
+
+export function shouldBlurMatureMedia(
+  blurMatureMedia: boolean,
+  contentWarnings: ContentWarningType[] | undefined,
+  contentRevealed: boolean,
+): boolean {
+  return (
+    blurMatureMedia &&
+    !contentRevealed &&
+    !!contentWarnings?.some((warning) => MATURE_CONTENT_WARNING_TYPES.has(warning))
+  );
+}
 
 export function extractDomain(url: string): string {
   try {

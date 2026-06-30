@@ -29,6 +29,7 @@ import {
   extractYouTubeVideoId,
   getVideoThumbnailUri,
   resolvePostContent,
+  shouldBlurMatureMedia,
 } from "./post-card-utils";
 
 const THUMB_SIZE = 72;
@@ -136,8 +137,11 @@ export const PostCardCompact = memo(function PostCardCompact({
   } = post;
 
   const blurSensitiveMedia = usePreferencesStore((s) => s.blurSensitiveMedia);
-  const shouldBlurContent =
-    blurSensitiveMedia && !!contentWarnings?.length && !contentRevealed;
+  const shouldBlurContent = shouldBlurMatureMedia(
+    blurSensitiveMedia,
+    contentWarnings,
+    contentRevealed,
+  );
 
   const resolved = useMemo(
     () => resolvePostContent(body, media),

@@ -24,7 +24,7 @@ import { PostCardContent } from "./post-card-content";
 import { PostCardHeader } from "./post-card-header";
 import { PostCardMedia } from "./post-card-media";
 import type { Post } from "./post-card-types";
-import { resolvePostContent } from "./post-card-utils";
+import { resolvePostContent, shouldBlurMatureMedia } from "./post-card-utils";
 import { Ionicons } from "@expo/vector-icons";
 
 export type { Post, PostAuthor, PostMedia } from "./post-card-types";
@@ -177,7 +177,11 @@ export const PostCard = memo(function PostCard({
   } = post;
 
   const blurSensitiveMedia = usePreferencesStore((s) => s.blurSensitiveMedia);
-  const shouldBlurContent = blurSensitiveMedia && !!contentWarnings?.length && !contentRevealed;
+  const shouldBlurContent = shouldBlurMatureMedia(
+    blurSensitiveMedia,
+    contentWarnings,
+    contentRevealed,
+  );
 
   const resolvedContent = useMemo(
     () => resolvePostContent(body, media),
