@@ -2,7 +2,7 @@ import * as Sentry from "@sentry/react-native";
 import type { QueryClient } from "@tanstack/react-query";
 
 import { getBootstrap, type BootstrapResponse } from "@/src/api/read/endpoints/bootstrap";
-import { getNodeConfig } from "@/src/api/read/endpoints/parameters";
+import { getNodeConfig, getSafeApiErrorContext } from "@/src/api/read/endpoints/parameters";
 import {
   getInviteCodes,
   getUserBlocked,
@@ -60,6 +60,16 @@ export function hydrateBootstrapCache(
 ) {
   if (response.node_config) {
     queryClient.setQueryData(queryKeys.nodeConfig(), response.node_config);
+    Sentry.addBreadcrumb({
+      category: "auto-enabled-agents",
+      message: "Bootstrap node config hydrated",
+      level: "info",
+      data: {
+        source: "bootstrap",
+        autoEnabledAgentsCount: response.node_config.auto_enabled_agents?.length ?? 0,
+        hasAutoEnabledAgents: Array.isArray(response.node_config.auto_enabled_agents),
+      },
+    });
   }
 
   if (!address) return;
@@ -97,19 +107,60 @@ function scheduleBootstrapFallbacks(
     queryClient.prefetchQuery({
       queryKey: queryKeys.nodeConfig(),
       queryFn: async () => {
-        const nodeConfig = await getNodeConfig();
-        if (address) {
-          queryClient.setQueryData<UserFollowedResponse | undefined>(
-            queryKeys.userFollowed(address),
-            (old) => old
-              ? mergeUserFollowedEnabledAgents(old, {
+        let nodeConfigFetched = false;
+
+        try {
+          const nodeConfig = await getNodeConfig();
+          nodeConfigFetched = true;
+          const autoEnabledAgentsCount = nodeConfig.auto_enabled_agents?.length ?? 0;
+          let mergedExistingUserFollowed = false;
+
+          if (address) {
+            queryClient.setQueryData<UserFollowedResponse | undefined>(
+              queryKeys.userFollowed(address),
+              (old) => {
+                if (!old) return old;
+                mergedExistingUserFollowed = true;
+                return mergeUserFollowedEnabledAgents(old, {
                   source: "node_config_fallback",
                   nodeConfigAutoEnabledAgents: nodeConfig.auto_enabled_agents,
-                })
-              : old,
-          );
+                });
+              },
+            );
+          }
+
+          Sentry.addBreadcrumb({
+            category: "auto-enabled-agents",
+            message: "Bootstrap node config fallback completed",
+            level: "info",
+            data: {
+              source: "node_config_fallback",
+              hasAddress: Boolean(address),
+              autoEnabledAgentsCount,
+              mergedExistingUserFollowed,
+            },
+          });
+
+          return nodeConfig;
+        } catch (error) {
+          Sentry.addBreadcrumb({
+            category: "auto-enabled-agents",
+            message: "Bootstrap node config fallback failed",
+            level: "error",
+            data: {
+              source: "node_config_fallback",
+              hasAddress: Boolean(address),
+              ...getSafeApiErrorContext(error),
+            },
+          });
+          if (nodeConfigFetched) {
+            Sentry.captureException(error, {
+              tags: { feature: "auto-enabled-agents", operation: "bootstrap-node-config-merge" },
+              extra: { hasAddress: Boolean(address) },
+            });
+          }
+          throw error;
         }
-        return nodeConfig;
       },
       staleTime: 1000 * 60 * 60 * 24,
     });

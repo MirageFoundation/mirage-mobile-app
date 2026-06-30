@@ -13,7 +13,7 @@ import type {
   ValidateInviteCodeResponse,
   GetInviteCodesResponse,
 } from "../../types";
-import { getNodeConfig } from "./parameters";
+import { getNodeConfig, getSafeApiErrorContext } from "./parameters";
 
 // ============================================
 // User Status & Profile
@@ -78,6 +78,20 @@ export function mergeUserFollowedEnabledAgents(
     });
   }
 
+  Sentry.addBreadcrumb({
+    category: "auto-enabled-agents",
+    message: "Enabled agents merged",
+    level: options.nodeConfigAutoEnabledAgents ? "info" : "warning",
+    data: {
+      source: options.source,
+      userFollowedEnabledAgentsCount: response.enabled_agents?.length ?? 0,
+      userFollowedAutoEnabledAgentsCount: response.auto_enabled_agents?.length ?? 0,
+      nodeConfigAutoEnabledAgentsCount: options.nodeConfigAutoEnabledAgents?.length ?? 0,
+      mergedEnabledAgentsCount: enabledAgents.length,
+      usedNodeConfig: Boolean(options.nodeConfigAutoEnabledAgents),
+    },
+  });
+
   return {
     ...response,
     enabled_agents: enabledAgents,
@@ -93,7 +107,18 @@ export async function getUserFollowed(
   const [response, nodeConfig] = await Promise.all([
     api.get<UserFollowedResponse>("/get_user_followed", params),
     getNodeConfig().catch((error) => {
-      console.warn("[auto-enabled-agents] get_node_config failed during get_user_followed", error);
+      if (__DEV__) {
+        console.warn("[auto-enabled-agents] get_node_config failed during get_user_followed", error);
+      }
+      Sentry.addBreadcrumb({
+        category: "auto-enabled-agents",
+        message: "Node config unavailable during user_followed merge",
+        level: "warning",
+        data: {
+          source: "get_user_followed",
+          ...getSafeApiErrorContext(error),
+        },
+      });
       return null;
     }),
   ]);
