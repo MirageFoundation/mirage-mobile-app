@@ -777,7 +777,9 @@ export default function MediaPostDetailScreen({
               });
             }}
             onMorePress={(c) => {
-              actionSheetsRef.current?.presentCommentOptions(c);
+              requireAuth(() => {
+                actionSheetsRef.current?.presentCommentOptions(c);
+              });
             }}
             onHighlightedLayout={handleHighlightedCommentLayout}
           />
@@ -791,7 +793,7 @@ export default function MediaPostDetailScreen({
             pointerEvents="box-none"
             onBack={() => router.back()}
             onTopicPress={handleTopicPress}
-            onOptionsPress={() => actionSheetsRef.current?.presentPostOptions()}
+            onOptionsPress={() => requireAuth(() => actionSheetsRef.current?.presentPostOptions())}
           />
 
           {/* --------------- Comment input dock (collapsed mode) ------ */}

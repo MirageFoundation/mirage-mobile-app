@@ -44,6 +44,7 @@ import { Box, Text } from "@/src/components/ui/primitives";
 import {
   useBlockHandler,
   getBlockConfirmationMessage,
+  useAuthGuard,
   useDeleteHandler,
   useFollowHandler,
   useNetworkState,
@@ -74,6 +75,7 @@ export function TopicFeedScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const toast = useToast();
+  const { requireAuth } = useAuthGuard();
 
   const flatListRef = useRef<FlashListRef<Post>>(null);
   const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
@@ -348,9 +350,11 @@ export function TopicFeedScreen() {
   );
 
   const handleMorePress = useCallback((post: Post) => {
-    setSelectedPost(post);
-    postOptionsSheetRef.current?.present();
-  }, []);
+    requireAuth(() => {
+      setSelectedPost(post);
+      postOptionsSheetRef.current?.present();
+    });
+  }, [requireAuth]);
 
   const handleCommentPress = useCallback(
     (postId: string) => {

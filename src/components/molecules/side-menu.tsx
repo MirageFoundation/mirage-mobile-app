@@ -7,12 +7,12 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
-  useRef,
   useState,
 } from "react";
 import {
   ActivityIndicator,
   Dimensions,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -40,11 +40,6 @@ import {
 import { usePathname } from "expo-router";
 import { useRouter } from "@/src/navigation/guarded-router";
 import { LogoutConfirmationPopup } from "./logout-confirmation-popup";
-import {
-  ValuePickerSheet,
-  type ValuePickerSheetRef,
-  type ValueOption,
-} from "./settings";
 import { useApiServer } from "@/src/providers/api-server-provider";
 import { useToast } from "@/src/providers/toast-provider";
 import { useServerList } from "@/src/hooks/use-server-list";
@@ -331,37 +326,28 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     const [visible, setVisible] = useState(false);
     const [showLogoutPopup, setShowLogoutPopup] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
-    const apiServerSheetRef = useRef<ValuePickerSheetRef>(null);
+    const [showServerModal, setShowServerModal] = useState(false);
+    const [switchingServer, setSwitchingServer] = useState<ApiServer | null>(
+      null,
+    );
 
     const { switchServer } = useApiServer();
     const toast = useToast();
     const { apiServer, setShareServer } = usePreferencesStore();
     const { servers } = useServerList();
-    const apiServerOptions = servers.map((s: string) => ({
-      value: s,
-      label: s,
-    }));
 
     const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
     const walletAddress = useAuthStore((s) => s.user?.walletAddress);
 
-    useEffect(() => {
-      if (!isLoggedIn && visible) {
-        translateX.value = -MENU_WIDTH;
-        backdropOpacity.value = 0;
-        setVisible(false);
-      }
-    }, [isLoggedIn]);
-
     const { data: userStatus, refetch: refetchUserStatus } = useUserStatus({
-      enabled: visible,
+      enabled: visible && isLoggedIn,
     });
     const balance = userStatus?.balance
       ? Math.floor(userStatus.balance / 1_000_000)
       : 0;
 
     useEffect(() => {
-      if (!visible) return;
+      if (!visible || !isLoggedIn) return;
 
       void refetchUserStatus();
 
@@ -370,7 +356,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
       }, 3000);
 
       return () => clearTimeout(refreshAfterIndexerLag);
-    }, [visible, pathname, refetchUserStatus]);
+    }, [visible, isLoggedIn, pathname, refetchUserStatus]);
 
     const { topicsBeforeShowMore, peopleBeforeShowMore } =
       usePreferencesStore();
@@ -485,12 +471,13 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     }, [close, onLogout]);
 
     const handleServerPress = useCallback(() => {
-      apiServerSheetRef.current?.present();
+      setShowServerModal(true);
     }, []);
 
     const handleApiServerChange = useCallback(
       async (server: ApiServer) => {
         if (server === apiServer) return;
+        setSwitchingServer(server);
         try {
           await switchServer(server);
           setShareServer(server);
@@ -516,6 +503,8 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
             level: "warning",
             data: { server },
           });
+        } finally {
+          setSwitchingServer(null);
         }
       },
       [switchServer, apiServer, toast, router, setShareServer, close],
@@ -568,6 +557,19 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                 Menu
               </Text>
               <View style={styles.headerRight}>
+                <Pressable onPress={handleServerPress}>
+                  <Text
+                    size="lg"
+                    weight="semibold"
+                    style={{
+                      color: "#60A5FA",
+                      textDecorationLine: "underline",
+                      marginRight: 8,
+                    }}
+                  >
+                    {apiServer}
+                  </Text>
+                </Pressable>
                 <Pressable
                   onPress={close}
                   style={[
@@ -879,13 +881,88 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
             isLoading={isLoggingOut}
           />
 
-          <ValuePickerSheet
-            ref={apiServerSheetRef}
-            title="Server"
-            options={apiServerOptions}
-            value={apiServer}
-            onChange={handleApiServerChange}
-          />
+          <Modal
+            visible={showServerModal}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowServerModal(false)}
+          >
+            <Pressable
+              style={styles.modalOverlay}
+              onPress={() => setShowServerModal(false)}
+            >
+              <View
+                style={[
+                  styles.modalContent,
+                  { backgroundColor: theme.colors.background.default },
+                ]}
+              >
+                <Text
+                  size="lg"
+                  weight="bold"
+                  style={{ marginBottom: 16, textAlign: "center" }}
+                >
+                  Switch Node
+                </Text>
+                {servers.map((server) => {
+                  const isActive = server === apiServer;
+                  const isSwitching = switchingServer === server;
+                  return (
+                    <Pressable
+                      key={server}
+                      disabled={!!switchingServer}
+                      onPress={async () => {
+                        if (!isActive) {
+                          await handleApiServerChange(server);
+                        }
+                        setShowServerModal(false);
+                      }}
+                      style={[
+                        styles.modalOption,
+                        {
+                          backgroundColor: isActive
+                            ? `${theme.colors.primary[500]}10`
+                            : "transparent",
+                          opacity: switchingServer && !isSwitching ? 0.5 : 1,
+                        },
+                      ]}
+                    >
+                      <View style={styles.modalOptionLabel}>
+                        <Ionicons
+                          name={
+                            isActive ? "radio-button-on" : "radio-button-off"
+                          }
+                          size={20}
+                          color={
+                            isActive
+                              ? theme.colors.primary[500]
+                              : theme.colors.text.subtle
+                          }
+                        />
+                        <Text
+                          size="md"
+                          weight={isActive ? "semibold" : "regular"}
+                          style={
+                            isActive
+                              ? { color: theme.colors.primary[500] }
+                              : undefined
+                          }
+                        >
+                          {server}
+                        </Text>
+                      </View>
+                      {isSwitching && (
+                        <ActivityIndicator
+                          size="small"
+                          color={theme.colors.primary[500]}
+                        />
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </Pressable>
+          </Modal>
         </View>
       </View>
     );
@@ -1022,5 +1099,37 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.sm,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "75%",
+    borderRadius: 14,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  modalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginBottom: 4,
+  },
+  modalOptionLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
   },
 }));

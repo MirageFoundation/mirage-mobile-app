@@ -668,8 +668,10 @@ function LegacyPostDetailScreen() {
   }, []);
 
   const handleMoreOptions = useCallback((comment: Comment) => {
-    actionSheetsRef.current?.presentCommentOptions(comment);
-  }, []);
+    requireAuth(() => {
+      actionSheetsRef.current?.presentCommentOptions(comment);
+    });
+  }, [requireAuth]);
 
   usePostDetailPendingCommentEdit({
     id,
@@ -693,12 +695,12 @@ function LegacyPostDetailScreen() {
         }
         onOptionsPress={
           displayPost
-            ? () => actionSheetsRef.current?.presentPostOptions()
+            ? () => requireAuth(() => actionSheetsRef.current?.presentPostOptions())
             : undefined
         }
       />
     ),
-    [insets.top, handleBack, displayPost, isLoadingComments, router],
+    [insets.top, handleBack, displayPost, isLoadingComments, router, requireAuth],
   );
 
   const listHeader = useMemo(

@@ -6,6 +6,7 @@ import {
 } from "@/assets/figma-icons";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { useAuthStore, useUIStore } from "@/src/stores";
 import { Ionicons } from "@expo/vector-icons";
 import { memo, useRef } from "react";
 import {
@@ -155,6 +156,8 @@ export const PostActions = memo(function PostActions({
   hideCommentAction = false,
 }: PostActionsProps) {
   const { theme } = useUnistyles();
+  const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
+  const showAuthSheet = useUIStore((s) => s.showAuthSheet);
   const {
     iconSize,
     gap,
@@ -168,7 +171,7 @@ export const PostActions = memo(function PostActions({
   // so they render as visually-round circles inside the pill border.
   const iconOnlyButtonStyle = {
     paddingHorizontal: iconOnlyPad,
-    paddingVertical: iconOnlyPad,
+    paddingVertical: Math.max(4, (pillHeight - iconSize) / 2 - 1),
   };
 
   const blockMenuMinWidth = Math.max(180, `Block @${authorUsername || ""}`.length * 10 + 60);
@@ -265,6 +268,11 @@ export const PostActions = memo(function PostActions({
   const handleReport = () => {
     triggerHaptic("warning");
     onReport?.();
+  };
+
+  const handleAuthRequiredModeration = () => {
+    triggerHaptic("warning");
+    showAuthSheet();
   };
 
   const defaultColor = theme.colors.text.default;
@@ -393,7 +401,24 @@ export const PostActions = memo(function PostActions({
       </Animated.View>
 
       {/* Moderation menu (only for other users' posts) */}
-      {!isOwnPost && (
+      {!isOwnPost && !isLoggedIn && (
+        <Animated.View style={[styles.votePill, { height: pillHeight, transform: [{ scale: banPillScale }] }]}>
+          <Pressable
+            onPress={handleAuthRequiredModeration}
+            {...makePressHandlers(banPillScale)}
+            disabled={disabled}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            style={[styles.voteButton, iconOnlyButtonStyle, disabled && styles.disabled]}
+          >
+            <Ionicons
+              name="ban-outline"
+              size={iconSize}
+              color={theme.colors.error[500]}
+            />
+          </Pressable>
+        </Animated.View>
+      )}
+      {!isOwnPost && isLoggedIn && (
         <Menu>
           <MenuTrigger
             customStyles={{

@@ -620,11 +620,13 @@ export function SavedPostsScreen() {
     (postId: string) => {
       const post = visiblePosts.find((p) => p.id === postId);
       if (post) {
-        setSelectedPost(post);
-        postOptionsSheetRef.current?.present();
+        requireAuth(() => {
+          setSelectedPost(post);
+          postOptionsSheetRef.current?.present();
+        });
       }
     },
-    [visiblePosts],
+    [visiblePosts, requireAuth],
   );
 
   const handleLikePress = useCallback(
@@ -703,10 +705,12 @@ export function SavedPostsScreen() {
 
   const handleSavedCommentLongPress = useCallback(
     (comment: SavedComment) => {
-      setSelectedComment(comment);
-      commentOptionsSheetRef.current?.present();
+      requireAuth(() => {
+        setSelectedComment(comment);
+        commentOptionsSheetRef.current?.present();
+      });
     },
-    [],
+    [requireAuth],
   );
 
   const renderPostItem = useCallback(

@@ -218,9 +218,11 @@ export function FollowingScreen() {
   }, [router]);
 
   const handleMorePress = useCallback((post: Post) => {
-    setSelectedPost(post);
-    postOptionsSheetRef.current?.present();
-  }, []);
+    requireAuth(() => {
+      setSelectedPost(post);
+      postOptionsSheetRef.current?.present();
+    });
+  }, [requireAuth]);
 
   const handleCommentPress = useCallback(
     (postId: string) => {

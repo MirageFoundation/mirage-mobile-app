@@ -515,9 +515,11 @@ export function HomeScreen() {
   }, [router]);
 
   const handleMorePress = useCallback((post: Post) => {
-    setSelectedPost(post);
-    postOptionsSheetRef.current?.present();
-  }, []);
+    requireAuth(() => {
+      setSelectedPost(post);
+      postOptionsSheetRef.current?.present();
+    });
+  }, [requireAuth]);
 
   const blockHandler = useBlockHandler({});
   const reportHandler = useReportHandler({});

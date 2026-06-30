@@ -68,6 +68,7 @@ import { Box } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import {
   getBlockConfirmationMessage,
+  useAuthGuard,
   useFollowHandler,
   useVoteHandler,
   type VoteResult,
@@ -123,6 +124,7 @@ export function UserProfileScreen() {
   const queryClient = useQueryClient();
   const shareServer = usePreferencesStore((s) => s.apiServer);
   const toast = useToast();
+  const { requireAuth } = useAuthGuard();
 
   const currentUser = useAuthStore((s) => s.user);
   const flatListRef = useRef<FlatList<any>>(null);
@@ -346,9 +348,11 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
 
   const handleMenuPress = useCallback(() => {
     if (!isOwnProfile) {
-      userMenuSheetRef.current?.present();
+      requireAuth(() => {
+        userMenuSheetRef.current?.present();
+      });
     }
-  }, [isOwnProfile]);
+  }, [isOwnProfile, requireAuth]);
 
   const handleFollowersPress = useCallback(() => {
     const followId = userAddress || id;
@@ -555,10 +559,12 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     (postId: string) => {
       const post = postsById.get(postId);
       if (post) {
-        postActionSheetsRef.current?.openPost(post);
+        requireAuth(() => {
+          postActionSheetsRef.current?.openPost(post);
+        });
       }
     },
-    [postsById]
+    [postsById, requireAuth]
   );
 
   const handleBlockUserFromCard = useCallback(

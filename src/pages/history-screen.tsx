@@ -90,11 +90,13 @@ export function HistoryScreen() {
     (postId: string) => {
       const post = visibleEntries.find((p) => p.id === postId);
       if (post) {
-        setSelectedPost(post);
-        postOptionsSheetRef.current?.present();
+        requireAuth(() => {
+          setSelectedPost(post);
+          postOptionsSheetRef.current?.present();
+        });
       }
     },
-    [visibleEntries],
+    [visibleEntries, requireAuth],
   );
 
   const handleLikePress = useCallback(
