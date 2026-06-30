@@ -8,6 +8,7 @@ import {
   getUserBlocked,
   getUserFollowed,
   getUserStatus,
+  mergeUserFollowedEnabledAgents,
 } from "@/src/api/read/endpoints/users";
 import { queryKeys } from "@/src/api/read/query-keys";
 import type { UserFollowedResponse } from "@/src/api/types";
@@ -52,16 +53,6 @@ function addBootstrapFallbackBreadcrumb(
   });
 }
 
-function normalizeUserFollowed(response: UserFollowedResponse): UserFollowedResponse {
-  return {
-    ...response,
-    enabled_agents: Array.from(new Set([
-      ...(response.enabled_agents ?? []),
-      ...(response.auto_enabled_agents ?? []),
-    ])),
-  };
-}
-
 export function hydrateBootstrapCache(
   queryClient: QueryClient,
   response: BootstrapResponse,
@@ -77,7 +68,13 @@ export function hydrateBootstrapCache(
     queryClient.setQueryData(queryKeys.userStatus(address), response.user_status);
   }
   if (response.user_followed) {
-    queryClient.setQueryData(queryKeys.userFollowed(address), normalizeUserFollowed(response.user_followed));
+    queryClient.setQueryData(
+      queryKeys.userFollowed(address),
+      mergeUserFollowedEnabledAgents(response.user_followed, {
+        source: "bootstrap",
+        nodeConfigAutoEnabledAgents: response.node_config?.auto_enabled_agents,
+      }),
+    );
   }
   if (response.user_blocked) {
     queryClient.setQueryData(queryKeys.userBlocked(address), response.user_blocked);
@@ -99,7 +96,21 @@ function scheduleBootstrapFallbacks(
     addBootstrapFallbackBreadcrumb("node_config", Boolean(address));
     queryClient.prefetchQuery({
       queryKey: queryKeys.nodeConfig(),
-      queryFn: () => getNodeConfig(),
+      queryFn: async () => {
+        const nodeConfig = await getNodeConfig();
+        if (address) {
+          queryClient.setQueryData<UserFollowedResponse | undefined>(
+            queryKeys.userFollowed(address),
+            (old) => old
+              ? mergeUserFollowedEnabledAgents(old, {
+                  source: "node_config_fallback",
+                  nodeConfigAutoEnabledAgents: nodeConfig.auto_enabled_agents,
+                })
+              : old,
+          );
+        }
+        return nodeConfig;
+      },
       staleTime: 1000 * 60 * 60 * 24,
     });
   }

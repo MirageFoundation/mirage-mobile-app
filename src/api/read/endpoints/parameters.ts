@@ -22,6 +22,10 @@ export async function getChainConfig(): Promise<ConfigResponse> {
 
 export async function getNodeConfig(): Promise<NodeConfigResponse> {
  const response = await api.get<NodeConfigResponse>("/get_node_config");
- console.log("[getNodeConfig] response:", JSON.stringify(response, null, 2));
+ if (__DEV__) {
+  console.log("[auto-enabled-agents] get_node_config", {
+   node_config_auto_enabled_agents: response.auto_enabled_agents ?? [],
+  });
+ }
  return response;
 }

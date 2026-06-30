@@ -104,6 +104,7 @@ export type ChainConfigResponse = ConfigResponse;
 
 export interface NodeConfigResponse {
   giphy_api_key: string;
+  auto_enabled_agents?: string[];
   open_browsing_enabled?: boolean;
   quest_payouts_enabled: boolean;
   quests_enabled: boolean;
