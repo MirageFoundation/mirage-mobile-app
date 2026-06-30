@@ -7,6 +7,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useRef,
   useState,
 } from "react";
 import {
@@ -53,6 +54,10 @@ import Constants from "expo-constants";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MENU_WIDTH = SCREEN_WIDTH * 0.8;
+const SIDE_MENU_ANIMATION_CONFIG = {
+  duration: 300,
+  easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+};
 
 type SideMenuProps = {
   onSettings?: () => void;
@@ -136,6 +141,7 @@ const MenuItem = ({
 };
 
 const SHOW_MORE_HITSLOP = { top: 12, bottom: 12, left: 16, right: 16 };
+const HEADER_LABEL_TEXT_PROPS = { size: "sm", weight: "semibold" } as const;
 
 const SectionHeader = ({
   title,
@@ -330,6 +336,7 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     const [switchingServer, setSwitchingServer] = useState<ApiServer | null>(
       null,
     );
+    const shouldCloseAfterAuthRef = useRef(false);
 
     const { switchServer } = useApiServer();
     const toast = useToast();
@@ -382,27 +389,31 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
     const translateX = useSharedValue(-MENU_WIDTH);
     const backdropOpacity = useSharedValue(0);
 
-    const animationConfig = {
-      duration: 300,
-      easing: Easing.bezier(0.25, 0.1, 0.25, 1),
-    };
-
     const open = useCallback(() => {
       setVisible(true);
-      translateX.value = withTiming(0, animationConfig);
-      backdropOpacity.value = withTiming(0.5, animationConfig);
+      translateX.value = withTiming(0, SIDE_MENU_ANIMATION_CONFIG);
+      backdropOpacity.value = withTiming(0.5, SIDE_MENU_ANIMATION_CONFIG);
       onOpen?.();
-    }, [onOpen]);
+    }, [backdropOpacity, onOpen, translateX]);
 
     const close = useCallback(() => {
-      translateX.value = withTiming(-MENU_WIDTH, animationConfig);
-      backdropOpacity.value = withTiming(0, animationConfig, () => {
+      translateX.value = withTiming(-MENU_WIDTH, SIDE_MENU_ANIMATION_CONFIG);
+      backdropOpacity.value = withTiming(0, SIDE_MENU_ANIMATION_CONFIG, () => {
         runOnJS(setVisible)(false);
         if (onDismiss) {
           runOnJS(onDismiss)();
         }
       });
-    }, [onDismiss]);
+    }, [backdropOpacity, onDismiss, translateX]);
+
+    useEffect(() => {
+      if (!isLoggedIn || !shouldCloseAfterAuthRef.current) return;
+
+      shouldCloseAfterAuthRef.current = false;
+      if (visible) {
+        close();
+      }
+    }, [close, isLoggedIn, visible]);
 
     useImperativeHandle(ref, () => ({
       present: open,
@@ -447,28 +458,32 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
 
     const handleCreateAccount = useCallback(() => {
       triggerHaptic("light");
+      shouldCloseAfterAuthRef.current = true;
       router.push("/(auth)/username");
     }, [router]);
 
     const handleLogin = useCallback(() => {
       triggerHaptic("light");
+      shouldCloseAfterAuthRef.current = true;
       router.push("/(auth)/login");
     }, [router]);
 
     const handleLogoutConfirm = useCallback(async () => {
       setIsLoggingOut(true);
       try {
-        close();
         await onLogout?.();
+        setShowLogoutPopup(false);
+        close();
       } catch (error) {
         Sentry.captureException(error, {
           tags: { feature: "side-menu", operation: "logout" },
         });
+        setShowLogoutPopup(true);
+        toast.error("Logout failed. Please try again.");
       } finally {
         setIsLoggingOut(false);
-        setShowLogoutPopup(false);
       }
-    }, [close, onLogout]);
+    }, [close, onLogout, toast]);
 
     const handleServerPress = useCallback(() => {
       setShowServerModal(true);
@@ -557,19 +572,6 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                 Menu
               </Text>
               <View style={styles.headerRight}>
-                <Pressable onPress={handleServerPress}>
-                  <Text
-                    size="lg"
-                    weight="semibold"
-                    style={{
-                      color: "#60A5FA",
-                      textDecorationLine: "underline",
-                      marginRight: 8,
-                    }}
-                  >
-                    {apiServer}
-                  </Text>
-                </Pressable>
                 <Pressable
                   onPress={close}
                   style={[
@@ -820,7 +822,32 @@ export const SideMenu = forwardRef<SideMenuRef, SideMenuProps>(
                 </>
               ) : (
                 <>
-                  <SectionHeader title="Get Started" />
+                  <View style={styles.sectionHeaderRow}>
+                    <Text
+                      {...HEADER_LABEL_TEXT_PROPS}
+                      style={{ color: theme.colors.text.subtle }}
+                    >
+                      GET STARTED
+                    </Text>
+                    <Pressable
+                      onPress={handleServerPress}
+                      hitSlop={SHOW_MORE_HITSLOP}
+                      style={({ pressed }) => [
+                        styles.serverHeaderButton,
+                        pressed && { opacity: 0.7 },
+                      ]}
+                    >
+                      <Text
+                        {...HEADER_LABEL_TEXT_PROPS}
+                        style={{
+                          color: "#60A5FA",
+                          textDecorationLine: "underline",
+                        }}
+                      >
+                        {apiServer}
+                      </Text>
+                    </Pressable>
+                  </View>
                   <MenuItem
                     iconName="person-add-outline"
                     title="Create Account"
@@ -1042,6 +1069,10 @@ const styles = StyleSheet.create((theme) => ({
     paddingBottom: theme.spacing.md,
   },
   showMoreButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  serverHeaderButton: {
     paddingVertical: 4,
     paddingHorizontal: 8,
   },
