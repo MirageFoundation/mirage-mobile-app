@@ -19,6 +19,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { MediaPreviewModal } from "./media-preview-modal";
 import { AwardBadges } from "@/src/components/atoms/award-badges";
+import { ContentWarningBadge } from "@/src/components/atoms/content-warning-badge";
 import { PostActions } from "./post-actions";
 import { PostCardContent } from "./post-card-content";
 import { PostCardHeader } from "./post-card-header";
@@ -360,9 +361,24 @@ export const PostCard = memo(function PostCard({
         isPostDetail={isPostDetail}
       />
 
-      {post.awards && post.awards.length > 0 && (
-        <View style={styles.awardBadgesRow}>
-          <AwardBadges awards={post.awards} size="sm" />
+      {(contentWarnings?.length || post.awards?.length || post.agentEdited) && (
+        <View style={styles.badgesRow}>
+          {contentWarnings && contentWarnings.length > 0 && (
+            <ContentWarningBadge types={contentWarnings} compact />
+          )}
+          {post.agentEdited && (
+            <View style={styles.agentBadge}>
+              <Ionicons name="shield-checkmark" size={12} color="#EF4444" />
+              <Text size="xs" weight="medium" style={styles.agentBadgeText}>
+                Agent modified
+              </Text>
+            </View>
+          )}
+          {post.awards && post.awards.length > 0 && (
+            <View style={styles.awardsPill}>
+              <AwardBadges awards={post.awards} size="sm" />
+            </View>
+          )}
         </View>
       )}
 
@@ -431,7 +447,6 @@ export const PostCard = memo(function PostCard({
         displayDomain={resolvedContent.displayDomain}
         bodyVideoUrl={resolvedContent.bodyVideoUrl}
         shouldBlurContent={shouldBlurContent}
-        contentWarnings={contentWarnings}
         showUrlCard={showUrlCard}
         disabled={disablePostInteractions}
         onRevealContent={disablePostInteractions ? undefined : onRevealContent}
@@ -470,13 +485,6 @@ export const PostCard = memo(function PostCard({
                 : bodyText
             }
           />
-        </View>
-      )}
-
-      {post.agentEdited && (
-        <View style={styles.agentBadge}>
-          <Ionicons name="shield-checkmark" size={14} color="#EF4444" />
-          <Text size="xs" mode="subtle"> Agent modified</Text>
         </View>
       )}
 
@@ -544,7 +552,11 @@ const styles = StyleSheet.create((theme) => ({
     marginTop: theme.spacing.sm,
     lineHeight: 18,
   },
-  awardBadgesRow: {
+  badgesRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: theme.spacing.xs,
     marginVertical: theme.spacing.xs,
     paddingLeft: 2,
   },
@@ -587,11 +599,26 @@ const styles = StyleSheet.create((theme) => ({
   agentBadge: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: theme.spacing.xs,
     gap: 4,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 2,
     borderRadius: theme.radius.md,
+    borderWidth: 0.5,
+    borderColor: theme.colors.border.default,
+    backgroundColor: theme.colors.primary[500] + "1A",
+  },
+  agentBadgeText: {
+    color: theme.colors.primary[500],
+  },
+  awardsPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 2,
+    borderRadius: theme.radius.md,
+    borderWidth: 0.5,
+    borderColor: theme.colors.border.default,
+    backgroundColor: theme.colors.primary[500] + "1A",
   },
   appendicesContainer: {
     marginTop: theme.spacing.sm,
