@@ -845,7 +845,6 @@ function LegacyPostDetailScreen() {
         header={renderHeader}
         message={commentsApiError?.message}
         onBack={handleUnavailableBack}
-        theme={theme}
       />
     );
   }
