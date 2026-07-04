@@ -20,6 +20,7 @@ type PostDetailPostSectionProps = {
   currentUserId?: string;
   focusedCommentId?: string | null;
   followedTopics: string[];
+  focusedCommentNotFound?: boolean;
   hasFocusedRecentContext: boolean;
   hasFullThreadBeyondFocus: boolean;
   id: string;
@@ -40,6 +41,7 @@ export function PostDetailPostSection({
   contentInitiallyRevealed,
   currentUserId,
   focusedCommentId,
+  focusedCommentNotFound = false,
   followedTopics,
   hasFocusedRecentContext,
   hasFullThreadBeyondFocus,
@@ -212,6 +214,18 @@ export function PostDetailPostSection({
         videoSyncScope={videoSyncScope}
       />
       <View style={styles.divider} />
+      {focusedCommentNotFound ? (
+        <View style={styles.deletedCommentNotice}>
+          <Ionicons
+            name="trash-bin-outline"
+            size={15}
+            color={theme.colors.error[500]}
+          />
+          <Text size="xs" weight="medium" style={styles.deletedCommentNoticeText}>
+            Comment not found. It may have been deleted by its author.
+          </Text>
+        </View>
+      ) : null}
       {shouldShowThreadReminder ? (
         <View style={styles.threadReminder}>
           <View style={styles.threadReminderHeader}>

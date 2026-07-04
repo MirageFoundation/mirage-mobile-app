@@ -287,6 +287,22 @@ export const styles = StyleSheet.create((theme) => ({
     opacity: 0.5,
     backgroundColor: theme.colors.background.subtle,
   },
+  deletedCommentNotice: {
+    marginTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.error[500] + "15",
+    borderWidth: 1,
+    borderColor: theme.colors.error[500] + "40",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs,
+  },
+  deletedCommentNoticeText: {
+    color: theme.colors.error[500],
+    flex: 1,
+  },
   commentsTitle: {
     marginTop: 4,
     marginBottom: 4,

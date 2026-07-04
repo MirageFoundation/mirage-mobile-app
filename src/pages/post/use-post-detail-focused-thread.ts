@@ -6,6 +6,7 @@ import { useComments } from "@/src/api/read";
 import { getCommentContext, getComments } from "@/src/api/read/endpoints/posts";
 import { queryKeys } from "@/src/api/read/query-keys";
 import type { CommentsResponse, Post as ApiPost, PostWithChildren } from "@/src/api/types";
+import { parseApiError } from "@/src/utils/parse-api-error";
 
 type UsePostDetailFocusedThreadInput = {
   commentsData?: CommentsResponse;
@@ -45,9 +46,28 @@ export function usePostDetailFocusedThread({
   const {
     data: focusedCommentData,
     isLoading: isLoadingFocusedComment,
+    error: focusedCommentError,
   } = useComments(focusedCommentId, {
     enabled: isFocused && !!focusedCommentId && !isViewingComment,
   });
+  const focusedCommentApiError = useMemo(() => {
+    if (!focusedCommentError) return null;
+    return parseApiError(focusedCommentError);
+  }, [focusedCommentError]);
+  const currentFocusedCommentNotFound = !!focusedCommentId && !isViewingComment && (
+    focusedCommentApiError?.errorCode === "post_not_found" ||
+    focusedCommentApiError?.errorCode === "comment_not_found" ||
+    focusedCommentApiError?.httpStatus === 404
+  );
+  const [notFoundFocusedCommentId, setNotFoundFocusedCommentId] = useState<string | null>(null);
+  useEffect(() => {
+    setNotFoundFocusedCommentId(null);
+  }, [focusedCommentId]);
+  useEffect(() => {
+    if (!focusedCommentId || !currentFocusedCommentNotFound) return;
+    setNotFoundFocusedCommentId(focusedCommentId);
+  }, [currentFocusedCommentNotFound, focusedCommentId]);
+  const isFocusedCommentNotFound = currentFocusedCommentNotFound || notFoundFocusedCommentId === focusedCommentId;
   const {
     data: fullThreadCommentsData,
     isLoading: isLoadingFullThreadComments,
@@ -72,13 +92,13 @@ export function usePostDetailFocusedThread({
 
   const focusedContextCheckQuery = useQuery({
     queryKey: focusedCommentId
-      ? queryKeys.commentContext(focusedCommentId, 10)
-      : queryKeys.commentContext("missing", 10),
+      ? queryKeys.commentContext(focusedCommentId, 5)
+      : queryKeys.commentContext("missing", 5),
     queryFn: () =>
       getCommentContext({
         comment_id: focusedCommentId!,
         address: currentUserWallet,
-        max_depth: 10,
+        max_depth: 5,
       }),
     enabled: !!focusedCommentId,
     staleTime: 1000 * 60,
@@ -87,7 +107,7 @@ export function usePostDetailFocusedThread({
   const loadFocusedContext = useCallback(
     async (maxDepth = 5) => {
       if (!focusedCommentId) return;
-      const depthToLoad = Math.min(Math.max(maxDepth, 0), 10);
+      const depthToLoad = Math.min(Math.max(maxDepth, 0), 5);
       if (depthToLoad <= 0) return;
       setIsLoadingContext(true);
       try {
@@ -165,6 +185,7 @@ export function usePostDetailFocusedThread({
     hasLoadedFocusedContext,
     highlightCommentId,
     isLoadingContext,
+    isFocusedCommentNotFound,
     isLoadingFocusedComment,
     isLoadingFullThreadComments,
     loadFocusedContext,

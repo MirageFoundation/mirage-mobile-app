@@ -173,8 +173,8 @@ export default function MediaPostDetailScreen({
     isLoadingComments,
     isLoadingFocusedComment,
     isLoadingFocusedContextThread,
+    isFocusedCommentNotFound,
     isPostNotFound,
-    postUnavailableMessage,
     post,
     recentContextDisabled,
     recentContextDone,
@@ -661,7 +661,7 @@ export default function MediaPostDetailScreen({
   if (isPostNotFound) {
     return (
       <MediaPostDetailNotFound
-        message={postUnavailableMessage}
+        message="Content not found"
         onBack={handleUnavailableBack}
       />
     );
@@ -730,6 +730,7 @@ export default function MediaPostDetailScreen({
             onClose={handleBack}
             focusedCommentId={focusedCommentId}
             focusedMode={focusedMode}
+            focusedCommentNotFound={isFocusedCommentNotFound}
             isLoadingComments={isLoadingComments}
             isLoadingFocusedComment={isLoadingFocusedComment}
             isLoadingFocusedContextThread={isLoadingFocusedContextThread}

@@ -238,10 +238,21 @@ function LegacyPostDetailScreen() {
     return parseApiError(commentsError);
   }, [commentsError]);
 
-  const isPostNotFound = commentsApiError?.errorCode === "post_not_found" || commentsApiError?.httpStatus === 404;
+  const currentFetchPostNotFound = commentsApiError?.errorCode === "post_not_found" || commentsApiError?.httpStatus === 404;
   const optimisticPost = usePendingPostsStore((state) =>
     id ? state.posts.find((post) => post.post_id.toLowerCase() === id.toLowerCase()) : undefined,
   );
+  const [notFoundRouteId, setNotFoundRouteId] = useState<string | null>(null);
+  useEffect(() => {
+    setNotFoundRouteId(null);
+  }, [id]);
+  useEffect(() => {
+    if (!id || !currentFetchPostNotFound || optimisticPost) return;
+    setNotFoundRouteId(id);
+  }, [currentFetchPostNotFound, id, optimisticPost]);
+
+  const isPostNotFound = currentFetchPostNotFound || notFoundRouteId === id;
+  const isCommentRouteNotFound = !!depth && isPostNotFound;
   const shouldUseOptimisticRootFallback = isPostNotFound && !!optimisticPost;
   const effectiveCommentsData = useMemo<CommentsResponse | undefined>(() => {
     if (commentsData) return commentsData;
@@ -374,6 +385,7 @@ function LegacyPostDetailScreen() {
     focusedContextCheckQuery,
     fullThreadCommentsData,
     hasLoadedFocusedContext,
+    isFocusedCommentNotFound,
     isLoadingContext,
     isLoadingFocusedComment,
     isLoadingFullThreadComments,
@@ -738,7 +750,7 @@ function LegacyPostDetailScreen() {
         isLoadingTopic={!displayPost && isLoadingComments}
         insetsTop={insets.top}
         onBack={
-          isPostNotFound && !shouldUseOptimisticRootFallback
+          (isPostNotFound && !shouldUseOptimisticRootFallback) || isFocusedCommentNotFound
             ? handleUnavailableBack
             : handleBack
         }
@@ -755,7 +767,7 @@ function LegacyPostDetailScreen() {
         }
       />
     ),
-    [insets.top, handleBack, handleUnavailableBack, isPostNotFound, shouldUseOptimisticRootFallback, displayPost, isLoadingComments, router, requireAuth],
+    [insets.top, handleBack, handleUnavailableBack, isFocusedCommentNotFound, isPostNotFound, shouldUseOptimisticRootFallback, displayPost, isLoadingComments, router, requireAuth],
   );
 
   const listHeader = useMemo(
@@ -765,6 +777,7 @@ function LegacyPostDetailScreen() {
         contentInitiallyRevealed={reveal === "true"}
         currentUserId={currentUser?.id}
         focusedCommentId={focusedCommentId}
+        focusedCommentNotFound={isFocusedCommentNotFound}
         followedTopics={followedTopics}
         hasFocusedRecentContext={hasFocusedRecentContext}
         hasFullThreadBeyondFocus={hasFullThreadBeyondFocus}
@@ -792,6 +805,7 @@ function LegacyPostDetailScreen() {
       currentUser?.id,
       displayPost,
       focusedCommentId,
+      isFocusedCommentNotFound,
       followedTopics,
       handlePostHeaderLayout,
       hasFocusedRecentContext,
@@ -842,8 +856,13 @@ function LegacyPostDetailScreen() {
   if (isPostNotFound && !shouldUseOptimisticRootFallback) {
     return (
       <PostDetailNotFound
+        description={
+          isCommentRouteNotFound
+            ? "This comment may have been deleted by its author or is no longer available."
+            : "This post or comment may have been deleted by its author or is no longer available."
+        }
         header={renderHeader}
-        message={commentsApiError?.message}
+        message={isCommentRouteNotFound ? "Comment not found" : "Content not found"}
         onBack={handleUnavailableBack}
       />
     );

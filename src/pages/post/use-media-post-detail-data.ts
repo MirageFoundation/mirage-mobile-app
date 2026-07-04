@@ -100,7 +100,16 @@ export function useMediaPostDetailData({
     if (!commentsError) return null;
     return parseApiError(commentsError);
   }, [commentsError]);
-  const isPostNotFound = commentsApiError?.errorCode === "post_not_found" || commentsApiError?.httpStatus === 404;
+  const currentFetchPostNotFound = commentsApiError?.errorCode === "post_not_found" || commentsApiError?.httpStatus === 404;
+  const [notFoundRouteId, setNotFoundRouteId] = useState<string | null>(null);
+  useEffect(() => {
+    setNotFoundRouteId(null);
+  }, [id]);
+  useEffect(() => {
+    if (!id || !currentFetchPostNotFound) return;
+    setNotFoundRouteId(id);
+  }, [currentFetchPostNotFound, id]);
+  const isPostNotFound = currentFetchPostNotFound || notFoundRouteId === id;
   const [focusedContextDepth, setFocusedContextDepth] = useState(5);
   const focusedDepth = focusedMode === "context" ? focusedContextDepth : 0;
   const {
@@ -112,6 +121,24 @@ export function useMediaPostDetailData({
   } = useComments(focusedCommentId, {
     enabled: isFocused && !!focusedCommentId && focusedMode !== "full",
   });
+  const focusedCommentApiError = useMemo(() => {
+    if (!focusedCommentError) return null;
+    return parseApiError(focusedCommentError);
+  }, [focusedCommentError]);
+  const currentFocusedCommentNotFound = !!focusedCommentId && focusedMode !== "full" && (
+    focusedCommentApiError?.errorCode === "post_not_found" ||
+    focusedCommentApiError?.errorCode === "comment_not_found" ||
+    focusedCommentApiError?.httpStatus === 404
+  );
+  const [notFoundFocusedCommentId, setNotFoundFocusedCommentId] = useState<string | null>(null);
+  useEffect(() => {
+    setNotFoundFocusedCommentId(null);
+  }, [focusedCommentId]);
+  useEffect(() => {
+    if (!focusedCommentId || !currentFocusedCommentNotFound) return;
+    setNotFoundFocusedCommentId(focusedCommentId);
+  }, [currentFocusedCommentNotFound, focusedCommentId]);
+  const isFocusedCommentNotFound = currentFocusedCommentNotFound || notFoundFocusedCommentId === focusedCommentId;
   const {
     data: focusedContextData,
     refetch: refetchFocusedContext,
@@ -135,12 +162,12 @@ export function useMediaPostDetailData({
     isError: isFocusedContextCheckError,
     error: focusedContextCheckError,
   } = useQuery({
-    queryKey: queryKeys.commentContext(focusedCommentId!, 10),
+    queryKey: queryKeys.commentContext(focusedCommentId!, 5),
     queryFn: () =>
       getCommentContext({
         comment_id: focusedCommentId!,
         address: currentUser?.walletAddress ?? undefined,
-        max_depth: 10,
+        max_depth: 5,
       }),
     enabled: isFocused && !!focusedCommentId && focusedMode !== "full",
     staleTime: 1000 * 60,
@@ -646,8 +673,8 @@ export function useMediaPostDetailData({
     isLoadingComments,
     isLoadingFocusedComment,
     isLoadingFocusedContextThread,
+    isFocusedCommentNotFound,
     isPostNotFound,
-    postUnavailableMessage: commentsApiError?.message,
     post,
     recentContextDisabled,
     recentContextDone,

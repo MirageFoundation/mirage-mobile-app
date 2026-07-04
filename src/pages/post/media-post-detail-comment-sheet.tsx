@@ -47,6 +47,7 @@ type MediaPostDetailCommentSheetProps = {
   onClose: () => void;
   focusedCommentId: string | null;
   focusedMode: FocusedMode;
+  focusedCommentNotFound?: boolean;
   isLoadingComments: boolean;
   isLoadingFocusedComment: boolean;
   isLoadingFocusedContextThread: boolean;
@@ -118,6 +119,7 @@ export function MediaPostDetailCommentSheet({
   onClose,
   focusedCommentId,
   focusedMode,
+  focusedCommentNotFound = false,
   isLoadingComments,
   isLoadingFocusedComment,
   isLoadingFocusedContextThread,
@@ -475,6 +477,19 @@ export function MediaPostDetailCommentSheet({
               </View>
             ) : null}
 
+            {focusedCommentNotFound ? (
+              <View style={styles.deletedCommentNotice}>
+                <Ionicons
+                  name="trash-bin-outline"
+                  size={15}
+                  color={theme.colors.error[500]}
+                />
+                <Text size="xs" weight="medium" style={styles.deletedCommentNoticeText}>
+                  Comment not found. It may have been deleted by its author.
+                </Text>
+              </View>
+            ) : null}
+
             <View
               style={[
                 styles.dividerThick,
@@ -499,7 +514,7 @@ export function MediaPostDetailCommentSheet({
           />
         )}
         ListEmptyComponent={
-          isLoadingComments || isLoadingFocusedComment || isLoadingFocusedContextThread ? (
+          focusedCommentNotFound ? null : isLoadingComments || isLoadingFocusedComment || isLoadingFocusedContextThread ? (
             <View style={styles.contextSkeletonList}>
               {[0, 1, 2, 3].map((item) => (
                 <View

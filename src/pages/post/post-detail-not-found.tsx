@@ -6,11 +6,17 @@ import { Box, Button, Text } from "@/src/components/ui/primitives";
 
 type PostDetailNotFoundProps = {
   header: React.ReactNode;
+  description?: string;
   message?: string;
   onBack: () => void;
 };
 
-export function PostDetailNotFound({ header, message, onBack }: PostDetailNotFoundProps) {
+export function PostDetailNotFound({
+  description = "This post may have been deleted by its author or is no longer available.",
+  header,
+  message = "Post not found",
+  onBack,
+}: PostDetailNotFoundProps) {
   const { theme } = useUnistyles();
 
   return (
@@ -41,7 +47,7 @@ export function PostDetailNotFound({ header, message, onBack }: PostDetailNotFou
 
         <Box center gap="xs">
           <Text size="xl" weight="bold">
-            {message ?? "Post not found"}
+            {message}
           </Text>
           <Text
             size="sm"
@@ -49,8 +55,7 @@ export function PostDetailNotFound({ header, message, onBack }: PostDetailNotFou
             leading="relaxed"
             style={{ textAlign: "center", maxWidth: 300 }}
           >
-            This post may have been deleted by its author or is no longer
-            available.
+            {description}
           </Text>
         </Box>
 

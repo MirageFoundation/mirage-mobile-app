@@ -4,11 +4,16 @@ import { useUnistyles } from "react-native-unistyles";
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 
 type MediaPostDetailNotFoundProps = {
+  description?: string;
   message?: string;
   onBack: () => void;
 };
 
-export function MediaPostDetailNotFound({ message, onBack }: MediaPostDetailNotFoundProps) {
+export function MediaPostDetailNotFound({
+  description = "This post or comment may have been deleted by its author or is no longer available.",
+  message = "Content not found",
+  onBack,
+}: MediaPostDetailNotFoundProps) {
   const { theme } = useUnistyles();
 
   return (
@@ -33,7 +38,7 @@ export function MediaPostDetailNotFound({ message, onBack }: MediaPostDetailNotF
 
       <Box center gap="xs">
         <Text size="xl" weight="bold">
-          {message ?? "Post unavailable"}
+          {message}
         </Text>
         <Text
           size="sm"
@@ -41,8 +46,7 @@ export function MediaPostDetailNotFound({ message, onBack }: MediaPostDetailNotF
           leading="relaxed"
           style={{ textAlign: "center", maxWidth: 300 }}
         >
-          This post may have been deleted by its author or is no longer
-          available.
+          {description}
         </Text>
       </Box>
 
