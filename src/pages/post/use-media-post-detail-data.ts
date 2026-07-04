@@ -179,7 +179,9 @@ export function useMediaPostDetailData({
       },
     });
   }, [commentsData?.root, currentFocusedCommentNotFound, currentUser?.walletAddress, focusedCommentApiError?.errorCode, focusedCommentApiError?.httpStatus, focusedCommentId, focusedMode, id]);
-  const isFocusedCommentNotFound = currentFocusedCommentNotFound || notFoundFocusedCommentId === focusedCommentId;
+  const isFocusedCommentNotFound = !!focusedCommentId && (
+    currentFocusedCommentNotFound || notFoundFocusedCommentId === focusedCommentId
+  );
   const {
     data: focusedContextData,
     refetch: refetchFocusedContext,

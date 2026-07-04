@@ -89,7 +89,9 @@ export function usePostDetailFocusedThread({
       },
     });
   }, [actualRootPostId, currentFocusedCommentNotFound, currentUserWallet, depth, focusedCommentApiError?.errorCode, focusedCommentApiError?.httpStatus, focusedCommentId, highlight, id]);
-  const isFocusedCommentNotFound = currentFocusedCommentNotFound || notFoundFocusedCommentId === focusedCommentId;
+  const isFocusedCommentNotFound = !!focusedCommentId && (
+    currentFocusedCommentNotFound || notFoundFocusedCommentId === focusedCommentId
+  );
   const {
     data: fullThreadCommentsData,
     isLoading: isLoadingFullThreadComments,
