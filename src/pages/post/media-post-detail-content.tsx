@@ -132,7 +132,10 @@ export default function MediaPostDetailScreen({
   const focusedInitialScrollTargetRef = useRef<string | null>(null);
   const pendingScrollToEndRef = useRef(false);
   const pendingReplyScrollIdRef = useRef<string | null>(null);
-  const pendingPostedCommentScrollRef = useRef<string | null>(null);
+  const pendingPostedCommentScrollRef = useRef<{
+    id: string;
+    createdAt: number;
+  } | null>(null);
   const displayCommentsRef = useRef<Comment[]>([]);
   const displayCommentsLengthRef = useRef(0);
   const actionSheetsRef = useRef<MediaPostDetailActionSheetsRef>(null);
@@ -170,6 +173,8 @@ export default function MediaPostDetailScreen({
     isLoadingComments,
     isLoadingFocusedComment,
     isLoadingFocusedContextThread,
+    isPostNotFound,
+    postUnavailableMessage,
     post,
     recentContextDisabled,
     recentContextDone,
@@ -341,6 +346,11 @@ export default function MediaPostDetailScreen({
     displayCommentsRef.current = displayComments;
   }, [displayComments]);
 
+  const findCommentInTree = useCallback((comment: Comment, targetId: string): boolean => {
+    if (comment.id === targetId) return true;
+    return comment.replies?.some((reply) => findCommentInTree(reply, targetId)) ?? false;
+  }, []);
+
   useEffect(() => {
     const pendingTarget = pendingPostedCommentScrollRef.current;
     if (!pendingTarget || displayComments.length === 0) return;
@@ -406,11 +416,6 @@ export default function MediaPostDetailScreen({
     return () => clearTimeout(timer);
   }, [focusedCommentId, focusedMode, displayComments, highlightedCommentId, scrollCommentsToIndex]);
 
-  const findCommentInTree = useCallback((comment: Comment, targetId: string): boolean => {
-    if (comment.id === targetId) return true;
-    return comment.replies?.some((reply) => findCommentInTree(reply, targetId)) ?? false;
-  }, []);
-
   useEffect(() => {
     if (!highlightedCommentId || displayComments.length === 0) return;
     if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
@@ -441,7 +446,7 @@ export default function MediaPostDetailScreen({
       if (!highlightedCommentId) return;
       if (suppressedHighlightScrollRef.current === highlightedCommentId) return;
       const isPendingPostedComment =
-        pendingPostedCommentScrollRef.current === highlightedCommentId;
+        pendingPostedCommentScrollRef.current?.id === highlightedCommentId;
       if (
         !isPendingPostedComment &&
         preciseScrollTargetRef.current?.startsWith(`${highlightedCommentId}:`)
@@ -563,6 +568,18 @@ export default function MediaPostDetailScreen({
     collapseMedia();
   }, [post, collapseMedia]);
 
+  const handleBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/");
+  }, [router]);
+
+  const handleUnavailableBack = useCallback(() => {
+    router.replace("/");
+  }, [router]);
+
   const handleFollowCommentAuthor = useCallback(
     (authorId: string, isCurrentlyFollowing: boolean) => {
       followUser(authorId, "", isCurrentlyFollowing);
@@ -576,9 +593,9 @@ export default function MediaPostDetailScreen({
     requestAnimationFrame(() => {
       sheetRef.current?.snapToIndex?.(2, { duration: 1 });
     });
-    pendingPostedCommentScrollRef.current = commentId;
+    pendingPostedCommentScrollRef.current = { id: commentId, createdAt: Date.now() };
     setTimeout(() => {
-      if (pendingPostedCommentScrollRef.current !== commentId) return;
+      if (pendingPostedCommentScrollRef.current?.id !== commentId) return;
       Sentry.captureMessage(
         "Posted media-detail comment did not trigger reveal layout",
         {
@@ -641,12 +658,21 @@ export default function MediaPostDetailScreen({
   });
 
   // --- render -------------------------------------------------------------
+  if (isPostNotFound) {
+    return (
+      <MediaPostDetailNotFound
+        message={postUnavailableMessage}
+        onBack={handleUnavailableBack}
+      />
+    );
+  }
+
   if (!post && isLoadingComments) {
     return <MediaPostDetailSkeleton />;
   }
 
   if (!post) {
-    return <MediaPostDetailNotFound onBack={() => router.back()} />;
+    return <MediaPostDetailNotFound onBack={handleUnavailableBack} />;
   }
 
   return (
@@ -679,7 +705,7 @@ export default function MediaPostDetailScreen({
               if (collapseProgress.value > 0.1) {
                 expandMedia();
               } else {
-                router.back();
+                handleBack();
               }
             }}
           />
@@ -701,7 +727,7 @@ export default function MediaPostDetailScreen({
             animationConfigs={sheetAnimationConfigs}
             measuredPostSummaryH={measuredPostSummaryH}
             onPostSummaryHeightChange={setMeasuredPostSummaryH}
-            onClose={() => router.back()}
+            onClose={handleBack}
             focusedCommentId={focusedCommentId}
             focusedMode={focusedMode}
             isLoadingComments={isLoadingComments}
@@ -791,7 +817,7 @@ export default function MediaPostDetailScreen({
             height={headerH}
             animatedStyle={headerStyle}
             pointerEvents="box-none"
-            onBack={() => router.back()}
+            onBack={handleBack}
             onTopicPress={handleTopicPress}
             onOptionsPress={() => requireAuth(() => actionSheetsRef.current?.presentPostOptions())}
           />

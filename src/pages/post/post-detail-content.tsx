@@ -150,10 +150,6 @@ export default function PostDetailScreen() {
     return <MediaPostDetailSkeleton />;
   }
 
-  if (!useImmersive && isResolvingFocusedMediaRoute) {
-    return <MediaPostDetailSkeleton />;
-  }
-
   if (useImmersive) {
     return (
       <MediaPostDetailScreen
@@ -707,7 +703,15 @@ function LegacyPostDetailScreen() {
 
   // Handlers
   const handleBack = useCallback(() => {
-    router.back();
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace("/");
+  }, [router]);
+
+  const handleUnavailableBack = useCallback(() => {
+    router.replace("/");
   }, [router]);
 
   const handleReplyToComment = useCallback((comment: Comment) => {
@@ -733,7 +737,11 @@ function LegacyPostDetailScreen() {
         topic={displayPost?.topic}
         isLoadingTopic={!displayPost && isLoadingComments}
         insetsTop={insets.top}
-        onBack={handleBack}
+        onBack={
+          isPostNotFound && !shouldUseOptimisticRootFallback
+            ? handleUnavailableBack
+            : handleBack
+        }
         onTopicPress={
           displayPost?.topic
             ? () =>
@@ -747,7 +755,7 @@ function LegacyPostDetailScreen() {
         }
       />
     ),
-    [insets.top, handleBack, displayPost, isLoadingComments, router, requireAuth],
+    [insets.top, handleBack, handleUnavailableBack, isPostNotFound, shouldUseOptimisticRootFallback, displayPost, isLoadingComments, router, requireAuth],
   );
 
   const listHeader = useMemo(
@@ -836,7 +844,7 @@ function LegacyPostDetailScreen() {
       <PostDetailNotFound
         header={renderHeader}
         message={commentsApiError?.message}
-        onBack={() => router.back()}
+        onBack={handleUnavailableBack}
         theme={theme}
       />
     );

@@ -14,6 +14,7 @@ import { queryKeys } from "@/src/api/read/query-keys";
 import type { PostWithChildren } from "@/src/api/types";
 import { type Comment, type Post } from "@/src/components/molecules";
 import { useVoteHandler } from "@/src/hooks";
+import { parseApiError } from "@/src/utils/parse-api-error";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
   useOptimisticReplyComments,
@@ -95,6 +96,11 @@ export function useMediaPostDetailData({
     isError: isCommentsError,
     error: commentsError,
   } = useComments(id!, { enabled: isFocused });
+  const commentsApiError = useMemo(() => {
+    if (!commentsError) return null;
+    return parseApiError(commentsError);
+  }, [commentsError]);
+  const isPostNotFound = commentsApiError?.errorCode === "post_not_found" || commentsApiError?.httpStatus === 404;
   const [focusedContextDepth, setFocusedContextDepth] = useState(5);
   const focusedDepth = focusedMode === "context" ? focusedContextDepth : 0;
   const {
@@ -196,7 +202,7 @@ export function useMediaPostDetailData({
   );
 
   const cachedPost = useMemo<Post | null>(() => {
-    if (!id) return null;
+    if (!id || isPostNotFound) return null;
 
     const cachedQueries = queryClient.getQueriesData({});
     for (const [, queryData] of cachedQueries) {
@@ -213,9 +219,10 @@ export function useMediaPostDetailData({
       }
     }
     return null;
-  }, [currentUser, followedUsers, id, queryClient]);
+  }, [currentUser, followedUsers, id, isPostNotFound, queryClient]);
 
   const basePost: Post | null = useMemo(() => {
+    if (isPostNotFound) return null;
     if (!commentsData?.root) return cachedPost;
     return transformApiPost(commentsData.root, {
       followedUsers,
@@ -223,7 +230,7 @@ export function useMediaPostDetailData({
         ? { id: currentUser.id, username: currentUser.username ?? null }
         : undefined,
     });
-  }, [cachedPost, commentsData, followedUsers, currentUser]);
+  }, [cachedPost, commentsData, followedUsers, currentUser, isPostNotFound]);
 
   const sharedVoteOverride = useHomePostCardStore((state) =>
     id ? state.voteOverrides[id] : undefined,
@@ -639,6 +646,8 @@ export function useMediaPostDetailData({
     isLoadingComments,
     isLoadingFocusedComment,
     isLoadingFocusedContextThread,
+    isPostNotFound,
+    postUnavailableMessage: commentsApiError?.message,
     post,
     recentContextDisabled,
     recentContextDone,
