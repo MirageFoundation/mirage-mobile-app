@@ -219,9 +219,7 @@ export function useCreateShareIntent({
       clearPendingShareIntent(getPendingShareIntentKey(activeShareIntent));
       setPendingShareIntent(null);
       setIsProcessingShareLink(false);
-      if (hasShareIntent) {
-        resetShareIntent();
-      }
+      resetShareIntent();
       router.replace("/(tabs)");
       showAuthSheet();
       return;
@@ -250,6 +248,7 @@ export function useCreateShareIntent({
     clearPendingShareIntent(currentIntentKey);
     clearLastSharePath(consumedLaunchPath);
     setPendingShareIntent(null);
+    resetShareIntent();
     Sentry.addBreadcrumb({
       category: "share-intent",
       message: "Cleared consumed share launch intent",
@@ -856,9 +855,7 @@ export function useCreateShareIntent({
             clearPendingShareIntent(currentIntentKey);
             setPendingShareIntent(null);
             setIsProcessingShareLink(false);
-            if (hasShareIntent) {
-              resetShareIntent();
-            }
+            resetShareIntent();
           }
         });
         return;
@@ -899,9 +896,7 @@ export function useCreateShareIntent({
       }
       clearPendingShareIntent(currentIntentKey);
       setPendingShareIntent(null);
-      if (hasShareIntent) {
-        resetShareIntent();
-      }
+      resetShareIntent();
     }, 50);
 
     return () => {

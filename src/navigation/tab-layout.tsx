@@ -14,6 +14,7 @@ import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
 import { useAuthStore, useUIStore } from "@/src/stores";
+import { useDeepLinkStore } from "@/src/stores/deep-link-store";
 import { useInboxStore } from "@/src/stores/inbox-store";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { useShareIntentContext } from "expo-share-intent";
@@ -52,6 +53,24 @@ import { getPendingShareIntent } from "@/src/navigation/pending-launch-intents";
 
 // Tabs that require authentication
 const PROTECTED_TABS = ["following", "create", "inbox", "profile"];
+
+function getPendingShareIntentDiagnostics() {
+  const pending = getPendingShareIntent();
+  if (!pending) {
+    return { hasPendingShareIntent: false };
+  }
+
+  return {
+    hasPendingShareIntent: true,
+    pendingShareIntentAgeMs: Date.now() - pending.receivedAt,
+    pendingShareIntentSource: pending.source,
+    pendingShareIntentType: pending.type,
+    pendingHasText: !!pending.text,
+    pendingHasWebUrl: !!pending.webUrl,
+    pendingFileCount: pending.files?.length ?? 0,
+    pendingHasLaunchPath: !!pending.launchPath,
+  };
+}
 
 const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
   const insets = useSafeAreaInsets();
@@ -406,18 +425,36 @@ export default function TabLayout() {
     }
     if (!hasForcedShareIntentRouteRef.current) {
       hasForcedShareIntentRouteRef.current = true;
+      const hasRecentInitialTabDeepLink = isRecentInitialTabDeepLink();
+      const isPostPath = pathname.startsWith("/post/");
+      const activeShareRedirectDiagnostics = {
+        pathname,
+        hadPreviousShareIntent: prev,
+        hasHandledInitialRoute: hasHandledInitialRouteRef.current,
+        isNotificationNavigationActive: isInboxNotificationNavigationActive(),
+        hasForcedShareIntentRoute: hasForcedShareIntentRouteRef.current,
+        hasRecentInitialTabDeepLink,
+        isPostPath,
+        detectedRecentSharePath: isRecentSharePath(10_000),
+        ...getPendingShareIntentDiagnostics(),
+      };
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Forcing share intent to create tab",
         level: "info",
-        data: {
-          pathname,
-          hadPreviousShareIntent: prev,
-          hasHandledInitialRoute: hasHandledInitialRouteRef.current,
-          isNotificationNavigationActive: isInboxNotificationNavigationActive(),
-          hasForcedShareIntentRoute: hasForcedShareIntentRouteRef.current,
-        },
+        data: activeShareRedirectDiagnostics,
       });
+      if (isPostPath || hasRecentInitialTabDeepLink) {
+        Sentry.captureMessage("Share intent redirected an active deep link to create", {
+          level: "warning",
+          tags: {
+            feature: "share-intent",
+            operation: "active-deep-link-overridden",
+            route_kind: isPostPath ? "post" : "tab",
+          },
+          extra: activeShareRedirectDiagnostics,
+        });
+      }
       replaceBypass("/(tabs)/create");
     } else {
       Sentry.addBreadcrumb({
@@ -436,7 +473,8 @@ export default function TabLayout() {
       if (hasHandledInitialRouteRef.current) return;
       hasHandledInitialRouteRef.current = true;
 
-      const hasPendingShareIntent = !!getPendingShareIntent();
+      const pendingShareIntentDiagnostics = getPendingShareIntentDiagnostics();
+      const hasPendingShareIntent = pendingShareIntentDiagnostics.hasPendingShareIntent;
       const hasInitialShareIntent =
         initialShareIntentRef.current ||
         hasShareIntent ||
@@ -453,6 +491,8 @@ export default function TabLayout() {
       const isOnCreate = currentPathname.endsWith("/create");
       const isOnInbox = currentPathname.endsWith("/inbox");
       const isOnPostDetail = currentPathname.startsWith("/post/");
+      const pendingDeepLinkRoute = useDeepLinkStore.getState().pendingRoute;
+      const pendingDeepLinkIsPost = pendingDeepLinkRoute?.startsWith("/post/") ?? false;
       const isOnNonHomeTab =
         isOnCreate ||
         isOnInbox ||
@@ -470,12 +510,15 @@ export default function TabLayout() {
         isOnCreate,
         isOnInbox,
         isOnPostDetail,
+        hasPendingDeepLinkRoute: !!pendingDeepLinkRoute,
+        pendingDeepLinkIsPost,
         isOnNonHomeTab,
         isNotificationNavigationActive,
         isShareNavigationActive,
         hasShareIntent,
         hadInitialShareIntent: initialShareIntentRef.current,
         detectedRecentSharePath: isRecentSharePath(10_000),
+        ...pendingShareIntentDiagnostics,
       };
 
       Sentry.addBreadcrumb({
@@ -543,6 +586,17 @@ export default function TabLayout() {
           },
           level: "info",
         });
+        if (isOnPostDetail || pendingDeepLinkIsPost || hasInitialTabDeepLink) {
+          Sentry.captureMessage("Stale share intent may override initial deep link", {
+            level: "warning",
+            tags: {
+              feature: "share-intent",
+              operation: "initial-deep-link-overridden",
+              route_kind: isOnPostDetail || pendingDeepLinkIsPost ? "post" : "tab",
+            },
+            extra: initialRouteDiagnostics,
+          });
+        }
         Sentry.captureMessage("Android share intent initial route recovery", {
           level: "info",
           tags: { feature: "share-intent", operation: "initial-route-recovery" },

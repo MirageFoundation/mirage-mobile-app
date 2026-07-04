@@ -29,3 +29,15 @@ index c36bb79..77bdddc 100644
              changeSubscription.remove();
              errorSubscription.remove();
          };
+diff --git a/node_modules/expo-share-intent/android/src/main/java/expo/modules/shareintent/ExpoShareIntentModule.kt b/node_modules/expo-share-intent/android/src/main/java/expo/modules/shareintent/ExpoShareIntentModule.kt
+--- a/node_modules/expo-share-intent/android/src/main/java/expo/modules/shareintent/ExpoShareIntentModule.kt
++++ b/node_modules/expo-share-intent/android/src/main/java/expo/modules/shareintent/ExpoShareIntentModule.kt
+@@ -190,6 +190,8 @@ class ExpoShareIntentModule : Module() {
+ 
+         Function("clearShareIntent") { _: String ->
+             ExpoShareIntentSingleton.intent = null
++            ExpoShareIntentSingleton.isPending = false
++            currentActivity?.intent = Intent()
+         }
+ 
+         Function("hasShareIntent") { _: String ->
