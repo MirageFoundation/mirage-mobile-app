@@ -301,19 +301,7 @@ export function resolvePostContent(
   const hasMultipleMedia = mediaCount > 1;
   const extraMediaCount = mediaCount > 0 ? mediaCount - 1 : 0;
 
-  const isOgThumbnail =
-    extractedUrl &&
-    !isDirectMediaUrl(extractedUrl) &&
-    mediaCount === 1 &&
-    primaryMedia?.type === "image" &&
-    primaryMedia?.uri &&
-    !primaryMedia.uri.includes("imagedelivery.net") &&
-    !primaryMedia.uri.includes("cloudflarestream.com") &&
-    !primaryMedia.uri.includes("videodelivery.net");
-
-  const resolvedMedia = isOgThumbnail
-    ? undefined
-    : bodyVideoUrl
+  const resolvedMedia = bodyVideoUrl
     ? (getMediaTypeFromUrl(extractedUrl!) === "youtube"
       ? ({
           uri: extractedUrl!,
@@ -365,23 +353,21 @@ export function resolvePostContent(
 
   return {
     extractedUrl,
-    bodyWithoutUrl: (isOgThumbnail || !isBodyUrlRenderedAsMedia) ? body : bodyWithoutUrl,
+    bodyWithoutUrl: !isBodyUrlRenderedAsMedia ? body : bodyWithoutUrl,
     displayDomain,
     bodyVideoUrl,
     resolvedMedia: finalMedia,
-    resolvedMediaList: isOgThumbnail
-      ? []
-      : (media ?? []).map((m) => {
-          const redgifs = m.type === "gif" ? resolveRedgifsVideoUrl(m.uri) : null;
-          return {
-            ...m,
-            uri: redgifs ?? (m.type === "video" ? normalizeVideoUrl(m.uri) : m.uri),
-            type: redgifs ? ("video" as const) : m.type,
-            posterUri: redgifs ? (m.posterUri ?? m.uri) : m.posterUri,
-          };
-        }),
-    hasMultipleMedia: isOgThumbnail ? false : hasMultipleMedia,
-    extraMediaCount: isOgThumbnail ? 0 : extraMediaCount,
+    resolvedMediaList: (media ?? []).map((m) => {
+      const redgifs = m.type === "gif" ? resolveRedgifsVideoUrl(m.uri) : null;
+      return {
+        ...m,
+        uri: redgifs ?? (m.type === "video" ? normalizeVideoUrl(m.uri) : m.uri),
+        type: redgifs ? ("video" as const) : m.type,
+        posterUri: redgifs ? (m.posterUri ?? m.uri) : m.posterUri,
+      };
+    }),
+    hasMultipleMedia,
+    extraMediaCount,
   };
 }
 
