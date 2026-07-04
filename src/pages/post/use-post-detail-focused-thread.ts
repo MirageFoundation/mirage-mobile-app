@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 
 import { useComments } from "@/src/api/read";
@@ -60,13 +60,35 @@ export function usePostDetailFocusedThread({
     focusedCommentApiError?.httpStatus === 404
   );
   const [notFoundFocusedCommentId, setNotFoundFocusedCommentId] = useState<string | null>(null);
+  const reportedFocusedCommentNotFoundRef = useRef<string | null>(null);
   useEffect(() => {
     setNotFoundFocusedCommentId(null);
   }, [focusedCommentId]);
   useEffect(() => {
     if (!focusedCommentId || !currentFocusedCommentNotFound) return;
     setNotFoundFocusedCommentId(focusedCommentId);
-  }, [currentFocusedCommentNotFound, focusedCommentId]);
+    const reportKey = `${id}:${focusedCommentId}:${focusedCommentApiError?.errorCode ?? focusedCommentApiError?.httpStatus ?? "unknown"}`;
+    if (reportedFocusedCommentNotFoundRef.current === reportKey) return;
+    reportedFocusedCommentNotFoundRef.current = reportKey;
+    Sentry.captureMessage("Post detail focused comment not found", {
+      level: "info",
+      tags: {
+        feature: "comments",
+        operation: "focused-comment-not-found",
+        screen: "post-detail",
+        error_code: focusedCommentApiError?.errorCode ?? "unknown",
+      },
+      extra: {
+        routePostId: id,
+        rootPostId: actualRootPostId,
+        focusedCommentId,
+        highlight,
+        depth,
+        httpStatus: focusedCommentApiError?.httpStatus,
+        hasAddress: !!currentUserWallet,
+      },
+    });
+  }, [actualRootPostId, currentFocusedCommentNotFound, currentUserWallet, depth, focusedCommentApiError?.errorCode, focusedCommentApiError?.httpStatus, focusedCommentId, highlight, id]);
   const isFocusedCommentNotFound = currentFocusedCommentNotFound || notFoundFocusedCommentId === focusedCommentId;
   const {
     data: fullThreadCommentsData,

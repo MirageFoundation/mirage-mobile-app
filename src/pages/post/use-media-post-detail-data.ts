@@ -102,13 +102,33 @@ export function useMediaPostDetailData({
   }, [commentsError]);
   const currentFetchPostNotFound = commentsApiError?.errorCode === "post_not_found" || commentsApiError?.httpStatus === 404;
   const [notFoundRouteId, setNotFoundRouteId] = useState<string | null>(null);
+  const reportedNotFoundRouteRef = useRef<string | null>(null);
   useEffect(() => {
     setNotFoundRouteId(null);
   }, [id]);
   useEffect(() => {
     if (!id || !currentFetchPostNotFound) return;
     setNotFoundRouteId(id);
-  }, [currentFetchPostNotFound, id]);
+    const reportKey = `${id}:${commentsApiError?.errorCode ?? commentsApiError?.httpStatus ?? "unknown"}`;
+    if (reportedNotFoundRouteRef.current === reportKey) return;
+    reportedNotFoundRouteRef.current = reportKey;
+    Sentry.captureMessage("Media post detail route content not found", {
+      level: "info",
+      tags: {
+        feature: "post-detail",
+        operation: "route-content-not-found",
+        screen: "media-post-detail",
+        error_code: commentsApiError?.errorCode ?? "unknown",
+      },
+      extra: {
+        routePostId: id,
+        httpStatus: commentsApiError?.httpStatus,
+        hasAddress: !!currentUser?.walletAddress,
+        focusedCommentId,
+        focusedMode,
+      },
+    });
+  }, [commentsApiError?.errorCode, commentsApiError?.httpStatus, currentFetchPostNotFound, currentUser?.walletAddress, focusedCommentId, focusedMode, id]);
   const isPostNotFound = currentFetchPostNotFound || notFoundRouteId === id;
   const [focusedContextDepth, setFocusedContextDepth] = useState(5);
   const focusedDepth = focusedMode === "context" ? focusedContextDepth : 0;
@@ -131,13 +151,34 @@ export function useMediaPostDetailData({
     focusedCommentApiError?.httpStatus === 404
   );
   const [notFoundFocusedCommentId, setNotFoundFocusedCommentId] = useState<string | null>(null);
+  const reportedFocusedCommentNotFoundRef = useRef<string | null>(null);
   useEffect(() => {
     setNotFoundFocusedCommentId(null);
   }, [focusedCommentId]);
   useEffect(() => {
     if (!focusedCommentId || !currentFocusedCommentNotFound) return;
     setNotFoundFocusedCommentId(focusedCommentId);
-  }, [currentFocusedCommentNotFound, focusedCommentId]);
+    const reportKey = `${id ?? "missing"}:${focusedCommentId}:${focusedCommentApiError?.errorCode ?? focusedCommentApiError?.httpStatus ?? "unknown"}`;
+    if (reportedFocusedCommentNotFoundRef.current === reportKey) return;
+    reportedFocusedCommentNotFoundRef.current = reportKey;
+    Sentry.captureMessage("Media post detail focused comment not found", {
+      level: "info",
+      tags: {
+        feature: "comments",
+        operation: "focused-comment-not-found",
+        screen: "media-post-detail",
+        error_code: focusedCommentApiError?.errorCode ?? "unknown",
+      },
+      extra: {
+        rootPostId: id,
+        focusedCommentId,
+        focusedMode,
+        httpStatus: focusedCommentApiError?.httpStatus,
+        hasAddress: !!currentUser?.walletAddress,
+        hasRootData: !!commentsData?.root,
+      },
+    });
+  }, [commentsData?.root, currentFocusedCommentNotFound, currentUser?.walletAddress, focusedCommentApiError?.errorCode, focusedCommentApiError?.httpStatus, focusedCommentId, focusedMode, id]);
   const isFocusedCommentNotFound = currentFocusedCommentNotFound || notFoundFocusedCommentId === focusedCommentId;
   const {
     data: focusedContextData,

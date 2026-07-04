@@ -243,13 +243,32 @@ function LegacyPostDetailScreen() {
     id ? state.posts.find((post) => post.post_id.toLowerCase() === id.toLowerCase()) : undefined,
   );
   const [notFoundRouteId, setNotFoundRouteId] = useState<string | null>(null);
+  const reportedNotFoundRouteRef = useRef<string | null>(null);
   useEffect(() => {
     setNotFoundRouteId(null);
   }, [id]);
   useEffect(() => {
     if (!id || !currentFetchPostNotFound || optimisticPost) return;
     setNotFoundRouteId(id);
-  }, [currentFetchPostNotFound, id, optimisticPost]);
+    const reportKey = `${id}:${commentsApiError?.errorCode ?? commentsApiError?.httpStatus ?? "unknown"}`;
+    if (reportedNotFoundRouteRef.current === reportKey) return;
+    reportedNotFoundRouteRef.current = reportKey;
+    Sentry.captureMessage("Post detail route content not found", {
+      level: "info",
+      tags: {
+        feature: "post-detail",
+        operation: "route-content-not-found",
+        screen: "post-detail",
+        error_code: commentsApiError?.errorCode ?? "unknown",
+      },
+      extra: {
+        routePostId: id,
+        httpStatus: commentsApiError?.httpStatus,
+        hasAddress: !!currentUser?.walletAddress,
+        isCommentRoute: !!depth,
+      },
+    });
+  }, [commentsApiError?.errorCode, commentsApiError?.httpStatus, currentFetchPostNotFound, currentUser?.walletAddress, depth, id, optimisticPost]);
 
   const isPostNotFound = currentFetchPostNotFound || notFoundRouteId === id;
   const isCommentRouteNotFound = !!depth && isPostNotFound;
