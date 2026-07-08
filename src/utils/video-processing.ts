@@ -385,14 +385,14 @@ export async function validateVideoFile(uri: string): Promise<boolean> {
   }
 }
 
-export const MAX_VIDEO_DURATION_MS = 59000;
+export const MAX_VIDEO_DURATION_MS = 30 * 60 * 1000;
 
 export async function trimToMaxDuration(
   uri: string,
   durationMs: number,
 ): Promise<string> {
   if (durationMs <= MAX_VIDEO_DURATION_MS) return uri;
-  console.log("[VideoProcessing] Auto-trimming to 59s, original duration:", durationMs);
+  console.log("[VideoProcessing] Auto-trimming to 30m, original duration:", durationMs);
   const result = await processVideo(uri, {
     trimStartMs: 0,
     trimEndMs: MAX_VIDEO_DURATION_MS,

@@ -20,7 +20,7 @@ import {
 import { fetchLinkMeta } from "@/src/utils/fetch-link-meta";
 import { mergeAudioVideo } from "@/src/utils/merge-audio-video";
 import { sanitizeTopicName } from "@/src/utils/topic-validation";
-import { trimToMaxDuration } from "@/src/utils/video-processing";
+import { MAX_VIDEO_DURATION_MS, trimToMaxDuration } from "@/src/utils/video-processing";
 import { useDraftStore, type Community } from "@/src/stores/draft-store";
 import { useCreateComposeState } from "./create-compose-state";
 import { decodeHtmlEntities } from "./create-screen-utils";
@@ -597,7 +597,7 @@ export function useCreateShareIntent({
                         const { sound } = await Audio.Sound.createAsync({ uri: mergedFile.uri });
                         const status = await sound.getStatusAsync();
                         await sound.unloadAsync();
-                        if (status.isLoaded && status.durationMillis && status.durationMillis > 59000) {
+                        if (status.isLoaded && status.durationMillis && status.durationMillis > MAX_VIDEO_DURATION_MS) {
                           mergedUri = await trimToMaxDuration(mergedFile.uri, status.durationMillis);
                         }
                       } catch {}
@@ -623,7 +623,7 @@ export function useCreateShareIntent({
                     const { sound } = await Audio.Sound.createAsync({ uri: destFile.uri });
                     const status = await sound.getStatusAsync();
                     await sound.unloadAsync();
-                    if (status.isLoaded && status.durationMillis && status.durationMillis > 59000) {
+                    if (status.isLoaded && status.durationMillis && status.durationMillis > MAX_VIDEO_DURATION_MS) {
                       videoUri = await trimToMaxDuration(destFile.uri, status.durationMillis);
                     }
                   } catch {}
@@ -652,7 +652,7 @@ export function useCreateShareIntent({
                   const { sound } = await Audio.Sound.createAsync({ uri: downloadedFile.uri });
                   const status = await sound.getStatusAsync();
                   await sound.unloadAsync();
-                  if (status.isLoaded && status.durationMillis && status.durationMillis > 59000) {
+                  if (status.isLoaded && status.durationMillis && status.durationMillis > MAX_VIDEO_DURATION_MS) {
                     diskUri = await trimToMaxDuration(downloadedFile.uri, status.durationMillis);
                   }
                 } catch {}

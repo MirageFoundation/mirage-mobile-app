@@ -23,14 +23,14 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
-import { processVideo } from "@/src/utils/video-processing";
+import { MAX_VIDEO_DURATION_MS, processVideo } from "@/src/utils/video-processing";
 import { setPendingVideoResult } from "@/src/stores/video-editor-result-store";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const TIMELINE_PADDING = 24;
 const TIMELINE_WIDTH = SCREEN_WIDTH - TIMELINE_PADDING * 2;
 const MIN_TRIM_DURATION = 1000; // 1 second minimum
-const MAX_TRIM_DURATION = 59000; // 59 seconds maximum
+const MAX_TRIM_DURATION = MAX_VIDEO_DURATION_MS; // 30 minutes maximum
 
 export function VideoEditorScreen() {
   const { theme, rt } = useUnistyles();
@@ -369,7 +369,7 @@ export function VideoEditorScreen() {
             </Text>
           {trimDuration > MAX_TRIM_DURATION && (
             <Text size="xs" style={{ color: theme.colors.error[500], marginTop: 2 }}>
-              Video exceeds 59 second limit
+              Video exceeds 30 minute limit
             </Text>
           )}
           </View>
@@ -422,7 +422,7 @@ export function VideoEditorScreen() {
 
           {/* Instructions */}
           <Text size="sm" mode="subtle" style={styles.instructions}>
-            Maximum duration: 59 seconds
+            Maximum duration: 30 minutes
           </Text>
         </View>
 
