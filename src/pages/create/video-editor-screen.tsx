@@ -239,6 +239,8 @@ export function VideoEditorScreen() {
         trimStartMs: trimStart,
         trimEndMs: trimEnd,
         totalDurationMs: duration,
+        sourceWidth: resolvedVideoSize.width,
+        sourceHeight: resolvedVideoSize.height,
       });
       processedUri = result.uri;
     } catch (error) {

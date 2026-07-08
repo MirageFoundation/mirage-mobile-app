@@ -308,7 +308,108 @@ export async function uploadMedia(
   const timeoutMs = mediaType === "video" ? VIDEO_UPLOAD_TIMEOUT_MS : IMAGE_UPLOAD_TIMEOUT_MS;
   const uploadUrl = apiClient.getApiUrl("/upload_media");
 
-  const uploadFn = async (): Promise<UploadMediaResponse> => {
+  const uploadWithXhr = async (): Promise<UploadMediaResponse> => {
+    return new Promise<UploadMediaResponse>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      let didSettle = false;
+
+      const settle = (fn: () => void) => {
+        if (didSettle) return;
+        didSettle = true;
+        signal?.removeEventListener("abort", onAbort);
+        fn();
+      };
+
+      const onAbort = () => {
+        xhr.abort();
+        settle(() => reject(new Error("Upload aborted")));
+      };
+
+      xhr.open("POST", uploadUrl);
+      xhr.timeout = timeoutMs;
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0 && onProgress) {
+          const pct = Math.min(100, Math.round((event.loaded / event.total) * 100));
+          onProgress(pct);
+        }
+      };
+      xhr.onload = () => {
+        console.log("[MediaUpload] upload_media complete", {
+          status: xhr.status,
+          mediaType,
+          fileName: filename,
+          transport: "xhr",
+        });
+        if (xhr.status < 200 || xhr.status >= 300) {
+          const errorCode = getUploadErrorCode(xhr.responseText);
+          Sentry.addBreadcrumb({
+            category: "media-upload",
+            message: "upload_media rejected upload",
+            level: "warning",
+            data: {
+              mediaType,
+              fileName: filename,
+              status: xhr.status,
+              errorCode,
+              uploadsDisabled: errorCode === "uploads_disabled",
+              transport: "xhr",
+            },
+          });
+          settle(() => reject(buildUploadError(xhr.status, xhr.responseText)));
+          return;
+        }
+        Sentry.addBreadcrumb({
+          category: "media-upload",
+          message: "upload_media upload complete",
+          level: "info",
+          data: {
+            mediaType,
+            fileName: filename,
+            status: xhr.status,
+            parameterCount: Object.keys(parameters).length,
+            transport: "xhr",
+          },
+        });
+        settle(() => resolve(parseUploadMediaResponse(xhr.responseText)));
+      };
+      xhr.onerror = () => {
+        settle(() => reject(new Error(`${mediaType === "video" ? "Video" : "Image"} upload network error`)));
+      };
+      xhr.ontimeout = () => {
+        settle(() => reject(new Error(`${mediaType === "video" ? "Video" : "Image"} upload timed out after ${timeoutMs / 1000}s`)));
+      };
+      xhr.onabort = () => {
+        settle(() => reject(new Error("Upload aborted")));
+      };
+
+      if (signal) {
+        if (signal.aborted) {
+          onAbort();
+          return;
+        }
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
+
+      const formData = new FormData();
+      for (const [key, value] of Object.entries({ kind: mediaType, ...parameters })) {
+        formData.append(key, value);
+      }
+      formData.append("file", {
+        uri: normalizedUri,
+        name: filename,
+        type: contentType,
+      } as unknown as Blob);
+      Sentry.addBreadcrumb({
+        category: "media-upload",
+        message: "Using XHR upload_media transport",
+        level: "info",
+        data: { mediaType, fileName: filename, contentType, parameterCount: Object.keys(parameters).length },
+      });
+      xhr.send(formData);
+    });
+  };
+
+  const uploadWithFileSystem = async (): Promise<UploadMediaResponse> => {
     const task = createUploadTask(
       uploadUrl,
       normalizedUri,
@@ -390,6 +491,13 @@ export async function uploadMedia(
       if (timeoutId) clearTimeout(timeoutId);
       signal?.removeEventListener("abort", onAbort);
     }
+  };
+
+  const uploadFn = async (): Promise<UploadMediaResponse> => {
+    if (mediaType === "video") {
+      return uploadWithXhr();
+    }
+    return uploadWithFileSystem();
   };
 
   return withRetry(uploadFn, {

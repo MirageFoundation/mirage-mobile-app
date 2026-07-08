@@ -9,6 +9,8 @@ import { Video } from 'react-native-compressor';
 import { trim, isValidFile } from 'react-native-video-trim';
 
 const UPLOAD_VIDEO_MAX_SIZE = 1280;
+const LONGFORM_VIDEO_THRESHOLD_MS = 60 * 1000;
+const LONGFORM_VIDEO_MAX_SIZE = 1080;
 const UPLOAD_VIDEO_BITRATE = 1_800_000;
 const MIN_VIDEO_SIZE_TO_COMPRESS_MB = 2;
 
@@ -25,6 +27,10 @@ export interface ProcessVideoOptions {
   trimEndMs?: number;
   /** Total video duration in milliseconds (needed to detect if trimming is required) */
   totalDurationMs?: number;
+  /** Source video width in pixels */
+  sourceWidth?: number;
+  /** Source video height in pixels */
+  sourceHeight?: number;
 }
 
 export interface ProcessVideoResult {
@@ -55,12 +61,21 @@ function needsTrimming(options: ProcessVideoOptions): boolean {
   return trimStartMs > 100;
 }
 
+function getCompressionMaxSize(options: ProcessVideoOptions): number {
+  const isLongForm = (options.totalDurationMs ?? 0) > LONGFORM_VIDEO_THRESHOLD_MS;
+  if (isLongForm && (!options.sourceHeight || options.sourceHeight > LONGFORM_VIDEO_MAX_SIZE)) {
+    return LONGFORM_VIDEO_MAX_SIZE;
+  }
+  return UPLOAD_VIDEO_MAX_SIZE;
+}
+
 async function compressVideoForUpload(
   inputUri: string,
   options: ProcessVideoOptions,
   fileName: string,
 ): Promise<ProcessVideoResult> {
   const compressionStartedAt = Date.now();
+  const compressionMaxSize = getCompressionMaxSize(options);
   console.log("[VideoProcessing] Compressing video for upload...");
   Sentry.addBreadcrumb({
     category: 'video-processing',
@@ -68,9 +83,12 @@ async function compressVideoForUpload(
     level: 'info',
     data: {
       fileName,
-      maxSize: UPLOAD_VIDEO_MAX_SIZE,
+      maxSize: compressionMaxSize,
       bitrate: UPLOAD_VIDEO_BITRATE,
       stripAudio: options.removeAudio === true,
+      totalDurationMs: options.totalDurationMs,
+      sourceWidth: options.sourceWidth,
+      sourceHeight: options.sourceHeight,
     },
   });
 
@@ -78,7 +96,7 @@ async function compressVideoForUpload(
     inputUri,
     {
       compressionMethod: 'manual',
-      maxSize: UPLOAD_VIDEO_MAX_SIZE,
+      maxSize: compressionMaxSize,
       bitrate: UPLOAD_VIDEO_BITRATE,
       minimumFileSizeForCompress: MIN_VIDEO_SIZE_TO_COMPRESS_MB,
       stripAudio: options.removeAudio === true,
@@ -107,7 +125,7 @@ async function compressVideoForUpload(
       fileName,
       durationMs: compressionDurationMs,
       wasCompressed: !!outputUri && outputUri !== inputUri,
-      maxSize: UPLOAD_VIDEO_MAX_SIZE,
+      maxSize: compressionMaxSize,
       bitrate: UPLOAD_VIDEO_BITRATE,
     },
   });
@@ -121,7 +139,7 @@ async function compressVideoForUpload(
       extra: {
         fileName,
         durationMs: compressionDurationMs,
-        maxSize: UPLOAD_VIDEO_MAX_SIZE,
+        maxSize: compressionMaxSize,
         bitrate: UPLOAD_VIDEO_BITRATE,
       },
     });
@@ -168,6 +186,8 @@ export async function processVideo(
       trimStartMs: options.trimStartMs,
       trimEndMs: options.trimEndMs,
       totalDurationMs: options.totalDurationMs,
+      sourceWidth: options.sourceWidth,
+      sourceHeight: options.sourceHeight,
     },
   });
 
@@ -393,6 +413,15 @@ export async function trimToMaxDuration(
 ): Promise<string> {
   if (durationMs <= MAX_VIDEO_DURATION_MS) return uri;
   console.log("[VideoProcessing] Auto-trimming to 30m, original duration:", durationMs);
+  Sentry.addBreadcrumb({
+    category: 'video-processing',
+    message: 'Auto-trimming video to max duration',
+    level: 'info',
+    data: {
+      durationMs,
+      maxDurationMs: MAX_VIDEO_DURATION_MS,
+    },
+  });
   const result = await processVideo(uri, {
     trimStartMs: 0,
     trimEndMs: MAX_VIDEO_DURATION_MS,

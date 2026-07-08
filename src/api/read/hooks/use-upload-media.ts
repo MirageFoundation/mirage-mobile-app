@@ -7,6 +7,7 @@
 import { useCallback, useRef, useState } from "react";
 import * as Sentry from "@sentry/react-native";
 import { useMutation } from "@tanstack/react-query";
+import { getVideoMetaData } from "react-native-compressor";
 import { mutationKeys } from "@/src/api/write/mutation-keys";
 import { processVideo } from "@/src/utils/video-processing";
 import {
@@ -74,9 +75,44 @@ async function prepareVideoForUpload(
     },
   });
 
+  let totalDurationMs: number | undefined;
+  let sourceWidth: number | undefined;
+  let sourceHeight: number | undefined;
+  try {
+    const meta = await getVideoMetaData(uri);
+    const durationSeconds = Math.round(Number(meta.duration) || 0);
+    sourceWidth = Math.round(Number(meta.width) || 0) || undefined;
+    sourceHeight = Math.round(Number(meta.height) || 0) || undefined;
+    totalDurationMs = durationSeconds > 0 ? durationSeconds * 1000 : undefined;
+    Sentry.addBreadcrumb({
+      category: "media-upload",
+      message: "Video upload source metadata loaded",
+      level: "info",
+      data: {
+        fileName: uri.split("/").pop() ?? uri,
+        durationSeconds,
+        sourceWidth,
+        sourceHeight,
+      },
+    });
+  } catch (error) {
+    Sentry.addBreadcrumb({
+      category: "media-upload",
+      message: "Video upload source metadata unavailable before compression",
+      level: "warning",
+      data: {
+        fileName: uri.split("/").pop() ?? uri,
+        error: String(error),
+      },
+    });
+  }
+
   const processed = await processVideo(uri, {
     compressForUpload: true,
     failOnCompressionError: true,
+    totalDurationMs,
+    sourceWidth,
+    sourceHeight,
   });
   if (signal?.aborted) {
     throw new Error("Video upload aborted");
