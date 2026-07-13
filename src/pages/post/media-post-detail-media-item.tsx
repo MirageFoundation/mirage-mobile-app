@@ -11,6 +11,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { Audio, AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
+import * as Sentry from "@sentry/react-native";
 
 import {
   buildVideoPositionKey,
@@ -18,6 +19,7 @@ import {
   useVideoMuteStore,
 } from "@/src/stores";
 import { getVideoThumbnailUri } from "@/src/components/molecules/post-card-utils";
+import { isExpectedVideoLifecycleError } from "@/src/components/utils/native-video-playback";
 
 import { styles } from "./media-post-detail-styles";
 
@@ -71,6 +73,7 @@ export const MediaItemView = memo(function MediaItemView({
   const setPosition = useVideoPositionStore((s) => s.setPosition);
   const currentVideoPositionRef = useRef(0);
   const hasRestoredVideoPositionRef = useRef(false);
+  const hasReportedLoadErrorRef = useRef(false);
 
   // --- pinch-to-zoom (only active when media is fully expanded) -------------
   const scale = useSharedValue(1);
@@ -174,7 +177,22 @@ export const MediaItemView = memo(function MediaItemView({
 
   const handleStatus = useCallback(
     (s: AVPlaybackStatus) => {
-      if (!s.isLoaded) return;
+      if (!s.isLoaded) {
+        // Unloaded statuses carry the AVPlayer failure reason for silent
+        // load failures that never reach onError.
+        if (s.error && !hasReportedLoadErrorRef.current) {
+          hasReportedLoadErrorRef.current = true;
+          Sentry.captureMessage("Media post detail video failed to load", {
+            level: "error",
+            tags: {
+              feature: "post-media",
+              operation: "detail-video-load",
+            },
+            extra: { uri: item.uri, error: s.error },
+          });
+        }
+        return;
+      }
       currentVideoPositionRef.current = s.positionMillis ?? 0;
       setPositionMs(s.positionMillis ?? 0);
       if (s.isPlaying && videoPositionKey) {
@@ -188,7 +206,7 @@ export const MediaItemView = memo(function MediaItemView({
         setIsPlaying(s.isPlaying);
       }
     },
-    [durationMs, isPlaying, videoPositionKey, setPosition],
+    [durationMs, isPlaying, item.uri, videoPositionKey, setPosition],
   );
 
   const tap = Gesture.Tap()
@@ -303,6 +321,16 @@ export const MediaItemView = memo(function MediaItemView({
             }}
             onReadyForDisplay={() => {
               setShowInitialPreview(false);
+            }}
+            onError={(error) => {
+              Sentry.captureMessage("Media post detail video error", {
+                level: isExpectedVideoLifecycleError(error) ? "warning" : "error",
+                tags: {
+                  feature: "post-media",
+                  operation: "detail-video-playback",
+                },
+                extra: { uri: item.uri, error },
+              });
             }}
             onPlaybackStatusUpdate={handleStatus}
           />
