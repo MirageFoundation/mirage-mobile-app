@@ -22,7 +22,6 @@ import {
   usePostCommentOptimisticStore,
 } from "@/src/stores/post-comment-optimistic-store";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
-import { useInboxStore } from "@/src/stores/inbox-store";
 import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
 import { useIsFocused } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
@@ -73,9 +72,6 @@ export default function PostDetailScreen() {
     depth?: string;
     fromNotification?: string;
   }>();
-  const notificationNavigationStartedAt = useInboxStore(
-    (s) => s.notificationNavigationStartedAt,
-  );
 
   const {
     isResolvingFocusedMediaRoute,
@@ -84,9 +80,9 @@ export default function PostDetailScreen() {
     useImmersive,
   } = usePostDetailMediaRoute(params);
 
-  const isNotificationNavigationActive =
-    Date.now() - notificationNavigationStartedAt < 10_000 ||
-    isInboxNotificationNavigationActive();
+  // Exact in-flight flag only. The previous 10s wall-clock window suppressed
+  // legitimate post detail opens that happened shortly after a notification.
+  const isNotificationNavigationActive = isInboxNotificationNavigationActive();
 
   console.log("[InboxNotifFlow] post detail route", {
     id: params.id,

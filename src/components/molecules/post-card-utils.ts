@@ -215,9 +215,48 @@ export function getVideoThumbnailUri(uri?: string, posterUri?: string): string {
     const match = uri.match(/(?:cloudflarestream\.com|videodelivery\.net)\/([a-zA-Z0-9]+)/);
     if (match?.[1]) return `https://videodelivery.net/${match[1]}/thumbnails/thumbnail.jpg?time=1s&width=480`;
   }
+  const bunnyThumbnail = getBunnyStreamThumbnailUri(uri);
+  if (bunnyThumbnail) return bunnyThumbnail;
   const redgifsPoster = resolveRedgifsPosterUrl(posterUri ?? uri);
   if (redgifsPoster) return redgifsPoster;
+  if (posterUri && !isHlsManifestUrl(posterUri)) return posterUri;
   return "";
+}
+
+// Bunny Stream delivery: https://{pull-zone}.b-cdn.net/{guid}/playlist.m3u8
+// Thumbnail lives at /{guid}/thumbnail.jpg (no "thumbnails/" segment).
+function getBunnyStreamThumbnailUri(uri: string): string | null {
+  try {
+    const parsed = new URL(uri);
+    if (!parsed.hostname.toLowerCase().endsWith(".b-cdn.net")) return null;
+    const guid = parsed.pathname.split("/").filter(Boolean)[0];
+    if (!guid) return null;
+    return `${parsed.origin}/${guid}/thumbnail.jpg`;
+  } catch {
+    return null;
+  }
+}
+
+export function isHlsManifestUrl(uri?: string | null): boolean {
+  if (!uri) return false;
+  try {
+    return new URL(uri).pathname.toLowerCase().endsWith(".m3u8");
+  } catch {
+    return uri.toLowerCase().split("?")[0].endsWith(".m3u8");
+  }
+}
+
+// Hosted stream videos (Cloudflare Stream, Bunny Stream, or any HLS manifest)
+// transcode asynchronously: the manifest can 404/501 right after upload, so
+// playback errors are retryable rather than permanent.
+export function isHostedStreamVideoUrl(uri?: string | null): boolean {
+  if (!uri) return false;
+  return (
+    uri.includes("cloudflarestream.com") ||
+    uri.includes("videodelivery.net") ||
+    uri.toLowerCase().includes(".b-cdn.net/") ||
+    isHlsManifestUrl(uri)
+  );
 }
 
 export function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" | "youtube" {

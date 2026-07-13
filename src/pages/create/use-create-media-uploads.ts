@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import * as Network from "expo-network";
 import * as Sentry from "@sentry/react-native";
 
 import {
@@ -11,6 +10,7 @@ import { useToast } from "@/src/providers/toast-provider";
 import { useDraftStore } from "@/src/stores/draft-store";
 import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 import { IMAGE_UPLOADS, VIDEO_UPLOADS } from "./create-upload-state";
+import { useUploadNetworkRetry } from "./use-upload-network-retry";
 
 export type CreateVideoUploadState = Record<
   string,
@@ -312,18 +312,6 @@ export function useCreateMediaUploads() {
       }));
     }, controller.signal)
       .then((url) => {
-        if (videoUploadSessionRef.current !== sessionId) {
-          Sentry.addBreadcrumb({
-            category: "video-upload",
-            message: "Ignored stale video upload success",
-            level: "info",
-            data: {
-              ...getVideoUploadDebugData(uri, sessionId),
-              hasUrl: !!url,
-            },
-          });
-          return;
-        }
         if (videoUploadSessionRef.current !== sessionId || controller.signal.aborted) {
           Sentry.addBreadcrumb({
             category: "video-upload",
@@ -423,69 +411,55 @@ export function useCreateMediaUploads() {
     };
   }, [resetVideoUploads, resetImageUploads]);
 
-  useEffect(() => {
-    if (!hasFailedUploads) return;
-    let retryScheduled = false;
-    const sub = Network.addNetworkStateListener((event) => {
-      if (retryScheduled) return;
-      if (event.isConnected && event.isInternetReachable !== false) {
-        retryScheduled = true;
-        setTimeout(() => {
-          const toRetry = [...VIDEO_UPLOADS.entries()]
-            .filter(([, entry]) => !!entry.error && !entry.isServerError)
-            .map(([uri]) => uri);
-          toRetry.forEach((uri) => startVideoUpload(uri, true));
-        }, 1500);
-      }
-    });
-    Network.getNetworkStateAsync().then((state) => {
-      if (retryScheduled) return;
-      if (state.isConnected && state.isInternetReachable !== false) {
-        retryScheduled = true;
-        setTimeout(() => {
-          const toRetry = [...VIDEO_UPLOADS.entries()]
-            .filter(([, entry]) => !!entry.error && !entry.isServerError)
-            .map(([uri]) => uri);
-          toRetry.forEach((uri) => startVideoUpload(uri, true));
-        }, 3000);
-      }
-    });
-    return () => sub.remove();
-  }, [hasFailedUploads, startVideoUpload]);
-
-  useEffect(() => {
-    if (!hasFailedImageUploads) return;
-    let retryScheduled = false;
-    const retryImages = () => {
-      const toRetry = [...IMAGE_UPLOADS.entries()]
+  const getRetryableVideoUris = useCallback(
+    () =>
+      [...VIDEO_UPLOADS.entries()]
         .filter(([, entry]) => !!entry.error && !entry.isServerError)
-        .map(([uri]) => uri);
-      if (toRetry.length > 0) {
+        .map(([uri]) => uri),
+    [],
+  );
+  const retryVideoUpload = useCallback(
+    (uri: string) => startVideoUpload(uri, true),
+    [startVideoUpload],
+  );
+  useUploadNetworkRetry({
+    kind: "video",
+    hasFailures: hasFailedUploads,
+    getRetryableUris: getRetryableVideoUris,
+    retryUpload: retryVideoUpload,
+  });
+
+  const getRetryableImageUris = useCallback(
+    () =>
+      [...IMAGE_UPLOADS.entries()]
+        .filter(([, entry]) => !!entry.error && !entry.isServerError)
+        .map(([uri]) => uri),
+    [],
+  );
+  const retryImageUpload = useCallback(
+    (uri: string) => {
+      startImageUpload(uri, true)?.catch((error) => {
+        // Failure state and Sentry reporting are handled inside
+        // startImageUpload; this only prevents an unhandled rejection.
         Sentry.addBreadcrumb({
           category: "image-upload",
-          message: "Retrying failed image uploads after network recovery",
-          level: "info",
-          data: { retryCount: toRetry.length },
+          message: "Network-recovery image retry failed",
+          level: "warning",
+          data: {
+            fileName: uri.split("/").pop() ?? uri,
+            error: error instanceof Error ? error.message : String(error),
+          },
         });
-      }
-      toRetry.forEach((uri) => startImageUpload(uri, true)?.catch(() => {}));
-    };
-    const sub = Network.addNetworkStateListener((event) => {
-      if (retryScheduled) return;
-      if (event.isConnected && event.isInternetReachable !== false) {
-        retryScheduled = true;
-        setTimeout(retryImages, 1500);
-      }
-    });
-    Network.getNetworkStateAsync().then((state) => {
-      if (retryScheduled) return;
-      if (state.isConnected && state.isInternetReachable !== false) {
-        retryScheduled = true;
-        setTimeout(retryImages, 3000);
-      }
-    });
-    return () => sub.remove();
-  }, [hasFailedImageUploads, startImageUpload]);
+      });
+    },
+    [startImageUpload],
+  );
+  useUploadNetworkRetry({
+    kind: "image",
+    hasFailures: hasFailedImageUploads,
+    getRetryableUris: getRetryableImageUris,
+    retryUpload: retryImageUpload,
+  });
 
   return {
     getUploadedImageUrls,

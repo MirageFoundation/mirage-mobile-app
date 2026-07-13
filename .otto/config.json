@@ -1,0 +1,12 @@
+{
+  "references": {
+    "mirage-node": {
+      "description": "Use this when you want to check backend/node codebase for mirage and it’s web app implementation as well",
+      "enabled": true,
+      "source": {
+        "type": "local",
+        "path": "/Users/sonali/dev/mirage/mirage-node"
+      }
+    }
+  }
+}

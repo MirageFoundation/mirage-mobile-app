@@ -149,7 +149,15 @@ export function transformApiPost(
           const w = meta?.w;
           const h = meta?.h;
           const type = getMediaTypeFromUrl(url);
-          const posterUri = meta?.posterUrl ?? meta?.poster_url;
+          // Fall back to the server-computed post thumbnail for the first
+          // media item so hosted stream providers (Bunny, Cloudflare, ...)
+          // always have a poster without client-side provider knowledge.
+          const posterUri =
+            meta?.posterUrl ??
+            meta?.poster_url ??
+            (i === 0 && type === "video" && !editOverride?.media
+              ? apiPost.thumbnail || undefined
+              : undefined);
           const downloadUri = meta?.downloadUrl ?? meta?.download_url;
           return {
           uri: url,

@@ -24,8 +24,14 @@ import {
   type GestureResponderEvent,
 } from "react-native";
 import YoutubePlayer from "react-native-youtube-iframe";
-import { extractYouTubeVideoId, getVideoThumbnailUri, type ResolvedMedia } from "./post-card-utils";
+import {
+  extractYouTubeVideoId,
+  getVideoThumbnailUri,
+  isHostedStreamVideoUrl,
+  type ResolvedMedia,
+} from "./post-card-utils";
 import { MediaGallery } from "./media-gallery";
+import { playNativeVideo } from "@/src/components/utils/native-video-playback";
 import {
   buildVideoPositionKey,
   useIsFeedScrolling,
@@ -232,7 +238,6 @@ export const PostCardMedia = memo(
         const status = await videoRef.current.getStatusAsync();
         if (!status.isLoaded) return;
 
-        await videoRef.current.pauseAsync().catch(() => {});
         await videoRef.current.setStatusAsync({
           shouldPlay: false,
           isMuted: true,
@@ -594,41 +599,13 @@ export const PostCardMedia = memo(
       if (!shouldPlayNativeVideo) return;
 
       let cancelled = false;
-      const play = async () => {
-        const video = videoRef.current;
-        if (!video) return;
-
-        try {
-          const status = await video.getStatusAsync();
-          if (cancelled || !status.isLoaded || status.isPlaying) return;
-
-          await video.setStatusAsync({
-            shouldPlay: true,
-            isMuted: videoMuted,
-          });
-          await video.playAsync();
-        } catch (error) {
-          Sentry.captureException(error, {
-            tags: {
-              feature: "feed-video",
-              component: "post-card-media",
-              action: "play-native-feed-video",
-            },
-            extra: { uri: resolvedMediaUri },
-          });
-          // expo-av can ignore the declarative shouldPlay prop after media
-          // source/session changes (e.g. switching API servers). A short
-          // retry mirrors the mute/unmute path, which starts playback by
-          // imperatively calling playAsync().
-          if (!cancelled) {
-            setTimeout(() => {
-              if (!cancelled) videoRef.current?.playAsync().catch(() => {});
-            }, 250);
-          }
-        }
-      };
-
-      void play();
+      void playNativeVideo(videoRef.current, {
+        isMuted: videoMuted,
+        isCancelled: () => cancelled || videoRef.current === null,
+        component: "post-card-media",
+        action: "play-native-feed-video",
+        uri: resolvedMediaUri,
+      });
 
       return () => {
         cancelled = true;
@@ -903,13 +880,7 @@ export const PostCardMedia = memo(
                 ? (newGlobalMuted || !isFocused)
                 : newGlobalMuted;
             const newVideoMuted = newEffective || !videoReadyForDisplay;
-            if (!newVideoMuted) {
-              await videoRef.current.pauseAsync();
-              await videoRef.current.setStatusAsync({ isMuted: false });
-              await videoRef.current.playAsync();
-            } else {
-              await videoRef.current.setStatusAsync({ isMuted: true });
-            }
+            await videoRef.current.setStatusAsync({ isMuted: newVideoMuted });
           } catch {}
         }
       },
@@ -971,11 +942,9 @@ export const PostCardMedia = memo(
       [disabled, shouldBlurContent, onRevealContent, runWithMediaTransition, media, onMediaPress, saveVideoPosition],
     );
 
-    const isCloudflareVideo =
-      media?.uri?.includes("cloudflarestream.com") ||
-      media?.uri?.includes("videodelivery.net");
+    const isHostedStreamVideo = isHostedStreamVideoUrl(media?.uri);
     const isRedgifsVideo = media?.uri?.includes("redgifs.com");
-    const isRetryableVideo = isCloudflareVideo || isRedgifsVideo;
+    const isRetryableVideo = isHostedStreamVideo || isRedgifsVideo;
     const shouldHideOnError =
       imageError && !isRetryableVideo && !isVideoProcessing;
 
@@ -1022,7 +991,7 @@ export const PostCardMedia = memo(
     }, [imageError, isConnected, isVideoProcessing]);
 
     useEffect(() => {
-      if (!isVideoProcessing || !isCloudflareVideo || !resolvedMediaUri) {
+      if (!isVideoProcessing || !isHostedStreamVideo || !resolvedMediaUri) {
         videoProcessingStartedAtRef.current = null;
         if (videoProcessingPollTimeoutRef.current) {
           clearTimeout(videoProcessingPollTimeoutRef.current);
@@ -1109,7 +1078,7 @@ export const PostCardMedia = memo(
           videoProcessingPollTimeoutRef.current = null;
         }
       };
-    }, [isVideoProcessing, isCloudflareVideo, resolvedMediaUri, getVideoDiagnostics]);
+    }, [isVideoProcessing, isHostedStreamVideo, resolvedMediaUri, getVideoDiagnostics]);
 
     const containerWidth = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
     const calculatedHeight = containerWidth / effectiveAspectRatio;
@@ -1324,30 +1293,17 @@ export const PostCardMedia = memo(
               onLoad={() => {
                   setMediaLoaded(true);
                   if (resolvedMediaUri) MEDIA_LOADED_CACHE.add(resolvedMediaUri);
-                  void (async () => {
-                    if (!videoRef.current) return;
-
-                    if (!hasRestoredVideoPositionRef.current && videoPositionKey) {
-                      const saved = getPosition(videoPositionKey);
-                      if (saved > 0.5) {
-                        hasRestoredVideoPositionRef.current = true;
-                        await videoRef.current.setStatusAsync({
-                          positionMillis: saved * 1000,
-                          shouldPlay: shouldPlayNativeVideo,
-                          isMuted: shouldPlayNativeVideo ? videoMuted : true,
-                        }).catch(() => {});
-                        return;
-                      }
+                  // Playback ownership lives in the shouldPlay prop and the
+                  // playNativeVideo effect. onLoad only restores position.
+                  if (!hasRestoredVideoPositionRef.current && videoPositionKey) {
+                    const saved = getPosition(videoPositionKey);
+                    if (saved > 0.5) {
+                      hasRestoredVideoPositionRef.current = true;
+                      videoRef.current
+                        ?.setStatusAsync({ positionMillis: saved * 1000 })
+                        .catch(() => {});
                     }
-
-                    await videoRef.current.setStatusAsync({
-                      shouldPlay: shouldPlayNativeVideo,
-                      isMuted: shouldPlayNativeVideo ? videoMuted : true,
-                    }).catch(() => {});
-                    if (shouldPlayNativeVideo) {
-                      await videoRef.current?.playAsync().catch(() => {});
-                    }
-                  })();
+                  }
                 }}
                 onReadyForDisplay={(event) => {
                   const { width, height } = event.naturalSize ?? {};
@@ -1384,27 +1340,25 @@ export const PostCardMedia = memo(
                       mediaSource.uri,
                     );
                   }
-                  const isCloudflare =
-                    mediaSource.uri?.includes("cloudflarestream.com") ||
-                    mediaSource.uri?.includes("videodelivery.net");
+                  const isHostedStream = isHostedStreamVideoUrl(mediaSource.uri);
                   const isRedgifs = mediaSource.uri?.includes("redgifs.com");
                   Sentry.captureMessage("Post video playback error", {
-                    level: isCloudflare || isRedgifs ? "warning" : "error",
+                    level: isHostedStream || isRedgifs ? "warning" : "error",
                     tags: {
                       feature: "post-media",
                       operation: "video-playback",
-                      retryable: String(isCloudflare || isRedgifs),
+                      retryable: String(isHostedStream || isRedgifs),
                     },
                     extra: {
                       ...getVideoDiagnostics(),
                       uri: mediaSource.uri,
                       error,
-                      isCloudflare,
+                      isHostedStream,
                       isRedgifs,
                       retryCount: videoErrorRetryCountRef.current,
                     },
                   });
-                  if (isCloudflare || isRedgifs) {
+                  if (isHostedStream || isRedgifs) {
                     videoErrorRetryCountRef.current += 1;
                     if (videoErrorRetryRef.current) {
                       clearTimeout(videoErrorRetryRef.current);

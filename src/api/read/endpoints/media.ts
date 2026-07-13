@@ -76,6 +76,22 @@ function isNetworkError(error: unknown): boolean {
     (error as any)?.code === "ERR_NETWORK";
 }
 
+function isAbortError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return msg === "Upload aborted" || msg === "Video upload aborted";
+}
+
+function classifyUploadError(error: unknown): "aborted" | "timeout" | "network" | "http_4xx" | "http_5xx" | "unknown" {
+  if (isAbortError(error)) return "aborted";
+  const msg = error instanceof Error ? error.message : String(error);
+  if (msg.includes("timed out")) return "timeout";
+  const status = (error as { status?: number }).status;
+  if (status && status >= 400 && status < 500) return "http_4xx";
+  if (status && status >= 500) return "http_5xx";
+  if (isNetworkError(error)) return "network";
+  return "unknown";
+}
+
 function captureMediaUploadException(
   error: unknown,
   mediaType: MediaType,
@@ -84,16 +100,21 @@ function captureMediaUploadException(
   contentType: string,
   extra?: Record<string, unknown>
 ) {
-  if (isNetworkError(error)) return;
+  // User-initiated aborts are expected cancellations, not failures.
+  if (isAbortError(error)) return;
+  const errorClass = classifyUploadError(error);
   Sentry.captureException(error, {
+    level: errorClass === "network" || errorClass === "timeout" ? "warning" : "error",
     tags: {
       feature: "media-upload",
       media_type: mediaType,
       stage,
+      error_class: errorClass,
     },
     extra: {
       fileName: getFileNameFromUri(localUri),
       contentType,
+      attemptsMade: (error as { attemptsMade?: number }).attemptsMade,
       ...extra,
     },
   });
@@ -241,16 +262,19 @@ async function withRetry<T>(
   } = {}
 ): Promise<T> {
   let lastError: unknown;
+  let attemptsMade = 0;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (signal?.aborted) throw new Error("Upload aborted");
     try {
       return await fn();
     } catch (error) {
       lastError = error;
+      attemptsMade = attempt + 1;
       const msg = error instanceof Error ? error.message : String(error);
       if (msg === "Upload aborted") throw error;
       const status = (error as { status?: number }).status;
       if (status && status >= 400 && status < 500 && status !== 408 && status !== 429) {
+        Object.assign(error as object, { attemptsMade });
         throw error;
       }
 
@@ -270,6 +294,9 @@ async function withRetry<T>(
         await new Promise((r) => setTimeout(r, delay));
       }
     }
+  }
+  if (lastError instanceof Error || (typeof lastError === "object" && lastError !== null)) {
+    Object.assign(lastError as object, { attemptsMade, retriesExhausted: maxRetries > 0 });
   }
   throw lastError;
 }
@@ -500,9 +527,10 @@ export async function uploadMedia(
     return uploadWithFileSystem();
   };
 
+  // /upload_media is the app backend, not a single-use signed URL, so both
+  // media types share the same bounded retry policy.
   return withRetry(uploadFn, {
     label: `${mediaType}-upload`,
-    maxRetries: mediaType === "video" ? 0 : MAX_UPLOAD_RETRIES,
     signal,
   });
 }

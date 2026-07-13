@@ -81,6 +81,7 @@ let deferredInitSubscription: { remove(): void } | null = null;
 let isInboxNotificationsInitialized = false;
 let isInitializingInboxNotifications = false;
 let lastInboxNotificationNavigationAt = 0;
+let inboxNotificationNavigationInFlight = false;
 let lastShareIntentNavigationAt = 0;
 const pendingInboxNotificationNavigations = new Map<
   string,
@@ -130,12 +131,22 @@ export function signalTabsReady(): void {
 }
 
 export function isInboxNotificationNavigationActive(): boolean {
-  return Date.now() - lastInboxNotificationNavigationAt < INBOX_NOTIFICATION_NAVIGATION_ACTIVE_MS;
+  // Explicit in-flight flag; the timestamp acts only as a bounded safety net
+  // in case a flow dies without reaching its completion handler.
+  return (
+    inboxNotificationNavigationInFlight &&
+    Date.now() - lastInboxNotificationNavigationAt < INBOX_NOTIFICATION_NAVIGATION_ACTIVE_MS
+  );
 }
 
 function markInboxNotificationNavigationActive(): void {
+  inboxNotificationNavigationInFlight = true;
   lastInboxNotificationNavigationAt = Date.now();
   useInboxStore.getState().markNotificationNavigationActive();
+}
+
+function clearInboxNotificationNavigationActive(): void {
+  inboxNotificationNavigationInFlight = false;
 }
 
 function getNotificationResponseAgeMs(
@@ -1345,6 +1356,7 @@ function handleNotificationResponse(
           saveHandledNotificationIds(ids);
         }
         handledNotificationIdsInFlight.delete(notificationId);
+        clearInboxNotificationNavigationActive();
       };
       const areTabsReadyAtDispatch = _areTabsReady;
       Sentry.addBreadcrumb({
@@ -1369,16 +1381,18 @@ function handleNotificationResponse(
       try {
         dispatchNavigate();
         if (canOpenReplyDetailImmediately || canOpenPostDetailImmediately) {
-          console.log("[InboxNotifFlow] scheduling detail push", { notificationId, delayMs: 50 });
+          // Push the detail route in the same tick as the inbox replace so no
+          // other navigation (share intent, deep link, app-state change) can
+          // interleave between the two dispatches.
           Sentry.addBreadcrumb({
             category: "navigation",
             message: canOpenReplyDetailImmediately
-              ? "Scheduling notification reply detail push"
-              : "Scheduling notification post detail push",
+              ? "Pushing notification reply detail"
+              : "Pushing notification post detail",
             level: "info",
-            data: { notificationId, replyId, rootPostId, delayMs: 50 },
+            data: { notificationId, replyId, rootPostId },
           });
-          setTimeout(dispatchReplyDetail, 50);
+          dispatchReplyDetail();
         }
       } catch (error) {
         clearPendingInboxNotificationNavigation(notificationId);
@@ -1413,6 +1427,7 @@ function handleNotificationResponse(
     const runNavigateToInbox = () => {
       void navigateToInbox().catch((error) => {
         handledNotificationIdsInFlight.delete(notificationId);
+        clearInboxNotificationNavigationActive();
         console.error("[InboxNotifications] Failed to navigate from notification:", error);
         Sentry.captureException(error, {
           tags: { action: "notification_navigate" },

@@ -424,37 +424,54 @@ export default function TabLayout() {
       return;
     }
     if (!hasForcedShareIntentRouteRef.current) {
-      hasForcedShareIntentRouteRef.current = true;
       const hasRecentInitialTabDeepLink = isRecentInitialTabDeepLink();
       const isPostPath = pathname.startsWith("/post/");
+      const isNotificationNavigationActive = isInboxNotificationNavigationActive();
       const activeShareRedirectDiagnostics = {
         pathname,
         hadPreviousShareIntent: prev,
         hasHandledInitialRoute: hasHandledInitialRouteRef.current,
-        isNotificationNavigationActive: isInboxNotificationNavigationActive(),
+        isNotificationNavigationActive,
         hasForcedShareIntentRoute: hasForcedShareIntentRouteRef.current,
         hasRecentInitialTabDeepLink,
         isPostPath,
         detectedRecentSharePath: isRecentSharePath(10_000),
         ...getPendingShareIntentDiagnostics(),
       };
+      // Notification navigation owns the route while it is in flight. A share
+      // intent replayed by Android (cold start, activity recreation) must not
+      // steal the screen and strand the user on Create.
+      if (isNotificationNavigationActive) {
+        Sentry.captureMessage("Share intent create redirect blocked during notification navigation", {
+          level: "warning",
+          tags: {
+            feature: "share-intent",
+            operation: "create-redirect-blocked",
+          },
+          extra: activeShareRedirectDiagnostics,
+        });
+        return;
+      }
+      // An active post deep link also outranks a replayed share intent.
+      if (isPostPath || hasRecentInitialTabDeepLink) {
+        Sentry.captureMessage("Share intent create redirect blocked by active deep link", {
+          level: "warning",
+          tags: {
+            feature: "share-intent",
+            operation: "create-redirect-blocked",
+            route_kind: isPostPath ? "post" : "tab",
+          },
+          extra: activeShareRedirectDiagnostics,
+        });
+        return;
+      }
+      hasForcedShareIntentRouteRef.current = true;
       Sentry.addBreadcrumb({
         category: "navigation",
         message: "Forcing share intent to create tab",
         level: "info",
         data: activeShareRedirectDiagnostics,
       });
-      if (isPostPath || hasRecentInitialTabDeepLink) {
-        Sentry.captureMessage("Share intent redirected an active deep link to create", {
-          level: "warning",
-          tags: {
-            feature: "share-intent",
-            operation: "active-deep-link-overridden",
-            route_kind: isPostPath ? "post" : "tab",
-          },
-          extra: activeShareRedirectDiagnostics,
-        });
-      }
       replaceBypass("/(tabs)/create");
     } else {
       Sentry.addBreadcrumb({
@@ -504,7 +521,6 @@ export default function TabLayout() {
         pathname: currentPathname,
         hasInitialCreateIntent,
         hasInitialShareIntent,
-        hasPendingShareIntent,
         hasInitialTabDeepLink,
         isOnHomeTab,
         isOnCreate,
