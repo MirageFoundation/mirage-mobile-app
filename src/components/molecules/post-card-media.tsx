@@ -86,6 +86,7 @@ type PostCardMediaProps = {
   isPostDetail?: boolean;
   videoSyncScope?: string;
   postId?: string;
+  forceVideoProcessing?: boolean;
 };
 
 let nextNativeAudioFocusId = 0;
@@ -114,6 +115,7 @@ export const PostCardMedia = memo(
       isPostDetail = false,
       videoSyncScope,
       postId,
+      forceVideoProcessing = false,
     },
     ref,
   ) {
@@ -1516,7 +1518,10 @@ export const PostCardMedia = memo(
           )}
 
           <MediaProcessingOverlay
-            visible={Boolean(isVideoProcessing && isRetryableVideo && isConnected)}
+            visible={Boolean(
+              isConnected &&
+              (forceVideoProcessing || (isVideoProcessing && isRetryableVideo))
+            )}
             isRedgifsVideo={Boolean(isRedgifsVideo)}
           />
 

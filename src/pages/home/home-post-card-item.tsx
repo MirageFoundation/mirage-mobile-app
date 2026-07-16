@@ -351,6 +351,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
      showUrlCard={false}
      allowAutoplay={allowAutoplay}
       screenActive={feedActive}
+      allowOptimisticMediaPreview={feedScreen === "home"}
       videoSyncScope={feedContext}
       onPress={handlePostPress}
       onAuthorPress={handleAuthorPress}

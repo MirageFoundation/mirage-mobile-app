@@ -12,7 +12,7 @@ import { styles } from "./create-screen-styles";
 
 type ImageUploadState = Record<
   string,
-  { uploading: boolean; done: boolean; error: string | null }
+  { progress: number; uploading: boolean; done: boolean; error: string | null }
 >;
 
 type CreateImagePreviewCarouselProps = {
@@ -75,7 +75,9 @@ export function CreateImagePreviewCarousel({
                 <View style={[styles.uploadedBadge, !isNetworkOnline && { backgroundColor: "rgba(234,179,8,0.85)" }]}>
                   <ActivityIndicator size="small" color="#fff" />
                   <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
-                    {!isNetworkOnline ? "Low connectivity…" : "Uploading…"}
+                    {!isNetworkOnline
+                      ? "Low connectivity…"
+                      : `Uploading… ${Math.round(upload.progress)}%`}
                   </Text>
                 </View>
               )}
@@ -108,7 +110,7 @@ export function CreateImagePreviewCarousel({
                 >
                   <Feather name="refresh-cw" size={12} color="#fff" />
                   <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
-                    Retry
+                    Upload failed · Retry
                   </Text>
                 </Pressable>
               )}

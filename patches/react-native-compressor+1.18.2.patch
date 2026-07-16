@@ -1,0 +1,29 @@
+diff --git a/node_modules/react-native-compressor/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt b/node_modules/react-native-compressor/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt
+index 7dbbd18..8091806 100644
+--- a/node_modules/react-native-compressor/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt
++++ b/node_modules/react-native-compressor/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt
+@@ -87,8 +87,8 @@ class Uploader(private val reactContext: ReactApplicationContext) {
+       if (client == null) {
+         val builder = OkHttpClient.Builder()
+           .connectTimeout(60, TimeUnit.SECONDS)
+-          .readTimeout(60, TimeUnit.SECONDS)
+-          .writeTimeout(60, TimeUnit.SECONDS)
++          .readTimeout(600, TimeUnit.SECONDS)
++          .writeTimeout(600, TimeUnit.SECONDS)
+         client = builder.build()
+       }
+       return client
+diff --git a/node_modules/react-native-compressor/ios/Utils/Uploader.swift b/node_modules/react-native-compressor/ios/Utils/Uploader.swift
+index 9949df0..9587017 100644
+--- a/node_modules/react-native-compressor/ios/Utils/Uploader.swift
++++ b/node_modules/react-native-compressor/ios/Utils/Uploader.swift
+@@ -83,6 +83,9 @@ class Uploader: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
+       let type:UploaderUploadType=self.getUploadType(from: uploadType)
+  
+       let config = URLSessionConfiguration.background(withIdentifier: uuid)
++      config.timeoutIntervalForRequest = 600
++      config.timeoutIntervalForResource = 600
++      request.timeoutInterval = 600
+       let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
+         var task:URLSessionUploadTask!;
+         if type == .UploaderBinaryContent {

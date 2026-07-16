@@ -8,7 +8,7 @@ import {
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useToast } from "@/src/providers/toast-provider";
 import { useDraftStore } from "@/src/stores/draft-store";
-import { getApiErrorMessage } from "@/src/utils/parse-api-error";
+import { getMediaUploadErrorDetails } from "@/src/utils/media-upload-error";
 import { IMAGE_UPLOADS, VIDEO_UPLOADS } from "./create-upload-state";
 import { useUploadNetworkRetry } from "./use-upload-network-retry";
 
@@ -19,7 +19,7 @@ export type CreateVideoUploadState = Record<
 
 export type CreateImageUploadState = Record<
   string,
-  { uploading: boolean; done: boolean; error: string | null }
+  { progress: number; uploading: boolean; done: boolean; error: string | null }
 >;
 
 export function useCreateMediaUploads() {
@@ -44,6 +44,7 @@ export function useCreateMediaUploads() {
     const init: CreateImageUploadState = {};
     for (const [uri, entry] of IMAGE_UPLOADS) {
       init[uri] = {
+        progress: entry.progress,
         uploading: entry.uploading,
         done: !!entry.url,
         error: entry.error,
@@ -137,7 +138,17 @@ export function useCreateMediaUploads() {
       },
     });
 
-    const promise = uploadImageAndGetUrl(uri)
+    const promise = uploadImageAndGetUrl(uri, (progress) => {
+      const clamped = Math.min(100, Math.max(0, progress));
+      const entry = IMAGE_UPLOADS.get(uri);
+      if (entry) {
+        IMAGE_UPLOADS.set(uri, { ...entry, progress: clamped });
+      }
+      imageUploadStateRef.current((prev) => ({
+        ...prev,
+        [uri]: { ...prev[uri], progress: clamped },
+      }));
+    })
       .then((url) => {
         Sentry.addBreadcrumb({
           category: "image-upload",
@@ -148,10 +159,10 @@ export function useCreateMediaUploads() {
             hasUrl: !!url,
           },
         });
-        IMAGE_UPLOADS.set(uri, { url, uploading: false, error: null });
+        IMAGE_UPLOADS.set(uri, { url, uploading: false, progress: 100, error: null });
         imageUploadStateRef.current((prev) => ({
           ...prev,
-          [uri]: { uploading: false, done: true, error: null },
+          [uri]: { progress: 100, uploading: false, done: true, error: null },
         }));
         imageUploadToastShownRef.current = false;
         return url;
@@ -160,10 +171,11 @@ export function useCreateMediaUploads() {
         const status = (error as any)?.response?.status ?? (error as any)?.status;
         const responseText = (error as any)?.responseText ?? (error as any)?.response?.data?.error ?? "";
         const isUnsupportedFormat = status === 422 && String(responseText).includes("decoding");
+        const uploadError = getMediaUploadErrorDetails(error);
         const msg = isUnsupportedFormat
           ? "This image format isn't supported. Try a different photo."
-          : error instanceof Error ? error.message : "Upload failed";
-        const isServerError = !!status && status >= 400;
+          : uploadError.message;
+        const isServerError = uploadError.kind === "server";
         Sentry.captureException(error, {
           tags: {
             feature: "create-post",
@@ -180,10 +192,10 @@ export function useCreateMediaUploads() {
             attachmentType: draft.attachmentType,
           },
         });
-        IMAGE_UPLOADS.set(uri, { url: null, uploading: false, error: msg, isServerError });
+        IMAGE_UPLOADS.set(uri, { url: null, uploading: false, progress: 0, error: msg, isServerError });
         imageUploadStateRef.current((prev) => ({
           ...prev,
-          [uri]: { uploading: false, done: false, error: msg },
+          [uri]: { progress: 0, uploading: false, done: false, error: msg },
         }));
         if (!silent && !imageUploadToastShownRef.current) {
           imageUploadToastShownRef.current = true;
@@ -192,10 +204,10 @@ export function useCreateMediaUploads() {
         throw error;
       });
 
-    IMAGE_UPLOADS.set(uri, { url: null, uploading: true, error: null, isServerError: false, promise });
+    IMAGE_UPLOADS.set(uri, { url: null, uploading: true, progress: 0, error: null, isServerError: false, promise });
     imageUploadStateRef.current((prev) => ({
       ...prev,
-      [uri]: { uploading: true, done: false, error: null },
+      [uri]: { progress: 0, uploading: true, done: false, error: null },
     }));
     return promise;
   }, [draft.attachmentType, draft.mediaUris, toast]);
@@ -360,8 +372,9 @@ export function useCreateMediaUploads() {
         videoUploadControllersRef.current.delete(uri);
         const status = err?.response?.status ?? err?.status;
         const serverError = err?.response?.data?.error ?? err?.responseText;
-        const msg = err?.response?.data?.error_code ? getApiErrorMessage(err) : (err instanceof Error ? err.message : "Upload failed");
-        const isServerError = !!status && status >= 400;
+        const uploadError = getMediaUploadErrorDetails(err);
+        const msg = uploadError.message;
+        const isServerError = uploadError.kind === "server";
         Sentry.addBreadcrumb({
           category: "video-upload",
           message: "Create video upload failed",
@@ -397,8 +410,7 @@ export function useCreateMediaUploads() {
         }));
         if (!silent && !videoUploadToastShownRef.current) {
           videoUploadToastShownRef.current = true;
-          const title = serverError ? `${serverError} (${status})` : "Video upload failed";
-          toast.error(title, serverError ? "Please try again" : msg);
+          toast.error("Video upload failed", msg);
         }
         triggerHaptic("error");
       });

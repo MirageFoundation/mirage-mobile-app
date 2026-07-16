@@ -51,6 +51,7 @@ type ItemRenderProps = {
   videoKey: string;
   videoSyncScope?: string;
   initialPreviewUri?: string;
+  onVideoReady?: () => void;
 };
 
 export const MediaItemView = memo(function MediaItemView({
@@ -63,6 +64,7 @@ export const MediaItemView = memo(function MediaItemView({
   videoKey,
   videoSyncScope,
   initialPreviewUri,
+  onVideoReady,
 }: ItemRenderProps) {
   const videoRef = useRef<Video | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
@@ -321,6 +323,9 @@ export const MediaItemView = memo(function MediaItemView({
             }}
             onReadyForDisplay={() => {
               setShowInitialPreview(false);
+              if (!item.uri.startsWith("file://")) {
+                onVideoReady?.();
+              }
             }}
             onError={(error) => {
               Sentry.captureMessage("Media post detail video error", {

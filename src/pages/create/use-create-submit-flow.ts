@@ -228,6 +228,12 @@ export function useCreateSubmitFlow({
           (draft.attachmentType === "image" || draft.attachmentType === "video") && draft.mediaUris.length > 0
             ? draft.mediaUris
             : undefined;
+        const optimisticMediaMeta = draft.attachmentType === "video"
+          ? draft.mediaUris.map((uri) => {
+              const meta = VIDEO_META.get(uri);
+              return meta ? { w: meta.width, h: meta.height } : {};
+            })
+          : undefined;
         const postInput: CreatePostMutationInput = {
           topic,
           title: draft.title.trim(),
@@ -239,6 +245,7 @@ export function useCreateSubmitFlow({
           optimisticMediaUrl: mediaUrls[0] ?? undefined,
           optimisticMediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
           optimisticPreviewMediaUrls,
+          optimisticMediaMeta,
           optimisticDraft,
         };
         const insertOptimisticPost = () => {

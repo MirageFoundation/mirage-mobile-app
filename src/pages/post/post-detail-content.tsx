@@ -270,7 +270,19 @@ function LegacyPostDetailScreen() {
   const isCommentRouteNotFound = !!depth && isPostNotFound;
   const shouldUseOptimisticRootFallback = isPostNotFound && !!optimisticPost;
   const effectiveCommentsData = useMemo<CommentsResponse | undefined>(() => {
-    if (commentsData) return commentsData;
+    if (commentsData) {
+      if (!optimisticPost?.optimistic_video_preview_until) return commentsData;
+      return {
+        ...commentsData,
+        root: {
+          ...commentsData.root,
+          optimistic_status: optimisticPost.optimistic_status,
+          optimistic_action_id: optimisticPost.optimistic_action_id,
+          optimistic_draft: optimisticPost.optimistic_draft,
+          optimistic_video_preview_until: optimisticPost.optimistic_video_preview_until,
+        },
+      };
+    }
     if (!shouldUseOptimisticRootFallback || !optimisticPost) return undefined;
     return {
       root: {
@@ -303,6 +315,7 @@ function LegacyPostDetailScreen() {
 
   useEffect(() => {
     if (!id || !commentsData?.root) return;
+    if (optimisticPost?.optimistic_video_preview_until) return;
     Sentry.addBreadcrumb({
       category: "post-detail",
       message: "Optimistic root post reconciled from detail fetch",
@@ -310,7 +323,7 @@ function LegacyPostDetailScreen() {
       data: { postId: id },
     });
     usePendingPostsStore.getState().removePost(id);
-  }, [commentsData?.root, id]);
+  }, [commentsData?.root, id, optimisticPost?.optimistic_video_preview_until]);
 
   useEffect(() => {
     if (!id || !shouldUseOptimisticRootFallback) return;

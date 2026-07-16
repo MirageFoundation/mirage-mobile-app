@@ -278,11 +278,15 @@ export function useUploadVideo(options: UseUploadVideoOptions = {}) {
  * Standalone function for use outside of React components.
  *
  * @param uri - Local file URI
+ * @param onProgress - Optional progress callback
  * @returns The uploaded image URL
  */
-export async function uploadImageAndGetUrl(uri: string): Promise<string> {
+export async function uploadImageAndGetUrl(
+  uri: string,
+  onProgress?: UploadProgressCallback,
+): Promise<string> {
   const contentType = getContentTypeFromUri(uri);
-  const result = await uploadImage(uri, contentType);
+  const result = await uploadImage(uri, contentType, onProgress);
   return result.url;
 }
 

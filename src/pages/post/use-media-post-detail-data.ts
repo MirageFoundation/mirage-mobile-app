@@ -16,6 +16,7 @@ import { type Comment, type Post } from "@/src/components/molecules";
 import { useVoteHandler } from "@/src/hooks";
 import { parseApiError } from "@/src/utils/parse-api-error";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
+import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
 import {
   useOptimisticReplyComments,
   useOptimisticTopLevelComments,
@@ -270,6 +271,9 @@ export function useMediaPostDetailData({
     () => followedData?.followed_topics ?? [],
     [followedData],
   );
+  const optimisticPost = usePendingPostsStore((state) =>
+    id ? state.posts.find((item) => item.post_id.toLowerCase() === id.toLowerCase()) : undefined,
+  );
 
   const cachedPost = useMemo<Post | null>(() => {
     if (!id || isPostNotFound) return null;
@@ -293,14 +297,24 @@ export function useMediaPostDetailData({
 
   const basePost: Post | null = useMemo(() => {
     if (isPostNotFound) return null;
-    if (!commentsData?.root) return cachedPost;
-    return transformApiPost(commentsData.root, {
+    const serverPost = commentsData?.root
+      ? transformApiPost(commentsData.root, {
       followedUsers,
       currentUser: currentUser
         ? { id: currentUser.id, username: currentUser.username ?? null }
         : undefined,
-    });
-  }, [cachedPost, commentsData, followedUsers, currentUser, isPostNotFound]);
+      })
+      : cachedPost;
+    if (!serverPost || !optimisticPost) return serverPost;
+    return {
+      ...serverPost,
+      optimisticStatus: optimisticPost.optimistic_status,
+      optimisticError: optimisticPost.optimistic_error,
+      optimisticActionId: optimisticPost.optimistic_action_id,
+      optimisticDraft: optimisticPost.optimistic_draft,
+      optimisticVideoPreviewUntil: optimisticPost.optimistic_video_preview_until,
+    };
+  }, [cachedPost, commentsData, followedUsers, currentUser, isPostNotFound, optimisticPost]);
 
   const sharedVoteOverride = useHomePostCardStore((state) =>
     id ? state.voteOverrides[id] : undefined,

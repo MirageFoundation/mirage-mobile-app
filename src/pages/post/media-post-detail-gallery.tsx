@@ -13,6 +13,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 
 import { Box, Text } from "@/src/components/ui/primitives";
+import { MediaProcessingOverlay } from "@/src/components/molecules/post-card-media-overlays";
 import type { PressedMediaTransition } from "@/src/utils/post-transition";
 import {
   MediaItemView,
@@ -37,11 +38,13 @@ type MediaPostDetailGalleryProps = {
   expandMedia: () => void;
   globalMuted: boolean;
   isFocused: boolean;
+  isVideoProcessing: boolean;
   isVideoActive: boolean;
   mediaContainerStyle: ComponentProps<typeof Animated.View>["style"];
   mediaItems: MediaItem[];
   onMuteToggle: () => void;
   onPlayPause: () => void;
+  onVideoReady?: () => void;
   registerVideo: (key: string, api: VideoApi | null) => void;
   setActiveIndex: (index: number) => void;
   sourceMediaTransition?: PressedMediaTransition | null;
@@ -59,11 +62,13 @@ export function MediaPostDetailGallery({
   expandMedia,
   globalMuted,
   isFocused,
+  isVideoProcessing,
   isVideoActive,
   mediaContainerStyle,
   mediaItems,
   onMuteToggle,
   onPlayPause,
+  onVideoReady,
   registerVideo,
   setActiveIndex,
   sourceMediaTransition,
@@ -89,6 +94,7 @@ export function MediaPostDetailGallery({
           videoKey={`m-${index}`}
           videoSyncScope={videoSyncScope}
           initialPreviewUri={getInitialPreviewUri(item)}
+          onVideoReady={onVideoReady}
         />
       </View>
     ),
@@ -98,6 +104,7 @@ export function MediaPostDetailGallery({
       expandMedia,
       getInitialPreviewUri,
       isFocused,
+      onVideoReady,
       registerVideo,
       videoSyncScope,
     ],
@@ -163,6 +170,7 @@ export function MediaPostDetailGallery({
             videoKey="m-0"
             videoSyncScope={videoSyncScope}
             initialPreviewUri={getInitialPreviewUri(activeMedia)}
+            onVideoReady={onVideoReady}
           />
         ) : null}
 
@@ -214,6 +222,10 @@ export function MediaPostDetailGallery({
             </Pressable>
           </Animated.View>
         )}
+        <MediaProcessingOverlay
+          visible={isVideoProcessing}
+          isRedgifsVideo={false}
+        />
     </Animated.View>
     </GestureDetector>
   );

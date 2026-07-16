@@ -10,6 +10,7 @@ export type VideoUploadEntry = {
 export type ImageUploadEntry = {
   url: string | null;
   uploading: boolean;
+  progress: number;
   error: string | null;
   isServerError?: boolean;
   promise?: Promise<string>;

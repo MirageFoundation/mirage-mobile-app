@@ -72,6 +72,7 @@ type PostCardProps = {
   directFollowUser?: boolean;
   showMoreButton?: boolean;
   isPostDetail?: boolean;
+  allowOptimisticMediaPreview?: boolean;
   videoSyncScope?: string;
   style?: StyleProp<ViewStyle>;
 };
@@ -113,6 +114,7 @@ function arePostCardPropsEqual(
   if (prevProps.directFollowUser !== nextProps.directFollowUser) return false;
   if (prevProps.showMoreButton !== nextProps.showMoreButton) return false;
   if (prevProps.isPostDetail !== nextProps.isPostDetail) return false;
+  if (prevProps.allowOptimisticMediaPreview !== nextProps.allowOptimisticMediaPreview) return false;
   if (prevProps.videoSyncScope !== nextProps.videoSyncScope) return false;
   if (prevProps.onOptimisticRetryPress !== nextProps.onOptimisticRetryPress) return false;
 
@@ -155,6 +157,7 @@ export const PostCard = memo(function PostCard({
   directFollowUser = false,
   showMoreButton = false,
   isPostDetail = false,
+  allowOptimisticMediaPreview = false,
   videoSyncScope,
   style,
 }: PostCardProps) {
@@ -241,10 +244,11 @@ export const PostCard = memo(function PostCard({
     !!post.optimisticActionId &&
     isOptimisticPostQueued &&
     currentPowActionId !== post.optimisticActionId;
-  const isOptimisticVideoProcessing =
-    !!post.optimisticVideoPreviewUntil && post.optimisticVideoPreviewUntil > Date.now();
+  const isOptimisticVideoProcessing = !!post.optimisticVideoPreviewUntil;
   const isOptimisticVideoPost =
     post.optimisticDraft?.attachmentType === "video" || isOptimisticVideoProcessing;
+  const showOptimisticVideoProcessing =
+    isOptimisticVideoProcessing && !allowOptimisticMediaPreview;
   const optimisticResolvedMedia =
     isOptimisticVideoPost && resolvedContent.resolvedMedia
       ? { ...resolvedContent.resolvedMedia, type: "video" as const }
@@ -259,11 +263,13 @@ export const PostCard = memo(function PostCard({
   const disablePostInteractions = !!post.optimisticStatus && post.optimisticStatus !== "success";
   // Allow video playback interactions for optimistic video posts (pending/error)
   // so users can tap-to-play the local video preview while it's being posted.
-  const disableMediaInteractions = disablePostInteractions && !isOptimisticVideoPost;
+  const disableMediaInteractions =
+    showOptimisticVideoProcessing || (disablePostInteractions && !isOptimisticVideoPost);
   const keepOptimisticMediaMounted =
     post.optimisticStatus === "success" ||
     (!!post.optimisticVideoPreviewUntil && post.optimisticVideoPreviewUntil > Date.now());
   const shouldPrimeOptimisticVideo =
+    allowOptimisticMediaPreview &&
     !isPostDetail &&
     !!post.optimisticVideoPreviewUntil &&
     post.optimisticVideoPreviewUntil > Date.now();
@@ -464,13 +470,14 @@ export const PostCard = memo(function PostCard({
         hasMultipleMedia={resolvedContent.hasMultipleMedia}
         extraMediaCount={resolvedContent.extraMediaCount}
         allowAutoplay={allowAutoplay}
-        screenActive={screenActive && !showMediaPreview}
+        screenActive={screenActive && !showMediaPreview && !showOptimisticVideoProcessing}
         disabled={disableMediaInteractions}
         onRevealContent={disableMediaInteractions ? undefined : onRevealContent}
         onMediaPress={disablePostInteractions ? undefined : handleMediaPress}
         isPostDetail={isPostDetail}
         videoSyncScope={videoSyncScope}
         postId={post.id}
+        forceVideoProcessing={showOptimisticVideoProcessing}
         onGalleryMediaPress={disablePostInteractions ? undefined : handleGalleryMediaPress}
       />
 

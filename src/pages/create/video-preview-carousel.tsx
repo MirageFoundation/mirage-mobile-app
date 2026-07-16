@@ -133,8 +133,8 @@ export function VideoPreviewCarousel({
                     {!isNetworkOnline
                       ? "Low connectivity…"
                       : upload.progress >= 98
-                        ? "Processing…"
-                        : "Uploading…"}
+                        ? `Processing… ${Math.round(upload.progress)}%`
+                        : `Uploading… ${Math.round(upload.progress)}%`}
                   </Text>
                 </View>
               )}
@@ -173,7 +173,7 @@ export function VideoPreviewCarousel({
                 >
                   <Feather name="refresh-cw" size={12} color="#fff" />
                   <Text size="xs" weight="medium" style={{ color: "#fff", marginLeft: 4 }}>
-                    Retry
+                    Upload failed · Retry
                   </Text>
                 </Pressable>
               )}

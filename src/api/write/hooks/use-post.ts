@@ -10,6 +10,7 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import { queryKeys } from "@/src/api/read/query-keys";
+import { getPosts } from "@/src/api/read/endpoints/posts";
 import type {
   CommentsResponse,
   PostFilters,
@@ -53,6 +54,7 @@ export type CreatePostMutationInput = CreatePostInput & {
   optimisticMediaUrl?: string | null;
   optimisticMediaUrls?: string[];
   optimisticPreviewMediaUrls?: string[];
+  optimisticMediaMeta?: ApiPost["media_meta"];
   optimisticDraft?: PostDraft;
 };
 
@@ -152,6 +154,7 @@ export const buildOptimisticPost = (
     edited_at: 0,
     thumbnail,
     media,
+    media_meta: input.optimisticMediaMeta,
     points: 1,
     comments: 0,
     user_vote: 1,
@@ -192,18 +195,18 @@ const upsertPostIntoPostsResponse = (
   optimisticPost.optimistic_action_id === existingPost.optimistic_action_id;
  if (
   isStaleLocalOptimisticPost ||
-  existingPost.post_id === optimisticPost.post_id ||
   (optimisticPost.optimistic_status === "pending" &&
    existingPost.optimistic_status !== "pending")
  ) {
   return queryData;
  }
 
- const posts = [...queryData.posts];
- posts[matchingPostIndex] = optimisticPost;
  return {
   ...queryData,
-  posts,
+  posts: [
+   optimisticPost,
+   ...queryData.posts.filter((_, index) => index !== matchingPostIndex),
+  ],
  };
 };
 
@@ -296,6 +299,45 @@ export const upsertHomePost = (
   });
 };
 
+const refreshHomeFeedsPreservingPost = (
+  queryClient: QueryClient,
+  post: ApiPost,
+  options: UpsertHomePostOptions,
+) => {
+  upsertHomePost(queryClient, post, options);
+  useHomePostCardStore.getState().triggerScrollToTop();
+
+  const homeQueries = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() })
+    .filter(([queryKey]) => (queryKey[1] as PostFilters | undefined)?.feed === "home");
+  void Promise.all(homeQueries.map(async ([queryKey, currentData]) => {
+    const filters = queryKey[1] as PostFilters;
+    const refreshedFirstPage = await getPosts({ ...filters, page: 1 });
+    queryClient.setQueryData(queryKey, (latestData: unknown) => {
+      const data = latestData ?? currentData;
+      if (
+        typeof data === "object" &&
+        data !== null &&
+        "pages" in data
+      ) {
+        const infiniteData = data as { pages: PostsResponse[]; pageParams: unknown[] };
+        return {
+          ...infiniteData,
+          pages: [
+            upsertPostIntoPostsResponse(refreshedFirstPage, post),
+            ...infiniteData.pages.slice(1),
+          ],
+        };
+      }
+      return upsertPostIntoPostsResponse(refreshedFirstPage, post);
+    });
+  })).catch((error) => {
+    Sentry.captureException(error, {
+      tags: { feature: "posts", operation: "refresh-home-after-create" },
+      extra: { postId: post.post_id },
+    });
+  });
+};
+
 export const removeOptimisticPostFromCache = (queryClient: QueryClient, postId: string) => {
   Sentry.addBreadcrumb({
     category: "create-post",
@@ -374,6 +416,17 @@ const setOptimisticPostStatus = (
         optimistic_video_preview_until: options.previewMediaUrls?.length
           ? Date.now() + 45000
           : persistedPost.optimistic_video_preview_until,
+      });
+    }
+  } else if (options.previewMediaUrls?.length) {
+    const persistedPost = usePendingPostsStore
+      .getState()
+      .posts.find((post) => post.post_id === postId);
+    if (persistedPost) {
+      usePendingPostsStore.getState().upsertPost({
+        ...persistedPost,
+        optimistic_status: "success",
+        optimistic_error: undefined,
       });
     }
   } else {
@@ -1020,7 +1073,7 @@ export function usePost(options: UsePostOptions = {}) {
     mutationKey: mutationKeys.post.create(),
     mutationFn: async (input: CreatePostMutationInput) => {
       const wallet = await getWallet();
-      const { optimisticId, optimisticActionId, optimisticMediaUrl, optimisticMediaUrls, optimisticPreviewMediaUrls, optimisticDraft, ...postInput } = input;
+      const { optimisticId, optimisticActionId, optimisticMediaUrl, optimisticMediaUrls, optimisticPreviewMediaUrls, optimisticMediaMeta, optimisticDraft, ...postInput } = input;
       const result = await createPost(wallet, postInput, options.onPoWProgress);
       if (result.code !== undefined && result.code !== 0) {
         Sentry.addBreadcrumb({
@@ -1108,7 +1161,7 @@ export function usePost(options: UsePostOptions = {}) {
         usePendingPostsStore.getState().removePost(input.optimisticId);
         usePendingPostsStore.getState().upsertPost(postAfterNetworkConfirmation);
         replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, postAfterNetworkConfirmation);
-        upsertHomePost(queryClient, postAfterNetworkConfirmation, upsertOptions);
+        refreshHomeFeedsPreservingPost(queryClient, postAfterNetworkConfirmation, upsertOptions);
         if (videoPreviewMediaUrls?.length) {
           Sentry.addBreadcrumb({
             category: "create-post",
@@ -1132,7 +1185,7 @@ export function usePost(options: UsePostOptions = {}) {
           videoPreviewMediaUrls,
         );
       } else {
-        upsertHomePost(queryClient, optimisticPost, upsertOptions);
+        refreshHomeFeedsPreservingPost(queryClient, optimisticPost, upsertOptions);
       }
 
      // Invalidate user posts
