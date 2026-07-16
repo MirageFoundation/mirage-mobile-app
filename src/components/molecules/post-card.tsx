@@ -6,6 +6,10 @@ import { setLastPressedPostY } from "@/src/utils/post-transition";
 import { useIsFeedScrolling, usePreferencesStore } from "@/src/stores";
 import { usePowQueueStore } from "@/src/services/pow-queue";
 import { useNetworkState } from "@/src/hooks/use-network-state";
+import { isPostVideoProcessing } from "@/src/domain/posts/video-processing";
+import { markOptimisticVideoProcessingComplete } from "@/src/api/write/hooks/use-post";
+import { useQueryClient } from "@tanstack/react-query";
+import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Linking,
@@ -25,7 +29,11 @@ import { PostCardContent } from "./post-card-content";
 import { PostCardHeader } from "./post-card-header";
 import { PostCardMedia } from "./post-card-media";
 import type { Post } from "./post-card-types";
-import { resolvePostContent, shouldBlurMatureMedia } from "./post-card-utils";
+import {
+  isSuccessfulOptimisticPost,
+  resolvePostContent,
+  shouldBlurMatureMedia,
+} from "./post-card-utils";
 import { Ionicons } from "@expo/vector-icons";
 
 export type { Post, PostAuthor, PostMedia } from "./post-card-types";
@@ -226,6 +234,10 @@ export const PostCard = memo(function PostCard({
   }, [onMediaPressProp]);
 
   const { theme } = useUnistyles();
+  const queryClient = useQueryClient();
+  const pendingPost = usePendingPostsStore((state) =>
+    state.posts.find((item) => item.post_id === post.id),
+  );
   const currentPowActionId = usePowQueueStore((state) => state.currentAction?.id);
   const isOptimisticPostQueued = usePowQueueStore((state) =>
     post.optimisticActionId
@@ -233,10 +245,11 @@ export const PostCard = memo(function PostCard({
       : false,
   );
   const { isConnected } = useNetworkState();
+  const isOptimisticPostSuccess = isSuccessfulOptimisticPost(post);
   const isOptimisticPostOffline = post.optimisticStatus === "pending" && !isConnected;
   const optimisticStatusColor = post.optimisticStatus === "error" || isOptimisticPostOffline
     ? theme.colors.error[500]
-    : post.optimisticStatus === "success"
+    : isOptimisticPostSuccess
     ? theme.colors.success[500]
     : theme.colors.warning[500];
   const isOptimisticPostWaitingForQueue =
@@ -244,9 +257,12 @@ export const PostCard = memo(function PostCard({
     !!post.optimisticActionId &&
     isOptimisticPostQueued &&
     currentPowActionId !== post.optimisticActionId;
-  const isOptimisticVideoProcessing = !!post.optimisticVideoPreviewUntil;
+  const isOptimisticVideoProcessing =
+    isPostVideoProcessing(pendingPost) || isPostVideoProcessing(post);
   const isOptimisticVideoPost =
-    post.optimisticDraft?.attachmentType === "video" || isOptimisticVideoProcessing;
+    pendingPost?.optimistic_draft?.attachmentType === "video" ||
+    post.optimisticDraft?.attachmentType === "video" ||
+    isOptimisticVideoProcessing;
   const showOptimisticVideoProcessing =
     isOptimisticVideoProcessing && !allowOptimisticMediaPreview;
   const optimisticResolvedMedia =
@@ -260,19 +276,21 @@ export const PostCard = memo(function PostCard({
   const isOptimisticPostFinalizingNetwork =
     post.optimisticStatus === "pending" && post.id.startsWith("optimistic-post-") && !isOptimisticVideoProcessing;
   const isOptimisticEdit = !!post.optimisticStatus && !post.optimisticDraft && !isOptimisticVideoPost;
-  const disablePostInteractions = !!post.optimisticStatus && post.optimisticStatus !== "success";
+  const disablePostInteractions = !!post.optimisticStatus && !isOptimisticPostSuccess;
   // Allow video playback interactions for optimistic video posts (pending/error)
   // so users can tap-to-play the local video preview while it's being posted.
   const disableMediaInteractions =
     showOptimisticVideoProcessing || (disablePostInteractions && !isOptimisticVideoPost);
   const keepOptimisticMediaMounted =
-    post.optimisticStatus === "success" ||
-    (!!post.optimisticVideoPreviewUntil && post.optimisticVideoPreviewUntil > Date.now());
+    isOptimisticPostSuccess ||
+    isOptimisticVideoProcessing;
   const shouldPrimeOptimisticVideo =
     allowOptimisticMediaPreview &&
     !isPostDetail &&
-    !!post.optimisticVideoPreviewUntil &&
-    post.optimisticVideoPreviewUntil > Date.now();
+    isOptimisticVideoProcessing;
+  const handleVideoProcessingComplete = useCallback(() => {
+    markOptimisticVideoProcessingComplete(queryClient, post.id);
+  }, [post.id, queryClient]);
   const isFeedScrolling = useIsFeedScrolling(!isPostDetail ? videoSyncScope : undefined);
   const [optimisticVideoPrimeDismissed, setOptimisticVideoPrimeDismissed] = useState(false);
   const primeOptimisticVideo = shouldPrimeOptimisticVideo && !optimisticVideoPrimeDismissed;
@@ -394,7 +412,7 @@ export const PostCard = memo(function PostCard({
             styles.optimisticBadge,
             post.optimisticStatus === "error" || isOptimisticPostOffline
               ? styles.optimisticBadgeError
-              : post.optimisticStatus === "success"
+              : isOptimisticPostSuccess
               ? styles.optimisticBadgeSuccess
               : styles.optimisticBadgePending,
           ]}
@@ -403,7 +421,7 @@ export const PostCard = memo(function PostCard({
             name={
               post.optimisticStatus === "error"
                 ? "alert-circle"
-                : post.optimisticStatus === "success"
+                : isOptimisticPostSuccess
                 ? "checkmark-circle"
                 : isOptimisticPostOffline
                 ? "cloud-offline-outline"
@@ -419,7 +437,7 @@ export const PostCard = memo(function PostCard({
           >
             {post.optimisticStatus === "error"
               ? optimisticErrorText
-              : post.optimisticStatus === "success"
+              : isOptimisticPostSuccess
               ? isOptimisticEdit
                 ? "Successfully edited."
                 : "Successfully posted."
@@ -478,6 +496,7 @@ export const PostCard = memo(function PostCard({
         videoSyncScope={videoSyncScope}
         postId={post.id}
         forceVideoProcessing={showOptimisticVideoProcessing}
+        onVideoProcessingComplete={handleVideoProcessingComplete}
         onGalleryMediaPress={disablePostInteractions ? undefined : handleGalleryMediaPress}
       />
 

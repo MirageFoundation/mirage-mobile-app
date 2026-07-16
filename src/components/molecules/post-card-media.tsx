@@ -87,9 +87,13 @@ type PostCardMediaProps = {
   videoSyncScope?: string;
   postId?: string;
   forceVideoProcessing?: boolean;
+  onVideoProcessingComplete?: () => void;
 };
 
 let nextNativeAudioFocusId = 0;
+const HOSTED_VIDEO_READY_CACHE = new Set<string>();
+const COMPLETED_PROCESSING_POST_IDS = new Set<string>();
+const VIDEO_PROCESSING_POLL_MAX_MS = 5 * 60 * 1000;
 let activeNativeAudioFocus: {
   id: string;
   onLoseFocus: () => void;
@@ -116,6 +120,7 @@ export const PostCardMedia = memo(
       videoSyncScope,
       postId,
       forceVideoProcessing = false,
+      onVideoProcessingComplete,
     },
     ref,
   ) {
@@ -152,8 +157,27 @@ export const PostCardMedia = memo(
     const videoProcessingPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const videoProcessingStartedAtRef = useRef<number | null>(null);
     const videoProcessingAttemptsRef = useRef(0);
+    const processingCompletionReportedRef = useRef(false);
     const focusRecoveryRetryCountRef = useRef(0);
     const mediaFrameRef = useRef<View | null>(null);
+
+    useEffect(() => {
+      processingCompletionReportedRef.current = false;
+    }, [media?.uri]);
+
+    const reportVideoProcessingComplete = useCallback(() => {
+      const completionKey = postId ?? media?.uri;
+      if (
+        processingCompletionReportedRef.current ||
+        !completionKey ||
+        COMPLETED_PROCESSING_POST_IDS.has(completionKey)
+      ) {
+        return;
+      }
+      processingCompletionReportedRef.current = true;
+      COMPLETED_PROCESSING_POST_IDS.add(completionKey);
+      onVideoProcessingComplete?.();
+    }, [media?.uri, onVideoProcessingComplete, postId]);
 
     const aspectRatioLockedRef = useRef(false);
     const userInitiatedPlayRef = useRef(false);
@@ -563,14 +587,14 @@ export const PostCardMedia = memo(
 
     useEffect(() => {
       if (!shouldAttemptVideoRecovery) return;
-      if (videoReadyForDisplay || isVideoProcessing || imageError) {
+      if (videoReadyForDisplay || forceVideoProcessing || isVideoProcessing || imageError) {
         focusRecoveryRetryCountRef.current = 0;
         return;
       }
       if (focusRecoveryRetryCountRef.current >= 2) return;
 
       const timer = setTimeout(() => {
-        if (videoReadyForDisplay || isVideoProcessing || imageError) return;
+        if (videoReadyForDisplay || forceVideoProcessing || isVideoProcessing || imageError) return;
         focusRecoveryRetryCountRef.current += 1;
         setMediaRetryKey((k) => k + 1);
       }, 700);
@@ -579,6 +603,7 @@ export const PostCardMedia = memo(
     }, [
       shouldAttemptVideoRecovery,
       videoReadyForDisplay,
+      forceVideoProcessing,
       isVideoProcessing,
       imageError,
     ]);
@@ -947,6 +972,8 @@ export const PostCardMedia = memo(
     const isHostedStreamVideo = isHostedStreamVideoUrl(media?.uri);
     const isRedgifsVideo = media?.uri?.includes("redgifs.com");
     const isRetryableVideo = isHostedStreamVideo || isRedgifsVideo;
+    const showVideoProcessing =
+      forceVideoProcessing || (isVideoProcessing && isRetryableVideo);
     const shouldHideOnError =
       imageError && !isRetryableVideo && !isVideoProcessing;
 
@@ -959,7 +986,7 @@ export const PostCardMedia = memo(
           wasBackgroundedRef.current = true;
         } else if (nextState === "active" && wasBackgroundedRef.current) {
           wasBackgroundedRef.current = false;
-          if (isVideoProcessing || (imageError && isRetryableVideo)) {
+          if (!forceVideoProcessing && (isVideoProcessing || (imageError && isRetryableVideo))) {
             setTimeout(() => {
               setIsVideoProcessing(false);
               setImageError(false);
@@ -970,7 +997,7 @@ export const PostCardMedia = memo(
         }
       });
       return () => sub.remove();
-    }, [isVideoProcessing, imageError, isRetryableVideo]);
+    }, [forceVideoProcessing, isVideoProcessing, imageError, isRetryableVideo]);
 
     useEffect(() => {
       if (!isConnected) {
@@ -993,7 +1020,7 @@ export const PostCardMedia = memo(
     }, [imageError, isConnected, isVideoProcessing]);
 
     useEffect(() => {
-      if (!isVideoProcessing || !isHostedStreamVideo || !resolvedMediaUri) {
+      if (!showVideoProcessing || !isHostedStreamVideo || !resolvedMediaUri) {
         videoProcessingStartedAtRef.current = null;
         if (videoProcessingPollTimeoutRef.current) {
           clearTimeout(videoProcessingPollTimeoutRef.current);
@@ -1048,6 +1075,8 @@ export const PostCardMedia = memo(
             setMediaLoaded(false);
             setVideoReadyForDisplay(false);
             videoProcessingAttemptsRef.current = 0;
+            HOSTED_VIDEO_READY_CACHE.add(resolvedMediaUri);
+            reportVideoProcessingComplete();
             setMediaRetryKey((k) => k + 1);
             return;
           }
@@ -1060,6 +1089,18 @@ export const PostCardMedia = memo(
         }
 
         if (cancelled) return;
+        if (
+          videoProcessingStartedAtRef.current &&
+          Date.now() - videoProcessingStartedAtRef.current >= VIDEO_PROCESSING_POLL_MAX_MS
+        ) {
+          Sentry.addBreadcrumb({
+            category: "post-media",
+            message: "Hosted video processing poll reached time limit",
+            level: "warning",
+            data: getVideoDiagnostics(),
+          });
+          return;
+        }
         const nextDelay = Math.min(
           CLOUD_FLARE_PROCESSING_POLL_INTERVAL_MS * (videoProcessingAttemptsRef.current + 1),
           10000,
@@ -1080,7 +1121,13 @@ export const PostCardMedia = memo(
           videoProcessingPollTimeoutRef.current = null;
         }
       };
-    }, [isVideoProcessing, isHostedStreamVideo, resolvedMediaUri, getVideoDiagnostics]);
+    }, [
+      showVideoProcessing,
+      isHostedStreamVideo,
+      resolvedMediaUri,
+      getVideoDiagnostics,
+      reportVideoProcessingComplete,
+    ]);
 
     const containerWidth = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
     const calculatedHeight = containerWidth / effectiveAspectRatio;
@@ -1312,13 +1359,19 @@ export const PostCardMedia = memo(
                   updateMediaAspectRatioFromSize(width, height);
                   setVideoReadyForDisplay(true);
                   setMediaLoaded(true);
-                  if (resolvedMediaUri) MEDIA_LOADED_CACHE.add(resolvedMediaUri);
+                  if (resolvedMediaUri) {
+                    MEDIA_LOADED_CACHE.add(resolvedMediaUri);
+                    if (isHostedStreamVideo) HOSTED_VIDEO_READY_CACHE.add(resolvedMediaUri);
+                  }
                   if (userInitiatedPlayRef.current) {
                     setIsVideoLoading(false);
                     userInitiatedPlayRef.current = false;
                   }
                   if (isVideoProcessing) {
                     setIsVideoProcessing(false);
+                  }
+                  if (forceVideoProcessing) {
+                    reportVideoProcessingComplete();
                   }
                   videoProcessingStartedAtRef.current = null;
                   if (videoProcessingPollTimeoutRef.current) {
@@ -1366,7 +1419,9 @@ export const PostCardMedia = memo(
                       clearTimeout(videoErrorRetryRef.current);
                       videoErrorRetryRef.current = null;
                     }
-                    setIsVideoProcessing(true);
+                    if (!HOSTED_VIDEO_READY_CACHE.has(mediaSource.uri)) {
+                      setIsVideoProcessing(true);
+                    }
                     setImageError(false);
                     setMediaLoaded(false);
                     setVideoReadyForDisplay(false);
@@ -1402,7 +1457,7 @@ export const PostCardMedia = memo(
             </Pressable>
           )}
 
-          {!mediaLoaded && !(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri)) && !shouldBlurContent && media.type !== "youtube" && isConnected && !isVideoProcessing && (
+          {!mediaLoaded && !(resolvedMediaUri && MEDIA_LOADED_CACHE.has(resolvedMediaUri)) && !shouldBlurContent && media.type !== "youtube" && isConnected && !showVideoProcessing && (
             <View style={[styles.skeletonOverlay]}>
               <ActivityIndicator size="small" color="rgba(150,150,150,0.6)" />
             </View>
@@ -1418,7 +1473,7 @@ export const PostCardMedia = memo(
 
           {media.type === "video" &&
             !shouldBlurContent &&
-            !isVideoProcessing && (
+            !showVideoProcessing && (
               <View style={styles.playOverlay}>
                 {isPostDetail ? (
                   <>
@@ -1463,7 +1518,7 @@ export const PostCardMedia = memo(
 
           {media.type === "video" &&
             !shouldBlurContent &&
-            !isVideoProcessing &&
+            !showVideoProcessing &&
             isPostDetail && (
               <Pressable
                 onPress={() => {
@@ -1482,7 +1537,7 @@ export const PostCardMedia = memo(
           {/* Mute/Unmute button for videos */}
           {(media.type === "video" || media.type === "youtube") &&
             !shouldBlurContent &&
-            (media.type !== "video" || !isVideoProcessing) &&
+            (media.type !== "video" || !showVideoProcessing) &&
             !(media.type === "youtube" && Platform.OS === "ios") && (
               <Pressable
                 onPress={handleMuteToggle}
@@ -1518,10 +1573,7 @@ export const PostCardMedia = memo(
           )}
 
           <MediaProcessingOverlay
-            visible={Boolean(
-              isConnected &&
-              (forceVideoProcessing || (isVideoProcessing && isRetryableVideo))
-            )}
+            visible={Boolean(isConnected && showVideoProcessing)}
             isRedgifsVideo={Boolean(isRedgifsVideo)}
           />
 

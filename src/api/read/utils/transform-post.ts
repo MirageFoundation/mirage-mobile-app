@@ -3,6 +3,7 @@ import type { Post as UIPost } from "@/src/components/molecules";
 import type { Post as ApiPost } from "../../types";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { calculateDisplayPoints } from "../endpoints/posts";
+import { transformOptimisticPostState } from "./transform-optimistic-post-state";
 
 const VIDEO_EXTENSIONS = new Set([
   "mp4",
@@ -198,11 +199,7 @@ export function transformApiPost(
     awards: apiPost.awards ?? [],
     agentEdited: apiPost.agent_edited ?? false,
     agentEditsMeta: apiPost.agent_edits_meta,
-    optimisticStatus: apiPost.optimistic_status,
-    optimisticError: apiPost.optimistic_error,
-    optimisticActionId: apiPost.optimistic_action_id,
-    optimisticDraft: apiPost.optimistic_draft,
-    optimisticVideoPreviewUntil: apiPost.optimistic_video_preview_until,
+    ...transformOptimisticPostState(apiPost),
     appendices: apiPost.appendices?.map((a) => ({
       agent: a.agent,
       agentUsername: a.agent_username,

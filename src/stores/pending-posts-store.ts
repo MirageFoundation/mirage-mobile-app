@@ -3,28 +3,20 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import type { Post as ApiPost } from "@/src/api/types";
 import { mmkvStorage } from "./mmkv-storage";
+import {
+  matchesPendingPostAlias,
+  normalizePendingPost,
+  prunePendingPosts,
+} from "./pending-posts-lifecycle";
 
 type PendingPostsState = {
   posts: ApiPost[];
   upsertPost: (post: ApiPost) => void;
-  removePost: (postId: string) => void;
+  removePost: (postId: string, optimisticActionId?: string) => void;
   removeExpiredPosts: () => void;
   getPost: (postId: string) => ApiPost | undefined;
   markPostError: (postId: string, errorMessage: string) => void;
 };
-
-const OPTIMISTIC_SUCCESS_CACHE_MS = 2 * 60 * 1000;
-
-const isPendingPostStatus = (post: ApiPost) =>
-  post.optimistic_status === "pending" ||
-  post.optimistic_status === "error" ||
-  (post.optimistic_status === "success" &&
-    (post.optimistic_cached_until ?? 0) > Date.now());
-
-const withSuccessCacheTtl = (post: ApiPost): ApiPost =>
-  post.optimistic_status === "success" && !post.optimistic_cached_until
-    ? { ...post, optimistic_cached_until: Date.now() + OPTIMISTIC_SUCCESS_CACHE_MS }
-    : post;
 
 export const usePendingPostsStore = create<PendingPostsState>()(
   persist(
@@ -32,27 +24,36 @@ export const usePendingPostsStore = create<PendingPostsState>()(
       posts: [] as ApiPost[],
       upsertPost: (post) =>
         set((state) => {
-          const cachedPost = withSuccessCacheTtl(post);
-          if (!isPendingPostStatus(cachedPost)) {
+          const pendingPost = normalizePendingPost(post);
+          if (!pendingPost) {
             return {
-              posts: state.posts.filter((item) => item.post_id !== cachedPost.post_id),
+              posts: state.posts.filter((item) => !matchesPendingPostAlias(
+                item,
+                post.post_id,
+                post.optimistic_action_id,
+              )),
             };
           }
 
           const nextPosts = state.posts.filter(
             (item) =>
-              item.post_id !== cachedPost.post_id &&
-              item.optimistic_action_id !== cachedPost.optimistic_action_id,
+              !matchesPendingPostAlias(
+                item,
+                pendingPost.post_id,
+                pendingPost.optimistic_action_id,
+              ),
           );
-          return { posts: [cachedPost, ...nextPosts].slice(0, 10) };
+          return { posts: [pendingPost, ...nextPosts].slice(0, 10) };
         }),
-      removePost: (postId) =>
+      removePost: (postId, optimisticActionId) =>
         set((state) => ({
-          posts: state.posts.filter((post) => post.post_id !== postId),
+          posts: state.posts.filter((post) =>
+            !matchesPendingPostAlias(post, postId, optimisticActionId),
+          ),
         })),
       removeExpiredPosts: () =>
         set((state) => ({
-          posts: state.posts.filter(isPendingPostStatus),
+          posts: prunePendingPosts(state.posts),
         })),
       getPost: (postId) => {
         const normalizedPostId = postId.toLowerCase();
@@ -75,7 +76,17 @@ export const usePendingPostsStore = create<PendingPostsState>()(
     {
       name: "pending-posts-storage",
       storage: createJSONStorage(() => mmkvStorage),
-      version: 1,
+      version: 2,
+      migrate: (persistedState) => {
+        const state = persistedState as Partial<PendingPostsState> | undefined;
+        return {
+          ...state,
+          posts: prunePendingPosts(state?.posts ?? []),
+        } as PendingPostsState;
+      },
+      onRehydrateStorage: () => (state) => {
+        state?.removeExpiredPosts();
+      },
       partialize: (state) => ({ posts: state.posts }),
     },
   ),

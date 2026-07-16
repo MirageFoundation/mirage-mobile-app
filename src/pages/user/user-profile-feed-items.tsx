@@ -18,6 +18,8 @@ const MemoizedPostCardItem = memo(PostCardItem, (prev, next) => {
  if (p.hasLiked !== n.hasLiked) return false;
  if (p.hasDisliked !== n.hasDisliked) return false;
  if (p.awards?.length !== n.awards?.length) return false;
+ if (p.optimisticStatus !== n.optimisticStatus) return false;
+ if (p.optimisticVideoPreviewUntil !== n.optimisticVideoPreviewUntil) return false;
  if (prev.isVisible !== next.isVisible) return false;
  if (prev.isFocused !== next.isFocused) return false;
  if (prev.isNearVisible !== next.isNearVisible) return false;

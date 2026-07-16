@@ -53,6 +53,7 @@ import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { resolvePostContent } from "@/src/components/molecules/post-card-utils";
 import { markOptimisticVideoProcessingComplete } from "@/src/api/write/hooks/use-post";
 import { useQueryClient } from "@tanstack/react-query";
+import { isPostVideoProcessing } from "@/src/domain/posts/video-processing";
 import {
   MediaPostDetailActionSheets,
   type MediaPostDetailActionSheetsRef,
@@ -692,14 +693,14 @@ export default function MediaPostDetailScreen({
             expandMedia={expandMedia}
             globalMuted={globalMuted}
             isFocused={isFocused}
-            isVideoProcessing={Boolean(post.optimisticVideoPreviewUntil)}
+            isVideoProcessing={isPostVideoProcessing(post)}
             isVideoActive={isVideoActive}
             mediaContainerStyle={mediaContainerStyle}
             mediaItems={mediaItems}
             onMuteToggle={handleMuteToggle}
             onPlayPause={handlePlayPause}
             onVideoReady={() => {
-              if (post.optimisticVideoPreviewUntil) {
+              if (isPostVideoProcessing(post)) {
                 markOptimisticVideoProcessingComplete(queryClient, post.id);
               }
             }}

@@ -422,3 +422,9 @@ export function postHasPlayableVideo(post?: { media?: Array<{ type?: string; uri
   const url = extractFirstUrl(post.body);
   return !!url && isYouTubeUrl(url);
 }
+
+export function isSuccessfulOptimisticPost(
+  post: { optimisticStatus?: string },
+): boolean {
+  return post.optimisticStatus === "success";
+}

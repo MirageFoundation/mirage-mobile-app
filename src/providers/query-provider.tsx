@@ -5,6 +5,7 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 import { storage } from "@/src/stores/mmkv-storage";
 import { AppState, Platform } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
+import { hasTransientPostSuccess } from "@/src/api/cache/transient-post-success";
 
 onlineManager.setEventListener((setOnline) => {
   return NetInfo.addEventListener((state) => {
@@ -176,13 +177,15 @@ export const QueryProvider = ({ children }: { children: React.ReactNode }) => {
       client={queryClient}
       persistOptions={{
         persister,
+        buster: "pending-post-lifecycle-v2",
         dehydrateOptions: {
           shouldDehydrateQuery: (query) => {
             const key = query.queryKey[0];
             if (typeof key === "string" && EXCLUDED_QUERY_KEYS.includes(key)) {
               return false;
             }
-            return query.state.status === "success";
+            return query.state.status === "success" &&
+              !hasTransientPostSuccess(query.state.data);
           },
         },
       }}

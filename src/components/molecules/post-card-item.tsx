@@ -67,6 +67,8 @@ function arePostCardItemPropsEqual(
   if (prev.hasLiked !== next.hasLiked) return false;
   if (prev.hasDisliked !== next.hasDisliked) return false;
   if (prev.awards?.length !== next.awards?.length) return false;
+  if (prev.optimisticStatus !== next.optimisticStatus) return false;
+  if (prev.optimisticVideoPreviewUntil !== next.optimisticVideoPreviewUntil) return false;
   if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
   if (prevProps.isVisible !== nextProps.isVisible) return false;
   if (prevProps.isFocused !== nextProps.isFocused) return false;

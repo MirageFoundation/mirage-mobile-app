@@ -11,6 +11,13 @@ import {
 } from "@tanstack/react-query";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { getPosts } from "@/src/api/read/endpoints/posts";
+import { clearOptimisticVideoProcessingFromData } from "@/src/api/cache/optimistic-video-processing";
+import { removePostAliasesFromData } from "@/src/api/cache/remove-post-aliases";
+import { isPostVideoProcessing } from "@/src/domain/posts/video-processing";
+import {
+  mergeRefreshedPostPreservingOrder,
+  setTransientPostSuccessInData,
+} from "@/src/api/cache/transient-post-success";
 import type {
   CommentsResponse,
   PostFilters,
@@ -66,6 +73,27 @@ type UpsertHomePostOptions = {
   address?: string;
   allowedTags?: string;
   limit?: number;
+};
+
+const TRANSIENT_POST_SUCCESS_MS = 2000;
+const transientPostSuccessTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const transientPostSuccessExpiresAt = new Map<string, number>();
+
+const isTransientPostSuccessActive = (postId: string) =>
+  (transientPostSuccessExpiresAt.get(postId) ?? 0) > Date.now();
+
+const cancelTransientPostSuccess = (postId: string) => {
+  const timer = transientPostSuccessTimers.get(postId);
+  if (timer) clearTimeout(timer);
+  transientPostSuccessTimers.delete(postId);
+  transientPostSuccessExpiresAt.delete(postId);
+};
+
+const clearTransientPostSuccess = (queryClient: QueryClient, postId: string) => {
+  cancelTransientPostSuccess(postId);
+  queryClient.setQueriesData({ queryKey: queryKeys.postsRoot() }, (data) =>
+    setTransientPostSuccessInData(data, postId, false),
+  );
 };
 
 const MEDIA_URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
@@ -312,6 +340,25 @@ const refreshHomeFeedsPreservingPost = (
   void Promise.all(homeQueries.map(async ([queryKey, currentData]) => {
     const filters = queryKey[1] as PostFilters;
     const refreshedFirstPage = await getPosts({ ...filters, page: 1 });
+    const pendingPost = usePendingPostsStore.getState().getPost(post.post_id);
+    const preserveProcessingPost = isPostVideoProcessing(pendingPost);
+    const postToPreserve = preserveProcessingPost
+      ? pendingPost!
+      : {
+          ...post,
+          optimistic_status: undefined,
+          optimistic_error: undefined,
+          optimistic_draft: undefined,
+          optimistic_video_preview_until: undefined,
+          optimistic_cached_until: undefined,
+        };
+    const transientSuccessActive = isTransientPostSuccessActive(post.post_id);
+    const mergedFirstPage = mergeRefreshedPostPreservingOrder(
+      refreshedFirstPage,
+      postToPreserve,
+      transientSuccessActive,
+      preserveProcessingPost,
+    );
     queryClient.setQueryData(queryKey, (latestData: unknown) => {
       const data = latestData ?? currentData;
       if (
@@ -323,12 +370,12 @@ const refreshHomeFeedsPreservingPost = (
         return {
           ...infiniteData,
           pages: [
-            upsertPostIntoPostsResponse(refreshedFirstPage, post),
+            mergedFirstPage,
             ...infiniteData.pages.slice(1),
           ],
         };
       }
-      return upsertPostIntoPostsResponse(refreshedFirstPage, post);
+      return mergedFirstPage;
     });
   })).catch((error) => {
     Sentry.captureException(error, {
@@ -345,6 +392,7 @@ export const removeOptimisticPostFromCache = (queryClient: QueryClient, postId: 
     level: "info",
     data: { postId },
   });
+  clearTransientPostSuccess(queryClient, postId);
   usePendingPostsStore.getState().removePost(postId);
   updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => removePostFromPostsData(data, postId));
 };
@@ -425,8 +473,9 @@ const setOptimisticPostStatus = (
     if (persistedPost) {
       usePendingPostsStore.getState().upsertPost({
         ...persistedPost,
-        optimistic_status: "success",
+        optimistic_status: undefined,
         optimistic_error: undefined,
+        optimistic_cached_until: undefined,
       });
     }
   } else {
@@ -441,7 +490,9 @@ const setOptimisticPostStatus = (
             ...post,
             optimistic_status: status,
             optimistic_error: options.errorMessage,
-            optimistic_draft: options.keepDraft || status === "success" ? post.optimistic_draft : undefined,
+            optimistic_draft: options.keepDraft || options.previewMediaUrls?.length
+              ? post.optimistic_draft
+              : undefined,
             optimistic_video_preview_until: options.previewMediaUrls?.length
               ? Date.now() + 45000
               : post.optimistic_video_preview_until,
@@ -473,11 +524,13 @@ const setOptimisticPostStatus = (
 const scheduleClearOptimisticPostStatus = (
   queryClient: QueryClient,
   postId: string,
-  previewMediaUrls?: string[],
 ) => {
-  setTimeout(() => {
-    setOptimisticPostStatus(queryClient, postId, undefined, { previewMediaUrls });
-  }, 2000);
+  cancelTransientPostSuccess(postId);
+  transientPostSuccessExpiresAt.set(postId, Date.now() + TRANSIENT_POST_SUCCESS_MS);
+  const timer = setTimeout(() => {
+    clearTransientPostSuccess(queryClient, postId);
+  }, TRANSIENT_POST_SUCCESS_MS);
+  transientPostSuccessTimers.set(postId, timer);
 };
 
 export const markOptimisticPostSuccess = (
@@ -495,7 +548,7 @@ export const markOptimisticPostSuccess = (
     },
   });
   setOptimisticPostStatus(queryClient, postId, "success", { previewMediaUrls });
-  scheduleClearOptimisticPostStatus(queryClient, postId, previewMediaUrls);
+  scheduleClearOptimisticPostStatus(queryClient, postId);
 };
 
 export const markOptimisticVideoProcessingComplete = (
@@ -512,32 +565,15 @@ export const markOptimisticVideoProcessingComplete = (
     });
   }
 
-  updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => {
-    if (!data) return { nextData: data, didUpdate: false };
-    const updatePost = (post: ApiPost) =>
-      post.post_id === postId
-        ? { ...post, optimistic_video_preview_until: undefined }
-        : post;
-    if (isInfinitePostsData(data)) {
-      let didUpdate = false;
-      const pages = data.pages.map((page) => {
-        const posts = page.posts.map((post) => {
-          if (post.post_id !== postId) return post;
-          didUpdate = true;
-          return updatePost(post);
-        });
-        return didUpdate ? { ...page, posts } : page;
-      });
-      return { nextData: didUpdate ? { ...data, pages } : data, didUpdate };
-    }
-    const singleData = data as PostsResponse;
-    let didUpdate = false;
-    const posts = singleData.posts.map((post) => {
-      if (post.post_id !== postId) return post;
-      didUpdate = true;
-      return updatePost(post);
-    });
-    return { nextData: didUpdate ? { ...singleData, posts } : data, didUpdate };
+  [
+    queryKeys.postsRoot(),
+    queryKeys.userPostsRoot(),
+    queryKeys.commentsRoot(),
+    queryKeys.commentContextRoot(),
+  ].forEach((queryKey) => {
+    queryClient.setQueriesData({ queryKey }, (data) =>
+      clearOptimisticVideoProcessingFromData(data, postId),
+    );
   });
 };
 
@@ -608,6 +644,8 @@ const preserveLocalPreviewMedia = (
   previewMediaUrls: string[],
 ) => {
   if (!previewMediaUrls.length) return;
+  const pendingPost = usePendingPostsStore.getState().getPost(postId);
+  if (!isPostVideoProcessing(pendingPost)) return;
   updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => {
     if (!data) return { nextData: data, didUpdate: false };
     const preserve = (post: ApiPost) =>
@@ -1158,9 +1196,13 @@ export function usePost(options: UsePostOptions = {}) {
             ? Date.now() + 45000
             : confirmedPost.optimistic_video_preview_until,
         };
-        usePendingPostsStore.getState().removePost(input.optimisticId);
+        usePendingPostsStore.getState().removePost(
+          input.optimisticId,
+          input.optimisticActionId,
+        );
         usePendingPostsStore.getState().upsertPost(postAfterNetworkConfirmation);
         replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, postAfterNetworkConfirmation);
+        scheduleClearOptimisticPostStatus(queryClient, confirmedPost.post_id);
         refreshHomeFeedsPreservingPost(queryClient, postAfterNetworkConfirmation, upsertOptions);
         if (videoPreviewMediaUrls?.length) {
           Sentry.addBreadcrumb({
@@ -1179,12 +1221,8 @@ export function usePost(options: UsePostOptions = {}) {
             }, delay);
           });
         }
-        scheduleClearOptimisticPostStatus(
-          queryClient,
-          confirmedPost.post_id,
-          videoPreviewMediaUrls,
-        );
       } else {
+        scheduleClearOptimisticPostStatus(queryClient, optimisticPost.post_id);
         refreshHomeFeedsPreservingPost(queryClient, optimisticPost, upsertOptions);
       }
 
@@ -1529,6 +1567,7 @@ export function useDelete(options: UsePostOptions = {}) {
       throw new Error("Delete failed");
     },
     onMutate: async (input) => {
+      clearTransientPostSuccess(queryClient, input.postId);
       await queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() });
       await queryClient.cancelQueries({ queryKey: queryKeys.postsRoot() });
       await queryClient.cancelQueries({ queryKey: queryKeys.userPostsRoot() });
@@ -1542,6 +1581,13 @@ export function useDelete(options: UsePostOptions = {}) {
       const previousUserPosts = queryClient.getQueriesData({
         queryKey: queryKeys.userPostsRoot(),
       }) as Array<[QueryKey, unknown]>;
+      const previousPendingPosts = usePendingPostsStore.getState().posts;
+      const pendingMatch = previousPendingPosts.find((post) =>
+        post.post_id.toLowerCase() === input.postId.toLowerCase(),
+      );
+      const optimisticActionId = pendingMatch?.optimistic_action_id;
+
+      usePendingPostsStore.getState().removePost(input.postId, optimisticActionId);
 
       const affectedRootPostIds = findRootPostIdsForCachedComment(queryClient, input.postId);
       if (input.rootPostId) {
@@ -1579,11 +1625,22 @@ export function useDelete(options: UsePostOptions = {}) {
       updateQueriesWithReducer(queryClient, queryKeys.userPostsRoot(), (queryData) =>
         removePostFromPostsData(queryData, input.postId),
       );
+      [
+        queryKeys.postsRoot(),
+        queryKeys.userPostsRoot(),
+        queryKeys.commentsRoot(),
+        queryKeys.commentContextRoot(),
+      ].forEach((queryKey) => {
+        queryClient.setQueriesData({ queryKey }, (data) =>
+          removePostAliasesFromData(data, input.postId, optimisticActionId),
+        );
+      });
 
       return {
         previousComments,
         previousPosts,
         previousUserPosts,
+        previousPendingPosts,
       };
     },
     onError: (_error, _input, context) => {
@@ -1594,6 +1651,10 @@ export function useDelete(options: UsePostOptions = {}) {
       restoreQuerySnapshots(queryClient, context?.previousComments);
       restoreQuerySnapshots(queryClient, context?.previousPosts);
       restoreQuerySnapshots(queryClient, context?.previousUserPosts);
+      clearTransientPostSuccess(queryClient, _input.postId);
+      if (context?.previousPendingPosts) {
+        usePendingPostsStore.setState({ posts: context.previousPendingPosts });
+      }
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot(), refetchType: "inactive" });

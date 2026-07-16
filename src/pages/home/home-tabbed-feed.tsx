@@ -29,6 +29,7 @@ import {
   useInfinitePosts,
   type PostsResponse,
 } from "@/src/api";
+import { mergePendingPostWithCachedPost } from "@/src/api/cache/transient-post-success";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
@@ -266,7 +267,16 @@ export const HomeTabbedFeed = forwardRef<
       const uniquePostIds = new Set<string>();
       const uniqueOptimisticActionIds = new Set<string>();
       const transformedPosts: Post[] = [];
-      const pendingPosts = transformApiPosts(pendingApiPosts, {
+      const cachedPostsById = new Map(
+        data?.pages?.flatMap((page) => page.posts).map((post) => [post.post_id, post]) ?? [],
+      );
+      const reconciledPendingApiPosts = pendingApiPosts.map((pendingPost) =>
+        mergePendingPostWithCachedPost(
+          pendingPost,
+          cachedPostsById.get(pendingPost.post_id),
+        ),
+      );
+      const pendingPosts = transformApiPosts(reconciledPendingApiPosts, {
         currentUser: currentUserId
           ? { id: currentUserId, username: currentUsername }
           : undefined,
