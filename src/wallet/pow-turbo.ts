@@ -67,6 +67,7 @@ function computeEffectiveBits(powDifficulty: number, powBaseBits: number, powFac
 const MAX_NATIVE_RETRIES = 8;
 const MAX_POW_COMPUTE_TIME_MS = 60_000;
 const POW_TIMEOUT_ERROR_MESSAGE = "Transaction did not work. Please try again.";
+const POW_WATCHDOG_TIMEOUT_MESSAGE = "PoW compute watchdog timed out";
 
 function reportPowTimeout(
   reason: string,
@@ -131,8 +132,9 @@ export async function computePoW(
 
       const startNonce = Math.floor(Math.random() * 0xffffffff);
       let result: Awaited<ReturnType<typeof computePowNative>>;
+      let watchdogTimeout: ReturnType<typeof setTimeout> | undefined;
       try {
-        result = await computePowNative({
+        const nativeComputation = computePowNative({
           base: baseHex,
           salt: saltHex,
           difficulty: effectiveBits,
@@ -144,6 +146,13 @@ export async function computePoW(
           parallelism: ARGON2_PARALLELISM,
           hashLength: ARGON2_OUTPUT_LENGTH,
         } as any);
+        const watchdog = new Promise<never>((_, reject) => {
+          watchdogTimeout = setTimeout(
+            () => reject(new Error(POW_WATCHDOG_TIMEOUT_MESSAGE)),
+            remainingMs,
+          );
+        });
+        result = await Promise.race([nativeComputation, watchdog]);
       } catch (error) {
         const msg = String((error as Error)?.message || error || "");
         if (
@@ -153,7 +162,9 @@ export async function computePoW(
           const elapsedAfterErrorMs = Date.now() - overallStart;
           cancelPow();
           reportPowTimeout(
-            "native_timeout_or_limit",
+            msg === POW_WATCHDOG_TIMEOUT_MESSAGE
+              ? "js_watchdog_timeout"
+              : "native_timeout_or_limit",
             input,
             elapsedAfterErrorMs,
             totalAttempts,
@@ -162,20 +173,15 @@ export async function computePoW(
           throw new Error(POW_TIMEOUT_ERROR_MESSAGE);
         }
         throw error;
+      } finally {
+        if (watchdogTimeout) {
+          clearTimeout(watchdogTimeout);
+        }
       }
 
       const nonce = result.nonce < 0 ? (result.nonce >>> 0) : result.nonce;
       const digest = hexToUint8Array(result.digest);
       totalAttempts += result.attempts;
-
-      if (checkPowTarget(digest, powDifficulty, powBaseBits, powFactor)) {
-        const computeTimeMs = Date.now() - overallStart;
-        const hashRate = Math.round(totalAttempts / (computeTimeMs / 1000));
-        console.log(
-          `[PoW Turbo] Found! nonce=${nonce}, attempts=${totalAttempts}, time=${computeTimeMs}ms, rate=${hashRate} h/s`
-        );
-        return { pow: nonce, digest, computeTimeMs, attempts: totalAttempts };
-      }
 
       if (Date.now() - overallStart >= MAX_POW_COMPUTE_TIME_MS) {
         const elapsedAfterResultMs = Date.now() - overallStart;
@@ -188,6 +194,15 @@ export async function computePoW(
           retry,
         );
         throw new Error(POW_TIMEOUT_ERROR_MESSAGE);
+      }
+
+      if (checkPowTarget(digest, powDifficulty, powBaseBits, powFactor)) {
+        const computeTimeMs = Date.now() - overallStart;
+        const hashRate = Math.round(totalAttempts / (computeTimeMs / 1000));
+        console.log(
+          `[PoW Turbo] Found! nonce=${nonce}, attempts=${totalAttempts}, time=${computeTimeMs}ms, rate=${hashRate} h/s`
+        );
+        return { pow: nonce, digest, computeTimeMs, attempts: totalAttempts };
       }
 
       console.log(`[PoW Turbo] Native result failed JS target check (attempt ${retry + 1}/${MAX_NATIVE_RETRIES}), retrying...`);

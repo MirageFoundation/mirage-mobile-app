@@ -11,15 +11,6 @@ import { parseApiError } from "@/src/utils/parse-api-error";
 
 const MAX_POW_RETRIES = 3;
 
-function isNativePowTimeoutError(error: unknown): boolean {
-  const msg = String((error as any)?.message || error || "");
-  return (
-    /pow computation failed: timed out/i.test(msg) ||
-    /pow:?\s*native module failed target check/i.test(msg) ||
-    /pow computation failed: exceeded \d+ attempts/i.test(msg)
-  );
-}
-
 /**
  * Execute a function that may fail with "insufficient pow" and retry with fresh parameters
  */
@@ -38,23 +29,14 @@ export async function withPowRetry<T>(
       const isPowRetryable =
         errorCode === "insufficient_pow_precheck" ||
         errorCode === "invalid_last_block_hash";
-      // PoW native module can time out when iOS/Android suspends our
-      // CPU-bound workers while the app is backgrounded. When we foreground
-      // again, the native module rejects with a "timed out" / attempts-cap
-      // error. Retry from scratch — the next attempt will fetch a fresh
-      // last_block_hash and re-run PoW.
-      const isNativeTimeout = isNativePowTimeoutError(error);
-      if ((isPowRetryable || isNativeTimeout) && attempt < MAX_POW_RETRIES) {
+      if (isPowRetryable && attempt < MAX_POW_RETRIES) {
         Sentry.addBreadcrumb({
           category: "pow-retry",
-          message: isNativeTimeout
-            ? `${operationName} PoW native timeout/cap, retrying`
-            : `${operationName} PoW rejected, retrying`,
+          message: `${operationName} PoW rejected, retrying`,
           data: {
             attempt: attempt + 1,
             maxAttempts: MAX_POW_RETRIES + 1,
             errorCode,
-            nativeTimeout: isNativeTimeout || undefined,
           },
           level: "warning",
         });
