@@ -82,18 +82,36 @@ const transientPostSuccessExpiresAt = new Map<string, number>();
 const isTransientPostSuccessActive = (postId: string) =>
   (transientPostSuccessExpiresAt.get(postId) ?? 0) > Date.now();
 
-const cancelTransientPostSuccess = (postId: string) => {
+const cancelTransientPostSuccess = (postId: string, reportCancellation = true) => {
   const timer = transientPostSuccessTimers.get(postId);
   if (timer) clearTimeout(timer);
+  if (reportCancellation && (timer || transientPostSuccessExpiresAt.has(postId))) {
+    Sentry.addBreadcrumb({
+      category: "create-post",
+      message: "Transient post success cancelled",
+      level: "info",
+      data: { postId, hadTimer: !!timer },
+    });
+  }
   transientPostSuccessTimers.delete(postId);
   transientPostSuccessExpiresAt.delete(postId);
 };
 
 const clearTransientPostSuccess = (queryClient: QueryClient, postId: string) => {
-  cancelTransientPostSuccess(postId);
+  const wasRegistered = transientPostSuccessExpiresAt.has(postId);
+  const expired = !isTransientPostSuccessActive(postId);
+  cancelTransientPostSuccess(postId, false);
   queryClient.setQueriesData({ queryKey: queryKeys.postsRoot() }, (data) =>
     setTransientPostSuccessInData(data, postId, false),
   );
+  if (wasRegistered) {
+    Sentry.addBreadcrumb({
+      category: "create-post",
+      message: expired ? "Transient post success expired" : "Transient post success cleared",
+      level: "info",
+      data: { postId },
+    });
+  }
 };
 
 const MEDIA_URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
@@ -359,6 +377,20 @@ const refreshHomeFeedsPreservingPost = (
       transientSuccessActive,
       preserveProcessingPost,
     );
+    const refreshedMatch = refreshedFirstPage.posts.some((item) => item.post_id === post.post_id);
+    Sentry.addBreadcrumb({
+      category: "create-post",
+      message: "Home refresh merged confirmed post",
+      level: "info",
+      data: {
+        postId: post.post_id,
+        by: filters.by,
+        refreshedMatch,
+        usedTemporaryFallback: !refreshedMatch && (transientSuccessActive || preserveProcessingPost),
+        preservedProcessingPost: preserveProcessingPost,
+        transientSuccessActive,
+      },
+    });
     queryClient.setQueryData(queryKey, (latestData: unknown) => {
       const data = latestData ?? currentData;
       if (
@@ -527,6 +559,12 @@ const scheduleClearOptimisticPostStatus = (
 ) => {
   cancelTransientPostSuccess(postId);
   transientPostSuccessExpiresAt.set(postId, Date.now() + TRANSIENT_POST_SUCCESS_MS);
+  Sentry.addBreadcrumb({
+    category: "create-post",
+    message: "Transient post success registered",
+    level: "info",
+    data: { postId, durationMs: TRANSIENT_POST_SUCCESS_MS },
+  });
   const timer = setTimeout(() => {
     clearTransientPostSuccess(queryClient, postId);
   }, TRANSIENT_POST_SUCCESS_MS);
@@ -555,6 +593,12 @@ export const markOptimisticVideoProcessingComplete = (
   queryClient: QueryClient,
   postId: string,
 ) => {
+  Sentry.addBreadcrumb({
+    category: "create-post",
+    message: "Pending video processing completed",
+    level: "info",
+    data: { postId },
+  });
   const persistedPost = usePendingPostsStore
     .getState()
     .posts.find((post) => post.post_id === postId);
@@ -1202,6 +1246,16 @@ export function usePost(options: UsePostOptions = {}) {
         );
         usePendingPostsStore.getState().upsertPost(postAfterNetworkConfirmation);
         replaceOrUpdateOptimisticPost(queryClient, input.optimisticId, postAfterNetworkConfirmation);
+        Sentry.addBreadcrumb({
+          category: "create-post",
+          message: "Optimistic post ID transitioned to confirmed ID",
+          level: "info",
+          data: {
+            optimisticId: input.optimisticId,
+            confirmedPostId: confirmedPost.post_id,
+            isVideo: !!videoPreviewMediaUrls?.length,
+          },
+        });
         scheduleClearOptimisticPostStatus(queryClient, confirmedPost.post_id);
         refreshHomeFeedsPreservingPost(queryClient, postAfterNetworkConfirmation, upsertOptions);
         if (videoPreviewMediaUrls?.length) {
@@ -1588,6 +1642,16 @@ export function useDelete(options: UsePostOptions = {}) {
       const optimisticActionId = pendingMatch?.optimistic_action_id;
 
       usePendingPostsStore.getState().removePost(input.postId, optimisticActionId);
+      Sentry.addBreadcrumb({
+        category: "delete-post",
+        message: "Delete aliases removed optimistically",
+        level: "info",
+        data: {
+          postId: input.postId,
+          hasOptimisticActionId: !!optimisticActionId,
+          pendingMatch: !!pendingMatch,
+        },
+      });
 
       const affectedRootPostIds = findRootPostIdsForCachedComment(queryClient, input.postId);
       if (input.rootPostId) {
@@ -1655,6 +1719,18 @@ export function useDelete(options: UsePostOptions = {}) {
       if (context?.previousPendingPosts) {
         usePendingPostsStore.setState({ posts: context.previousPendingPosts });
       }
+      Sentry.addBreadcrumb({
+        category: "delete-post",
+        message: "Failed delete state restored",
+        level: "warning",
+        data: {
+          postId: _input.postId,
+          restoredComments: context?.previousComments?.length ?? 0,
+          restoredPostQueries: context?.previousPosts?.length ?? 0,
+          restoredUserPostQueries: context?.previousUserPosts?.length ?? 0,
+          restoredPendingPosts: context?.previousPendingPosts?.length ?? 0,
+        },
+      });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.postsRoot(), refetchType: "inactive" });

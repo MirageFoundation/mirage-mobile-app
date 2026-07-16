@@ -197,6 +197,7 @@ export const HomeTabbedFeed = forwardRef<
   const pendingApiPosts = usePendingPostsStore((s) => s.posts);
   const postEditOverrides = usePostEditStore((s) => s.overrides);
   const transformedPageCacheRef = useRef(new WeakMap<object, Post[]>());
+  const reportedSuccessReconciliationsRef = useRef(new Set<string>());
 
   useEffect(() => {
     if (!pendingApiPosts.some((post) => post.optimistic_status === "success")) {
@@ -270,12 +271,25 @@ export const HomeTabbedFeed = forwardRef<
       const cachedPostsById = new Map(
         data?.pages?.flatMap((page) => page.posts).map((post) => [post.post_id, post]) ?? [],
       );
-      const reconciledPendingApiPosts = pendingApiPosts.map((pendingPost) =>
-        mergePendingPostWithCachedPost(
+      const reconciledPendingApiPosts = pendingApiPosts.map((pendingPost) => {
+        const reconciledPost = mergePendingPostWithCachedPost(
           pendingPost,
           cachedPostsById.get(pendingPost.post_id),
-        ),
-      );
+        );
+        if (
+          reconciledPost !== pendingPost &&
+          !reportedSuccessReconciliationsRef.current.has(pendingPost.post_id)
+        ) {
+          reportedSuccessReconciliationsRef.current.add(pendingPost.post_id);
+          Sentry.addBreadcrumb({
+            category: "create-post",
+            message: "Transient success reconciled onto pending video",
+            level: "info",
+            data: { postId: pendingPost.post_id, feed: baseFeed },
+          });
+        }
+        return reconciledPost;
+      });
       const pendingPosts = transformApiPosts(reconciledPendingApiPosts, {
         currentUser: currentUserId
           ? { id: currentUserId, username: currentUsername }
@@ -337,6 +351,7 @@ export const HomeTabbedFeed = forwardRef<
     },
     [
       applyPostEditOverrides,
+      baseFeed,
       blockedTopicNames,
       blockedUserIds,
       currentUserId,

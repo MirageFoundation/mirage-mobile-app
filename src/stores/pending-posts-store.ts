@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import * as Sentry from "@sentry/react-native";
 
 import type { Post as ApiPost } from "@/src/api/types";
 import { mmkvStorage } from "./mmkv-storage";
@@ -52,9 +53,19 @@ export const usePendingPostsStore = create<PendingPostsState>()(
           ),
         })),
       removeExpiredPosts: () =>
-        set((state) => ({
-          posts: prunePendingPosts(state.posts),
-        })),
+        set((state) => {
+          const posts = prunePendingPosts(state.posts);
+          const removedCount = state.posts.length - posts.length;
+          if (removedCount > 0) {
+            Sentry.addBreadcrumb({
+              category: "pending-posts",
+              message: "Stale pending posts pruned",
+              level: "info",
+              data: { removedCount, remainingCount: posts.length },
+            });
+          }
+          return { posts };
+        }),
       getPost: (postId) => {
         const normalizedPostId = postId.toLowerCase();
         return get()
@@ -79,9 +90,22 @@ export const usePendingPostsStore = create<PendingPostsState>()(
       version: 2,
       migrate: (persistedState) => {
         const state = persistedState as Partial<PendingPostsState> | undefined;
+        const previousPosts = state?.posts ?? [];
+        const posts = prunePendingPosts(previousPosts);
+        if (posts.length < previousPosts.length) {
+          Sentry.addBreadcrumb({
+            category: "pending-posts",
+            message: "Stale persisted pending posts pruned during migration",
+            level: "info",
+            data: {
+              removedCount: previousPosts.length - posts.length,
+              remainingCount: posts.length,
+            },
+          });
+        }
         return {
           ...state,
-          posts: prunePendingPosts(state?.posts ?? []),
+          posts,
         } as PendingPostsState;
       },
       onRehydrateStorage: () => (state) => {

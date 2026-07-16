@@ -375,8 +375,6 @@ export const PostCardMedia = memo(
     const getVideoDiagnostics = useCallback(() => ({
       postId,
       mediaType: media?.type,
-      mediaUri: media?.uri,
-      resolvedMediaUri,
       isPostDetail,
       isVisible,
       isFocused,
@@ -387,8 +385,6 @@ export const PostCardMedia = memo(
     }), [
       postId,
       media?.type,
-      media?.uri,
-      resolvedMediaUri,
       isPostDetail,
       isVisible,
       isFocused,
@@ -1060,8 +1056,10 @@ export const PostCardMedia = memo(
               level: "info",
               data: {
                 ...getVideoDiagnostics(),
-                uri: resolvedMediaUri,
                 attempts: videoProcessingAttemptsRef.current,
+                elapsedMs: videoProcessingStartedAtRef.current
+                  ? Date.now() - videoProcessingStartedAtRef.current
+                  : undefined,
               },
             });
             videoProcessingStartedAtRef.current = null;
