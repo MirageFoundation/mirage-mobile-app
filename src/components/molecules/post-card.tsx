@@ -7,7 +7,7 @@ import { useIsFeedScrolling, usePreferencesStore } from "@/src/stores";
 import { usePowQueueStore } from "@/src/services/pow-queue";
 import { useNetworkState } from "@/src/hooks/use-network-state";
 import { isPostVideoProcessing } from "@/src/domain/posts/video-processing";
-import { markOptimisticVideoProcessingComplete } from "@/src/api/write/hooks/use-post";
+import { markOptimisticVideoProcessingComplete } from "@/src/api/cache/complete-video-processing";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";

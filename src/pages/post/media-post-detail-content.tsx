@@ -51,7 +51,7 @@ import { useLocalSearchParams } from "expo-router";
 import * as Sentry from "@sentry/react-native";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { resolvePostContent } from "@/src/components/molecules/post-card-utils";
-import { markOptimisticVideoProcessingComplete } from "@/src/api/write/hooks/use-post";
+import { markOptimisticVideoProcessingComplete } from "@/src/api/cache/complete-video-processing";
 import { useQueryClient } from "@tanstack/react-query";
 import { isPostVideoProcessing } from "@/src/domain/posts/video-processing";
 import {

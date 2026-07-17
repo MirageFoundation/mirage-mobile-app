@@ -11,7 +11,6 @@ import {
 } from "@tanstack/react-query";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { getPosts } from "@/src/api/read/endpoints/posts";
-import { clearOptimisticVideoProcessingFromData } from "@/src/api/cache/optimistic-video-processing";
 import { removePostAliasesFromData } from "@/src/api/cache/remove-post-aliases";
 import { isPostVideoProcessing } from "@/src/domain/posts/video-processing";
 import {
@@ -589,37 +588,7 @@ export const markOptimisticPostSuccess = (
   scheduleClearOptimisticPostStatus(queryClient, postId);
 };
 
-export const markOptimisticVideoProcessingComplete = (
-  queryClient: QueryClient,
-  postId: string,
-) => {
-  Sentry.addBreadcrumb({
-    category: "create-post",
-    message: "Pending video processing completed",
-    level: "info",
-    data: { postId },
-  });
-  const persistedPost = usePendingPostsStore
-    .getState()
-    .posts.find((post) => post.post_id === postId);
-  if (persistedPost) {
-    usePendingPostsStore.getState().upsertPost({
-      ...persistedPost,
-      optimistic_video_preview_until: undefined,
-    });
-  }
-
-  [
-    queryKeys.postsRoot(),
-    queryKeys.userPostsRoot(),
-    queryKeys.commentsRoot(),
-    queryKeys.commentContextRoot(),
-  ].forEach((queryKey) => {
-    queryClient.setQueriesData({ queryKey }, (data) =>
-      clearOptimisticVideoProcessingFromData(data, postId),
-    );
-  });
-};
+export { markOptimisticVideoProcessingComplete } from "@/src/api/cache/complete-video-processing";
 
 const replaceOrUpdateOptimisticPost = (
   queryClient: QueryClient,

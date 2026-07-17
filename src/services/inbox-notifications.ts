@@ -195,16 +195,28 @@ function captureInboxNotificationNavigationEvent(
   operation: string,
   extra: Record<string, unknown> = {},
 ): void {
+  const data = {
+    operation,
+    ...extra,
+    ...getNavigationReadinessDebugData(),
+  };
+  if (level === "info") {
+    Sentry.addBreadcrumb({
+      category: "inbox-notifications",
+      message,
+      level,
+      data,
+    });
+    return;
+  }
+
   Sentry.captureMessage(message, {
     level,
     tags: {
       feature: "inbox-notifications",
       operation,
     },
-    extra: {
-      ...extra,
-      ...getNavigationReadinessDebugData(),
-    },
+    extra: data,
   });
 }
 
@@ -952,6 +964,20 @@ function handleNotificationResponse(
       notificationId,
       notificationAgeMs,
     );
+    if (isFallbackNotificationId && !hasInboxNotificationPayload(notificationData)) {
+      // Android may replay launcher/remote-intent metadata through
+      // getLastNotificationResponseAsync() on cold start or resume. If it has
+      // no inbox marker and no stable notification id, it is not an actionable
+      // inbox notification tap.
+      captureInboxNotificationNavigationEvent(
+        "Inbox notification response ignored without inbox payload",
+        "info",
+        "ignored-unidentified-response",
+        responseDebugData,
+      );
+      void Notifications.clearLastNotificationResponseAsync?.().catch(() => undefined);
+      return;
+    }
     if (isFallbackNotificationId) {
       captureInboxNotificationNavigationEvent(
         "Inbox notification response arrived without identifiable payload",
@@ -968,20 +994,6 @@ function handleNotificationResponse(
           ),
         },
       );
-    }
-    if (isFallbackNotificationId && !hasInboxNotificationPayload(notificationData)) {
-      // Android may replay launcher/remote-intent metadata through
-      // getLastNotificationResponseAsync() on cold start or resume. If it has
-      // no inbox marker and no stable notification id, it is not an actionable
-      // inbox notification tap.
-      captureInboxNotificationNavigationEvent(
-        "Inbox notification response ignored without inbox payload",
-        "info",
-        "ignored-unidentified-response",
-        responseDebugData,
-      );
-      void Notifications.clearLastNotificationResponseAsync?.().catch(() => undefined);
-      return;
     }
     Sentry.addBreadcrumb({
       category: "notifications",

@@ -54,8 +54,9 @@ export const usePendingPostsStore = create<PendingPostsState>()(
         })),
       removeExpiredPosts: () =>
         set((state) => {
-          const posts = prunePendingPosts(state.posts);
-          const removedCount = state.posts.length - posts.length;
+          const previousPosts = Array.isArray(state.posts) ? state.posts : [];
+          const posts = prunePendingPosts(previousPosts);
+          const removedCount = previousPosts.length - posts.length;
           if (removedCount > 0) {
             Sentry.addBreadcrumb({
               category: "pending-posts",
@@ -90,7 +91,7 @@ export const usePendingPostsStore = create<PendingPostsState>()(
       version: 2,
       migrate: (persistedState) => {
         const state = persistedState as Partial<PendingPostsState> | undefined;
-        const previousPosts = state?.posts ?? [];
+        const previousPosts = Array.isArray(state?.posts) ? state.posts : [];
         const posts = prunePendingPosts(previousPosts);
         if (posts.length < previousPosts.length) {
           Sentry.addBreadcrumb({
@@ -108,8 +109,10 @@ export const usePendingPostsStore = create<PendingPostsState>()(
           posts,
         } as PendingPostsState;
       },
-      onRehydrateStorage: () => (state) => {
-        state?.removeExpiredPosts();
+      onRehydrateStorage: () => (state, error) => {
+        if (!error) {
+          state?.removeExpiredPosts();
+        }
       },
       partialize: (state) => ({ posts: state.posts }),
     },
