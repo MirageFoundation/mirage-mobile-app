@@ -33,8 +33,11 @@ const buildNumber = Platform.select({
 });
 const updateId = Updates.updateId ?? "embedded";
 const ANDROID_EXIT_BACK_PRESS_WINDOW_MS = 2000;
+const SENTRY_TRACES_SAMPLE_RATE = 0.02;
+const SENTRY_ERROR_REPLAY_SAMPLE_RATE = 0.1;
+const SENTRY_WARNING_MESSAGE_SAMPLE_RATE = 0.1;
 
-function isKnownHandledError(event: Sentry.ErrorEvent): boolean {
+function shouldDropSentryEvent(event: Sentry.ErrorEvent): boolean {
   const message = event.exception?.values?.[0]?.value?.toLowerCase() ?? '';
   if (
     message.includes('getregistrationinfoasync') ||
@@ -49,6 +52,16 @@ function isKnownHandledError(event: Sentry.ErrorEvent): boolean {
   ) {
     return true;
   }
+
+  if (event.level === "info") return true;
+  if (
+    event.level === "warning" &&
+    event.message &&
+    Math.random() >= SENTRY_WARNING_MESSAGE_SAMPLE_RATE
+  ) {
+    return true;
+  }
+
   return false;
 }
 
@@ -64,10 +77,10 @@ Sentry.init({
 
   sendDefaultPii: !IS_FDROID_BUILD,
 
-  tracesSampleRate: IS_FDROID_BUILD ? 0 : 0.2,
+  tracesSampleRate: IS_FDROID_BUILD ? 0 : SENTRY_TRACES_SAMPLE_RATE,
 
   replaysSessionSampleRate: 0,
-  replaysOnErrorSampleRate: IS_FDROID_BUILD ? 0 : 1,
+  replaysOnErrorSampleRate: IS_FDROID_BUILD ? 0 : SENTRY_ERROR_REPLAY_SAMPLE_RATE,
   integrations: IS_FDROID_BUILD
     ? []
     : [
@@ -78,7 +91,7 @@ Sentry.init({
   enableAutoPerformanceTracing: !IS_FDROID_BUILD,
 
   beforeSend(event) {
-    if (isKnownHandledError(event)) return null;
+    if (shouldDropSentryEvent(event)) return null;
     return event;
   },
 });
