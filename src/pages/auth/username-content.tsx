@@ -87,6 +87,7 @@ export default function UsernameScreen() {
   const { servers } = useServerList();
 
   const walletConfirmedRef = useRef(false);
+  const recoveryNavigationStartedRef = useRef(false);
   const txProgress = useTransactionProgress();
 
   useEffect(() => {
@@ -371,14 +372,6 @@ export default function UsernameScreen() {
       });
 
       triggerHaptic("success");
-
-      setTimeout(() => {
-        txProgress.hideModal();
-        router.push({
-          pathname: "/(auth)/recovery-phrase",
-          params: { username: `anon-${username}` },
-        });
-      }, 1500);
     } catch (error) {
       console.error("[Username] Failed to create account:", error);
       triggerHaptic("error");
@@ -407,8 +400,17 @@ export default function UsernameScreen() {
     createNewWallet,
     setHasUsername,
     txProgress,
-    router,
   ]);
+
+  const handleRecoveryPhraseNavigation = useCallback(() => {
+    if (recoveryNavigationStartedRef.current) return;
+    recoveryNavigationStartedRef.current = true;
+    txProgress.hideModal();
+    router.push({
+      pathname: "/(auth)/recovery-phrase",
+      params: { username: `anon-${username}` },
+    });
+  }, [router, txProgress, username]);
 
   const handleRetry = useCallback(() => {
     txProgress.reset();
@@ -605,16 +607,11 @@ export default function UsernameScreen() {
         description={`Registering @${username} on the blockchain`}
         onDismiss={
           txProgress.progress.phase === "success"
-            ? () => {
-                txProgress.hideModal();
-                router.push({
-                  pathname: "/(auth)/recovery-phrase",
-                params: { username: `anon-${username}` },
-                });
-              }
+            ? handleRecoveryPhraseNavigation
             : handleDismissError
         }
         onRetry={handleRetry}
+        autoDismissDelay={1500}
         dismissible={
           txProgress.progress.phase === "success" ||
           txProgress.progress.phase === "error"

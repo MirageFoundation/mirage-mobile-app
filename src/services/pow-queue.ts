@@ -189,6 +189,7 @@ const immediateActions = new Map<
 >();
 
 let isPausedByAppState = AppState.currentState !== "active";
+let appStatePauseVersion = 0;
 let appStateSubscription: ReturnType<typeof AppState.addEventListener> | null =
   null;
 
@@ -245,6 +246,7 @@ function setupPowQueueAppStateHandling(): void {
     if (nextState.match(/inactive|background/)) {
       if (isPausedByAppState) return;
       isPausedByAppState = true;
+      appStatePauseVersion += 1;
       Sentry.addBreadcrumb({
         category: "pow",
         message: "App backgrounded, pausing PoW queue",
@@ -312,6 +314,28 @@ function setupPowQueueAppStateHandling(): void {
     }
   });
 }
+
+export const getPowAppStatePauseVersion = (): number => appStatePauseVersion;
+
+export const didPowPauseForAppState = (pauseVersion: number): boolean =>
+  isPausedByAppState ||
+  AppState.currentState !== "active" ||
+  appStatePauseVersion > pauseVersion;
+
+export const waitForPowAppActive = (): Promise<void> => {
+  if (!isPausedByAppState && AppState.currentState === "active") {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        subscription.remove();
+        resolve();
+      }
+    });
+  });
+};
 
 const waitForConnectivity = (): Promise<void> => {
   return new Promise((resolve) => {
