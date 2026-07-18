@@ -102,7 +102,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name,
     slug,
-    version: "1.1.2",
+    version: "1.1.1",
     orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: scheme,
