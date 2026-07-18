@@ -1,6 +1,5 @@
-import React, { createContext, useContext, useEffect, useState, useMemo } from "react";
+import React, { createContext, useContext, useEffect, useState, useMemo, useRef } from "react";
 import { useColorScheme, Appearance } from "react-native";
-import { UnistylesRuntime, type UnistylesThemes } from "react-native-unistyles";
 import { usePreferencesStore, type ThemeMode } from "@/src/stores";
 
 type ThemeContextType = {
@@ -27,31 +26,23 @@ export const ThemeContextProvider = ({
   const systemColorScheme = useColorScheme();
   const [currentTheme, setCurrentTheme] = useState<"light" | "dark">("light");
   const [isThemeReady, setIsThemeReady] = useState(false);
+  const appliedThemeModeRef = useRef<ThemeMode | null>(null);
 
   // Subscribe to preferences store for theme mode
   const themeMode = usePreferencesStore((s) => s.theme);
 
-  // Apply theme whenever themeMode or system color scheme changes
+  // Unistyles 3.2.4 can corrupt its shadow tree when Appearance and setTheme
+  // dispatch back-to-back updates. Adaptive themes need only this Appearance update.
   useEffect(() => {
-    let resolvedTheme: "light" | "dark";
-
-    if (themeMode === "system") {
-      // Reset to system default - this allows useColorScheme to return the actual system value
-      Appearance.setColorScheme(null);
-      
-      // Get the actual system color scheme
-      const actualSystemTheme = Appearance.getColorScheme();
-      resolvedTheme = actualSystemTheme === "dark" ? "dark" : "light";
-    } else {
-      // Manual override - set the color scheme explicitly
-      resolvedTheme = themeMode;
-      Appearance.setColorScheme(resolvedTheme);
+    if (appliedThemeModeRef.current !== themeMode) {
+      appliedThemeModeRef.current = themeMode;
+      Appearance.setColorScheme(themeMode === "system" ? null : themeMode);
     }
 
-    // Apply theme to Unistyles
-    UnistylesRuntime.setTheme(resolvedTheme as keyof UnistylesThemes);
+    const resolvedTheme = themeMode === "system"
+      ? systemColorScheme === "dark" ? "dark" : "light"
+      : themeMode;
 
-    // Update state
     setCurrentTheme(resolvedTheme);
     setIsThemeReady(true);
   }, [themeMode, systemColorScheme]);

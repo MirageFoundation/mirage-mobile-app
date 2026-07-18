@@ -213,6 +213,8 @@ export function ProfileScreen() {
   const router = useRouter();
   const isFocused = useIsFocused();
   const user = useAuthStore((s) => s.user);
+  const storedUserLevel = useAuthStore((s) => s.userLevel);
+  const setUserLevel = useAuthStore((s) => s.setUserLevel);
   const shareServer = usePreferencesStore((s) => s.apiServer);
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
@@ -457,8 +459,12 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
   }, [router]);
 
   const handleEditUsernamePress = useCallback(() => {
+    const currentUserLevel = userStatus?.user_level ?? 0;
+    if (currentUserLevel > storedUserLevel) {
+      setUserLevel(currentUserLevel);
+    }
     router.push("/change-username");
-  }, [router]);
+  }, [router, setUserLevel, storedUserLevel, userStatus?.user_level]);
 
   const handleFollowersPress = useCallback(() => {
     const id = user?.walletAddress || user?.username;
