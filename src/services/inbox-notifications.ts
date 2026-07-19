@@ -407,39 +407,28 @@ export function signalTabsUnmounted(): void {
   });
 }
 
-function waitForTabsReady(timeoutMs = 5000): Promise<boolean> {
-  let didSettle = false;
-  return Promise.race([
-    Promise.all([_rootLayoutReadyPromise, _tabsReadyPromise]).then(() => {
-      if (didSettle) return true;
-      didSettle = true;
-      Sentry.addBreadcrumb({
-        category: "notifications",
-        message: "Navigation tree ready before inbox notification navigation",
-        level: "info",
-      });
-      return true;
-    }),
-    new Promise<boolean>((resolve) =>
-      setTimeout(() => {
-        if (!didSettle) {
-          didSettle = true;
-          Sentry.captureMessage(
-            "Inbox notification navigation delayed until tabs ready",
-            {
-              level: "warning",
-              tags: {
-                feature: "inbox-notifications",
-                operation: "wait-tabs-ready",
-              },
-              extra: { timeoutMs, ...getNavigationReadinessDebugData() },
-            },
-          );
-        }
-        resolve(false);
-      }, timeoutMs),
-    ),
-  ]);
+async function waitForTabsReady(timeoutMs = 5000): Promise<void> {
+  const timeoutId = setTimeout(() => {
+    Sentry.captureMessage(
+      "Inbox notification navigation delayed until tabs ready",
+      {
+        level: "warning",
+        tags: {
+          feature: "inbox-notifications",
+          operation: "wait-tabs-ready",
+        },
+        extra: { timeoutMs, ...getNavigationReadinessDebugData() },
+      },
+    );
+  }, timeoutMs);
+
+  await Promise.all([_rootLayoutReadyPromise, _tabsReadyPromise]);
+  clearTimeout(timeoutId);
+  Sentry.addBreadcrumb({
+    category: "notifications",
+    message: "Navigation tree ready before inbox notification navigation",
+    level: "info",
+  });
 }
 
 function isNotificationAccessDeferredError(error: unknown): boolean {
@@ -1370,10 +1359,11 @@ function handleNotificationResponse(
         handledNotificationIdsInFlight.delete(notificationId);
         clearInboxNotificationNavigationActive();
       };
+      await waitForTabsReady(INBOX_NAVIGATION_READY_TIMEOUT_MS);
       const areTabsReadyAtDispatch = _areTabsReady;
       Sentry.addBreadcrumb({
         category: "navigation",
-        message: "Dispatching inbox notification navigation immediately",
+        message: "Dispatching inbox notification navigation after tabs became ready",
         level: "info",
         data: {
           notificationId,
@@ -1410,15 +1400,6 @@ function handleNotificationResponse(
         clearPendingInboxNotificationNavigation(notificationId);
         throw error;
       }
-      void waitForTabsReady(INBOX_NAVIGATION_READY_TIMEOUT_MS).then((areTabsReady) => {
-        if (areTabsReady) return;
-        Sentry.addBreadcrumb({
-          category: "navigation",
-          message: "Inbox notification navigation dispatched before tabs were ready",
-          level: "warning",
-          data: { notificationId, ...getNavigationReadinessDebugData() },
-        });
-      });
       Sentry.captureMessage("Inbox notification navigation dispatched", {
         level: "info",
         tags: {
