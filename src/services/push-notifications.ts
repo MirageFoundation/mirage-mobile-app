@@ -13,13 +13,13 @@ import { walletService } from "@/src/services/wallet-service";
 import { storage } from "@/src/stores/mmkv-storage";
 import { markRepliesAsNotified } from "@/src/services/inbox-notified-ids";
 import { queryClient } from "@/src/providers/query-provider";
+import { infiniteInboxQueryOptions } from "@/src/api/read/hooks/use-inbox";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { getNodeConfig } from "@/src/api/read/endpoints/parameters";
 import { apiClient } from "@/src/api/client";
 import type { NodeConfigResponse } from "@/src/api/types";
 import type { MirageWallet } from "@/src/wallet";
 import { useAuthStore } from "@/src/stores/auth-store";
-import { getInbox } from "@/src/api/read/endpoints/inbox";
 import { isRetryable } from "@/src/utils/error-messages";
 
 const PUSH_TOKEN_KEY = "push-token";
@@ -576,11 +576,7 @@ function subscribePushReceived(): void {
     }
     const address = useAuthStore.getState().walletAddress;
     if (address) {
-      queryClient.prefetchInfiniteQuery({
-        queryKey: queryKeys.inboxInfinite(address),
-        queryFn: ({ pageParam = 1 }) => getInbox({ address, page: pageParam, limit: 25 }),
-        initialPageParam: 1,
-      });
+      queryClient.prefetchInfiniteQuery(infiniteInboxQueryOptions(address, { limit: 25 }));
     }
   });
 }

@@ -238,6 +238,8 @@ function getNotificationResponseDebugData(
     dataKeys: getNotificationDataKeys(notificationData),
     hasNotificationType: !!notificationData.notificationType,
     notificationType: toOptionalString(notificationData.notificationType),
+    hasNotificationKind: !!toOptionalString(notificationData.type),
+    notificationKind: toOptionalString(notificationData.type),
     hasReplyId: !!toOptionalString(notificationData.replyId),
     hasRootPostId: !!toOptionalString(notificationData.rootPostId),
     hasInboxReply: !!notificationData.inboxReply,
@@ -250,6 +252,7 @@ function hasInboxNotificationPayload(
   return !!(
     toOptionalString(notificationData.notificationType) === "inbox" ||
     toOptionalString(notificationData.notificationId) ||
+    toOptionalString(notificationData.type) ||
     toOptionalString(notificationData.replyId) ||
     toOptionalString(notificationData.rootPostId) ||
     notificationData.inboxReply
@@ -367,13 +370,11 @@ export function confirmInboxNotificationNavigation(
   }
 
   clearPendingInboxNotificationNavigation(notificationId);
-  Sentry.captureMessage("Inbox notification navigation arrived", {
+  Sentry.addBreadcrumb({
+    category: "navigation",
+    message: "Inbox notification navigation arrived",
     level: "info",
-    tags: {
-      feature: "inbox-notifications",
-      operation: "notification-arrival",
-    },
-    extra: {
+    data: {
       notificationId,
       elapsedMs: Date.now() - pending.dispatchedAt,
       hasReplyId: !!pending.replyId,
@@ -670,9 +671,11 @@ async function performInboxCheck(
             body: getNotificationBody(reply),
             data: {
               notificationType: "inbox",
+              notificationId: `inbox-reply:${reply.reply_id}`,
               rootPostId: reply.root_post_id,
               replyId: reply.reply_id,
               type: reply.type,
+              inboxReply: reply,
             },
             ...(Platform.OS === "android" && {
               categoryIdentifier: "inbox",
@@ -806,13 +809,11 @@ function flushDeferredNotificationResponses(reason: string): void {
   if (!useAuthStore.getState().walletAddress) return;
   for (const [notificationId, response] of Array.from(deferredNotificationResponses.entries())) {
     clearDeferredNotificationResponse(notificationId);
-    Sentry.captureMessage("Inbox notification response resumed after wallet ready", {
+    Sentry.addBreadcrumb({
+      category: "inbox-notifications",
+      message: "Inbox notification response resumed after wallet ready",
       level: "info",
-      tags: {
-        feature: "inbox-notifications",
-        operation: "deferred-notification-response",
-      },
-      extra: {
+      data: {
         notificationId,
         reason,
         ...getNavigationReadinessDebugData(),
@@ -1141,46 +1142,7 @@ function handleNotificationResponse(
         },
       });
     }
-    if (canOpenPostDetailImmediately) {
-      Sentry.captureMessage("Inbox notification classified as post detail", {
-        level: "info",
-        tags: {
-          feature: "inbox-notifications",
-          operation: "post-only-target",
-        },
-        extra: {
-          notificationId,
-          replyId,
-          rootPostId,
-          targetType,
-          hasPreviewReply: !!previewReply,
-          previewReplyHasContent,
-          hasHighlight: false,
-          ...getNavigationReadinessDebugData(),
-        },
-      });
-    }
-    Sentry.captureMessage("Inbox notification target resolved", {
-      level: "info",
-      tags: {
-        feature: "inbox-notifications",
-        operation: "target-resolved",
-        immediate_detail: String(canOpenReplyDetailImmediately),
-        immediate_post_detail: String(canOpenPostDetailImmediately),
-      },
-      extra: {
-        notificationId,
-        replyId,
-        rootPostId,
-        targetType,
-        hasPreviewReply: !!previewReply,
-        previewReplyHasContent,
-        canOpenPostDetailImmediately,
-        notificationDataKeys: getNotificationDataKeys(notificationData),
-        ...getNavigationReadinessDebugData(),
-      },
-    });
-    if (!replyId && !rootPostId && !previewReply) {
+    if (!replyId && !rootPostId && !previewReply && targetType !== "summary") {
       captureInboxNotificationNavigationEvent(
         "Inbox notification target resolved without reply or root post ids",
         "warning",
@@ -1329,22 +1291,6 @@ function handleNotificationResponse(
           hasPreviewReply: !!previewReply,
           hasHighlight: canOpenReplyDetailImmediately && !!replyId,
         });
-        Sentry.captureMessage(canOpenReplyDetailImmediately ? "Inbox notification reply detail pushed" : "Inbox notification post detail pushed", {
-          level: "info",
-          tags: {
-            feature: "inbox-notifications",
-            operation: "detail-push",
-          },
-          extra: {
-            notificationId,
-            replyId,
-            rootPostId,
-            targetType,
-            hasPreviewReply: !!previewReply,
-            hasHighlight: canOpenReplyDetailImmediately && !!replyId,
-            ...getNavigationReadinessDebugData(),
-          },
-        });
         useInboxStore.getState().clearNotificationTarget(notificationId);
         clearPendingInboxNotificationNavigation(notificationId);
         markHandled();
@@ -1400,21 +1346,6 @@ function handleNotificationResponse(
         clearPendingInboxNotificationNavigation(notificationId);
         throw error;
       }
-      Sentry.captureMessage("Inbox notification navigation dispatched", {
-        level: "info",
-        tags: {
-          feature: "inbox-notifications",
-          operation: "notification-navigate",
-        },
-        extra: {
-          notificationId,
-          hasReplyId: !!replyId,
-          hasRootPostId: !!rootPostId,
-          areTabsReady: areTabsReadyAtDispatch,
-          appState: AppState.currentState,
-          ...getNavigationReadinessDebugData(),
-        },
-      });
       void Notifications.clearLastNotificationResponseAsync?.().catch(() => undefined);
     };
     const runNavigateToInbox = () => {

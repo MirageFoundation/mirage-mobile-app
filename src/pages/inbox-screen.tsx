@@ -348,24 +348,34 @@ export function InboxScreen() {
       await refetch();
       if (cancelled) return;
       if (attempts >= maxAttempts) {
-        Sentry.captureMessage("Inbox notification target fetch exhausted", {
-          level: targetReplyId ? "warning" : "info",
-          tags: {
-            feature: "inbox-notifications",
-            operation: "inbox-target-fetch",
-          },
-          extra: {
-            notificationId: activeNotificationId,
-            targetReplyId,
-            attempts,
-            maxAttempts,
-            hasFetchedTargetReply,
-            hasPreviewReply: !!previewReply,
-            visibleRepliesCount: visibleReplies.length,
-            routeOpenReply,
-            platform: Platform.OS,
-          },
-        });
+        const targetFetchData = {
+          notificationId: activeNotificationId,
+          targetReplyId,
+          attempts,
+          maxAttempts,
+          hasFetchedTargetReply,
+          hasPreviewReply: !!previewReply,
+          visibleRepliesCount: visibleReplies.length,
+          routeOpenReply,
+          platform: Platform.OS,
+        };
+        if (targetReplyId) {
+          Sentry.captureMessage("Inbox notification target fetch exhausted", {
+            level: "warning",
+            tags: {
+              feature: "inbox-notifications",
+              operation: "inbox-target-fetch",
+            },
+            extra: targetFetchData,
+          });
+        } else {
+          Sentry.addBreadcrumb({
+            category: "inbox-notifications",
+            message: "Inbox notification had no reply target to fetch",
+            level: "info",
+            data: targetFetchData,
+          });
+        }
         setIsNotificationLoading(false);
         return;
       }
@@ -476,15 +486,11 @@ export function InboxScreen() {
         });
         if (isValidPostId(res.root_post_id)) {
           const elapsedMs = Date.now() - startedAt;
-          Sentry.captureMessage("Inbox item root post id resolved from reply id", {
+          Sentry.addBreadcrumb({
+            category: "inbox",
+            message: "Inbox item root post id resolved from reply id",
             level: "info",
-            tags: {
-              feature: "inbox",
-              operation: "resolve-root-post-id",
-              platform: Platform.OS,
-              outcome: "resolved",
-            },
-            extra: {
+            data: {
               replyId: reply.reply_id,
               resolvedRootPostId: res.root_post_id,
               parentId: reply.parent_id,
@@ -614,26 +620,6 @@ export function InboxScreen() {
             href,
           },
         });
-        Sentry.captureMessage("Inbox item detail navigation dispatched", {
-          level: "info",
-          tags: {
-            feature: "inbox",
-            operation: "open-post-detail",
-            platform: Platform.OS,
-            route_type: "post",
-            root_resolution_source: rootResolution.source,
-          },
-          extra: {
-            replyId: reply.reply_id,
-            rootPostId,
-            parentId: reply.parent_id,
-            type: reply.type ?? "reply",
-            notificationId,
-            hasFromNotification: !!notificationId,
-            href,
-            rootResolutionElapsedMs: rootResolution.elapsedMs,
-          },
-        });
         try {
           routerRef.current.push(href);
         } catch (error) {
@@ -664,26 +650,6 @@ export function InboxScreen() {
         },
       });
       seedFocusedComment(replyForNavigation);
-      Sentry.captureMessage("Inbox item detail navigation dispatched", {
-        level: "info",
-        tags: {
-          feature: "inbox",
-          operation: "open-post-detail",
-          platform: Platform.OS,
-          route_type: "focused-comment",
-          root_resolution_source: rootResolution.source,
-        },
-        extra: {
-          replyId: reply.reply_id,
-          rootPostId,
-          parentId: reply.parent_id,
-          type: reply.type ?? "reply",
-          notificationId,
-          hasFromNotification: !!notificationId,
-          href,
-          rootResolutionElapsedMs: rootResolution.elapsedMs,
-        },
-      });
       try {
         routerRef.current.push(href);
       } catch (error) {
@@ -731,14 +697,11 @@ export function InboxScreen() {
         type: targetReply.type,
         replyOwner: targetReply.reply_owner,
       });
-      Sentry.captureMessage("Inbox action notification opened", {
+      Sentry.addBreadcrumb({
+        category: "inbox-notifications",
+        message: "Inbox action notification opened",
         level: "info",
-        tags: {
-          feature: "inbox-notifications",
-          operation: "inbox-action-notification-open",
-          notification_type: targetReply.type ?? "unknown",
-        },
-        extra: {
+        data: {
           notificationId: activeNotificationId,
           replyId: targetReply.reply_id,
           type: targetReply.type,
@@ -808,13 +771,11 @@ export function InboxScreen() {
       targetReplyId,
       rootPostId: targetReply.root_post_id,
     });
-    Sentry.captureMessage("Inbox fallback auto-opening notification reply", {
+    Sentry.addBreadcrumb({
+      category: "inbox-notifications",
+      message: "Inbox fallback auto-opening notification reply",
       level: "info",
-      tags: {
-        feature: "inbox-notifications",
-        operation: "inbox-fallback-auto-open",
-      },
-      extra: {
+      data: {
         notificationId: activeNotificationId,
         replyId: targetReply.reply_id,
         rootPostId: targetReply.root_post_id,

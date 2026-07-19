@@ -83,6 +83,10 @@ export default function PostDetailScreen() {
   // Exact in-flight flag only. The previous 10s wall-clock window suppressed
   // legitimate post detail opens that happened shortly after a notification.
   const isNotificationNavigationActive = isInboxNotificationNavigationActive();
+  const shouldSuppressStalePostDetail =
+    isNotificationNavigationActive && !params.fromNotification;
+  const stalePostDetailKey = `${params.id}:${params.highlight ?? ""}`;
+  const reportedStalePostDetailRef = useRef<string | null>(null);
 
   console.log("[InboxNotifFlow] post detail route", {
     id: params.id,
@@ -96,7 +100,10 @@ export default function PostDetailScreen() {
   });
 
   useEffect(() => {
-    if (!params.fromNotification && !isNotificationNavigationActive) return;
+    if (!params.fromNotification && !isNotificationNavigationActive) {
+      reportedStalePostDetailRef.current = null;
+      return;
+    }
     Sentry.addBreadcrumb({
       category: "navigation",
       message: "Post detail rendered during notification flow",
@@ -112,6 +119,27 @@ export default function PostDetailScreen() {
         isResolvingFocusedMediaRoute,
       },
     });
+    if (
+      shouldSuppressStalePostDetail &&
+      reportedStalePostDetailRef.current !== stalePostDetailKey
+    ) {
+      reportedStalePostDetailRef.current = stalePostDetailKey;
+      Sentry.captureMessage("Stale post detail suppressed during notification flow", {
+        level: "warning",
+        tags: {
+          feature: "inbox-notifications",
+          operation: "stale-post-detail-suppressed",
+        },
+        extra: {
+          id: params.id,
+          highlight: params.highlight,
+          routeRootPostId,
+          routeHighlightCommentId,
+          useImmersive,
+          isResolvingFocusedMediaRoute,
+        },
+      });
+    }
   }, [
     isNotificationNavigationActive,
     isResolvingFocusedMediaRoute,
@@ -120,28 +148,15 @@ export default function PostDetailScreen() {
     params.id,
     routeHighlightCommentId,
     routeRootPostId,
+    shouldSuppressStalePostDetail,
+    stalePostDetailKey,
     useImmersive,
   ]);
 
-  if (isNotificationNavigationActive && !params.fromNotification) {
+  if (shouldSuppressStalePostDetail) {
     console.log("[InboxNotifFlow] suppressing stale post detail during notification", {
       id: params.id,
       highlight: params.highlight,
-    });
-    Sentry.captureMessage("Stale post detail suppressed during notification flow", {
-      level: "warning",
-      tags: {
-        feature: "inbox-notifications",
-        operation: "stale-post-detail-suppressed",
-      },
-      extra: {
-        id: params.id,
-        highlight: params.highlight,
-        routeRootPostId,
-        routeHighlightCommentId,
-        useImmersive,
-        isResolvingFocusedMediaRoute,
-      },
     });
     return <MediaPostDetailSkeleton />;
   }
