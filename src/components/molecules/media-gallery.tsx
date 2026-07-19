@@ -2,7 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Audio, ResizeMode, Video } from "expo-av";
 import { Image } from "expo-image";
-import * as Sentry from "@sentry/react-native";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -128,13 +127,11 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
         pauseDelayRef.current = null;
       }
       setIsPlaying(false);
-      videoRef.current?.pauseAsync().catch(() => {});
     } else if (!isVisible) {
       if (!pauseDelayRef.current) {
         pauseDelayRef.current = setTimeout(() => {
           pauseDelayRef.current = null;
           setIsPlaying(false);
-          videoRef.current?.pauseAsync().catch(() => {});
         }, 400);
       }
     }
@@ -164,92 +161,10 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
           staysActiveInBackground: false,
         });
       }
-      if (videoRef.current) {
-        const newEffective = isPostDetail
-          ? newGlobalMuted
-          : allowAutoplay
-            ? (newGlobalMuted || !isFocused)
-            : newGlobalMuted;
-        if (!newEffective) {
-          await videoRef.current.pauseAsync();
-          await videoRef.current.setStatusAsync({ isMuted: false });
-          await videoRef.current.playAsync();
-        } else {
-          await videoRef.current.setStatusAsync({ isMuted: true });
-        }
-      }
     } catch {}
-  }, [globalMuted, toggleMute, isFocused, isPostDetail, allowAutoplay]);
-
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.setStatusAsync({ isMuted: effectiveMuted }).catch(() => {});
-    }
-  }, [effectiveMuted]);
+  }, [globalMuted, toggleMute]);
 
   const shouldPlayVideo = isPlaying && isActive && screenActive && isVisible;
-
-  useEffect(() => {
-    if (!shouldPlayVideo) {
-      videoRef.current?.setStatusAsync({
-        shouldPlay: false,
-        isMuted: true,
-      }).catch((error) => {
-        Sentry.captureException(error, {
-          tags: {
-            feature: "feed-video",
-            component: "media-gallery",
-            action: "pause-inactive-gallery-video",
-          },
-          extra: { uri: itemUri },
-        });
-      });
-      videoRef.current?.pauseAsync().catch((error) => {
-        Sentry.captureException(error, {
-          tags: {
-            feature: "feed-video",
-            component: "media-gallery",
-            action: "pause-inactive-gallery-video",
-          },
-          extra: { uri: itemUri },
-        });
-      });
-      return;
-    }
-
-    let cancelled = false;
-    const play = async () => {
-      const video = videoRef.current;
-      if (!video) return;
-
-      try {
-        const status = await video.getStatusAsync();
-        if (cancelled || !status.isLoaded || status.isPlaying) return;
-        await video.setStatusAsync({ shouldPlay: true, isMuted: effectiveMuted });
-        await video.playAsync();
-      } catch (error) {
-        Sentry.captureException(error, {
-          tags: {
-            feature: "feed-video",
-            component: "media-gallery",
-            action: "play-active-gallery-video",
-          },
-          extra: { uri: itemUri },
-        });
-        if (!cancelled) {
-          setTimeout(() => {
-            if (!cancelled) videoRef.current?.playAsync().catch(() => {});
-          }, 250);
-        }
-      }
-    };
-
-    void play();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [shouldPlayVideo, effectiveMuted, itemUri]);
 
   const thumbnailUri = getVideoThumbnailUri(item.uri, item.posterUri);
   const showThumbnail = thumbnailUri && !GALLERY_LOADED_CACHE.has(item.uri);
@@ -294,7 +209,6 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
             clearTimeout(errorRetryRef.current);
             errorRetryRef.current = null;
           }
-          videoRef.current?.setStatusAsync({ isMuted: effectiveMuted }).catch(() => {});
         }}
         onPlaybackStatusUpdate={(status) => {
           if (status.isLoaded && (status.isPlaying || status.durationMillis)) {

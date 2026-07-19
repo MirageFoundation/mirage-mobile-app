@@ -57,6 +57,17 @@ describe("pending post lifecycle", () => {
     ]).map((item) => item.post_id)).toEqual(["pending"]);
   });
 
+  test("rejects malformed persisted containers and entries", () => {
+    expect(prunePendingPosts({ posts: [] })).toEqual([]);
+    expect(prunePendingPosts([
+      null,
+      { optimistic_status: "pending" },
+      post({ post_id: 123, optimistic_status: "pending" }),
+      post({ media: [null], optimistic_status: "pending" }),
+      post({ post_id: "valid", optimistic_status: "pending" }),
+    ]).map((item) => item.post_id)).toEqual(["valid"]);
+  });
+
   test("removes confirmed and optimistic aliases from persisted cache shapes", () => {
     const data = {
       pages: [{ posts: [

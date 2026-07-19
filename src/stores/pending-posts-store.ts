@@ -88,7 +88,7 @@ export const usePendingPostsStore = create<PendingPostsState>()(
     {
       name: "pending-posts-storage",
       storage: createJSONStorage(() => mmkvStorage),
-      version: 2,
+      version: 3,
       migrate: (persistedState) => {
         const state = persistedState as Partial<PendingPostsState> | undefined;
         const previousPosts = Array.isArray(state?.posts) ? state.posts : [];

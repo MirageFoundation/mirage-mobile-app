@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  hasOptimisticPostState,
   hasTransientPostSuccess,
   mergeRefreshedPostPreservingOrder,
   setTransientPostSuccessInData,
@@ -82,6 +83,16 @@ describe("transient post success", () => {
     expect(hasTransientPostSuccess({ pages: [response([post("created", "success")])] }))
       .toBe(true);
     expect(hasTransientPostSuccess({ pages: [response([post("created")])] }))
+      .toBe(false);
+  });
+
+  test("detects all optimistic state before query persistence", () => {
+    expect(hasOptimisticPostState({ pages: [response([post("created", "pending")])] }))
+      .toBe(true);
+    expect(hasOptimisticPostState({
+      pages: [response([{ ...post("created"), optimistic_video_preview_until: 123 }])],
+    })).toBe(true);
+    expect(hasOptimisticPostState({ pages: [response([post("created")])] }))
       .toBe(false);
   });
 

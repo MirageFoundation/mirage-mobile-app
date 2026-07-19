@@ -31,7 +31,6 @@ import {
   type ResolvedMedia,
 } from "./post-card-utils";
 import { MediaGallery } from "./media-gallery";
-import { playNativeVideo } from "@/src/components/utils/native-video-playback";
 import {
   buildVideoPositionKey,
   useIsFeedScrolling,
@@ -612,29 +611,6 @@ export const PostCardMedia = memo(
       screenActive &&
       !shouldBlurContent;
 
-    useEffect(() => {
-      if (videoRef.current && media?.type === "video") {
-        videoRef.current.setStatusAsync({ isMuted: videoMuted }).catch(() => {});
-      }
-    }, [videoMuted, media?.type]);
-
-    useEffect(() => {
-      if (!shouldPlayNativeVideo) return;
-
-      let cancelled = false;
-      void playNativeVideo(videoRef.current, {
-        isMuted: videoMuted,
-        isCancelled: () => cancelled || videoRef.current === null,
-        component: "post-card-media",
-        action: "play-native-feed-video",
-        uri: resolvedMediaUri,
-      });
-
-      return () => {
-        cancelled = true;
-      };
-    }, [shouldPlayNativeVideo, videoMuted, resolvedMediaUri, mediaLoaded]);
-
     const wasScreenInactiveForVideoRef = useRef(false);
     useEffect(() => {
       if (media?.type !== "video" || !videoPositionKey) return;
@@ -710,7 +686,7 @@ export const PostCardMedia = memo(
     const shouldMountNativeVideo =
       !shouldDeferHeavyMedia && (
         isPostDetail ||
-        shouldKeepFeedVideoMounted
+        (screenActive && shouldKeepFeedVideoMounted)
       );
 
     const runWithMediaTransition = useCallback(
@@ -1340,8 +1316,8 @@ export const PostCardMedia = memo(
               onLoad={() => {
                   setMediaLoaded(true);
                   if (resolvedMediaUri) MEDIA_LOADED_CACHE.add(resolvedMediaUri);
-                  // Playback ownership lives in the shouldPlay prop and the
-                  // playNativeVideo effect. onLoad only restores position.
+                  // Playback ownership lives in the shouldPlay/isMuted props.
+                  // onLoad only restores position.
                   if (!hasRestoredVideoPositionRef.current && videoPositionKey) {
                     const saved = getPosition(videoPositionKey);
                     if (saved > 0.5) {

@@ -268,8 +268,25 @@ export const HomeTabbedFeed = forwardRef<
       const uniquePostIds = new Set<string>();
       const uniqueOptimisticActionIds = new Set<string>();
       const transformedPosts: Post[] = [];
+      const pages = Array.isArray(data?.pages)
+        ? data.pages.filter(
+            (page): page is { posts: any[] } =>
+              !!page && Array.isArray(page.posts),
+          )
+        : [];
+      const isRenderableApiPost = (post: any) =>
+        !!post &&
+        typeof post === "object" &&
+        typeof post.post_id === "string" &&
+        typeof post.user_id === "string" &&
+        (post.media === undefined || (
+          Array.isArray(post.media) &&
+          post.media.every((uri: unknown) => typeof uri === "string")
+        ));
       const cachedPostsById = new Map(
-        data?.pages?.flatMap((page) => page.posts).map((post) => [post.post_id, post]) ?? [],
+        pages
+          .flatMap((page) => page.posts.filter(isRenderableApiPost))
+          .map((post) => [post.post_id, post]),
       );
       const reconciledPendingApiPosts = pendingApiPosts.map((pendingPost) => {
         const reconciledPost = mergePendingPostWithCachedPost(
@@ -310,15 +327,16 @@ export const HomeTabbedFeed = forwardRef<
         transformedPosts.push(post);
       }
 
-      if (!data?.pages) return transformedPosts;
+      if (pages.length === 0) return transformedPosts;
 
-      for (const page of data.pages) {
+      for (const page of pages) {
         let cachedPagePosts = transformedPageCacheRef.current.get(page);
 
         if (!cachedPagePosts) {
+          const renderablePosts = page.posts.filter(isRenderableApiPost);
           const pagePosts = hideDownvotedPosts
-            ? page.posts.filter((post) => post.user_vote !== -1)
-            : page.posts;
+            ? renderablePosts.filter((post) => post.user_vote !== -1)
+            : renderablePosts;
 
           const patchedPosts = applyPostEditOverrides(pagePosts);
 
@@ -947,17 +965,32 @@ export const HomeTabbedFeed = forwardRef<
     }
 
     if (seededFeedContextRef.current === seedKey) return;
-    seededFeedContextRef.current = seedKey;
-
-    const initialVisiblePosts = posts.slice(0, 5).filter(postHasPlayableVideo);
-    const visibleVideoIds = new Set(initialVisiblePosts.map((post) => post.id));
-    const activeVideoId = initialVisiblePosts[0]?.id ?? null;
-
     useHomePostCardStore.getState().setVideoViewability(
       feedContext,
-      visibleVideoIds,
-      activeVideoId,
+      new Set(),
+      null,
     );
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const task = InteractionManager.runAfterInteractions(() => {
+      timer = setTimeout(() => {
+        const initialVisiblePosts = posts.slice(0, 5).filter(postHasPlayableVideo);
+        const visibleVideoIds = new Set(initialVisiblePosts.map((post) => post.id));
+        const activeVideoId = initialVisiblePosts[0]?.id ?? null;
+
+        seededFeedContextRef.current = seedKey;
+        useHomePostCardStore.getState().setVideoViewability(
+          feedContext,
+          visibleVideoIds,
+          activeVideoId,
+        );
+      }, 1200);
+    });
+
+    return () => {
+      task.cancel();
+      if (timer) clearTimeout(timer);
+    };
   }, [feedContext, posts, apiServer]);
 
   const tabListRef = activeTabIndex === 0 ? magicListRef : latestListRef;

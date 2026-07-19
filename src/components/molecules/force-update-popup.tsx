@@ -18,8 +18,7 @@ import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { type ForceUpdateReason } from "@/src/hooks/use-force-update";
 
-const APP_STORE_URL =
-  "https://apps.apple.com/in/app/mirage-talk/id6757619038";
+const APP_STORE_URL = "https://apps.apple.com/app/id6757619038";
 const PLAY_STORE_URL =
   "https://play.google.com/store/apps/details?id=talk.mirage.mobile";
 

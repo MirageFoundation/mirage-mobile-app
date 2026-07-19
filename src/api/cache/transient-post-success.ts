@@ -10,6 +10,23 @@ export function hasTransientPostSuccess(data: unknown): boolean {
   );
 }
 
+export function hasOptimisticPostState(data: unknown): boolean {
+  if (Array.isArray(data)) return data.some(hasOptimisticPostState);
+  if (!data || typeof data !== "object") return false;
+  const record = data as Record<string, unknown>;
+  if (
+    record.optimistic_status !== undefined ||
+    record.optimistic_action_id !== undefined ||
+    record.optimistic_draft !== undefined ||
+    record.optimistic_video_preview_until !== undefined
+  ) {
+    return true;
+  }
+  return ["pages", "posts", "root", "children", "data"].some((key) =>
+    hasOptimisticPostState(record[key]),
+  );
+}
+
 export function setTransientPostSuccessInResponse(
   response: PostsResponse,
   postId: string,

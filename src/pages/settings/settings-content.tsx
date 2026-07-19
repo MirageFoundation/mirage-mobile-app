@@ -19,6 +19,7 @@ import {
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useApiServer } from "@/src/providers/api-server-provider";
+import { useTheme } from "@/src/providers/theme-context";
 import { useToast } from "@/src/providers/toast-provider";
 import { usePreferencesStore, type ThemeMode, type ApiServer, type VideoAutoplayNetwork } from "@/src/stores";
 import { isAdultContentEnabled } from "@/src/stores/preferences-store";
@@ -69,13 +70,13 @@ export function SettingsScreen() {
  const router = useRouter();
  const insets = useSafeAreaInsets();
  const { theme } = useUnistyles();
+ const { setThemeMode } = useTheme();
 
 // Stores
   const { switchServer } = useApiServer();
   const toast = useToast();
   const {
     theme: themeMode,
-    setTheme,
     selectedContentTypes,
     adultContentEnabled,
     setAdultContent,
@@ -155,9 +156,9 @@ export function SettingsScreen() {
 
  const handleThemeChange = useCallback(
     (value: ThemeMode) => {
-      setTheme(value);
+      setThemeMode(value);
     },
-    [setTheme]
+    [setThemeMode]
   );
 
 const handleApiServerChange = useCallback(

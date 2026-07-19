@@ -5,7 +5,7 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 import { storage } from "@/src/stores/mmkv-storage";
 import { AppState, Platform } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
-import { hasTransientPostSuccess } from "@/src/api/cache/transient-post-success";
+import { sanitizePersistedPostQueries } from "@/src/api/cache/persisted-post-cache";
 
 onlineManager.setEventListener((setOnline) => {
   return NetInfo.addEventListener((state) => {
@@ -32,6 +32,9 @@ const mmkvQueryStorage = {
 const persister = createSyncStoragePersister({
   storage: mmkvQueryStorage,
   key: "mirage-query-cache",
+  serialize: (client) => JSON.stringify(sanitizePersistedPostQueries(client)),
+  deserialize: (cachedString) =>
+    sanitizePersistedPostQueries(JSON.parse(cachedString)),
 });
 
 const EXCLUDED_QUERY_KEYS = ["comments", "inbox", "topics"];
@@ -184,8 +187,7 @@ export const QueryProvider = ({ children }: { children: React.ReactNode }) => {
             if (typeof key === "string" && EXCLUDED_QUERY_KEYS.includes(key)) {
               return false;
             }
-            return query.state.status === "success" &&
-              !hasTransientPostSuccess(query.state.data);
+            return query.state.status === "success";
           },
         },
       }}
