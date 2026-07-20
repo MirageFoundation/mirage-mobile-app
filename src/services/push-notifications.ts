@@ -90,6 +90,10 @@ function isOfflineRegistrationError(error: unknown): boolean {
   return false;
 }
 
+function isTokenOwnershipConflict(error: unknown): boolean {
+  return (error as any)?.response?.status === 409;
+}
+
 function isRetryablePushError(error: unknown): boolean {
   const status = (error as any)?.response?.status;
   const errorCode = (error as any)?.response?.data?.error_code;
@@ -450,6 +454,13 @@ export async function registerPush(wallet: MirageWallet): Promise<void> {
       Sentry.addBreadcrumb({
         category: "push-notifications",
         message: "Push registration skipped: network unavailable",
+        level: "warning",
+      });
+    } else if (isTokenOwnershipConflict(error)) {
+      console.warn("[PushNotifications] Push token belongs to another account, falling back to polling");
+      Sentry.addBreadcrumb({
+        category: "push-notifications",
+        message: "Push registration skipped: token belongs to another account",
         level: "warning",
       });
     } else {

@@ -55,7 +55,12 @@ export const RootProvider = memo(
 
     useEffect(() => {
       initInboxNotifications();
-      initPushNotifications();
+      void initPushNotifications().catch((error) => {
+        console.error("[RootProvider] Failed to initialize push notifications:", error);
+        Sentry.captureException(error, {
+          tags: { feature: "push-notifications", operation: "initialize" },
+        });
+      });
       initSeenPosts();
       startTimeTicking();
 
