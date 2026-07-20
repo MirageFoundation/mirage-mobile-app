@@ -4,6 +4,8 @@ export type PressedMediaTransition = {
   postId: string;
   uri: string;
   previewUri?: string;
+  positionSeconds?: number;
+  wasPlaying?: boolean;
   type: string;
   x: number;
   y: number;

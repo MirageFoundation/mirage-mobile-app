@@ -1,10 +1,10 @@
 import { Feather } from "@expo/vector-icons";
 import * as Sentry from "@sentry/react-native";
-import { AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { BlurView } from "expo-blur";
 import { useLocalSearchParams } from "expo-router";
+import { VideoView } from "expo-video";
 import { router } from "@/src/navigation/guarded-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -25,6 +25,7 @@ import { Box, Button, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { MAX_VIDEO_DURATION_MS, processVideo } from "@/src/utils/video-processing";
 import { setPendingVideoResult } from "@/src/stores/video-editor-result-store";
+import { useVideoEditorPlayer } from "./use-video-editor-player";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const TIMELINE_PADDING = 24;
@@ -42,8 +43,6 @@ export function VideoEditorScreen() {
   const initialVideoWidth = params.width ? parseInt(params.width) : 1920;
   const initialVideoHeight = params.height ? parseInt(params.height) : 1080;
   
-  const videoRef = useRef<Video>(null);
-  
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentPosition, setCurrentPosition] = useState(0);
@@ -59,6 +58,17 @@ export function VideoEditorScreen() {
   // Trim state (in milliseconds)
   const [trimStart, setTrimStart] = useState(initialTrimStartMs);
   const [trimEnd, setTrimEnd] = useState(initialTrimEndMs);
+  const videoPlayer = useVideoEditorPlayer({
+    uri: videoUri,
+    isPlaying,
+    trimStartMs: trimStart,
+    trimEndMs: trimEnd,
+    setCurrentPosition,
+    setDuration,
+    setIsPlaying,
+    setResolvedVideoSize,
+    setTrimEnd,
+  });
   
   // Shared values for trim handles
   const leftTrimPosition = useSharedValue(0);
@@ -78,76 +88,29 @@ export function VideoEditorScreen() {
     }
     if (duration > 0 && initialTrimStartMs > 0) {
       leftTrimPosition.value = (initialTrimStartMs / duration) * TIMELINE_WIDTH;
-      videoRef.current?.setPositionAsync(initialTrimStartMs).catch(() => {});
+      videoPlayer.currentTime = initialTrimStartMs / 1000;
     }
     if (duration > 0 && initialTrimEndMs > 0 && initialTrimEndMs < duration) {
       const clampedEnd = Math.min(initialTrimEndMs, initialTrimStartMs + MAX_TRIM_DURATION);
       setTrimEnd(clampedEnd);
       rightTrimPosition.value = (clampedEnd / duration) * TIMELINE_WIDTH;
     }
-  }, [duration]);
-
-  const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
-    if (!status.isLoaded) return;
-    
-    if (status.durationMillis && duration === 0) {
-      setDuration(status.durationMillis);
-      setTrimEnd(Math.min(status.durationMillis, MAX_TRIM_DURATION));
-    }
-    
-    setCurrentPosition(status.positionMillis);
-    setIsPlaying(status.isPlaying);
-    
-    // Loop within trim region
-    if (status.positionMillis >= trimEnd && trimEnd > 0) {
-      videoRef.current?.setPositionAsync(trimStart).catch(() => {});
-    }
-  }, [duration, trimStart, trimEnd]);
+  }, [duration, initialTrimEndMs, initialTrimStartMs, leftTrimPosition, rightTrimPosition, trimEnd, videoPlayer]);
 
   const handlePlayPause = useCallback(async () => {
-    if (!videoRef.current) return;
     triggerHaptic("light");
-    
-    const status = await videoRef.current.getStatusAsync();
-    if (!status.isLoaded) return;
-    
-    if (status.isPlaying) {
-      await videoRef.current.pauseAsync();
-    } else {
-      // If at end of trim, restart from trim start
-      if (status.positionMillis >= trimEnd) {
-        await videoRef.current.setPositionAsync(trimStart);
-      }
-      await videoRef.current.playAsync();
+
+    if (!isPlaying && currentPosition >= trimEnd) {
+      videoPlayer.currentTime = trimStart / 1000;
     }
-  }, [trimStart, trimEnd]);
+    setIsPlaying((playing) => !playing);
+  }, [currentPosition, isPlaying, trimEnd, trimStart, videoPlayer]);
 
   const stopEditorPlayback = useCallback(async () => {
-    if (!videoRef.current) return;
-
-    try {
-      const status = await videoRef.current.getStatusAsync();
-      if (!status.isLoaded) return;
-
-      await videoRef.current.pauseAsync().catch(() => {});
-      await videoRef.current.setStatusAsync({
-        shouldPlay: false,
-        isMuted: true,
-        positionMillis: trimStart,
-      }).catch(() => {});
-      await videoRef.current.unloadAsync().catch(() => {});
-    } catch {
-      // no-op
-    }
-
+    videoPlayer.pause();
+    videoPlayer.currentTime = trimStart / 1000;
     setIsPlaying(false);
-  }, [trimStart]);
-
-  useEffect(() => {
-    return () => {
-      void stopEditorPlayback();
-    };
-  }, [stopEditorPlayback]);
+  }, [trimStart, videoPlayer]);
 
   const updateTrimFromPosition = useCallback((position: number, isLeft: boolean) => {
     const newTime = Math.round((position / TIMELINE_WIDTH) * duration);
@@ -158,16 +121,16 @@ export function VideoEditorScreen() {
       const clampedTime = Math.max(Math.max(0, minStart), Math.min(newTime, maxStart));
       setTrimStart(clampedTime);
       leftTrimPosition.value = (clampedTime / duration) * TIMELINE_WIDTH;
-      videoRef.current?.setPositionAsync(clampedTime).catch(() => {});
+      videoPlayer.currentTime = clampedTime / 1000;
     } else {
       const minEnd = trimStart + MIN_TRIM_DURATION;
       const maxEnd = Math.min(duration, trimStart + MAX_TRIM_DURATION);
       const clampedTime = Math.max(minEnd, Math.min(newTime, maxEnd));
       setTrimEnd(clampedTime);
       rightTrimPosition.value = (clampedTime / duration) * TIMELINE_WIDTH;
-      videoRef.current?.setPositionAsync(clampedTime).catch(() => {});
+      videoPlayer.currentTime = clampedTime / 1000;
     }
-  }, [duration, trimStart, trimEnd]);
+  }, [duration, leftTrimPosition, rightTrimPosition, trimStart, trimEnd, videoPlayer]);
 
   const leftPanGesture = Gesture.Pan()
     .onUpdate((event) => {
@@ -274,7 +237,7 @@ export function VideoEditorScreen() {
         },
       });
     }
-  }, [videoUri, resolvedVideoSize.height, resolvedVideoSize.width, trimStart, trimEnd, params.returnTo, params.replacingUri, stopEditorPlayback]);
+  }, [videoUri, duration, resolvedVideoSize.height, resolvedVideoSize.width, trimStart, trimEnd, params.returnTo, params.replacingUri, stopEditorPlayback]);
 
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -333,20 +296,14 @@ export function VideoEditorScreen() {
         {/* Video Preview */}
         <View style={[styles.videoContainer, { backgroundColor: theme.colors.background.base }]}>
           <Pressable onPress={handlePlayPause} style={styles.videoWrapper}>
-            <Video
-              ref={videoRef}
-              source={{ uri: videoUri }}
+            <VideoView
+              player={videoPlayer}
               style={[styles.video, { height: videoDisplayHeight }]}
-              resizeMode={ResizeMode.CONTAIN}
-              shouldPlay={false}
-              isLooping={false}
-              onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-              onReadyForDisplay={(event) => {
-                const { width, height } = event.naturalSize ?? {};
-                if (!width || !height) return;
-                if (width === resolvedVideoSize.width && height === resolvedVideoSize.height) return;
-                setResolvedVideoSize({ width, height });
-              }}
+              contentFit="contain"
+              nativeControls={false}
+              fullscreenOptions={{ enable: false }}
+              allowsPictureInPicture={false}
+              surfaceType={Platform.OS === "android" ? "textureView" : undefined}
             />
             
             {/* Play/Pause overlay */}

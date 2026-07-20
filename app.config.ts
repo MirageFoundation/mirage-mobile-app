@@ -47,6 +47,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       },
     ],
     "expo-secure-store",
+    "expo-video",
     "expo-web-browser",
     [
       "expo-build-properties",
@@ -102,7 +103,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name,
     slug,
-    version: "1.1.3",
+    version: "1.1.4",
     orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: scheme,
@@ -127,7 +128,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         monochromeImage: "./assets/images/android-icon-monochrome.png",
       },
       package: bundleIdentifier,
-      versionCode: 1013,
+      versionCode: 1014,
       ...(isFdroidBuild
         ? {}
         : { googleServicesFile: process.env.GOOGLE_SERVICES_JSON }),

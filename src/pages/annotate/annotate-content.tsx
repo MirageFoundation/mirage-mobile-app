@@ -12,7 +12,6 @@ import {
   ScrollView,
   View,
 } from "react-native";
-import { ResizeMode, Video } from "expo-av";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,6 +25,7 @@ import * as Sentry from "@sentry/react-native";
 import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 import { useAnnotate } from "@/src/api/write";
 import { Box, Text } from "@/src/components/ui/primitives";
+import { StaticVideoPreview } from "@/src/components/molecules/static-video-preview";
 import { StickerPicker } from "@/src/components/molecules/sticker-picker";
 import { CommunitySelectionModal } from "@/src/components/molecules/community-selection-modal";
 import { consumePendingVideoResult } from "@/src/stores/video-editor-result-store";
@@ -639,13 +639,9 @@ export function AnnotateScreen() {
                     return (
                       <Pressable key={uri} onPress={() => handleEditVideo(uri)} style={[styles.videoPlayerWrapper, { height: VIDEO_HEIGHT, width: VIDEO_WIDTH }]}>
                         <View pointerEvents="none">
-                          <Video
-                            source={{ uri }}
+                          <StaticVideoPreview
+                            uri={uri}
                             style={[styles.videoPlayer, { width: VIDEO_WIDTH, height: VIDEO_HEIGHT }]}
-                            resizeMode={ResizeMode.COVER}
-                            shouldPlay={false}
-                            isMuted
-                            useNativeControls={false}
                           />
                         </View>
 

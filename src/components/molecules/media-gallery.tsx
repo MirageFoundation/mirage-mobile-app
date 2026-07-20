@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { Audio, ResizeMode, Video } from "expo-av";
+import { Audio } from "expo-av";
 import { Image } from "expo-image";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { VideoView } from "expo-video";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -10,9 +11,15 @@ import {
   Platform,
   Pressable,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native";
 import { getVideoThumbnailUri, type ResolvedMedia } from "./post-card-utils";
 import { Text } from "@/src/components/ui/primitives";
+import {
+  getCachedVideoSource,
+  useVideoPlayerController,
+} from "@/src/hooks/use-video-player-controller";
 import { useVideoMuteStore } from "@/src/stores";
 import { StyleSheet } from "react-native-unistyles";
 
@@ -61,6 +68,7 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   isVisible,
   isFocused = true,
   isPostDetail,
+  shouldPrepare,
 }: {
   item: ResolvedMedia;
   width: number;
@@ -73,8 +81,8 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   isVisible?: boolean;
   isFocused?: boolean;
   isPostDetail?: boolean;
+  shouldPrepare: boolean;
 }) {
-  const videoRef = useRef<Video>(null);
   const itemUri = item.uri;
   const [isPlaying, setIsPlaying] = useState(false);
   const globalMuted = useVideoMuteStore((s) => s.isMuted);
@@ -88,20 +96,23 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   const [feedTappedToPlay, setFeedTappedToPlay] = useState(false);
   const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pauseDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [retryKey, setRetryKey] = useState(0);
   const errorRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errorRetryCountRef = useRef(0);
+  const shouldPlayVideo = isPlaying && isActive && screenActive && isVisible;
+  const videoPlayer = useVideoPlayerController(shouldPrepare ? item.uri : null, {
+    loop: true,
+    muted: effectiveMuted,
+    shouldPlay: shouldPlayVideo,
+  });
 
   useEffect(() => {
-    if (GALLERY_LOADED_CACHE.has(itemUri)) return;
-    const video = videoRef.current;
+    if (!shouldPrepare || GALLERY_LOADED_CACHE.has(itemUri)) return;
+    setIsLoading(true);
     loadingTimeoutRef.current = setTimeout(() => {
       setIsLoading(false);
       GALLERY_LOADED_CACHE.add(itemUri);
     }, 8000);
     return () => {
-      video?.pauseAsync().catch(() => {});
-      video?.unloadAsync().catch(() => {});
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
       }
@@ -112,7 +123,79 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
         clearTimeout(errorRetryRef.current);
       }
     };
-  }, [itemUri]);
+  }, [itemUri, shouldPrepare]);
+
+  useEffect(() => {
+    if (!shouldPrepare) return;
+    let cancelled = false;
+    const markLoaded = () => {
+      if (cancelled) return;
+      setIsLoading(false);
+      GALLERY_LOADED_CACHE.add(item.uri);
+      if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+      errorRetryCountRef.current = 0;
+      if (errorRetryRef.current) {
+        clearTimeout(errorRetryRef.current);
+        errorRetryRef.current = null;
+      }
+    };
+    const applyAspectRatio = (
+      availableVideoTracks: typeof videoPlayer.availableVideoTracks,
+    ) => {
+      const size = availableVideoTracks[0]?.size;
+      if (size?.width && size.height) {
+        const ratio = size.width / size.height;
+        if (Number.isFinite(ratio) && ratio > 0) {
+          ASPECT_RATIO_CACHE.set(item.uri, ratio);
+          onAspectRatioDetected?.(item.uri, ratio);
+        }
+      }
+    };
+
+    const sourceSubscription = videoPlayer.addListener(
+      "sourceLoad",
+      ({ availableVideoTracks }) => {
+        markLoaded();
+        applyAspectRatio(availableVideoTracks);
+        if (shouldPlayVideo) videoPlayer.play();
+      },
+    );
+    const statusSubscription = videoPlayer.addListener(
+      "statusChange",
+      ({ status }) => {
+        if (status === "readyToPlay") {
+          markLoaded();
+          applyAspectRatio(videoPlayer.availableVideoTracks);
+          if (shouldPlayVideo) videoPlayer.play();
+        } else if (status === "error" && errorRetryCountRef.current < 3) {
+          errorRetryCountRef.current += 1;
+          if (errorRetryRef.current) clearTimeout(errorRetryRef.current);
+          errorRetryRef.current = setTimeout(() => {
+            if (cancelled) return;
+            setIsLoading(true);
+            void videoPlayer.replaceAsync(getCachedVideoSource(item.uri)).catch(() => {
+              if (!cancelled) setIsLoading(false);
+            });
+          }, 2000 * errorRetryCountRef.current);
+        }
+      },
+    );
+    if (videoPlayer.status === "readyToPlay") {
+      markLoaded();
+      applyAspectRatio(videoPlayer.availableVideoTracks);
+      if (shouldPlayVideo) videoPlayer.play();
+    }
+
+    return () => {
+      cancelled = true;
+      sourceSubscription.remove();
+      statusSubscription.remove();
+      if (errorRetryRef.current) {
+        clearTimeout(errorRetryRef.current);
+        errorRetryRef.current = null;
+      }
+    };
+  }, [item.uri, onAspectRatioDetected, shouldPlayVideo, shouldPrepare, videoPlayer]);
 
   useEffect(() => {
     if (isActive && screenActive && isVisible && (allowAutoplay || feedTappedToPlay)) {
@@ -164,10 +247,9 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
     } catch {}
   }, [globalMuted, toggleMute]);
 
-  const shouldPlayVideo = isPlaying && isActive && screenActive && isVisible;
-
   const thumbnailUri = getVideoThumbnailUri(item.uri, item.posterUri);
-  const showThumbnail = thumbnailUri && !GALLERY_LOADED_CACHE.has(item.uri);
+  const showThumbnail =
+    thumbnailUri && (!shouldPrepare || !GALLERY_LOADED_CACHE.has(item.uri));
 
   return (
     <View style={[galleryStyles.itemContainer, { width, height }]}>
@@ -190,54 +272,18 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
           }}
         />
       ) : null}
-      <Video
-        key={retryKey}
-        ref={videoRef}
-        source={{ uri: item.uri }}
-        style={[galleryStyles.itemMedia, { width, height }]}
-        resizeMode={ResizeMode.COVER}
-        shouldPlay={shouldPlayVideo}
-        isMuted={effectiveMuted}
-        isLooping
-        useNativeControls={false}
-        onLoad={() => {
-          setIsLoading(false);
-          GALLERY_LOADED_CACHE.add(item.uri);
-          if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
-          errorRetryCountRef.current = 0;
-          if (errorRetryRef.current) {
-            clearTimeout(errorRetryRef.current);
-            errorRetryRef.current = null;
-          }
-        }}
-        onPlaybackStatusUpdate={(status) => {
-          if (status.isLoaded && (status.isPlaying || status.durationMillis)) {
-            setIsLoading(false);
-            GALLERY_LOADED_CACHE.add(item.uri);
-            if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
-          }
-        }}
-        onReadyForDisplay={(event) => {
-          const { width: w, height: h } = event.naturalSize ?? {};
-          if (w && h) {
-            const ratio = w / h;
-            if (Number.isFinite(ratio) && ratio > 0) {
-              ASPECT_RATIO_CACHE.set(item.uri, ratio);
-              onAspectRatioDetected?.(item.uri, ratio);
-            }
-          }
-        }}
-        onError={() => {
-          if (errorRetryCountRef.current < 3) {
-            errorRetryCountRef.current += 1;
-            if (errorRetryRef.current) clearTimeout(errorRetryRef.current);
-            errorRetryRef.current = setTimeout(() => {
-              setIsLoading(true);
-              setRetryKey((k) => k + 1);
-            }, 2000 * errorRetryCountRef.current);
-          }
-        }}
-      />
+      {shouldPrepare ? (
+        <VideoView
+          player={videoPlayer}
+          style={[galleryStyles.itemMedia, { width, height }]}
+          contentFit="cover"
+          nativeControls={false}
+          fullscreenOptions={{ enable: false }}
+          allowsPictureInPicture={false}
+          surfaceType={Platform.OS === "android" ? "textureView" : undefined}
+          onFirstFrameRender={() => setIsLoading(false)}
+        />
+      ) : null}
 
       <View style={galleryStyles.playOverlay}>
         {isPostDetail ? (
@@ -336,6 +382,7 @@ const GalleryImageItem = memo(function GalleryImageItem({
         style={[galleryStyles.itemMedia, { width, height }]}
         contentFit="cover"
         cachePolicy="memory-disk"
+        recyclingKey={item.uri}
         onLoad={({ source }) => {
           setLoaded(true);
           if (imageLoadTimeoutRef.current) clearTimeout(imageLoadTimeoutRef.current);
@@ -391,7 +438,16 @@ export const MediaGallery = memo(function MediaGallery({
     return computeGalleryHeight(getItemAspectRatio(item));
   }, [media]);
 
-  const [containerHeight, setContainerHeight] = useState(() => getHeightForIndex(0));
+  const firstItemHeight = getHeightForIndex(0);
+  const [containerHeight, setContainerHeight] = useState(firstItemHeight);
+  const mediaIdentity = media.map((item) => item.uri).join("|");
+
+  useEffect(() => {
+    activeIndexRef.current = 0;
+    setActiveIndex(0);
+    setContainerHeight(firstItemHeight);
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [firstItemHeight, mediaIdentity]);
 
   const handleAspectRatioDetected = useCallback(
     (uri: string, ratio: number) => {
@@ -408,30 +464,48 @@ export const MediaGallery = memo(function MediaGallery({
     [media],
   );
 
-  const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
-      if (viewableItems.length > 0 && viewableItems[0].index != null) {
-        const newIndex = viewableItems[0].index;
-        activeIndexRef.current = newIndex;
-        setActiveIndex(newIndex);
+  const updateActiveIndex = useCallback(
+    (requestedIndex: number) => {
+      const newIndex = Math.max(0, Math.min(requestedIndex, media.length - 1));
+      const item = media[newIndex];
+      if (!item) return;
 
-        const item = media[newIndex];
-        if (item) {
-          const ratio = itemRatiosRef.current.get(item.uri) ?? getItemAspectRatio(item);
-          const newHeight = computeGalleryHeight(ratio);
-          setContainerHeight((prev) => {
-            if (Math.abs(prev - newHeight) < 1) return prev;
-            return newHeight;
-          });
-        }
-      }
+      activeIndexRef.current = newIndex;
+      setActiveIndex((current) => (current === newIndex ? current : newIndex));
+
+      const ratio = itemRatiosRef.current.get(item.uri) ?? getItemAspectRatio(item);
+      const newHeight = computeGalleryHeight(ratio);
+      setContainerHeight((current) =>
+        Math.abs(current - newHeight) < 1 ? current : newHeight,
+      );
     },
     [media],
   );
 
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: { index: number | null }[] }) => {
+      if (viewableItems.length > 0 && viewableItems[0].index != null) {
+        updateActiveIndex(viewableItems[0].index);
+      }
+    },
+    [updateActiveIndex],
+  );
+
+  const handleMomentumScrollEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      updateActiveIndex(
+        Math.round(event.nativeEvent.contentOffset.x / GALLERY_WIDTH),
+      );
+    },
+    [updateActiveIndex],
+  );
+
   const viewabilityConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
 
-  const maxHeight = Math.max(...media.map((_, i) => getHeightForIndex(i)));
+  const maxHeight = useMemo(
+    () => Math.max(...media.map((_, index) => getHeightForIndex(index))),
+    [getHeightForIndex, media],
+  );
 
   const renderItem = useCallback(
     ({ item, index }: { item: ResolvedMedia; index: number }) => {
@@ -452,6 +526,12 @@ export const MediaGallery = memo(function MediaGallery({
               isVisible={isVisible}
               isFocused={isFocused}
               isPostDetail={isPostDetail}
+              shouldPrepare={
+                screenActive &&
+                isVisible &&
+                isFocused &&
+                Math.abs(index - activeIndex) <= 1
+              }
             />
           ) : (
             <GalleryImageItem
@@ -485,10 +565,14 @@ export const MediaGallery = memo(function MediaGallery({
         showsHorizontalScrollIndicator={false}
         scrollEnabled={!shouldBlurContent}
         onViewableItemsChanged={onViewableItemsChanged}
+        onMomentumScrollEnd={handleMomentumScrollEnd}
         viewabilityConfig={viewabilityConfig}
         snapToInterval={GALLERY_WIDTH}
         decelerationRate="fast"
         extraData={activeIndex}
+        initialNumToRender={2}
+        maxToRenderPerBatch={2}
+        windowSize={3}
         getItemLayout={(_, index) => ({
           length: GALLERY_WIDTH,
           offset: GALLERY_WIDTH * index,

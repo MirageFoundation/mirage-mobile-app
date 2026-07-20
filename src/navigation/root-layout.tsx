@@ -7,8 +7,6 @@ import { ForceUpdatePopup } from "@/src/components/molecules/force-update-popup"
 import { ThemedStatusBar } from "@/src/components/ui/themed-status-bar";
 import { BackHandler, Platform, ToastAndroid } from "react-native";
 import * as Sentry from '@sentry/react-native';
-import Constants from "expo-constants";
-import * as Updates from "expo-updates";
 import { useEffect, useRef } from "react";
 import { getShareScheme } from "@/src/utils/share-scheme";
 import { useForceUpdate } from "@/src/hooks/use-force-update";
@@ -19,98 +17,14 @@ import {
 } from "@/src/services/inbox-notifications";
 import { IS_FDROID_BUILD } from "@/src/config/build-flags";
 import { persistPendingShareIntent } from "@/src/navigation/pending-launch-intents";
+import { navigationIntegration } from "@/src/services/sentry";
+import {
+  markStartupRootReady,
+  markStartupStable,
+} from "@/src/services/startup-diagnostics";
 
-const navigationIntegration = Sentry.reactNavigationIntegration({
-  enableTimeToInitialDisplay: true,
-});
-
-const appEnvironment = process.env.EXPO_PUBLIC_ENV || "production";
-const appVersion = Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? "unknown";
-const buildNumber = Platform.select({
-  android: Constants.expoConfig?.android?.versionCode?.toString(),
-  ios: Constants.expoConfig?.ios?.buildNumber,
-  default: undefined,
-});
-const updateId = Updates.updateId ?? "embedded";
 const ANDROID_EXIT_BACK_PRESS_WINDOW_MS = 2000;
-const SENTRY_TRACES_SAMPLE_RATE = 0.02;
-const SENTRY_ERROR_REPLAY_SAMPLE_RATE = 0.1;
-const SENTRY_WARNING_MESSAGE_SAMPLE_RATE = 0.1;
-
-function shouldDropSentryEvent(event: Sentry.ErrorEvent): boolean {
-  const message = event.exception?.values?.[0]?.value?.toLowerCase() ?? '';
-  if (
-    message.includes('getregistrationinfoasync') ||
-    message.includes('keychain access failed') ||
-    message.includes('user interaction is not allowed')
-  ) {
-    return true;
-  }
-  if (
-    message.includes('performhapticsasync') ||
-    message.includes('a haptics engine is not available')
-  ) {
-    return true;
-  }
-
-  if (event.level === "info") return true;
-  if (
-    event.level === "warning" &&
-    event.message &&
-    Math.random() >= SENTRY_WARNING_MESSAGE_SAMPLE_RATE
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
-Sentry.init({
-  dsn: IS_FDROID_BUILD
-    ? undefined
-    : 'https://34f3ac8d124f7b5edbbb02ff36ac1a2b@o4510907183595520.ingest.us.sentry.io/4510907185496064',
-
-  enabled: !__DEV__ && !IS_FDROID_BUILD,
-  environment: appEnvironment,
-  release: `mirage@${appVersion}`,
-  dist: buildNumber,
-
-  sendDefaultPii: !IS_FDROID_BUILD,
-
-  tracesSampleRate: IS_FDROID_BUILD ? 0 : SENTRY_TRACES_SAMPLE_RATE,
-
-  replaysSessionSampleRate: 0,
-  replaysOnErrorSampleRate: IS_FDROID_BUILD ? 0 : SENTRY_ERROR_REPLAY_SAMPLE_RATE,
-  integrations: IS_FDROID_BUILD
-    ? []
-    : [
-        Sentry.mobileReplayIntegration(),
-        navigationIntegration,
-      ],
-
-  enableAutoPerformanceTracing: !IS_FDROID_BUILD,
-
-  beforeSend(event) {
-    if (shouldDropSentryEvent(event)) return null;
-    return event;
-  },
-});
-
-Sentry.setTags({
-  app_env: appEnvironment,
-  app_platform: Platform.OS,
-  fdroid_build: String(IS_FDROID_BUILD),
-  update_channel: Updates.channel ?? "embedded",
-  update_runtime_version: Updates.runtimeVersion ?? "unknown",
-});
-Sentry.setContext("app_update", {
-  appVersion,
-  buildNumber,
-  updateId,
-  channel: Updates.channel ?? "embedded",
-  runtimeVersion: Updates.runtimeVersion ?? "unknown",
-  isEmbeddedLaunch: Updates.isEmbeddedLaunch,
-});
+const STARTUP_STABLE_DELAY_MS = 10_000;
 
 function AndroidShareIntentColdStartRefresh() {
   useEffect(() => {
@@ -196,11 +110,19 @@ export default Sentry.wrap(function RootLayout() {
   useAndroidDoubleBackExitGuard(ref);
 
   useEffect(() => {
+    markStartupRootReady();
     signalRootLayoutReady();
+    const startupStableTimer = setTimeout(
+      markStartupStable,
+      STARTUP_STABLE_DELAY_MS,
+    );
     if (!IS_FDROID_BUILD && ref?.current) {
       navigationIntegration.registerNavigationContainer(ref);
     }
-    return () => signalRootLayoutUnmounted();
+    return () => {
+      clearTimeout(startupStableTimer);
+      signalRootLayoutUnmounted();
+    };
   }, [ref]);
 
   return (

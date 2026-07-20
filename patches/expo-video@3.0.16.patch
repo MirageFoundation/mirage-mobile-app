@@ -1,0 +1,24 @@
+diff --git a/ios/VideoPlayerObserver.swift b/ios/VideoPlayerObserver.swift
+index da422f893203ab645d7d7470b66fda8f50d06070..cbadb80e79be5b0f2a7b09ebbf64424cb456f5a3 100644
+--- a/ios/VideoPlayerObserver.swift
++++ b/ios/VideoPlayerObserver.swift
+@@ -82,16 +82,9 @@ class VideoPlayerObserver: VideoSourceLoaderListener {
+   private var isLoadingAsynchronously = false
+   private var loadedCurrentItem = false
+   private var periodicTimeObserver: Any?
+-  private var currentVideoTrack: VideoTrack? {
+-    didSet {
+-      if let player, oldValue != currentVideoTrack {
+-        delegates.forEach { delegate in
+-          delegate.value?.onVideoTrackChanged(player: player, oldVideoTrack: oldValue, newVideoTrack: currentVideoTrack)
+-        }
+-      }
+-    }
+-  }
+-
++  // Expo SDK 54 can crash while serializing videoTrackChange events under
++  // rapid HLS track changes. Mirage does not consume this event.
++  private var currentVideoTrack: VideoTrack?
+   private var isPlaying: Bool = false {
+     didSet {
+       if let player, oldValue != isPlaying {

@@ -1,10 +1,10 @@
 import { Feather } from "@expo/vector-icons";
-import { ResizeMode, Video } from "expo-av";
 import { useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { useUnistyles } from "react-native-unistyles";
 
+import { StaticVideoPreview } from "@/src/components/molecules/static-video-preview";
 import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useRouter } from "@/src/navigation/guarded-router";
@@ -107,13 +107,9 @@ export function VideoPreviewCarousel({
               style={[styles.videoPlayerWrapper, { height: VIDEO_HEIGHT, width: VIDEO_WIDTH }]}
             >
               <View pointerEvents="none">
-                <Video
-                  source={{ uri }}
+                <StaticVideoPreview
+                  uri={uri}
                   style={[styles.videoPlayer, { width: VIDEO_WIDTH, height: VIDEO_HEIGHT }]}
-                  resizeMode={ResizeMode.COVER}
-                  shouldPlay={false}
-                  isMuted
-                  useNativeControls={false}
                 />
               </View>
 

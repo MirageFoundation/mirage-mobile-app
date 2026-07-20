@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import Animated, { type SharedValue } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
+import * as Sentry from "@sentry/react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS } from "react-native-reanimated";
 
@@ -78,7 +79,13 @@ export function MediaPostDetailGallery({
 }: MediaPostDetailGalleryProps) {
   const getInitialPreviewUri = useCallback((item: MediaItem) => {
     if (!sourceMediaTransition || sourceMediaTransition.uri !== item.uri) return undefined;
+    if (item.type === "video") return sourceMediaTransition.previewUri || undefined;
     return sourceMediaTransition.previewUri || sourceMediaTransition.uri;
+  }, [sourceMediaTransition]);
+
+  const getInitialPositionSeconds = useCallback((item: MediaItem) => {
+    if (!sourceMediaTransition || sourceMediaTransition.uri !== item.uri) return undefined;
+    return sourceMediaTransition.positionSeconds;
   }, [sourceMediaTransition]);
 
   const renderCarouselItem = useCallback(
@@ -88,12 +95,14 @@ export function MediaPostDetailGallery({
           item={item}
           isActive={index === activeIndex}
           screenActive={isFocused}
+          shouldPrepare={isFocused && Math.abs(index - activeIndex) <= 1}
           collapseProgress={collapseProgress}
           onTapWhenCollapsed={expandMedia}
           registerVideo={registerVideo}
           videoKey={`m-${index}`}
           videoSyncScope={videoSyncScope}
           initialPreviewUri={getInitialPreviewUri(item)}
+          initialPositionSeconds={getInitialPositionSeconds(item)}
           onVideoReady={onVideoReady}
         />
       </View>
@@ -103,6 +112,7 @@ export function MediaPostDetailGallery({
       collapseProgress,
       expandMedia,
       getInitialPreviewUri,
+      getInitialPositionSeconds,
       isFocused,
       onVideoReady,
       registerVideo,
@@ -118,15 +128,39 @@ export function MediaPostDetailGallery({
     [activeIndex, setActiveIndex],
   );
 
+  const handleVerticalSwipe = useCallback(
+    (direction: "up" | "down") => {
+      Sentry.addBreadcrumb({
+        category: "expo-video",
+        message: `Post detail swipe ${direction}`,
+        level: "info",
+        data: {
+          active_index: activeIndex,
+          media_type: activeMedia?.type,
+          is_video_active: isVideoActive,
+          is_playing: activeStatus.playing,
+          position_ms: Math.round(activeStatus.position),
+          duration_ms: Math.round(activeStatus.duration),
+        },
+      });
+      if (direction === "up") {
+        onSwipeUp?.();
+      } else {
+        onSwipeDown?.();
+      }
+    },
+    [activeIndex, activeMedia?.type, activeStatus, isVideoActive, onSwipeDown, onSwipeUp],
+  );
+
   const verticalSwipeGesture = Gesture.Pan()
     .activeOffsetY([-12, 12])
     .failOffsetX([-20, 20])
     .onEnd((event) => {
       const { translationY, velocityY } = event;
       if (translationY < -30 || velocityY < -400) {
-        if (onSwipeUp) runOnJS(onSwipeUp)();
+        runOnJS(handleVerticalSwipe)("up");
       } else if (translationY > 30 || velocityY > 400) {
-        if (onSwipeDown) runOnJS(onSwipeDown)();
+        runOnJS(handleVerticalSwipe)("down");
       }
     });
 
@@ -164,12 +198,14 @@ export function MediaPostDetailGallery({
             item={activeMedia}
             isActive
             screenActive={isFocused}
+            shouldPrepare={isFocused}
             collapseProgress={collapseProgress}
             onTapWhenCollapsed={expandMedia}
             registerVideo={registerVideo}
             videoKey="m-0"
             videoSyncScope={videoSyncScope}
             initialPreviewUri={getInitialPreviewUri(activeMedia)}
+            initialPositionSeconds={getInitialPositionSeconds(activeMedia)}
             onVideoReady={onVideoReady}
           />
         ) : null}

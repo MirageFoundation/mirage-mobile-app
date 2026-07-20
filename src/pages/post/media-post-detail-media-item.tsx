@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, memo } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   runOnJS,
@@ -9,8 +9,9 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from "react-native-reanimated";
-import { Audio, AVPlaybackStatus, ResizeMode, Video } from "expo-av";
+import { Audio } from "expo-av";
 import { Image } from "expo-image";
+import { VideoView } from "expo-video";
 import * as Sentry from "@sentry/react-native";
 
 import {
@@ -19,11 +20,9 @@ import {
   useVideoMuteStore,
 } from "@/src/stores";
 import { getVideoThumbnailUri } from "@/src/components/molecules/post-card-utils";
-import { isExpectedVideoLifecycleError } from "@/src/components/utils/native-video-playback";
+import { useVideoPlayerController } from "@/src/hooks/use-video-player-controller";
 
 import { styles } from "./media-post-detail-styles";
-
-const AnimatedVideo = Animated.createAnimatedComponent(Video);
 
 export type MediaItem = {
   uri: string;
@@ -45,12 +44,14 @@ type ItemRenderProps = {
   item: MediaItem;
   isActive: boolean;
   screenActive: boolean;
+  shouldPrepare: boolean;
   collapseProgress: SharedValue<number>;
   onTapWhenCollapsed: () => void;
   registerVideo: (key: string, api: VideoApi | null) => void;
   videoKey: string;
   videoSyncScope?: string;
   initialPreviewUri?: string;
+  initialPositionSeconds?: number;
   onVideoReady?: () => void;
 };
 
@@ -58,24 +59,34 @@ export const MediaItemView = memo(function MediaItemView({
   item,
   isActive,
   screenActive,
+  shouldPrepare,
   collapseProgress,
   onTapWhenCollapsed,
   registerVideo,
   videoKey,
   videoSyncScope,
   initialPreviewUri,
+  initialPositionSeconds,
   onVideoReady,
 }: ItemRenderProps) {
-  const videoRef = useRef<Video | null>(null);
+  const isVideo = item.type === "video";
+  const videoPositionKey = isVideo
+    ? buildVideoPositionKey(item.uri, videoSyncScope)
+    : "";
+  const getPosition = useVideoPositionStore((s) => s.getPosition);
+  const initialPlaybackPosition = initialPositionSeconds ?? (
+    videoPositionKey ? getPosition(videoPositionKey) : 0
+  );
   const [isPlaying, setIsPlaying] = useState(true);
-  const [positionMs, setPositionMs] = useState(0);
+  const [positionMs, setPositionMs] = useState(initialPlaybackPosition * 1000);
   const [durationMs, setDurationMs] = useState(0);
   const globalMuted = useVideoMuteStore((s) => s.isMuted);
-  const getPosition = useVideoPositionStore((s) => s.getPosition);
   const setPosition = useVideoPositionStore((s) => s.setPosition);
-  const currentVideoPositionRef = useRef(0);
-  const hasRestoredVideoPositionRef = useRef(false);
+  const currentVideoPositionRef = useRef(initialPlaybackPosition);
+  const hasRestoredVideoPositionRef = useRef(initialPlaybackPosition > 0.5);
   const hasReportedLoadErrorRef = useRef(false);
+  const firstFrameRenderedRef = useRef(false);
+  const preparedVideoUriRef = useRef<string | null>(null);
 
   // --- pinch-to-zoom (only active when media is fully expanded) -------------
   const scale = useSharedValue(1);
@@ -106,23 +117,49 @@ export const MediaItemView = memo(function MediaItemView({
     },
   );
 
-  const isVideo = item.type === "video";
   const videoPreviewUri = isVideo
     ? initialPreviewUri || getVideoThumbnailUri(item.uri, item.posterUri)
     : "";
   const mediaPreviewUri = initialPreviewUri || (isVideo ? videoPreviewUri : item.uri);
   const [showInitialPreview, setShowInitialPreview] = useState(!!mediaPreviewUri);
-  const videoPositionKey = isVideo
-    ? buildVideoPositionKey(item.uri, videoSyncScope)
-    : "";
+  const videoPlayer = useVideoPlayerController(
+    isVideo && shouldPrepare ? item.uri : null,
+    {
+      loop: true,
+      muted: globalMuted || !isActive,
+      shouldPlay:
+        isVideo &&
+        shouldPrepare &&
+        isPlaying &&
+        isActive &&
+        screenActive,
+      timeUpdateInterval: 0.2,
+      initialTime: initialPlaybackPosition,
+    },
+  );
 
   useEffect(() => {
-    setShowInitialPreview(!!mediaPreviewUri);
+    if (!firstFrameRenderedRef.current) {
+      setShowInitialPreview(!!mediaPreviewUri);
+    }
   }, [mediaPreviewUri]);
+
+  useEffect(() => {
+    if (!isVideo) return;
+    if (!shouldPrepare) {
+      firstFrameRenderedRef.current = false;
+      preparedVideoUriRef.current = null;
+      setShowInitialPreview(!!mediaPreviewUri);
+    } else if (preparedVideoUriRef.current !== item.uri) {
+      preparedVideoUriRef.current = item.uri;
+      firstFrameRenderedRef.current = false;
+      setShowInitialPreview(!!mediaPreviewUri);
+    }
+  }, [isVideo, item.uri, mediaPreviewUri, shouldPrepare]);
 
   const saveVideoPosition = useCallback(() => {
     if (!videoPositionKey) return;
-    const seconds = currentVideoPositionRef.current / 1000;
+    const seconds = currentVideoPositionRef.current;
     if (seconds > 0.5) setPosition(videoPositionKey, seconds);
   }, [videoPositionKey, setPosition]);
 
@@ -133,18 +170,7 @@ export const MediaItemView = memo(function MediaItemView({
   }, [saveVideoPosition]);
 
   const togglePlay = useCallback(async () => {
-    const v = videoRef.current;
-    if (!v) return;
-    const s = await v.getStatusAsync();
-    if (!s.isLoaded) return;
-    if (s.isPlaying) {
-      await v.pauseAsync();
-      setIsPlaying(false);
-    } else {
-      if (s.didJustFinish) await v.replayAsync();
-      else await v.playAsync();
-      setIsPlaying(true);
-    }
+    setIsPlaying((playing) => !playing);
   }, []);
 
   useEffect(() => {
@@ -152,15 +178,15 @@ export const MediaItemView = memo(function MediaItemView({
     const api: VideoApi = {
       toggle: togglePlay,
       seek: async (ms) => {
-        await videoRef.current?.setStatusAsync({ positionMillis: ms });
-        currentVideoPositionRef.current = ms;
+        videoPlayer.currentTime = ms / 1000;
+        currentVideoPositionRef.current = ms / 1000;
         setPositionMs(ms);
         saveVideoPosition();
       },
       getPosition: () => positionMs,
       getDuration: () => durationMs,
       setMuted: async (m) => {
-        await videoRef.current?.setStatusAsync({ isMuted: m });
+        videoPlayer.muted = m;
       },
       isPlaying: () => isPlaying,
     };
@@ -175,14 +201,36 @@ export const MediaItemView = memo(function MediaItemView({
     isPlaying,
     togglePlay,
     saveVideoPosition,
+    videoPlayer,
   ]);
 
-  const handleStatus = useCallback(
-    (s: AVPlaybackStatus) => {
-      if (!s.isLoaded) {
-        // Unloaded statuses carry the AVPlayer failure reason for silent
-        // load failures that never reach onError.
-        if (s.error && !hasReportedLoadErrorRef.current) {
+  useEffect(() => {
+    const applySourceMetadata = (duration: number) => {
+      if (duration > 0) setDurationMs(duration * 1000);
+      if (!hasRestoredVideoPositionRef.current) {
+        const saved = videoPositionKey ? getPosition(videoPositionKey) : 0;
+        hasRestoredVideoPositionRef.current = true;
+        if (saved > 0.5) {
+          currentVideoPositionRef.current = saved;
+          setPositionMs(saved * 1000);
+          videoPlayer.currentTime = saved;
+        }
+      }
+    };
+    const timeSubscription = videoPlayer.addListener("timeUpdate", ({ currentTime }) => {
+      currentVideoPositionRef.current = currentTime;
+      setPositionMs(currentTime * 1000);
+      if (videoPositionKey && currentTime > 0.5) {
+        setPosition(videoPositionKey, currentTime);
+      }
+    });
+    const statusSubscription = videoPlayer.addListener(
+      "statusChange",
+      ({ status, error }) => {
+        if (status === "readyToPlay") {
+          applySourceMetadata(videoPlayer.duration);
+        }
+        if (status === "error" && error && !hasReportedLoadErrorRef.current) {
           hasReportedLoadErrorRef.current = true;
           Sentry.captureMessage("Media post detail video failed to load", {
             level: "error",
@@ -190,26 +238,36 @@ export const MediaItemView = memo(function MediaItemView({
               feature: "post-media",
               operation: "detail-video-load",
             },
-            extra: { uri: item.uri, error: s.error },
+            extra: { uri: item.uri, error: error.message },
           });
         }
-        return;
-      }
-      currentVideoPositionRef.current = s.positionMillis ?? 0;
-      setPositionMs(s.positionMillis ?? 0);
-      if (s.isPlaying && videoPositionKey) {
-        const seconds = (s.positionMillis ?? 0) / 1000;
-        if (seconds > 0.5) setPosition(videoPositionKey, seconds);
-      }
-      if (s.durationMillis && s.durationMillis !== durationMs) {
-        setDurationMs(s.durationMillis);
-      }
-      if (typeof s.isPlaying === "boolean" && s.isPlaying !== isPlaying) {
-        setIsPlaying(s.isPlaying);
-      }
-    },
-    [durationMs, isPlaying, item.uri, videoPositionKey, setPosition],
-  );
+      },
+    );
+    const sourceSubscription = videoPlayer.addListener(
+      "sourceLoad",
+      ({ duration }) => {
+        applySourceMetadata(duration);
+      },
+    );
+    const playingSubscription = videoPlayer.addListener(
+      "playingChange",
+      ({ isPlaying: playerIsPlaying }) => {
+        if (isActive && screenActive && playerIsPlaying) {
+          setIsPlaying(true);
+        }
+      },
+    );
+    if (videoPlayer.status === "readyToPlay") {
+      applySourceMetadata(videoPlayer.duration);
+    }
+
+    return () => {
+      timeSubscription.remove();
+      statusSubscription.remove();
+      sourceSubscription.remove();
+      playingSubscription.remove();
+    };
+  }, [getPosition, isActive, item.uri, screenActive, setPosition, videoPlayer, videoPositionKey]);
 
   const tap = Gesture.Tap()
     .maxDuration(250)
@@ -298,46 +356,22 @@ export const MediaItemView = memo(function MediaItemView({
     <GestureDetector gesture={composed}>
       <View style={styles.mediaItem}>
         <Animated.View style={[styles.mediaInner, zoomStyle]}>
-        {isVideo ? (
-          <AnimatedVideo
-            ref={videoRef}
-            source={{ uri: item.uri }}
+        {isVideo && shouldPrepare ? (
+          <VideoView
+            player={videoPlayer}
             style={styles.mediaInner}
-            resizeMode={ResizeMode.CONTAIN}
-            shouldPlay={isActive && screenActive}
-            isLooping
-            isMuted={globalMuted || !isActive}
-            useNativeControls={false}
-            progressUpdateIntervalMillis={200}
-            onLoad={async () => {
-              if (!videoPositionKey || hasRestoredVideoPositionRef.current) return;
-              const saved = getPosition(videoPositionKey);
-              if (saved > 0.5) {
-                hasRestoredVideoPositionRef.current = true;
-                currentVideoPositionRef.current = saved * 1000;
-                setPositionMs(saved * 1000);
-                await videoRef.current?.setStatusAsync({
-                  positionMillis: saved * 1000,
-                }).catch(() => {});
-              }
-            }}
-            onReadyForDisplay={() => {
+            contentFit="contain"
+            nativeControls={false}
+            fullscreenOptions={{ enable: false }}
+            allowsPictureInPicture={false}
+            surfaceType={Platform.OS === "android" ? "textureView" : undefined}
+            onFirstFrameRender={() => {
+              firstFrameRenderedRef.current = true;
               setShowInitialPreview(false);
               if (!item.uri.startsWith("file://")) {
                 onVideoReady?.();
               }
             }}
-            onError={(error) => {
-              Sentry.captureMessage("Media post detail video error", {
-                level: isExpectedVideoLifecycleError(error) ? "warning" : "error",
-                tags: {
-                  feature: "post-media",
-                  operation: "detail-video-playback",
-                },
-                extra: { uri: item.uri, error },
-              });
-            }}
-            onPlaybackStatusUpdate={handleStatus}
           />
         ) : (
           <Image
