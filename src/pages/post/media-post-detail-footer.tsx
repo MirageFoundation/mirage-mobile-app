@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { memo } from "react";
 import { Pressable, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUnistyles } from "react-native-unistyles";
 
 import { Avatar, TimeAgo } from "@/src/components/atoms";
@@ -105,12 +106,20 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
   onFollowTopic,
 }: MediaPostDetailFooterProps) {
   const { theme } = useUnistyles();
+  const insets = useSafeAreaInsets();
   const tierColor =
     post.author.level != null ? getUsernameColor(post.author.level) : undefined;
   const displayBody = resolvePostContent(post.body, post.media).bodyWithoutUrl ?? "";
 
   return (
-    <View style={styles.footerBlock}>
+    <View
+      style={[
+        styles.footerBlock,
+        !isExpanded && {
+          paddingBottom: insets.bottom || theme.spacing.sm,
+        },
+      ]}
+    >
       <View style={styles.authorRowFull}>
         <Pressable onPress={onAuthorPress} style={styles.authorRow}>
           <Avatar seed={post.author.avatarSeed ?? post.author.id} size={32} />
