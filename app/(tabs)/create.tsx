@@ -1,3 +1,3 @@
-import { CreateScreen } from "@/src/pages";
+import { CreateScreen } from "@/src/pages/create-screen";
 
 export default CreateScreen;

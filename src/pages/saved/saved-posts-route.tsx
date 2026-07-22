@@ -5,7 +5,7 @@ import * as Sentry from "@sentry/react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useUnistyles } from "react-native-unistyles";
 
-import { SavedPostsScreen } from "@/src/pages";
+import { SavedPostsScreen } from "@/src/pages/saved-posts-screen";
 import { Text } from "@/src/components/ui/primitives";
 import { useRouter } from "@/src/navigation/guarded-router";
 

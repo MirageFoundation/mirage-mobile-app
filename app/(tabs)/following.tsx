@@ -1,3 +1,3 @@
-import { FollowingScreen } from "@/src/pages";
+import { FollowingScreen } from "@/src/pages/following-screen";
 
 export default FollowingScreen;

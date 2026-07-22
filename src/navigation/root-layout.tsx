@@ -2,7 +2,7 @@ import { RootProvider } from "@/src/providers/root-provider";
 import { Stack, useNavigationContainerRef } from "expo-router";
 import { ShareIntentProvider } from "expo-share-intent";
 import ExpoShareIntentModule from "expo-share-intent/build/ExpoShareIntentModule";
-import { AuthSheet } from "@/src/components/molecules";
+import { AuthSheet } from "@/src/components/molecules/auth-sheet";
 import { ForceUpdatePopup } from "@/src/components/molecules/force-update-popup";
 import { ThemedStatusBar } from "@/src/components/ui/themed-status-bar";
 import { BackHandler, Platform, ToastAndroid } from "react-native";
