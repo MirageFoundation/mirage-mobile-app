@@ -72,8 +72,14 @@ export const ADDRESS_PREFIX = "mirage";
 // ============================================
 
 export const STORAGE_KEYS = {
-  /** Encrypted mnemonic in expo-secure-store */
+  /** Legacy encrypted mnemonic in expo-secure-store */
   MNEMONIC: "mirage_mnemonic",
+  /** Encrypted mnemonic using the current keychain accessibility */
+  MNEMONIC_V2: "mirage_mnemonic_v2",
+  /** Temporary candidate used while replacing a wallet */
+  MNEMONIC_CANDIDATE: "mirage_mnemonic_candidate",
+  /** Temporary backup used while replacing a wallet */
+  MNEMONIC_BACKUP: "mirage_mnemonic_backup",
   /** Non-sensitive wallet metadata in MMKV */
   WALLET_META: "mirage_wallet_meta",
   /** Cached user tier level in MMKV */

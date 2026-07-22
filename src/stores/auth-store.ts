@@ -296,10 +296,6 @@ export const useAuthStore = create<AuthState>()(
         set({ isCreatingWallet: true });
 
         try {
-          if (await walletService.hasWallet()) {
-            await walletService.clearWallet();
-          }
-
           const metadata = await walletService.importWallet(mnemonic);
 
           Sentry.setUser({
