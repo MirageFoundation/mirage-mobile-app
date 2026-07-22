@@ -13,6 +13,7 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import * as Sentry from "@sentry/react-native";
 
 import { usePowQueueStore, getSuccessLabel } from "@/src/services/pow-queue";
+import { createPowQueueToastPresentationSelector } from "@/src/services/pow-queue-toast-presentation";
 import { getPowProgress } from "@/src/wallet";
 import { useTopToastStack } from "@/src/stores/toast-layout-store";
 import { useIsConnected } from "@/src/hooks/use-network-state";
@@ -58,16 +59,20 @@ export const PowQueueToast = () => {
   const { theme, rt } = useUnistyles();
   const insets = useSafeAreaInsets();
   const isConnected = useIsConnected();
+  const presentationSelectorRef = useRef(
+    createPowQueueToastPresentationSelector(),
+  );
 
   const {
     currentAction,
     preparingAction,
+    nextAction,
+    hasVisibleWork,
     completedCount,
     totalCount,
     lastCompletedAction,
     successOverlay,
-    queue,
-  } = usePowQueueStore();
+  } = usePowQueueStore(presentationSelectorRef.current);
 
   const translateY = useRef(new Animated.Value(-100)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -99,11 +104,7 @@ export const PowQueueToast = () => {
   const lastHashRateRef = useRef(0);
   const { offset, onLayout } = useTopToastStack(TOAST_STACK_ID, isVisible);
 
-  const visibleCurrentAction = currentAction?.showProgress === false ? null : currentAction;
-  const visiblePreparingAction = preparingAction?.showProgress === false ? null : preparingAction;
-  const visibleQueue = queue.filter((action) => action.showProgress !== false);
-  const hasQueuedOrActiveWork = visibleCurrentAction !== null || visiblePreparingAction !== null || visibleQueue.length > 0;
-  const hasPendingWork = hasQueuedOrActiveWork;
+  const hasPendingWork = hasVisibleWork;
   const resultAction = lastCompletedAction ?? displayedCompletedAction;
   const immediateResultAction = successOverlay
     ? {
@@ -126,20 +127,25 @@ export const PowQueueToast = () => {
   const hasInlineResultOverlay =
     transientResultAction !== null || immediateResultAction !== null;
   const isShowingResult =
-    activeResultAction !== null && (!hasQueuedOrActiveWork || hasInlineResultOverlay);
+    activeResultAction !== null && (!hasVisibleWork || hasInlineResultOverlay);
   const hasActiveResultAction = activeResultAction !== null;
   const isShowingProcessing = hasPendingWork && !isShowingResult;
   const isShowingPreparingAction =
-    isShowingProcessing && visiblePreparingAction !== null && visibleCurrentAction === null;
+    isShowingProcessing && preparingAction !== null && currentAction === null;
   const isOfflineProcessing = isShowingProcessing && !isConnected;
+  const activeActionKey = currentAction
+    ? `current:${currentAction.id}`
+    : preparingAction
+      ? `preparing:${preparingAction.id}`
+      : null;
 
   const displayLabel = isShowingResult
     ? activeResultAction.success
       ? getSuccessLabel(activeResultAction.type as any)
       : activeResultAction.errorMessage || "Failed"
-    : visibleCurrentAction?.label ||
-      visiblePreparingAction?.label ||
-      visibleQueue[0]?.label ||
+    : currentAction?.label ||
+      preparingAction?.label ||
+      nextAction?.label ||
       (activeResultAction
         ? activeResultAction.success
           ? getSuccessLabel(activeResultAction.type as any)
@@ -264,7 +270,7 @@ export const PowQueueToast = () => {
   }, [animateIn, hasPendingWork, isVisible, successOverlay]);
 
   useEffect(() => {
-    if (visibleCurrentAction || visiblePreparingAction) {
+    if (activeActionKey) {
       setElapsedMs(0);
       setHashRate(0);
       setPhase("preparing");
@@ -276,7 +282,7 @@ export const PowQueueToast = () => {
       setTransientResultAction(null);
       setDisplayedCompletedAction(null);
     }
-  }, [visibleCurrentAction, visiblePreparingAction]);
+  }, [activeActionKey]);
 
   useEffect(() => {
     if (!hasPendingWork && isVisible) {
@@ -325,8 +331,8 @@ export const PowQueueToast = () => {
                   actionElapsedMs,
                   nativeElapsedMs: elapsed,
                   attempts: att,
-                  actionType: visibleCurrentAction?.type,
-                  actionId: visibleCurrentAction?.id,
+                  actionType: currentAction?.type,
+                  actionId: currentAction?.id,
                 },
               });
             }
@@ -361,8 +367,8 @@ export const PowQueueToast = () => {
     isShowingPreparingAction,
     isShowingProcessing,
     isVisible,
-    visibleCurrentAction?.id,
-    visibleCurrentAction?.type,
+    currentAction?.id,
+    currentAction?.type,
   ]);
 
   if (!isVisible) return null;
