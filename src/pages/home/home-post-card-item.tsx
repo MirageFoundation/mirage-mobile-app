@@ -35,29 +35,6 @@ type HomePostCardItemProps = {
   onLayout?: (postId: string, event: LayoutChangeEvent) => void;
 };
 
-function areHomePostCardItemPropsEqual(
-  prevProps: HomePostCardItemProps,
-  nextProps: HomePostCardItemProps
-): boolean {
-  const prev = prevProps.post;
-  const next = nextProps.post;
-  
-  if (prev.id !== next.id) return false;
-  if (prev.likes !== next.likes) return false;
-  if (prev.dislikes !== next.dislikes) return false;
-  if (prev.comments !== next.comments) return false;
- if (prev.hasLiked !== next.hasLiked) return false;
- if (prev.hasDisliked !== next.hasDisliked) return false;
- if (prev.awards?.length !== next.awards?.length) return false;
- if (prev.optimisticStatus !== next.optimisticStatus) return false;
- if (prev.optimisticError !== next.optimisticError) return false;
- if (prev.optimisticActionId !== next.optimisticActionId) return false;
- if (prev.optimisticVideoPreviewUntil !== next.optimisticVideoPreviewUntil) return false;
-  if (prevProps.feedScreen !== nextProps.feedScreen) return false;
-  if (prevProps.feedContext !== nextProps.feedContext) return false;
- return true;
-}
-
 // Get handlers from store without subscribing to changes
 const getHandlers = () => useHomePostCardStore.getState().handlers;
 const APP_STARTED_AT = Date.now();
@@ -376,4 +353,4 @@ export const HomePostCardItem = memo(function HomePostCardItem({
       shareUrl={`${getShareBaseUrl(shareServer)}/p/${post.id}`}
   />
   );
-}, areHomePostCardItemPropsEqual);
+});

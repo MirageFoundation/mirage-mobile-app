@@ -65,33 +65,6 @@ type PostCardCompactProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-function arePostCardCompactPropsEqual(
-  prev: PostCardCompactProps,
-  next: PostCardCompactProps,
-): boolean {
-  const a = prev.post;
-  const b = next.post;
-  if (a.id !== b.id) return false;
-  if (a.title !== b.title) return false;
-  if (a.body !== b.body) return false;
-  if (a.likes !== b.likes) return false;
-  if (a.dislikes !== b.dislikes) return false;
-  if (a.comments !== b.comments) return false;
-  if (a.hasLiked !== b.hasLiked) return false;
-  if (a.hasDisliked !== b.hasDisliked) return false;
-  if (a.awards?.length !== b.awards?.length) return false;
-  if (a.isFollowing !== b.isFollowing) return false;
-  if (a.optimisticStatus !== b.optimisticStatus) return false;
-  if (a.optimisticError !== b.optimisticError) return false;
-  if (a.media?.length !== b.media?.length) return false;
-  if (prev.isOwnPost !== next.isOwnPost) return false;
-  if (prev.isTopicFollowed !== next.isTopicFollowed) return false;
-  if (prev.contentRevealed !== next.contentRevealed) return false;
-  if (prev.shareUrl !== next.shareUrl) return false;
-  if (prev.topicDisabled !== next.topicDisabled) return false;
-  return true;
-}
-
 export const PostCardCompact = memo(function PostCardCompact({
   post,
   isOwnPost = false,
@@ -408,7 +381,7 @@ export const PostCardCompact = memo(function PostCardCompact({
       )}
     </Pressable>
   );
-}, arePostCardCompactPropsEqual);
+});
 
 const styles = StyleSheet.create((theme) => ({
   container: {

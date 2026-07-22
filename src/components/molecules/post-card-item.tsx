@@ -55,31 +55,6 @@ type PostCardItemProps = {
   onTopicPress?: (topic: string) => void;
 };
 
-function arePostCardItemPropsEqual(
-  prevProps: PostCardItemProps,
-  nextProps: PostCardItemProps
-): boolean {
-  const prev = prevProps.post;
-  const next = nextProps.post;
-  if (prev.id !== next.id) return false;
-  if (prev.likes !== next.likes) return false;
-  if (prev.comments !== next.comments) return false;
-  if (prev.hasLiked !== next.hasLiked) return false;
-  if (prev.hasDisliked !== next.hasDisliked) return false;
-  if (prev.awards?.length !== next.awards?.length) return false;
-  if (prev.optimisticStatus !== next.optimisticStatus) return false;
-  if (prev.optimisticVideoPreviewUntil !== next.optimisticVideoPreviewUntil) return false;
-  if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
-  if (prevProps.isVisible !== nextProps.isVisible) return false;
-  if (prevProps.isFocused !== nextProps.isFocused) return false;
-  if (prevProps.isNearVisible !== nextProps.isNearVisible) return false;
-  if (prevProps.screenActive !== nextProps.screenActive) return false;
-  if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
-  if (prevProps.contentRevealed !== nextProps.contentRevealed) return false;
-  if (prevProps.videoSyncScope !== nextProps.videoSyncScope) return false;
-  return true;
-}
-
 export const PostCardItem = memo(function PostCardItem({
 post,
 isVisible = false,
@@ -289,4 +264,4 @@ onPostPress,
       showUrlCard={showUrlCard}
    />
   );
-}, arePostCardItemPropsEqual);
+});

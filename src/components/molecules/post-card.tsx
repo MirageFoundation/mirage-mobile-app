@@ -85,50 +85,6 @@ type PostCardProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-function arePostCardPropsEqual(
-  prevProps: PostCardProps,
-  nextProps: PostCardProps,
-): boolean {
-  const prevPost = prevProps.post;
-  const nextPost = nextProps.post;
-
-  if (prevPost.id !== nextPost.id) return false;
-  if (prevPost.title !== nextPost.title) return false;
-  if (prevPost.body !== nextPost.body) return false;
-  if (prevPost.likes !== nextPost.likes) return false;
-  if (prevPost.dislikes !== nextPost.dislikes) return false;
-  if (prevPost.comments !== nextPost.comments) return false;
-  if (prevPost.hasLiked !== nextPost.hasLiked) return false;
-  if (prevPost.hasDisliked !== nextPost.hasDisliked) return false;
-  if (prevPost.awards?.length !== nextPost.awards?.length) return false;
-  if (prevPost.isFollowing !== nextPost.isFollowing) return false;
-  if (prevPost.optimisticStatus !== nextPost.optimisticStatus) return false;
-  if (prevPost.optimisticError !== nextPost.optimisticError) return false;
-  if (prevPost.optimisticActionId !== nextPost.optimisticActionId) return false;
-  if (prevPost.optimisticVideoPreviewUntil !== nextPost.optimisticVideoPreviewUntil) return false;
-
-  if (prevProps.isOwnPost !== nextProps.isOwnPost) return false;
-  if (prevProps.isVisible !== nextProps.isVisible) return false;
-  if (prevProps.isFocused !== nextProps.isFocused) return false;
-  if (prevProps.isNearVisible !== nextProps.isNearVisible) return false;
-  if (prevProps.showFollowButton !== nextProps.showFollowButton) return false;
-  if (prevProps.isTopicFollowed !== nextProps.isTopicFollowed) return false;
-  if (prevProps.allowAutoplay !== nextProps.allowAutoplay) return false;
-  if (prevProps.screenActive !== nextProps.screenActive) return false;
-  if (prevProps.contentRevealed !== nextProps.contentRevealed) return false;
-  if (prevProps.shareUrl !== nextProps.shareUrl) return false;
-  if (prevProps.showUrlCard !== nextProps.showUrlCard) return false;
-  if (prevProps.topicDisabled !== nextProps.topicDisabled) return false;
-  if (prevProps.directFollowUser !== nextProps.directFollowUser) return false;
-  if (prevProps.showMoreButton !== nextProps.showMoreButton) return false;
-  if (prevProps.isPostDetail !== nextProps.isPostDetail) return false;
-  if (prevProps.allowOptimisticMediaPreview !== nextProps.allowOptimisticMediaPreview) return false;
-  if (prevProps.videoSyncScope !== nextProps.videoSyncScope) return false;
-  if (prevProps.onOptimisticRetryPress !== nextProps.onOptimisticRetryPress) return false;
-
-  return true;
-}
-
 export const PostCard = memo(function PostCard({
   post,
   isOwnPost = false,
@@ -561,7 +517,7 @@ export const PostCard = memo(function PostCard({
       />
     </Pressable>
   );
-}, arePostCardPropsEqual);
+});
 
 const styles = StyleSheet.create((theme) => ({
   container: {
