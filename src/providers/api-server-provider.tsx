@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/src/api/client";
 import { resetServerScopedCache } from "@/src/api/cache/server-cache";
+import { serverQueryRoot } from "@/src/api/server-runtime";
 import { usePreferencesStore, getApiBaseUrl, type ApiServer } from "@/src/stores";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { Text } from "@/src/components/ui/primitives";
@@ -34,6 +35,7 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const setApiServer = usePreferencesStore((s) => s.setApiServer);
   const initializedRef = useRef(false);
   const previousServerRef = useRef<ApiServer>(apiServer);
+  const refreshingCountRef = useRef(0);
 
   useEffect(() => {
     const baseUrl = getApiBaseUrl(apiServer);
@@ -47,7 +49,6 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     if (previousServerRef.current !== apiServer) {
       apiClient.setBaseUrl(baseUrl);
-      resetServerScopedCache(queryClient);
       previousServerRef.current = apiServer;
     }
   }, [apiServer, queryClient]);
@@ -57,8 +58,10 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return;
     }
 
+    refreshingCountRef.current += 1;
     setIsRefreshing(true);
-    const previousServer = previousServerRef.current;
+    let previousServer = previousServerRef.current;
+    let wallet = null as Awaited<ReturnType<typeof walletService.getWallet>>;
 
     Sentry.addBreadcrumb({
       category: "api-server",
@@ -71,45 +74,62 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
 
     try {
-      const wallet = await walletService.getWallet();
-      await unregisterPush(wallet);
-
       const baseUrl = getApiBaseUrl(server);
-      apiClient.setBaseUrl(baseUrl);
+      await apiClient.switchBaseUrl(baseUrl, {
+        beforeCommit: async (previousContext) => {
+          previousServer = previousServerRef.current;
+          await queryClient.cancelQueries({
+            queryKey: serverQueryRoot(previousContext.identity),
+          });
+          wallet = await walletService.getWallet();
+          await unregisterPush(wallet);
+        },
+        afterCommit: async (previousContext) => {
+          resetServerScopedCache(queryClient, previousContext.identity);
 
-      resetServerScopedCache(queryClient);
+          // Clear any video viewability/active state from the previous server
+          // and suppress playback until the caller navigates back home.
+          useHomePostCardStore.setState({
+            activeVideoPostIds: {},
+            visibleVideoPostIds: {},
+            nearbyVideoPostIds: {},
+            sideMenuOpen: true,
+          });
+          Sentry.addBreadcrumb({
+            category: "feed-video",
+            message: "Suppressed feed playback during API server switch",
+            level: "info",
+            data: { from: previousServer, to: server },
+          });
 
-      // Clear any video viewability/active state from the previous server and
-      // keep feed playback suppressed while the settings screen is still on
-      // top. The caller releases sideMenuOpen after navigating back home.
-      useHomePostCardStore.setState({
-        activeVideoPostIds: {},
-        visibleVideoPostIds: {},
-        nearbyVideoPostIds: {},
-        sideMenuOpen: true,
-      });
-      Sentry.addBreadcrumb({
-        category: "feed-video",
-        message: "Suppressed feed playback during API server switch",
-        level: "info",
-        data: {
-          from: previousServer,
-          to: server,
+          previousServerRef.current = server;
+          setApiServer(server);
+          await primeBootstrap(queryClient, wallet?.address);
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        },
+        rollback: (_previousContext, failedContext) => {
+          if (failedContext) {
+            resetServerScopedCache(queryClient, failedContext.identity);
+          }
+          previousServerRef.current = previousServer;
+          setApiServer(previousServer);
         },
       });
-
-      setApiServer(server);
-      previousServerRef.current = server;
-
-      await primeBootstrap(queryClient, wallet?.address);
-
-      await new Promise((resolve) => setTimeout(resolve, 300));
 
       const walletAfterSwitch = await walletService.getWallet();
       if (walletAfterSwitch) {
         await registerPush(walletAfterSwitch);
       }
     } catch (error) {
+      if (wallet && previousServerRef.current === previousServer) {
+        try {
+          await registerPush(wallet);
+        } catch (rollbackError) {
+          Sentry.captureException(rollbackError, {
+            tags: { feature: "api-server", action: "rollback-push" },
+          });
+        }
+      }
       Sentry.captureException(error, {
         tags: {
           feature: "api-server",
@@ -122,7 +142,10 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
       throw error;
     } finally {
-      setIsRefreshing(false);
+      refreshingCountRef.current -= 1;
+      if (refreshingCountRef.current === 0) {
+        setIsRefreshing(false);
+      }
     }
   }, [queryClient, setApiServer]);
 

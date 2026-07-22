@@ -1,21 +1,17 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/src/api/read/query-keys";
+import { serverQueryRoot } from "@/src/api/server-runtime";
 
 export function resetNodeConfigCache(queryClient: QueryClient): void {
   queryClient.removeQueries({ queryKey: queryKeys.nodeConfig() });
   queryClient.removeQueries({ queryKey: queryKeys.config() });
 }
 
-export function resetServerScopedCache(queryClient: QueryClient): void {
-  resetNodeConfigCache(queryClient);
-  queryClient.removeQueries({ queryKey: queryKeys.postsRoot() });
-  queryClient.removeQueries({ queryKey: queryKeys.commentsRoot() });
-  queryClient.removeQueries({ queryKey: queryKeys.topicsRoot() });
-  queryClient.removeQueries({ queryKey: queryKeys.peers() });
-  queryClient.removeQueries({ queryKey: queryKeys.networkStats() });
-  queryClient.removeQueries({ queryKey: queryKeys.circulationStats() });
-  queryClient.removeQueries({ queryKey: queryKeys.appStats() });
-  queryClient.removeQueries({ queryKey: queryKeys.welcomeStats() });
+export function resetServerScopedCache(
+  queryClient: QueryClient,
+  identity?: string,
+): void {
+  queryClient.removeQueries({ queryKey: serverQueryRoot(identity) });
 }
 
 export async function resetServerScopedCacheAndRefetchConfig(

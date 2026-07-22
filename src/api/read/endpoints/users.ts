@@ -289,9 +289,9 @@ export async function validateInviteCode(
   }
 
   try {
-    const response = await apiClient.getInstance().post<ValidateInviteCodeResponse>("/api/validate_invite_code", { code: trimmed });
-    console.log("[validateInviteCode] server response:", JSON.stringify(response.data));
-    return response.data;
+    const response = await apiClient.post<ValidateInviteCodeResponse>("/validate_invite_code", { code: trimmed });
+    console.log("[validateInviteCode] server response:", JSON.stringify(response));
+    return response;
   } catch (error: any) {
     const status = error?.response?.status;
     Sentry.addBreadcrumb({ category: "invite-code", message: "validateInviteCode failed", data: { status, error: error?.message }, level: "warning" });
