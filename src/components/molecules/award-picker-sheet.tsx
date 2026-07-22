@@ -233,9 +233,13 @@ export const AwardPickerSheet = forwardRef<
               Give Award
             </Text>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close award picker"
+              accessibilityState={{ disabled: isSending, busy: isSending }}
               onPress={dismiss}
               disabled={isSending}
               style={[styles.closeButton, isSending && { opacity: 0.5 }]}
+              hitSlop={6}
             >
               <EvilIcons
                 name="close"

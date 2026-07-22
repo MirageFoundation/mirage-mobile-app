@@ -205,11 +205,14 @@ export const ProfileMenuSheet = forwardRef<
               My Account
             </Text>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close account menu"
               onPress={dismiss}
               style={[
                 styles.closeButton,
                 { backgroundColor: theme.colors.background.subtle },
               ]}
+              hitSlop={6}
             >
               <Ionicons
                 name="close"

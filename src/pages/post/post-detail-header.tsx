@@ -28,7 +28,13 @@ export function PostDetailHeader({
   return (
     <View style={{ paddingTop: insetsTop }}>
       <View style={styles.header}>
-        <Pressable onPress={onBack} style={styles.headerButton} hitSlop={8}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close post"
+          onPress={onBack}
+          style={styles.headerButton}
+          hitSlop={8}
+        >
           <AntDesign name="close" size={22} color={theme.colors.text.default} />
         </Pressable>
         <View style={styles.headerCenter}>
@@ -48,6 +54,9 @@ export function PostDetailHeader({
           ) : null}
         </View>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open post options"
+          accessibilityState={{ disabled: !onOptionsPress }}
           onPress={onOptionsPress}
           style={styles.headerButton}
           hitSlop={8}

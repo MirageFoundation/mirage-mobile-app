@@ -28,7 +28,13 @@ export function UsernameHeader({
         { paddingTop: Platform.OS === "ios" ? 20 : insetsTop },
       ]}
     >
-      <Pressable onPress={onClose} style={styles.closeButton}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Close sign up"
+        onPress={onClose}
+        style={styles.closeButton}
+        hitSlop={8}
+      >
         <EvilIcons name="close" size={36} color={theme.colors.text.default} />
       </Pressable>
       <Pressable onPress={onOpenServerModal}>

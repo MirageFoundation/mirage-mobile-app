@@ -130,11 +130,14 @@ export const ContentTypeSheet = forwardRef<
               </Text>
             </Box>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close content filter"
               onPress={dismiss}
               style={[
                 styles.closeButton,
                 { backgroundColor: theme.colors.background.subtle },
               ]}
+              hitSlop={6}
             >
               <Ionicons
                 name="close"

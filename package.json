@@ -19,6 +19,7 @@
     "check:stores": "bun tools/check-store-boundaries.mjs",
     "check:boundaries": "bun tools/check-layer-boundaries.mjs",
     "check:query-keys": "bun tools/check-query-key-literals.mjs",
+    "check:accessibility": "bun tools/check-icon-button-accessibility.mjs",
     "check:navigation": "bun tools/check-navigation.mjs",
     "check:typecheck": "bun run typecheck",
     "check:architecture": "bun tools/check-architecture.mjs"

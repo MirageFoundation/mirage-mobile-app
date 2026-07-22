@@ -44,6 +44,8 @@ export function ViewRecoveryPhraseScreen() {
         ]}
       >
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
           onPress={handleBack}
           style={({ pressed }) => [
             styles.backButton,

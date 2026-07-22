@@ -1473,18 +1473,38 @@ export const PostCardMedia = memo(
                 <>
                   <View style={styles.youtubeControlsContainer} pointerEvents="box-none">
                     <View style={styles.youtubeControlsRow}>
-                      <Pressable onPress={handleYouTubeSeekBack} style={styles.youtubeControlButton}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Rewind 10 seconds"
+                        onPress={handleYouTubeSeekBack}
+                        style={styles.youtubeControlButton}
+                        hitSlop={8}
+                      >
                         <Ionicons name="play-back" size={18} color="#fff" />
                       </Pressable>
-                      <Pressable onPress={handleYouTubeTogglePlay} style={styles.youtubeControlButton}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={isVideoPlaying ? "Pause video" : "Play video"}
+                        onPress={handleYouTubeTogglePlay}
+                        style={styles.youtubeControlButton}
+                        hitSlop={8}
+                      >
                         <Ionicons name={isVideoPlaying ? "pause" : "play"} size={18} color="#fff" />
                       </Pressable>
-                      <Pressable onPress={handleYouTubeSeekForward} style={styles.youtubeControlButton}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Fast-forward 10 seconds"
+                        onPress={handleYouTubeSeekForward}
+                        style={styles.youtubeControlButton}
+                        hitSlop={8}
+                      >
                         <Ionicons name="play-forward" size={18} color="#fff" />
                       </Pressable>
                     </View>
                   </View>
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Open fullscreen video"
                     onPress={() => {
                       onMediaPress?.();
                     }}
@@ -1605,6 +1625,8 @@ export const PostCardMedia = memo(
                 {isPostDetail ? (
                   <>
                     <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={isVideoPlaying ? "Pause video" : "Play video"}
                       onPress={handleVideoPress}
                       style={styles.videoTapArea}
                     />
@@ -1624,6 +1646,8 @@ export const PostCardMedia = memo(
                 ) : (
                   <>
                     <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={isVideoPlaying ? "Pause video" : "Play video"}
                       onPress={handleFeedVideoTap}
                       style={styles.videoTapArea}
                     />
@@ -1648,6 +1672,8 @@ export const PostCardMedia = memo(
             !showVideoProcessing &&
             isPostDetail && (
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open fullscreen video"
                 onPress={() => {
                   saveVideoPosition();
                   onMediaPress?.();
@@ -1667,6 +1693,8 @@ export const PostCardMedia = memo(
             (media.type !== "video" || !showVideoProcessing) &&
             !(media.type === "youtube" && Platform.OS === "ios") && (
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={globalMuted ? "Unmute video" : "Mute video"}
                 onPress={handleMuteToggle}
                 style={styles.muteButton}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}

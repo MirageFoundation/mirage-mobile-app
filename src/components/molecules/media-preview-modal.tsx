@@ -406,13 +406,30 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
       {isAndroid && controlsVisible && (
         <View style={previewVideoStyles.centerControlsOverlay} pointerEvents="box-none">
           <View style={previewVideoStyles.centerControlsRow}>
-            <Pressable onPress={() => { handleSeekBy(-10); showControlsTemporarily(); }} style={previewVideoStyles.youtubeControlButton}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Rewind 10 seconds"
+              onPress={() => { handleSeekBy(-10); showControlsTemporarily(); }}
+              style={previewVideoStyles.youtubeControlButton}
+              hitSlop={8}
+            >
               <Ionicons name="play-back" size={22} color="#fff" />
             </Pressable>
-            <Pressable onPress={() => { handleTogglePlay(); showControlsTemporarily(); }} style={previewVideoStyles.centerPlayButton}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={playing ? "Pause video" : "Play video"}
+              onPress={() => { handleTogglePlay(); showControlsTemporarily(); }}
+              style={previewVideoStyles.centerPlayButton}
+            >
               <Ionicons name={playing ? "pause" : "play"} size={36} color="#fff" />
             </Pressable>
-            <Pressable onPress={() => { handleSeekBy(10); showControlsTemporarily(); }} style={previewVideoStyles.youtubeControlButton}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Fast-forward 10 seconds"
+              onPress={() => { handleSeekBy(10); showControlsTemporarily(); }}
+              style={previewVideoStyles.youtubeControlButton}
+              hitSlop={8}
+            >
               <Ionicons name="play-forward" size={22} color="#fff" />
             </Pressable>
           </View>
@@ -420,6 +437,8 @@ const PreviewYouTubeItem = memo(function PreviewYouTubeItem({
       )}
       {isAndroid && (
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={muted ? "Unmute video" : "Mute video"}
           onPress={handleToggleMute}
           style={[previewVideoStyles.muteButton, { bottom: insets.bottom + 10, right: 16 }]}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -742,6 +761,8 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
       >
         <View style={styles.container}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close media preview"
             style={[styles.closeButton, { top: insets.top + 10 }]}
             onPress={handleClose}
             hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
@@ -825,6 +846,8 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
       <GestureHandlerRootView style={styles.gestureRoot}>
         <View style={styles.container}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close media preview"
             style={[styles.closeButton, { top: insets.top + 10 }]}
             onPress={handleClose}
             hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
@@ -859,7 +882,12 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
           )}
 
           {isVideo && (
-            <Pressable style={[styles.mediaContainer, { width: screenWidth, height: screenHeight }]} onPress={handleVideoToggle}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={isVideoPlaying ? "Pause video" : "Play video"}
+              style={[styles.mediaContainer, { width: screenWidth, height: screenHeight }]}
+              onPress={handleVideoToggle}
+            >
               <VideoView
                 player={videoPlayer}
                 style={styles.fullMedia}
@@ -892,6 +920,8 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
 
           {isVideo && (
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={isMuted ? "Unmute video" : "Mute video"}
               style={[styles.muteButton, { bottom: insets.bottom + 10 }]}
               onPress={handleMuteToggle}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}

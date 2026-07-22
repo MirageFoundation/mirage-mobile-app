@@ -117,11 +117,14 @@ const handleSelect = useCallback(
             {title}
           </Text>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Close ${title}`}
             onPress={dismiss}
             style={[
               styles.closeButton,
               { backgroundColor: theme.colors.background.subtle },
             ]}
+            hitSlop={6}
           >
             <Ionicons
               name="close"
@@ -139,6 +142,8 @@ const handleSelect = useCallback(
             return (
               <Pressable
                 key={String(option.value)}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: isSelected }}
                 onPress={() => handleSelect(option.value)}
                 style={({ pressed }) => [
                   styles.optionItem,

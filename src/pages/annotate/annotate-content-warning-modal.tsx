@@ -50,7 +50,12 @@ export function AnnotateContentWarningModal({
             <Text size="lg" weight="bold">
               Add content warning
             </Text>
-            <Pressable onPress={onClose} hitSlop={8}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close content warning options"
+              onPress={onClose}
+              hitSlop={12}
+            >
               <Feather name="x" size={20} color={theme.colors.text.subtle} />
             </Pressable>
           </View>
@@ -58,6 +63,8 @@ export function AnnotateContentWarningModal({
             {CONTENT_WARNING_OPTIONS.map((option) => (
               <Pressable
                 key={option.value}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selectedTag === option.value }}
                 onPress={() => onSelect(option.value)}
                 style={styles.tagOption}
               >

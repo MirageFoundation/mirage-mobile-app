@@ -152,7 +152,13 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
           entering={FadeIn.duration(120)}
           exiting={FadeOut.duration(120)}
         >
-          <Pressable onPress={videoControls.playPause} hitSlop={8} style={styles.ctrlBtn}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={videoControls.isPlaying ? "Pause video" : "Play video"}
+            onPress={videoControls.playPause}
+            hitSlop={8}
+            style={styles.ctrlBtn}
+          >
             <Ionicons
               name={videoControls.isPlaying ? "pause" : "play"}
               size={18}
@@ -175,6 +181,8 @@ export const MediaPostDetailFooter = memo(function MediaPostDetailFooter({
             {formatTime(videoControls.positionMs)} / {formatTime(videoControls.durationMs)}
           </Text>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={videoControls.isMuted ? "Unmute video" : "Mute video"}
             onPress={videoControls.muteToggle}
             hitSlop={8}
             style={styles.ctrlBtn}

@@ -496,7 +496,13 @@ export const PostOptionsSheet = forwardRef<
             <Text size="lg" weight="bold">
               Options
             </Text>
-            <Pressable onPress={dismiss} style={[styles.closeButton]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close post options"
+              onPress={dismiss}
+              style={[styles.closeButton]}
+              hitSlop={6}
+            >
               <EvilIcons
                 name="close"
                 size={24}
