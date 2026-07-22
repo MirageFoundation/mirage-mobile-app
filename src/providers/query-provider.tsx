@@ -2,8 +2,14 @@ import * as Sentry from "@sentry/react-native";
 import { MutationCache, QueryCache, QueryClient, focusManager, onlineManager } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
+import { useEffect } from "react";
 import { storage } from "@/src/stores/mmkv-storage";
 import { AppState, Platform } from "react-native";
+import { apiClient } from "@/src/api/client";
+import {
+  StaleQueryRecoveryCoordinator,
+  recoverStaleActiveQueries,
+} from "@/src/api/cache/stale-query-recovery";
 import {
   getNetworkState,
   subscribeNetworkState,
@@ -187,6 +193,33 @@ const queryClient = new QueryClient({
 export { queryClient };
 
 export const QueryProvider = ({ children }: { children: React.ReactNode }) => {
+  useEffect(() => {
+    const coordinator = new StaleQueryRecoveryCoordinator({
+      onRecovery: () => {
+        void recoverStaleActiveQueries({
+          queryClient,
+          getServerContext: () => apiClient.getCurrentServerContext(),
+          getViewerAddress: () => useAuthStore.getState().walletAddress,
+        });
+      },
+    });
+
+    coordinator.handleAppState(AppState.currentState);
+    coordinator.handleConnectivity(getNetworkState().isConnected);
+
+    const appStateSubscription = AppState.addEventListener("change", (status) => {
+      coordinator.handleAppState(status);
+    });
+    const unsubscribeNetwork = subscribeNetworkState((state) => {
+      coordinator.handleConnectivity(state.isConnected);
+    });
+
+    return () => {
+      appStateSubscription.remove();
+      unsubscribeNetwork();
+    };
+  }, []);
+
   return (
     <PersistQueryClientProvider
       client={queryClient}

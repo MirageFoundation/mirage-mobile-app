@@ -133,6 +133,10 @@ class ApiClient {
     return this.coordinator.getContext().baseUrl;
   }
 
+  getCurrentServerContext(): ServerRequestContext {
+    return this.coordinator.getContext();
+  }
+
   /**
    * Switch to next configured node on failure.
    * Currently this is intentionally a no-op unless multiple nodes are
