@@ -641,3 +641,39 @@ export const useWalletAddress = () => useAuthStore((s) => s.walletAddress);
 export const useUserLevel = () => useAuthStore((s) => s.userLevel);
 export const useHasUsername = () => useAuthStore((s) => s.hasUsername);
 export const useIsInitializing = () => useAuthStore((s) => s.isInitializing);
+
+export function ensureLocallyLoggedOutAfterAccountDeletion(
+  deletedWalletAddress: string | null,
+): void {
+  const state = useAuthStore.getState();
+  if (
+    !state.isLoggedIn ||
+    state.walletAddress?.toLowerCase() !== deletedWalletAddress?.toLowerCase()
+  ) {
+    return;
+  }
+
+  const session = beginAuthTransition(null);
+  Sentry.setUser(null);
+  resetAnalyticsIdentity();
+  useAuthStore.setState({
+    user: null,
+    isLoggedIn: false,
+    walletAddress: null,
+    publicKeyBase64: null,
+    userLevel: 0,
+    hasUsername: false,
+    isBootstrapping: true,
+    hasOnboarded: false,
+    recoveryPhrase: null,
+  });
+  useHomePostCardStore.getState().reset();
+  useContentModerationStore.getState().clearAll();
+  useInboxStore.getState().resetForLogout();
+  usePreferencesStore.setState({ hasSeenAdultPrompt: false, ageVerified: false });
+  useDraftStore.getState().clearDraft();
+  bootstrapAnonymousAfterLogout(
+    () => useAuthStore.setState({ isBootstrapping: false }),
+    () => authSessionCoordinator.isCurrent(session),
+  );
+}
