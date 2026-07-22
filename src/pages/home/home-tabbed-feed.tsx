@@ -185,14 +185,14 @@ export const HomeTabbedFeed = forwardRef<
     feed: baseFeed,
     by: "magic",
     allowed_tags: allowedTags || undefined,
-  }, { pageLimit: NEXT_PAGE_SIZE, disableAutoFetchWhenCached: true });
+  }, { pageLimit: NEXT_PAGE_SIZE });
 
   const latestQuery = useInfinitePosts({
     limit: INITIAL_PAGE_SIZE,
     feed: baseFeed,
     by: "newest",
     allowed_tags: allowedTags || undefined,
-  }, { enabled: latestTabActivated, pageLimit: NEXT_PAGE_SIZE, disableAutoFetchWhenCached: true });
+  }, { enabled: latestTabActivated, pageLimit: NEXT_PAGE_SIZE });
 
   const pendingApiPosts = usePendingPostsStore((s) => s.posts);
   const postEditOverrides = usePostEditStore((s) => s.overrides);
