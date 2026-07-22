@@ -85,13 +85,10 @@ export { UpdateBanner } from "./update-banner";
 export {
   ProfileEmptyState,
   ProfileTabBar,
-  ProfileTabContent,
-  ProfileTabs,
   type TabType,
 } from "./profile-tabs";
 export { ProfileCommentItem } from "./profile-comment-item";
 export { InboxItem } from "./inbox-item";
-export { ProfilePostsList } from "./profile-posts-list";
 export { ProfilePostsSkeleton } from "./profile-posts-skeleton";
 export { UserProfileContent } from "./user-profile-content";
 export { UserProfileContentAnimated } from "./user-profile-content-animated";

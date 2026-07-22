@@ -1,35 +1,25 @@
 import { sizing } from "@/src/config/sizing";
 import { Image } from "expo-image";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
-  Dimensions,
   ImageSourcePropType,
   Pressable,
   Text as RNText,
   View,
 } from "react-native";
-import PagerView from "react-native-pager-view";
 import Animated, {
   interpolate,
   interpolateColor,
   SharedValue,
   useAnimatedStyle,
-  useDerivedValue,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
-import { ProfilePostsList } from "./profile-posts-list";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 export type TabType = "posts" | "comments" | "about";
 export const PROFILE_TAB_BAR_HEIGHT = 50;
-
-type ProfileTabsProps = {
-  onSettingsPress?: () => void;
-};
 
 const TABS: { key: TabType; label: string }[] = [
   { key: "posts", label: "Posts" },
@@ -149,71 +139,6 @@ export const ProfileEmptyState = ({
      )}
    </View>
  );
-};
-
-interface ProfileTabContentProps {
- tabType: TabType;
- owner?: string;
- onSettingsPress?: () => void;
- onPostPress?: (postId: string) => void;
- onCommentPress?: (commentId: string, rootPostId: string) => void;
- onAuthorPress?: (authorId: string) => void;
- onMorePress?: (post: any) => void;
- isOwnProfile?: boolean;
-  isBlocked?: boolean;
-  onUnblock?: () => void;
-}
-
-export const ProfileTabContent = ({
- tabType,
- owner,
- onSettingsPress,
- onPostPress,
- onCommentPress,
- onAuthorPress,
- onMorePress,
- isOwnProfile = true,
-  isBlocked = false,
-  onUnblock,
-}: ProfileTabContentProps) => {
-  if (isBlocked) {
-    return (
-      <ProfileEmptyState
-        tabType={tabType}
-        isOwnProfile={isOwnProfile}
-        isBlocked={true}
-        onUnblock={onUnblock}
-      />
-    );
-  }
-
- if (tabType === "about") {
-   return (
-     <ProfileEmptyState tabType={tabType} onSettingsPress={onSettingsPress} isOwnProfile={isOwnProfile} />
-   );
- }
-
-  if (!owner) {
-    return (
-      <ProfileEmptyState tabType={tabType} onSettingsPress={onSettingsPress} isOwnProfile={isOwnProfile} />
-    );
-  }
-
-  const type = tabType === "posts" ? "submissions" : "comments";
-
-  return (
-    <ProfilePostsList
-      owner={owner}
-      type={type}
-      onPostPress={onPostPress ?? (() => {})}
-      onCommentPress={onCommentPress ?? (() => {})}
-      onAuthorPress={onAuthorPress}
-      onMorePress={onMorePress}
-      ListEmptyComponent={
-        <ProfileEmptyState tabType={tabType} onSettingsPress={onSettingsPress} isOwnProfile={isOwnProfile} />
-      }
-    />
-  );
 };
 
 const DOUBLE_TAP_DELAY = 300;
@@ -348,51 +273,7 @@ export const ProfileTabBar = ({
   );
 };
 
-export const ProfileTabs = ({ onSettingsPress }: ProfileTabsProps) => {
-  const [activeTab, setActiveTab] = useState(0);
-  const pagerRef = useRef<PagerView>(null);
-
-  const handleTabChange = useCallback((index: number) => {
-    setActiveTab(index);
-    pagerRef.current?.setPage(index);
-  }, []);
-
-  const handlePageSelected = useCallback((e: any) => {
-    setActiveTab(e.nativeEvent.position);
-  }, []);
-
-  return (
-    <View style={styles.container}>
-      <ProfileTabBar
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
-        tabWidth={SCREEN_WIDTH}
-      />
-
-      <PagerView
-        ref={pagerRef}
-        style={styles.pagerView}
-        initialPage={0}
-        onPageSelected={handlePageSelected}
-      >
-        {TABS.map((tab) => (
-          <View key={tab.key} style={styles.page}>
-            <ProfileTabContent
-              tabType={tab.key}
-              onSettingsPress={onSettingsPress}
-            />
-          </View>
-        ))}
-      </PagerView>
-    </View>
-  );
-};
-
 const styles = StyleSheet.create((theme) => ({
-  container: {
-    flex: 1,
-    minHeight: 500,
-  },
   tabBarContainer: {
     position: "relative",
     minHeight: PROFILE_TAB_BAR_HEIGHT,
@@ -422,12 +303,6 @@ const styles = StyleSheet.create((theme) => ({
     left: 0,
     right: 0,
     height: 1,
-  },
-  pagerView: {
-    flex: 1,
-  },
-  page: {
-    flex: 1,
   },
   emptyStateContainer: {
     alignItems: "center",

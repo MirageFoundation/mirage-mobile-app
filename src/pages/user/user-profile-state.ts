@@ -36,6 +36,11 @@ export function selectUserProfileListData(
   return ["header", "tabs", ...(activeTab === 0 ? submissionPosts : comments)];
 }
 
+export function getUserProfileListItemKey(item: UserProfileListItem): string {
+  if (item === "header" || item === "tabs") return item;
+  return "id" in item ? item.id : item.post_id;
+}
+
 export function getUserProfileAction(
   isFollowing: boolean,
   isBlocked: boolean,

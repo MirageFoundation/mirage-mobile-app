@@ -5,6 +5,7 @@ import {
   calculateAccountAgeDays,
   formatMirageBalance,
   getUserProfileAction,
+  getUserProfileListItemKey,
   getUserProfilePostType,
   resolveOptimisticMembership,
   resolveUserProfileAddress,
@@ -49,6 +50,13 @@ describe("user profile state", () => {
     ]);
     expect(selectUserProfileListData(2, false, submissions, comments)).toEqual(["header", "tabs"]);
     expect(selectUserProfileListData(0, true, submissions, comments)).toEqual(["header", "tabs"]);
+  });
+
+  test("maps every primary list section to a stable key", () => {
+    expect(getUserProfileListItemKey("header")).toBe("header");
+    expect(getUserProfileListItemKey("tabs")).toBe("tabs");
+    expect(getUserProfileListItemKey({ id: "submission" })).toBe("submission");
+    expect(getUserProfileListItemKey({ post_id: "comment" })).toBe("comment");
   });
 
   test("formats balances and deterministic account age", () => {

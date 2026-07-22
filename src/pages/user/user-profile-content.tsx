@@ -25,7 +25,10 @@ import {
 import { UserProfileListFooter } from "./user-profile-list-footer";
 import { UserProfileOverlays } from "./user-profile-overlays";
 import { styles } from "./user-profile-styles";
-import type { UserProfileListItem } from "./user-profile-state";
+import {
+  getUserProfileListItemKey,
+  type UserProfileListItem,
+} from "./user-profile-state";
 import { useUserProfileController } from "./use-user-profile-controller";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -97,11 +100,6 @@ export function UserProfileScreen() {
     username,
     visibleVideoPostIds,
   } = controller;
-
-  const keyExtractor = useCallback((item: UserProfileListItem) => {
-    if (item === "header" || item === "tabs") return item;
-    return "id" in item ? item.id : item.post_id;
-  }, []);
 
   const renderItem: ListRenderItem<UserProfileListItem> = useCallback(({ item }) => {
     if (item === "header") {
@@ -250,7 +248,7 @@ export function UserProfileScreen() {
           ref={flatListRef}
           data={listData}
           renderItem={renderItem}
-          keyExtractor={keyExtractor}
+          keyExtractor={getUserProfileListItemKey}
           onScroll={scrollHandler}
           scrollEventThrottle={Platform.OS === "ios" ? 64 : 16}
           showsVerticalScrollIndicator={false}
