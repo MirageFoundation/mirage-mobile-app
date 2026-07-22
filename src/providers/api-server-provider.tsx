@@ -92,9 +92,6 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           // Clear any video viewability/active state from the previous server
           // and suppress playback until the caller navigates back home.
           useHomePostCardStore.setState({
-            activeVideoPostIds: {},
-            visibleVideoPostIds: {},
-            nearbyVideoPostIds: {},
             sideMenuOpen: true,
           });
           Sentry.addBreadcrumb({

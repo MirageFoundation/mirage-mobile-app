@@ -131,7 +131,6 @@ export default function MediaPostDetailScreen({
 
   const currentUser = useAuthStore((s) => s.user);
   const shareServer = usePreferencesStore((s) => s.apiServer);
-  const setActiveFeedScreen = useHomePostCardStore((s) => s.setActiveFeedScreen);
 
   const commentsListRef = useRef<MediaPostDetailCommentsListRef>(null);
   const commentsScrollYRef = useRef(0);
@@ -166,10 +165,6 @@ export default function MediaPostDetailScreen({
     preciseScrollTargetRef.current = null;
     coarseScrollTargetRef.current = null;
   }, [highlightedCommentId]);
-
-  useEffect(() => {
-    setActiveFeedScreen(null);
-  }, [setActiveFeedScreen]);
 
   const {
     blockCommentAuthor,

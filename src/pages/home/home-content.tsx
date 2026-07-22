@@ -38,6 +38,7 @@ import {
 import { HEADER_HEIGHT } from "@/src/providers/scroll-animation-context";
 import { useToast } from "@/src/providers/toast-provider";
 import { HomeTabbedFeed, type HomeTabbedFeedRef } from "./home-tabbed-feed";
+import { FeedPostCardRuntimeProvider } from "./feed-post-card-runtime";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
   useAuthStore,
@@ -202,9 +203,16 @@ export function HomeScreen() {
     () => followedData?.followed_topics ?? [],
     [followedData]
   );
-  const followUserOverrides = useHomePostCardStore((state) => state.followUserOverrides);
-  const setFollowUserOverride = useHomePostCardStore((state) => state.setFollowUserOverride);
-  const clearFollowUserOverride = useHomePostCardStore((state) => state.clearFollowUserOverride);
+  const [followUserOverrides, setFollowUserOverrides] = useState<Record<string, boolean>>({});
+  const setFollowUserOverride = useCallback((userId: string, isFollowing: boolean) => {
+    setFollowUserOverrides((current) => ({ ...current, [userId]: isFollowing }));
+  }, []);
+  const clearFollowUserOverride = useCallback((userId: string) => {
+    setFollowUserOverrides((current) => {
+      const { [userId]: _, ...rest } = current;
+      return rest;
+    });
+  }, []);
   const displayFollowedUsers = useMemo(() => {
     const overrides = Object.entries(followUserOverrides);
     if (overrides.length === 0) return followedUsers;
@@ -352,6 +360,7 @@ export function HomeScreen() {
   const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
   const shouldScrollToTop = useHomePostCardStore((state) => state.shouldScrollToTop);
   const clearScrollToTop = useHomePostCardStore((state) => state.clearScrollToTop);
+  const sideMenuOpen = useHomePostCardStore((state) => state.sideMenuOpen);
 
   const savedPostIds = useMemo(
     () => new Set(savedPosts.map((post) => post.id)),
@@ -576,11 +585,6 @@ export function HomeScreen() {
     };
   }, [shouldScrollToTop, isHomeFocused, clearScrollToTop]);
 
-  const setCardContext = useHomePostCardStore((state) => state.setCardContext);
-  const setHandlers = useHomePostCardStore((state) => state.setHandlers);
-  const setActiveFeedScreen = useHomePostCardStore((state) => state.setActiveFeedScreen);
-  const setDisabledTopicName = useHomePostCardStore((state) => state.setDisabledTopicName);
-
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
   const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
 
@@ -589,37 +593,10 @@ export function HomeScreen() {
     [autoPlayVideos, videoAutoplayNetwork, networkType]
   );
 
-  useEffect(() => {
-    setCardContext({
-      currentUserId: currentUser?.id,
-      followedUsers: followedUsersSet,
-      followedTopics: followedTopicsSet,
-      revealedPosts,
-      shareServer,
-      allowAutoplay,
-    });
-  }, [
-    allowAutoplay,
-    currentUser?.id,
-    followedTopicsSet,
-    followedUsersSet,
-    revealedPosts,
-    setCardContext,
-    shareServer,
-  ]);
-
   useFocusEffect(
     useCallback(() => {
-      setActiveFeedScreen('home');
-      setDisabledTopicName(undefined);
       useTimeTickStore.getState().bump();
-      return () => {
-        const current = useHomePostCardStore.getState().activeFeedScreen;
-        if (current === 'home') {
-          setActiveFeedScreen(null);
-        }
-      };
-    }, [setActiveFeedScreen, setDisabledTopicName]),
+    }, []),
   );
 
   const handlersRef = useLatestRef({
@@ -639,37 +616,56 @@ export function HomeScreen() {
     handleReportFromCard,
   });
 
-  useFocusEffect(
-    useCallback(() => {
-      setHandlers({
-        onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
-        onAuthorPress: (authorId) => handlersRef.current.handleAuthorPress(authorId),
-        onTopicPress: (topic) => handlersRef.current.handleTopicPress(topic),
-        onMorePress: (post) => handlersRef.current.handleMorePress(post),
-        onLikePress: (postId, liked, disliked, likes) =>
-          handlersRef.current.handleGuardedUpvote(postId, liked, disliked, likes),
-        onDislikePress: (postId, liked, disliked, likes) =>
-          handlersRef.current.handleGuardedDownvote(postId, liked, disliked, likes),
-        onCommentPress: (postId) => handlersRef.current.handleCommentPress(postId),
-        onFollowUser: (authorId, username, isFollowing) =>
-          handlersRef.current.handleGuardedFollowPress(authorId, username, isFollowing),
-        onFollowTopic: (topic, isFollowed) =>
-          handlersRef.current.handleGuardedFollowTopicFromCard(topic, isFollowed),
-        onRevealContent: (postId) => handlersRef.current.handleRevealContent(postId),
-        onBlockUser: (postId, authorId, authorUsername) =>
-          handlersRef.current.handleBlockUserFromCard(postId, authorId, authorUsername),
-        onBlockPost: (postId) => handlersRef.current.handleBlockPostFromCard(postId),
-        onBlockTopic: (postId, topic) => handlersRef.current.handleBlockTopicFromCard(postId, topic),
-        onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
-      });
-    }, [handlersRef, setHandlers])
-  );
+  const feedRuntimeConfig = useMemo(() => ({
+    currentUserId: currentUser?.id,
+    followedUsers: followedUsersSet,
+    followedTopics: followedTopicsSet,
+    followUserOverrides,
+    revealedPosts,
+    shareServer,
+    allowAutoplay,
+    active: isHomeFocused && !sideMenuOpen,
+    handlers: {
+      onPostPress: (postId: string) => handlersRef.current.handlePostPress(postId),
+      onAuthorPress: (authorId: string) => handlersRef.current.handleAuthorPress(authorId),
+      onTopicPress: (topic: string) => handlersRef.current.handleTopicPress(topic),
+      onMorePress: (post: Post) => handlersRef.current.handleMorePress(post),
+      onLikePress: (postId: string, liked: boolean, disliked: boolean, likes: number) =>
+        handlersRef.current.handleGuardedUpvote(postId, liked, disliked, likes),
+      onDislikePress: (postId: string, liked: boolean, disliked: boolean, likes: number) =>
+        handlersRef.current.handleGuardedDownvote(postId, liked, disliked, likes),
+      onCommentPress: (postId: string) => handlersRef.current.handleCommentPress(postId),
+      onFollowUser: (authorId: string, username: string, isFollowing: boolean) =>
+        handlersRef.current.handleGuardedFollowPress(authorId, username, isFollowing),
+      onFollowTopic: (topic: string, isFollowed: boolean) =>
+        handlersRef.current.handleGuardedFollowTopicFromCard(topic, isFollowed),
+      onRevealContent: (postId: string) => handlersRef.current.handleRevealContent(postId),
+      onBlockUser: (postId: string, authorId: string, username: string) =>
+        handlersRef.current.handleBlockUserFromCard(postId, authorId, username),
+      onBlockPost: (postId: string) => handlersRef.current.handleBlockPostFromCard(postId),
+      onBlockTopic: (postId: string, topic: string) =>
+        handlersRef.current.handleBlockTopicFromCard(postId, topic),
+      onReport: (postId: string) => handlersRef.current.handleReportFromCard(postId),
+    },
+  }), [
+    allowAutoplay,
+    currentUser?.id,
+    followedTopicsSet,
+    followedUsersSet,
+    followUserOverrides,
+    handlersRef,
+    isHomeFocused,
+    revealedPosts,
+    shareServer,
+    sideMenuOpen,
+  ]);
 
   if (!isLoggedIn && !isInitializing && !openBrowsingEnabled) {
     return <LoggedOutHome />;
   }
 
   return (
+    <FeedPostCardRuntimeProvider config={feedRuntimeConfig}>
     <Box flex background="base">
       <View style={[styles.statusBarBackground, { height: insets.top }]} />
 
@@ -721,5 +717,6 @@ export function HomeScreen() {
 
       <PostActionOverlays controller={postActions} />
     </Box>
+    </FeedPostCardRuntimeProvider>
   );
 }

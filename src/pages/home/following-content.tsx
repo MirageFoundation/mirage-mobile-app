@@ -1,6 +1,6 @@
 import { navigateToEditPost } from "@/src/utils/edit-post";
 import { markSeen } from "@/src/services/seen-posts";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, View, type AppStateStatus } from "react-native";
@@ -21,7 +21,12 @@ import { Box, Text } from "@/src/components/ui/primitives";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
 import { storage } from "@/src/stores";
 
-import { useAuthGuard, useLatestRef } from "@/src/hooks";
+import {
+  shouldAutoplayVideo,
+  useAuthGuard,
+  useLatestRef,
+  useNetworkType,
+} from "@/src/hooks";
 import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
@@ -34,6 +39,7 @@ import {
   useTimeTickStore,
 } from "@/src/stores";
 import { HomeTabbedFeed, type HomeTabbedFeedRef } from "./home-tabbed-feed";
+import { FeedPostCardRuntimeProvider } from "./feed-post-card-runtime";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { PostActionOverlays } from "../post/post-action-overlays";
 import { usePostActionController } from "../post/use-post-action-controller";
@@ -43,6 +49,7 @@ export function FollowingScreen() {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const isFocused = useIsFocused();
   const {
     headerAnimatedStyle,
   } = useScrollAnimationContext();
@@ -52,6 +59,9 @@ export function FollowingScreen() {
 
   const currentUser = useAuthStore((s) => s.user);
   const shareServer = usePreferencesStore((s) => s.apiServer);
+  const autoPlayVideos = usePreferencesStore((s) => s.autoPlayVideos);
+  const videoAutoplayNetwork = usePreferencesStore((s) => s.videoAutoplayNetwork);
+  const networkType = useNetworkType();
 
   const [hasNewPosts, setHasNewPosts] = useState(false);
   const [newPostAvatars, setNewPostAvatars] = useState<{ userId: string; username: string }[]>([]);
@@ -132,9 +142,16 @@ export function FollowingScreen() {
     () => followedData?.followed_topics ?? [],
     [followedData]
   );
-  const followUserOverrides = useHomePostCardStore((state) => state.followUserOverrides);
-  const setFollowUserOverride = useHomePostCardStore((state) => state.setFollowUserOverride);
-  const clearFollowUserOverride = useHomePostCardStore((state) => state.clearFollowUserOverride);
+  const [followUserOverrides, setFollowUserOverrides] = useState<Record<string, boolean>>({});
+  const setFollowUserOverride = useCallback((userId: string, isFollowing: boolean) => {
+    setFollowUserOverrides((current) => ({ ...current, [userId]: isFollowing }));
+  }, []);
+  const clearFollowUserOverride = useCallback((userId: string) => {
+    setFollowUserOverrides((current) => {
+      const { [userId]: _, ...rest } = current;
+      return rest;
+    });
+  }, []);
   const displayFollowedUsers = useMemo(() => {
     const overrides = Object.entries(followUserOverrides);
     if (overrides.length === 0) return followedUsers;
@@ -152,6 +169,7 @@ export function FollowingScreen() {
 
   const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
   const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
+  const sideMenuOpen = useHomePostCardStore((state) => state.sideMenuOpen);
   const savedPostIds = useMemo(
     () => new Set(savedPosts.map((post) => post.id)),
     [savedPosts],
@@ -264,43 +282,17 @@ export function FollowingScreen() {
     });
   }, []);
 
-  const setCardContext = useHomePostCardStore((state) => state.setCardContext);
-  const setHandlers = useHomePostCardStore((state) => state.setHandlers);
-  const setActiveFeedScreen = useHomePostCardStore((state) => state.setActiveFeedScreen);
-  const setDisabledTopicName = useHomePostCardStore((state) => state.setDisabledTopicName);
-
   const followedUsersSet = useMemo(() => new Set(followedUsers), [followedUsers]);
   const followedTopicsSet = useMemo(() => new Set(followedTopics), [followedTopics]);
-
-  useEffect(() => {
-    setCardContext({
-      currentUserId: currentUser?.id,
-      followedUsers: followedUsersSet,
-      followedTopics: followedTopicsSet,
-      revealedPosts,
-      shareServer,
-    });
-  }, [
-    currentUser?.id,
-    followedTopicsSet,
-    followedUsersSet,
-    revealedPosts,
-    setCardContext,
-    shareServer,
-  ]);
+  const allowAutoplay = useMemo(
+    () => shouldAutoplayVideo(autoPlayVideos, videoAutoplayNetwork, networkType),
+    [autoPlayVideos, networkType, videoAutoplayNetwork],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      setActiveFeedScreen('following');
-      setDisabledTopicName(undefined);
       useTimeTickStore.getState().bump();
-      return () => {
-        const current = useHomePostCardStore.getState().activeFeedScreen;
-        if (current === 'following') {
-          setActiveFeedScreen(null);
-        }
-      };
-    }, [setActiveFeedScreen, setDisabledTopicName]),
+    }, []),
   );
 
   const handlersRef = useLatestRef({
@@ -320,33 +312,46 @@ export function FollowingScreen() {
     handleReportFromCard,
   });
 
-  useFocusEffect(
-    useCallback(() => {
-      setHandlers({
-        onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
-        onAuthorPress: (authorId) => handlersRef.current.handleAuthorPress(authorId),
-        onTopicPress: (topic) => handlersRef.current.handleTopicPress(topic),
-        onMorePress: (post) => handlersRef.current.handleMorePress(post),
-        onLikePress: (postId, liked, disliked, likes) =>
-          handlersRef.current.handleUpvote(postId, liked, disliked, likes),
-        onDislikePress: (postId, liked, disliked, likes) =>
-          handlersRef.current.handleDownvote(postId, liked, disliked, likes),
-        onCommentPress: (postId) => handlersRef.current.handleCommentPress(postId),
-        onFollowUser: (authorId, username, isFollowing) =>
-          handlersRef.current.handleFollowPress(authorId, username, isFollowing),
-        onFollowTopic: (topic, isFollowed) =>
-          handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
-        onRevealContent: (postId) => handlersRef.current.handleRevealContent(postId),
-        onBlockUser: (postId, authorId, authorUsername) =>
-          handlersRef.current.handleBlockUserFromCard(postId, authorId, authorUsername),
-        onBlockPost: (postId) => handlersRef.current.handleBlockPostFromCard(postId),
-        onBlockTopic: (postId, topic) => handlersRef.current.handleBlockTopicFromCard(postId, topic),
-        onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
-      });
-    }, [handlersRef, setHandlers])
-  );
+  const feedRuntimeConfig = useMemo(() => ({
+    currentUserId: currentUser?.id,
+    followedUsers: followedUsersSet,
+    followedTopics: followedTopicsSet,
+    followUserOverrides,
+    revealedPosts,
+    shareServer,
+    allowAutoplay,
+    active: isFocused && !sideMenuOpen,
+    handlers: {
+      onPostPress: handlersRef.current.handlePostPress,
+      onAuthorPress: handlersRef.current.handleAuthorPress,
+      onTopicPress: handlersRef.current.handleTopicPress,
+      onMorePress: handlersRef.current.handleMorePress,
+      onLikePress: handlersRef.current.handleUpvote,
+      onDislikePress: handlersRef.current.handleDownvote,
+      onCommentPress: handlersRef.current.handleCommentPress,
+      onFollowUser: handlersRef.current.handleFollowPress,
+      onFollowTopic: handlersRef.current.handleFollowTopicFromCard,
+      onRevealContent: handlersRef.current.handleRevealContent,
+      onBlockUser: handlersRef.current.handleBlockUserFromCard,
+      onBlockPost: handlersRef.current.handleBlockPostFromCard,
+      onBlockTopic: handlersRef.current.handleBlockTopicFromCard,
+      onReport: handlersRef.current.handleReportFromCard,
+    },
+  }), [
+    allowAutoplay,
+    currentUser?.id,
+    followedTopicsSet,
+    followedUsersSet,
+    followUserOverrides,
+    handlersRef,
+    isFocused,
+    revealedPosts,
+    shareServer,
+    sideMenuOpen,
+  ]);
 
   return (
+    <FeedPostCardRuntimeProvider config={feedRuntimeConfig}>
     <Box flex background="base">
       <View style={[styles.statusBarBackground, { height: insets.top }]} />
 
@@ -380,5 +385,6 @@ export function FollowingScreen() {
 
       <PostActionOverlays controller={postActions} />
     </Box>
+    </FeedPostCardRuntimeProvider>
   );
 }

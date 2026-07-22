@@ -46,7 +46,7 @@ import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
 import { HomePostList } from "./home-post-list";
-import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
+import { useFeedPostCardRuntime } from "./feed-post-card-runtime";
 import {
   getAllowedTagsFromContentTypes,
   useAuthStore,
@@ -128,12 +128,13 @@ export const HomeTabbedFeed = forwardRef<
     refreshing: isRefreshing,
     onTriggerRefresh: triggerPullRefresh,
   });
+  const feedRuntime = useFeedPostCardRuntime();
 
   useEffect(() => {
     if (prevTabIndexRef.current !== activeTabIndex) {
       const oldFeedContext = `${baseFeed}:${prevTabIndexRef.current === 0 ? "magic" : "latest"}`;
       const newFeedContext = `${baseFeed}:${activeTabIndex === 0 ? "magic" : "latest"}`;
-      useHomePostCardStore.getState().setVideoViewability(oldFeedContext, new Set(), null);
+      feedRuntime.setVideoViewability(new Set(), null);
       setContextScrolling(oldFeedContext, false);
       setContextScrolling(newFeedContext, false);
 
@@ -156,7 +157,7 @@ export const HomeTabbedFeed = forwardRef<
         setTimeout(() => handleRefreshRef.current?.(), 100);
       }
     }
-  }, [activeTabIndex, showBars, baseFeed, setContextScrolling, scrollOffsetY]);
+  }, [activeTabIndex, showBars, baseFeed, feedRuntime, setContextScrolling, scrollOffsetY]);
 
   const currentUser = useAuthStore((s) => s.user);
   const selectedContentTypes = usePreferencesStore(
@@ -965,11 +966,7 @@ export const HomeTabbedFeed = forwardRef<
     }
 
     if (seededFeedContextRef.current === seedKey) return;
-    useHomePostCardStore.getState().setVideoViewability(
-      feedContext,
-      new Set(),
-      null,
-    );
+    feedRuntime.setVideoViewability(new Set(), null);
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const task = InteractionManager.runAfterInteractions(() => {
@@ -979,11 +976,7 @@ export const HomeTabbedFeed = forwardRef<
         const activeVideoId = initialVisiblePosts[0]?.id ?? null;
 
         seededFeedContextRef.current = seedKey;
-        useHomePostCardStore.getState().setVideoViewability(
-          feedContext,
-          visibleVideoIds,
-          activeVideoId,
-        );
+        feedRuntime.setVideoViewability(visibleVideoIds, activeVideoId);
       }, 1200);
     });
 
@@ -991,7 +984,7 @@ export const HomeTabbedFeed = forwardRef<
       task.cancel();
       if (timer) clearTimeout(timer);
     };
-  }, [feedContext, posts, apiServer]);
+  }, [feedContext, posts, apiServer, feedRuntime]);
 
   const tabListRef = activeTabIndex === 0 ? magicListRef : latestListRef;
   const combinedRefCallback = useCallback((instance: FlashListRef<Post> | null) => {

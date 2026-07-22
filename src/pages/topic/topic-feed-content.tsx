@@ -2,7 +2,7 @@ import { navigateToEditPost } from "@/src/utils/edit-post";
 import { markSeen } from "@/src/services/seen-posts";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import * as Sentry from "@sentry/react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import type { FlashListRef } from "@shopify/flash-list";
 import { useLocalSearchParams } from "expo-router";
 import { useRouter } from "@/src/navigation/guarded-router";
@@ -38,6 +38,7 @@ import {
 } from "@/src/hooks";
 import { useToast } from "@/src/providers/toast-provider";
 import { HomePostList } from "../home/home-post-list";
+import { FeedPostCardRuntimeProvider } from "../home/feed-post-card-runtime";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
   getAllowedTagsFromContentTypes,
@@ -58,6 +59,7 @@ export function TopicFeedScreen() {
   const { id: topicName } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const isFocused = useIsFocused();
   const toast = useToast();
   const { requireAuth } = useAuthGuard();
 
@@ -82,7 +84,6 @@ export function TopicFeedScreen() {
     triggerHaptic("light");
     const oldFeedContext = `topic:${topicName ?? "unknown"}:${sortBy}`;
     const newFeedContext = `topic:${topicName ?? "unknown"}:${value}`;
-    useHomePostCardStore.getState().setVideoViewability(oldFeedContext, new Set(), null);
     setContextScrolling(oldFeedContext, false);
     setContextScrolling(newFeedContext, false);
     setSortBy(value);
@@ -122,9 +123,16 @@ export function TopicFeedScreen() {
     () => followedData?.followed_topics ?? [],
     [followedData],
   );
-  const followUserOverrides = useHomePostCardStore((state) => state.followUserOverrides);
-  const setFollowUserOverride = useHomePostCardStore((state) => state.setFollowUserOverride);
-  const clearFollowUserOverride = useHomePostCardStore((state) => state.clearFollowUserOverride);
+  const [followUserOverrides, setFollowUserOverrides] = useState<Record<string, boolean>>({});
+  const setFollowUserOverride = useCallback((userId: string, isFollowing: boolean) => {
+    setFollowUserOverrides((current) => ({ ...current, [userId]: isFollowing }));
+  }, []);
+  const clearFollowUserOverride = useCallback((userId: string) => {
+    setFollowUserOverrides((current) => {
+      const { [userId]: _, ...rest } = current;
+      return rest;
+    });
+  }, []);
   const displayFollowedUsers = useMemo(() => {
     const overrides = Object.entries(followUserOverrides);
     if (overrides.length === 0) return followedUsers;
@@ -253,6 +261,7 @@ export function TopicFeedScreen() {
   const clearVoteOverride = useHomePostCardStore(
     (state) => state.clearVoteOverride,
   );
+  const sideMenuOpen = useHomePostCardStore((state) => state.sideMenuOpen);
   const savedPostIds = useMemo(
     () => new Set(savedPosts.map((post) => post.id)),
     [savedPosts],
@@ -536,15 +545,6 @@ export function TopicFeedScreen() {
     );
   }, [handleRefresh, insets.top, isIOS]);
 
-  const setCardContext = useHomePostCardStore((state) => state.setCardContext);
-  const setHandlers = useHomePostCardStore((state) => state.setHandlers);
-  const setActiveFeedScreen = useHomePostCardStore(
-    (state) => state.setActiveFeedScreen,
-  );
-  const setDisabledTopicName = useHomePostCardStore(
-    (state) => state.setDisabledTopicName,
-  );
-
   const followedUsersSet = useMemo(
     () => new Set(followedUsers),
     [followedUsers],
@@ -560,37 +560,10 @@ export function TopicFeedScreen() {
     [autoPlayVideos, videoAutoplayNetwork, networkType],
   );
 
-  useEffect(() => {
-    setCardContext({
-      currentUserId: currentUser?.id,
-      followedUsers: followedUsersSet,
-      followedTopics: followedTopicsSet,
-      revealedPosts,
-      shareServer,
-      allowAutoplay,
-    });
-  }, [
-    allowAutoplay,
-    currentUser?.id,
-    followedTopicsSet,
-    followedUsersSet,
-    revealedPosts,
-    setCardContext,
-    shareServer,
-  ]);
-
   useFocusEffect(
     useCallback(() => {
-      setActiveFeedScreen("topic");
-      setDisabledTopicName(topicName);
       useTimeTickStore.getState().bump();
-      return () => {
-        const current = useHomePostCardStore.getState().activeFeedScreen;
-        if (current === "topic") {
-          setActiveFeedScreen(null);
-        }
-      };
-    }, [setActiveFeedScreen, setDisabledTopicName, topicName]),
+    }, []),
   );
 
   const handlersRef = useLatestRef({
@@ -610,46 +583,48 @@ export function TopicFeedScreen() {
     handleReportFromCard,
   });
 
-  useFocusEffect(
-    useCallback(() => {
-      setHandlers({
-        onPostPress: (postId) => handlersRef.current.handlePostPress(postId),
-        onAuthorPress: (authorId) =>
-          handlersRef.current.handleAuthorPress(authorId),
-        onTopicPress: (topic) => handlersRef.current.handleTopicPress(topic),
-        onMorePress: (post) => handlersRef.current.handleMorePress(post),
-        onLikePress: (postId, liked, disliked, likes) =>
-          handlersRef.current.handleUpvote(postId, liked, disliked, likes),
-        onDislikePress: (postId, liked, disliked, likes) =>
-          handlersRef.current.handleDownvote(postId, liked, disliked, likes),
-        onCommentPress: (postId) =>
-          handlersRef.current.handleCommentPress(postId),
-        onFollowUser: (authorId, username, isFollowing) =>
-          handlersRef.current.handleFollowPress(
-            authorId,
-            username,
-            isFollowing,
-          ),
-        onFollowTopic: (topic, isFollowed) =>
-          handlersRef.current.handleFollowTopicFromCard(topic, isFollowed),
-        onRevealContent: (postId) =>
-          handlersRef.current.handleRevealContent(postId),
-        onBlockUser: (postId, authorId, authorUsername) =>
-          handlersRef.current.handleBlockUserFromCard(
-            postId,
-            authorId,
-            authorUsername,
-          ),
-        onBlockPost: (postId) =>
-          handlersRef.current.handleBlockPostFromCard(postId),
-        onBlockTopic: (postId, topic) =>
-          handlersRef.current.handleBlockTopicFromCard(postId, topic),
-        onReport: (postId) => handlersRef.current.handleReportFromCard(postId),
-      });
-    }, [handlersRef, setHandlers]),
-  );
+  const feedRuntimeConfig = useMemo(() => ({
+    currentUserId: currentUser?.id,
+    followedUsers: followedUsersSet,
+    followedTopics: followedTopicsSet,
+    followUserOverrides,
+    revealedPosts,
+    shareServer,
+    allowAutoplay,
+    active: isFocused && !sideMenuOpen,
+    disabledTopicName: topicName,
+    handlers: {
+      onPostPress: handlersRef.current.handlePostPress,
+      onAuthorPress: handlersRef.current.handleAuthorPress,
+      onTopicPress: handlersRef.current.handleTopicPress,
+      onMorePress: handlersRef.current.handleMorePress,
+      onLikePress: handlersRef.current.handleUpvote,
+      onDislikePress: handlersRef.current.handleDownvote,
+      onCommentPress: handlersRef.current.handleCommentPress,
+      onFollowUser: handlersRef.current.handleFollowPress,
+      onFollowTopic: handlersRef.current.handleFollowTopicFromCard,
+      onRevealContent: handlersRef.current.handleRevealContent,
+      onBlockUser: handlersRef.current.handleBlockUserFromCard,
+      onBlockPost: handlersRef.current.handleBlockPostFromCard,
+      onBlockTopic: handlersRef.current.handleBlockTopicFromCard,
+      onReport: handlersRef.current.handleReportFromCard,
+    },
+  }), [
+    allowAutoplay,
+    currentUser?.id,
+    followedTopicsSet,
+    followedUsersSet,
+    followUserOverrides,
+    handlersRef,
+    isFocused,
+    revealedPosts,
+    shareServer,
+    sideMenuOpen,
+    topicName,
+  ]);
 
   return (
+    <FeedPostCardRuntimeProvider config={feedRuntimeConfig}>
     <Box flex background="base">
       <TopicFeedHeader
         insetsTop={insets.top}
@@ -698,5 +673,6 @@ export function TopicFeedScreen() {
 
       <PostActionOverlays controller={postActions} />
     </Box>
+    </FeedPostCardRuntimeProvider>
   );
 }

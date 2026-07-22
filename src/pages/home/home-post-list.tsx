@@ -20,13 +20,13 @@ import type { Post } from "@/src/components/molecules";
 import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils";
 import { useAppState } from "@/src/hooks";
 import { HomePostCardItem } from "./home-post-card-item";
+import { useFeedPostCardRuntime } from "./feed-post-card-runtime";
 import {
   getBoundedVisibleIndexRange,
   getVisibleLayoutIndices,
   mergeViewableTokens,
 } from "./home-post-list-visibility";
 import { useFeedDensity, useFeedScrollStore, useTimeTickStore } from "@/src/stores";
-import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import {
   recordViewableItems,
   pauseAllDwellTimers,
@@ -83,8 +83,15 @@ const HomePostListInner = function HomePostListInner(
     feedDensity === "compact"
       ? ESTIMATED_ITEM_SIZE_COMPACT
       : ESTIMATED_ITEM_SIZE_CARD;
-  const setVideoViewability = useHomePostCardStore(
-    (state) => state.setVideoViewability,
+  const feedRuntime = useFeedPostCardRuntime();
+  const setVideoViewability = useCallback(
+    (
+      _feedContext: string,
+      visibleIds: Set<string>,
+      activeId: string | null,
+      nearbyIds?: Set<string>,
+    ) => feedRuntime.setVideoViewability(visibleIds, activeId, nearbyIds),
+    [feedRuntime],
   );
   const onItemVisibleRef = useRef(onItemVisible);
   onItemVisibleRef.current = onItemVisible;
@@ -284,13 +291,13 @@ const HomePostListInner = function HomePostListInner(
       pendingViewableRef.current = currentViewableItems;
       syncSeenViewability(currentViewableItems);
 
-      const currentActive = useHomePostCardStore.getState().activeVideoPostIds[feedScreenRef.current];
+      const currentActive = feedRuntime.getState().activePostId;
       if (currentActive) {
         const stillVisible = currentViewableItems.some(
           (v) => v.isViewable && v.item?.id === currentActive,
         );
         if (!stillVisible) {
-          useHomePostCardStore.getState().setActiveVideoPostId(feedScreenRef.current, null);
+          feedRuntime.setActivePostId(null);
         }
       }
 
@@ -384,7 +391,7 @@ const HomePostListInner = function HomePostListInner(
     const removedStale = Array.from(currentViewableTokensRef.current).some(
       ([id, token]) => token.index == null || data[token.index]?.id !== id,
     );
-    const activeId = useHomePostCardStore.getState().activeVideoPostIds[feedScreenRef.current];
+    const activeId = feedRuntime.getState().activePostId;
     const activeMissing = !!activeId && !currentViewableTokensRef.current.has(activeId);
     if (!removedStale && !activeMissing) return;
 
@@ -410,7 +417,7 @@ const HomePostListInner = function HomePostListInner(
       rafRef.current = null;
       retryRafRef.current = null;
     };
-  }, [data, cancelDeferredFlush, flushViewability, recomputeViewableFromLayout]);
+  }, [data, cancelDeferredFlush, feedRuntime, flushViewability, recomputeViewableFromLayout]);
 
   const prevFeedContextRef = useRef(feedContext);
 

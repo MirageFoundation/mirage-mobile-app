@@ -595,7 +595,6 @@ const replaceOrUpdateOptimisticPost = (
   optimisticId: string,
   nextPost: ApiPost,
 ) => {
-  const nextPostId = nextPost.post_id;
   updateQueriesWithReducer(queryClient, queryKeys.postsRoot(), (data) => {
     if (!data) return { nextData: data, didUpdate: false };
     const replace = (post: ApiPost) =>
@@ -622,33 +621,6 @@ const replaceOrUpdateOptimisticPost = (
     return { nextData: didUpdate ? { ...singleData, posts } : data, didUpdate };
   });
 
-  useHomePostCardStore.setState((state) => {
-    const replaceId = (id: string | null | undefined) =>
-      id === optimisticId ? nextPostId : id ?? null;
-    const replaceSet = (ids?: Set<string>) => {
-      if (!ids?.has(optimisticId)) return ids;
-      const next = new Set(ids);
-      next.delete(optimisticId);
-      next.add(nextPostId);
-      return next;
-    };
-
-    const activeVideoPostIds = Object.fromEntries(
-      Object.entries(state.activeVideoPostIds).map(([screen, id]) => [screen, replaceId(id)]),
-    );
-    const visibleVideoPostIds = Object.fromEntries(
-      Object.entries(state.visibleVideoPostIds).map(([screen, ids]) => [screen, replaceSet(ids) ?? ids]),
-    );
-    const nearbyVideoPostIds = Object.fromEntries(
-      Object.entries(state.nearbyVideoPostIds).map(([screen, ids]) => [screen, replaceSet(ids) ?? ids]),
-    );
-
-    return {
-      activeVideoPostIds,
-      visibleVideoPostIds,
-      nearbyVideoPostIds,
-    };
-  });
 };
 
 const preserveLocalPreviewMedia = (
