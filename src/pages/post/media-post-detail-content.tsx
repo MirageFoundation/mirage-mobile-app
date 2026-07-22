@@ -59,6 +59,10 @@ import {
   type MediaPostDetailActionSheetsRef,
 } from "./media-post-detail-action-sheets";
 import { MediaPostDetailCommentSheet } from "./media-post-detail-comment-sheet";
+import {
+  createMediaPostDetailSheetController,
+  type MediaPostDetailCommentsListRef,
+} from "./media-post-detail-contracts";
 import { MediaPostDetailGallery } from "./media-post-detail-gallery";
 import { MediaPostDetailHeader } from "./media-post-detail-header";
 import { type MediaItem } from "./media-post-detail-media-item";
@@ -129,7 +133,7 @@ export default function MediaPostDetailScreen({
   const shareServer = usePreferencesStore((s) => s.apiServer);
   const setActiveFeedScreen = useHomePostCardStore((s) => s.setActiveFeedScreen);
 
-  const commentsListRef = useRef<any>(null);
+  const commentsListRef = useRef<MediaPostDetailCommentsListRef>(null);
   const commentsScrollYRef = useRef(0);
   const preciseScrollTargetRef = useRef<string | null>(null);
   const coarseScrollTargetRef = useRef<string | null>(null);
@@ -722,103 +726,112 @@ export default function MediaPostDetailScreen({
 
           {/* --------------- BottomSheet for comments ------------------ */}
           <MediaPostDetailCommentSheet
-            sheetRef={sheetRef}
-            commentsListRef={commentsListRef}
-            displayComments={displayComments}
-            post={displayPost ?? post}
-            currentUserId={currentUser?.id ?? null}
-            followedUsers={displayFollowedUsers}
-            followedTopics={followedTopics}
-            inputDockTotalH={inputDockTotalH}
-            shouldOpenSheetInitially={shouldOpenSheetInitially}
-            snapPoints={snapPoints}
-            animatedIndex={animatedIndex}
-            animatedPosition={animatedPosition}
-            animationConfigs={sheetAnimationConfigs}
-            measuredPostSummaryH={measuredPostSummaryH}
-            onPostSummaryHeightChange={setMeasuredPostSummaryH}
-            onClose={handleBack}
-            focusedCommentId={focusedCommentId}
-            focusedMode={focusedMode}
-            focusedCommentNotFound={isFocusedCommentNotFound}
-            isLoadingComments={isLoadingComments}
-            isLoadingFocusedComment={isLoadingFocusedComment}
-            isLoadingFocusedContextThread={isLoadingFocusedContextThread}
-            recentContextDisabled={recentContextDisabled}
-            recentContextDone={recentContextDone}
-            hasFullThreadBeyondFocus={hasFullThreadBeyondFocus}
-            highlightedCommentId={highlightedCommentId}
-            onScrollYChange={(y) => {
-              commentsScrollYRef.current = y;
-            }}
-            onScrollToIndex={scrollCommentsToIndex}
-            onAuthorPress={handleAuthorPress}
-            onAuthorIdPress={(authorId) => router.push(`/user/${authorId}`)}
-            onFollowAuthor={() =>
-              followUser(
-                post.author.id,
-                post.author.username,
-                displayPost?.isFollowing ?? false,
-              )
-            }
-            onFollowCommentAuthor={handleFollowCommentAuthor}
-            onFollowTopic={() => {
-              if (post.topic) {
-                followTopic(post.topic, followedTopics.includes(post.topic));
-              }
-            }}
-            onUpvote={handleUpvote}
-            onDownvote={handleDownvote}
-            onComment={handleComment}
-            onShare={handleShare}
-            onBlockUser={() => actionSheetsRef.current?.requestBlockUser()}
-            onBlockPost={() => actionSheetsRef.current?.requestBlockPost()}
-            onBlockTopic={() => actionSheetsRef.current?.requestBlockTopic()}
-            onReportPost={() => actionSheetsRef.current?.requestReportPost()}
-            onExpandSheet={collapseMedia}
-            isOwnPost={currentUser?.id === post.author.id}
-            shareUrl={`${getShareBaseUrl(shareServer)}/p/${post.id}`}
-            isVideo={isVideoActive}
-            isPlaying={activeStatus.playing}
-            positionMs={activeStatus.position}
-            durationMs={activeStatus.duration}
-            onPlayPause={handlePlayPause}
-            onSeek={handleSeek}
-            isMuted={globalMuted}
-            onMuteToggle={handleMuteToggle}
-            onSetFocusedMode={setFocusedMode}
-            onRefetchFocusedContext={() => {
-              setFocusedContextDepth(10);
-            }}
-            onCommentUpvote={(cid, l, d, n) =>
-              commentVote.handleUpvote(cid, l, d, n)
-            }
-            onCommentDownvote={(cid, l, d, n) =>
-              commentVote.handleDownvote(cid, l, d, n)
-            }
-            onReplyPress={(c) => {
-              requireAuth(() => {
-                if (!reserveComposeNavigation()) return;
-                router.push({
-                  pathname: "/comment-compose",
-                  params: {
-                    postId: post.id,
-                    postTitle: post.title,
-                    postAuthorUsername: post.author.username,
-                    postContent: post.body ?? "",
-                    replyToId: c.id,
-                    replyToUsername: c.author.username,
-                    replyToContent: c.content,
-                  },
-                });
-              });
-            }}
-            onMorePress={(c) => {
-              requireAuth(() => {
-                actionSheetsRef.current?.presentCommentOptions(c);
-              });
-            }}
-            onHighlightedLayout={handleHighlightedCommentLayout}
+            controller={createMediaPostDetailSheetController({
+              threadState: {
+                comments: displayComments,
+                currentUserId: currentUser?.id ?? null,
+                followedUsers: displayFollowedUsers,
+                focusedCommentId,
+                focusedMode,
+                focusedCommentNotFound: isFocusedCommentNotFound,
+                isLoadingComments,
+                isLoadingFocusedComment,
+                isLoadingFocusedContextThread,
+                recentContextDisabled,
+                recentContextDone,
+                hasFullThreadBeyondFocus,
+                highlightedCommentId,
+              },
+              postState: {
+                post: displayPost ?? post,
+                currentUserId: currentUser?.id ?? null,
+                followedUsers: displayFollowedUsers,
+                followedTopics,
+                isOwnPost: currentUser?.id === post.author.id,
+                shareUrl: `${getShareBaseUrl(shareServer)}/p/${post.id}`,
+              },
+              postActions: {
+                authorPress: handleAuthorPress,
+                authorIdPress: (authorId) => router.push(`/user/${authorId}`),
+                followAuthor: () =>
+                  followUser(
+                    post.author.id,
+                    post.author.username,
+                    displayPost?.isFollowing ?? false,
+                  ),
+                followTopic: () => {
+                  if (post.topic) {
+                    followTopic(post.topic, followedTopics.includes(post.topic));
+                  }
+                },
+                upvote: handleUpvote,
+                downvote: handleDownvote,
+                comment: handleComment,
+                share: handleShare,
+                blockUser: () => actionSheetsRef.current?.requestBlockUser(),
+                blockPost: () => actionSheetsRef.current?.requestBlockPost(),
+                blockTopic: () => actionSheetsRef.current?.requestBlockTopic(),
+                reportPost: () => actionSheetsRef.current?.requestReportPost(),
+                expandSheet: collapseMedia,
+              },
+              commentActions: {
+                scrollYChange: (y) => {
+                  commentsScrollYRef.current = y;
+                },
+                scrollToIndex: scrollCommentsToIndex,
+                followAuthor: handleFollowCommentAuthor,
+                setFocusedMode,
+                refetchFocusedContext: () => setFocusedContextDepth(10),
+                upvote: (cid, l, d, n) => commentVote.handleUpvote(cid, l, d, n),
+                downvote: (cid, l, d, n) => commentVote.handleDownvote(cid, l, d, n),
+                replyPress: (comment) => {
+                  requireAuth(() => {
+                    if (!reserveComposeNavigation()) return;
+                    router.push({
+                      pathname: "/comment-compose",
+                      params: {
+                        postId: post.id,
+                        postTitle: post.title,
+                        postAuthorUsername: post.author.username,
+                        postContent: post.body ?? "",
+                        replyToId: comment.id,
+                        replyToUsername: comment.author.username,
+                        replyToContent: comment.content,
+                      },
+                    });
+                  });
+                },
+                morePress: (comment) => {
+                  requireAuth(() => {
+                    actionSheetsRef.current?.presentCommentOptions(comment);
+                  });
+                },
+                highlightedLayout: handleHighlightedCommentLayout,
+              },
+              videoControls: {
+                isVideo: isVideoActive,
+                isPlaying: activeStatus.playing,
+                positionMs: activeStatus.position,
+                durationMs: activeStatus.duration,
+                isMuted: globalMuted,
+                playPause: handlePlayPause,
+                seek: handleSeek,
+                muteToggle: handleMuteToggle,
+              },
+              sheetLayout: {
+                sheetRef,
+                commentsListRef,
+                inputDockTotalH,
+                shouldOpenInitially: shouldOpenSheetInitially,
+                snapPoints,
+                animatedIndex,
+                animatedPosition,
+                animationConfigs: sheetAnimationConfigs,
+                measuredPostSummaryH,
+                postSummaryHeightChange: setMeasuredPostSummaryH,
+                close: handleBack,
+              },
+            })}
           />
 
           {/* --------------- Header overlay ---------------------------- */}

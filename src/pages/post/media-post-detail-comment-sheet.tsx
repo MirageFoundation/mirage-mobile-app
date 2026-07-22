@@ -1,8 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import type { RefObject } from "react";
 import { useState } from "react";
 import {
-  LayoutChangeEvent,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
@@ -13,163 +11,77 @@ import Animated, {
   Extrapolation,
   interpolate,
   useAnimatedStyle,
-  type SharedValue,
 } from "react-native-reanimated";
 import { useUnistyles } from "react-native-unistyles";
 
-import { CommentThread, type Comment, type Post } from "@/src/components/molecules";
+import { CommentThread, type Comment } from "@/src/components/molecules";
 import { Text } from "@/src/components/ui/primitives";
 
+import {
+  createMediaPostDetailFooterContract,
+  createMediaPostDetailMeasurementFooterContract,
+  type MediaPostDetailSheetController,
+} from "./media-post-detail-contracts";
 import { MediaPostDetailFooter } from "./media-post-detail-footer";
 import { styles } from "./media-post-detail-styles";
 
-type FocusedMode = "single" | "context" | "full";
-
-const noop = () => {};
-const noopSeek = (_ms: number) => {};
-
 type MediaPostDetailCommentSheetProps = {
-  sheetRef: RefObject<BottomSheet | null>;
-  commentsListRef: RefObject<any>;
-  displayComments: Comment[];
-  post: Post;
-  currentUserId: string | null;
-  followedUsers: string[];
-  followedTopics: string[];
-  inputDockTotalH: number;
-  shouldOpenSheetInitially: boolean;
-  snapPoints: (number | string)[];
-  animatedIndex: SharedValue<number>;
-  animatedPosition: SharedValue<number>;
-  animationConfigs: any;
-  measuredPostSummaryH: number;
-  onPostSummaryHeightChange: (height: number) => void;
-  onClose: () => void;
-  focusedCommentId: string | null;
-  focusedMode: FocusedMode;
-  focusedCommentNotFound?: boolean;
-  isLoadingComments: boolean;
-  isLoadingFocusedComment: boolean;
-  isLoadingFocusedContextThread: boolean;
-  recentContextDisabled: boolean;
-  recentContextDone: boolean;
-  hasFullThreadBeyondFocus: boolean;
-  highlightedCommentId: string | null;
-  onScrollYChange: (y: number) => void;
-  onScrollToIndex: (index: number) => void;
-  onAuthorPress: () => void;
-  onAuthorIdPress: (authorId: string) => void;
-  onFollowAuthor: () => void;
-  onFollowCommentAuthor: (authorId: string, isCurrentlyFollowing: boolean) => void;
-  onFollowTopic: () => void;
-  onUpvote: () => void;
-  onDownvote: () => void;
-  onComment: () => void;
-  onShare: () => void;
-  onBlockUser: () => void;
-  onBlockPost: () => void;
-  onBlockTopic: () => void;
-  onReportPost: () => void;
-  onExpandSheet: () => void;
-  isOwnPost: boolean;
-  shareUrl: string;
-  isVideo: boolean;
-  isPlaying: boolean;
-  positionMs: number;
-  durationMs: number;
-  onPlayPause: () => void;
-  onSeek: (ms: number) => void;
-  isMuted: boolean;
-  onMuteToggle: () => void;
-  onSetFocusedMode: (mode: FocusedMode) => void;
-  onRefetchFocusedContext: () => void;
-  onCommentUpvote: (
-    id: string,
-    hasLiked: boolean,
-    hasDisliked: boolean,
-    likes: number,
-  ) => void;
-  onCommentDownvote: (
-    id: string,
-    hasLiked: boolean,
-    hasDisliked: boolean,
-    likes: number,
-  ) => void;
-  onReplyPress: (comment: Comment) => void;
-  onMorePress: (comment: Comment) => void;
-  onHighlightedLayout: (event: LayoutChangeEvent) => void;
+  controller: MediaPostDetailSheetController;
 };
 
 export function MediaPostDetailCommentSheet({
-  sheetRef,
-  commentsListRef,
-  displayComments,
-  post,
-  currentUserId,
-  followedUsers,
-  followedTopics,
-  inputDockTotalH,
-  shouldOpenSheetInitially,
-  snapPoints,
-  animatedIndex,
-  animatedPosition,
-  animationConfigs,
-  measuredPostSummaryH,
-  onPostSummaryHeightChange,
-  onClose,
-  focusedCommentId,
-  focusedMode,
-  focusedCommentNotFound = false,
-  isLoadingComments,
-  isLoadingFocusedComment,
-  isLoadingFocusedContextThread,
-  recentContextDisabled,
-  recentContextDone,
-  hasFullThreadBeyondFocus,
-  highlightedCommentId,
-  onScrollYChange,
-  onScrollToIndex,
-  onAuthorPress,
-  onAuthorIdPress,
-  onFollowAuthor,
-  onFollowCommentAuthor,
-  onFollowTopic,
-  onUpvote,
-  onDownvote,
-  onComment,
-  onShare,
-  onBlockUser,
-  onBlockPost,
-  onBlockTopic,
-  onReportPost,
-  onExpandSheet,
-  isOwnPost,
-  shareUrl,
-  isVideo,
-  isPlaying,
-  positionMs,
-  durationMs,
-  onPlayPause,
-  onSeek,
-  isMuted,
-  onMuteToggle,
-  onSetFocusedMode,
-  onRefetchFocusedContext,
-  onCommentUpvote,
-  onCommentDownvote,
-  onReplyPress,
-  onMorePress,
-  onHighlightedLayout,
+  controller: {
+    threadState,
+    postState,
+    postActions,
+    commentActions,
+    videoControls,
+    sheetLayout,
+  },
 }: MediaPostDetailCommentSheetProps) {
+  const {
+    comments,
+    currentUserId,
+    followedUsers,
+    focusedCommentId,
+    focusedMode,
+    focusedCommentNotFound,
+    isLoadingComments,
+    isLoadingFocusedComment,
+    isLoadingFocusedContextThread,
+    recentContextDisabled,
+    recentContextDone,
+    hasFullThreadBeyondFocus,
+    highlightedCommentId,
+  } = threadState;
+  const {
+    sheetRef,
+    commentsListRef,
+    inputDockTotalH,
+    shouldOpenInitially,
+    snapPoints,
+    animatedIndex,
+    animatedPosition,
+    animationConfigs,
+    measuredPostSummaryH,
+    postSummaryHeightChange,
+    close,
+  } = sheetLayout;
+  const footerContract = createMediaPostDetailFooterContract(
+    postState,
+    postActions,
+    videoControls,
+    { isExpanded: false, hideVideoControls: false },
+  );
   const { theme } = useUnistyles();
   const [isSheetExpanded, setIsSheetExpanded] = useState(
-    shouldOpenSheetInitially,
+    shouldOpenInitially,
   );
   // Tracks "is the sheet expanding/expanded" for fast-hiding elements (like
   // the video controls row) that should disappear as soon as expansion
   // begins, instead of waiting for the sheet to settle.
   const [isExpandingOrExpanded, setIsExpandingOrExpanded] = useState(
-    shouldOpenSheetInitially,
+    shouldOpenInitially,
   );
   const contextActionAvailable = !recentContextDisabled;
   const fullThreadActionAvailable = hasFullThreadBeyondFocus;
@@ -219,7 +131,7 @@ export function MediaPostDetailCommentSheet({
   return (
     <BottomSheet
       ref={sheetRef}
-      index={shouldOpenSheetInitially ? 1 : 0}
+      index={shouldOpenInitially ? 1 : 0}
       snapPoints={snapPoints}
       animatedIndex={animatedIndex}
       animatedPosition={animatedPosition}
@@ -236,7 +148,7 @@ export function MediaPostDetailCommentSheet({
       enableOverDrag={false}
       enableHandlePanningGesture
       enableContentPanningGesture
-      onClose={onClose}
+      onClose={close}
       onAnimate={(_from, to) => {
         // Switch body variant (collapsed inline ↔ expanded markdown) as soon
         // as the gesture starts moving toward the target snap point, so the
@@ -263,16 +175,16 @@ export function MediaPostDetailCommentSheet({
     >
       <BottomSheetFlatList
         ref={commentsListRef}
-        data={displayComments}
+        data={comments}
         keyExtractor={(c: Comment) => c.id}
         showsVerticalScrollIndicator={false}
         onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
-          onScrollYChange(event.nativeEvent.contentOffset.y);
+          commentActions.scrollYChange(event.nativeEvent.contentOffset.y);
         }}
         scrollEventThrottle={16}
         onScrollToIndexFailed={({ index }: { index: number }) => {
           setTimeout(() => {
-            onScrollToIndex(index);
+            commentActions.scrollToIndex(index);
           }, 300);
         }}
         contentContainerStyle={{
@@ -288,40 +200,16 @@ export function MediaPostDetailCommentSheet({
                 // body content grows/shrinks during the transition.
                 if (isSheetExpanded) return;
                 if (height > 0 && height !== measuredPostSummaryH) {
-                  onPostSummaryHeightChange(height);
+                  postSummaryHeightChange(height);
                 }
               }}
             >
               <MediaPostDetailFooter
-                post={post}
-                isExpanded={isSheetExpanded}
-                hideVideoControls={isExpandingOrExpanded}
-                onAuthorPress={onAuthorPress}
-                onUpvote={onUpvote}
-                onDownvote={onDownvote}
-                onComment={onComment}
-                onShare={onShare}
-                onBlockUser={onBlockUser}
-                onBlockPost={onBlockPost}
-                onBlockTopic={onBlockTopic}
-                onReport={onReportPost}
-                isOwnPost={isOwnPost}
-                shareUrl={shareUrl}
-                isVideo={isVideo}
-                isPlaying={isPlaying}
-                positionMs={positionMs}
-                durationMs={durationMs}
-                onPlayPause={onPlayPause}
-                onSeek={onSeek}
-                onMoreLink={onExpandSheet}
-                isMuted={isMuted}
-                onMuteToggle={onMuteToggle}
-                isFollowing={post.isFollowing ?? followedUsers.includes(post.author.id)}
-                isTopicFollowed={post.topic ? followedTopics.includes(post.topic) : false}
-                topic={post.topic}
-                isOwnAuthor={currentUserId === post.author.id}
-                onFollowAuthor={onFollowAuthor}
-                onFollowTopic={onFollowTopic}
+                {...footerContract}
+                presentation={{
+                  isExpanded: isSheetExpanded,
+                  hideVideoControls: isExpandingOrExpanded,
+                }}
               />
             </View>
 
@@ -359,39 +247,12 @@ export function MediaPostDetailCommentSheet({
                 onLayout={(event) => {
                   const height = Math.ceil(event.nativeEvent.layout.height);
                   if (height > 0 && height !== measuredPostSummaryH) {
-                    onPostSummaryHeightChange(height);
+                    postSummaryHeightChange(height);
                   }
                 }}
               >
                 <MediaPostDetailFooter
-                  post={post}
-                  isExpanded={false}
-                  onAuthorPress={noop}
-                  onUpvote={noop}
-                  onDownvote={noop}
-                  onComment={noop}
-                  onShare={noop}
-                  onBlockUser={noop}
-                  onBlockPost={noop}
-                  onBlockTopic={noop}
-                  onReport={noop}
-                  isOwnPost={isOwnPost}
-                  shareUrl={shareUrl}
-                  isVideo={isVideo}
-                  isPlaying={false}
-                  positionMs={0}
-                  durationMs={durationMs}
-                  onPlayPause={noop}
-                  onSeek={noopSeek}
-                  onMoreLink={noop}
-                  isMuted={isMuted}
-                  onMuteToggle={noop}
-                  isFollowing={post.isFollowing ?? followedUsers.includes(post.author.id)}
-                  isTopicFollowed={post.topic ? followedTopics.includes(post.topic) : false}
-                  topic={post.topic}
-                  isOwnAuthor={currentUserId === post.author.id}
-                  onFollowAuthor={noop}
-                  onFollowTopic={noop}
+                  {...createMediaPostDetailMeasurementFooterContract(footerContract)}
                 />
               </View>
             ) : null}
@@ -417,8 +278,8 @@ export function MediaPostDetailCommentSheet({
                   <View style={styles.threadReminderButtonSlot}>
                     <Pressable
                       onPress={() => {
-                        onSetFocusedMode("context");
-                        setTimeout(() => onRefetchFocusedContext(), 0);
+                        commentActions.setFocusedMode("context");
+                        setTimeout(() => commentActions.refetchFocusedContext(), 0);
                       }}
                       style={({ pressed }) => [
                         styles.threadReminderButton,
@@ -447,7 +308,7 @@ export function MediaPostDetailCommentSheet({
                   </View>
                   <View style={styles.threadReminderButtonSlot}>
                     <Pressable
-                      onPress={() => onSetFocusedMode("full")}
+                      onPress={() => commentActions.setFocusedMode("full")}
                       style={({ pressed }) => [
                         styles.threadReminderButton,
                         pressed && styles.threadReminderButtonPressed,
@@ -504,13 +365,13 @@ export function MediaPostDetailCommentSheet({
             highlightedCommentId={highlightedCommentId}
             currentUserId={currentUserId}
             followedUsers={followedUsers}
-            onAuthorPress={onAuthorIdPress}
-            onLikePress={onCommentUpvote}
-            onDislikePress={onCommentDownvote}
-            onFollowPress={onFollowCommentAuthor}
-            onReplyPress={onReplyPress}
-            onMorePress={onMorePress}
-            onHighlightedLayout={onHighlightedLayout}
+            onAuthorPress={postActions.authorIdPress}
+            onLikePress={commentActions.upvote}
+            onDislikePress={commentActions.downvote}
+            onFollowPress={commentActions.followAuthor}
+            onReplyPress={commentActions.replyPress}
+            onMorePress={commentActions.morePress}
+            onHighlightedLayout={commentActions.highlightedLayout}
           />
         )}
         ListEmptyComponent={
