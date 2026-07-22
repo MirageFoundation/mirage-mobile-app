@@ -2,8 +2,8 @@ import { getContrastColor, getIconSize } from "@/utils/theme";
 import { Feather } from "@expo/vector-icons";
 import { useMemo, useState } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
-import { Pressable, useColorScheme } from "react-native";
-import { StyleSheet, UnistylesRuntime } from "react-native-unistyles";
+import { Pressable } from "react-native";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Icon } from "./icon";
 
 export type CheckboxProps = {
@@ -26,8 +26,7 @@ export const Checkbox = ({
   const [internalChecked, setInternalChecked] = useState(
     defaultChecked || false
   );
-  const theme = UnistylesRuntime.getTheme();
-  const colorScheme = useColorScheme();
+  const { theme } = useUnistyles();
   const isChecked =
     controlledChecked !== undefined ? controlledChecked : internalChecked;
   const isDisabled = mode === "disabled";
@@ -47,11 +46,9 @@ export const Checkbox = ({
   });
 
   const iconColor = useMemo(() => {
-    const theme = UnistylesRuntime.getTheme();
-
     const backgroundColor = theme.colors[mode || "primary"][500];
     return getContrastColor(backgroundColor);
-  }, [mode, colorScheme]);
+  }, [mode, theme]);
 
   return (
     <Pressable

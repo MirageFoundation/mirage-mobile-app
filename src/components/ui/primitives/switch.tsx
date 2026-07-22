@@ -1,8 +1,6 @@
-import React from "react";
 import { Pressable } from "react-native";
-import { useTheme } from "@/providers/theme-context";
 import type { StyleProp, ViewStyle } from "react-native";
-import { StyleSheet, UnistylesRuntime } from "react-native-unistyles";
+import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import Animated, {
   interpolate,
   interpolateColor,
@@ -45,13 +43,9 @@ export const Switch = ({
   disabled,
   haptics = "selection",
 }: SwitchProps) => {
-  const { currentTheme } = useTheme();
+  const { theme } = useUnistyles();
   const height = useSharedValue(0);
   const width = useSharedValue(0);
-
-  const theme = React.useMemo(() => {
-    return UnistylesRuntime.getTheme();
-  }, [currentTheme]);
 
   styles.useVariants({
     size,

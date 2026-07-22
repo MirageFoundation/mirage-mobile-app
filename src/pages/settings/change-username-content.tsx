@@ -82,7 +82,7 @@ export function ChangeUsernameScreen() {
       bottomPadding.value = withTiming(insets.bottom + 16, { duration: 250 });
     });
     return () => { showSub.remove(); hideSub.remove(); };
-  }, [insets.bottom]);
+  }, [bottomPadding, insets.bottom]);
 
   const animatedBottomStyle = useAnimatedStyle(() => ({
     paddingBottom: bottomPadding.value,

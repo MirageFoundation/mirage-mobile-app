@@ -98,7 +98,7 @@ const PopupModal = ({
       stiffness: 500,
       mass: 1,
     });
-  }, []);
+  }, [backdropOpacity, scale, translateY]);
   const handleClose = () => {
     // Perfectly synchronized exit animation - same duration for both
     const exitDuration = 300;

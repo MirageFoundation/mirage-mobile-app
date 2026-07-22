@@ -258,7 +258,6 @@ export function AnnotateScreen() {
     selectedCommunity,
     tagEnabled,
     selectedTag,
-    mediaEnabled,
     hasMediaContent,
     appendix,
     mediaType,

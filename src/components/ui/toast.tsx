@@ -123,7 +123,7 @@ export const Toast = ({
         friction: 12,
       }),
     ]).start();
-  }, []);
+  }, [opacity, scale, translateY]);
 
   // Elapsed time counter for loading toasts
   useEffect(() => {

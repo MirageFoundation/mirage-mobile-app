@@ -97,8 +97,8 @@ export function useCreateMediaUploads() {
     if (draft.attachmentType !== "image") return true;
     if (draft.mediaUris.length === 0) return true;
     return draft.mediaUris.every((uri) => {
-      const entry = IMAGE_UPLOADS.get(uri);
-      return !!entry && !!entry.url && !entry.uploading && !entry.error;
+      const entry = imageUploadState[uri];
+      return !!entry && entry.done && !entry.uploading && !entry.error;
     });
   }, [draft.attachmentType, draft.mediaUris, imageUploadState]);
 
@@ -106,8 +106,8 @@ export function useCreateMediaUploads() {
     if (draft.attachmentType !== "video") return true;
     if (draft.mediaUris.length === 0) return true;
     return draft.mediaUris.every((uri) => {
-      const entry = VIDEO_UPLOADS.get(uri);
-      return !!entry && !!entry.url && !entry.uploading && !entry.error;
+      const entry = videoUploadState[uri];
+      return !!entry && entry.done && !entry.uploading && !entry.error;
     });
   }, [draft.attachmentType, draft.mediaUris, videoUploadState]);
 

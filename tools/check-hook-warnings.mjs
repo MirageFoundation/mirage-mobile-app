@@ -36,5 +36,4 @@ for (const warning of warnings) {
   console.log(`- ${warning.file}:${warning.line} ${warning.message}`);
 }
 
-// Reporting stays non-blocking until the remaining low-risk warnings are cleared.
-process.exit(0);
+process.exit(warnings.length > 0 ? 1 : 0);

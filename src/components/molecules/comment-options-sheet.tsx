@@ -160,8 +160,6 @@ export const CommentOptionsSheet = forwardRef<
       onShare?.();
     }, [
       comment?.id,
-      comment?.content,
-      comment?.author?.username,
       rootPostId,
       shareServer,
       dismiss,

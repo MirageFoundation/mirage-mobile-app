@@ -137,7 +137,7 @@ const SimpleSheetNavigator: React.FC<SheetNavigatorProps> = ({
         mass: 1,
       });
     }
-  }, [visible, backdropOpacity, translateY, scale]);
+  }, [visible, backdropOpacity, translateY, scale, currentContentOpacity, currentContentTranslateX]);
 
   const handleClose = () => {
     // Simplified close without runOnJS to prevent crashes
@@ -182,7 +182,7 @@ const SimpleSheetNavigator: React.FC<SheetNavigatorProps> = ({
       
       prevStepIndex.value = currentIndex;
     }
-  }, [navigation.currentStepIndex]);
+  }, [currentContentOpacity, currentContentTranslateX, navigation.currentStepIndex, prevStepIndex]);
 
 
 

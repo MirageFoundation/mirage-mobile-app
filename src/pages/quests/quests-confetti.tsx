@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { View } from "react-native";
 import Animated, {
+  cancelAnimation,
   Easing,
   useAnimatedStyle,
   useSharedValue,
@@ -70,7 +71,15 @@ function ConfettiPiece({ delay, index }: { delay: number; index: number }) {
         withSpring(1, { damping: 10 }),
       ),
     );
-  }, []);
+
+    return () => {
+      cancelAnimation(opacity);
+      cancelAnimation(rotate);
+      cancelAnimation(scale);
+      cancelAnimation(translateX);
+      cancelAnimation(translateY);
+    };
+  }, [delay, opacity, rotate, scale, translateX, translateY]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
@@ -121,4 +130,3 @@ export function ConfettiAnimation({ isVisible }: { isVisible: boolean }) {
     </View>
   );
 }
-

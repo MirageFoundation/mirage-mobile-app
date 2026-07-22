@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect } from "react";
 import { Image, type ImageSourcePropType, View } from "react-native";
 import Animated, {
   useSharedValue,
@@ -117,7 +117,7 @@ function useRefreshAnimations() {
   const spin = useSharedValue(0);
   const pulse = useSharedValue(0);
 
-  const start = () => {
+  const start = useCallback(() => {
     spin.value = 0;
     pulse.value = 0;
     spin.value = withRepeat(
@@ -133,14 +133,14 @@ function useRefreshAnimations() {
       -1,
       false,
     );
-  };
+  }, [pulse, spin]);
 
-  const stop = () => {
+  const stop = useCallback(() => {
     cancelAnimation(spin);
     cancelAnimation(pulse);
     spin.value = 0;
     pulse.value = 0;
-  };
+  }, [pulse, spin]);
 
   return { spin, pulse, start, stop };
 }
@@ -157,7 +157,7 @@ export function RefreshIndicator() {
   useEffect(() => {
     start();
     return stop;
-  }, []);
+  }, [start, stop]);
 
   return (
     <View style={{ alignItems: "center", paddingVertical: 16, overflow: "visible" }}>
@@ -198,7 +198,8 @@ export function IOSRefreshIndicator({ visible, topOffset, scrollY, pullDistance 
     } else {
       stop();
     }
-  }, [visible]);
+    return stop;
+  }, [isRefreshing, start, stop, visible]);
 
   const progress = useDerivedValue(() => {
     if (isRefreshing.value) return 1;

@@ -79,7 +79,7 @@ export const UpdateBanner = ({
         }),
       ]).start();
     }
-  }, [visible]);
+  }, [opacity, scale, translateY, visible]);
 
   if (!visible) return null;
 

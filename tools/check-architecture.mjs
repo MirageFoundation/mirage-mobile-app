@@ -10,6 +10,7 @@ const checks = [
   "check:boundaries",
   "check:query-keys",
   "check:navigation",
+  "check:hooks",
   "check:typecheck",
   "check:lint",
 ];

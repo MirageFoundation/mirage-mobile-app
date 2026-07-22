@@ -170,7 +170,7 @@ function LegacyPostDetailScreen() {
         easing: Easing.out(Easing.cubic),
       });
     }
-  }, []);
+  }, [postOpacity, postTranslateY, pressedY]);
 
   const postEnteringStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: postTranslateY.value }],
