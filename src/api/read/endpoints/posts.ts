@@ -6,6 +6,12 @@ import type {
   CommentContextResponse,
 } from "../../types";
 import { fetchCompleteCommentTree } from "../deep-comment-expansion";
+import { normalizeUserPostsQueryParams } from "../request-params";
+
+export {
+  normalizeUserPostsQueryParams,
+  type UserPostsQueryParams,
+} from "../request-params";
 
 // ============================================
 // Posts & Feed
@@ -39,7 +45,7 @@ export async function getPosts(
 export interface GetUserPostsParams {
   owner: string; // Required
   address?: string; // Viewer address
-  type?: "submissions" | "comments";
+  type?: "" | "submissions" | "comments";
   page?: number;
   limit?: number; // max 50
   allowed_tags?: string;
@@ -51,7 +57,10 @@ export interface GetUserPostsParams {
 export async function getUserPosts(
   params: GetUserPostsParams
 ): Promise<PostsResponse> {
-  return api.get<PostsResponse>("/get_user_posts", params);
+  return api.get<PostsResponse>("/get_user_posts", {
+    ...params,
+    ...normalizeUserPostsQueryParams(params),
+  });
 }
 
 // ============================================

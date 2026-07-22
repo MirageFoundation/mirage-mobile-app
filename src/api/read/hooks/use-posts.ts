@@ -12,6 +12,7 @@ import {
 import {
   getPosts,
   getUserPosts,
+  normalizeUserPostsQueryParams,
   type GetPostsParams,
   type GetUserPostsParams,
 } from "../endpoints/posts";
@@ -179,15 +180,18 @@ export function useUserPosts(
   const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
   const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
+  const queryParams = normalizeUserPostsQueryParams({
+    type,
+    allowed_tags: allowedTags || undefined,
+  });
 
   return useQuery({
-    queryKey: queryKeys.userPosts(owner!, type, allowedTags, walletAddress),
+    queryKey: queryKeys.userPosts(owner!, walletAddress, queryParams),
     queryFn: () =>
       getUserPosts({
         owner: owner!,
         address: walletAddress ?? undefined,
-        type,
-        allowed_tags: allowedTags || undefined,
+        ...queryParams,
       }),
     enabled: !!owner,
     staleTime: 1000 * 60, // 1 minute
@@ -205,16 +209,19 @@ export function useInfiniteUserPosts(
   const selectedContentTypes = usePreferencesStore((s) => s.selectedContentTypes);
   const adultContentEnabled = usePreferencesStore((s) => s.adultContentEnabled);
   const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
+  const queryParams = normalizeUserPostsQueryParams({
+    ...params,
+    allowed_tags: params?.allowed_tags ?? (allowedTags || undefined),
+  });
 
   return useInfiniteQuery({
-    queryKey: queryKeys.userPosts(owner!, params?.type, allowedTags, walletAddress),
+    queryKey: queryKeys.userPosts(owner!, walletAddress, queryParams),
     queryFn: ({ pageParam = 1 }) => {
       return getUserPosts({
         owner: owner!,
         address: walletAddress ?? undefined,
         page: pageParam,
-        allowed_tags: allowedTags || undefined,
-        ...params,
+        ...queryParams,
       });
     },
     initialPageParam: 1,

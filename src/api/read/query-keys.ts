@@ -1,5 +1,12 @@
 import type { PostFilters, UserFilters } from "../types";
 import { serverQueryRoot } from "../server-runtime";
+import {
+  normalizeInboxQueryParams,
+  normalizeUserPostsQueryParams,
+  type InboxQueryParamsInput,
+  type UserPostsQueryParams,
+  type UserPostsQueryParamsInput,
+} from "./request-params";
 import { normalizeUsernameIdentity } from "./username-resolution";
 
 const serverKey = <T extends readonly unknown[]>(...key: T) =>
@@ -10,6 +17,20 @@ export const normalizeAccountIdentity = (address?: string | null): string =>
 
 const viewerKey = (address?: string | null) =>
   ["viewer", normalizeAccountIdentity(address)] as const;
+
+export const getUserPostsQueryParamsFromKey = (
+  queryKey: readonly unknown[],
+): UserPostsQueryParams | undefined => {
+  const value = queryKey.at(-1);
+  if (!value || typeof value !== "object") return undefined;
+  const params = value as Partial<UserPostsQueryParams>;
+  if (
+    typeof params.type !== "string" ||
+    typeof params.limit !== "number" ||
+    typeof params.allowed_tags !== "string"
+  ) return undefined;
+  return normalizeUserPostsQueryParams(params as UserPostsQueryParams);
+};
 
 export const queryKeys = {
   // Config & Parameters
@@ -26,26 +47,22 @@ export const queryKeys = {
   userPostsForViewer: (
     owner: string,
     viewerAddress: string | null | undefined,
-    type: string | undefined,
   ) => serverKey(
     "user",
     "posts",
     normalizeAccountIdentity(owner),
     ...viewerKey(viewerAddress),
-    type,
   ),
   userPosts: (
     owner: string,
-    type: string | undefined,
-    allowedTags: string | undefined,
     viewerAddress: string | null | undefined,
+    params?: UserPostsQueryParamsInput,
   ) => serverKey(
     "user",
     "posts",
     normalizeAccountIdentity(owner),
     ...viewerKey(viewerAddress),
-    type,
-    allowedTags,
+    normalizeUserPostsQueryParams(params),
   ),
   userFollowed: (address: string) => serverKey("user", "followed", normalizeAccountIdentity(address)),
   userBlocked: (address: string) => serverKey("user", "blocked", normalizeAccountIdentity(address)),
@@ -72,10 +89,27 @@ export const queryKeys = {
   batchUsernames: (stableKey: string) => serverKey("batchUsernames", stableKey),
 
   // Inbox
-  inbox: (address: string, page?: number) =>
-    serverKey("inbox", normalizeAccountIdentity(address), page),
-  inboxInfinite: (address: string) =>
-    serverKey("inbox", "infinite", normalizeAccountIdentity(address)),
+  inboxRoot: () => serverKey("inbox"),
+  inboxForAddress: (address: string) =>
+    serverKey("inbox", normalizeAccountIdentity(address)),
+  inbox: (
+    address: string,
+    page?: number,
+    params?: InboxQueryParamsInput,
+  ) => serverKey(
+    "inbox",
+    normalizeAccountIdentity(address),
+    "page",
+    page ?? 1,
+    normalizeInboxQueryParams(params),
+  ),
+  inboxInfinite: (address: string, params?: InboxQueryParamsInput) =>
+    serverKey(
+      "inbox",
+      normalizeAccountIdentity(address),
+      "infinite",
+      normalizeInboxQueryParams(params),
+    ),
 
   // Topics
   topicsRoot: () => serverKey("topics"),

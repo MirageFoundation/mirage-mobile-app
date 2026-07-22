@@ -186,9 +186,8 @@ export function useUserProfileController(
     queryClient.prefetchInfiniteQuery({
       queryKey: queryKeys.userPosts(
         userAddress,
-        "comments",
-        undefined,
         currentUser?.walletAddress,
+        { type: "comments", limit: 20 },
       ),
       queryFn: ({ pageParam = 1 }) => getUserPosts({
         owner: userAddress,

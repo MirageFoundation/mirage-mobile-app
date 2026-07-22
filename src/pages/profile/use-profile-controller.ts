@@ -114,7 +114,10 @@ export function useProfileController(headerInset: number, windowHeight: number) 
   useEffect(() => {
     if (!walletAddress) return;
     queryClient.prefetchInfiniteQuery({
-      queryKey: queryKeys.userPosts(walletAddress, "comments", undefined, walletAddress),
+      queryKey: queryKeys.userPosts(walletAddress, walletAddress, {
+        type: "comments",
+        limit: 20,
+      }),
       queryFn: ({ pageParam = 1 }) => getUserPosts({
         owner: walletAddress,
         address: walletAddress,

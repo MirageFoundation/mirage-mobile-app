@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useQueryClient, type InfiniteData, type QueryClient } from "@tanstack/react-query";
-import { getComments, getPosts, getUserPosts } from "@/src/api/read/endpoints/posts";
+import {
+  getComments,
+  getPosts,
+  getUserPosts,
+  normalizeUserPostsQueryParams,
+} from "@/src/api/read/endpoints/posts";
 import type { PostsResponse, Post as ApiPost } from "@/src/api/types";
-import { queryKeys } from "@/src/api/read/query-keys";
+import {
+  getUserPostsQueryParamsFromKey,
+  queryKeys,
+} from "@/src/api/read/query-keys";
 import { getVisiblePostIds } from "@/src/services/seen-posts-tracker";
 import { useAppState } from "./use-app-state";
 
@@ -118,24 +126,27 @@ async function refreshUserPostsQuery(
   const queryRoot = queryKeys.userPostsForViewer(
     params.owner,
     params.address,
-    params.type,
   );
+  const targetParams = normalizeUserPostsQueryParams(params);
   const queries = queryClient.getQueriesData<InfiniteData<PostsResponse>>({
     queryKey: queryRoot,
   });
 
   await Promise.all(queries.map(async ([queryKey, existingData]) => {
     if (!existingData?.pages?.length) return;
-    const allowedTags = queryKey.at(-1);
+    const queryParams = getUserPostsQueryParamsFromKey(queryKey);
+    if (
+      !queryParams ||
+      queryParams.type !== targetParams.type ||
+      queryParams.limit !== targetParams.limit
+    ) return;
 
     const freshPages = await Promise.all(
       existingData.pages.map((page, index) =>
         getUserPosts({
           ...params,
           page: existingData.pageParams[index] as number,
-          limit: params.limit,
-          allowed_tags:
-            typeof allowedTags === "string" ? allowedTags : undefined,
+          ...queryParams,
         }),
       ),
     );

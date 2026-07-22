@@ -2,7 +2,11 @@ import { infiniteQueryOptions, useQuery, useInfiniteQuery } from "@tanstack/reac
 import * as Sentry from "@sentry/react-native";
 import { Platform } from "react-native";
 import { queryKeys } from "../query-keys";
-import { getInbox, type GetInboxParams } from "../endpoints/inbox";
+import {
+  getInbox,
+  normalizeInboxQueryParams,
+  type GetInboxParams,
+} from "../endpoints/inbox";
 import { useAuthStore } from "@/src/stores";
 import {
   INBOX_MAX_PAGES,
@@ -18,14 +22,16 @@ import {
  */
 export function useInbox(params?: Omit<GetInboxParams, "address">) {
   const walletAddress = useAuthStore((s) => s.user?.walletAddress);
+  const queryParams = normalizeInboxQueryParams(params);
 
   return useQuery({
-    queryKey: queryKeys.inbox(walletAddress ?? "", params?.page),
+    queryKey: queryKeys.inbox(walletAddress ?? "", params?.page, queryParams),
     queryFn: async () => {
       try {
         return await getInbox({
           address: walletAddress!,
           ...params,
+          ...queryParams,
         });
       } catch (err) {
         Sentry.addBreadcrumb({
@@ -55,14 +61,17 @@ export function infiniteInboxQueryOptions(
   walletAddress: string,
   params?: Omit<GetInboxParams, "address" | "page">,
 ) {
+  const queryParams = normalizeInboxQueryParams(params);
+
   return infiniteQueryOptions({
-    queryKey: queryKeys.inboxInfinite(walletAddress),
+    queryKey: queryKeys.inboxInfinite(walletAddress, queryParams),
     queryFn: async ({ pageParam = 1 }) => {
       try {
         return await getInbox({
           address: walletAddress,
           page: pageParam,
           ...params,
+          ...queryParams,
         });
       } catch (err) {
         Sentry.addBreadcrumb({

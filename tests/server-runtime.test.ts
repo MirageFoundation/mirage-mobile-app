@@ -62,8 +62,8 @@ describe("viewer query identity", () => {
         queryKeys.posts({ feed: "home", address: viewerB }),
       ],
       [
-        queryKeys.userPosts("MIRAGE1OWNER", "comments", "sensitive", viewerA),
-        queryKeys.userPosts("MIRAGE1OWNER", "comments", "sensitive", viewerB),
+        queryKeys.userPosts("MIRAGE1OWNER", viewerA, { type: "comments" }),
+        queryKeys.userPosts("MIRAGE1OWNER", viewerB, { type: "comments" }),
       ],
       [
         queryKeys.comments("post-1", viewerA),
@@ -109,9 +109,8 @@ describe("viewer query identity", () => {
   test("keeps owner and viewer cache roots aligned with full user-post keys", () => {
     const key = queryKeys.userPosts(
       "MIRAGE1OWNER",
-      "comments",
-      "sensitive",
       viewerA,
+      { type: "comments", limit: 20, allowed_tags: "sensitive" },
     );
     expect(key.slice(0, queryKeys.userPostsForOwner("mirage1owner").length)).toEqual(
       queryKeys.userPostsForOwner("mirage1owner"),
@@ -119,11 +118,78 @@ describe("viewer query identity", () => {
     expect(
       key.slice(
         0,
-        queryKeys.userPostsForViewer("mirage1owner", viewerA, "comments").length,
+        queryKeys.userPostsForViewer("mirage1owner", viewerA).length,
       ),
     ).toEqual(
-      queryKeys.userPostsForViewer("mirage1owner", viewerA, "comments"),
+      queryKeys.userPostsForViewer("mirage1owner", viewerA),
     );
+  });
+
+  test("includes every user-post response parameter with stable defaults", () => {
+    const defaults = queryKeys.userPosts("owner", viewerA);
+    expect(defaults).toEqual(queryKeys.userPosts("owner", viewerA, {
+      type: undefined,
+      limit: 10,
+      allowed_tags: "sensitive",
+    }));
+    expect(defaults).not.toEqual(
+      queryKeys.userPosts("owner", viewerA, { limit: 20 }),
+    );
+    expect(defaults).not.toEqual(
+      queryKeys.userPosts("owner", viewerA, { allowed_tags: "" }),
+    );
+    expect(defaults).not.toEqual(
+      queryKeys.userPosts("owner", viewerA, { type: "comments" }),
+    );
+  });
+
+  test("normalizes semantically equivalent allowed-tag sets", () => {
+    expect(queryKeys.userPosts("owner", viewerA, {
+      allowed_tags: " adult, sensitive,adult ",
+    })).toEqual(queryKeys.userPosts("owner", viewerA, {
+      allowed_tags: "SENSITIVE,ADULT",
+    }));
+  });
+
+  test("includes inbox limits and excludes infinite page parameters", () => {
+    expect(queryKeys.inboxInfinite(viewerA)).toEqual(
+      queryKeys.inboxInfinite(viewerA, { limit: 25 }),
+    );
+    expect(queryKeys.inboxInfinite(viewerA, { limit: 25 })).not.toEqual(
+      queryKeys.inboxInfinite(viewerA, { limit: 50 }),
+    );
+    expect(queryKeys.inbox(viewerA, 1, { limit: 25 })).not.toEqual(
+      queryKeys.inbox(viewerA, 2, { limit: 25 }),
+    );
+  });
+
+  test("keeps invalidation roots aligned with every parameter variant", () => {
+    const userVariants = [
+      queryKeys.userPosts("owner", viewerA),
+      queryKeys.userPosts("owner", viewerA, {
+        type: "comments",
+        limit: 20,
+        allowed_tags: "adult,sensitive",
+      }),
+    ];
+    const inboxVariants = [
+      queryKeys.inbox(viewerA, 3, { limit: 10 }),
+      queryKeys.inboxInfinite(viewerA, { limit: 50 }),
+    ];
+
+    for (const key of userVariants) {
+      expect(key.slice(0, queryKeys.userPostsForOwner("owner").length)).toEqual(
+        queryKeys.userPostsForOwner("owner"),
+      );
+      expect(key.slice(0, queryKeys.userPostsForViewer("owner", viewerA).length)).toEqual(
+        queryKeys.userPostsForViewer("owner", viewerA),
+      );
+    }
+    for (const key of inboxVariants) {
+      expect(key.slice(0, queryKeys.inboxForAddress(viewerA).length)).toEqual(
+        queryKeys.inboxForAddress(viewerA),
+      );
+    }
   });
 });
 

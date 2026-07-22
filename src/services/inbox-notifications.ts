@@ -490,8 +490,9 @@ function saveNotifiedIds(ids: Set<string>): void {
 
 function seedInboxCache(walletAddress: string, inbox: InboxResponse): void {
   const page = inbox.page || 1;
+  const params = { limit: inbox.limit };
   queryClient.setQueryData<InfiniteData<InboxResponse>>(
-    queryKeys.inboxInfinite(walletAddress),
+    queryKeys.inboxInfinite(walletAddress, params),
     (current) => {
       if (!current) {
         return { pages: [inbox], pageParams: [page] };
@@ -504,7 +505,7 @@ function seedInboxCache(walletAddress: string, inbox: InboxResponse): void {
       return { ...current, pages, pageParams };
     },
   );
-  queryClient.setQueryData(queryKeys.inbox(walletAddress, page), inbox);
+  queryClient.setQueryData(queryKeys.inbox(walletAddress, page, params), inbox);
 }
 
 async function fetchAndSeedInboxCache(
