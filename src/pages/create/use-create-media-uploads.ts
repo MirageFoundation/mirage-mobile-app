@@ -7,6 +7,7 @@ import {
 } from "@/src/api/read/hooks/use-upload-media";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useToast } from "@/src/providers/toast-provider";
+import { sanitizedTelemetryError } from "@/src/services/react-query-telemetry";
 import { useDraftStore } from "@/src/stores/draft-store";
 import { getMediaUploadErrorDetails } from "@/src/utils/media-upload-error";
 import { IMAGE_UPLOADS, VIDEO_UPLOADS } from "./create-upload-state";
@@ -118,7 +119,6 @@ export function useCreateMediaUploads() {
         message: existing.uploading ? "Reusing in-flight image upload" : "Using completed image upload",
         level: "info",
         data: {
-          fileName: uri.split("/").pop() ?? uri,
           hasUrl: !!existing.url,
           silent,
         },
@@ -131,7 +131,6 @@ export function useCreateMediaUploads() {
       message: "Starting create image upload",
       level: "info",
       data: {
-        fileName: uri.split("/").pop() ?? uri,
         silent,
         isCurrentDraftMedia: draft.mediaUris.includes(uri),
         attachmentType: draft.attachmentType,
@@ -155,7 +154,6 @@ export function useCreateMediaUploads() {
           message: "Create image upload succeeded",
           level: "info",
           data: {
-            fileName: uri.split("/").pop() ?? uri,
             hasUrl: !!url,
           },
         });
@@ -176,7 +174,10 @@ export function useCreateMediaUploads() {
           ? "This image format isn't supported. Try a different photo."
           : uploadError.message;
         const isServerError = uploadError.kind === "server";
-        Sentry.captureException(error, {
+        Sentry.captureException(sanitizedTelemetryError("media-upload", {
+          error_class: typeof status === "number" ? "http" : "unexpected",
+          status: typeof status === "number" ? status : undefined,
+        }), {
           tags: {
             feature: "create-post",
             operation: "image-upload",
@@ -184,9 +185,7 @@ export function useCreateMediaUploads() {
             unsupportedFormat: String(isUnsupportedFormat),
           },
           extra: {
-            fileName: uri.split("/").pop() ?? uri,
             status,
-            responseText,
             silent,
             isCurrentDraftMedia: draft.mediaUris.includes(uri),
             attachmentType: draft.attachmentType,
@@ -240,7 +239,6 @@ export function useCreateMediaUploads() {
   }, []);
 
   const getVideoUploadDebugData = useCallback((uri: string, sessionId?: number) => ({
-    fileName: uri.split("/").pop() ?? uri,
     sessionId,
     activeSessionId: videoUploadSessionRef.current,
     isCurrentDraftMedia: videoUploadDraftDebugRef.current.mediaUris.includes(uri),
@@ -450,17 +448,13 @@ export function useCreateMediaUploads() {
   );
   const retryImageUpload = useCallback(
     (uri: string) => {
-      startImageUpload(uri, true)?.catch((error) => {
+      startImageUpload(uri, true)?.catch(() => {
         // Failure state and Sentry reporting are handled inside
         // startImageUpload; this only prevents an unhandled rejection.
         Sentry.addBreadcrumb({
           category: "image-upload",
           message: "Network-recovery image retry failed",
           level: "warning",
-          data: {
-            fileName: uri.split("/").pop() ?? uri,
-            error: error instanceof Error ? error.message : String(error),
-          },
         });
       });
     },

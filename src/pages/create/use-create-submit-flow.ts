@@ -163,14 +163,6 @@ export function useCreateSubmitFlow({
           media: mediaUrls.length > 0 ? mediaUrls : [],
           optimisticActionId: actionId,
         };
-        console.log("[CreateScreen] Edit input:", {
-          postId: editInput.postId,
-          topic: editInput.topic,
-          titleLength: editInput.title.length,
-          contentLength: editInput.content.length,
-          tag: editInput.tag,
-          mediaCount: editInput.media?.length ?? 0,
-        });
         usePowQueueStore.getState().enqueue({
           id: actionId,
           type: "edit",

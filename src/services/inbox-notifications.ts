@@ -560,7 +560,6 @@ async function performInboxCheck(
 
   try {
     const walletAddress = useAuthStore.getState().walletAddress;
-    console.log("[InboxNotifications] walletAddress:", walletAddress);
     if (!walletAddress) {
       console.log("[InboxNotifications] No wallet, skipping");
       return BackgroundFetch.BackgroundFetchResult.NoData;

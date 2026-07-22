@@ -290,9 +290,7 @@ export default function UsernameScreen() {
     try {
       if (inviteCodeRequired && !isReferralMode) {
         const rawCode = inviteCode.trim();
-        console.log("[InviteCode] raw input:", JSON.stringify(inviteCode), "code:", JSON.stringify(rawCode), "length:", rawCode.length);
         const result = await validateInviteCode({ code: rawCode });
-        console.log("[InviteCode] validateInviteCode result:", JSON.stringify(result));
 
         if (!result.valid) {
           if (result.error === "already_used") {
@@ -333,7 +331,6 @@ export default function UsernameScreen() {
           const usernamePayload = isReferralMode
             ? { username, referrer_username: referrerUsername! }
             : { username, ...(inviteCodeRequired && inviteCode.trim() ? { invite_code: inviteCode.trim() } : {}) };
-          console.log("[setUsername] payload:", JSON.stringify(usernamePayload));
           const response = await setUsernameOnChain(
             wallet,
             usernamePayload,

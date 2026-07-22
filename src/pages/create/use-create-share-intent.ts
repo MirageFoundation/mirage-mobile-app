@@ -470,11 +470,6 @@ export function useCreateShareIntent({
           const extractedBody = bodyParts.join("\n\n").trim();
           const finalBody = extractedBody.slice(0, tierLimits.maxContentLength);
           updateDraft({ title: finalTitle ?? "", body: finalBody });
-          console.log("[CreateScreen] Draft auto-filled:", {
-            title: finalTitle?.slice(0, tierLimits.maxTitleLength),
-            body: finalBody.slice(0, 200),
-            community: redditMatch ? sanitizeTopicName(redditMatch[1]) : null,
-          });
           Sentry.addBreadcrumb({
             category: "share-intent",
             message: "Draft auto-filled from link meta",
@@ -812,10 +807,6 @@ export function useCreateShareIntent({
                 autofilledSharedUrlInLinkInput: shouldAutofillLinkInput,
               },
             });
-          }
-
-          if (meta.externalUrl) {
-            console.log("[CreateScreen] Keeping external link out of link input:", meta.externalUrl);
           }
         }).catch((err: any) => {
           if (lastProcessedIntentRef.current !== currentIntentKey) return;

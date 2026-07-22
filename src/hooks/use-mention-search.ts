@@ -92,17 +92,16 @@ export function useMentionSearch(): UseMentionSearchResult {
           setMentionResults(res.results);
           Sentry.addBreadcrumb({
             category: "mention",
-            message: `Search returned ${res.results.length} results`,
-            data: { query: mentionQuery },
+            message: "Username search completed",
+            data: { resultCount: res.results.length },
             level: "info",
           });
         }
-      } catch (err) {
+      } catch {
         setMentionResults([]);
         Sentry.addBreadcrumb({
           category: "mention",
           message: "Username search failed",
-          data: { query: mentionQuery, error: String(err) },
           level: "warning",
         });
       } finally {
@@ -135,7 +134,7 @@ export function useMentionSearch(): UseMentionSearchResult {
 
       Sentry.addBreadcrumb({
         category: "mention",
-        message: `Inserted mention @${username}`,
+        message: "Inserted mention",
         level: "info",
       });
 

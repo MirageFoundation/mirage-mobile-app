@@ -70,7 +70,6 @@ async function prepareVideoForUpload(
     message: "Preparing video for upload",
     level: "info",
     data: {
-      fileName: uri.split("/").pop() ?? uri,
       contentType,
     },
   });
@@ -89,21 +88,16 @@ async function prepareVideoForUpload(
       message: "Video upload source metadata loaded",
       level: "info",
       data: {
-        fileName: uri.split("/").pop() ?? uri,
         durationSeconds,
         sourceWidth,
         sourceHeight,
       },
     });
-  } catch (error) {
+  } catch {
     Sentry.addBreadcrumb({
       category: "media-upload",
       message: "Video upload source metadata unavailable before compression",
       level: "warning",
-      data: {
-        fileName: uri.split("/").pop() ?? uri,
-        error: String(error),
-      },
     });
   }
 

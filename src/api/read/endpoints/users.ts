@@ -283,18 +283,16 @@ export async function validateInviteCode(
 ): Promise<ValidateInviteCodeResponse> {
   const trimmed = params.code.trim();
   const isValidFormat = /^[A-Za-z0-9]{4}-?[A-Za-z0-9]{4}$/.test(trimmed);
-  console.log("[validateInviteCode] code:", JSON.stringify(trimmed), "isValidFormat:", isValidFormat);
   if (!isValidFormat) {
     return { valid: false, code: trimmed, error: "invalid_code" };
   }
 
   try {
     const response = await apiClient.post<ValidateInviteCodeResponse>("/validate_invite_code", { code: trimmed });
-    console.log("[validateInviteCode] server response:", JSON.stringify(response));
     return response;
   } catch (error: any) {
     const status = error?.response?.status;
-    Sentry.addBreadcrumb({ category: "invite-code", message: "validateInviteCode failed", data: { status, error: error?.message }, level: "warning" });
+    Sentry.addBreadcrumb({ category: "invite-code", message: "validateInviteCode failed", data: { status }, level: "warning" });
     if (status === 404 || status === 405) {
       return { valid: true, code: trimmed };
     }

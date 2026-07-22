@@ -1,7 +1,6 @@
 import type { ContentWarningType } from "@/src/domain/content";
 import type { PostMedia } from "./post-card-types";
 
-const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/gi;
 const MARKDOWN_LINK_REGEX = /!?\[[^\]]*\]\([^)]+\)/g;
 // Regex to find standalone URLs (not inside markdown links)
 const STANDALONE_URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]()]+/gi;
@@ -322,19 +321,12 @@ export function resolvePostContent(
   media: PostMedia[] | undefined
 ): ResolvedPostContent {
   const extractedUrl = extractFirstUrl(body);
-  if (__DEV__ && body?.includes("cloudflarestream")) {
-    console.log("[resolvePostContent] body:", body, "extractedUrl:", extractedUrl);
-  }
   const bodyWithoutUrl = removeFirstUrl(body);
   const displayDomain = extractedUrl ? extractDomain(extractedUrl) : null;
   const bodyVideoUrl =
     extractedUrl && (getMediaTypeFromUrl(extractedUrl) === "video" || getMediaTypeFromUrl(extractedUrl) === "youtube")
       ? normalizeVideoUrl(extractedUrl)
       : null;
-  if (__DEV__ && extractedUrl?.includes("cloudflarestream")) {
-    console.log("[resolvePostContent] mediaType:", getMediaTypeFromUrl(extractedUrl), "bodyVideoUrl:", bodyVideoUrl);
-  }
-
   const primaryMedia = media?.[0];
   const mediaCount = media?.length ?? 0;
   const hasMultipleMedia = mediaCount > 1;

@@ -3,6 +3,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { useGiphy } from "@/src/hooks";
 import { useMentionSearch } from "@/src/hooks/use-mention-search";
 import { useRouter } from "@/src/navigation/guarded-router";
+import { sanitizedTelemetryError } from "@/src/services/react-query-telemetry";
 import { useUserLevel } from "@/src/stores/auth-store";
 import { useCommentComposeStore } from "@/src/stores/comment-compose-store";
 import { canEditContent, getTierPostLimits } from "@/src/utils/tiers";
@@ -314,14 +315,14 @@ export function useCommentComposeController() {
   const startImageUpload = useCallback((uri: string) => {
     const sessionId = imageUploadSessionRef.current;
     setImageUploadState({ uploading: true, done: false, error: null, url: null });
-    Sentry.addBreadcrumb({ category: "comment-image-upload", message: "Starting comment image upload", level: "info", data: { fileName: uri.split("/").pop() ?? uri } });
+    Sentry.addBreadcrumb({ category: "comment-image-upload", message: "Starting comment image upload", level: "info" });
     uploadImageAndGetUrl(uri).then((url) => {
       if (imageUploadSessionRef.current !== sessionId) return;
       setImageUploadState({ uploading: false, done: true, error: null, url });
       setIsMediaLoading(false);
       setIsPreviewVisible(true);
       setSelectedImageUri(url);
-      Sentry.addBreadcrumb({ category: "comment-image-upload", message: "Comment image upload succeeded", level: "info", data: { fileName: uri.split("/").pop() ?? uri, hasUrl: !!url } });
+      Sentry.addBreadcrumb({ category: "comment-image-upload", message: "Comment image upload succeeded", level: "info", data: { hasUrl: !!url } });
     }).catch((error) => {
       if (imageUploadSessionRef.current !== sessionId) return;
       const status = (error as any)?.response?.status ?? (error as any)?.status;
@@ -331,9 +332,12 @@ export function useCommentComposeController() {
         ? "This image format isn't supported. Try a different photo."
         : error instanceof Error ? error.message : "Upload failed";
       setImageUploadState({ uploading: false, done: false, error: message, url: null });
-      Sentry.captureException(error, {
+      Sentry.captureException(sanitizedTelemetryError("media-upload", {
+        error_class: typeof status === "number" ? "http" : "unexpected",
+        status: typeof status === "number" ? status : undefined,
+      }), {
         tags: { feature: "comment-compose", operation: "image-upload", unsupportedFormat: String(isUnsupportedFormat) },
-        extra: { fileName: uri.split("/").pop() ?? uri, status, responseText },
+        extra: { status, unsupportedFormat: isUnsupportedFormat },
       });
     });
   }, []);

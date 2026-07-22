@@ -17,6 +17,11 @@ import {
   type PersistedQueryMetrics,
 } from "@/src/api/cache/persisted-post-cache";
 import { getApiBaseUrl, useAuthStore, usePreferencesStore } from "@/src/stores";
+import {
+  buildMutationErrorMetadata,
+  buildQueryErrorMetadata,
+  sanitizedTelemetryError,
+} from "@/src/services/react-query-telemetry";
 
 // Remove the pre-v3 broad cache, which was not identity scoped or allowlisted.
 storage.remove("mirage-query-cache");
@@ -97,26 +102,6 @@ const persister = createSyncStoragePersister({
   },
 });
 
-function toSentryContext(value: unknown): unknown {
-  try {
-    return JSON.parse(JSON.stringify(value));
-  } catch {
-    return String(value);
-  }
-}
-
-function serializeKey(key: readonly unknown[] | undefined): string {
-  if (!key) {
-    return "unknown";
-  }
-
-  try {
-    return JSON.stringify(key);
-  } catch {
-    return String(key);
-  }
-}
-
 function getErrorStatus(error: unknown): number | undefined {
   const status =
     (error as { response?: { status?: number }; status?: number })?.response
@@ -138,71 +123,53 @@ function addPersistedCacheRestoredBreadcrumb() {
 const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (error, query) => {
-      const status = getErrorStatus(error);
+      const metadata = buildQueryErrorMetadata(query.queryKey, error);
 
       Sentry.addBreadcrumb({
         category: "react-query",
         message: "Query failed",
         level: "error",
-        data: {
-          queryKey: serializeKey(query.queryKey),
-          status,
-          fetchStatus: query.state.fetchStatus,
-        },
+        data: metadata,
       });
 
       if (!shouldCaptureReactQueryError(error)) {
         return;
       }
 
-      Sentry.captureException(error, {
+      Sentry.captureException(sanitizedTelemetryError("query", metadata), {
         tags: {
           feature: "react-query",
           type: "query",
-          query_key: serializeKey(query.queryKey),
+          operation: metadata.operation,
+          error_class: metadata.error_class,
         },
-        extra: {
-          queryKey: toSentryContext(query.queryKey),
-          meta: toSentryContext(query.meta),
-          state: {
-            fetchStatus: query.state.fetchStatus,
-            status: query.state.status,
-            dataUpdatedAt: query.state.dataUpdatedAt,
-            errorUpdateCount: query.state.errorUpdateCount,
-          },
-        },
+        extra: metadata,
       });
     },
   }),
   mutationCache: new MutationCache({
-    onError: (error, variables, _context, mutation) => {
-      const status = getErrorStatus(error);
+    onError: (error, _variables, _context, mutation) => {
+      const metadata = buildMutationErrorMetadata(mutation.options.mutationKey, error);
 
       Sentry.addBreadcrumb({
         category: "react-query",
         message: "Mutation failed",
         level: "error",
-        data: {
-          mutationKey: serializeKey(mutation.options.mutationKey),
-          status,
-        },
+        data: metadata,
       });
 
       if (!shouldCaptureReactQueryError(error)) {
         return;
       }
 
-      Sentry.captureException(error, {
+      Sentry.captureException(sanitizedTelemetryError("mutation", metadata), {
         tags: {
           feature: "react-query",
           type: "mutation",
-          mutation_key: serializeKey(mutation.options.mutationKey),
+          operation: metadata.operation,
+          error_class: metadata.error_class,
         },
-        extra: {
-          mutationKey: toSentryContext(mutation.options.mutationKey),
-          meta: toSentryContext(mutation.meta),
-          variables: toSentryContext(variables),
-        },
+        extra: metadata,
       });
     },
   }),

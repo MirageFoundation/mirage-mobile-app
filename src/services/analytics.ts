@@ -120,7 +120,7 @@ export async function setAnalyticsTrackingEnabled(
       analyticsCoordinator.track("analytics_consent_granted");
       analyticsCoordinator.flush();
       if (IS_DEV) {
-        console.log("[Analytics] Mixpanel initialized, token:", MIXPANEL_TOKEN);
+        console.log("[Analytics] Mixpanel initialized");
       }
     } catch (error) {
       console.warn("[Analytics] Failed to initialize Mixpanel:", error);
