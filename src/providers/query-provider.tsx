@@ -5,7 +5,18 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 import { storage } from "@/src/stores/mmkv-storage";
 import { AppState, Platform } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
-import { sanitizePersistedPostQueries } from "@/src/api/cache/persisted-post-cache";
+import {
+  buildPersistedQueryNamespace,
+  buildPersistedQueryStorageKey,
+  isLaunchCriticalFeedQuery,
+  preparePersistedQueryClient,
+  restorePersistedQueryClient,
+  type PersistedQueryMetrics,
+} from "@/src/api/cache/persisted-post-cache";
+import { getApiBaseUrl, useAuthStore, usePreferencesStore } from "@/src/stores";
+
+// Remove the pre-v3 broad cache, which was not identity scoped or allowlisted.
+storage.remove("mirage-query-cache");
 
 onlineManager.setEventListener((setOnline) => {
   return NetInfo.addEventListener((state) => {
@@ -22,22 +33,65 @@ focusManager.setEventListener((setFocused) => {
   return () => sub.remove();
 });
 
-// MMKV adapter for TanStack Query (sync because MMKV is synchronous)
+function getCurrentPersistedNamespace(): string {
+  const server = getApiBaseUrl(usePreferencesStore.getState().apiServer);
+  return buildPersistedQueryNamespace(
+    server,
+    useAuthStore.getState().walletAddress,
+  );
+}
+
+// Resolve the key per operation so server/wallet changes rotate persistence.
 const mmkvQueryStorage = {
-  getItem: (key: string) => storage.getString(key) ?? null,
-  setItem: (key: string, value: string) => storage.set(key, value),
-  removeItem: (key: string) => storage.remove(key),
+  getItem: () =>
+    storage.getString(buildPersistedQueryStorageKey(getCurrentPersistedNamespace())) ?? null,
+  setItem: (_key: string, value: string) =>
+    storage.set(buildPersistedQueryStorageKey(getCurrentPersistedNamespace()), value),
+  removeItem: () =>
+    storage.remove(buildPersistedQueryStorageKey(getCurrentPersistedNamespace())),
 };
+
+let restoredMetrics: PersistedQueryMetrics | null = null;
+
+function addPersistenceBreadcrumb(
+  operation: "persist" | "restore",
+  metrics: PersistedQueryMetrics,
+) {
+  Sentry.addBreadcrumb({
+    category: "react-query.persistence",
+    message: `Persisted query cache ${operation}d`,
+    level: "info",
+    data: metrics,
+  });
+}
 
 const persister = createSyncStoragePersister({
   storage: mmkvQueryStorage,
-  key: "mirage-query-cache",
-  serialize: (client) => JSON.stringify(sanitizePersistedPostQueries(client)),
-  deserialize: (cachedString) =>
-    sanitizePersistedPostQueries(JSON.parse(cachedString)),
+  key: "dynamic-query-cache",
+  serialize: (client) => {
+    const prepared = preparePersistedQueryClient(
+      client,
+      getCurrentPersistedNamespace(),
+    );
+    addPersistenceBreadcrumb("persist", prepared.metrics);
+    return prepared.serialized;
+  },
+  deserialize: (cachedString) => {
+    const startedAt = Date.now();
+    const restored = restorePersistedQueryClient(
+      cachedString,
+      getCurrentPersistedNamespace(),
+    );
+    if (!restored) mmkvQueryStorage.removeItem();
+    restoredMetrics = restored?.metrics ?? {
+      queryCount: 0,
+      pageCount: 0,
+      bytes: new TextEncoder().encode(cachedString).length,
+      durationMs: Math.max(0, Date.now() - startedAt),
+    };
+    return restored?.client as any;
+  },
 });
-
-const EXCLUDED_QUERY_KEYS = ["comments", "inbox", "topics"];
 
 function toSentryContext(value: unknown): unknown {
   try {
@@ -74,20 +128,7 @@ function shouldCaptureReactQueryError(error: unknown): boolean {
 }
 
 function addPersistedCacheRestoredBreadcrumb() {
-  const restoredQueries = queryClient.getQueryCache().findAll();
-  const restoredPostQueries = restoredQueries.filter(
-    (query) => query.queryKey[0] === "posts",
-  );
-
-  Sentry.addBreadcrumb({
-    category: "react-query",
-    message: "Persisted query cache restored",
-    level: "info",
-    data: {
-      restoredQueryCount: restoredQueries.length,
-      restoredPostQueryCount: restoredPostQueries.length,
-    },
-  });
+  if (restoredMetrics) addPersistenceBreadcrumb("restore", restoredMetrics);
 }
 
 const queryClient = new QueryClient({
@@ -180,15 +221,11 @@ export const QueryProvider = ({ children }: { children: React.ReactNode }) => {
       client={queryClient}
       persistOptions={{
         persister,
-        buster: "pending-post-lifecycle-v2",
+        buster: "launch-feed-cache-v3",
         dehydrateOptions: {
-          shouldDehydrateQuery: (query) => {
-            const key = query.queryKey[0];
-            if (typeof key === "string" && EXCLUDED_QUERY_KEYS.includes(key)) {
-              return false;
-            }
-            return query.state.status === "success";
-          },
+          shouldDehydrateQuery: (query) =>
+            query.state.status === "success" &&
+            isLaunchCriticalFeedQuery(query.queryKey),
         },
       }}
       onSuccess={addPersistedCacheRestoredBreadcrumb}

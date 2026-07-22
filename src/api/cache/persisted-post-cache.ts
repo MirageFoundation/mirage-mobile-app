@@ -1,4 +1,30 @@
+import { normalizeServerBaseUrl } from "@/src/api/server-runtime";
+import { normalizeAccountIdentity } from "@/src/api/read/query-keys";
+
 type UnknownRecord = Record<string, unknown>;
+
+export const PERSISTED_QUERY_SCHEMA_VERSION = 3;
+export const PERSISTED_QUERY_MAX_PAGES = 1;
+export const PERSISTED_QUERY_MAX_BYTES = 1024 * 1024;
+
+export type PersistedQueryMetrics = {
+  queryCount: number;
+  pageCount: number;
+  bytes: number;
+  durationMs: number;
+};
+
+export type PreparedPersistedClient = {
+  client: unknown;
+  serialized: string;
+  metrics: PersistedQueryMetrics;
+};
+
+type PersistedEnvelope = {
+  schemaVersion: number;
+  namespace: string;
+  client: unknown;
+};
 
 const isRecord = (value: unknown): value is UnknownRecord =>
   !!value && typeof value === "object" && !Array.isArray(value);
@@ -6,6 +32,44 @@ const isRecord = (value: unknown): value is UnknownRecord =>
 const isDeviceLocalUri = (value: unknown): boolean =>
   typeof value === "string" &&
   /^(file|content|ph|assets-library|blob):/i.test(value);
+
+const utf8Bytes = (value: string): number => new TextEncoder().encode(value).length;
+
+export function buildPersistedQueryNamespace(
+  serverIdentity: string,
+  viewerAddress?: string | null,
+): string {
+  return [
+    `v${PERSISTED_QUERY_SCHEMA_VERSION}`,
+    normalizeServerBaseUrl(serverIdentity),
+    normalizeAccountIdentity(viewerAddress),
+  ].join("|");
+}
+
+export function buildPersistedQueryStorageKey(namespace: string): string {
+  return `mirage-query-cache:${encodeURIComponent(namespace)}`;
+}
+
+export function isLaunchCriticalFeedQuery(queryKey: unknown): boolean {
+  if (!Array.isArray(queryKey)) return false;
+  if (
+    queryKey[0] !== "server" ||
+    typeof queryKey[1] !== "string" ||
+    queryKey[2] !== "posts" ||
+    queryKey[3] !== "viewer" ||
+    typeof queryKey[4] !== "string"
+  ) {
+    return false;
+  }
+
+  const filters = queryKey[5];
+  return (
+    isRecord(filters) &&
+    (filters.feed === "home" || filters.feed === "following") &&
+    filters.by === "magic" &&
+    (filters.page === undefined || filters.page === null)
+  );
+}
 
 function isSafeServerPost(value: unknown): value is UnknownRecord {
   if (!isRecord(value)) return false;
@@ -28,12 +92,13 @@ function isSafeServerPost(value: unknown): value is UnknownRecord {
   ) {
     return false;
   }
-  if (value.media !== undefined && (
-    !Array.isArray(value.media) ||
-    !value.media.every(
-      (uri) => typeof uri === "string" && !isDeviceLocalUri(uri),
-    )
-  )) {
+  if (
+    value.media !== undefined &&
+    (!Array.isArray(value.media) ||
+      !value.media.every(
+        (uri) => typeof uri === "string" && !isDeviceLocalUri(uri),
+      ))
+  ) {
     return false;
   }
   return !isDeviceLocalUri(value.thumbnail);
@@ -46,51 +111,165 @@ function sanitizePostsResponse(value: unknown): UnknownRecord | undefined {
 }
 
 export function sanitizePersistedPostsData(data: unknown): unknown | undefined {
-  if (!isRecord(data)) return undefined;
-  if (!("pages" in data)) return sanitizePostsResponse(data);
-  if (!Array.isArray(data.pages)) return undefined;
+  if (!isRecord(data) || !Array.isArray(data.pages)) return undefined;
 
-  const sourcePages = data.pages;
-  const pages = sourcePages.map(sanitizePostsResponse);
-  if (pages.some((page) => page === undefined)) return undefined;
-  return pages.every((page, index) => page === sourcePages[index])
-    ? data
-    : { ...data, pages };
+  const pages = data.pages
+    .slice(0, PERSISTED_QUERY_MAX_PAGES)
+    .map(sanitizePostsResponse);
+  if (pages.length === 0 || pages.some((page) => page === undefined)) {
+    return undefined;
+  }
+
+  return {
+    ...data,
+    pages,
+    pageParams: Array.isArray(data.pageParams)
+      ? data.pageParams.slice(0, PERSISTED_QUERY_MAX_PAGES)
+      : [],
+  };
 }
 
-export function sanitizePersistedPostQueries<T>(client: T): T {
-  if (!isRecord(client) || !isRecord(client.clientState)) return client;
-  const queries = client.clientState.queries;
-  if (!Array.isArray(queries)) return client;
+function sanitizeAllowedQuery(
+  query: unknown,
+  namespace: string,
+): UnknownRecord | undefined {
+  if (
+    !isRecord(query) ||
+    !Array.isArray(query.queryKey) ||
+    !isLaunchCriticalFeedQuery(query.queryKey) ||
+    !isRecord(query.state) ||
+    query.state.status !== "success"
+  ) {
+    return undefined;
+  }
+  if (
+    buildPersistedQueryNamespace(query.queryKey[1], query.queryKey[4]) !==
+    namespace
+  ) {
+    return undefined;
+  }
 
-  let changed = false;
-  const safeQueries = queries.flatMap((query) => {
-    if (!isRecord(query) || !Array.isArray(query.queryKey)) {
-      changed = true;
-      return [];
-    }
-    if (query.queryKey[0] !== "posts") return [query];
-    if (!isRecord(query.state)) {
-      changed = true;
-      return [];
-    }
+  const data = sanitizePersistedPostsData(query.state.data);
+  if (data === undefined) return undefined;
+  return { ...query, state: { ...query.state, data } };
+}
 
-    const data = sanitizePersistedPostsData(query.state.data);
-    if (data === undefined) {
-      changed = true;
-      return [];
-    }
-    if (data === query.state.data) return [query];
-    changed = true;
-    return [{ ...query, state: { ...query.state, data } }];
-  });
-
-  if (!changed) return client;
+function createClientWithQueries(client: UnknownRecord, queries: UnknownRecord[]) {
   return {
     ...client,
     clientState: {
-      ...client.clientState,
-      queries: safeQueries,
+      ...(client.clientState as UnknownRecord),
+      mutations: [],
+      queries,
     },
-  } as T;
+  };
+}
+
+function countPages(queries: UnknownRecord[]): number {
+  return queries.reduce((total, query) => {
+    const state = query.state;
+    if (!isRecord(state) || !isRecord(state.data)) return total;
+    return total + (Array.isArray(state.data.pages) ? state.data.pages.length : 0);
+  }, 0);
+}
+
+export function preparePersistedQueryClient(
+  client: unknown,
+  namespace: string,
+  maxBytes = PERSISTED_QUERY_MAX_BYTES,
+  now: () => number = Date.now,
+): PreparedPersistedClient {
+  const startedAt = now();
+  const source: UnknownRecord =
+    isRecord(client) && isRecord(client.clientState)
+      ? client
+      : {
+          timestamp: 0,
+          buster: "",
+          clientState: { mutations: [], queries: [] },
+        };
+  const sourceClientState = source.clientState as UnknownRecord;
+  const sourceQueries: unknown[] = Array.isArray(sourceClientState.queries)
+    ? sourceClientState.queries
+    : [];
+  const candidates = sourceQueries
+    .map((query) => sanitizeAllowedQuery(query, namespace))
+    .filter((query): query is UnknownRecord => query !== undefined)
+    .sort((left, right) => {
+      const leftUpdated = isRecord(left.state) ? Number(left.state.dataUpdatedAt) : 0;
+      const rightUpdated = isRecord(right.state) ? Number(right.state.dataUpdatedAt) : 0;
+      return rightUpdated - leftUpdated;
+    });
+
+  const retained: UnknownRecord[] = [];
+  let persistedClient = createClientWithQueries(source, retained);
+  let serialized = JSON.stringify({
+    schemaVersion: PERSISTED_QUERY_SCHEMA_VERSION,
+    namespace,
+    client: persistedClient,
+  } satisfies PersistedEnvelope);
+
+  for (const query of candidates) {
+    const nextQueries = [...retained, query];
+    const nextClient = createClientWithQueries(source, nextQueries);
+    const nextSerialized = JSON.stringify({
+      schemaVersion: PERSISTED_QUERY_SCHEMA_VERSION,
+      namespace,
+      client: nextClient,
+    } satisfies PersistedEnvelope);
+    if (utf8Bytes(nextSerialized) > maxBytes) continue;
+    retained.push(query);
+    persistedClient = nextClient;
+    serialized = nextSerialized;
+  }
+
+  return {
+    client: persistedClient,
+    serialized,
+    metrics: {
+      queryCount: retained.length,
+      pageCount: countPages(retained),
+      bytes: utf8Bytes(serialized),
+      durationMs: Math.max(0, now() - startedAt),
+    },
+  };
+}
+
+export function restorePersistedQueryClient(
+  serialized: string,
+  namespace: string,
+  maxBytes = PERSISTED_QUERY_MAX_BYTES,
+  now: () => number = Date.now,
+): PreparedPersistedClient | null {
+  const startedAt = now();
+  if (utf8Bytes(serialized) > maxBytes) return null;
+
+  let envelope: unknown;
+  try {
+    envelope = JSON.parse(serialized);
+  } catch {
+    return null;
+  }
+  if (
+    !isRecord(envelope) ||
+    envelope.schemaVersion !== PERSISTED_QUERY_SCHEMA_VERSION ||
+    envelope.namespace !== namespace
+  ) {
+    return null;
+  }
+
+  const prepared = preparePersistedQueryClient(
+    envelope.client,
+    namespace,
+    maxBytes,
+    now,
+  );
+  return {
+    ...prepared,
+    metrics: {
+      ...prepared.metrics,
+      bytes: utf8Bytes(serialized),
+      durationMs: Math.max(0, now() - startedAt),
+    },
+  };
 }

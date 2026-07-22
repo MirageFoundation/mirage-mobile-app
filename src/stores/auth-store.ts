@@ -9,6 +9,8 @@ import { useContentModerationStore } from "./content-moderation-store";
 import { useInboxStore } from "./inbox-store";
 import { useDraftStore } from "./draft-store";
 import { unregisterPush } from "@/src/services/push-notifications";
+import { removePersistedQueryCache } from "@/src/api/cache/persisted-query-storage";
+import { getServerIdentity } from "@/src/api/server-runtime";
 import {
   identifyUser,
   registerTierSuperProperty,
@@ -264,6 +266,7 @@ export const useAuthStore = create<AuthState>()(
         set({ isCreatingWallet: true });
 
         try {
+          removePersistedQueryCache(getServerIdentity(), get().walletAddress);
           const metadata = await walletService.createWallet();
 
           const mnemonic = await walletService.exportMnemonic();
@@ -296,6 +299,7 @@ export const useAuthStore = create<AuthState>()(
         set({ isCreatingWallet: true });
 
         try {
+          removePersistedQueryCache(getServerIdentity(), get().walletAddress);
           const metadata = await walletService.importWallet(mnemonic);
 
           Sentry.setUser({
@@ -395,6 +399,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: async () => {
+        removePersistedQueryCache(getServerIdentity(), get().walletAddress);
         try {
           const wallet = await walletService.getWallet();
           await unregisterPush(wallet);

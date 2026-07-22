@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/src/api/client";
 import { resetServerScopedCache } from "@/src/api/cache/server-cache";
+import { removePersistedQueryCache } from "@/src/api/cache/persisted-query-storage";
 import { serverQueryRoot } from "@/src/api/server-runtime";
 import { usePreferencesStore, getApiBaseUrl, type ApiServer } from "@/src/stores";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
@@ -83,6 +84,7 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           });
           wallet = await walletService.getWallet();
           await unregisterPush(wallet);
+          removePersistedQueryCache(previousContext.identity, wallet?.address);
         },
         afterCommit: async (previousContext) => {
           resetServerScopedCache(queryClient, previousContext.identity);
