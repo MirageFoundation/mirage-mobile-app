@@ -16,21 +16,10 @@ import {
 
 import {
 AdultContentPopup,
-ConfirmationPopup,
 FeedHeader,
 ModerationReminderCard,
 NewPostsButton,
 type Post,
- PostOptionsSheet,
- type PostOptionsSheetRef,
- AwardPickerSheet,
- type AwardPickerSheetRef,
- GiftMirageSheet,
- type GiftMirageSheetRef,
- GiftSubscriptionSheet,
- type GiftSubscriptionSheetRef,
- ReportSheet,
- type ReportSheetRef,
 UpdateBanner,
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
@@ -38,17 +27,10 @@ import { useSideMenu } from "@/src/providers/side-menu-provider";
 import { storage } from "@/src/stores";
 import {
   useAuthGuard,
-  useBlockHandler,
-  getBlockConfirmationMessage,
-  useDeleteHandler,
   useEasUpdate,
-  useFollowHandler,
   useNetworkType,
-  useReportHandler,
-  useVoteHandler,
   shouldAutoplayVideo,
   useLatestRef,
-  type VoteResult,
 } from "@/src/hooks";
 import {
   useScrollAnimationContext,
@@ -65,6 +47,8 @@ import {
   useTimeTickStore,
 } from "@/src/stores";
 import { LoggedOutHome } from "../logged-out-home";
+import { PostActionOverlays } from "../post/post-action-overlays";
+import { usePostActionController } from "../post/use-post-action-controller";
 import { styles } from "./home-styles";
 
 const MODERATION_REMINDER_MIN_AGE_MS = 10 * 60 * 1000;
@@ -150,16 +134,9 @@ export function HomeScreen() {
     }
   }, [showBars]);
 
-  const postOptionsSheetRef = useRef<PostOptionsSheetRef>(null);
-  const awardPickerSheetRef = useRef<AwardPickerSheetRef>(null);
-  const giftMirageSheetRef = useRef<GiftMirageSheetRef>(null);
-  const giftSubscriptionSheetRef = useRef<GiftSubscriptionSheetRef>(null);
-  const reportSheetRef = useRef<ReportSheetRef>(null);
-
   const { openSideMenu } = useSideMenu();
 
   const savedPosts = useSavedPostsStore((s) => s.savedPosts);
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [feedTabIndex, setFeedTabIndex] = useState(0);
 
   const FEED_OPTIONS = useMemo(() => [
@@ -242,27 +219,6 @@ export function HomeScreen() {
     });
     return Array.from(next);
   }, [followedUsers, followUserOverrides]);
-
-  const { handleFollowUser: handleFollowPress, handleFollowTopic: handleFollowTopicFromCard } = useFollowHandler({
-    onOptimisticFollowUser: (userId, isFollowing) => {
-      setFollowUserOverride(userId, isFollowing);
-    },
-    onRollbackFollowUser: (userId) => {
-      clearFollowUserOverride(userId);
-    },
-  });
-  const handleGuardedFollowPress = useCallback(
-    (authorId: string, username: string, isFollowing: boolean) => {
-      requireAuth(() => handleFollowPress(authorId, username, isFollowing));
-    },
-    [handleFollowPress, requireAuth],
-  );
-  const handleGuardedFollowTopicFromCard = useCallback(
-    (topic: string, isFollowed: boolean) => {
-      requireAuth(() => handleFollowTopicFromCard(topic, isFollowed));
-    },
-    [handleFollowTopicFromCard, requireAuth],
-  );
 
   const showAdultPopup = !!currentUser && !hasSeenAdultPrompt;
   const moderationReminderShownForRef = useRef<string | null>(null);
@@ -397,8 +353,18 @@ export function HomeScreen() {
   const shouldScrollToTop = useHomePostCardStore((state) => state.shouldScrollToTop);
   const clearScrollToTop = useHomePostCardStore((state) => state.clearScrollToTop);
 
-  const { handleUpvote, handleDownvote } = useVoteHandler({
-    onOptimisticUpdate: useCallback((targetId: string, result: VoteResult) => {
+  const savedPostIds = useMemo(
+    () => new Set(savedPosts.map((post) => post.id)),
+    [savedPosts],
+  );
+  const postActions = usePostActionController({
+    currentUserId: currentUser?.id,
+    followedUsers: displayFollowedUsers,
+    followedTopics,
+    savedPostIds,
+    onFollowUserOptimistic: setFollowUserOverride,
+    onFollowUserRollback: clearFollowUserOverride,
+    onVoteOptimistic: useCallback((targetId, result) => {
       markSeen(targetId, "vote");
       setVoteOverride(targetId, {
         hasLiked: result.hasLiked,
@@ -406,20 +372,62 @@ export function HomeScreen() {
         likes: result.newLikes,
       });
     }, [setVoteOverride]),
-    onRollback: useCallback(
-      (
-        targetId: string,
-        previousState: {
-          hasLiked: boolean;
-          hasDisliked: boolean;
-          likes: number;
-        }
-      ) => {
-        clearVoteOverride(targetId);
-      },
-      [clearVoteOverride]
+    onVoteRollback: useCallback((targetId) => {
+      clearVoteOverride(targetId);
+    }, [clearVoteOverride]),
+    onBlockConfirmed: useCallback((pending) => {
+      if (pending.type === "user") blockUser(pending.id);
+      else if (pending.type === "post") hidePost(pending.id);
+      else if (pending.type === "topic") {
+        blockTopicOptimistic(pending.id);
+        showBars();
+      }
+    }, [blockTopicOptimistic, blockUser, hidePost, showBars]),
+    onDeleteConfirmed: hidePost,
+    onDeleteRollback: unhidePost,
+    onReportSubmitted: hidePost,
+    onEditPost: useCallback((post) => navigateToEditPost(router, post), [router]),
+    onToggleSave: useCallback(
+      (post) => useSavedPostsStore.getState().toggleSavePost(post),
+      [],
     ),
+    onSaveChanged: useCallback((saved) => {
+      toast.success(
+        saved ? "Post saved" : "Post unsaved",
+        saved ? "You can find it in your saved items." : "Removed from saved items.",
+      );
+    }, [toast]),
+    onCopyText: useCallback(() => {
+      toast.success("Copied", "Text copied to clipboard.");
+    }, [toast]),
+    onShowFewer: useCallback((post) => {
+      console.log("Show fewer posts like:", post?.id);
+      toast.success("Got it", "We'll show fewer posts like this.");
+    }, [toast]),
   });
+  const {
+    openOptions: openPostOptions,
+    followUser: handleFollowPress,
+    followTopic: handleFollowTopicFromCard,
+    upvote: handleUpvote,
+    downvote: handleDownvote,
+    blockUser: handleBlockUserFromCard,
+    blockPost: handleBlockPostFromCard,
+    blockTopic: handleBlockTopicFromCard,
+    report: handleReportFromCard,
+  } = postActions.cardActions;
+  const handleGuardedFollowPress = useCallback(
+    (authorId: string, username: string, isFollowing: boolean) => {
+      requireAuth(() => handleFollowPress(authorId, username, isFollowing));
+    },
+    [handleFollowPress, requireAuth],
+  );
+  const handleGuardedFollowTopicFromCard = useCallback(
+    (topic: string, isFollowed: boolean) => {
+      requireAuth(() => handleFollowTopicFromCard(topic, isFollowed));
+    },
+    [handleFollowTopicFromCard, requireAuth],
+  );
   const handleGuardedUpvote = useCallback(
     (postId: string, liked: boolean, disliked: boolean, likes: number) => {
       requireAuth(() => handleUpvote(postId, liked, disliked, likes));
@@ -516,159 +524,9 @@ export function HomeScreen() {
 
   const handleMorePress = useCallback((post: Post) => {
     requireAuth(() => {
-      setSelectedPost(post);
-      postOptionsSheetRef.current?.present();
+      openPostOptions(post);
     });
-  }, [requireAuth]);
-
-  const blockHandler = useBlockHandler({});
-  const reportHandler = useReportHandler({});
-
-  const deleteHandler = useDeleteHandler({
-    onRollback: (targetId, targetType) => {
-      if (targetType === "post") {
-        unhidePost(targetId);
-      }
-    },
-  });
-
-  const handleConfirmBlock = useCallback(() => {
-    const pending = blockHandler.pendingBlock;
-    if (pending) {
-      if (pending.type === "user") {
-        blockUser(pending.id);
-      } else if (pending.type === "post") {
-        hidePost(pending.id);
-      } else if (pending.type === "topic") {
-        blockTopicOptimistic(pending.id);
-        showBars();
-      }
-    }
-    blockHandler.confirmBlock();
-  }, [blockHandler, blockUser, hidePost, blockTopicOptimistic, showBars]);
-
-  const handleConfirmDelete = useCallback(() => {
-    const pending = deleteHandler.pendingTarget;
-    if (pending) {
-      hidePost(pending.id);
-    }
-    deleteHandler.confirmDelete();
-  }, [deleteHandler, hidePost]);
-
-  const handleReportSubmitWithOptimistic = useCallback(
-    (reason: string) => {
-      const pending = reportHandler.pendingTarget;
-      if (pending) {
-        hidePost(pending.id);
-      }
-      reportSheetRef.current?.dismiss();
-      reportHandler.submitReport(reason);
-    },
-    [reportHandler, hidePost]
-  );
-
-  useEffect(() => {
-    if (reportHandler.showReportSheet) {
-      reportSheetRef.current?.present();
-    }
-  }, [reportHandler.showReportSheet]);
-
-  const handleReport = useCallback(() => {
-    requireAuth(() => {
-      if (selectedPost) {
-        reportHandler.requestReport(selectedPost.id, "post");
-      }
-    });
-  }, [selectedPost, reportHandler, requireAuth]);
-
-  const handleBlockUser = useCallback(() => {
-    requireAuth(() => {
-      if (selectedPost) {
-        blockHandler.requestBlockUser(
-          selectedPost.author.id,
-          selectedPost.author.username
-        );
-      }
-    });
-  }, [selectedPost, blockHandler, requireAuth]);
-
-  const handleHidePost = useCallback(() => {
-    requireAuth(() => {
-      if (selectedPost) {
-        blockHandler.requestBlockPost(selectedPost.id);
-      }
-    });
-  }, [selectedPost, blockHandler, requireAuth]);
-
-  const handleBlockUserFromCard = useCallback(
-    (postId: string, authorId: string, authorUsername: string) => {
-      requireAuth(() => blockHandler.requestBlockUser(authorId, authorUsername));
-    },
-    [blockHandler, requireAuth]
-  );
-
-  const handleBlockPostFromCard = useCallback(
-    (postId: string) => {
-      requireAuth(() => blockHandler.requestBlockPost(postId));
-    },
-    [blockHandler, requireAuth]
-  );
-
-  const handleBlockTopicFromCard = useCallback(
-    (_postId: string, topic: string) => {
-      requireAuth(() => blockHandler.requestBlockTopic(topic));
-    },
-    [blockHandler, requireAuth]
-  );
-
-  const handleReportFromCard = useCallback(
-    (postId: string) => {
-      requireAuth(() => reportHandler.requestReport(postId, "post"));
-    },
-    [reportHandler, requireAuth]
-  );
-
-  const handleEditPost = useCallback(() => {
-    requireAuth(() => {
-      if (!selectedPost) return;
-      navigateToEditPost(router, selectedPost);
-    });
-  }, [selectedPost, router, requireAuth]);
-
-  const handleDeletePost = useCallback(() => {
-    requireAuth(() => {
-      if (selectedPost) {
-        deleteHandler.requestDelete(selectedPost.id, "post");
-      }
-    });
-  }, [selectedPost, deleteHandler, requireAuth]);
-
-  const handleSavePost = useCallback(() => {
-    if (!selectedPost) return;
-    const saved = useSavedPostsStore.getState().toggleSavePost(selectedPost);
-    toast.success(
-      saved ? "Post saved" : "Post unsaved",
-      saved ? "You can find it in your saved items." : "Removed from saved items.",
-    );
-  }, [selectedPost, toast]);
-
-  const handleCopyText = useCallback(() => {
-    toast.success("Copied", "Text copied to clipboard.");
-  }, [toast]);
-
-  const handleFollowTopic = useCallback(() => {
-    requireAuth(() => {
-      if (!selectedPost?.topic) return;
-      const topic = selectedPost.topic;
-      const isCurrentlyFollowed = followedTopics.includes(topic);
-      handleFollowTopicFromCard(topic, isCurrentlyFollowed);
-    });
-  }, [selectedPost?.topic, followedTopics, handleFollowTopicFromCard, requireAuth]);
-
-  const handleShowFewer = useCallback(() => {
-    console.log("Show fewer posts like:", selectedPost?.id);
-    toast.success("Got it", "We'll show fewer posts like this.");
-  }, [selectedPost?.id, toast]);
+  }, [openPostOptions, requireAuth]);
 
   const handleCommentPress = useCallback(
     (postId: string) => {
@@ -677,16 +535,6 @@ export function HomeScreen() {
     },
     [currentFeedSyncContext, router]
   );
-
-  const handleFollowUserFromSheet = useCallback(() => {
-    requireAuth(() => {
-      if (!selectedPost) return;
-      const authorId = selectedPost.author.id;
-      const authorUsername = selectedPost.author.username;
-      const isCurrentlyFollowing = displayFollowedUsers.includes(authorId);
-      handleFollowPress(authorId, authorUsername, isCurrentlyFollowing);
-    });
-  }, [selectedPost, displayFollowedUsers, handleFollowPress, requireAuth]);
 
   const [revealedPosts, setRevealedPosts] = useState<Set<string>>(new Set());
 
@@ -871,98 +719,7 @@ export function HomeScreen() {
         onGoToSettings={() => router.push("/settings")}
       />
 
-      <PostOptionsSheet
-        ref={postOptionsSheetRef}
-        post={selectedPost}
-        isOwnPost={currentUser?.id === selectedPost?.author.id}
-        isTopicFollowed={
-          selectedPost?.topic
-            ? followedTopics.includes(selectedPost.topic)
-            : false
-        }
-        isFollowingUser={
-          selectedPost?.author.id
-            ? displayFollowedUsers.includes(selectedPost.author.id)
-            : false
-        }
-        onShowFewer={handleShowFewer}
-        onFollowUser={handleFollowUserFromSheet}
-        onFollowTopic={handleFollowTopic}
-        onSave={handleSavePost}
-        isSaved={selectedPost ? savedPosts.some((p) => p.id === selectedPost.id) : false}
-        onCopyText={handleCopyText}
-        onReport={handleReport}
-        onBlockUser={handleBlockUser}
-        onHidePost={handleHidePost}
-        onEdit={handleEditPost}
-        onDelete={handleDeletePost}
-        onGiveAward={() => {
-          if (!selectedPost) return;
-          setTimeout(() => awardPickerSheetRef.current?.present(), 300);
-        }}
-        onGiftMirage={() => {
-          if (!selectedPost) return;
-          setTimeout(() => giftMirageSheetRef.current?.present(), 300);
-        }}
-        onGiftSubscription={() => {
-          if (!selectedPost) return;
-          setTimeout(() => giftSubscriptionSheetRef.current?.present(), 300);
-        }}
-        onDismiss={() => setSelectedPost(null)}
-      />
-
-      <AwardPickerSheet
-        ref={awardPickerSheetRef}
-        targetId={selectedPost?.id ?? ""}
-        targetType="post"
-        isOwnContent={currentUser?.id === selectedPost?.author.id}
-      />
-
-      <GiftMirageSheet
-        ref={giftMirageSheetRef}
-        recipientAddress={selectedPost?.author.id ?? ""}
-        recipientUsername={selectedPost?.author.username ?? ""}
-      />
-
-      <GiftSubscriptionSheet
-        ref={giftSubscriptionSheetRef}
-        recipientAddress={selectedPost?.author.id ?? ""}
-        recipientUsername={selectedPost?.author.username ?? ""}
-      />
-
-      <ReportSheet
-        ref={reportSheetRef}
-        targetType="post"
-        onSubmit={handleReportSubmitWithOptimistic}
-        onDismiss={reportHandler.cancelReport}
-        isLoading={reportHandler.isReporting}
-      />
-
-      <ConfirmationPopup
-        visible={blockHandler.showConfirmation}
-        title={`Block ${blockHandler.pendingBlock?.label || "user"}?`}
-        message={getBlockConfirmationMessage(
-          blockHandler.pendingBlock?.type ?? "post",
-        )}
-        icon="ban-outline"
-        confirmText="Block"
-        isDestructive
-        onConfirm={handleConfirmBlock}
-        onCancel={blockHandler.cancelBlock}
-      />
-
-      <ConfirmationPopup
-        visible={deleteHandler.showConfirmation}
-        title="Delete this post?"
-        message="This action cannot be undone."
-        description="Your post will be permanently removed."
-        icon="trash-outline"
-        confirmText="Delete"
-        isDestructive
-        onConfirm={handleConfirmDelete}
-        onCancel={deleteHandler.cancelDelete}
-      />
-
+      <PostActionOverlays controller={postActions} />
     </Box>
   );
 }
