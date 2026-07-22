@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { mmkvStorage } from "./mmkv-storage";
+import {
+  registerWalletScopedStore,
+  walletScopedStorage,
+} from "./wallet-scoped-storage";
 
 const DRAFT_TTL_MS = 2 * 24 * 60 * 60 * 1000;
 
@@ -115,8 +118,21 @@ export const useCommentComposeStore = create<CommentComposeState>()(
     }),
     {
       name: "comment-compose-storage",
-      storage: createJSONStorage(() => mmkvStorage),
+      storage: createJSONStorage(() => walletScopedStorage),
+      skipHydration: true,
       partialize: (state) => ({ drafts: state.drafts }),
     },
   ),
 );
+
+registerWalletScopedStore({
+  storageName: "comment-compose-storage",
+  reset: () =>
+    useCommentComposeStore.setState({
+      pendingComment: null,
+      pendingEdit: null,
+      wasDismissed: false,
+      drafts: {},
+    }),
+  rehydrate: () => useCommentComposeStore.persist.rehydrate(),
+});

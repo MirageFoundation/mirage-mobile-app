@@ -8,6 +8,12 @@ import { useHomePostCardStore } from "./home-post-card-store";
 import { useContentModerationStore } from "./content-moderation-store";
 import { useInboxStore } from "./inbox-store";
 import { useDraftStore } from "./draft-store";
+import "./comment-compose-store";
+import "./history-store";
+import "./pending-posts-store";
+import "./saved-posts-store";
+import "./search-store";
+import { selectWalletStorageNamespace } from "./wallet-scoped-storage";
 import { unregisterPush } from "@/src/services/push-notifications";
 import { removePersistedQueryCache } from "@/src/api/cache/persisted-query-storage";
 import { getServerIdentity } from "@/src/api/server-runtime";
@@ -164,6 +170,7 @@ export const useAuthStore = create<AuthState>()(
           }
 
           if (!hasWalletResult) {
+            await selectWalletStorageNamespace(null);
             await bootstrapAnonymousStartup();
             set({
               isLoggedIn: false,
@@ -178,6 +185,7 @@ export const useAuthStore = create<AuthState>()(
           const metadata = walletService.getWalletMetadata();
 
           if (metadata) {
+            await selectWalletStorageNamespace(metadata.address);
             Sentry.setUser({
               id: metadata.address,
             });
@@ -242,6 +250,7 @@ export const useAuthStore = create<AuthState>()(
             return;
           }
         } catch (error) {
+          await selectWalletStorageNamespace(null);
           set({ isBootstrapping: false });
           console.error("[AuthStore] Failed to initialize wallet:", error);
           Sentry.captureException(error, {
@@ -267,6 +276,7 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           removePersistedQueryCache(getServerIdentity(), get().walletAddress);
+          await selectWalletStorageNamespace(null);
           const metadata = await walletService.createWallet();
 
           const mnemonic = await walletService.exportMnemonic();
@@ -277,6 +287,7 @@ export const useAuthStore = create<AuthState>()(
             );
           }
 
+          await selectWalletStorageNamespace(metadata.address);
           set({
             recoveryPhrase: mnemonic,
             walletAddress: metadata.address,
@@ -300,8 +311,10 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           removePersistedQueryCache(getServerIdentity(), get().walletAddress);
+          await selectWalletStorageNamespace(null);
           const metadata = await walletService.importWallet(mnemonic);
 
+          await selectWalletStorageNamespace(metadata.address);
           Sentry.setUser({
             id: metadata.address,
           });
@@ -400,6 +413,7 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         removePersistedQueryCache(getServerIdentity(), get().walletAddress);
+        await selectWalletStorageNamespace(null);
         try {
           const wallet = await walletService.getWallet();
           await unregisterPush(wallet);

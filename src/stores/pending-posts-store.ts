@@ -3,7 +3,10 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import * as Sentry from "@sentry/react-native";
 
 import type { Post as ApiPost } from "@/src/api/types";
-import { mmkvStorage } from "./mmkv-storage";
+import {
+  registerWalletScopedStore,
+  walletScopedStorage,
+} from "./wallet-scoped-storage";
 import {
   matchesPendingPostAlias,
   normalizePendingPost,
@@ -87,7 +90,8 @@ export const usePendingPostsStore = create<PendingPostsState>()(
     }),
     {
       name: "pending-posts-storage",
-      storage: createJSONStorage(() => mmkvStorage),
+      storage: createJSONStorage(() => walletScopedStorage),
+      skipHydration: true,
       version: 3,
       migrate: (persistedState) => {
         const state = persistedState as Partial<PendingPostsState> | undefined;
@@ -118,3 +122,9 @@ export const usePendingPostsStore = create<PendingPostsState>()(
     },
   ),
 );
+
+registerWalletScopedStore({
+  storageName: "pending-posts-storage",
+  reset: () => usePendingPostsStore.setState({ posts: [] }),
+  rehydrate: () => usePendingPostsStore.persist.rehydrate(),
+});

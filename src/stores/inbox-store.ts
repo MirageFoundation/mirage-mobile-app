@@ -1,7 +1,10 @@
 import type { InboxReply } from "@/src/api/types";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { mmkvStorage } from "./mmkv-storage";
+import {
+  registerWalletScopedStore,
+  walletScopedStorage,
+} from "./wallet-scoped-storage";
 
 interface InboxNotificationTarget {
   notificationId: string;
@@ -113,8 +116,9 @@ export const useInboxStore = create<InboxState>()(
           unreadCount: 0,
           hasUnread: false,
           isInboxActive: false,
+          lastViewedAt: 0,
           latestInboxTimestamp: 0,
-          highlightBaselineAt: Math.floor(Date.now() / 1000),
+          highlightBaselineAt: 0,
           _suppressUntil: 0,
           readReplyIds: [],
           notificationTarget: null,
@@ -124,7 +128,8 @@ export const useInboxStore = create<InboxState>()(
     {
       name: "inbox-store",
       version: 6,
-      storage: createJSONStorage(() => mmkvStorage),
+      storage: createJSONStorage(() => walletScopedStorage),
+      skipHydration: true,
       partialize: (state) => ({
         lastViewedAt: state.lastViewedAt,
         highlightBaselineAt: state.highlightBaselineAt,
@@ -144,3 +149,9 @@ export const useInboxStore = create<InboxState>()(
     },
   ),
 );
+
+registerWalletScopedStore({
+  storageName: "inbox-store",
+  reset: () => useInboxStore.getState().resetForLogout(),
+  rehydrate: () => useInboxStore.persist.rehydrate(),
+});
