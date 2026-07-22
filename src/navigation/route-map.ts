@@ -95,10 +95,29 @@ export function isMirageScheme(scheme: string): boolean {
   return scheme.toLowerCase().startsWith(MIRAGE_SCHEME_PREFIX);
 }
 
+function matchesAppRoutePrefix(pathname: string, prefix: string): boolean {
+  if (!pathname.startsWith(prefix)) {
+    return false;
+  }
+
+  if (prefix.endsWith("/")) {
+    const rest = pathname.slice(prefix.length);
+    return rest.length > 0 && !rest.startsWith("/");
+  }
+
+  if (pathname.length === prefix.length) {
+    return true;
+  }
+
+  return pathname.charAt(prefix.length) === "/";
+}
+
 export function isAppRoute(path: string): boolean {
   const { pathname } = splitPathAndSearch(path);
 
-  return KNOWN_APP_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  return KNOWN_APP_ROUTE_PREFIXES.some((prefix) =>
+    matchesAppRoutePrefix(pathname, prefix),
+  );
 }
 
 export function mapMiragePathToRoute(
