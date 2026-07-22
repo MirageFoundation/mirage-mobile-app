@@ -87,8 +87,7 @@ export function useHomeTabbedFeedController({
     scrollHandler,
     scrollY,
     scrollOffsetY,
-    registerHomeRefresh,
-    registerFollowingRefresh,
+    registerRefreshTarget,
     showBars,
   } = useScrollAnimationContext();
   const setContextScrolling = useFeedScrollStore((state) => state.setContextScrolling);
@@ -364,16 +363,8 @@ export function useHomeTabbedFeedController({
     });
   }, []);
   useEffect(() => {
-    const register = baseFeed === "home"
-      ? registerHomeRefresh
-      : registerFollowingRefresh;
-    register(scrollToTopAndRefresh);
-  }, [
-    baseFeed,
-    registerFollowingRefresh,
-    registerHomeRefresh,
-    scrollToTopAndRefresh,
-  ]);
+    return registerRefreshTarget(baseFeed, scrollToTopAndRefresh);
+  }, [baseFeed, registerRefreshTarget, scrollToTopAndRefresh]);
 
   const latestPostTimestamp = useMemo(
     () => getLatestPostTimestamp(query.data?.pages),

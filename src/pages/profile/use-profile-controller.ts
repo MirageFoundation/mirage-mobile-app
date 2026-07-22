@@ -56,7 +56,7 @@ export function useProfileController(headerInset: number, windowHeight: number) 
   const router = useRouter();
   const isFocused = useIsFocused();
   const queryClient = useQueryClient();
-  const { registerProfileRefresh, showBars } = useScrollAnimationContext();
+  const { registerRefreshTarget, showBars } = useScrollAnimationContext();
   const user = useAuthStore((state) => state.user);
   const storedUserLevel = useAuthStore((state) => state.userLevel);
   const setUserLevel = useAuthStore((state) => state.setUserLevel);
@@ -206,8 +206,8 @@ export function useProfileController(headerInset: number, windowHeight: number) 
     }
   }, [invalidateWalletQueries, refetchPosts, refetchProfile, refetchUserStatus, walletAddress]);
   useEffect(() => {
-    registerProfileRefresh(() => refreshProfile(true));
-  }, [refreshProfile, registerProfileRefresh]);
+    return registerRefreshTarget("profile", () => refreshProfile(true));
+  }, [refreshProfile, registerRefreshTarget]);
   useFocusEffect(useCallback(() => {
     showBars();
     setFocusVersion((version) => version + 1);

@@ -11,6 +11,7 @@ import {
 import {
   ScrollAnimationProvider,
   TAB_BAR_HEIGHT,
+  type RefreshTargetKey,
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
 import { useAuthStore, useUIStore } from "@/src/stores";
@@ -52,6 +53,11 @@ import { getPendingShareIntent } from "@/src/navigation/pending-launch-intents";
 
 // Tabs that require authentication
 const PROTECTED_TABS = ["following", "create", "inbox", "profile"];
+const REFRESH_TARGET_BY_ROUTE: Partial<Record<string, RefreshTargetKey>> = {
+  index: "home",
+  following: "following",
+  profile: "profile",
+};
 
 function getPendingShareIntentDiagnostics() {
   const pending = getPendingShareIntent();
@@ -76,8 +82,6 @@ const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
   const {
     tabBarAnimatedStyle,
     scrollToTopAndRefresh,
-    scrollToTopAndRefreshFollowing,
-    scrollToTopAndRefreshProfile,
   } = useScrollAnimationContext();
 
   // Auth state
@@ -112,21 +116,14 @@ const AnimatedTabBar = ({ state, descriptors, navigation }: any) => {
               canPreventDefault: true,
             });
 
-            // If already on home tab, scroll to top and refresh
-            if (isFocused && route.name === "index") {
-              scrollToTopAndRefresh();
-              return;
-            }
-
-            // If already on following tab, scroll to top and refresh
-            if (isFocused && route.name === "following") {
-              scrollToTopAndRefreshFollowing();
-              return;
-            }
-
-            // If already on profile tab, scroll to top and refresh
-            if (isFocused && route.name === "profile") {
-              scrollToTopAndRefreshProfile();
+            const refreshTarget = REFRESH_TARGET_BY_ROUTE[route.name];
+            if (isFocused && refreshTarget) {
+              void scrollToTopAndRefresh(refreshTarget).catch((error) => {
+                Sentry.captureException(error, {
+                  tags: { feature: "tab-bar", operation: "refresh-target" },
+                  extra: { refreshTarget },
+                });
+              });
               return;
             }
 

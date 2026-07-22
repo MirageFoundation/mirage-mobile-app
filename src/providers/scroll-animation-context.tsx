@@ -5,7 +5,6 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import type { FlatList, ScrollView } from "react-native";
 import {
   useAnimatedScrollHandler,
   useAnimatedStyle,
@@ -14,6 +13,11 @@ import {
   type SharedValue,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  RefreshTargetRegistry,
+  type RefreshTargetCallback,
+  type RefreshTargetKey,
+} from "./refresh-target-registry";
 
 const HEADER_HEIGHT = 44;
 const FEED_TAB_BAR_HEIGHT = 44;
@@ -33,8 +37,6 @@ const MAX_LEGIT_DIFF = 150;
 // page is rendering.
 const TRANSITION_LOCKOUT_MS = 350;
 
-type ScrollableRef = FlatList<any> | ScrollView | null;
-
 type ScrollAnimationContextType = {
   scrollHandler: ReturnType<typeof useAnimatedScrollHandler>;
   headerAnimatedStyle: ReturnType<typeof useAnimatedStyle>;
@@ -44,12 +46,11 @@ type ScrollAnimationContextType = {
   tabBarTranslateY: SharedValue<number>;
   scrollY: SharedValue<number>;
   scrollOffsetY: SharedValue<number>;
-  registerHomeRefresh: (callback: () => void) => void;
-  registerFollowingRefresh: (callback: () => void) => void;
-  registerProfileRefresh: (callback: () => void) => void;
-  scrollToTopAndRefresh: () => void;
-  scrollToTopAndRefreshFollowing: () => void;
-  scrollToTopAndRefreshProfile: () => void;
+  registerRefreshTarget: (
+    key: RefreshTargetKey,
+    callback: RefreshTargetCallback,
+  ) => () => void;
+  scrollToTopAndRefresh: (key: RefreshTargetKey) => Promise<void>;
   showBars: () => void;
 };
 
@@ -79,9 +80,10 @@ export const ScrollAnimationProvider = ({
   // insert, recycling) and must not toggle the bars.
   const isUserScrolling = useSharedValue(false);
 
-  const homeRefreshRef = useRef<(() => void) | null>(null);
-  const followingRefreshRef = useRef<(() => void) | null>(null);
-  const profileRefreshRef = useRef<(() => void) | null>(null);
+  const refreshTargetRegistryRef = useRef<RefreshTargetRegistry | null>(null);
+  if (!refreshTargetRegistryRef.current) {
+    refreshTargetRegistryRef.current = new RefreshTargetRegistry();
+  }
 
   const fullHeaderHeight = HEADER_HEIGHT + insets.top;
   const fullTabBarHeight = TAB_BAR_HEIGHT + insets.bottom;
@@ -199,31 +201,14 @@ export const ScrollAnimationProvider = ({
     }, 2000);
   }, [headerTranslateY, tabBarTranslateY, isUserScrolling, isHidden, isFirstScroll, lastScrollY, lastTransitionAt, isProgrammaticScroll]);
 
-  const registerHomeRefresh = useCallback((callback: () => void) => {
-    homeRefreshRef.current = callback;
-  }, []);
+  const registerRefreshTarget = useCallback((
+    key: RefreshTargetKey,
+    callback: RefreshTargetCallback,
+  ) => refreshTargetRegistryRef.current!.register(key, callback), []);
 
-  const registerFollowingRefresh = useCallback((callback: () => void) => {
-    followingRefreshRef.current = callback;
-  }, []);
-
-  const registerProfileRefresh = useCallback((callback: () => void) => {
-    profileRefreshRef.current = callback;
-  }, []);
-
-  const scrollToTopAndRefresh = useCallback(() => {
+  const scrollToTopAndRefresh = useCallback(async (key: RefreshTargetKey) => {
     showBars();
-    homeRefreshRef.current?.();
-  }, [showBars]);
-
-  const scrollToTopAndRefreshFollowing = useCallback(() => {
-    showBars();
-    followingRefreshRef.current?.();
-  }, [showBars]);
-
-  const scrollToTopAndRefreshProfile = useCallback(() => {
-    showBars();
-    profileRefreshRef.current?.();
+    await refreshTargetRegistryRef.current!.invoke(key);
   }, [showBars]);
 
   const value = useMemo(
@@ -236,12 +221,8 @@ export const ScrollAnimationProvider = ({
       tabBarTranslateY,
       scrollY: lastScrollY,
       scrollOffsetY,
-      registerHomeRefresh,
-      registerFollowingRefresh,
-      registerProfileRefresh,
+      registerRefreshTarget,
       scrollToTopAndRefresh,
-      scrollToTopAndRefreshFollowing,
-      scrollToTopAndRefreshProfile,
       showBars,
     }),
     [
@@ -252,12 +233,8 @@ export const ScrollAnimationProvider = ({
       tabBarTranslateY,
       lastScrollY,
       scrollOffsetY,
-      registerHomeRefresh,
-      registerFollowingRefresh,
-      registerProfileRefresh,
+      registerRefreshTarget,
       scrollToTopAndRefresh,
-      scrollToTopAndRefreshFollowing,
-      scrollToTopAndRefreshProfile,
       showBars,
     ]
   );
@@ -286,3 +263,4 @@ export const useScrollY = (): SharedValue<number> | null => {
 
 export { HEADER_HEIGHT, TAB_BAR_HEIGHT };
 export { FEED_TAB_BAR_HEIGHT };
+export type { RefreshTargetKey } from "./refresh-target-registry";
