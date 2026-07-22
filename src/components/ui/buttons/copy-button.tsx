@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect, useRef } from "react";
 import { Animated, Easing } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 import { Button } from "@/components/ui/primitives/button";
@@ -21,8 +21,17 @@ export const CopyButton: React.FC<CopyButtonProps> = ({
   onCopy,
 }) => {
   const [copied, setCopied] = useState(false);
-  const rotateAnim = new Animated.Value(0);
-  const scaleAnim = new Animated.Value(1);
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const animateBack = useCallback(() => {
+    Animated.timing(rotateAnim, {
+      toValue: 0,
+      duration: 300,
+      easing: Easing.bezier(0.4, 0, 0.2, 1),
+      useNativeDriver: true,
+    }).start(() => setCopied(false));
+  }, [rotateAnim]);
 
   // Reset copied state after delay
   useEffect(() => {
@@ -36,7 +45,7 @@ export const CopyButton: React.FC<CopyButtonProps> = ({
     return () => {
       if (timeout) clearTimeout(timeout);
     };
-  }, [copied]);
+  }, [animateBack, copied]);
 
   const animateToCopied = () => {
     Animated.parallel([
@@ -61,15 +70,6 @@ export const CopyButton: React.FC<CopyButtonProps> = ({
         }),
       ]),
     ]).start();
-  };
-
-  const animateBack = () => {
-    Animated.timing(rotateAnim, {
-      toValue: 0,
-      duration: 300,
-      easing: Easing.bezier(0.4, 0, 0.2, 1),
-      useNativeDriver: true,
-    }).start(() => setCopied(false));
   };
 
   const copyToClipboard = async () => {

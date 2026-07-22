@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -146,7 +146,7 @@ export const PowQueueToast = () => {
           : activeResultAction.errorMessage || "Failed"
         : "Processing…");
 
-  const animateIn = () => {
+  const animateIn = useCallback(() => {
     isAnimatingOutRef.current = false;
     Animated.parallel([
       Animated.spring(translateY, {
@@ -167,9 +167,9 @@ export const PowQueueToast = () => {
         friction: 12,
       }),
     ]).start();
-  };
+  }, [opacity, scale, translateY]);
 
-  const animateOut = () => {
+  const animateOut = useCallback(() => {
     if (isAnimatingOutRef.current) return;
     isAnimatingOutRef.current = true;
 
@@ -195,7 +195,7 @@ export const PowQueueToast = () => {
       setDisplayedCompletedAction(null);
       isAnimatingOutRef.current = false;
     });
-  };
+  }, [opacity, scale, translateY]);
 
   useEffect(() => {
     if (lastCompletedAction) {
@@ -261,7 +261,7 @@ export const PowQueueToast = () => {
       lastHashRateRef.current = 0;
       animateIn();
     }
-  }, [hasPendingWork, isVisible, successOverlay]);
+  }, [animateIn, hasPendingWork, isVisible, successOverlay]);
 
   useEffect(() => {
     if (visibleCurrentAction || visiblePreparingAction) {
@@ -302,7 +302,7 @@ export const PowQueueToast = () => {
         clearTimeout(dismissTimeoutRef.current);
       }
     };
-  }, [hasActiveResultAction, hasPendingWork, isVisible, resultDisplayDurationMs]);
+  }, [animateOut, hasActiveResultAction, hasPendingWork, isVisible, resultDisplayDurationMs]);
 
   useEffect(() => {
     if (isShowingProcessing && isVisible) {

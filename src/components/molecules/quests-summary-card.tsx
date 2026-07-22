@@ -278,17 +278,17 @@ export function QuestsSummaryCard() {
   const triggerScrollToTop = useHomePostCardStore((s) => s.triggerScrollToTop);
 
   useEffect(() => {
-    if (questsCardExpanded) {
-      setTimeout(() => triggerScrollToTop(), 100);
-    }
-  }, []);
+    if (!questsCardExpanded) return;
+
+    const timeout = setTimeout(() => triggerScrollToTop(), 100);
+    return () => clearTimeout(timeout);
+  }, [questsCardExpanded, triggerScrollToTop]);
 
   const handleToggleExpand = useCallback(() => {
     triggerHaptic("light");
     showBars();
     setQuestsCardExpanded(!questsCardExpanded);
-    setTimeout(() => triggerScrollToTop(), 50);
-  }, [questsCardExpanded, setQuestsCardExpanded, showBars, triggerScrollToTop]);
+  }, [questsCardExpanded, setQuestsCardExpanded, showBars]);
 
   if (!isLoggedIn) return null;
   if (!questsEnabled) return null;

@@ -88,7 +88,7 @@ export function LoggedOutHome() {
     } finally {
       setIsSwitching(false);
     }
-  }, [otherServer, setApiServer, queryClient, refetchNodeConfig, router]);
+  }, [otherServer, setApiServer, queryClient, refetchNodeConfig, router, toast]);
 
   return (
     <Box flex background="base">

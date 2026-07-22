@@ -190,7 +190,7 @@ function LegacyPostDetailScreen() {
         queryKey: queryKeys.comments(id, currentUser?.walletAddress ?? undefined),
       });
     }
-  }, []);
+  }, [currentUser?.walletAddress, highlight, id, queryClient]);
 
   // Fetch comments from API
   const {

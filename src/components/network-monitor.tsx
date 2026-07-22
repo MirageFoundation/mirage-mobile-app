@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Dimensions, Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
@@ -32,7 +32,7 @@ export function NetworkMonitor() {
 
   useAppState({ onForeground: () => {} });
 
-  const animateIn = () => {
+  const animateIn = useCallback(() => {
     Animated.parallel([
       Animated.spring(translateY, {
         toValue: 0,
@@ -52,9 +52,9 @@ export function NetworkMonitor() {
         friction: 12,
       }),
     ]).start();
-  };
+  }, [opacity, scale, translateY]);
 
-  const animateOut = () => {
+  const animateOut = useCallback(() => {
     Animated.parallel([
       Animated.timing(translateY, {
         toValue: -100,
@@ -75,7 +75,7 @@ export function NetworkMonitor() {
       setIsVisible(false);
       setMode(null);
     });
-  };
+  }, [opacity, scale, translateY]);
 
   useEffect(() => {
     if (isInitial.current) {
@@ -108,7 +108,7 @@ export function NetworkMonitor() {
     }
 
     prevConnected.current = isConnected;
-  }, [isConnected]);
+  }, [animateIn, animateOut, isConnected]);
 
   useEffect(() => {
     return () => {

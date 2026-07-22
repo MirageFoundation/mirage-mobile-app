@@ -19,6 +19,7 @@ import { useToast } from "@/src/providers/toast-provider";
 import { useAuthStore } from "@/src/stores";
 import { AWARD_TYPES, formatAwardCost, getFriendlyAwardError } from "@/src/data/awards";
 import { formatCompactNumber } from "@/src/utils/format-number";
+import { createDuplicateActionGuard } from "@/src/utils/duplicate-action-guard";
 import type { AwardConfig } from "@/src/api/types";
 import axios from "axios";
 
@@ -124,6 +125,7 @@ export const AwardPickerSheet = forwardRef<
     const [isPresented, setIsPresented] = useState(false);
     const [selectedType, setSelectedType] = useState<string | null>(null);
     const [isSending, setIsSending] = useState(false);
+    const sendGuardRef = useRef(createDuplicateActionGuard());
     const { data: awardConfigs } = useAwardConfigs({ enabled: isPresented });
     const { data: userStatus } = useUserStatus({ enabled: isPresented });
     const giveAwardMutation = useGiveAward();
@@ -174,7 +176,7 @@ export const AwardPickerSheet = forwardRef<
       !isAdmin && selectedConfig ? balance < selectedConfig.cost : false;
 
     const handleSendAward = useCallback(async () => {
-      if (!selectedType || !targetId || isSending) return;
+      if (!selectedType || !targetId || !sendGuardRef.current.tryAcquire()) return;
       setIsSending(true);
       triggerHaptic("medium");
 
@@ -206,6 +208,7 @@ export const AwardPickerSheet = forwardRef<
         }
         toast.error(getFriendlyAwardError(errorMessage));
       } finally {
+        sendGuardRef.current.release();
         setIsSending(false);
       }
     }, [selectedType, targetId, giveAwardMutation, toast, dismiss, onSuccess]);

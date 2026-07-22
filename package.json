@@ -14,6 +14,7 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "check:lint": "bun run lint",
+    "check:hooks": "bun tools/check-hook-warnings.mjs",
     "check:file-sizes": "bun tools/check-file-sizes.mjs",
     "check:stores": "bun tools/check-store-boundaries.mjs",
     "check:boundaries": "bun tools/check-layer-boundaries.mjs",

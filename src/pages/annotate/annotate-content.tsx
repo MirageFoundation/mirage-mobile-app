@@ -440,7 +440,7 @@ export function AnnotateScreen() {
       Sentry.captureException(err, { tags: { feature: "annotate", operation: "video-picker" } });
       toast.error("Couldn't load video", "Try a different video or re-download it from iCloud");
     }
-  }, [mediaType, toast, startVideoUpload]);
+  }, [mediaType, router, toast]);
 
   const handleStickerPress = useCallback(() => {
     if (mediaType && mediaType !== "sticker") return;

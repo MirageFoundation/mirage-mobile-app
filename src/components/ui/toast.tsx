@@ -7,7 +7,7 @@
 
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -80,6 +80,28 @@ export const Toast = ({
   const scale = useRef(new Animated.Value(0.95)).current;
   const [elapsedMs, setElapsedMs] = useState(0);
 
+  const handleDismiss = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: -50,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scale, {
+        toValue: 0.95,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onDismiss(toast.id);
+    });
+  }, [onDismiss, opacity, scale, toast.id, translateY]);
+
   // Entrance animation
   useEffect(() => {
     Animated.parallel([
@@ -122,29 +144,7 @@ export const Toast = ({
       }, toast.duration);
       return () => clearTimeout(timer);
     }
-  }, [toast.duration, toast.id]);
-
-  const handleDismiss = () => {
-    Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: -50,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scale, {
-        toValue: 0.95,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      onDismiss(toast.id);
-    });
-  };
+  }, [handleDismiss, toast.duration, toast.id]);
 
   const getIconColor = () => {
     switch (toast.type) {
