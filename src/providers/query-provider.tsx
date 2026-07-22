@@ -4,7 +4,10 @@ import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { storage } from "@/src/stores/mmkv-storage";
 import { AppState, Platform } from "react-native";
-import NetInfo from "@react-native-community/netinfo";
+import {
+  getNetworkState,
+  subscribeNetworkState,
+} from "@/src/stores/network-state-store";
 import {
   buildPersistedQueryNamespace,
   buildPersistedQueryStorageKey,
@@ -19,8 +22,9 @@ import { getApiBaseUrl, useAuthStore, usePreferencesStore } from "@/src/stores";
 storage.remove("mirage-query-cache");
 
 onlineManager.setEventListener((setOnline) => {
-  return NetInfo.addEventListener((state) => {
-    setOnline(!!state.isConnected);
+  setOnline(getNetworkState().isConnected);
+  return subscribeNetworkState((state) => {
+    setOnline(state.isConnected);
   });
 });
 

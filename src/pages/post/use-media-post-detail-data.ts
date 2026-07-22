@@ -280,7 +280,7 @@ export function useMediaPostDetailData({
     [followedData],
   );
   const optimisticPost = usePendingPostsStore((state) =>
-    id ? state.posts.find((item) => item.post_id.toLowerCase() === id.toLowerCase()) : undefined,
+    id ? state.postsById[id.toLowerCase()] : undefined,
   );
 
   const cachedPost = useMemo<Post | null>(() => {

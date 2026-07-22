@@ -35,7 +35,7 @@ import { TimeAgo } from "@/src/components/atoms";
 import {
   useAppState,
   useAuthGuard,
-  useNetworkState,
+  useNetworkType,
   useVoteHandler,
   shouldAutoplayVideo,
   type VoteResult,
@@ -378,7 +378,7 @@ export function SavedPostsScreen() {
   const setVoteOverride = useHomePostCardStore((state) => state.setVoteOverride);
   const clearVoteOverride = useHomePostCardStore((state) => state.clearVoteOverride);
 
-  const { networkType } = useNetworkState();
+  const networkType = useNetworkType();
 
   const allowAutoplay = useMemo(
     () => shouldAutoplayVideo(autoPlayVideos, videoAutoplayNetwork, networkType),

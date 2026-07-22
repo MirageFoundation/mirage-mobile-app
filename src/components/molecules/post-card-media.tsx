@@ -42,7 +42,6 @@ import {
   YouTubeAutoplayEmbed,
   type YouTubeAutoplayEmbedRef,
 } from "./youtube-autoplay-embed";
-import { useNetworkState } from "@/src/hooks/use-network-state";
 import { useVideoPlayerController } from "@/src/hooks/use-video-player-controller";
 import { setLastPressedMediaTransition } from "@/src/utils/post-transition";
 import {
@@ -75,6 +74,8 @@ type PostCardMediaProps = {
   isVisible: boolean;
   isFocused?: boolean;
   isNearVisible?: boolean;
+  isConnected: boolean;
+  shouldPrimeOptimisticVideo?: boolean;
   shouldBlurContent: boolean;
   hasMultipleMedia: boolean;
   extraMediaCount: number;
@@ -105,9 +106,11 @@ export const PostCardMedia = memo(
     {
       media,
       mediaList,
-      isVisible,
-      isFocused = true,
+      isVisible: isVisibleProp,
+      isFocused: isFocusedProp = true,
       isNearVisible,
+      isConnected,
+      shouldPrimeOptimisticVideo = false,
       shouldBlurContent,
       hasMultipleMedia,
       extraMediaCount,
@@ -125,6 +128,26 @@ export const PostCardMedia = memo(
     },
     ref,
   ) {
+    const isFeedScrolling = useIsFeedScrolling(
+      !isPostDetail ? videoSyncScope : undefined,
+    );
+    const [optimisticVideoPrimeDismissed, setOptimisticVideoPrimeDismissed] =
+      useState(false);
+    const primeOptimisticVideo =
+      shouldPrimeOptimisticVideo && !optimisticVideoPrimeDismissed;
+    const isVisible = primeOptimisticVideo || isVisibleProp;
+    const isFocused = primeOptimisticVideo || isFocusedProp;
+
+    useEffect(() => {
+      if (!shouldPrimeOptimisticVideo) {
+        setOptimisticVideoPrimeDismissed(false);
+        return;
+      }
+      if (isFeedScrolling) {
+        setOptimisticVideoPrimeDismissed(true);
+      }
+    }, [isFeedScrolling, postId, shouldPrimeOptimisticVideo]);
+
     const [imageError, setImageError] = useState(false);
     const [isVideoPlaying, setIsVideoPlaying] = useState(false);
     const [isVideoLoading, setIsVideoLoading] = useState(false);
@@ -146,7 +169,6 @@ export const PostCardMedia = memo(
       : effectiveMuted;
     const [showVideoPrepSpinner, setShowVideoPrepSpinner] = useState(false);
     const [mediaRetryKey, setMediaRetryKey] = useState(0);
-    const { isConnected } = useNetworkState();
     const youtubeEmbedRef = useRef<YouTubeAutoplayEmbedRef | null>(null);
     const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const playRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -225,7 +247,6 @@ export const PostCardMedia = memo(
     const shouldLazyMountYouTube = Platform.OS === "android" && !isPostDetail;
     const videoThumbnailUri = media?.type === "video" ? getVideoThumbnailUri(media.uri, media.posterUri) : "";
     const youtubeThumbnailUri = youtubeVideoId ? `https://img.youtube.com/vi/${youtubeVideoId}/hqdefault.jpg` : "";
-    const isFeedScrolling = useIsFeedScrolling(!isPostDetail ? videoSyncScope : undefined);
     const getPosition = useVideoPositionStore((s) => s.getPosition);
     const setPosition = useVideoPositionStore((s) => s.setPosition);
     const lastKnownYouTubeTimeRef = useRef(0);

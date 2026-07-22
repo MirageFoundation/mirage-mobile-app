@@ -251,7 +251,7 @@ function LegacyPostDetailScreen() {
 
   const currentFetchPostNotFound = commentsApiError?.errorCode === "post_not_found" || commentsApiError?.httpStatus === 404;
   const optimisticPost = usePendingPostsStore((state) =>
-    id ? state.posts.find((post) => post.post_id.toLowerCase() === id.toLowerCase()) : undefined,
+    id ? state.postsById[id.toLowerCase()] : undefined,
   );
   const [notFoundRouteId, setNotFoundRouteId] = useState<string | null>(null);
   const reportedNotFoundRouteRef = useRef<string | null>(null);

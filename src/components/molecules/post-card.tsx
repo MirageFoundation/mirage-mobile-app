@@ -3,9 +3,12 @@ import { Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
 import { logPress } from "@/src/utils/press-logger";
 import { setLastPressedPostY } from "@/src/utils/post-transition";
-import { useIsFeedScrolling, usePreferencesStore } from "@/src/stores";
-import { usePowQueueStore } from "@/src/services/pow-queue";
-import { useNetworkState } from "@/src/hooks/use-network-state";
+import { usePreferencesStore } from "@/src/stores";
+import {
+  useIsPowActionCurrent,
+  useIsPowActionQueued,
+} from "@/src/services/pow-queue";
+import { useIsConnected } from "@/src/hooks/use-network-state";
 import { isPostVideoProcessing } from "@/src/domain/posts/video-processing";
 import { markOptimisticVideoProcessingComplete } from "@/src/api/cache/complete-video-processing";
 import { useQueryClient } from "@tanstack/react-query";
@@ -81,11 +84,21 @@ type PostCardProps = {
   showMoreButton?: boolean;
   isPostDetail?: boolean;
   allowOptimisticMediaPreview?: boolean;
+  optimisticQueueState?: {
+    isCurrent: boolean;
+    isQueued: boolean;
+  };
   videoSyncScope?: string;
   style?: StyleProp<ViewStyle>;
 };
 
-export const PostCard = memo(function PostCard({
+type PostCardViewProps = PostCardProps & {
+  isConnected: boolean;
+  isOptimisticActionCurrent: boolean;
+  isOptimisticActionQueued: boolean;
+};
+
+const PostCardView = memo(function PostCardView({
   post,
   isOwnPost = false,
   isVisible = false,
@@ -122,9 +135,12 @@ export const PostCard = memo(function PostCard({
   showMoreButton = false,
   isPostDetail = false,
   allowOptimisticMediaPreview = false,
+  isConnected,
+  isOptimisticActionCurrent = false,
+  isOptimisticActionQueued = false,
   videoSyncScope,
   style,
-}: PostCardProps) {
+}: PostCardViewProps) {
   if (__DEV__) {
     //  console.log("[render] post_card", post.id);
   }
@@ -191,16 +207,10 @@ export const PostCard = memo(function PostCard({
 
   const { theme } = useUnistyles();
   const queryClient = useQueryClient();
-  const pendingPost = usePendingPostsStore((state) =>
-    state.posts.find((item) => item.post_id === post.id),
+  const normalizedPostId = post.id.toLowerCase();
+  const pendingPost = usePendingPostsStore(
+    (state) => state.postsById[normalizedPostId],
   );
-  const currentPowActionId = usePowQueueStore((state) => state.currentAction?.id);
-  const isOptimisticPostQueued = usePowQueueStore((state) =>
-    post.optimisticActionId
-      ? state.queue.some((action) => action.id === post.optimisticActionId)
-      : false,
-  );
-  const { isConnected } = useNetworkState();
   const isOptimisticPostSuccess = isSuccessfulOptimisticPost(post);
   const isOptimisticPostOffline = post.optimisticStatus === "pending" && !isConnected;
   const optimisticStatusColor = post.optimisticStatus === "error" || isOptimisticPostOffline
@@ -211,8 +221,8 @@ export const PostCard = memo(function PostCard({
   const isOptimisticPostWaitingForQueue =
     post.optimisticStatus === "pending" &&
     !!post.optimisticActionId &&
-    isOptimisticPostQueued &&
-    currentPowActionId !== post.optimisticActionId;
+    isOptimisticActionQueued &&
+    !isOptimisticActionCurrent;
   const isOptimisticVideoProcessing =
     isPostVideoProcessing(pendingPost) || isPostVideoProcessing(post);
   const isOptimisticVideoPost =
@@ -247,9 +257,6 @@ export const PostCard = memo(function PostCard({
   const handleVideoProcessingComplete = useCallback(() => {
     markOptimisticVideoProcessingComplete(queryClient, post.id);
   }, [post.id, queryClient]);
-  const isFeedScrolling = useIsFeedScrolling(!isPostDetail ? videoSyncScope : undefined);
-  const [optimisticVideoPrimeDismissed, setOptimisticVideoPrimeDismissed] = useState(false);
-  const primeOptimisticVideo = shouldPrimeOptimisticVideo && !optimisticVideoPrimeDismissed;
   const optimisticCardStyle = post.optimisticStatus
     ? {
         marginTop: -1,
@@ -274,16 +281,6 @@ export const PostCard = memo(function PostCard({
   const previousOptimisticStatusRef = useRef<typeof post.optimisticStatus>(undefined);
   const mediaComponentKey = `${post.optimisticActionId ?? post.id}:${videoSyncScope ?? "default"}:${resolvedContent.resolvedMedia?.type ?? "none"}`;
 
-  useEffect(() => {
-    if (!shouldPrimeOptimisticVideo) {
-      setOptimisticVideoPrimeDismissed(false);
-      return;
-    }
-
-    if (isFeedScrolling) {
-      setOptimisticVideoPrimeDismissed(true);
-    }
-  }, [isFeedScrolling, post.id, shouldPrimeOptimisticVideo]);
 
   useEffect(() => {
     const previousStatus = previousOptimisticStatusRef.current;
@@ -433,28 +430,32 @@ export const PostCard = memo(function PostCard({
         onPlayNowPress={disablePostInteractions ? undefined : handlePlayNowPress}
       />
 
-      <PostCardMedia
-        key={mediaComponentKey}
-        media={optimisticResolvedMedia}
-        mediaList={optimisticResolvedMediaList}
-        isVisible={primeOptimisticVideo || isVisible}
-        isFocused={primeOptimisticVideo || (isFocused ?? isVisible)}
-        isNearVisible={keepOptimisticMediaMounted || (isNearVisible ?? isVisible)}
-        shouldBlurContent={shouldBlurContent}
-        hasMultipleMedia={resolvedContent.hasMultipleMedia}
-        extraMediaCount={resolvedContent.extraMediaCount}
-        allowAutoplay={allowAutoplay}
-        screenActive={screenActive && !showMediaPreview && !showOptimisticVideoProcessing}
-        disabled={disableMediaInteractions}
-        onRevealContent={disableMediaInteractions ? undefined : onRevealContent}
-        onMediaPress={disablePostInteractions ? undefined : handleMediaPress}
-        isPostDetail={isPostDetail}
-        videoSyncScope={videoSyncScope}
-        postId={post.id}
-        forceVideoProcessing={showOptimisticVideoProcessing}
-        onVideoProcessingComplete={handleVideoProcessingComplete}
-        onGalleryMediaPress={disablePostInteractions ? undefined : handleGalleryMediaPress}
-      />
+      {optimisticResolvedMedia && (
+        <PostCardMedia
+          key={mediaComponentKey}
+          media={optimisticResolvedMedia}
+          mediaList={optimisticResolvedMediaList}
+          isVisible={isVisible}
+          isFocused={isFocused ?? isVisible}
+          isNearVisible={keepOptimisticMediaMounted || (isNearVisible ?? isVisible)}
+          isConnected={isConnected}
+          shouldPrimeOptimisticVideo={shouldPrimeOptimisticVideo}
+          shouldBlurContent={shouldBlurContent}
+          hasMultipleMedia={resolvedContent.hasMultipleMedia}
+          extraMediaCount={resolvedContent.extraMediaCount}
+          allowAutoplay={allowAutoplay}
+          screenActive={screenActive && !showMediaPreview && !showOptimisticVideoProcessing}
+          disabled={disableMediaInteractions}
+          onRevealContent={disableMediaInteractions ? undefined : onRevealContent}
+          onMediaPress={disablePostInteractions ? undefined : handleMediaPress}
+          isPostDetail={isPostDetail}
+          videoSyncScope={videoSyncScope}
+          postId={post.id}
+          forceVideoProcessing={showOptimisticVideoProcessing}
+          onVideoProcessingComplete={handleVideoProcessingComplete}
+          onGalleryMediaPress={disablePostInteractions ? undefined : handleGalleryMediaPress}
+        />
+      )}
 
       {bodyText && !shouldBlurContent && (
         <View style={styles.body}>
@@ -516,6 +517,57 @@ export const PostCard = memo(function PostCard({
         onClose={handleCloseMediaPreview}
       />
     </Pressable>
+  );
+});
+
+const PostCardWithNetworkState = memo(function PostCardWithNetworkState(
+  props: Omit<PostCardViewProps, "isConnected">,
+) {
+  const isConnected = useIsConnected();
+  return <PostCardView {...props} isConnected={isConnected} />;
+});
+
+function PostCardResolved(props: Omit<PostCardViewProps, "isConnected">) {
+  const needsConnectivity =
+    !!props.post.optimisticStatus ||
+    !!props.post.media?.length ||
+    !!props.post.body?.includes("http");
+
+  return needsConnectivity
+    ? <PostCardWithNetworkState {...props} />
+    : <PostCardView {...props} isConnected />;
+}
+
+const PostCardWithQueueState = memo(function PostCardWithQueueState(
+  props: PostCardProps,
+) {
+  const isOptimisticActionCurrent = useIsPowActionCurrent(
+    props.post.optimisticActionId,
+  );
+  const isOptimisticActionQueued = useIsPowActionQueued(
+    props.post.optimisticActionId,
+  );
+
+  return (
+    <PostCardResolved
+      {...props}
+      isOptimisticActionCurrent={isOptimisticActionCurrent}
+      isOptimisticActionQueued={isOptimisticActionQueued}
+    />
+  );
+});
+
+export const PostCard = memo(function PostCard(props: PostCardProps) {
+  if (!props.optimisticQueueState && props.post.optimisticActionId) {
+    return <PostCardWithQueueState {...props} />;
+  }
+
+  return (
+    <PostCardResolved
+      {...props}
+      isOptimisticActionCurrent={props.optimisticQueueState?.isCurrent ?? false}
+      isOptimisticActionQueued={props.optimisticQueueState?.isQueued ?? false}
+    />
   );
 });
 

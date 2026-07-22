@@ -15,7 +15,7 @@ import * as Sentry from "@sentry/react-native";
 import { usePowQueueStore, getSuccessLabel } from "@/src/services/pow-queue";
 import { getPowProgress } from "@/src/wallet";
 import { useTopToastStack } from "@/src/stores/toast-layout-store";
-import { useNetworkState } from "@/src/hooks/use-network-state";
+import { useIsConnected } from "@/src/hooks/use-network-state";
 import { Text } from "./primitives";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -57,7 +57,7 @@ const formatHashRate = (rate: number): string => {
 export const PowQueueToast = () => {
   const { theme, rt } = useUnistyles();
   const insets = useSafeAreaInsets();
-  const { isConnected } = useNetworkState();
+  const isConnected = useIsConnected();
 
   const {
     currentAction,

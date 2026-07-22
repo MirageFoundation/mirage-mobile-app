@@ -12,9 +12,15 @@ import {
   normalizePendingPost,
   prunePendingPosts,
 } from "./pending-posts-lifecycle";
+import {
+  buildPendingPostIndex,
+  selectPendingPost,
+  type PendingPostIndex,
+} from "./pending-posts-index";
 
 type PendingPostsState = {
   posts: ApiPost[];
+  postsById: PendingPostIndex<ApiPost>;
   upsertPost: (post: ApiPost) => void;
   removePost: (postId: string, optimisticActionId?: string) => void;
   removeExpiredPosts: () => void;
@@ -26,16 +32,19 @@ export const usePendingPostsStore = create<PendingPostsState>()(
   persist(
     (set, get) => ({
       posts: [] as ApiPost[],
+      postsById: {},
       upsertPost: (post) =>
         set((state) => {
           const pendingPost = normalizePendingPost(post);
           if (!pendingPost) {
+            const posts = state.posts.filter((item) => !matchesPendingPostAlias(
+              item,
+              post.post_id,
+              post.optimistic_action_id,
+            ));
             return {
-              posts: state.posts.filter((item) => !matchesPendingPostAlias(
-                item,
-                post.post_id,
-                post.optimistic_action_id,
-              )),
+              posts,
+              postsById: buildPendingPostIndex(posts),
             };
           }
 
@@ -47,14 +56,16 @@ export const usePendingPostsStore = create<PendingPostsState>()(
                 pendingPost.optimistic_action_id,
               ),
           );
-          return { posts: [pendingPost, ...nextPosts].slice(0, 10) };
+          const posts = [pendingPost, ...nextPosts].slice(0, 10);
+          return { posts, postsById: buildPendingPostIndex(posts) };
         }),
       removePost: (postId, optimisticActionId) =>
-        set((state) => ({
-          posts: state.posts.filter((post) =>
+        set((state) => {
+          const posts = state.posts.filter((post) =>
             !matchesPendingPostAlias(post, postId, optimisticActionId),
-          ),
-        })),
+          );
+          return { posts, postsById: buildPendingPostIndex(posts) };
+        }),
       removeExpiredPosts: () =>
         set((state) => {
           const previousPosts = Array.isArray(state.posts) ? state.posts : [];
@@ -68,25 +79,22 @@ export const usePendingPostsStore = create<PendingPostsState>()(
               data: { removedCount, remainingCount: posts.length },
             });
           }
-          return { posts };
+          return { posts, postsById: buildPendingPostIndex(posts) };
         }),
-      getPost: (postId) => {
-        const normalizedPostId = postId.toLowerCase();
-        return get()
-          .posts.find((post) => post.post_id.toLowerCase() === normalizedPostId);
-      },
+      getPost: (postId) => selectPendingPost(get().postsById, postId),
       markPostError: (postId, errorMessage) =>
-        set((state) => ({
-          posts: state.posts.map((post) =>
+        set((state) => {
+          const posts: ApiPost[] = state.posts.map((post) =>
             post.post_id === postId
               ? {
                   ...post,
-                  optimistic_status: "error",
+                  optimistic_status: "error" as const,
                   optimistic_error: errorMessage,
                 }
               : post,
-          ),
-        })),
+          );
+          return { posts, postsById: buildPendingPostIndex(posts) };
+        }),
     }),
     {
       name: "pending-posts-storage",
@@ -125,6 +133,6 @@ export const usePendingPostsStore = create<PendingPostsState>()(
 
 registerWalletScopedStore({
   storageName: "pending-posts-storage",
-  reset: () => usePendingPostsStore.setState({ posts: [] }),
+  reset: () => usePendingPostsStore.setState({ posts: [], postsById: {} }),
   rehydrate: () => usePendingPostsStore.persist.rehydrate(),
 });

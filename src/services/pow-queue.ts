@@ -17,11 +17,20 @@
 import { create } from "zustand";
 import { AppState, InteractionManager } from "react-native";
 import * as Sentry from "@sentry/react-native";
-import * as Network from "expo-network";
 import { getApiErrorMessage } from "@/src/utils/parse-api-error";
 import { canSkipPoWForUser } from "@/src/utils/pow-eligibility";
 import { cancelPow, isPowCancelled } from "@/src/wallet";
 import { useAuthStore } from "@/src/stores/auth-store";
+import {
+  getNetworkState,
+  refreshNetworkState,
+  subscribeNetworkState,
+} from "@/src/stores/network-state-store";
+import {
+  buildQueuedActionIds,
+  selectIsActionQueued,
+  type QueuedActionIds,
+} from "./pow-queue-index";
 
 export type PowActionType =
   | "upvote"
@@ -58,6 +67,7 @@ export interface PowAction<T = unknown> {
 
 export interface PowQueueState {
   queue: PowAction[];
+  queuedActionIds: QueuedActionIds;
   currentAction: PowAction | null;
   preparingAction: PowAction | null;
   isProcessing: boolean;
@@ -339,38 +349,30 @@ export const waitForPowAppActive = (): Promise<void> => {
 
 const waitForConnectivity = (): Promise<void> => {
   return new Promise((resolve) => {
-    let resolved = false;
-    const check = async () => {
-      const appActive = AppState.currentState === "active";
-      const net = await Network.getNetworkStateAsync();
-      if (appActive && net.isConnected && net.isInternetReachable !== false) {
-        resolved = true;
-        resolve();
-        return;
-      }
-      const subs: { remove: () => void }[] = [];
-      const cleanup = () => subs.forEach((s) => s.remove());
-      const recheck = async () => {
-        if (resolved) return;
-        const a = AppState.currentState === "active";
-        const n = await Network.getNetworkStateAsync();
-        if (a && n.isConnected && n.isInternetReachable !== false) {
-          resolved = true;
-          cleanup();
-          resolve();
-        }
-      };
-      subs.push(AppState.addEventListener("change", () => recheck()));
-      const interval = setInterval(async () => {
-        await recheck();
-        if (AppState.currentState === "active") {
-          const n = await Network.getNetworkStateAsync();
-          if (n.isConnected && n.isInternetReachable !== false) clearInterval(interval);
-        }
-      }, 3000);
-      subs.push({ remove: () => clearInterval(interval) });
+    const isReady = () => {
+      const network = getNetworkState();
+      return AppState.currentState === "active" &&
+        network.isConnected &&
+        network.isInternetReachable !== false;
     };
-    check();
+
+    if (isReady()) {
+      resolve();
+      return;
+    }
+
+    let unsubscribeNetwork = () => {};
+    const appStateSubscription = AppState.addEventListener("change", check);
+    const cleanup = () => {
+      appStateSubscription.remove();
+      unsubscribeNetwork();
+    };
+    function check() {
+      if (!isReady()) return;
+      cleanup();
+      resolve();
+    }
+    unsubscribeNetwork = subscribeNetworkState(check);
   });
 };
 
@@ -468,8 +470,10 @@ const executeImmediately = async <T>(action: PowAction<T>): Promise<void> => {
         data: { actionId: action.id, type: action.type },
       });
       const state = usePowQueueStore.getState();
+      const queue = [action as PowAction, ...state.queue];
       usePowQueueStore.setState({
-        queue: [action as PowAction, ...state.queue],
+        queue,
+        queuedActionIds: buildQueuedActionIds(queue),
       });
       return;
     }
@@ -511,6 +515,7 @@ const executeImmediately = async <T>(action: PowAction<T>): Promise<void> => {
 
 export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
   queue: [],
+  queuedActionIds: {},
   currentAction: null,
   preparingAction: null,
   isProcessing: false,
@@ -534,8 +539,10 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     const needsKick = !isProcessingLock && !state.currentAction;
     const showProgress = action.showProgress !== false;
 
+    const queue = [...state.queue, action as PowAction];
     set({
-      queue: [...state.queue, action as PowAction],
+      queue,
+      queuedActionIds: buildQueuedActionIds(queue),
       totalCount: state.totalCount + (showProgress ? 1 : 0),
       isProcessing: true,
     });
@@ -610,6 +617,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
       newQueue.splice(idx, 1);
       set({
         queue: newQueue,
+        queuedActionIds: buildQueuedActionIds(newQueue),
         totalCount: Math.max(
           0,
           state.totalCount - (action?.showProgress === false ? 0 : 1)
@@ -663,7 +671,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     }
 
     try {
-      const networkState = await Network.getNetworkStateAsync();
+      const networkState = await refreshNetworkState();
       if (!networkState.isConnected || networkState.isInternetReachable === false) {
         Sentry.addBreadcrumb({
           category: "pow",
@@ -704,6 +712,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
    set({
      currentAction: nextAction,
      queue: remainingQueue,
+     queuedActionIds: buildQueuedActionIds(remainingQueue),
      currentProgress: 0,
    });
 
@@ -768,11 +777,15 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
           level: "info",
           data: { actionId: nextAction.id, type: nextAction.type },
         });
-        set((s) => ({
-          queue: [nextAction, ...s.queue],
-          currentAction: null,
-          currentProgress: 0,
-        }));
+        set((s) => {
+          const queue = [nextAction, ...s.queue];
+          return {
+            queue,
+            queuedActionIds: buildQueuedActionIds(queue),
+            currentAction: null,
+            currentProgress: 0,
+          };
+        });
       } else if (msg === "pow_cancelled" || isPowCancelled(error)) {
         wasCancelled = true;
         if (CONTENT_LOSS_TYPES.has(nextAction.type) && isPausedByAppState) {
@@ -784,11 +797,15 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
               queueLength: get().queue.length,
             },
           );
-          set((s) => ({
-            queue: [nextAction, ...s.queue],
-            currentAction: null,
-            currentProgress: 0,
-          }));
+          set((s) => {
+            const queue = [nextAction, ...s.queue];
+            return {
+              queue,
+              queuedActionIds: buildQueuedActionIds(queue),
+              currentAction: null,
+              currentProgress: 0,
+            };
+          });
           return;
         }
         if (CONTENT_LOSS_TYPES.has(nextAction.type)) {
@@ -888,6 +905,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
 
     set({
       queue: [],
+      queuedActionIds: {},
       preparingAction: null,
       totalCount: state.completedCount,
     });
@@ -901,6 +919,7 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
     immediateActions.clear();
     set({
       queue: [],
+      queuedActionIds: {},
       currentAction: null,
       preparingAction: null,
       isProcessing: false,
@@ -913,6 +932,16 @@ export const usePowQueueStore = create<PowQueueStore>((set, get) => ({
    });
   },
 }));
+
+export const useIsPowActionQueued = (actionId: string | undefined): boolean =>
+  usePowQueueStore((state) =>
+    selectIsActionQueued(state.queuedActionIds, actionId),
+  );
+
+export const useIsPowActionCurrent = (actionId: string | undefined): boolean =>
+  usePowQueueStore(
+    (state) => !!actionId && state.currentAction?.id === actionId,
+  );
 
 export function waitForQueueDrain(): Promise<void> {
  const state = usePowQueueStore.getState();

@@ -43,7 +43,7 @@ import {
   useDeleteHandler,
   useEasUpdate,
   useFollowHandler,
-  useNetworkState,
+  useNetworkType,
   useReportHandler,
   useVoteHandler,
   shouldAutoplayVideo,
@@ -214,7 +214,7 @@ export function HomeScreen() {
   const { data: nodeConfig } = useNodeConfig();
   const openBrowsingEnabled = nodeConfig?.open_browsing_enabled ?? false;
 
-  const { networkType } = useNetworkState();
+  const networkType = useNetworkType();
 
   const { data: followedData } = useUserFollowed();
   const followedUsers = useMemo(

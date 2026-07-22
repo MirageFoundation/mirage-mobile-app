@@ -12,7 +12,10 @@ import { useDraftStore } from "@/src/stores/draft-store";
 import { router } from "@/src/navigation/guarded-router";
 import { markOptimisticPostError, removeOptimisticPostFromCache } from "@/src/api/write/hooks/use-post";
 import { useCreateComposeState } from "@/src/pages/create/create-compose-state";
-import { usePowQueueStore } from "@/src/services/pow-queue";
+import {
+  useIsPowActionCurrent,
+  useIsPowActionQueued,
+} from "@/src/services/pow-queue";
 import {
   useHomePostCardStore,
   useAllowAutoplay,
@@ -68,11 +71,18 @@ export const HomePostCardItem = memo(function HomePostCardItem({
  const allowAutoplay = useAllowAutoplay();
  const feedActive = useFeedActive(feedScreen);
  const [feedDensity] = useFeedDensity();
- const currentPowActionId = usePowQueueStore((state) => state.currentAction?.id);
- const isOptimisticActionQueued = usePowQueueStore((state) =>
-   post.optimisticActionId
-     ? state.queue.some((action) => action.id === post.optimisticActionId)
-     : false,
+ const isOptimisticActionCurrent = useIsPowActionCurrent(
+   post.optimisticActionId,
+ );
+ const isOptimisticActionQueued = useIsPowActionQueued(
+   post.optimisticActionId,
+ );
+ const optimisticQueueState = useMemo(
+   () => ({
+     isCurrent: isOptimisticActionCurrent,
+     isQueued: isOptimisticActionQueued,
+   }),
+   [isOptimisticActionCurrent, isOptimisticActionQueued],
  );
 
 // Store post data in ref to avoid recreating callbacks
@@ -92,7 +102,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
    if (post.optimisticStatus !== "pending") return;
    if (
      post.optimisticActionId &&
-     (currentPowActionId === post.optimisticActionId || isOptimisticActionQueued)
+     (isOptimisticActionCurrent || isOptimisticActionQueued)
    ) {
      return;
    }
@@ -116,7 +126,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
      "Posting was interrupted. Please try posting again.",
    );
  }, [
-   currentPowActionId,
+   isOptimisticActionCurrent,
    isOptimisticActionQueued,
    post.id,
    post.optimisticActionId,
@@ -329,6 +339,7 @@ export const HomePostCardItem = memo(function HomePostCardItem({
      allowAutoplay={allowAutoplay}
       screenActive={feedActive}
       allowOptimisticMediaPreview={feedScreen === "home"}
+      optimisticQueueState={optimisticQueueState}
       videoSyncScope={feedContext}
       onPress={handlePostPress}
       onAuthorPress={handleAuthorPress}

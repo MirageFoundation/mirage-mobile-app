@@ -47,7 +47,7 @@ import {
   useAuthGuard,
   useDeleteHandler,
   useFollowHandler,
-  useNetworkState,
+  useNetworkType,
   useReportHandler,
   useVoteHandler,
   shouldAutoplayVideo,
@@ -133,7 +133,7 @@ export function TopicFeedScreen() {
   const hideDownvotedPosts = usePreferencesStore((s) => s.hideDownvotedPosts);
   const currentUser = useAuthStore((s) => s.user);
 
-  const { networkType } = useNetworkState();
+  const networkType = useNetworkType();
 
   const { data: followedData } = useUserFollowed();
   const followedUsers = useMemo(

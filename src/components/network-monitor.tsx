@@ -5,7 +5,7 @@ import { Animated, Dimensions, Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { useNetworkState } from "@/src/hooks/use-network-state";
+import { useIsConnected } from "@/src/hooks/use-network-state";
 import { useAppState } from "@/src/hooks/use-app-state";
 import { useTopToastStack } from "@/src/stores/toast-layout-store";
 import { Text } from "@/src/components/ui/primitives";
@@ -15,7 +15,7 @@ const TOAST_WIDTH = Math.round(SCREEN_WIDTH * 0.46);
 const TOAST_STACK_ID = "network-monitor";
 
 export function NetworkMonitor() {
-  const { isConnected } = useNetworkState();
+  const isConnected = useIsConnected();
   const { theme, rt } = useUnistyles();
   const insets = useSafeAreaInsets();
   const prevConnected = useRef(true);
