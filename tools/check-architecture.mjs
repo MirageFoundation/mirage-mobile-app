@@ -9,8 +9,10 @@ const checks = [
   "check:stores",
   "check:boundaries",
   "check:query-keys",
+  "check:accessibility",
   "check:navigation",
   "check:hooks",
+  "check:test",
   "check:typecheck",
   "check:lint",
 ];

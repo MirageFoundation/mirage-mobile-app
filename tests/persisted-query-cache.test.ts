@@ -131,6 +131,42 @@ describe("persisted launch feed allowlist", () => {
     expect(wrongNamespace.metrics.queryCount).toBe(0);
   });
 
+  test("filters optimistic and device-local posts and drops malformed feeds", () => {
+    const mixed = persistedQuery(launchKey, ["server"]);
+    mixed.state.data.pages[0].posts.push(
+      {
+        ...post("optimistic-post-1"),
+        optimistic_status: "pending",
+      },
+      {
+        ...post("local-media"),
+        media: ["file:///tmp/video.mp4"],
+      },
+      {
+        ...post("local-thumbnail"),
+        thumbnail: "content://local/thumbnail.jpg",
+      },
+    );
+    const malformed = persistedQuery(
+      queryKeys.posts({
+        feed: "following",
+        by: "magic",
+        address: "mirage1viewer",
+      }),
+      ["malformed"],
+    );
+    malformed.state.data.pages[0].posts = null;
+
+    const prepared = preparePersistedQueryClient(
+      client([malformed, mixed]),
+      namespace,
+    );
+    const queries = prepared.client.clientState.queries;
+
+    expect(queries).toHaveLength(1);
+    expect(queries[0].state.data.pages[0].posts).toEqual([post("server")]);
+  });
+
   test("retains newest queries only while respecting the byte cap", () => {
     const newest = persistedQuery(
       queryKeys.posts({

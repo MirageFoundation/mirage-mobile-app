@@ -13,6 +13,8 @@
     "update:sentry": "bun scripts/update-with-sentry.ts",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
+    "test": "bun test tests/*.test.ts scripts/*.test.js tools/*.test.js",
+    "check:test": "bun run test",
     "check:lint": "bun run lint",
     "check:hooks": "bun tools/check-hook-warnings.mjs",
     "check:file-sizes": "bun tools/check-file-sizes.mjs",
