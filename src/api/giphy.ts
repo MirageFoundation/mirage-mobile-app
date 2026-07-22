@@ -102,7 +102,8 @@ function transformGiphyGif(gif: GiphyGif): GifItem {
 export async function searchGifs(
   query: string,
   limit: number = 20,
-  offset: number = 0
+  offset: number = 0,
+  signal?: AbortSignal,
 ): Promise<GifItem[]> {
   if (!isGiphyConfigured()) {
     console.warn("[Giphy] API key not configured. Set EXPO_PUBLIC_GIPHY_API_KEY in your .env file.");
@@ -110,7 +111,7 @@ export async function searchGifs(
   }
 
   if (!query.trim()) {
-    return getTrendingGifs(limit);
+    return getTrendingGifs(limit, offset, signal);
   }
 
   const params = new URLSearchParams({
@@ -122,7 +123,7 @@ export async function searchGifs(
     lang: "en",
   });
 
-  const response = await fetch(`${GIPHY_API_BASE}/search?${params}`);
+  const response = await fetch(`${GIPHY_API_BASE}/search?${params}`, { signal });
 
   if (!response.ok) {
     if (response.status === 403 || response.status === 401) {
@@ -144,7 +145,8 @@ export async function searchGifs(
  */
 export async function getTrendingGifs(
   limit: number = 20,
-  offset: number = 0
+  offset: number = 0,
+  signal?: AbortSignal,
 ): Promise<GifItem[]> {
   if (!isGiphyConfigured()) {
     console.warn("[Giphy] API key not configured. Set EXPO_PUBLIC_GIPHY_API_KEY in your .env file.");
@@ -158,7 +160,7 @@ export async function getTrendingGifs(
     rating: "pg-13",
   });
 
-  const response = await fetch(`${GIPHY_API_BASE}/trending?${params}`);
+  const response = await fetch(`${GIPHY_API_BASE}/trending?${params}`, { signal });
 
   if (!response.ok) {
     if (response.status === 403 || response.status === 401) {
@@ -194,4 +196,3 @@ export async function getGifById(id: string): Promise<GifItem | null> {
   const data: { data: GiphyGif } = await response.json();
   return transformGiphyGif(data.data);
 }
-

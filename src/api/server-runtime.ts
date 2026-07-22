@@ -88,9 +88,18 @@ export class ServerRequestCoordinator {
       context: ServerRequestContext,
       signal: AbortSignal,
     ) => Promise<T>,
+    externalSignal?: AbortSignal,
   ): Promise<T> {
     const context = this.context;
     const controller = new AbortController();
+    const abortFromExternalSignal = () => controller.abort();
+    if (externalSignal?.aborted) {
+      controller.abort();
+    } else {
+      externalSignal?.addEventListener("abort", abortFromExternalSignal, {
+        once: true,
+      });
+    }
     const controllers = this.readControllers.get(context.generation) ?? new Set();
     controllers.add(controller);
     this.readControllers.set(context.generation, controllers);
@@ -101,6 +110,7 @@ export class ServerRequestCoordinator {
         return result;
       })
       .finally(() => {
+        externalSignal?.removeEventListener("abort", abortFromExternalSignal);
         controllers.delete(controller);
         if (controllers.size === 0) {
           this.readControllers.delete(context.generation);

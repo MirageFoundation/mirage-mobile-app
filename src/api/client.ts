@@ -217,11 +217,17 @@ class ApiClient {
   /**
    * GET request
    */
-  get<T, P = unknown>(path: string, params?: P): Promise<T> {
-    return this.coordinator.runRead((serverContext, signal) =>
-      this.withConcurrencyLimit(() =>
-        this.executeGet<T, P>(path, params, serverContext, signal),
-      ),
+  get<T, P = unknown>(
+    path: string,
+    params?: P,
+    options?: { signal?: AbortSignal },
+  ): Promise<T> {
+    return this.coordinator.runRead(
+      (serverContext, signal) =>
+        this.withConcurrencyLimit(() =>
+          this.executeGet<T, P>(path, params, serverContext, signal),
+        ),
+      options?.signal,
     );
   }
 
@@ -254,10 +260,7 @@ class ApiClient {
     if (!networkState.isConnected) {
       throw new AxiosError("Network Error", "ERR_NETWORK");
     }
-    console.log(
-      `[ApiClient] GET ${path}`,
-      params ? `with params: ${JSON.stringify(params)}` : "no params"
-    );
+    console.log(`[ApiClient] GET ${path}`, params ? "with params" : "no params");
     try {
       const response = await this.client.get<T>(`/api${path}`, {
         baseURL: serverContext.baseUrl,
@@ -517,8 +520,11 @@ export const apiClient = new ApiClient();
 
 // Direct access functions for simpler usage
 export const api = {
-  get: <T, P = unknown>(path: string, params?: P) =>
-    apiClient.get<T, P>(path, params),
+  get: <T, P = unknown>(
+    path: string,
+    params?: P,
+    options?: { signal?: AbortSignal },
+  ) => apiClient.get<T, P>(path, params, options),
   post: <T, D = unknown>(path: string, data?: D) =>
     apiClient.post<T, D>(path, data),
 };
