@@ -22,6 +22,7 @@ import {
 import { useVideoMuteStore } from "@/src/stores";
 import { StyleSheet } from "react-native-unistyles";
 import { BoundedLruMap, BoundedLruSet } from "@/src/utils/bounded-lru";
+import { getMediaImagePolicy } from "./media-image-policy";
 
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -239,6 +240,12 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   }, [toggleMute]);
 
   const thumbnailUri = getVideoThumbnailUri(item.uri, item.posterUri);
+  const thumbnailPolicy = getMediaImagePolicy({
+    uri: thumbnailUri,
+    surface: isPostDetail ? "detail" : "feed",
+    mediaType: "poster",
+    displayWidth: width,
+  });
   const showThumbnail =
     thumbnailUri && (!shouldPrepare || !GALLERY_LOADED_CACHE.has(item.uri));
 
@@ -246,10 +253,13 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
     <View style={[galleryStyles.itemContainer, { width, height }]}>
       {showThumbnail ? (
         <Image
-          source={{ uri: thumbnailUri }}
+          source={{ uri: thumbnailPolicy.uri }}
           style={[galleryStyles.itemMedia, { width, height, position: "absolute", zIndex: 0 }]}
-          contentFit="cover"
-          cachePolicy="memory-disk"
+          contentFit={thumbnailPolicy.contentFit}
+          cachePolicy={thumbnailPolicy.cachePolicy}
+          recyclingKey={thumbnailPolicy.recyclingKey}
+          allowDownscaling={thumbnailPolicy.allowDownscaling}
+          enforceEarlyResizing={thumbnailPolicy.enforceEarlyResizing}
           onLoad={({ source }) => {
             const w = source?.width;
             const h = source?.height;
@@ -345,15 +355,23 @@ const GalleryImageItem = memo(function GalleryImageItem({
   height,
   onPress,
   onAspectRatioDetected,
+  isPostDetail,
 }: {
   item: ResolvedMedia;
   width: number;
   height: number;
   onPress?: () => void;
   onAspectRatioDetected?: (uri: string, ratio: number) => void;
+  isPostDetail: boolean;
 }) {
   const [loaded, setLoaded] = useState(false);
   const imageLoadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const imagePolicy = getMediaImagePolicy({
+    uri: item.uri,
+    surface: isPostDetail ? "detail" : "feed",
+    mediaType: item.type === "gif" ? "gif" : "image",
+    displayWidth: width,
+  });
 
   useEffect(() => {
     imageLoadTimeoutRef.current = setTimeout(() => {
@@ -369,11 +387,13 @@ const GalleryImageItem = memo(function GalleryImageItem({
   return (
     <Pressable onPress={onPress} style={[galleryStyles.itemContainer, { width, height }]}>
       <Image
-        source={{ uri: item.uri }}
+        source={{ uri: imagePolicy.uri }}
         style={[galleryStyles.itemMedia, { width, height }]}
-        contentFit="cover"
-        cachePolicy="memory-disk"
-        recyclingKey={item.uri}
+        contentFit={imagePolicy.contentFit}
+        cachePolicy={imagePolicy.cachePolicy}
+        recyclingKey={imagePolicy.recyclingKey}
+        allowDownscaling={imagePolicy.allowDownscaling}
+        enforceEarlyResizing={imagePolicy.enforceEarlyResizing}
         onLoad={({ source }) => {
           setLoaded(true);
           if (imageLoadTimeoutRef.current) clearTimeout(imageLoadTimeoutRef.current);
@@ -531,6 +551,7 @@ export const MediaGallery = memo(function MediaGallery({
               height={itemHeight}
               onPress={() => onMediaPress?.(index)}
               onAspectRatioDetected={handleAspectRatioDetected}
+              isPostDetail={isPostDetail}
             />
           )}
         </View>

@@ -64,6 +64,7 @@ import {
 } from "./post-card-media-overlays";
 import { StyleSheet } from "react-native-unistyles";
 import { BoundedLruSet } from "@/src/utils/bounded-lru";
+import { getMediaImagePolicy } from "./media-image-policy";
 
 export type PostCardMediaRef = {
   pauseVideo: () => void;
@@ -1330,6 +1331,26 @@ export const PostCardMedia = memo(
       ? { height: MEDIA_MAX_HEIGHT }
       : { aspectRatio: effectiveAspectRatio };
 
+    const imageSurface = isPostDetail ? "detail" : "feed";
+    const imagePolicy = getMediaImagePolicy({
+      uri: resolvedMediaUri ?? "",
+      surface: imageSurface,
+      mediaType: media?.type === "gif" ? "gif" : "image",
+      displayWidth: containerWidth,
+    });
+    const videoThumbnailPolicy = getMediaImagePolicy({
+      uri: videoThumbnailUri,
+      surface: imageSurface,
+      mediaType: "poster",
+      displayWidth: containerWidth,
+    });
+    const youtubeThumbnailPolicy = getMediaImagePolicy({
+      uri: youtubeThumbnailUri,
+      surface: imageSurface,
+      mediaType: "poster",
+      displayWidth: containerWidth,
+    });
+
     if (!media || shouldHideOnError) return null;
 
     if (mediaList && mediaList.length > 1) {
@@ -1370,11 +1391,13 @@ export const PostCardMedia = memo(
               {shouldLazyMountYouTube && (!isVisible || shouldDeferHeavyMedia) ? (
                 <Pressable onPress={handleFeedYouTubeTap} style={styles.media}>
                   <Image
-                    source={{ uri: youtubeThumbnailUri }}
+                    source={{ uri: youtubeThumbnailPolicy.uri }}
                     style={styles.media}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    recyclingKey={youtubeThumbnailUri}
+                    contentFit={youtubeThumbnailPolicy.contentFit}
+                    cachePolicy={youtubeThumbnailPolicy.cachePolicy}
+                    recyclingKey={youtubeThumbnailPolicy.recyclingKey}
+                    allowDownscaling={youtubeThumbnailPolicy.allowDownscaling}
+                    enforceEarlyResizing={youtubeThumbnailPolicy.enforceEarlyResizing}
                   />
                   <View style={styles.playOverlay} pointerEvents="none">
                     <View style={styles.playButton}>
@@ -1523,11 +1546,13 @@ export const PostCardMedia = memo(
               {videoThumbnailUri && (!videoReadyForDisplay || !shouldMountNativeVideo) ? (
                 <>
                   <Image
-                    source={{ uri: videoThumbnailUri }}
+                    source={{ uri: videoThumbnailPolicy.uri }}
                     style={[styles.media, { position: "absolute", zIndex: 1 }]}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    recyclingKey={videoThumbnailUri}
+                    contentFit={videoThumbnailPolicy.contentFit}
+                    cachePolicy={videoThumbnailPolicy.cachePolicy}
+                    recyclingKey={videoThumbnailPolicy.recyclingKey}
+                    allowDownscaling={videoThumbnailPolicy.allowDownscaling}
+                    enforceEarlyResizing={videoThumbnailPolicy.enforceEarlyResizing}
                     onLoad={({ source }) => {
                       updateMediaAspectRatioFromSize(source?.width, source?.height);
                     }}
@@ -1590,10 +1615,13 @@ export const PostCardMedia = memo(
           ) : (
             <Pressable onPress={handleMediaPress} style={styles.media}>
               <Image
-                source={mediaSource}
+                source={{ uri: imagePolicy.uri }}
                 style={styles.media}
-                contentFit="cover"
-                cachePolicy="memory-disk"
+                contentFit={imagePolicy.contentFit}
+                cachePolicy={imagePolicy.cachePolicy}
+                recyclingKey={imagePolicy.recyclingKey}
+                allowDownscaling={imagePolicy.allowDownscaling}
+                enforceEarlyResizing={imagePolicy.enforceEarlyResizing}
                 onLoad={({ source }) => {
                   updateMediaAspectRatioFromSize(source?.width, source?.height);
                   setMediaLoaded(true);
