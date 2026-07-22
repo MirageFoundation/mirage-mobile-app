@@ -1,15 +1,12 @@
-import { EvilIcons, Ionicons, Feather } from "@expo/vector-icons";
+import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import * as Sentry from "@sentry/react-native";
 import * as Clipboard from "expo-clipboard";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "@/src/navigation/guarded-router";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState, useMemo, useEffect } from "react";
 import {
-  ActivityIndicator,
+  FlatList,
   Pressable,
-  ScrollView,
-  Switch,
   View,
   Share,
 } from "react-native";
@@ -38,15 +35,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/src/api/read/query-keys";
 import { useToast } from "@/src/providers/toast-provider";
 import type { ReferralSummaryItem } from "@/src/api/types";
+import {
+  createReferralListModel,
+  getReferralRowKey,
+} from "@/src/pages/referrals/referral-list-model";
+import {
+  ReferralListHeader,
+  type ReferralPeriod,
+} from "@/src/pages/referrals/referral-list-header";
 
-type ReferralPeriod = "7d" | "30d" | "this_month" | "last_month";
-
-const PERIOD_LABELS: Record<ReferralPeriod, string> = {
-  "7d": "7 Days",
-  "30d": "30 Days",
-  this_month: "This Month",
-  last_month: "Last Month",
-};
+const REFERRAL_PAGINATION_SUPPORTED = false;
 
 function getPeriodParams(period: ReferralPeriod) {
   if (period === "7d") return { period: "7d" as const };
@@ -107,6 +105,8 @@ const ReferralItem = ({ item }: { item: ReferralSummaryItem }) => {
 
   return (
     <View
+      accessible
+      accessibilityLabel={`${item.username || item.address}, joined ${dateStr}, ${item.posts} posts, ${item.votes} votes, ${isRealUser ? "active" : "inactive"}`}
       style={[
         styles.referralItem,
         {
@@ -167,9 +167,23 @@ export function ReferralsScreen() {
 
   const [referralPeriod, setReferralPeriod] = useState<ReferralPeriod>("7d");
   const periodParams = useMemo(() => getPeriodParams(referralPeriod), [referralPeriod]);
-  const { data: referralData, isLoading: referralsLoading, refetch: refetchReferrals } = useReferralSummary({
+  const {
+    data: referralData,
+    isError: referralsError,
+    isLoading: referralsLoading,
+    refetch: refetchReferrals,
+  } = useReferralSummary({
     address: walletAddress ?? undefined,
     ...periodParams,
+  });
+  const referralListModel = createReferralListModel({
+    isLoading: referralsLoading,
+    isError: referralsError,
+    itemCount: referralData?.referrals.length ?? 0,
+    total: referralData?.total,
+    hasMore: referralData?.has_more ?? false,
+    supportsPagination: REFERRAL_PAGINATION_SUPPORTED,
+    isFetchingNextPage: false,
   });
 
   useEffect(() => {
@@ -254,6 +268,8 @@ export function ReferralsScreen() {
       >
         <Pressable
           onPress={handleBack}
+          accessibilityRole="button"
+          accessibilityLabel="Close referrals"
           style={({ pressed }) => [
             styles.backButton,
             pressed && { opacity: 0.7 },
@@ -267,147 +283,68 @@ export function ReferralsScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
+      <FlatList
+        data={referralData?.referrals ?? []}
+        keyExtractor={getReferralRowKey}
+        renderItem={({ item }) => <ReferralItem item={item} />}
+        ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
         contentContainerStyle={[
-          styles.scrollContent,
+          styles.listContent,
           { paddingBottom: insets.bottom + 40 },
         ]}
         showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.heroSection}>
-          <LinearGradient
-            colors={[theme.colors.brand[500] + "20", "transparent"]}
-            style={styles.heroGradient}
+        ListHeaderComponent={(
+          <ReferralListHeader
+            inviteCodeRequired={inviteCodeRequired}
+            effectiveEnabled={effectiveEnabled}
+            toggleLoading={toggleLoading}
+            referralUrl={referralUrl}
+            linkCopied={linkCopied}
+            totalLabel={referralListModel.header.totalLabel}
+            referralPeriod={referralPeriod}
+            onTogglePrecheck={handleTogglePrecheck}
+            onCopyReferralLink={handleCopyReferralLink}
+            onShareReferralLink={handleShareReferralLink}
+            onSelectPeriod={setReferralPeriod}
           />
-          <View
-            style={[
-              styles.heroIconContainer,
-              { backgroundColor: theme.colors.brand[500] + "15" },
-            ]}
-          >
-            <Ionicons name="link" size={40} color={theme.colors.brand[500]} />
-          </View>
-          <Text size="xxl" weight="bold" style={styles.heroTitle}>
-            Referral Links
-          </Text>
-          <Text size="md" mode="subtle" style={styles.heroSubtitle}>
-            Lets people sign up via your personal link instead of sharing invite codes directly. Anyone with the link can use your codes, so leave this off if you want to hand them out manually.
-          </Text>
-        </View>
-
-        {inviteCodeRequired && (
-          <View style={[styles.toggleCard, { backgroundColor: theme.colors.background.default, borderColor: theme.colors.border.subtle }]}>
-            <View style={{ flex: 1, marginRight: 12 }}>
-              <Text size="md" weight="semibold">Referral Link</Text>
-            </View>
-            <Switch
-              value={effectiveEnabled}
-              onValueChange={handleTogglePrecheck}
-              disabled={toggleLoading}
-              trackColor={{ false: theme.colors.background.emphasis, true: "rgb(30,67,150)" }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
         )}
-
-        {referralUrl && (
-          <View style={[styles.shareBoxCard, { backgroundColor: theme.colors.background.default, borderColor: theme.colors.border.subtle }]}>
-            <Text size="sm" mode="subtle" style={{ marginBottom: 8 }}>Your referral link</Text>
-            <View style={[styles.shareUrlRow, { backgroundColor: theme.colors.background.subtle, borderWidth: 1, borderColor: linkCopied ? "#10B981" : "transparent" }]}>
-              <Text
-                size="sm"
-                weight="medium"
-                numberOfLines={1}
-                style={{ flex: 1, opacity: effectiveEnabled ? 1 : 0.4 }}
-              >
-                {referralUrl}
-              </Text>
+        ListEmptyComponent={(
+          referralListModel.emptyState === "loading" ? (
+            <View style={styles.loadingState}>
+              <SkeletonBox width="100%" height={64} borderRadius={12} />
+              <SkeletonBox width="100%" height={64} borderRadius={12} />
+            </View>
+          ) : referralListModel.emptyState === "error" ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="alert-circle-outline" size={40} color={theme.colors.text.subtle} style={{ marginBottom: 8 }} />
+              <Text size="sm" mode="subtle">Unable to load referrals</Text>
               <Pressable
-                onPress={handleCopyReferralLink}
-                disabled={!effectiveEnabled}
-                style={({ pressed }) => [styles.shareCopyBtn, pressed && { opacity: 0.7 }, !effectiveEnabled && { opacity: 0.3 }]}
+                onPress={() => refetchReferrals()}
+                accessibilityRole="button"
+                style={styles.retryButton}
               >
-                <Ionicons name={linkCopied ? "checkmark" : "copy-outline"} size={18} color={linkCopied ? "#10B981" : theme.colors.brand[500]} />
+                <Text size="sm" weight="semibold" style={{ color: theme.colors.brand[500] }}>Try again</Text>
               </Pressable>
             </View>
-            <Pressable
-              onPress={handleShareReferralLink}
-              disabled={!effectiveEnabled}
-              style={({ pressed }) => [
-                styles.shareNativeBtn,
-                { backgroundColor: theme.colors.brand[500] },
-                pressed && { opacity: 0.7 },
-                !effectiveEnabled && { opacity: 0.4 },
-              ]}
-            >
-              <Feather name="share" size={16} color="#FFFFFF" />
-              <Text size="sm" weight="medium" style={{ color: "#FFFFFF", marginLeft: 6 }}>Share</Text>
-            </Pressable>
-            {!effectiveEnabled && (
-              <Text size="xs" mode="subtle" style={{ textAlign: "center", marginTop: 8 }}>
-                Enable the toggle above to share your referral link
-              </Text>
-            )}
-          </View>
-        )}
-
-        <View style={styles.section}>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <Text size="md" weight="semibold">Your Referrals</Text>
-            {referralData && (
-              <Text size="sm" mode="subtle">{referralData.total} total</Text>
-            )}
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              {(Object.keys(PERIOD_LABELS) as ReferralPeriod[]).map((p) => (
-                <Pressable
-                  key={p}
-                  onPress={() => setReferralPeriod(p)}
-                  style={[
-                    styles.periodTab,
-                    {
-                      backgroundColor: referralPeriod === p ? theme.colors.brand[500] : theme.colors.background.subtle,
-                    },
-                  ]}
-                >
-                  <Text
-                    size="sm"
-                    weight={referralPeriod === p ? "semibold" : "regular"}
-                    style={{ color: referralPeriod === p ? "#FFFFFF" : theme.colors.text.default }}
-                  >
-                    {PERIOD_LABELS[p]}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
-
-          {referralsLoading ? (
-            <View style={{ gap: 10, paddingVertical: 8 }}>
-              <SkeletonBox width="100%" height={64} borderRadius={12} />
-              <SkeletonBox width="100%" height={64} borderRadius={12} />
-            </View>
-          ) : referralData && referralData.referrals.length > 0 ? (
-            <View style={{ gap: 8 }}>
-              {referralData.referrals.map((item) => (
-                <ReferralItem key={item.address} item={item} />
-              ))}
-              {referralData.has_more && (
-                <Text size="sm" mode="subtle" style={{ textAlign: "center", paddingVertical: 8 }}>
-                  Showing {referralData.referrals.length} of {referralData.total}
-                </Text>
-              )}
-            </View>
           ) : (
-            <View style={{ paddingVertical: 32, alignItems: "center" }}>
+            <View style={styles.emptyState}>
               <Ionicons name="people-outline" size={40} color={theme.colors.text.subtle} style={{ marginBottom: 8 }} />
               <Text size="sm" mode="subtle">No referrals yet</Text>
             </View>
-          )}
-        </View>
-      </ScrollView>
+          )
+        )}
+        ListFooterComponent={(
+          referralListModel.footer.kind === "summary" ? (
+            <Text size="sm" mode="subtle" style={styles.paginationSummary}>
+              Showing {referralListModel.footer.visibleCount} of {referralListModel.footer.total}
+            </Text>
+          ) : referralListModel.footer.kind === "loading" ? (
+            <View style={styles.paginationLoading}>
+              <Text size="sm" mode="subtle">Loading more referrals...</Text>
+            </View>
+          ) : null
+        )}
+      />
     </Box>
   );
 }
@@ -430,83 +367,9 @@ const styles = StyleSheet.create((theme) => ({
   placeholder: {
     width: 40,
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
+  listContent: {
     paddingTop: theme.spacing.lg,
     paddingHorizontal: theme.spacing.md,
-  },
-  heroSection: {
-    alignItems: "center",
-    paddingVertical: theme.spacing.lg,
-    marginBottom: theme.spacing.md,
-    position: "relative",
-    overflow: "hidden",
-    borderRadius: theme.radius.xl,
-  },
-  heroGradient: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  heroIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: theme.spacing.md,
-  },
-  heroTitle: {
-    textAlign: "center",
-    marginBottom: theme.spacing.xs,
-  },
-  heroSubtitle: {
-    textAlign: "center",
-    paddingHorizontal: theme.spacing.lg,
-  },
-  toggleCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: theme.spacing.md,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    marginBottom: theme.spacing.md,
-  },
-  shareBoxCard: {
-    padding: theme.spacing.md,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    marginBottom: theme.spacing.lg,
-  },
-  shareUrlRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: theme.radius.md,
-    padding: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
-  },
-  shareCopyBtn: {
-    padding: theme.spacing.xs,
-    marginLeft: theme.spacing.xs,
-  },
-  shareNativeBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.radius.md,
-  },
-  section: {
-    marginBottom: theme.spacing.lg,
-  },
-  periodTab: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
   },
   referralItem: {
     flexDirection: "row",
@@ -514,6 +377,29 @@ const styles = StyleSheet.create((theme) => ({
     padding: theme.spacing.md,
     borderRadius: theme.radius.lg,
     borderWidth: 1,
+  },
+  itemSeparator: {
+    height: theme.spacing.sm,
+  },
+  loadingState: {
+    gap: 10,
+    paddingVertical: theme.spacing.sm,
+  },
+  emptyState: {
+    paddingVertical: theme.spacing.xl,
+    alignItems: "center",
+  },
+  retryButton: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  paginationSummary: {
+    textAlign: "center",
+    paddingVertical: theme.spacing.sm,
+  },
+  paginationLoading: {
+    alignItems: "center",
+    paddingVertical: theme.spacing.md,
   },
   statusBadge: {
     flexDirection: "row",
