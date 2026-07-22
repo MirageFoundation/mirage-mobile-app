@@ -1,4 +1,10 @@
 import { storage } from "@/src/stores/mmkv-storage";
+import {
+  normalizeShareIntent,
+  type ShareIntentLike,
+} from "@/src/navigation/share-intent-payload";
+
+export type { ShareIntentLike } from "@/src/navigation/share-intent-payload";
 
 const PENDING_SHARE_INTENT_KEY = "pending-share-intent";
 const PENDING_SHARE_INTENT_TTL_MS = 5 * 60_000;
@@ -18,13 +24,6 @@ export type PendingShareIntent = {
   launchPath?: string | null;
   source: string;
   receivedAt: number;
-};
-
-type ShareIntentLike = {
-  type?: unknown;
-  text?: unknown;
-  webUrl?: unknown;
-  files?: unknown;
 };
 
 type ShareIntentKeyLike = {
@@ -63,11 +62,12 @@ export function getPendingShareIntentKey(intent: ShareIntentKeyLike): string | n
 }
 
 export function persistPendingShareIntent(
-  intent: ShareIntentLike | null | undefined,
+  value: unknown,
   source: string,
   launchPath?: string | null,
 ): PendingShareIntent | null {
-  if (!intent || typeof intent !== "object") return null;
+  const intent: ShareIntentLike | null = normalizeShareIntent(value);
+  if (!intent) return null;
 
   const pending: PendingShareIntent = {
     type: toOptionalString(intent.type),

@@ -33,18 +33,12 @@ function AndroidShareIntentColdStartRefresh() {
     const timer = setTimeout(() => {
       try {
         const result = ExpoShareIntentModule?.getShareIntent("");
-        const resultRecord = result && typeof result === "object"
-          ? result as Record<string, unknown>
-          : null;
-        const hasSharePayload = !!(
-          resultRecord && (
-            typeof resultRecord.text === "string" ||
-            typeof resultRecord.webUrl === "string" ||
-            (Array.isArray(resultRecord.files) && resultRecord.files.length > 0)
-          )
+        const pending = persistPendingShareIntent(
+          result,
+          "android-cold-start-refresh",
         );
+        const hasSharePayload = !!pending;
         if (hasSharePayload) {
-          persistPendingShareIntent(resultRecord, "android-cold-start-refresh");
           markShareIntentNavigationActive("android-cold-start-refresh");
         }
         Sentry.addBreadcrumb({

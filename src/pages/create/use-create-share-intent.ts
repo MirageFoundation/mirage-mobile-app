@@ -165,7 +165,7 @@ export function useCreateShareIntent({
     try {
       const recoveredIntent = ExpoShareIntentModule?.getShareIntent(sharePath);
       const pending = persistPendingShareIntent(
-        recoveredIntent && typeof recoveredIntent === "object" ? recoveredIntent : null,
+        recoveredIntent,
         "create-screen-recovery",
         sharePath,
       );
