@@ -81,7 +81,6 @@ export {
 ProfileMenuSheet,
 type ProfileMenuSheetRef,
 } from "./profile-menu-sheet";
-export { SideMenu, type SideMenuRef } from "./side-menu";
 export { UpdateBanner } from "./update-banner";
 export {
   ProfileEmptyState,
