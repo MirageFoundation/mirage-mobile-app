@@ -30,6 +30,10 @@ import {
 } from "@/src/api/read";
 import { getUserPosts } from "@/src/api/read/endpoints/posts";
 import { queryKeys } from "@/src/api/read/query-keys";
+import {
+  USER_POSTS_MAX_PAGES,
+  USER_POSTS_QUERY_GC_TIME,
+} from "@/src/api/read/infinite-query-policy";
 import { transformApiPost } from "@/src/api/read/utils";
 import type { Post as ApiPost, PostsResponse } from "@/src/api/types";
 import {
@@ -343,6 +347,8 @@ export function ProfileScreen() {
         if (!lastPage?.has_more) return undefined;
         return lastPage.page + 1;
       },
+      maxPages: USER_POSTS_MAX_PAGES,
+      gcTime: USER_POSTS_QUERY_GC_TIME,
     });
   }, [queryClient, user?.walletAddress]);
 

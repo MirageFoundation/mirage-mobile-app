@@ -7,6 +7,7 @@ import {
   type GetCommentContextParams,
 } from "../endpoints/posts";
 import { useAuthStore } from "@/src/stores";
+import { POST_DETAIL_QUERY_GC_TIME } from "../infinite-query-policy";
 
 /**
  * Get comment tree for a post
@@ -26,7 +27,7 @@ export function useComments(postId: string | undefined | null, options?: { enabl
       }),
     enabled: !!postId && (options?.enabled ?? true),
     staleTime: 1000 * 30, // 30 seconds
-    gcTime: 1000 * 60 * 60, // 1 hour
+    gcTime: POST_DETAIL_QUERY_GC_TIME,
     retry: (failureCount, error) => {
       const status = (error as any)?.response?.status;
       if (status === 404) return false;

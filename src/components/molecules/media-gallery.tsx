@@ -21,6 +21,7 @@ import {
 } from "@/src/hooks/use-video-player-controller";
 import { useVideoMuteStore } from "@/src/stores";
 import { StyleSheet } from "react-native-unistyles";
+import { BoundedLruMap, BoundedLruSet } from "@/src/utils/bounded-lru";
 
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
@@ -28,8 +29,8 @@ const MEDIA_HORIZONTAL_PADDING = 32;
 const GALLERY_WIDTH = SCREEN_WIDTH - MEDIA_HORIZONTAL_PADDING;
 const MEDIA_MAX_HEIGHT = 450;
 
-const ASPECT_RATIO_CACHE = new Map<string, number>();
-const GALLERY_LOADED_CACHE = new Set<string>();
+const ASPECT_RATIO_CACHE = new BoundedLruMap<string, number>(256);
+const GALLERY_LOADED_CACHE = new BoundedLruSet<string>(512);
 
 function getItemAspectRatio(item: ResolvedMedia): number {
   const cached = ASPECT_RATIO_CACHE.get(item.uri);

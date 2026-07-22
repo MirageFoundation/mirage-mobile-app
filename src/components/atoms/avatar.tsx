@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { SvgXml } from "react-native-svg";
 import { StyleSheet } from "react-native-unistyles";
+import { BoundedLruMap } from "@/src/utils/bounded-lru";
 
 type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "xxl";
 
@@ -39,10 +40,25 @@ function buildDicebearSvgUrl(seed: string | undefined) {
   return `${DICEBEAR_BASE}/identicon/svg?seed=${safeSeed}&backgroundColor=transparent`;
 }
 
-// In-memory SVG cache so each seed is fetched at most once per app
-// session. Keyed by URL — survives unmount/remount of any Avatar.
-const svgCache = new Map<string, string>();
-const inflight = new Map<string, Promise<string>>();
+const AVATAR_SVG_CACHE_LIMIT = 128;
+const AVATAR_INFLIGHT_LIMIT = 32;
+let avatarCacheEvictions = 0;
+const reportAvatarCacheEviction = (_key: string, _value: unknown, entryCount: number) => {
+  avatarCacheEvictions += 1;
+  if (__DEV__ && avatarCacheEvictions % 32 === 1) {
+    Sentry.addBreadcrumb({
+      category: "cache.avatar",
+      message: "Avatar SVG cache evicted least-recently-used entry",
+      level: "info",
+      data: { entryCount, capacity: AVATAR_SVG_CACHE_LIMIT, evictionCount: avatarCacheEvictions },
+    });
+  }
+};
+const svgCache = new BoundedLruMap<string, string>(
+  AVATAR_SVG_CACHE_LIMIT,
+  reportAvatarCacheEviction,
+);
+const inflight = new BoundedLruMap<string, Promise<string>>(AVATAR_INFLIGHT_LIMIT);
 
 async function fetchDicebearSvg(url: string): Promise<string> {
   const cached = svgCache.get(url);
@@ -51,7 +67,8 @@ async function fetchDicebearSvg(url: string): Promise<string> {
   const existing = inflight.get(url);
   if (existing) return existing;
 
-  const promise = (async () => {
+  let promise: Promise<string> | undefined;
+  promise = (async () => {
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -59,7 +76,7 @@ async function fetchDicebearSvg(url: string): Promise<string> {
       svgCache.set(url, text);
       return text;
     } finally {
-      inflight.delete(url);
+      if (inflight.peek(url) === promise) inflight.delete(url);
     }
   })();
 
@@ -171,7 +188,7 @@ export const Avatar = ({
           category: "avatar",
           message: "Failed to fetch DiceBear SVG",
           level: "warning",
-          data: { url: svgUrl, error: String(error) },
+          data: { cacheEntryCount: svgCache.size, error: String(error) },
         });
       });
     return () => {

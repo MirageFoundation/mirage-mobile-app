@@ -4,6 +4,11 @@ import { Platform } from "react-native";
 import { queryKeys } from "../query-keys";
 import { getInbox, type GetInboxParams } from "../endpoints/inbox";
 import { useAuthStore } from "@/src/stores";
+import {
+  INBOX_MAX_PAGES,
+  INBOX_QUERY_GC_TIME,
+  getPreviousNumberedPageParam,
+} from "../infinite-query-policy";
 
 /**
  * Get user's inbox (reply notifications)
@@ -78,9 +83,12 @@ export function infiniteInboxQueryOptions(
       if (!lastPage?.has_more) return undefined;
       return (lastPage?.page ?? 0) + 1;
     },
+    getPreviousPageParam: getPreviousNumberedPageParam,
+    maxPages: INBOX_MAX_PAGES,
     enabled: !!walletAddress,
     retry: 1,
     staleTime: 1000 * 30, // 30 seconds
+    gcTime: INBOX_QUERY_GC_TIME,
   });
 }
 

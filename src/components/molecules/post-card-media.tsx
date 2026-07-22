@@ -63,6 +63,7 @@ import {
   MediaTypeBadge,
 } from "./post-card-media-overlays";
 import { StyleSheet } from "react-native-unistyles";
+import { BoundedLruSet } from "@/src/utils/bounded-lru";
 
 export type PostCardMediaRef = {
   pauseVideo: () => void;
@@ -93,8 +94,8 @@ type PostCardMediaProps = {
 };
 
 let nextNativeAudioFocusId = 0;
-const HOSTED_VIDEO_READY_CACHE = new Set<string>();
-const COMPLETED_PROCESSING_POST_IDS = new Set<string>();
+const HOSTED_VIDEO_READY_CACHE = new BoundedLruSet<string>(256);
+const COMPLETED_PROCESSING_POST_IDS = new BoundedLruSet<string>(256);
 const VIDEO_PROCESSING_POLL_MAX_MS = 5 * 60 * 1000;
 let activeNativeAudioFocus: {
   id: string;

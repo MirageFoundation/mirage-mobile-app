@@ -3,6 +3,13 @@ import { useQuery, useInfiniteQuery, useIsRestoring } from "@tanstack/react-quer
 import { queryKeys } from "../query-keys";
 import { getInfinitePostsQueryPolicy } from "../infinite-posts-policy";
 import {
+  FEED_MAX_PAGES,
+  FEED_QUERY_GC_TIME,
+  USER_POSTS_MAX_PAGES,
+  USER_POSTS_QUERY_GC_TIME,
+  getPreviousNumberedPageParam,
+} from "../infinite-query-policy";
+import {
   getPosts,
   getUserPosts,
   type GetPostsParams,
@@ -151,8 +158,10 @@ export function useInfinitePosts(
     initialPageParam: 1,
     getNextPageParam: (lastPage, allPages) =>
       getNextPostsPageParam(lastPage, allPages, baseParams),
+    getPreviousPageParam: getPreviousNumberedPageParam,
+    maxPages: FEED_MAX_PAGES,
     ...queryPolicy,
-    gcTime: 1000 * 60 * 60 * 4,
+    gcTime: FEED_QUERY_GC_TIME,
   });
 }
 
@@ -213,7 +222,10 @@ export function useInfiniteUserPosts(
       if (!lastPage?.has_more) return undefined;
       return lastPage.page + 1;
     },
+    getPreviousPageParam: getPreviousNumberedPageParam,
+    maxPages: USER_POSTS_MAX_PAGES,
     enabled: !!owner,
     staleTime: 1000 * 60, // 1 minute
+    gcTime: USER_POSTS_QUERY_GC_TIME,
   });
 }
