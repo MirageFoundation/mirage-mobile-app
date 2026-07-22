@@ -6,6 +6,11 @@ const ROOT = process.cwd();
 const SOURCE_EXTENSIONS = new Set([".ts", ".tsx"]);
 const LAYER_DIRS = ["components", "providers", "hooks", "services"];
 const importPattern = /import(?:[\s\S]*?)from\s+["']([^"']+)["']|import\s*\(\s*["']([^"']+)["']\s*\)/g;
+const FEATURE_OWNED_EXPORTS = ["ProfileAboutTab", "UserProfileMenuSheet"];
+const FEATURE_IMPLEMENTATION_SPECIFIERS = [
+  "@/src/pages/profile/profile-about-tab",
+  "@/src/pages/user/user-profile-menu-sheet",
+];
 
 function exists(path) {
   try {
@@ -38,6 +43,32 @@ function importsPageModule(specifier) {
 }
 
 const failures = [];
+const moleculesBarrel = readFileSync(
+  join(ROOT, "src", "components", "molecules", "index.ts"),
+  "utf8",
+);
+
+for (const exportName of FEATURE_OWNED_EXPORTS) {
+  if (moleculesBarrel.includes(exportName)) {
+    failures.push(
+      `src/components/molecules/index.ts: broad barrel exports feature-owned ${exportName}`,
+    );
+  }
+}
+
+const routeRootFiles = walk(join(ROOT, "app"));
+const rootLayout = join(ROOT, "src", "navigation", "root-layout.tsx");
+if (statSync(rootLayout).isFile()) routeRootFiles.push(rootLayout);
+
+for (const file of routeRootFiles) {
+  const rel = relative(ROOT, file);
+  const text = readFileSync(file, "utf8");
+  for (const specifier of FEATURE_IMPLEMENTATION_SPECIFIERS) {
+    if (text.includes(specifier)) {
+      failures.push(`${rel}: route/root imports feature implementation ${specifier}`);
+    }
+  }
+}
 
 for (const layer of LAYER_DIRS) {
   const dir = join(ROOT, "src", layer);

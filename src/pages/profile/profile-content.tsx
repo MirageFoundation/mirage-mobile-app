@@ -43,7 +43,6 @@ import {
   ProfileHeaderBar,
   ProfileTabBar,
   ProfileEmptyState,
-  ProfileAboutTab,
 } from "@/src/components/molecules";
 import { PostCardItem } from "@/src/components/molecules/post-card-item";
 import { PostCardSkeletonList } from "@/src/components/molecules/post-card-skeleton";
@@ -51,6 +50,7 @@ import { ProfileCommentItem } from "@/src/components/molecules/profile-comment-i
 import { ProfilePostsSkeleton } from "@/src/components/molecules/profile-posts-skeleton";
 import { ProfileContentAnimated } from "@/src/components/molecules/profile-content-animated";
 import { Box } from "@/src/components/ui/primitives";
+import { ProfileAboutTab } from "./profile-about-tab";
 import {
   useTabSwipeGesture,
   useVoteHandler,

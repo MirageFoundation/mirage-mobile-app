@@ -57,8 +57,6 @@ import {
   ProfileTabBar,
   ReportSheet,
   ReportSheetRef,
-  UserProfileMenuSheet,
-  UserProfileMenuSheetRef,
   AwardPickerSheet,
   type AwardPickerSheetRef,
   GiftMirageSheet,
@@ -70,6 +68,10 @@ import { postHasPlayableVideo } from "@/src/components/molecules/post-card-utils
 import { UserProfileContentAnimated } from "@/src/components/molecules/user-profile-content-animated";
 import { Box } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import {
+  UserProfileMenuSheet,
+  type UserProfileMenuSheetRef,
+} from "./user-profile-menu-sheet";
 import {
   getBlockConfirmationMessage,
   useAuthGuard,
