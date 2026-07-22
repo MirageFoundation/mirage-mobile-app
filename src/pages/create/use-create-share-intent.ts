@@ -5,6 +5,7 @@ import ExpoShareIntentModule from "expo-share-intent/build/ExpoShareIntentModule
 import * as Sentry from "@sentry/react-native";
 
 import { router } from "@/src/navigation/guarded-router";
+import { useToast } from "@/src/providers/toast-provider";
 import {
   clearLastSharePath,
   getLastSharePath,
@@ -17,6 +18,10 @@ import {
   persistPendingShareIntent,
 } from "@/src/navigation/pending-launch-intents";
 import { fetchLinkMeta } from "@/src/utils/fetch-link-meta";
+import {
+  getMediaMergeDecision,
+  getMediaMergeFallback,
+} from "@/src/utils/media-merge-limits";
 import { getMediaDurationMillis } from "@/src/utils/media-duration";
 import { mergeAudioVideo } from "@/src/utils/merge-audio-video";
 import { sanitizeTopicName } from "@/src/utils/topic-validation";
@@ -104,6 +109,7 @@ export function useCreateShareIntent({
   updateDraft,
 }: UseCreateShareIntentParams) {
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
+  const toast = useToast();
   const [pendingShareIntent, setPendingShareIntent] = useState(() => getPendingShareIntent());
   const lastProcessedIntentRef = useRef<string | null>(null);
   const shareIntentRecoveryPathRef = useRef<string | null>(null);
@@ -523,14 +529,10 @@ export function useCreateShareIntent({
             });
           }
 
-          const isOomError = (err: unknown) => {
-            const msg = String(err);
-            return msg.includes("allocat") || msg.includes("OOM") || msg.includes("out of memory");
-          };
-
           for (let vi = 0; vi < videosToDownload.length; vi++) {
             if (mediaCount >= 10) break;
             const vidUrl = videosToDownload[vi];
+            let temporaryVideoFile: { delete: () => void } | null = null;
             try {
               const fetchHeaders = {
                 "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
@@ -539,118 +541,107 @@ export function useCreateShareIntent({
               };
 
               let finalUri: string | null = null;
+              const ext = vidUrl.match(/\.(mp4|mov|webm|m3u8|ts|gif)(?:\?|#|$)/i)?.[1] ?? "mp4";
+              const videoFile = new ExpoFile(Paths.cache, `shared_link_video_${Date.now()}_${vi}.${ext}`);
+              const downloadedVideo = await ExpoFile.downloadFileAsync(vidUrl, videoFile, {
+                headers: fetchHeaders,
+              });
+              temporaryVideoFile = downloadedVideo;
+              const videoSize = downloadedVideo.size;
+              if (typeof videoSize === "number" && videoSize <= 1000) {
+                try { downloadedVideo.delete(); } catch {}
+                continue;
+              }
 
-              try {
-                const response = await fetch(vidUrl, { headers: fetchHeaders });
-                if (!response.ok) {
-                  Sentry.addBreadcrumb({ category: "share-intent", message: "Video download failed", data: { status: response.status, vidUrl }, level: "warning" });
-                  continue;
-                }
-                const contentType = response.headers.get("content-type") ?? "";
-                const isVideoContent = contentType.startsWith("video/") || contentType.startsWith("application/octet-stream") || contentType.startsWith("binary/octet-stream") || contentType === "image/gif" || contentType.startsWith("application/mp4");
-                const videoExtRe = /\.(mp4|mov|webm|m3u8|ts|gif)(\?|#|$)/i;
-                if (!isVideoContent && !videoExtRe.test(response.url) && !videoExtRe.test(vidUrl)) {
-                  Sentry.captureMessage("Video URL returned non-video content", {
-                    level: "warning",
-                    tags: { feature: "share-intent", domain: meta.domain },
-                    extra: { vidUrl, contentType, resolvedUrl: response.url },
-                  });
-                  continue;
-                }
+              Sentry.addBreadcrumb({
+                category: "share-intent",
+                message: "Shared link video downloaded to disk",
+                level: "info",
+                data: { domain: meta.domain, videoIndex: vi, byteLength: videoSize },
+              });
 
-                const arrayBuffer = await response.arrayBuffer();
-                if (arrayBuffer.byteLength <= 1000) continue;
-                Sentry.addBreadcrumb({
-                  category: "share-intent",
-                  message: "Shared link video downloaded",
-                  level: "info",
-                  data: {
-                    domain: meta.domain,
-                    videoIndex: vi,
-                    byteLength: arrayBuffer.byteLength,
-                    contentType,
-                    resolvedUrl: response.url,
-                  },
-                });
+              let audioMerged = false;
+              if (vi === 0) {
+                const audioUrlsToTry = meta.audioUrls?.length > 0
+                  ? meta.audioUrls
+                  : meta.audioUrl
+                    ? [meta.audioUrl]
+                    : [];
+                for (let ai = 0; ai < audioUrlsToTry.length; ai++) {
+                  const tryAudioUrl = audioUrlsToTry[ai];
+                  if (audioMerged) break;
+                  const audioFile = new ExpoFile(Paths.cache, `shared_link_audio_${Date.now()}_${vi}_${ai}.mp4`);
+                  try {
+                    const downloadedAudio = await ExpoFile.downloadFileAsync(tryAudioUrl, audioFile, {
+                      headers: fetchHeaders,
+                    });
+                    const audioSize = downloadedAudio.size;
+                    if (typeof audioSize === "number" && audioSize < 500) continue;
 
-                let audioMerged = false;
-                if (vi === 0) {
-                  const audioUrlsToTry = meta.audioUrls?.length > 0
-                    ? meta.audioUrls
-                    : meta.audioUrl
-                      ? [meta.audioUrl]
-                      : [];
-                  for (const tryAudioUrl of audioUrlsToTry) {
-                    if (audioMerged) break;
-                    try {
-                      const audioRes = await fetch(tryAudioUrl, { headers: fetchHeaders });
-                      if (!audioRes.ok) continue;
-                      const audioBuffer = await audioRes.arrayBuffer();
-                      if (audioBuffer.byteLength < 500) continue;
-                      const audioContentType = audioRes.headers.get("content-type") ?? "";
-                      if (audioContentType.includes("text/html") || audioContentType.includes("text/xml")) continue;
-                      const mergedBuffer = await mergeAudioVideo(arrayBuffer, audioBuffer);
-                      const mergedFile = new ExpoFile(Paths.cache, `shared_link_merged_${Date.now()}_${vi}.mp4`);
-                      mergedFile.write(new Uint8Array(mergedBuffer));
-                      let mergedUri = mergedFile.uri;
-                      try {
-                        const durationMillis = await getMediaDurationMillis(mergedFile.uri);
-                        if (durationMillis && durationMillis > MAX_VIDEO_DURATION_MS) {
-                          mergedUri = await trimToMaxDuration(mergedFile.uri, durationMillis);
-                        }
-                      } catch {}
-                      finalUri = mergedUri;
-                      audioMerged = true;
-                      Sentry.addBreadcrumb({ category: "share-intent", message: "Audio+video merged (RAM)", level: "info" });
-                    } catch (mergeErr) {
-                      Sentry.addBreadcrumb({ category: "share-intent", message: "Audio merge attempt failed", data: { error: String(mergeErr) }, level: "warning" });
+                    const mergeDecision = getMediaMergeDecision(videoSize, audioSize);
+                    const mergeFallback = getMediaMergeFallback(mergeDecision);
+                    if (mergeFallback) {
+                      Sentry.captureMessage("Share intent audio merge skipped for memory safety", {
+                        level: "warning",
+                        tags: { feature: "share-intent", operation: "merge-audio-video" },
+                        extra: {
+                          reason: mergeDecision.reason,
+                          videoBytes: mergeDecision.videoBytes,
+                          audioBytes: mergeDecision.audioBytes,
+                          combinedBytes: mergeDecision.combinedBytes,
+                        },
+                      });
+                      toast.info("Video imported without separate audio", mergeFallback.message);
+                      break;
                     }
+
+                    const videoBytes = await downloadedVideo.bytes();
+                    const audioBytes = await downloadedAudio.bytes();
+                    const mergedBuffer = await mergeAudioVideo(videoBytes.buffer, audioBytes.buffer);
+                    const mergedFile = new ExpoFile(Paths.cache, `shared_link_merged_${Date.now()}_${vi}.mp4`);
+                    mergedFile.write(new Uint8Array(mergedBuffer));
+                    let mergedUri = mergedFile.uri;
+                    try {
+                      const durationMillis = await getMediaDurationMillis(mergedFile.uri);
+                      if (durationMillis && durationMillis > MAX_VIDEO_DURATION_MS) {
+                        mergedUri = await trimToMaxDuration(mergedFile.uri, durationMillis);
+                        if (mergedUri !== mergedFile.uri) {
+                          try { mergedFile.delete(); } catch {}
+                        }
+                      }
+                    } catch {}
+                    finalUri = mergedUri;
+                    audioMerged = true;
+                    try { downloadedVideo.delete(); } catch {}
+                    Sentry.addBreadcrumb({
+                      category: "share-intent",
+                      message: "Audio+video merged within memory limit",
+                      data: { videoBytes: videoSize, audioBytes: audioSize },
+                      level: "info",
+                    });
+                  } catch (mergeErr) {
+                    Sentry.captureException(mergeErr, {
+                      tags: { feature: "share-intent", operation: "merge-audio-video" },
+                      extra: { reason: "merge-failed", videoBytes: videoSize, audioBytes: audioFile.size },
+                    });
+                  } finally {
+                    try { audioFile.delete(); } catch {}
                   }
                 }
+              }
 
-                if (!audioMerged) {
-                  const ext = contentType.includes("mp4") ? "mp4"
-                    : contentType.includes("webm") ? "webm"
-                    : contentType.includes("quicktime") ? "mov"
-                    : contentType === "image/gif" ? "gif"
-                    : vidUrl.match(/\.(mp4|mov|webm|gif)/i)?.[1] ?? "mp4";
-                  const destFile = new ExpoFile(Paths.cache, `shared_link_video_${Date.now()}_${vi}.${ext}`);
-                  destFile.write(new Uint8Array(arrayBuffer));
-                  let videoUri = destFile.uri;
-                  try {
-                    const durationMillis = await getMediaDurationMillis(destFile.uri);
-                    if (durationMillis && durationMillis > MAX_VIDEO_DURATION_MS) {
-                      videoUri = await trimToMaxDuration(destFile.uri, durationMillis);
-                    }
-                  } catch {}
-                  finalUri = videoUri;
-                }
-              } catch (ramErr) {
-                if (!isOomError(ramErr)) throw ramErr;
-                Sentry.captureMessage("Share intent: OOM during RAM download, falling back to disk", {
-                  level: "warning",
-                  tags: { feature: "share-intent", domain: meta.domain },
-                  extra: { vidUrl, error: String(ramErr) },
-                });
-
-                const ext = vidUrl.match(/\.(mp4|mov|webm|m3u8|gif)/i)?.[1] ?? "mp4";
-                const destFile = new ExpoFile(Paths.cache, `shared_link_video_${Date.now()}_${vi}.${ext}`);
-                const downloadedFile = await ExpoFile.downloadFileAsync(vidUrl, destFile, {
-                  headers: fetchHeaders,
-                });
-                const fileSize = downloadedFile.size ?? 0;
-                if (fileSize <= 1000) {
-                  try { downloadedFile.delete(); } catch {}
-                  continue;
-                }
-                let diskUri = downloadedFile.uri;
+              if (!audioMerged) {
+                let videoUri = downloadedVideo.uri;
                 try {
-                  const durationMillis = await getMediaDurationMillis(downloadedFile.uri);
+                  const durationMillis = await getMediaDurationMillis(downloadedVideo.uri);
                   if (durationMillis && durationMillis > MAX_VIDEO_DURATION_MS) {
-                    diskUri = await trimToMaxDuration(downloadedFile.uri, durationMillis);
+                    videoUri = await trimToMaxDuration(downloadedVideo.uri, durationMillis);
+                    if (videoUri !== downloadedVideo.uri) {
+                      try { downloadedVideo.delete(); } catch {}
+                    }
                   }
                 } catch {}
-                finalUri = diskUri;
+                finalUri = videoUri;
               }
 
               if (finalUri) {
@@ -672,6 +663,7 @@ export function useCreateShareIntent({
                 });
               }
             } catch (vidErr) {
+              try { temporaryVideoFile?.delete(); } catch {}
               Sentry.captureMessage("Share intent: video download threw exception", {
                 level: "warning",
                 tags: { feature: "share-intent", domain: meta.domain },
@@ -919,6 +911,7 @@ export function useCreateShareIntent({
     startVideoUpload,
     tierLimits.maxContentLength,
     tierLimits.maxTitleLength,
+    toast,
     updateDraft,
   ]);
 }

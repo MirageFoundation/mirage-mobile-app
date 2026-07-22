@@ -1,10 +1,14 @@
 import * as Sentry from "@sentry/react-native";
 import { createFile, MP4BoxBuffer, type ISOFile, type Sample, type Movie } from "mp4box";
 
+import { assertMediaMergeBufferSizes } from "@/src/utils/media-merge-limits";
+
 export async function mergeAudioVideo(
   videoBuffer: ArrayBuffer,
   audioBuffer: ArrayBuffer
 ): Promise<ArrayBuffer> {
+  assertMediaMergeBufferSizes(videoBuffer.byteLength, audioBuffer.byteLength);
+
   const extractSamples = (buffer: ArrayBuffer, trackType: "video" | "audio"): Promise<{ samples: Sample[]; info: Movie; stsdEntries: any[] }> => {
     return new Promise((resolve, reject) => {
       const file = createFile() as ISOFile;
