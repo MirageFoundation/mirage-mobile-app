@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   getAddressFromUsername,
   getUsernameFromAddress,
@@ -7,6 +7,11 @@ import {
   type GetUsersParams,
 } from "../endpoints/users";
 import { queryKeys } from "../query-keys";
+import {
+  buildUsernameResolutionCandidates,
+  normalizeUsernameIdentity,
+  selectUsernameResolution,
+} from "../username-resolution";
 import { useAuthStore } from "@/src/stores";
 
 /**
@@ -16,10 +21,12 @@ import { useAuthStore } from "@/src/stores";
  * @param username - The username to resolve
  */
 export function useAddressFromUsername(username: string | undefined | null) {
+  const normalizedUsername = normalizeUsernameIdentity(username);
+
   return useQuery({
-    queryKey: queryKeys.addressFromUsername(username!),
-    queryFn: () => getAddressFromUsername({ username: username! }),
-    enabled: !!username && username.length >= 2,
+    queryKey: queryKeys.addressFromUsername(normalizedUsername),
+    queryFn: () => getAddressFromUsername({ username: normalizedUsername }),
+    enabled: normalizedUsername.length >= 2,
     staleTime: 0,
     gcTime: 0,
   });
@@ -32,16 +39,37 @@ export function useAddressFromUsername(username: string | undefined | null) {
  * @param username - The username to check availability for
  */
 export function useUsernameAvailability(username: string | undefined | null) {
-  const isEnabled = !!username && username.length >= 2;
-  const anonUsername = `anon-${username ?? "__disabled__"}`;
-
-  return useQuery({
-    queryKey: queryKeys.addressFromUsername(anonUsername),
-    queryFn: () => getAddressFromUsername({ username: anonUsername }),
-    enabled: isEnabled,
-    staleTime: 0,
-    gcTime: 0,
+  const candidates = buildUsernameResolutionCandidates(username);
+  const isEnabled = (candidates[0]?.length ?? 0) >= 2;
+  const results = useQueries({
+    queries: isEnabled
+      ? candidates.map((candidate) => ({
+          queryKey: queryKeys.addressFromUsername(candidate),
+          queryFn: () => getAddressFromUsername({ username: candidate }),
+          staleTime: 0,
+          gcTime: 0,
+        }))
+      : [],
   });
+  const isError = results.some((result) => result.isError);
+  const isFetched =
+    results.length > 0 && results.every((result) => result.isFetched);
+
+  return {
+    data:
+      isFetched && !isError
+        ? selectUsernameResolution(
+            candidates,
+            results.map((result) => result.data),
+          )
+        : undefined,
+    isLoading: results.some((result) => result.isLoading),
+    isFetching: results.some((result) => result.isFetching),
+    isFetched,
+    isError,
+    error: results.find((result) => result.error)?.error ?? null,
+    refetch: () => Promise.all(results.map((result) => result.refetch())),
+  };
 }
 
 /**

@@ -1,5 +1,6 @@
 import type { PostFilters, UserFilters } from "../types";
 import { serverQueryRoot } from "../server-runtime";
+import { normalizeUsernameIdentity } from "./username-resolution";
 
 const serverKey = <T extends readonly unknown[]>(...key: T) =>
   [...serverQueryRoot(), ...key] as const;
@@ -97,7 +98,7 @@ export const queryKeys = {
 
   // Username/Address Resolution
   addressFromUsername: (username: string) =>
-    serverKey("resolve", "address", username),
+    serverKey("resolve", "address", normalizeUsernameIdentity(username)),
   usernameFromAddress: (address: string) =>
     serverKey("resolve", "username", normalizeAccountIdentity(address)),
   users: (filters?: UserFilters) => serverKey("users", filters),
