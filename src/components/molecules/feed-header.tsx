@@ -14,7 +14,6 @@ import {
 
 import { Text } from "@/src/components/ui/primitives";
 import { HEADER_HEIGHT } from "@/src/hooks/use-scroll-animation";
-import { formatCompactNumber } from "@/src/utils/format-number";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { FeedDensityToggle } from "./feed-density-toggle";
 
@@ -34,6 +33,22 @@ type FeedHeaderProps = {
   onFeedTypeChange?: (value: string) => void;
   borderBottomColor?: string;
 };
+
+type AppIconProps = {
+  isDark: boolean;
+};
+
+const AppIcon = ({ isDark }: AppIconProps) => (
+  <Image
+    source={
+      isDark
+        ? require("@/assets/images/app-dark-icon.png")
+        : require("@/assets/images/app-icon.png")
+    }
+    style={styles.appIcon}
+    resizeMode="contain"
+  />
+);
 
 export const FeedHeader = ({
   title,
@@ -56,18 +71,6 @@ export const FeedHeader = ({
 
   const hasFeedOptions =
     feedOptions && feedOptions.length > 0 && onFeedTypeChange;
-
-  const AppIcon = () => (
-    <Image
-      source={
-        isDark
-          ? require("@/assets/images/app-dark-icon.png")
-          : require("@/assets/images/app-icon.png")
-      }
-      style={styles.appIcon}
-      resizeMode="contain"
-    />
-  );
 
   return (
     <Animated.View
@@ -92,7 +95,7 @@ export const FeedHeader = ({
 
           {hasFeedOptions ? (
             <View style={styles.titleButton}>
-              <AppIcon />
+              <AppIcon isDark={isDark} />
               <Text size="xl" weight="bold">
                 {title}
               </Text>
@@ -196,7 +199,7 @@ export const FeedHeader = ({
             </View>
           ) : (
             <View style={styles.titleButton}>
-              <AppIcon />
+              <AppIcon isDark={isDark} />
               <Text size="xl" weight="bold">
                 {title}
               </Text>
