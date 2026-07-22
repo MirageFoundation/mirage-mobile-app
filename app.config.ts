@@ -47,6 +47,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       },
     ],
     "expo-secure-store",
+    [
+      "expo-local-authentication",
+      {
+        faceIDPermission: "Allow $(PRODUCT_NAME) to authenticate before showing your recovery phrase.",
+      },
+    ],
     "expo-video",
     "expo-web-browser",
     [
