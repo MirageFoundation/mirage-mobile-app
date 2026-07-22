@@ -115,43 +115,54 @@ async function refreshUserPostsQuery(
   queryClient: QueryClient,
   params: UserPostsRefreshParams,
 ) {
-  const queryKey = queryKeys.userPosts(params.owner, params.type);
-
-  const existingData = queryClient.getQueryData<InfiniteData<PostsResponse>>(queryKey);
-  if (!existingData?.pages?.length) return;
-
-  const freshPages = await Promise.all(
-    existingData.pages.map((page, index) =>
-      getUserPosts({
-        ...params,
-        page: existingData.pageParams[index] as number,
-        limit: params.limit,
-      }),
-    ),
+  const queryRoot = queryKeys.userPostsForViewer(
+    params.owner,
+    params.address,
+    params.type,
   );
-
-  queryClient.setQueryData<InfiniteData<PostsResponse>>(queryKey, (old) => {
-    if (!old) return old;
-
-    let anyChanged = false;
-    const newPages = old.pages.map((page, pageIndex) => {
-      const freshPage = freshPages[pageIndex];
-      if (!freshPage) return page;
-
-      const freshMap = new Map<string, ApiPost>();
-      for (const post of freshPage.posts) {
-        freshMap.set(post.post_id, post);
-      }
-
-      const { posts, changed } = mergePageMetadata(page.posts, freshMap);
-      if (!changed) return page;
-      anyChanged = true;
-      return { ...page, posts };
-    });
-
-    if (!anyChanged) return old;
-    return { ...old, pages: newPages };
+  const queries = queryClient.getQueriesData<InfiniteData<PostsResponse>>({
+    queryKey: queryRoot,
   });
+
+  await Promise.all(queries.map(async ([queryKey, existingData]) => {
+    if (!existingData?.pages?.length) return;
+    const allowedTags = queryKey.at(-1);
+
+    const freshPages = await Promise.all(
+      existingData.pages.map((page, index) =>
+        getUserPosts({
+          ...params,
+          page: existingData.pageParams[index] as number,
+          limit: params.limit,
+          allowed_tags:
+            typeof allowedTags === "string" ? allowedTags : undefined,
+        }),
+      ),
+    );
+
+    queryClient.setQueryData<InfiniteData<PostsResponse>>(queryKey, (old) => {
+      if (!old) return old;
+
+      let anyChanged = false;
+      const newPages = old.pages.map((page, pageIndex) => {
+        const freshPage = freshPages[pageIndex];
+        if (!freshPage) return page;
+
+        const freshMap = new Map<string, ApiPost>();
+        for (const post of freshPage.posts) {
+          freshMap.set(post.post_id, post);
+        }
+
+        const { posts, changed } = mergePageMetadata(page.posts, freshMap);
+        if (!changed) return page;
+        anyChanged = true;
+        return { ...page, posts };
+      });
+
+      if (!anyChanged) return old;
+      return { ...old, pages: newPages };
+    });
+  }));
 }
 
 function patchRootMetadataIntoPostQueries(

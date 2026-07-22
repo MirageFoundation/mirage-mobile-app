@@ -51,6 +51,82 @@ describe("server query identity", () => {
   });
 });
 
+describe("viewer query identity", () => {
+  const viewerA = " MIRAGE1VIEWERA ";
+  const viewerB = "mirage1viewerb";
+
+  test("separates personalized data with otherwise identical parameters", () => {
+    const pairs = [
+      [
+        queryKeys.posts({ feed: "home", address: viewerA }),
+        queryKeys.posts({ feed: "home", address: viewerB }),
+      ],
+      [
+        queryKeys.userPosts("MIRAGE1OWNER", "comments", "sensitive", viewerA),
+        queryKeys.userPosts("MIRAGE1OWNER", "comments", "sensitive", viewerB),
+      ],
+      [
+        queryKeys.comments("post-1", viewerA),
+        queryKeys.comments("post-1", viewerB),
+      ],
+      [
+        queryKeys.commentContext("comment-1", 5, viewerA),
+        queryKeys.commentContext("comment-1", 5, viewerB),
+      ],
+      [
+        queryKeys.search("mirage", "posts", 20, "sensitive", viewerA),
+        queryKeys.search("mirage", "posts", 20, "sensitive", viewerB),
+      ],
+      [
+        queryKeys.topics(20, "sensitive", viewerA),
+        queryKeys.topics(20, "sensitive", viewerB),
+      ],
+    ];
+
+    for (const [first, second] of pairs) {
+      expect(first).not.toEqual(second);
+    }
+  });
+
+  test("uses one stable anonymous identity and normalizes address casing", () => {
+    expect(queryKeys.comments("post-1", undefined)).toEqual(
+      queryKeys.comments("post-1", null),
+    );
+    expect(queryKeys.posts({ feed: "home" })).toEqual(
+      queryKeys.posts({ feed: "home", address: "" }),
+    );
+    expect(queryKeys.search("mirage", "posts", 20, undefined, undefined)).toEqual(
+      queryKeys.search("mirage", "posts", 20, undefined, null),
+    );
+    expect(queryKeys.profile(" MIRAGE1ACCOUNT ")).toEqual(
+      queryKeys.profile("mirage1account"),
+    );
+    expect(queryKeys.comments("post-1", " MIRAGE1VIEWER ")).toEqual(
+      queryKeys.comments("post-1", "mirage1viewer"),
+    );
+  });
+
+  test("keeps owner and viewer cache roots aligned with full user-post keys", () => {
+    const key = queryKeys.userPosts(
+      "MIRAGE1OWNER",
+      "comments",
+      "sensitive",
+      viewerA,
+    );
+    expect(key.slice(0, queryKeys.userPostsForOwner("mirage1owner").length)).toEqual(
+      queryKeys.userPostsForOwner("mirage1owner"),
+    );
+    expect(
+      key.slice(
+        0,
+        queryKeys.userPostsForViewer("mirage1owner", viewerA, "comments").length,
+      ),
+    ).toEqual(
+      queryKeys.userPostsForViewer("mirage1owner", viewerA, "comments"),
+    );
+  });
+});
+
 describe("ServerRequestCoordinator", () => {
   test("captures a read URL and rejects a late response after replacement", async () => {
     const coordinator = new ServerRequestCoordinator("https://a.example");

@@ -87,10 +87,10 @@ export function seedFocusedCommentFromInbox(
     // cached. Avoids replacing a multi-ancestor context with a single-parent
     // snapshot on repeat opens.
     const existingContext = queryClient.getQueryData<CommentContextResponse>(
-      queryKeys.commentContext(reply.reply_id, 5),
+      queryKeys.commentContext(reply.reply_id, 5, address),
     );
     if (!existingContext || (existingContext.context?.length ?? 0) === 0) {
-      queryClient.setQueryData(queryKeys.commentContext(reply.reply_id, 5), {
+      queryClient.setQueryData(queryKeys.commentContext(reply.reply_id, 5, address), {
         comment_id: reply.reply_id,
         context: [parent],
       });
@@ -101,7 +101,7 @@ export function seedFocusedCommentFromInbox(
     queryKey: queryKeys.comments(reply.reply_id, address),
   });
   void queryClient.invalidateQueries({
-    queryKey: queryKeys.commentContext(reply.reply_id, 5),
+    queryKey: queryKeys.commentContext(reply.reply_id, 5, address),
   });
   void queryClient.invalidateQueries({
     queryKey: queryKeys.comments(reply.root_post_id, address),

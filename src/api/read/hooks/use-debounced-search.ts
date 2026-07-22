@@ -43,7 +43,7 @@ export function useDebouncedSearch(
 
   // Perform the search with debounced query
   const searchQuery = useQuery({
-    queryKey: queryKeys.search(debouncedQuery!, params?.type, params?.limit, allowedTags),
+    queryKey: queryKeys.search(debouncedQuery!, params?.type, params?.limit, allowedTags, walletAddress),
     queryFn: () =>
       search({
         q: debouncedQuery!,

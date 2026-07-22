@@ -71,7 +71,7 @@ export function useCommentContext(
   };
 
   return useQuery({
-    queryKey: queryKeys.commentContext(commentId!, maxDepth),
+    queryKey: queryKeys.commentContext(commentId!, maxDepth, walletAddress),
     queryFn: () => getCommentContext(params),
     enabled: !!commentId,
     staleTime: 1000 * 60, // 1 minute

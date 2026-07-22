@@ -190,7 +190,11 @@ export function useMediaPostDetailData({
     isError: isFocusedContextError,
     error: focusedContextError,
   } = useQuery({
-    queryKey: queryKeys.commentContext(focusedCommentId!, focusedDepth),
+    queryKey: queryKeys.commentContext(
+      focusedCommentId!,
+      focusedDepth,
+      currentUser?.walletAddress,
+    ),
     queryFn: () =>
       getCommentContext({
         comment_id: focusedCommentId!,
@@ -206,7 +210,11 @@ export function useMediaPostDetailData({
     isError: isFocusedContextCheckError,
     error: focusedContextCheckError,
   } = useQuery({
-    queryKey: queryKeys.commentContext(focusedCommentId!, 5),
+    queryKey: queryKeys.commentContext(
+      focusedCommentId!,
+      5,
+      currentUser?.walletAddress,
+    ),
     queryFn: () =>
       getCommentContext({
         comment_id: focusedCommentId!,

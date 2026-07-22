@@ -324,7 +324,12 @@ export function ProfileScreen() {
     if (!user?.walletAddress) return;
 
     queryClient.prefetchInfiniteQuery({
-      queryKey: queryKeys.userPosts(user.walletAddress, "comments"),
+      queryKey: queryKeys.userPosts(
+        user.walletAddress,
+        "comments",
+        undefined,
+        user.walletAddress,
+      ),
       queryFn: ({ pageParam = 1 }) =>
         getUserPosts({
           owner: user.walletAddress,
@@ -392,7 +397,7 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
         ]);
         if (user?.walletAddress) {
           queryClient.invalidateQueries({
-            queryKey: queryKeys.userPosts(user.walletAddress),
+            queryKey: queryKeys.userPostsForOwner(user.walletAddress),
           });
           queryClient.invalidateQueries({
             queryKey: queryKeys.userBlocked(user.walletAddress),
@@ -420,7 +425,7 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
         refetchUserStatus();
         refetchProfile();
         queryClient.invalidateQueries({
-          queryKey: queryKeys.userPosts(user.walletAddress),
+          queryKey: queryKeys.userPostsForOwner(user.walletAddress),
         });
         queryClient.invalidateQueries({
           queryKey: queryKeys.userBlocked(user.walletAddress),
@@ -635,7 +640,7 @@ useEffect(() => {
         ]);
         if (user?.walletAddress) {
           queryClient.invalidateQueries({
-            queryKey: queryKeys.userPosts(user.walletAddress),
+            queryKey: queryKeys.userPostsForOwner(user.walletAddress),
           });
           queryClient.invalidateQueries({
             queryKey: queryKeys.userBlocked(user.walletAddress),

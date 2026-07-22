@@ -1252,7 +1252,7 @@ export function usePost(options: UsePostOptions = {}) {
      // Invalidate user posts
       if (address) {
         queryClient.invalidateQueries({
-          queryKey: queryKeys.userPosts(address),
+          queryKey: queryKeys.userPostsForOwner(address),
           refetchType: "inactive",
         });
       }
@@ -1398,7 +1398,7 @@ export function useComment(options: UsePostOptions = {}) {
 
       if (address) {
         queryClient.invalidateQueries({
-          queryKey: queryKeys.userPosts(address),
+          queryKey: queryKeys.userPostsForOwner(address),
           refetchType: "inactive",
         });
       }
@@ -1454,7 +1454,7 @@ export function useEdit(options: UsePostOptions = {}) {
       await queryClient.cancelQueries({ queryKey: queryKeys.postsRoot() });
       await queryClient.cancelQueries({ queryKey: queryKeys.commentsRoot() });
       if (address) {
-        await queryClient.cancelQueries({ queryKey: queryKeys.userPosts(address) });
+        await queryClient.cancelQueries({ queryKey: queryKeys.userPostsForOwner(address) });
       }
 
       const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as Array<[QueryKey, unknown]>;
@@ -1707,7 +1707,7 @@ export function useDelete(options: UsePostOptions = {}) {
 
       if (address) {
         queryClient.invalidateQueries({
-          queryKey: queryKeys.userPosts(address),
+          queryKey: queryKeys.userPostsForOwner(address),
           refetchType: "inactive",
         });
       }

@@ -116,8 +116,8 @@ export function usePostDetailFocusedThread({
 
   const focusedContextCheckQuery = useQuery({
     queryKey: focusedCommentId
-      ? queryKeys.commentContext(focusedCommentId, 5)
-      : queryKeys.commentContext("missing", 5),
+      ? queryKeys.commentContext(focusedCommentId, 5, currentUserWallet)
+      : queryKeys.commentContext("missing", 5, currentUserWallet),
     queryFn: () =>
       getCommentContext({
         comment_id: focusedCommentId!,
@@ -136,7 +136,11 @@ export function usePostDetailFocusedThread({
       setIsLoadingContext(true);
       try {
         const data = await queryClient.fetchQuery({
-          queryKey: queryKeys.commentContext(focusedCommentId, depthToLoad),
+          queryKey: queryKeys.commentContext(
+            focusedCommentId,
+            depthToLoad,
+            currentUserWallet,
+          ),
           queryFn: () =>
             getCommentContext({
               comment_id: focusedCommentId,

@@ -264,7 +264,12 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
     if (!userAddress) return;
 
     queryClient.prefetchInfiniteQuery({
-      queryKey: queryKeys.userPosts(userAddress, "comments"),
+      queryKey: queryKeys.userPosts(
+        userAddress,
+        "comments",
+        undefined,
+        currentUser?.walletAddress,
+      ),
       queryFn: ({ pageParam = 1 }) =>
         getUserPosts({
           owner: userAddress,
@@ -622,9 +627,8 @@ const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
           refetchPosts(),
         ]);
         if (userAddress) {
-          const type = index === 0 ? "submissions" : "comments";
           queryClient.invalidateQueries({
-            queryKey: queryKeys.userPosts(userAddress, type),
+            queryKey: queryKeys.userPostsForOwner(userAddress),
           });
         }
       } finally {

@@ -173,7 +173,7 @@ export function useUserPosts(
   const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
 
   return useQuery({
-    queryKey: queryKeys.userPosts(owner!, type, allowedTags),
+    queryKey: queryKeys.userPosts(owner!, type, allowedTags, walletAddress),
     queryFn: () =>
       getUserPosts({
         owner: owner!,
@@ -199,7 +199,7 @@ export function useInfiniteUserPosts(
   const allowedTags = getAllowedTagsFromContentTypes(selectedContentTypes, adultContentEnabled);
 
   return useInfiniteQuery({
-    queryKey: queryKeys.userPosts(owner!, params?.type, allowedTags),
+    queryKey: queryKeys.userPosts(owner!, params?.type, allowedTags, walletAddress),
     queryFn: ({ pageParam = 1 }) => {
       return getUserPosts({
         owner: owner!,
