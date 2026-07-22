@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/react-native";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { mmkvStorage } from "./mmkv-storage";
+import { setAnalyticsTrackingEnabled } from "@/src/services/analytics";
 
 export type FeedType = "home" | "popular" | "news" | "watch" | "latest";
 export type FeedDensity = "card" | "compact";
@@ -270,8 +271,10 @@ export const usePreferencesStore = create<PreferencesState>()(
       setBlurSensitiveMedia: (blur) => set({ blurSensitiveMedia: blur }),
       setAgeVerified: (verified) => set({ ageVerified: verified }),
       setHideDownvotedPosts: (hide) => set({ hideDownvotedPosts: hide }),
-      setAnalyticsConsent: (granted) =>
-        set({ analyticsConsent: granted, analyticsConsentAsked: true }),
+      setAnalyticsConsent: (granted) => {
+        void setAnalyticsTrackingEnabled(granted);
+        set({ analyticsConsent: granted, analyticsConsentAsked: true });
+      },
       setAutoCollapseThreshold: (threshold) =>
         set({ autoCollapseThreshold: threshold }),
       setTopicsBeforeShowMore: (count) => set({ topicsBeforeShowMore: count }),

@@ -16,7 +16,7 @@ import { CloudflareErrorToast } from "@/src/components/cloudflare-error-toast";
 import { WalletProvider } from "./wallet-provider";
 import { cleanupInboxNotificationsForLogout, initInboxNotifications } from "@/src/services/inbox-notifications";
 import { initPushNotifications, registerPush } from "@/src/services/push-notifications";
-import { identifyUser, setAnalyticsTrackingEnabled, trackEvent } from "@/src/services/analytics";
+import { identifyUser, isAnalyticsActive, setAnalyticsTrackingEnabled, trackEvent } from "@/src/services/analytics";
 import { initSeenPosts, teardownSeenPosts } from "@/src/services/seen-posts";
 import { useAuthStore, usePreferencesStore, useVideoPositionStore } from "@/src/stores";
 import { walletService } from "@/src/services/wallet-service";
@@ -77,8 +77,8 @@ export const RootProvider = memo(
     );
 
     useEffect(() => {
-      if (!analyticsConsent) return;
-      setAnalyticsTrackingEnabled(true).then(() => {
+      void setAnalyticsTrackingEnabled(analyticsConsent).then(() => {
+        if (!isAnalyticsActive()) return;
         const { walletAddress: address, user } = useAuthStore.getState();
         if (address) {
           identifyUser(address, {
@@ -126,7 +126,6 @@ export const RootProvider = memo(
         }
 
         if (
-          analyticsConsent &&
           nextState === "active" &&
           previousState.match(/inactive|background/)
         ) {
@@ -138,7 +137,7 @@ export const RootProvider = memo(
         }
       });
       return () => sub.remove();
-    }, [analyticsConsent]);
+    }, []);
 
     const hasSeenAdultPrompt = usePreferencesStore((s) => s.hasSeenAdultPrompt);
 
