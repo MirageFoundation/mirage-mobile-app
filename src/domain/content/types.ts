@@ -1,12 +1,7 @@
 import type { AwardBadge } from "@/src/api/types";
+import type { ContentWarningType } from "./content-warning-options";
 
-export type ContentWarningType =
-  | "sensitive"
-  | "adult"
-  | "violence"
-  | "gore"
-  | "death"
-  | "nsfw";
+export type { ContentWarningType } from "./content-warning-options";
 
 export type Community = {
   id: string;

@@ -1,16 +1,7 @@
-import type { ContentTag } from "@/src/api/write/endpoints/posts";
 import { parseApiError } from "@/src/utils/parse-api-error";
 
 // Strict URL validation - requires protocol (http:// or https://)
 export const URL_REGEX = /^https?:\/\/[^\s<>"{}|\\^`\[\]]+$/i;
-
-export const CONTENT_WARNING_OPTIONS: { value: ContentTag; label: string }[] = [
-  { value: "sensitive", label: "Sensitive" },
-  { value: "adult", label: "Adult" },
-  { value: "violence", label: "Violence" },
-  { value: "gore", label: "Gore" },
-  { value: "death", label: "Death" },
-];
 
 export function decodeHtmlEntities(text: string): string {
   return text

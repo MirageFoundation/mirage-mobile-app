@@ -128,48 +128,6 @@ export const styles = StyleSheet.create((theme) => ({
   mediaButtonDisabled: {
     opacity: 0.4,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: theme.spacing.lg,
-  },
-  contentWarningModalContent: {
-    width: "100%",
-    maxWidth: 340,
-    borderRadius: theme.radius.xl,
-    padding: theme.spacing.md,
-  },
-  contentWarningHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: theme.spacing.sm,
-  },
-  contentWarningOptions: {
-    gap: theme.spacing.xs,
-  },
-  contentWarningOption: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.xs,
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  clearWarningButton: {
-    alignItems: "center",
-    marginTop: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-  },
   uploadOverlay: {
     position: "absolute",
     top: 0,

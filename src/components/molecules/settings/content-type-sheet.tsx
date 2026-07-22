@@ -11,24 +11,11 @@ import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { CONTENT_WARNING_IDS, CONTENT_WARNING_OPTIONS } from "@/src/domain/content";
 import {
   ContentType,
   usePreferencesStore,
 } from "@/src/stores/preferences-store";
-
-type ContentTypeOption = {
-  value: ContentType;
-  label: string;
-  icon: string;
-};
-
-const individualOptions: ContentTypeOption[] = [
-  { value: "sensitive", label: "Sensitive", icon: "warning-outline" },
-  { value: "adult", label: "Adult", icon: "eye-off-outline" },
-  { value: "violence", label: "Violence", icon: "flash-outline" },
-  { value: "gore", label: "Gore", icon: "skull-outline" },
-  { value: "death", label: "Death", icon: "alert-circle-outline" },
-];
 
 type ContentTypeSheetProps = {
   selectedTypes: ContentType[];
@@ -96,8 +83,7 @@ export const ContentTypeSheet = forwardRef<
     [onToggle, selectedTypes, setBlurSensitiveMedia],
   );
 
-  const ALL_TAGS = ["sensitive", "adult", "violence", "gore", "death"] as const;
-  const isAllSelected = ALL_TAGS.every((t) => selectedTypes.includes(t));
+  const isAllSelected = CONTENT_WARNING_IDS.every((type) => selectedTypes.includes(type));
   const isNoneSelected = selectedTypes.length === 0;
   const adultSelectedButToggleOff = selectedTypes.includes("adult") && !matureToggleEnabled;
 
@@ -210,14 +196,14 @@ export const ContentTypeSheet = forwardRef<
           </View>
 
           <View style={styles.optionsList}>
-            {individualOptions.map((option) => {
-              const selected = isIndividualSelected(option.value);
-              const showNote = option.value === "adult" && selected && !matureToggleEnabled;
+            {CONTENT_WARNING_OPTIONS.map((option) => {
+              const selected = isIndividualSelected(option.id);
+              const showNote = option.id === "adult" && selected && !matureToggleEnabled;
 
               return (
-                <View key={option.value}>
+                <View key={option.id}>
                   <Pressable
-                    onPress={() => handleSelect(option.value)}
+                    onPress={() => handleSelect(option.id)}
                     style={({ pressed }) => [
                       styles.optionItem,
                       pressed && { opacity: 0.7 },
@@ -225,7 +211,7 @@ export const ContentTypeSheet = forwardRef<
                   >
                     <Box direction="row" alignItems="center" gap="md" flex>
                       <Ionicons
-                        name={option.icon as any}
+                        name={option.filterIcon as any}
                         size={20}
                         color={theme.colors.text.default}
                       />

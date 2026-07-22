@@ -7,6 +7,7 @@
  */
 
 import { api } from "@/src/api/client";
+import type { ContentWarningId } from "@/src/domain/content";
 import type { MirageWallet } from "@/src/wallet";
 import {
   buildSignedEnvelope,
@@ -21,7 +22,7 @@ import { withPowRetry } from "../utils/retry-pow";
 // Types
 // ============================================
 
-export type ContentTag = "" | "sensitive" | "adult" | "gore" | "violence" | "death";
+export type ContentTag = "" | ContentWarningId;
 
 export interface CreatePostInput {
   /** Topic name (required for posts) */

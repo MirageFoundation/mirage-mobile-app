@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { mmkvStorage } from "./mmkv-storage";
 import { setAnalyticsTrackingEnabled } from "@/src/services/analytics";
+import { CONTENT_WARNING_IDS, type ContentWarningId } from "@/src/domain/content";
 
 export type FeedType = "home" | "popular" | "news" | "watch" | "latest";
 export type FeedDensity = "card" | "compact";
@@ -10,16 +11,9 @@ export type ThemeMode = "light" | "dark" | "system";
 export type ShareServer = string;
 export type ApiServer = string;
 export type VideoAutoplayNetwork = "always" | "wifi_only" | "never";
-export type ContentType =
-  | "sensitive"
-  | "adult"
-  | "violence"
-  | "gore"
-  | "death"
-  | "none"
-  | "all";
+export type ContentType = ContentWarningId | "none" | "all";
 
-const CONTENT_TAGS = ["sensitive", "adult", "violence", "gore", "death"] as const;
+const CONTENT_TAGS = CONTENT_WARNING_IDS;
 const ADULT_CONTENT_TAGS = ["adult", "violence", "gore", "death"] as const;
 
 type AdultContentTag = (typeof ADULT_CONTENT_TAGS)[number];

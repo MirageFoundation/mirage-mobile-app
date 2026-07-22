@@ -9,3 +9,17 @@ export type {
   PostDraft,
   PostMedia,
 } from "./types";
+export {
+  clearContentWarningSelection,
+  CONTENT_WARNING_CONFIG,
+  CONTENT_WARNING_IDS,
+  CONTENT_WARNING_OPTIONS,
+  getSingleContentWarningSelection,
+  isContentWarningId,
+  selectSingleContentWarning,
+} from "./content-warning-options";
+export type {
+  ContentWarningId,
+  ContentWarningOption,
+  ContentWarningTone,
+} from "./content-warning-options";

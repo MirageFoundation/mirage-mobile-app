@@ -18,6 +18,7 @@ import {
 } from "@/src/components/molecules";
 import { Box, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
+import { CONTENT_WARNING_IDS, CONTENT_WARNING_OPTIONS } from "@/src/domain/content";
 import { useApiServer } from "@/src/providers/api-server-provider";
 import { useTheme } from "@/src/providers/theme-context";
 import { useToast } from "@/src/providers/toast-provider";
@@ -198,15 +199,15 @@ const handleApiServerChange = useCallback(
 
   // Get display labels
  const getContentTypeLabel = () => {
-   const ALL_TAGS = ["sensitive", "adult", "violence", "gore", "death"];
-   const allSelected = ALL_TAGS.every((t) => selectedContentTypes.includes(t as any));
+   const allSelected = CONTENT_WARNING_IDS.every((type) =>
+     selectedContentTypes.includes(type),
+   );
    if (allSelected) return "All";
     if (selectedContentTypes.length === 0) return "None";
    if (selectedContentTypes.length === 1) {
-     return (
-        selectedContentTypes[0].charAt(0).toUpperCase() +
-        selectedContentTypes[0].slice(1)
-      );
+     return CONTENT_WARNING_OPTIONS.find(
+       (option) => option.id === selectedContentTypes[0],
+     )?.label ?? selectedContentTypes[0];
     }
     return `${selectedContentTypes.length} selected`;
   };
