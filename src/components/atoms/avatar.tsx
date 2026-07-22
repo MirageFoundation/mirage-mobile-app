@@ -1,10 +1,11 @@
 import { Image, type ImageProps } from "expo-image";
 import * as Sentry from "@sentry/react-native";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
-import { SvgXml } from "react-native-svg";
+import { parse, SvgAst, type JsxAST } from "react-native-svg";
 import { StyleSheet } from "react-native-unistyles";
-import { BoundedLruMap } from "@/src/utils/bounded-lru";
+import { getAvatarSourcePolicy, getAvatarSvgRenderKey } from "./avatar-source-policy";
+import { AvatarSvgCache } from "./avatar-svg-cache";
 
 type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "xxl";
 
@@ -16,29 +17,6 @@ const AVATAR_SIZES: Record<AvatarSize, number> = {
   xl: 64,
   xxl: 80,
 };
-
-/**
- * DiceBear identicon URL — kept byte-compatible with the web app's
- * `web/frontend/src/utils/avatar.js`:
- *   - Same DiceBear major version (9.x)
- *   - Same style (`identicon`)
- *   - SVG output (resolution-independent; same as web)
- *   - Raw seed (no lowercase / trim); only `encodeURIComponent` for URL safety
- *   - Default fallback seed: "default"
- *
- * Identical URL = identical identicon across web and mobile for the
- * same user.
- */
-const DICEBEAR_BASE = "https://api.dicebear.com/9.x";
-
-function buildDicebearSvgUrl(seed: string | undefined) {
-  const rawSeed = seed === null || seed === undefined ? "" : String(seed);
-  const safeSeed = encodeURIComponent(rawSeed || "default");
-  // Request a transparent background so the avatar's themed container
-  // surface shows through (matches dark mode in compact post cards and
-  // anywhere else the avatar sits on a non-white surface).
-  return `${DICEBEAR_BASE}/identicon/svg?seed=${safeSeed}&backgroundColor=transparent`;
-}
 
 const AVATAR_SVG_CACHE_LIMIT = 128;
 const AVATAR_INFLIGHT_LIMIT = 32;
@@ -54,35 +32,37 @@ const reportAvatarCacheEviction = (_key: string, _value: unknown, entryCount: nu
     });
   }
 };
-const svgCache = new BoundedLruMap<string, string>(
+const svgCache = new AvatarSvgCache<JsxAST>(
   AVATAR_SVG_CACHE_LIMIT,
+  AVATAR_INFLIGHT_LIMIT,
   reportAvatarCacheEviction,
 );
-const inflight = new BoundedLruMap<string, Promise<string>>(AVATAR_INFLIGHT_LIMIT);
 
-async function fetchDicebearSvg(url: string): Promise<string> {
-  const cached = svgCache.get(url);
-  if (cached) return cached;
-
-  const existing = inflight.get(url);
-  if (existing) return existing;
-
-  let promise: Promise<string> | undefined;
-  promise = (async () => {
-    try {
+function fetchDicebearSvg(url: string): Promise<JsxAST> {
+  return svgCache.load(
+    url,
+    async () => {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const text = await res.text();
-      svgCache.set(url, text);
-      return text;
-    } finally {
-      if (inflight.peek(url) === promise) inflight.delete(url);
-    }
-  })();
-
-  inflight.set(url, promise);
-  return promise;
+      return res.text();
+    },
+    (xml) => {
+      const ast = parse(xml);
+      if (!ast) throw new Error("DiceBear SVG was empty");
+      return ast;
+    },
+  );
 }
+
+const ParsedAvatarSvg = memo(function ParsedAvatarSvg({
+  ast,
+  size,
+}: {
+  ast: JsxAST;
+  size: number;
+}) {
+  return <SvgAst ast={ast} override={{ width: size, height: size }} />;
+});
 
 type AvatarProps = Omit<ImageProps, "source"> & {
   /** Size preset or custom number */
@@ -157,31 +137,36 @@ export const Avatar = ({
   const identiconInset = Math.max(requestedInset, minInsetForCircle);
   const innerSize = Math.max(1, resolvedSize - identiconInset * 2);
 
-  const svgUrl = useMemo(
-    () => (source ? null : buildDicebearSvgUrl(seed)),
+  const sourcePolicy = useMemo(
+    () => getAvatarSourcePolicy(source, seed),
     [source, seed],
   );
+  const svgUrl = sourcePolicy.kind === "generated-svg" ? sourcePolicy.uri : null;
 
   // Synchronously read from cache so cached identicons render on the
-  // first frame with no flicker; otherwise fetch and stash.
-  const [svgXml, setSvgXml] = useState<string | null>(() =>
-    svgUrl ? svgCache.get(svgUrl) ?? null : null,
-  );
+  // first frame with no flicker. Mounted state retains ownership if its
+  // LRU entry is later evicted, while new mounts parse the SVG again.
+  const [svgState, setSvgState] = useState<{ key: string; ast: JsxAST } | null>(() => {
+    if (!svgUrl) return null;
+    const cached = svgCache.get(svgUrl);
+    return cached ? { key: svgUrl, ast: cached } : null;
+  });
+  const svgAst = svgState?.key === svgUrl ? svgState.ast : null;
 
   useEffect(() => {
     if (!svgUrl) {
-      setSvgXml(null);
+      setSvgState(null);
       return;
     }
     const cached = svgCache.get(svgUrl);
     if (cached) {
-      setSvgXml(cached);
+      setSvgState({ key: svgUrl, ast: cached });
       return;
     }
     let cancelled = false;
     fetchDicebearSvg(svgUrl)
-      .then((xml) => {
-        if (!cancelled) setSvgXml(xml);
+      .then((ast) => {
+        if (!cancelled) setSvgState({ key: svgUrl, ast });
       })
       .catch((error) => {
         Sentry.addBreadcrumb({
@@ -229,11 +214,11 @@ export const Avatar = ({
           ]}
           pointerEvents="none"
         >
-          {svgXml ? (
-            <SvgXml
-              xml={svgXml}
-              width={innerSize}
-              height={innerSize}
+          {svgAst ? (
+            <ParsedAvatarSvg
+              key={getAvatarSvgRenderKey(svgUrl ?? "", innerSize)}
+              ast={svgAst}
+              size={innerSize}
             />
           ) : null}
         </View>
