@@ -77,6 +77,13 @@ export function registerWalletScopedStore(
   return () => controllers.delete(controller.storageName);
 }
 
+export function clearWalletScopedState(): void {
+  activeWalletIdentity = null;
+  for (const controller of controllers.values()) {
+    controller.reset();
+  }
+}
+
 export async function selectWalletStorageNamespace(
   walletIdentity: string | null | undefined,
   baseStorage: StateStorage = mmkvStorage,
@@ -85,9 +92,8 @@ export async function selectWalletStorageNamespace(
 
   // Reset while writes are disabled so one wallet's in-memory state can never be
   // persisted into the namespace selected for another wallet.
-  activeWalletIdentity = null;
+  clearWalletScopedState();
   for (const controller of controllers.values()) {
-    controller.reset();
     // Legacy records were unscoped and their owner cannot be established safely.
     await baseStorage.removeItem(controller.storageName);
   }

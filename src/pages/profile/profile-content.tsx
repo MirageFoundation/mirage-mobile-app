@@ -465,11 +465,11 @@ const listData = useMemo((): Array<Post | ApiPost | "header" | "tabs"> => {
 
   const handleEditUsernamePress = useCallback(() => {
     const currentUserLevel = userStatus?.user_level ?? 0;
-    if (currentUserLevel > storedUserLevel) {
-      setUserLevel(currentUserLevel);
+    if (currentUserLevel > storedUserLevel && user?.walletAddress) {
+      setUserLevel(currentUserLevel, user.walletAddress);
     }
     router.push("/change-username");
-  }, [router, setUserLevel, storedUserLevel, userStatus?.user_level]);
+  }, [router, setUserLevel, storedUserLevel, user?.walletAddress, userStatus?.user_level]);
 
   const handleFollowersPress = useCallback(() => {
     const id = user?.walletAddress || user?.username;

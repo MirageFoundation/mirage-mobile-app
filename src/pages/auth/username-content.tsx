@@ -10,6 +10,7 @@ import { Box, Button, Input, Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { executeWithProgress, useTransactionProgress, useServerList } from "@/src/hooks";
 import { trackEvent } from "@/src/services/analytics";
+import { isCurrentAuthWallet } from "@/src/services/auth-session-coordinator";
 import { walletService } from "@/src/services/wallet-service";
 import { useAuthStore, type ApiServer } from "@/src/stores";
 import { apiClient } from "@/src/api/client";
@@ -361,7 +362,8 @@ export default function UsernameScreen() {
         return;
       }
 
-      setHasUsername(true, `anon-${username}`);
+      if (!isCurrentAuthWallet(wallet.address)) return;
+      setHasUsername(true, `anon-${username}`, wallet.address);
 
       trackEvent("username_set", {
         sign_up_path: isReferralMode

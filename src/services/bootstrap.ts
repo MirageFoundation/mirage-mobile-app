@@ -201,6 +201,7 @@ function scheduleBootstrapFallbacks(
 export async function primeBootstrap(
   queryClient: QueryClient,
   address?: string,
+  isCurrent: () => boolean = () => true,
 ): Promise<BootstrapResponse | null> {
   const hasAddress = Boolean(address);
 
@@ -213,6 +214,7 @@ export async function primeBootstrap(
 
   try {
     const response = await getBootstrap(address ? { address } : undefined);
+    if (!isCurrent()) return null;
     hydrateBootstrapCache(queryClient, response, address);
     scheduleBootstrapFallbacks(queryClient, response, address);
 
@@ -240,6 +242,7 @@ export async function primeBootstrap(
 
     return response;
   } catch (error) {
+    if (!isCurrent()) return null;
     console.warn("[Bootstrap] Failed to prime bootstrap cache:", error);
     Sentry.addBreadcrumb({
       category: "bootstrap",

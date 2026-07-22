@@ -86,7 +86,7 @@ export async function buildSignedEnvelope<
     console.log(`[Envelope] Using last_block_hash: ${params.last_block_hash.substring(0, 16)}...`);
 
     if (params.user_level !== cachedUserLevel) {
-      useAuthStore.getState().setUserLevel(params.user_level);
+      useAuthStore.getState().setUserLevel(params.user_level, wallet.address);
     }
   }
 
