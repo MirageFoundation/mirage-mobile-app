@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { Audio } from "expo-av";
 import { Image } from "expo-image";
 import { VideoView } from "expo-video";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -234,18 +233,9 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
     onPress?.();
   }, [isPostDetail, allowAutoplay, isPlaying, feedTappedToPlay, onPress]);
 
-  const handleMuteToggle = useCallback(async () => {
-    const newGlobalMuted = !globalMuted;
+  const handleMuteToggle = useCallback(() => {
     toggleMute();
-    try {
-      if (!newGlobalMuted) {
-        await Audio.setAudioModeAsync({
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
-        });
-      }
-    } catch {}
-  }, [globalMuted, toggleMute]);
+  }, [toggleMute]);
 
   const thumbnailUri = getVideoThumbnailUri(item.uri, item.posterUri);
   const showThumbnail =

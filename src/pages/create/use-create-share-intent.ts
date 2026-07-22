@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { Audio } from "expo-av";
 import { Paths, File as ExpoFile } from "expo-file-system";
 import { useShareIntentContext } from "expo-share-intent";
 import ExpoShareIntentModule from "expo-share-intent/build/ExpoShareIntentModule";
@@ -18,6 +17,7 @@ import {
   persistPendingShareIntent,
 } from "@/src/navigation/pending-launch-intents";
 import { fetchLinkMeta } from "@/src/utils/fetch-link-meta";
+import { getMediaDurationMillis } from "@/src/utils/media-duration";
 import { mergeAudioVideo } from "@/src/utils/merge-audio-video";
 import { sanitizeTopicName } from "@/src/utils/topic-validation";
 import { MAX_VIDEO_DURATION_MS, trimToMaxDuration } from "@/src/utils/video-processing";
@@ -594,11 +594,9 @@ export function useCreateShareIntent({
                       mergedFile.write(new Uint8Array(mergedBuffer));
                       let mergedUri = mergedFile.uri;
                       try {
-                        const { sound } = await Audio.Sound.createAsync({ uri: mergedFile.uri });
-                        const status = await sound.getStatusAsync();
-                        await sound.unloadAsync();
-                        if (status.isLoaded && status.durationMillis && status.durationMillis > MAX_VIDEO_DURATION_MS) {
-                          mergedUri = await trimToMaxDuration(mergedFile.uri, status.durationMillis);
+                        const durationMillis = await getMediaDurationMillis(mergedFile.uri);
+                        if (durationMillis && durationMillis > MAX_VIDEO_DURATION_MS) {
+                          mergedUri = await trimToMaxDuration(mergedFile.uri, durationMillis);
                         }
                       } catch {}
                       finalUri = mergedUri;
@@ -620,11 +618,9 @@ export function useCreateShareIntent({
                   destFile.write(new Uint8Array(arrayBuffer));
                   let videoUri = destFile.uri;
                   try {
-                    const { sound } = await Audio.Sound.createAsync({ uri: destFile.uri });
-                    const status = await sound.getStatusAsync();
-                    await sound.unloadAsync();
-                    if (status.isLoaded && status.durationMillis && status.durationMillis > MAX_VIDEO_DURATION_MS) {
-                      videoUri = await trimToMaxDuration(destFile.uri, status.durationMillis);
+                    const durationMillis = await getMediaDurationMillis(destFile.uri);
+                    if (durationMillis && durationMillis > MAX_VIDEO_DURATION_MS) {
+                      videoUri = await trimToMaxDuration(destFile.uri, durationMillis);
                     }
                   } catch {}
                   finalUri = videoUri;
@@ -649,11 +645,9 @@ export function useCreateShareIntent({
                 }
                 let diskUri = downloadedFile.uri;
                 try {
-                  const { sound } = await Audio.Sound.createAsync({ uri: downloadedFile.uri });
-                  const status = await sound.getStatusAsync();
-                  await sound.unloadAsync();
-                  if (status.isLoaded && status.durationMillis && status.durationMillis > MAX_VIDEO_DURATION_MS) {
-                    diskUri = await trimToMaxDuration(downloadedFile.uri, status.durationMillis);
+                  const durationMillis = await getMediaDurationMillis(downloadedFile.uri);
+                  if (durationMillis && durationMillis > MAX_VIDEO_DURATION_MS) {
+                    diskUri = await trimToMaxDuration(downloadedFile.uri, durationMillis);
                   }
                 } catch {}
                 finalUri = diskUri;

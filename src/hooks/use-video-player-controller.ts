@@ -1,5 +1,8 @@
-import { useEffect } from "react";
+import * as Sentry from "@sentry/react-native";
+import { useEffect, useRef } from "react";
 import { useVideoPlayer, type VideoPlayer, type VideoSource } from "expo-video";
+
+let nextVideoPlayerDiagnosticId = 0;
 
 type VideoPlayerControllerOptions = {
   muted?: boolean;
@@ -33,7 +36,19 @@ export function useVideoPlayerController(
     initialTime = 0,
   }: VideoPlayerControllerOptions = {},
 ): VideoPlayer {
+  const diagnosticId = useRef(++nextVideoPlayerDiagnosticId).current;
   const player = useVideoPlayer(getCachedVideoSource(source), (createdPlayer) => {
+    Sentry.addBreadcrumb({
+      category: "video-player",
+      message: "Native video player created",
+      level: "info",
+      data: {
+        diagnosticId,
+        hasSource: source != null,
+        sourceType: typeof source === "string" ? "string" : source == null ? "none" : "object",
+        shouldPlay,
+      },
+    });
     createdPlayer.muted = muted;
     createdPlayer.loop = loop;
     createdPlayer.timeUpdateEventInterval = timeUpdateInterval;
@@ -56,11 +71,17 @@ export function useVideoPlayerController(
 
   useEffect(() => {
     if (shouldPlay) {
+      Sentry.addBreadcrumb({
+        category: "video-player",
+        message: "Native video playback requested",
+        level: "info",
+        data: { diagnosticId, hasSource: source != null },
+      });
       player.play();
     } else {
       player.pause();
     }
-  }, [player, shouldPlay]);
+  }, [diagnosticId, player, shouldPlay, source]);
 
   return player;
 }

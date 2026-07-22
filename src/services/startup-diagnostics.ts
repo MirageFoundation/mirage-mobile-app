@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/react-native";
 import Constants from "expo-constants";
+import * as Linking from "expo-linking";
 import * as Updates from "expo-updates";
 
 import { IS_FDROID_BUILD } from "@/src/config/build-flags";
@@ -16,6 +17,7 @@ type StartupRecord = {
   runtimeVersion: string;
   updateId: string;
   isEmbeddedLaunch: boolean;
+  launchSource?: "direct" | "deep_link" | "unknown";
 };
 
 const STARTUP_RECORD_KEY = "startup-diagnostics-current-v1";
@@ -49,6 +51,32 @@ function readStartupRecord(): StartupRecord | null {
 
 function writeStartupRecord(record: StartupRecord): void {
   storage.set(STARTUP_RECORD_KEY, JSON.stringify(record));
+}
+
+async function reportInitialLaunchSource(launchId: string): Promise<void> {
+  try {
+    const initialUrl = await Linking.getInitialURL();
+    const launchSource = initialUrl ? "deep_link" : "direct";
+    const record = readStartupRecord();
+    if (record?.launchId === launchId) {
+      writeStartupRecord({ ...record, launchSource });
+    }
+    Sentry.setTag("launch_source", launchSource);
+    Sentry.addBreadcrumb({
+      category: "startup",
+      message: "Initial launch source resolved",
+      level: "info",
+      data: { launchSource },
+    });
+  } catch (error) {
+    Sentry.setTag("launch_source", "unknown");
+    Sentry.addBreadcrumb({
+      category: "startup",
+      message: "Initial launch source could not be resolved",
+      level: "warning",
+      data: { error: String(error) },
+    });
+  }
 }
 
 function updateStartupPhase(phase: StartupPhase): void {
@@ -179,6 +207,7 @@ function beginStartupDiagnostics(): void {
   Sentry.setTag("startup_phase", current.phase);
   Sentry.setContext("current_launch", current);
   reportPreviousIncompleteLaunch(previous);
+  void reportInitialLaunchSource(current.launchId);
   void reportExpoUpdateDiagnostics();
 }
 

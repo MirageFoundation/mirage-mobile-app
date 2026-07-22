@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import * as Sentry from "@sentry/react-native";
-import { Audio } from "expo-av";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -101,36 +100,6 @@ export const ApiServerProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       setApiServer(server);
       previousServerRef.current = server;
-
-      const audioModeResult = await Audio.setAudioModeAsync({
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-      }).then(
-        () => "ok" as const,
-        (error) => {
-          Sentry.captureException(error, {
-            tags: {
-              feature: "feed-video",
-              action: "reset-audio-mode-after-server-switch",
-            },
-            extra: {
-              from: previousServer,
-              to: server,
-            },
-          });
-          return "failed" as const;
-        },
-      );
-      Sentry.addBreadcrumb({
-        category: "feed-video",
-        message: "Reset audio mode after API server switch",
-        level: audioModeResult === "ok" ? "info" : "warning",
-        data: {
-          result: audioModeResult,
-          from: previousServer,
-          to: server,
-        },
-      });
 
       await primeBootstrap(queryClient, wallet?.address);
 

@@ -2,7 +2,6 @@ import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import * as Sentry from "@sentry/react-native";
-import { Audio } from "expo-av";
 import { Image } from "expo-image";
 import { VideoView } from "expo-video";
 import {
@@ -268,6 +267,36 @@ export const PostCardMedia = memo(
       },
     );
     const appliedVideoRetryKeyRef = useRef(mediaRetryKey);
+    const reportedFeedVideoMountRef = useRef(false);
+
+    useEffect(() => {
+      if (reportedFeedVideoMountRef.current || isPostDetail || media?.type !== "video") return;
+      reportedFeedVideoMountRef.current = true;
+      Sentry.addBreadcrumb({
+        category: "feed-video",
+        message: "Feed video card mounted",
+        level: "info",
+        data: {
+          isVisible,
+          isFocused,
+          isNearVisible,
+          screenActive,
+          shouldPrepareNativeVideo,
+          shouldMountNativeVideo,
+          shouldPlayNativeVideo,
+        },
+      });
+    }, [
+      isFocused,
+      isNearVisible,
+      isPostDetail,
+      isVisible,
+      media?.type,
+      screenActive,
+      shouldMountNativeVideo,
+      shouldPlayNativeVideo,
+      shouldPrepareNativeVideo,
+    ]);
 
     useEffect(() => {
       if (media?.type === "video" && !shouldMountNativeVideo) {
@@ -965,18 +994,11 @@ export const PostCardMedia = memo(
     );
 
     const handleMuteToggle = useCallback(
-      async (event: GestureResponderEvent) => {
+      (event: GestureResponderEvent) => {
         event.stopPropagation?.();
         triggerHaptic("light");
         const newGlobalMuted = !globalMuted;
         toggleMute();
-
-        if (!newGlobalMuted) {
-          await Audio.setAudioModeAsync({
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-          }).catch(() => {});
-        }
 
         if (media?.type === "youtube") {
           if (shouldUseAndroidYouTubeEmbed) {

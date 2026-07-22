@@ -9,7 +9,6 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from "react-native-reanimated";
-import { Audio } from "expo-av";
 import { Image } from "expo-image";
 import { VideoView } from "expo-video";
 import * as Sentry from "@sentry/react-native";
@@ -397,10 +396,3 @@ export const MediaItemView = memo(function MediaItemView({
     </GestureDetector>
   );
 });
-
-export async function enableIosAudioPlayback() {
-  await Audio.setAudioModeAsync({
-    playsInSilentModeIOS: true,
-    staysActiveInBackground: false,
-  }).catch(() => {});
-}
