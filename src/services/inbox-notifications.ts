@@ -13,7 +13,7 @@ import { api } from "@/src/api/client";
 import { seedFocusedCommentFromInbox } from "@/src/api/cache";
 import { queryKeys } from "@/src/api/read/query-keys";
 import type { InboxResponse } from "@/src/api/types";
-import { queryClient } from "@/src/providers/query-provider";
+import { queryClient } from "@/src/providers/query-client";
 import { storage } from "@/src/stores/mmkv-storage";
 import { useAuthStore } from "@/src/stores/auth-store";
 import { useInboxStore } from "@/src/stores/inbox-store";

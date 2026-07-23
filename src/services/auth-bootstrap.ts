@@ -3,7 +3,7 @@ import * as Sentry from "@sentry/react-native";
 import { getUserStatus } from "@/src/api/read/endpoints/users";
 import { queryKeys } from "@/src/api/read/query-keys";
 import type { BootstrapResponse } from "@/src/api/read/endpoints/bootstrap";
-import { queryClient } from "@/src/providers/query-provider";
+import { queryClient } from "@/src/providers/query-client";
 import { getTierName } from "@/src/utils/tiers";
 import { primeBootstrap } from "@/src/services/bootstrap";
 import { walletService } from "@/src/services/wallet-service";

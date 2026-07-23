@@ -499,9 +499,9 @@ export const useAuthStore = create<AuthState>()(
         try {
           await authSessionCoordinator.enqueueIdentityMutation(async () => {
             const wallet = await walletService.getWallet();
-            // Lazy import: push-notifications pulls in the query client and
-            // inbox hooks, which import back into stores. A static import here
-            // creates a require cycle (auth-store <-> push-notifications).
+            // Lazy import: push-notifications imports the inbox hooks, which
+            // import back into stores. A static import here creates a require
+            // cycle (auth-store <-> push-notifications).
             const { unregisterPush } = await import("@/src/services/push-notifications");
             await unregisterPush(wallet);
             await walletService.clearWallet();

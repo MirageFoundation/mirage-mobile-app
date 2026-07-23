@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/react-native";
-import { MutationCache, QueryCache, QueryClient, focusManager, onlineManager } from "@tanstack/react-query";
+import { focusManager, onlineManager } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { useEffect } from "react";
@@ -23,11 +23,7 @@ import {
   type PersistedQueryMetrics,
 } from "@/src/api/cache/persisted-post-cache";
 import { getApiBaseUrl, useAuthStore, usePreferencesStore } from "@/src/stores";
-import {
-  buildMutationErrorMetadata,
-  buildQueryErrorMetadata,
-  sanitizedTelemetryError,
-} from "@/src/services/react-query-telemetry";
+import { queryClient } from "@/src/providers/query-client";
 
 // Remove the pre-v3 broad cache, which was not identity scoped or allowlisted.
 storage.remove("mirage-query-cache");
@@ -108,87 +104,9 @@ const persister = createSyncStoragePersister({
   },
 });
 
-function getErrorStatus(error: unknown): number | undefined {
-  const status =
-    (error as { response?: { status?: number }; status?: number })?.response
-      ?.status ?? (error as { status?: number })?.status;
-
-  return typeof status === "number" ? status : undefined;
-}
-
-function shouldCaptureReactQueryError(error: unknown): boolean {
-  const code = (error as any)?.code;
-  if (code === "ERR_NETWORK") return false;
-  return getErrorStatus(error) === undefined;
-}
-
 function addPersistedCacheRestoredBreadcrumb() {
   if (restoredMetrics) addPersistenceBreadcrumb("restore", restoredMetrics);
 }
-
-const queryClient = new QueryClient({
-  queryCache: new QueryCache({
-    onError: (error, query) => {
-      const metadata = buildQueryErrorMetadata(query.queryKey, error);
-
-      Sentry.addBreadcrumb({
-        category: "react-query",
-        message: "Query failed",
-        level: "error",
-        data: metadata,
-      });
-
-      if (!shouldCaptureReactQueryError(error)) {
-        return;
-      }
-
-      Sentry.captureException(sanitizedTelemetryError("query", metadata), {
-        tags: {
-          feature: "react-query",
-          type: "query",
-          operation: metadata.operation,
-          error_class: metadata.error_class,
-        },
-        extra: metadata,
-      });
-    },
-  }),
-  mutationCache: new MutationCache({
-    onError: (error, _variables, _context, mutation) => {
-      const metadata = buildMutationErrorMetadata(mutation.options.mutationKey, error);
-
-      Sentry.addBreadcrumb({
-        category: "react-query",
-        message: "Mutation failed",
-        level: "error",
-        data: metadata,
-      });
-
-      if (!shouldCaptureReactQueryError(error)) {
-        return;
-      }
-
-      Sentry.captureException(sanitizedTelemetryError("mutation", metadata), {
-        tags: {
-          feature: "react-query",
-          type: "mutation",
-          operation: metadata.operation,
-          error_class: metadata.error_class,
-        },
-        extra: metadata,
-      });
-    },
-  }),
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes
-      gcTime: 1000 * 60 * 60 * 24, // 24 hours (cacheTime renamed to gcTime in v5)
-      retry: 2,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-    },
-  },
-});
 
 export { queryClient };
 
