@@ -70,7 +70,6 @@ export function AnnotateScreen() {
 
   const postId = params.postId ?? "";
   const originalTitle = params.postTitle ?? "";
-  const originalTopic = params.postTopic ?? "";
   const postLikes = parseInt(params.postLikes ?? "0", 10);
   const postComments = parseInt(params.postComments ?? "0", 10);
   const postThumbnail = params.postThumbnail ?? "";

@@ -3,14 +3,14 @@ import { Box, Button, Icon } from "@/primitives";
 import type { IconProps } from "@expo/vector-icons/build/createIconSet";
 import { StyleProp, ViewStyle } from "react-native";
 
-type Icon = {
+type ActionIcon = {
   group: React.ComponentType<IconProps<any>>;
   name: string;
 };
 
 type ActionButtonProps = {
   title: string;
-  icon: Icon;
+  icon: ActionIcon;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
 };

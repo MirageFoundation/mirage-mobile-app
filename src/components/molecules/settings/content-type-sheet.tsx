@@ -85,7 +85,6 @@ export const ContentTypeSheet = forwardRef<
 
   const isAllSelected = CONTENT_WARNING_IDS.every((type) => selectedTypes.includes(type));
   const isNoneSelected = selectedTypes.length === 0;
-  const adultSelectedButToggleOff = selectedTypes.includes("adult") && !matureToggleEnabled;
 
   const isIndividualSelected = (type: ContentType) => {
     return selectedTypes.includes(type);

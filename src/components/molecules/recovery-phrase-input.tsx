@@ -68,22 +68,6 @@ export const RecoveryPhraseInput = ({
     [words, onWordsChange, onComplete]
   );
 
-  const handleWordSubmit = useCallback(
-    (index: number) => {
-      // Move to next input
-      if (index < 11) {
-        inputRefs.current[index + 1]?.focus();
-      } else {
-        // Last word, blur and trigger complete if all filled
-        inputRefs.current[index]?.blur();
-        if (words.every((w) => w.length > 0)) {
-          onComplete?.();
-        }
-      }
-    },
-    [words, onComplete]
-  );
-
   const handlePaste = useCallback(async () => {
     try {
       const clipboardText = await Clipboard.getStringAsync();

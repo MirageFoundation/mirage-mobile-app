@@ -32,11 +32,6 @@ export function DraftDiscardPopup({
     onDiscard();
   };
 
-  const handleCancel = () => {
-    triggerHaptic("light");
-    onCancel();
-  };
-
   return (
     <Modal
       visible={visible}

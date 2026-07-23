@@ -23,7 +23,6 @@ import { useApiServer } from "@/src/providers/api-server-provider";
 import { useTheme } from "@/src/providers/theme-context";
 import { useToast } from "@/src/providers/toast-provider";
 import { usePreferencesStore, type ThemeMode, type ApiServer, type VideoAutoplayNetwork } from "@/src/stores";
-import { isAdultContentEnabled } from "@/src/stores/preferences-store";
 import { useServerList } from "@/src/hooks/use-server-list";
 import { runInboxCheckNow, sendTestNotification, resetAndTestInboxNotification, getNotificationDebugInfo } from "@/src/services/inbox-notifications";
 import { setAnalyticsTrackingEnabled } from "@/src/services/analytics";
@@ -82,7 +81,6 @@ export function SettingsScreen() {
     adultContentEnabled,
     setAdultContent,
     toggleContentType,
-    setSelectedContentTypes,
     blurSensitiveMedia,
     setBlurSensitiveMedia,
     hideDownvotedPosts,
@@ -110,9 +108,6 @@ export function SettingsScreen() {
     },
     [setAnalyticsConsent],
   );
-
-  const adultContentActive = isAdultContentEnabled(selectedContentTypes);
-  const hasAnyContentEnabled = selectedContentTypes.length > 0;
 
   const handleBlurToggle = useCallback((value: boolean) => {
     setBlurSensitiveMedia(value);

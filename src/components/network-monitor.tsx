@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Dimensions, Platform, View } from "react-native";
+import { Animated, Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -10,8 +10,6 @@ import { useAppState } from "@/src/hooks/use-app-state";
 import { useTopToastStack } from "@/src/stores/toast-layout-store";
 import { Text } from "@/src/components/ui/primitives";
 
-const SCREEN_WIDTH = Dimensions.get("window").width;
-const TOAST_WIDTH = Math.round(SCREEN_WIDTH * 0.46);
 const TOAST_STACK_ID = "network-monitor";
 
 export function NetworkMonitor() {

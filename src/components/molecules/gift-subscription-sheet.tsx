@@ -18,7 +18,7 @@ import { useChainConfig } from "@/src/api/read/hooks/use-parameters";
 import { useGiftSubscription } from "@/src/api/write/hooks/use-gift-subscription";
 import { useToast } from "@/src/providers/toast-provider";
 import { formatCompactNumber } from "@/src/utils/format-number";
-import axios from "axios";
+import { isAxiosError } from "axios";
 
 type GiftSubscriptionSheetProps = {
   recipientAddress: string;
@@ -126,7 +126,7 @@ export const GiftSubscriptionSheet = forwardRef<
       triggerHaptic("error");
       Sentry.captureException(err, { tags: { feature: "gift-subscription" } });
       let errorMessage = err instanceof Error ? err.message : "Unknown error";
-      if (axios.isAxiosError(err)) {
+      if (isAxiosError(err)) {
         const data = err.response?.data;
         if (typeof data === "string" && data.trim()) {
           errorMessage = data;

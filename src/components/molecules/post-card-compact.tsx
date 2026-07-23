@@ -21,8 +21,6 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { usePreferencesStore } from "@/src/stores";
 import { getUsernameColor } from "@/src/utils/tiers";
 
-const NEW_USER_COLOR = "rgb(94,194,106)";
-
 import { PostActions } from "./post-actions";
 import type { Post } from "./post-card-types";
 import {
@@ -31,6 +29,8 @@ import {
   resolvePostContent,
   shouldBlurMatureMedia,
 } from "./post-card-utils";
+
+const NEW_USER_COLOR = "rgb(94,194,106)";
 
 const THUMB_SIZE = 72;
 

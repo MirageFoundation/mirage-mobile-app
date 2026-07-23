@@ -11,7 +11,7 @@ import { ActivityIndicator, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { Box, Text } from "@/src/components/ui/primitives";
+import { Text } from "@/src/components/ui/primitives";
 import { useAwardConfigs } from "@/src/api/read/hooks/use-award-configs";
 import { useUserStatus } from "@/src/api/read/hooks/use-user-status";
 import { useGiveAward } from "@/src/api/write/hooks/use-award";
@@ -21,7 +21,7 @@ import { AWARD_TYPES, formatAwardCost, getFriendlyAwardError } from "@/src/data/
 import { formatCompactNumber } from "@/src/utils/format-number";
 import { createDuplicateActionGuard } from "@/src/utils/duplicate-action-guard";
 import type { AwardConfig } from "@/src/api/types";
-import axios from "axios";
+import { isAxiosError } from "axios";
 
 type AwardPickerSheetProps = {
   targetId: string;
@@ -194,7 +194,7 @@ export const AwardPickerSheet = forwardRef<
         triggerHaptic("error");
         Sentry.captureException(err, { tags: { feature: "award", operation: "give-award" } });
         let errorMessage = err instanceof Error ? err.message : "Unknown error";
-        if (axios.isAxiosError(err)) {
+        if (isAxiosError(err)) {
           const data = err.response?.data;
           if (typeof data === "string" && data.trim()) {
             errorMessage = data;

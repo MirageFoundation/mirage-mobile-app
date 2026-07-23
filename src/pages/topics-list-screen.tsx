@@ -4,7 +4,6 @@ import { useRouter } from "@/src/navigation/guarded-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   Keyboard,
   Pressable,
   RefreshControl,
@@ -31,7 +30,7 @@ import {
   ContentWarningBadge,
   type ContentWarningType,
 } from "@/src/components/atoms";
-import { useAuthGuard, useFollowHandler } from "@/src/hooks";
+import { useFollowHandler } from "@/src/hooks";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
@@ -228,7 +227,6 @@ export function TopicsListScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
-  const { requireAuth } = useAuthGuard();
 
   const { data, isLoading, refetch } = useTopics(200);
   const { data: followedData } = useUserFollowed();

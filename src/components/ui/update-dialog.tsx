@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import * as Sentry from "@sentry/react-native";
 import * as Updates from "expo-updates";
-import { ActivityIndicator, InteractionManager, View } from "react-native";
+import { ActivityIndicator, InteractionManager } from "react-native";
 import { Box, Button } from "@/primitives";
 import { Feather } from "@expo/vector-icons";
 import { BodyLarge, Body } from "./typography";

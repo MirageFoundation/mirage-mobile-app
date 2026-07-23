@@ -35,5 +35,6 @@ type AppThemes = {
 export type Theme = typeof lightTheme;
 
 declare module "react-native-unistyles" {
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- required module augmentation pattern for unistyles theming
   export interface UnistylesThemes extends AppThemes {}
 }

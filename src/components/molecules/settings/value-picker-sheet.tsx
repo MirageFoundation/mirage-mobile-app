@@ -14,7 +14,7 @@ import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
-import { Box, Text } from "@/src/components/ui/primitives";
+import { Text } from "@/src/components/ui/primitives";
 import { triggerHaptic } from "@/src/components/utils/haptics";
 
 export type ValueOption<T> = {
@@ -91,7 +91,7 @@ const handleSelect = useCallback(
         } else {
           dismiss();
         }
-      } catch (err) {
+      } catch {
         dismiss();
       }
     },

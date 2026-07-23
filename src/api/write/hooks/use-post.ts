@@ -671,37 +671,6 @@ const preserveLocalPreviewMedia = (
   });
 };
 
-const buildOptimisticComment = (
-  commentId: string,
-  input: CreateCommentInput,
-  address: string | null,
-  username: string | null | undefined,
-  rootPost: PostWithChildren,
-): PostWithChildren => {
-  const nowSeconds = Math.floor(Date.now() / 1000);
-
-  return {
-    post_id: commentId,
-    user_id: address ?? "unknown",
-    username: username ?? address ?? "you",
-    timestamp: nowSeconds,
-    topic: "",
-    root_topic: rootPost.root_topic,
-    root_post_id: rootPost.root_post_id || rootPost.post_id,
-    title: input.title ?? "",
-    content: input.content,
-    tag: input.tag ?? "",
-    edited_at: 0,
-    thumbnail: "",
-    media: input.media ?? [],
-    points: 1,
-    comments: 0,
-    user_vote: 1,
-    user_weight: 0,
-    children: [],
-  };
-};
-
 const isInfinitePostsData = (
   data: unknown,
 ): data is { pages: PostsResponse[]; pageParams: unknown[] } => {
@@ -722,77 +691,6 @@ const commentTreeContainsId = (
       comment.post_id === targetId ||
       commentTreeContainsId(comment.children ?? [], targetId),
   );
-};
-
-const insertReplyIntoTree = (
-  comments: PostWithChildren[],
-  parentId: string,
-  reply: PostWithChildren,
-): PostWithChildren[] => {
-  let didUpdate = false;
-
-  const nextComments = comments.map((comment) => {
-    if (comment.post_id === parentId) {
-      didUpdate = true;
-      return {
-        ...comment,
-        children: [...(comment.children ?? []), reply],
-      };
-    }
-
-    if (!comment.children || comment.children.length === 0) {
-      return comment;
-    }
-
-    const updatedChildren = insertReplyIntoTree(comment.children, parentId, reply);
-    if (updatedChildren !== comment.children) {
-      didUpdate = true;
-      return {
-        ...comment,
-        children: updatedChildren,
-      };
-    }
-
-    return comment;
-  });
-
-  return didUpdate ? nextComments : comments;
-};
-
-const replaceCommentIdInTree = (
-  comments: PostWithChildren[],
-  oldId: string,
-  newId: string,
-): PostWithChildren[] => {
-  let didUpdate = false;
-
-  const nextComments = comments.map((comment) => {
-    const nextCommentId = comment.post_id === oldId ? newId : comment.post_id;
-    if (nextCommentId !== comment.post_id) {
-      didUpdate = true;
-    }
-
-    let nextChildren = comment.children;
-    if (comment.children && comment.children.length > 0) {
-      const updatedChildren = replaceCommentIdInTree(comment.children, oldId, newId);
-      if (updatedChildren !== comment.children) {
-        didUpdate = true;
-        nextChildren = updatedChildren;
-      }
-    }
-
-    if (nextCommentId !== comment.post_id || nextChildren !== comment.children) {
-      return {
-        ...comment,
-        post_id: nextCommentId,
-        children: nextChildren,
-      };
-    }
-
-    return comment;
-  });
-
-  return didUpdate ? nextComments : comments;
 };
 
 const removeCommentFromTree = (
@@ -1062,7 +960,7 @@ export const applyOptimisticPostEdit = (
 
 const restoreQuerySnapshots = (
   queryClient: QueryClient,
-  snapshots: Array<[QueryKey, unknown]> | undefined,
+  snapshots: [QueryKey, unknown][] | undefined,
 ) => {
   snapshots?.forEach(([queryKey, queryData]) => {
     queryClient.setQueryData(queryKey, queryData);
@@ -1286,7 +1184,6 @@ export function usePostWithConfirmation(options: UsePostOptions = {}) {
 export function useComment(options: UsePostOptions = {}) {
   const queryClient = useQueryClient();
   const { getWallet, address } = useWallet();
-  const username = useAuthStore((s) => s.user?.username);
 
   return useMutation({
     mutationKey: mutationKeys.post.comment(),
@@ -1301,7 +1198,7 @@ export function useComment(options: UsePostOptions = {}) {
 
       const previousComments = queryClient.getQueriesData<CommentsResponse>({
         queryKey: queryKeys.commentsRoot(),
-      }) as Array<[QueryKey, CommentsResponse | undefined]>;
+      }) as [QueryKey, CommentsResponse | undefined][];
       const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as [QueryKey, unknown][];
       const previousUserPosts = queryClient.getQueriesData({ queryKey: queryKeys.userPostsRoot() }) as [QueryKey, unknown][];
 
@@ -1429,9 +1326,9 @@ export function useEdit(options: UsePostOptions = {}) {
         await queryClient.cancelQueries({ queryKey: queryKeys.userPostsForOwner(address) });
       }
 
-      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as Array<[QueryKey, unknown]>;
-      const previousUserPosts = queryClient.getQueriesData({ queryKey: queryKeys.userPostsRoot() }) as Array<[QueryKey, unknown]>;
-      const previousComments = queryClient.getQueriesData({ queryKey: queryKeys.commentsRoot() }) as Array<[QueryKey, unknown]>;
+      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as [QueryKey, unknown][];
+      const previousUserPosts = queryClient.getQueriesData({ queryKey: queryKeys.userPostsRoot() }) as [QueryKey, unknown][];
+      const previousComments = queryClient.getQueriesData({ queryKey: queryKeys.commentsRoot() }) as [QueryKey, unknown][];
 
       applyOptimisticPostEdit(queryClient, input, "pending");
 
@@ -1569,13 +1466,11 @@ export function useDelete(options: UsePostOptions = {}) {
 
       const previousComments = queryClient.getQueriesData<CommentsResponse>({
         queryKey: queryKeys.commentsRoot(),
-      }) as Array<[QueryKey, CommentsResponse | undefined]>;
-      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as Array<
-        [QueryKey, unknown]
-      >;
+      }) as [QueryKey, CommentsResponse | undefined][];
+      const previousPosts = queryClient.getQueriesData({ queryKey: queryKeys.postsRoot() }) as [QueryKey, unknown][];
       const previousUserPosts = queryClient.getQueriesData({
         queryKey: queryKeys.userPostsRoot(),
-      }) as Array<[QueryKey, unknown]>;
+      }) as [QueryKey, unknown][];
       const previousPendingPosts = usePendingPostsStore.getState().posts;
       const pendingMatch = previousPendingPosts.find((post) =>
         post.post_id.toLowerCase() === input.postId.toLowerCase(),

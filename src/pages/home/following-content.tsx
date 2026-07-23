@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, View, type AppStateStatus } from "react-native";
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useUnistyles } from "react-native-unistyles";
 
 import {
   useUserFollowed,
@@ -17,9 +16,15 @@ import {
   NewPostsButton,
   type Post,
 } from "@/src/components/molecules";
-import { Box, Text } from "@/src/components/ui/primitives";
+import { Box } from "@/src/components/ui/primitives";
 import { useSideMenu } from "@/src/providers/side-menu-provider";
-import { storage } from "@/src/stores";
+import { storage ,
+  useAuthStore,
+  useContentModerationStore,
+  usePreferencesStore,
+  useSavedPostsStore,
+  useTimeTickStore,
+} from "@/src/stores";
 
 import {
   shouldAutoplayVideo,
@@ -31,13 +36,6 @@ import {
   useScrollAnimationContext,
 } from "@/src/providers/scroll-animation-context";
 import { useToast } from "@/src/providers/toast-provider";
-import {
-  useAuthStore,
-  useContentModerationStore,
-  usePreferencesStore,
-  useSavedPostsStore,
-  useTimeTickStore,
-} from "@/src/stores";
 import { HomeTabbedFeed, type HomeTabbedFeedRef } from "./home-tabbed-feed";
 import { FeedPostCardRuntimeProvider } from "./feed-post-card-runtime";
 import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
@@ -46,14 +44,13 @@ import { usePostActionController } from "../post/use-post-action-controller";
 import { styles } from "./following-styles";
 
 export function FollowingScreen() {
-  const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const isFocused = useIsFocused();
   const {
     headerAnimatedStyle,
   } = useScrollAnimationContext();
-  const { requireAuth, isLoggedIn } = useAuthGuard();
+  const { requireAuth } = useAuthGuard();
   const toast = useToast();
   const { showBars } = useScrollAnimationContext();
 
@@ -125,8 +122,6 @@ export function FollowingScreen() {
 
   const currentFeedSyncContext = feedTabIndex === 0 ? "following:magic" : "following:latest";
 
-  const hiddenPostIds = useContentModerationStore((s) => s.hiddenPostIds);
-  const blockedUserIds = useContentModerationStore((s) => s.blockedUserIds);
   const hidePost = useContentModerationStore((s) => s.hidePost);
   const unhidePost = useContentModerationStore((s) => s.unhidePost);
   const blockUser = useContentModerationStore((s) => s.blockUser);

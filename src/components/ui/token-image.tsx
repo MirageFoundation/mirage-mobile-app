@@ -28,14 +28,12 @@ export function TokenImage({
     const [retryCount, setRetryCount] = useState(0);
     const [hasError, setHasError] = useState(false);
     const [key, setKey] = useState(0); // Used to force re-render/retry
-    const [isLoading, setIsLoading] = useState(true);
 
     // Reset state when URI changes
     useEffect(() => {
         setRetryCount(0);
         setHasError(false);
         setKey(0);
-        setIsLoading(true);
     }, [uri]);
 
     const handleError = useCallback(() => {
@@ -50,12 +48,10 @@ export function TokenImage({
             return () => clearTimeout(timer);
         } else {
             setHasError(true);
-            setIsLoading(false);
         }
     }, [retryCount, maxRetries, retryDelay]);
 
     const handleLoad = useCallback(() => {
-        setIsLoading(false);
         setHasError(false);
     }, []);
 

@@ -272,7 +272,6 @@ const [copiedCode, setCopiedCode] = useState(false);
   const shareUrl = code
     ? `${getShareBaseUrl(shareServer)}/signup?invite=${code}`
     : "";
-  const shareMessage = `Join me on Mirage! Use my invite code: ${code}\n\n${shareUrl}`;
 
   const handleCopyCode = useCallback(async () => {
     if (!code) return;
@@ -466,7 +465,6 @@ export function InviteAndEarnScreen() {
   const availableCodes = inviteCodesData?.codes.filter((c) => !c.is_used) ?? [];
   const usedCodes = inviteCodesData?.codes.filter((c) => c.is_used) ?? [];
   const availableCount = inviteCodesData?.available ?? 0;
-  const totalCount = inviteCodesData?.total ?? 0;
 
   const handleBack = useCallback(() => {
     triggerHaptic("light");

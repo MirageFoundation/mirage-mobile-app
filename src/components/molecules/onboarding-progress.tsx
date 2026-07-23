@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { View, Animated } from "react-native";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { Ionicons } from "@expo/vector-icons";
-import { StatusStep } from "@/src/components/atoms";
 import { Box, Text, ProgressBar } from "@/src/components/ui/primitives";
 
 type StepStatus = "pending" | "active" | "complete" | "error";

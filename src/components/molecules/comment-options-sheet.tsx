@@ -150,7 +150,6 @@ export const CommentOptionsSheet = forwardRef<
       triggerHaptic("light");
       try {
         const commentId = comment?.id || "";
-        const root = rootPostId || "";
         const url = `${getShareBaseUrl(shareServer)}/p/${commentId}`;
         await Share.share({ message: url });
       } catch {
@@ -160,7 +159,6 @@ export const CommentOptionsSheet = forwardRef<
       onShare?.();
     }, [
       comment?.id,
-      rootPostId,
       shareServer,
       dismiss,
       onShare,

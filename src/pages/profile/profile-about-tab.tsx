@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "@/src/navigation/guarded-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, useWindowDimensions, View } from "react-native";
 import Animated, {
   interpolate,
@@ -27,15 +27,13 @@ import {
   useUsernameFromAddress,
 } from "@/src/api/read";
 import type {
-  PreferencesResponse,
   SimilarUser,
   ProfileResponse,
   UserStatusResponse,
 } from "@/src/api/types";
 import { Avatar } from "@/src/components/atoms";
-import { Box, Divider, Icon, Text } from "@/src/components/ui/primitives";
+import { Icon, Text } from "@/src/components/ui/primitives";
 import { MarkdownContent } from "@/src/components/ui/markdown-content";
-import { useAuthStore } from "@/src/stores";
 
 const emptyInfoImage = require("@/assets/images/empty-info.png");
 
@@ -599,7 +597,6 @@ export function ProfileAboutTab({
 }: ProfileAboutTabProps) {
   const { theme } = useUnistyles();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const { height: windowHeight } = useWindowDimensions();
 
   const { data: ownPreferences, isLoading: isLoadingOwnPrefs } =
