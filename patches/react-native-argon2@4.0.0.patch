@@ -1,7 +1,7 @@
-diff --git a/node_modules/react-native-argon2/android/src/main/java/com/poowf/argon2/RNArgon2Module.java b/node_modules/react-native-argon2/android/src/main/java/com/poowf/argon2/RNArgon2Module.java
-index 07caf94..603d31b 100644
---- a/node_modules/react-native-argon2/android/src/main/java/com/poowf/argon2/RNArgon2Module.java
-+++ b/node_modules/react-native-argon2/android/src/main/java/com/poowf/argon2/RNArgon2Module.java
+diff --git a/android/src/main/java/com/poowf/argon2/RNArgon2Module.java b/android/src/main/java/com/poowf/argon2/RNArgon2Module.java
+index 5e683d570479d52a8b64bbf1f0f30ee32dfe8cef..603d31b2762a69fa14e3d1af8306faae13043d2f 100644
+--- a/android/src/main/java/com/poowf/argon2/RNArgon2Module.java
++++ b/android/src/main/java/com/poowf/argon2/RNArgon2Module.java
 @@ -1,5 +1,6 @@
  package com.poowf.argon2;
  
@@ -28,10 +28,10 @@ index 07caf94..603d31b 100644
              
              String saltEncoding = config.hasKey("saltEncoding") ? config.getString("saltEncoding") : "utf8";
              final byte[] saltBytes = ("hex".equalsIgnoreCase(saltEncoding)) ? hexStringToByteArray(salt) : salt.getBytes("UTF-8");
-diff --git a/node_modules/react-native-argon2/index.d.ts b/node_modules/react-native-argon2/index.d.ts
-index b8050ef..a30f4aa 100644
---- a/node_modules/react-native-argon2/index.d.ts
-+++ b/node_modules/react-native-argon2/index.d.ts
+diff --git a/index.d.ts b/index.d.ts
+index b8050efbe795ff7e5643e0faa1c02e6c7d61319e..a30f4aa2c723d9cecd021d59ea7d5fa5bc8a7463 100644
+--- a/index.d.ts
++++ b/index.d.ts
 @@ -7,6 +7,9 @@ export interface Argon2Options {
    mode?: Argon2Mode;
  // 'utf8' (default, for backward compatibility)
@@ -42,10 +42,10 @@ index b8050ef..a30f4aa 100644
  }
  
  export interface Argon2Result {
-diff --git a/node_modules/react-native-argon2/ios/RNArgon2.swift b/node_modules/react-native-argon2/ios/RNArgon2.swift
-index a9aad3f..6a45adb 100644
---- a/node_modules/react-native-argon2/ios/RNArgon2.swift
-+++ b/node_modules/react-native-argon2/ios/RNArgon2.swift
+diff --git a/ios/RNArgon2.swift b/ios/RNArgon2.swift
+index a9aad3fa58762ddcd7cddc416544918b53c1a88f..6a45adb6a9a393d52cce4483b708db1ef65f6fcc 100644
+--- a/ios/RNArgon2.swift
++++ b/ios/RNArgon2.swift
 @@ -33,9 +33,26 @@ class RNArgon2: NSObject {
      let saltObject = Salt(bytes: validSaltData)
      

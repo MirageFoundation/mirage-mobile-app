@@ -1,8 +1,8 @@
-diff --git a/node_modules/react-native-compressor/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt b/node_modules/react-native-compressor/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt
-index 7dbbd18..8091806 100644
---- a/node_modules/react-native-compressor/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt
-+++ b/node_modules/react-native-compressor/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt
-@@ -87,8 +87,8 @@ class Uploader(private val reactContext: ReactApplicationContext) {
+diff --git a/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt b/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt
+index 7b6b49894dc48b89a2b5d42be3fd84766a2c7cbe..1b2c12e0549c9193a333526a4230af680c287b72 100644
+--- a/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt
++++ b/android/src/main/java/com/reactnativecompressor/Utils/Uploader.kt
+@@ -88,8 +88,8 @@ class Uploader(private val reactContext: ReactApplicationContext) {
        if (client == null) {
          val builder = OkHttpClient.Builder()
            .connectTimeout(60, TimeUnit.SECONDS)
@@ -13,10 +13,10 @@ index 7dbbd18..8091806 100644
          client = builder.build()
        }
        return client
-diff --git a/node_modules/react-native-compressor/ios/Utils/Uploader.swift b/node_modules/react-native-compressor/ios/Utils/Uploader.swift
-index 9949df0..9587017 100644
---- a/node_modules/react-native-compressor/ios/Utils/Uploader.swift
-+++ b/node_modules/react-native-compressor/ios/Utils/Uploader.swift
+diff --git a/ios/Utils/Uploader.swift b/ios/Utils/Uploader.swift
+index 2e6cd0aa4deb8cd6fc88e23b1bd35100aca8a41f..7fb9f21b46852cd673176da5dc97846ec753b8a7 100644
+--- a/ios/Utils/Uploader.swift
++++ b/ios/Utils/Uploader.swift
 @@ -83,6 +83,9 @@ class Uploader: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
        let type:UploaderUploadType=self.getUploadType(from: uploadType)
   
