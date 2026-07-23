@@ -619,206 +619,26 @@ export interface UploadProgressCallback {
 export interface UploadVideoResult {
   url: string;
   uid: string;
-  streamCustomer: string;
   thumbnailUrl: string;
-  downloadUrl?: string;
-  posterUrl?: string;
 }
 
-export function getVideoUrl(uploadResponse: VideoUploadResponse): string {
-  if (!uploadResponse.streamCustomer) {
-    return `https://videodelivery.net/${uploadResponse.uid}/manifest/video.m3u8`;
+/**
+ * Derive the Bunny Stream thumbnail URL from a playback URL.
+ * `https://{pull-zone}.b-cdn.net/{guid}/playlist.m3u8` -> `.../{guid}/thumbnail.jpg`
+ */
+function deriveVideoThumbnailUrl(playbackUrl: string): string {
+  try {
+    const parsed = new URL(playbackUrl);
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    if (segments.length < 2) return "";
+    segments[segments.length - 1] = "thumbnail.jpg";
+    parsed.pathname = `/${segments.join("/")}`;
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return "";
   }
-  return `https://customer-${uploadResponse.streamCustomer}.cloudflarestream.com/${uploadResponse.uid}/manifest/video.m3u8`;
-}
-
-export function getVideoThumbnailUrl(uploadResponse: VideoUploadResponse): string {
-  if (!uploadResponse.streamCustomer) {
-    return `https://videodelivery.net/${uploadResponse.uid}/thumbnails/thumbnail.jpg`;
-  }
-  return `https://customer-${uploadResponse.streamCustomer}.cloudflarestream.com/${uploadResponse.uid}/thumbnails/thumbnail.jpg`;
-}
-
-export async function uploadVideoToSignedUrl(
-  uploadUrl: string,
-  localUri: string,
-  contentType: string,
-  onProgress?: UploadProgressCallback,
-  signal?: AbortSignal
-): Promise<void> {
-  const signedUploadStartedAt = Date.now();
-  console.log("[VideoUpload] Starting upload to signed URL");
-
-  const normalizedUri = normalizeFileUri(localUri);
-  const uploadFileName = contentType === "video/quicktime" ? "video.mov" : "video.mp4";
-
-  const uploadWithXhr = async (): Promise<void> => {
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      let didSettle = false;
-
-      const settle = (fn: () => void) => {
-        if (didSettle) return;
-        didSettle = true;
-        signal?.removeEventListener("abort", onAbort);
-        fn();
-      };
-
-      const onAbort = () => {
-        xhr.abort();
-        settle(() => reject(new Error("Upload aborted")));
-      };
-
-      xhr.open("POST", uploadUrl);
-      xhr.timeout = VIDEO_UPLOAD_TIMEOUT_MS;
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable && event.total > 0 && onProgress) {
-          const pct = Math.min(100, Math.round((event.loaded / event.total) * 100));
-          onProgress(pct);
-        }
-      };
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          const durationMs = Date.now() - signedUploadStartedAt;
-          console.log("[VideoUpload] Android XHR upload complete, status:", xhr.status);
-          console.log("[VideoTiming] signed upload complete", {
-            platform: Platform.OS,
-            status: xhr.status,
-            durationMs,
-          });
-          Sentry.addBreadcrumb({
-            category: "media-upload",
-            message: "Video signed upload complete",
-            level: "info",
-            data: {
-              platform: Platform.OS,
-              status: xhr.status,
-              durationMs,
-            },
-          });
-          settle(resolve);
-          return;
-        }
-        settle(() => reject(Object.assign(
-          new Error(`Upload failed: ${xhr.status}`),
-          { status: xhr.status, responseText: xhr.responseText }
-        )));
-      };
-      xhr.onerror = () => {
-        settle(() => reject(new Error("Video upload network error")));
-      };
-      xhr.ontimeout = () => {
-        settle(() => reject(new Error(`Video upload timed out after ${VIDEO_UPLOAD_TIMEOUT_MS / 1000}s`)));
-      };
-      xhr.onabort = () => {
-        settle(() => reject(new Error("Upload aborted")));
-      };
-
-      if (signal) {
-        if (signal.aborted) {
-          onAbort();
-          return;
-        }
-        signal.addEventListener("abort", onAbort, { once: true });
-      }
-
-      const formData = new FormData();
-      formData.append("file", {
-        uri: normalizedUri,
-        name: uploadFileName,
-        type: contentType,
-      } as unknown as Blob);
-      Sentry.addBreadcrumb({
-        category: "media-upload",
-        message: "Using Android XHR video upload",
-        level: "info",
-        data: { contentType, platform: Platform.OS },
-      });
-      xhr.send(formData);
-    });
-  };
-
-  const uploadFn = async (): Promise<void> => {
-    if (Platform.OS === "android") {
-      await uploadWithXhr();
-      return;
-    }
-
-    const task = createUploadTask(
-      uploadUrl,
-      normalizedUri,
-      {
-        uploadType: FileSystemUploadType.MULTIPART,
-        fieldName: "file",
-        mimeType: contentType,
-        parameters: {},
-        headers: {},
-        sessionType: FileSystemSessionType.FOREGROUND,
-        httpMethod: "POST",
-      },
-      (data) => {
-        if (data.totalBytesExpectedToSend > 0 && onProgress) {
-          const pct = Math.min(100, Math.round(
-            (data.totalBytesSent / data.totalBytesExpectedToSend) * 100
-          ));
-          onProgress(pct);
-        }
-      }
-    );
-
-    if (signal) {
-      const onAbort = () => {
-        task.cancelAsync();
-      };
-      signal.addEventListener("abort", onAbort, { once: true });
-    }
-
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => {
-        task.cancelAsync();
-        reject(new Error(`Video upload timed out after ${VIDEO_UPLOAD_TIMEOUT_MS / 1000}s`));
-      }, VIDEO_UPLOAD_TIMEOUT_MS);
-    });
-
-    try {
-      const result = await Promise.race([
-        task.uploadAsync(),
-        timeoutPromise,
-      ]);
-      if (!result) throw new Error("Upload returned no result");
-      if (result.status < 200 || result.status >= 300) {
-        throw Object.assign(
-          new Error(`Upload failed: ${result.status}`),
-          { status: result.status, responseText: result.body }
-        );
-      }
-      const durationMs = Date.now() - signedUploadStartedAt;
-      console.log("[VideoUpload] Upload complete, status:", result.status);
-      console.log("[VideoTiming] signed upload complete", {
-        platform: Platform.OS,
-        status: result.status,
-        durationMs,
-      });
-      Sentry.addBreadcrumb({
-        category: "media-upload",
-        message: "Video signed upload complete",
-        level: "info",
-        data: {
-          platform: Platform.OS,
-          status: result.status,
-          durationMs,
-        },
-      });
-    } finally {
-      if (timeoutId) clearTimeout(timeoutId);
-    }
-  };
-
-  // Cloudflare Stream signed upload URLs are single-use. If the client times
-  // out after Cloudflare already accepted the file, retrying this same URL can
-  // fail later with "Video already uploaded" and surface stale errors.
-  return withRetry(uploadFn, { label: "video-upload", maxRetries: 0, signal });
 }
 
 export async function uploadVideo(
@@ -873,25 +693,17 @@ export async function uploadVideo(
     });
     console.log("[VideoUpload] File uploaded successfully");
 
-    const streamCustomer = uploadResponse.streamCustomer ?? uploadResponse.stream_customer ?? "";
     const assetId = uploadResponse.asset_id ?? uploadResponse.uid;
-    const normalizedVideoResponse: VideoUploadResponse = {
-      uploadURL: "",
-      provider: "stream",
-      streamCustomer,
-      stream_customer: streamCustomer,
-      uid: assetId ?? "",
-      url: uploadResponse.url,
-      thumbnailUrl: uploadResponse.thumbnailUrl,
-      thumbnail_url: uploadResponse.thumbnail_url,
-    };
-    const finalUrl = uploadResponse.url ?? getVideoUrl(normalizedVideoResponse);
+    const finalUrl = uploadResponse.url;
+    if (!finalUrl) {
+      throw new Error("Upload service did not return a video URL.");
+    }
     const thumbnailUrl =
       uploadResponse.thumbnailUrl ??
       uploadResponse.thumbnail_url ??
       uploadResponse.posterUrl ??
       uploadResponse.poster_url ??
-      getVideoThumbnailUrl(normalizedVideoResponse);
+      deriveVideoThumbnailUrl(finalUrl);
     const totalUploadDurationMs = Date.now() - uploadStartedAt;
     console.log("[VideoTiming] upload complete", {
       uid: assetId,
@@ -924,10 +736,7 @@ export async function uploadVideo(
     return {
       url: finalUrl,
       uid: assetId ?? finalUrl,
-      streamCustomer,
       thumbnailUrl,
-      downloadUrl: uploadResponse.downloadUrl ?? uploadResponse.download_url,
-      posterUrl: uploadResponse.posterUrl ?? uploadResponse.poster_url ?? thumbnailUrl,
     };
   } catch (error) {
     console.error("[VideoUpload] Video upload failed", {

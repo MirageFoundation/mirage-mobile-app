@@ -104,6 +104,11 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
     loop: true,
     muted: effectiveMuted,
     shouldPlay: shouldPlayVideo,
+    bufferProfile: isPostDetail
+      ? "detail"
+      : shouldPlayVideo
+        ? "feedActive"
+        : "feedWarm",
   });
 
   useEffect(() => {

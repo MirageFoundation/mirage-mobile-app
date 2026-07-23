@@ -18,7 +18,7 @@ const MIN_VIDEO_SIZE_TO_COMPRESS_MB = 2;
 export interface ProcessVideoOptions {
   /** Remove audio track from video */
   removeAudio?: boolean;
-  /** Compress video for faster upload and Cloudflare processing */
+  /** Compress video for faster upload and stream provider processing */
   compressForUpload?: boolean;
   /** Throw instead of falling back to the original/current file when compression fails */
   failOnCompressionError?: boolean;

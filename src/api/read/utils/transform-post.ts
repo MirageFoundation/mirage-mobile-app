@@ -39,12 +39,6 @@ function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" | "youtube"
   if (isYouTubeUrl(url)) return "youtube";
   try {
     const parsedUrl = new URL(url);
-    if (parsedUrl.hostname.includes("cloudflarestream.com")) {
-      return "video";
-    }
-    if (parsedUrl.hostname.includes("videodelivery.net")) {
-      return "video";
-    }
     if (parsedUrl.hostname.includes("redgifs.com")) {
       return "gif";
     }
@@ -55,8 +49,6 @@ function getMediaTypeFromUrl(url: string): "image" | "video" | "gif" | "youtube"
   } catch {
     const path = url.toLowerCase().split("?")[0];
     const extension = path.split(".").pop() ?? "";
-    if (url.includes("cloudflarestream.com")) return "video";
-    if (url.includes("videodelivery.net")) return "video";
     if (url.includes("redgifs.com")) return "gif";
     if (GIF_EXTENSIONS.has(extension)) return "gif";
     if (VIDEO_EXTENSIONS.has(extension)) return "video";
@@ -151,7 +143,7 @@ export function transformApiPost(
           const h = meta?.h;
           const type = getMediaTypeFromUrl(url);
           // Fall back to the server-computed post thumbnail for the first
-          // media item so hosted stream providers (Bunny, Cloudflare, ...)
+          // media item so hosted stream providers (Bunny, ...)
           // always have a poster without client-side provider knowledge.
           const posterUri =
             meta?.posterUrl ??

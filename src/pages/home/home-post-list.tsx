@@ -34,6 +34,10 @@ import {
   resetSeenPostTracking,
   type SeenPostVisibility,
 } from "@/src/services/seen-posts-tracker";
+import {
+  createScrollDirectionTracker,
+  getWarmWindowBounds,
+} from "@/src/utils/video-warm-window";
 
 const AnimatedFlashList = Animated.createAnimatedComponent(
   FlashList as ComponentType<any>,
@@ -125,7 +129,7 @@ const HomePostListInner = function HomePostListInner(
   const dataRef = useRef(data);
   dataRef.current = data;
 
-  const VIDEO_NEARBY_BUFFER = 3;
+  const scrollDirectionTrackerRef = useRef(createScrollDirectionTracker());
   const scrollStopHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMomentumScrollingRef = useRef(false);
   const hasReportedVisibleItemsRef = useRef(false);
@@ -259,8 +263,8 @@ const HomePostListInner = function HomePostListInner(
       const indices = visibleItems.map((v) => v.index ?? 0);
       const minIdx = Math.min(...indices);
       const maxIdx = Math.max(...indices);
-      const lo = Math.max(0, minIdx - VIDEO_NEARBY_BUFFER);
-      const hi = Math.min(allData.length - 1, maxIdx + VIDEO_NEARBY_BUFFER);
+      const direction = scrollDirectionTrackerRef.current.update(minIdx);
+      const { lo, hi } = getWarmWindowBounds(minIdx, maxIdx, direction, allData.length);
       for (let i = lo; i <= hi; i++) {
         const p = allData[i];
         if (p && postHasPlayableVideo(p)) nearbyVideoIds.add(p.id);
@@ -341,6 +345,7 @@ const HomePostListInner = function HomePostListInner(
     if (data.length !== 0) return;
     hasReportedVisibleItemsRef.current = false;
     currentViewableTokensRef.current = new Map();
+    scrollDirectionTrackerRef.current.reset();
     resetSeenPostTracking(feedContext);
     setVideoViewability(feedContext, new Set(), null);
   }, [data, feedContext, setVideoViewability]);

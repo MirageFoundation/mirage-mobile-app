@@ -35,23 +35,8 @@ describe("media image policy", () => {
     expect(policy.enforceEarlyResizing).toBe(false);
   });
 
-  test("sizes only the supported unsigned Cloudflare Stream thumbnail", () => {
-    const uri = "https://videodelivery.net/abc123/thumbnails/thumbnail.jpg?time=1s&width=480";
-    const policy = getMediaImagePolicy({
-      uri,
-      surface: "feed",
-      mediaType: "poster",
-      displayWidth: 390,
-    });
-
-    expect(policy.uri).toBe(
-      "https://videodelivery.net/abc123/thumbnails/thumbnail.jpg?time=1s&width=780",
-    );
-    expect(policy.recyclingKey).toBe(policy.uri);
-  });
-
-  test("caps feed thumbnail requests and leaves detail poster URLs unchanged", () => {
-    const uri = "https://videodelivery.net/abc123/thumbnails/thumbnail.jpg?time=1s&width=480";
+  test("never rewrites poster URLs (no server-side resizing on the CDN)", () => {
+    const uri = "https://vz-99c4cbfc-c60.b-cdn.net/abc-123/thumbnail.jpg";
     const feed = getMediaImagePolicy({
       uri,
       surface: "feed",
@@ -65,22 +50,17 @@ describe("media image policy", () => {
       displayWidth: 1000,
     });
 
-    expect(feed.uri).toContain("width=960");
+    expect(feed.uri).toBe(uri);
+    expect(feed.recyclingKey).toBe(uri);
+    expect(feed.enforceEarlyResizing).toBe(true);
     expect(detail.uri).toBe(uri);
   });
 
-  test("does not rewrite signed, animated, local, or unknown URLs", () => {
-    const signed = "https://videodelivery.net/abc123/thumbnails/thumbnail.jpg?token=secret&width=480";
+  test("does not rewrite animated, local, or unknown URLs", () => {
     const gif = "https://media.example/animation.gif?version=2";
     const local = "file:///tmp/photo.jpg";
     const unknown = "https://unknown.example/media?id=42";
 
-    expect(getMediaImagePolicy({
-      uri: signed,
-      surface: "feed",
-      mediaType: "poster",
-      displayWidth: 390,
-    }).uri).toBe(signed);
     expect(getMediaImagePolicy({
       uri: gif,
       surface: "feed",

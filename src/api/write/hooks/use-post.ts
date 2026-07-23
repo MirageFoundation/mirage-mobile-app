@@ -135,9 +135,6 @@ const getFirstMediaUrl = (content: string): string | null => {
   for (const url of matches) {
     try {
       const parsedUrl = new URL(url);
-      if (parsedUrl.hostname.includes("videodelivery.net")) {
-        return url;
-      }
       const path = parsedUrl.pathname.toLowerCase();
       const extension = path.split(".").pop() ?? "";
       if (IMAGE_EXTENSIONS.has(extension) || VIDEO_EXTENSIONS.has(extension)) {
@@ -146,7 +143,6 @@ const getFirstMediaUrl = (content: string): string | null => {
     } catch {
       const path = url.toLowerCase().split("?")[0];
       const extension = path.split(".").pop() ?? "";
-      if (url.includes("videodelivery.net")) return url;
       if (IMAGE_EXTENSIONS.has(extension) || VIDEO_EXTENSIONS.has(extension)) {
         return url;
       }

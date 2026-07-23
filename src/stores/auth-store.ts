@@ -17,7 +17,6 @@ import {
   clearWalletScopedState,
   selectWalletStorageNamespace,
 } from "./wallet-scoped-storage";
-import { unregisterPush } from "@/src/services/push-notifications";
 import { removePersistedQueryCache } from "@/src/api/cache/persisted-query-storage";
 import { getServerIdentity } from "@/src/api/server-runtime";
 import {
@@ -500,6 +499,10 @@ export const useAuthStore = create<AuthState>()(
         try {
           await authSessionCoordinator.enqueueIdentityMutation(async () => {
             const wallet = await walletService.getWallet();
+            // Lazy import: push-notifications pulls in the query client and
+            // inbox hooks, which import back into stores. A static import here
+            // creates a require cycle (auth-store <-> push-notifications).
+            const { unregisterPush } = await import("@/src/services/push-notifications");
             await unregisterPush(wallet);
             await walletService.clearWallet();
           });

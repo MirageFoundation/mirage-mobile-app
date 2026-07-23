@@ -3,7 +3,7 @@ import { triggerHaptic } from "@/src/components/utils/haptics";
 import { Ionicons } from "@expo/vector-icons";
 import * as Sentry from "@sentry/react-native";
 import { Image } from "expo-image";
-import { VideoView } from "expo-video";
+import { VideoView, type VideoPlayer } from "expo-video";
 import {
   memo,
   useCallback,
@@ -42,12 +42,27 @@ import {
   YouTubeAutoplayEmbed,
   type YouTubeAutoplayEmbedRef,
 } from "./youtube-autoplay-embed";
-import { useVideoPlayerController } from "@/src/hooks/use-video-player-controller";
+import {
+  applyVideoBufferProfile,
+  getAppliedVideoSourceUri,
+  getVideoSourceUri,
+  useVideoPlayerController,
+} from "@/src/hooks/use-video-player-controller";
+import {
+  adoptHandoffPlayer,
+  releaseHandoffPlayer,
+} from "@/src/utils/video-player-handoff";
+import { canonicalVideoAssetId } from "@/src/utils/video-asset-id";
 import { setLastPressedMediaTransition } from "@/src/utils/post-transition";
 import {
-  CLOUD_FLARE_PROCESSING_POLL_INTERVAL_MS,
-  isCloudflareManifestReady,
-} from "./cloudflare-manifest";
+  clearVideoPrepareMark,
+  markVideoFirstFrame,
+  markVideoPrepareStart,
+} from "@/src/utils/video-ttff";
+import {
+  HLS_PROCESSING_POLL_INTERVAL_MS,
+  isHlsManifestReady,
+} from "@/src/utils/hls-manifest";
 import {
   MEDIA_ASPECT_RATIO_CACHE,
   MEDIA_HORIZONTAL_PADDING,
@@ -221,6 +236,10 @@ export const PostCardMedia = memo(
     useEffect(() => {
       retainedPlayerWasInactiveRef.current = false;
       setRetainPlayerForDetail(false);
+      // The native player is stable across list recycling; keep the poster
+      // overlay up until the new source renders its first frame so the
+      // previous video's last frame never shows through.
+      setVideoReadyForDisplay(false);
     }, [media?.uri]);
 
     useEffect(() => {
@@ -280,17 +299,91 @@ export const PostCardMedia = memo(
       (isVideoPlaying || isLocalFileMedia) &&
       screenActive &&
       !shouldBlurContent;
-    const videoPlayer = useVideoPlayerController(
-      media?.type === "video" && shouldPrepareNativeVideo ? media.uri : null,
+    const videoBufferProfile = isPostDetail
+      ? "detail"
+      : shouldPlayNativeVideo
+        ? "feedActive"
+        : "feedWarm";
+    const videoHandoffKey =
+      media?.type === "video" && media.uri && !isLocalFileMedia
+        ? canonicalVideoAssetId(media.uri)
+        : null;
+    // Detail screens adopt the feed card's already-buffered player for this
+    // video when one exists (the feed stays mounted underneath in the nav
+    // stack), instead of creating a fresh player and re-streaming the HLS
+    // from scratch on every open.
+    const [adoptedPlayer, setAdoptedPlayer] = useState<VideoPlayer | null>(null);
+    useLayoutEffect(() => {
+      if (!isPostDetail || !videoHandoffKey) return;
+      if (media?.type !== "video" || !media.uri) return;
+      const player = adoptHandoffPlayer(videoHandoffKey, media.uri);
+      if (!player) return;
+      setAdoptedPlayer(player);
+      return () => {
+        setAdoptedPlayer(null);
+        releaseHandoffPlayer(videoHandoffKey, player);
+      };
+    }, [isPostDetail, videoHandoffKey, media?.type, media?.uri]);
+    const controllerPlayer = useVideoPlayerController(
+      media?.type === "video" && shouldPrepareNativeVideo && !adoptedPlayer
+        ? media.uri
+        : null,
       {
         loop: true,
         muted: videoMuted,
-        shouldPlay: shouldPlayNativeVideo,
+        shouldPlay: shouldPlayNativeVideo && !adoptedPlayer,
         timeUpdateInterval: 0.1,
+        bufferProfile: videoBufferProfile,
+        handoffKey: isPostDetail ? null : videoHandoffKey,
       },
     );
+    const videoPlayer = adoptedPlayer ?? controllerPlayer;
+
+    // An adopted player bypasses the controller's option effects, so detail
+    // applies its settings directly.
+    useEffect(() => {
+      if (!adoptedPlayer) return;
+      try {
+        applyVideoBufferProfile(adoptedPlayer, "detail");
+        adoptedPlayer.loop = true;
+        adoptedPlayer.timeUpdateEventInterval = 0.1;
+      } catch {
+        // Native player was released underneath us (feed unmounted).
+        setAdoptedPlayer(null);
+      }
+    }, [adoptedPlayer]);
+    useEffect(() => {
+      if (!adoptedPlayer) return;
+      try {
+        adoptedPlayer.muted = videoMuted;
+      } catch {
+        setAdoptedPlayer(null);
+      }
+    }, [adoptedPlayer, videoMuted]);
+    useEffect(() => {
+      if (!adoptedPlayer) return;
+      try {
+        if (shouldPlayNativeVideo) {
+          adoptedPlayer.play();
+        } else {
+          adoptedPlayer.pause();
+        }
+      } catch {
+        setAdoptedPlayer(null);
+      }
+    }, [adoptedPlayer, shouldPlayNativeVideo]);
     const appliedVideoRetryKeyRef = useRef(mediaRetryKey);
     const reportedFeedVideoMountRef = useRef(false);
+
+    useEffect(() => {
+      if (media?.type !== "video" || !media.uri) return;
+      const uri = media.uri;
+      if (shouldPrepareNativeVideo) {
+        markVideoPrepareStart(uri);
+        return;
+      }
+      clearVideoPrepareMark(uri);
+    }, [media?.type, media?.uri, shouldPrepareNativeVideo]);
 
     useEffect(() => {
       if (reportedFeedVideoMountRef.current || isPostDetail || media?.type !== "video") return;
@@ -801,9 +894,13 @@ export const PostCardMedia = memo(
           userInitiatedPlayRef.current = false;
         },
       );
+      // The player instance is stable while sources are swapped in and out
+      // (list recycling), so status/track reads and late events can belong to
+      // the previous source. Only apply metadata that matches this card's uri.
       const sourceSubscription = videoPlayer.addListener(
         "sourceLoad",
-        ({ availableVideoTracks }) => {
+        ({ availableVideoTracks, videoSource }) => {
+          if (getVideoSourceUri(videoSource) !== resolvedMediaUri) return;
           applySourceMetadata(availableVideoTracks);
           if (shouldPlayNativeVideo) videoPlayer.play();
         },
@@ -812,6 +909,7 @@ export const PostCardMedia = memo(
         "statusChange",
         ({ status }) => {
           if (status === "readyToPlay") {
+            if (getAppliedVideoSourceUri(videoPlayer) !== resolvedMediaUri) return;
             applySourceMetadata(videoPlayer.availableVideoTracks);
             if (shouldPlayNativeVideo) videoPlayer.play();
             return;
@@ -823,7 +921,10 @@ export const PostCardMedia = memo(
           }
         },
       );
-      if (videoPlayer.status === "readyToPlay") {
+      if (
+        videoPlayer.status === "readyToPlay" &&
+        getAppliedVideoSourceUri(videoPlayer) === resolvedMediaUri
+      ) {
         applySourceMetadata(videoPlayer.availableVideoTracks);
       }
 
@@ -1186,10 +1287,32 @@ export const PostCardMedia = memo(
               setMediaRetryKey((k) => k + 1);
             }, 500);
           }
+          // Returning from background can leave the video surface blank even
+          // though the player reports playing. A seek-in-place forces the
+          // native layer to repaint the current frame.
+          if (media?.type === "video" && shouldPlayNativeVideo) {
+            try {
+              if (videoPlayer.status === "readyToPlay") {
+                const position = videoPlayer.currentTime;
+                videoPlayer.currentTime = position;
+                videoPlayer.play();
+              }
+            } catch {
+              // Player already released; the mount gates will recreate it.
+            }
+          }
         }
       });
       return () => sub.remove();
-    }, [forceVideoProcessing, isVideoProcessing, imageError, isRetryableVideo]);
+    }, [
+      forceVideoProcessing,
+      isVideoProcessing,
+      imageError,
+      isRetryableVideo,
+      media?.type,
+      shouldPlayNativeVideo,
+      videoPlayer,
+    ]);
 
     useEffect(() => {
       if (!isConnected) {
@@ -1223,10 +1346,10 @@ export const PostCardMedia = memo(
 
       if (!videoProcessingStartedAtRef.current) {
         videoProcessingStartedAtRef.current = Date.now();
-        console.log("[PostCardMedia] Cloudflare processing poll started", getVideoDiagnostics());
+        console.log("[PostCardMedia] Hosted video processing poll started", getVideoDiagnostics());
         Sentry.addBreadcrumb({
           category: "post-media",
-          message: "Cloudflare video processing poll started",
+          message: "Hosted video processing poll started",
           level: "info",
           data: getVideoDiagnostics(),
         });
@@ -1237,10 +1360,10 @@ export const PostCardMedia = memo(
 
       const poll = async () => {
         try {
-          const ready = await isCloudflareManifestReady(resolvedMediaUri, controller.signal);
+          const ready = await isHlsManifestReady(resolvedMediaUri, controller.signal);
           if (cancelled) return;
 
-          console.log("[PostCardMedia] Cloudflare manifest poll result", {
+          console.log("[PostCardMedia] Hosted video manifest poll result", {
             ...getVideoDiagnostics(),
             ready,
           });
@@ -1248,7 +1371,7 @@ export const PostCardMedia = memo(
           if (ready) {
             Sentry.addBreadcrumb({
               category: "post-media",
-              message: "Cloudflare video manifest became ready",
+              message: "Hosted video manifest became ready",
               level: "info",
               data: {
                 ...getVideoDiagnostics(),
@@ -1276,7 +1399,7 @@ export const PostCardMedia = memo(
           }
         } catch (error) {
           if (cancelled) return;
-          console.log("[PostCardMedia] Cloudflare manifest poll failed", {
+          console.log("[PostCardMedia] Hosted video manifest poll failed", {
             ...getVideoDiagnostics(),
             error: error instanceof Error ? error.message : String(error),
           });
@@ -1296,7 +1419,7 @@ export const PostCardMedia = memo(
           return;
         }
         const nextDelay = Math.min(
-          CLOUD_FLARE_PROCESSING_POLL_INTERVAL_MS * (videoProcessingAttemptsRef.current + 1),
+          HLS_PROCESSING_POLL_INTERVAL_MS * (videoProcessingAttemptsRef.current + 1),
           10000,
         );
         videoProcessingAttemptsRef.current += 1;
@@ -1373,14 +1496,6 @@ export const PostCardMedia = memo(
           </View>
         </View>
       );
-    }
-
-    if (
-      __DEV__ &&
-      (media.uri?.includes("cloudflarestream") ||
-        media.uri?.includes("videodelivery"))
-    ) {
-      // console.log("[PostCardMedia] Rendering video:", media.uri, "type:", media.type, "imageError:", imageError, "isVideoProcessing:", isVideoProcessing);
     }
 
     return (
@@ -1575,6 +1690,9 @@ export const PostCardMedia = memo(
                 allowsPictureInPicture={false}
                 surfaceType={Platform.OS === "android" ? "textureView" : undefined}
                 onFirstFrameRender={() => {
+                  if (resolvedMediaUri) {
+                    markVideoFirstFrame(resolvedMediaUri, isPostDetail ? "detail" : "feed");
+                  }
                   setVideoReadyForDisplay(true);
                   setMediaLoaded(true);
                   if (resolvedMediaUri) {

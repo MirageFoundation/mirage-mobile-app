@@ -186,7 +186,7 @@ export function VideoEditorScreen() {
     let processedUri = videoUri;
     
     // Always process selected videos so Android/iOS uploads are compressed for
-    // faster Cloudflare processing. The helper trims only when needed.
+    // faster stream provider processing. The helper trims only when needed.
     const needsTrim = trimStart > 100 || (duration > 0 && trimEnd < duration - 100);
     
     setIsProcessing(true);

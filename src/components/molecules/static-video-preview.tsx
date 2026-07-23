@@ -9,7 +9,7 @@ type StaticVideoPreviewProps = {
 };
 
 export function StaticVideoPreview({ uri, style }: StaticVideoPreviewProps) {
-  const player = useVideoPlayerController(uri, { muted: true });
+  const player = useVideoPlayerController(uri, { muted: true, bufferProfile: "feedWarm" });
 
   return (
     <VideoView
