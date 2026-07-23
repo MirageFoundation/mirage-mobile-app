@@ -90,7 +90,6 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
-    "react-native-argon2": "^4.0.0",
     "react-native-argon2-turbo": "^0.1.1",
     "react-native-cloud-storage": "^2.3.0",
     "react-native-compressor": "^1.18.2",
@@ -136,7 +135,6 @@
     "expo-video@3.0.16": "patches/expo-video@3.0.16.patch",
     "react-native-unistyles@3.2.4": "patches/react-native-unistyles@3.2.4.patch",
     "expo-share-intent@5.1.1": "patches/expo-share-intent@5.1.1.patch",
-    "react-native-argon2@4.0.0": "patches/react-native-argon2@4.0.0.patch",
     "react-native-compressor@1.18.2": "patches/react-native-compressor@1.18.2.patch",
     "xcode@3.0.1": "patches/xcode@3.0.1.patch"
   }
