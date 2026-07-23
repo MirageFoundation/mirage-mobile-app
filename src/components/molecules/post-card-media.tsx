@@ -287,14 +287,21 @@ export const PostCardMedia = memo(
     const shouldKeepFeedVideoMounted =
       media?.type === "video" &&
       (isLocalFileMedia || isNearVisible || isFocused || feedTappedToPlay || isVideoPlaying);
+    // Multi-media posts render through MediaGallery, whose items own their
+    // players (including feed->detail handoff). Keep this component's
+    // single-video machinery fully inert for them so the primary media item
+    // is not streamed twice or offered/adopted under the same handoff key.
+    const isGalleryPost = !!(mediaList && mediaList.length > 1);
     const shouldPrepareNativeVideo =
-      isPostDetail ||
-      retainPlayerForDetail ||
-      (!shouldDeferHeavyMedia && shouldKeepFeedVideoMounted);
+      !isGalleryPost &&
+      (isPostDetail ||
+        retainPlayerForDetail ||
+        (!shouldDeferHeavyMedia && shouldKeepFeedVideoMounted));
     const shouldMountNativeVideo =
       shouldPrepareNativeVideo &&
       (isPostDetail || screenActive || retainPlayerForDetail);
     const shouldPlayNativeVideo =
+      !isGalleryPost &&
       media?.type === "video" &&
       (isVideoPlaying || isLocalFileMedia) &&
       screenActive &&
@@ -305,7 +312,7 @@ export const PostCardMedia = memo(
         ? "feedActive"
         : "feedWarm";
     const videoHandoffKey =
-      media?.type === "video" && media.uri && !isLocalFileMedia
+      !isGalleryPost && media?.type === "video" && media.uri && !isLocalFileMedia
         ? canonicalVideoAssetId(media.uri)
         : null;
     // Detail screens adopt the feed card's already-buffered player for this

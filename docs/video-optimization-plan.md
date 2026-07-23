@@ -135,6 +135,14 @@ Original caveats, resolved:
 - Debounced assignment: not needed — the existing viewability flush (deferred ~150–200ms) already gates source changes; the chain absorbs bursts.
 - Detail keeps its own player + position-store restore (unchanged).
 
+**Phase 2b — feed → detail player handoff (done Jul 2026):**
+`retainPlayerForDetail` turned out not to be a handoff at all — it only kept the feed card's video mounted under the push animation; detail always created a fresh player and re-streamed the HLS on every open. Real handoff now lives in `src/utils/video-player-handoff.ts`: feed controllers *offer* their prepared player under the video's canonical Bunny guid (`handoffKey` option on `useVideoPlayerController`), and the detail surface *adopts* that exact instance in a `useLayoutEffect` (same commit as the feed's blur re-render, so the lease lands before the feed controller's `replaceAsync(null)` effect can drop the buffer; worst case degrades to no-handoff, never breakage). While leased, the offering controller suppresses all writes; on release (back-nav) a lease-version bump re-runs its effects so it re-asserts state.
+
+Both video surfaces are consolidated on this pattern:
+- Single-video posts: `post-card-media.tsx` (offer in feed mode, adopt in detail mode).
+- Gallery posts: `GalleryVideoItem` in `media-gallery.tsx` (same offer/adopt, plus the same TTFF marks — `gallery-feed`/`gallery-detail` contexts — and the same background-repaint nudge).
+- `post-card-media`'s single-video machinery is fully inert for multi-media posts (`isGalleryPost` gate): previously the primary media item was **streamed twice** (post-card's own controller + gallery item 0), and with handoff on both paths the duplicate would also have fought over the same handoff key.
+
 ### Phase 3 — expo-video upgrade (requires explicit dependency decision — flag before doing)
 
 Not part of cleanup work per AGENTS.md. When we're ready to take a dependency change (likely with the next SDK bump):

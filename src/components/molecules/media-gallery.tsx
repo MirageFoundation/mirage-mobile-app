@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Image } from "expo-image";
-import { VideoView } from "expo-video";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { VideoView, type VideoPlayer } from "expo-video";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   Dimensions,
   FlatList,
   Platform,
@@ -16,12 +17,23 @@ import {
 import { getVideoThumbnailUri, type ResolvedMedia } from "./post-card-utils";
 import { Text } from "@/src/components/ui/primitives";
 import {
+  applyVideoBufferProfile,
   getCachedVideoSource,
   useVideoPlayerController,
 } from "@/src/hooks/use-video-player-controller";
 import { useVideoMuteStore } from "@/src/stores";
 import { StyleSheet } from "react-native-unistyles";
 import { BoundedLruMap, BoundedLruSet } from "@/src/utils/bounded-lru";
+import { canonicalVideoAssetId } from "@/src/utils/video-asset-id";
+import {
+  adoptHandoffPlayer,
+  releaseHandoffPlayer,
+} from "@/src/utils/video-player-handoff";
+import {
+  clearVideoPrepareMark,
+  markVideoFirstFrame,
+  markVideoPrepareStart,
+} from "@/src/utils/video-ttff";
 import { getMediaImagePolicy } from "./media-image-policy";
 
 
@@ -100,16 +112,106 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
   const errorRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errorRetryCountRef = useRef(0);
   const shouldPlayVideo = isPlaying && isActive && screenActive && isVisible;
-  const videoPlayer = useVideoPlayerController(shouldPrepare ? item.uri : null, {
-    loop: true,
-    muted: effectiveMuted,
-    shouldPlay: shouldPlayVideo,
-    bufferProfile: isPostDetail
-      ? "detail"
-      : shouldPlayVideo
-        ? "feedActive"
-        : "feedWarm",
-  });
+  const handoffKey = itemUri.startsWith("file://")
+    ? null
+    : canonicalVideoAssetId(itemUri);
+  // Same feed -> detail player handoff as single-video posts: the feed
+  // gallery card stays mounted underneath the pushed detail screen, so the
+  // detail gallery adopts its already-buffered player instead of creating a
+  // fresh one and re-streaming the HLS.
+  const [adoptedPlayer, setAdoptedPlayer] = useState<VideoPlayer | null>(null);
+  useLayoutEffect(() => {
+    if (!isPostDetail || !handoffKey || !shouldPrepare) return;
+    const player = adoptHandoffPlayer(handoffKey, itemUri);
+    if (!player) return;
+    setAdoptedPlayer(player);
+    return () => {
+      setAdoptedPlayer(null);
+      releaseHandoffPlayer(handoffKey, player);
+    };
+  }, [isPostDetail, handoffKey, itemUri, shouldPrepare]);
+  const controllerPlayer = useVideoPlayerController(
+    shouldPrepare && !adoptedPlayer ? item.uri : null,
+    {
+      loop: true,
+      muted: effectiveMuted,
+      shouldPlay: shouldPlayVideo && !adoptedPlayer,
+      bufferProfile: isPostDetail
+        ? "detail"
+        : shouldPlayVideo
+          ? "feedActive"
+          : "feedWarm",
+      handoffKey: isPostDetail ? null : handoffKey,
+    },
+  );
+  const videoPlayer = adoptedPlayer ?? controllerPlayer;
+
+  // An adopted player bypasses the controller's option effects, so detail
+  // applies its settings directly.
+  useEffect(() => {
+    if (!adoptedPlayer) return;
+    try {
+      applyVideoBufferProfile(adoptedPlayer, "detail");
+      adoptedPlayer.loop = true;
+    } catch {
+      // Native player was released underneath us (feed unmounted).
+      setAdoptedPlayer(null);
+    }
+  }, [adoptedPlayer]);
+  useEffect(() => {
+    if (!adoptedPlayer) return;
+    try {
+      adoptedPlayer.muted = effectiveMuted;
+    } catch {
+      setAdoptedPlayer(null);
+    }
+  }, [adoptedPlayer, effectiveMuted]);
+  useEffect(() => {
+    if (!adoptedPlayer) return;
+    try {
+      if (shouldPlayVideo) {
+        adoptedPlayer.play();
+      } else {
+        adoptedPlayer.pause();
+      }
+    } catch {
+      setAdoptedPlayer(null);
+    }
+  }, [adoptedPlayer, shouldPlayVideo]);
+
+  useEffect(() => {
+    if (shouldPrepare) {
+      markVideoPrepareStart(itemUri);
+      return;
+    }
+    clearVideoPrepareMark(itemUri);
+  }, [itemUri, shouldPrepare]);
+
+  // Returning from background can leave the video surface blank even though
+  // the player reports playing. A seek-in-place forces the native layer to
+  // repaint the current frame (same nudge as single-video cards).
+  const wasBackgroundedRef = useRef(false);
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "background") {
+        wasBackgroundedRef.current = true;
+        return;
+      }
+      if (nextState !== "active" || !wasBackgroundedRef.current) return;
+      wasBackgroundedRef.current = false;
+      if (!shouldPlayVideo) return;
+      try {
+        if (videoPlayer.status === "readyToPlay") {
+          const position = videoPlayer.currentTime;
+          videoPlayer.currentTime = position;
+          videoPlayer.play();
+        }
+      } catch {
+        // Player already released; the prepare gates will recreate it.
+      }
+    });
+    return () => sub.remove();
+  }, [shouldPlayVideo, videoPlayer]);
 
   useEffect(() => {
     if (!shouldPrepare || GALLERY_LOADED_CACHE.has(itemUri)) return;
@@ -287,7 +389,10 @@ const GalleryVideoItem = memo(function GalleryVideoItem({
           fullscreenOptions={{ enable: false }}
           allowsPictureInPicture={false}
           surfaceType={Platform.OS === "android" ? "textureView" : undefined}
-          onFirstFrameRender={() => setIsLoading(false)}
+          onFirstFrameRender={() => {
+            setIsLoading(false);
+            markVideoFirstFrame(itemUri, isPostDetail ? "gallery-detail" : "gallery-feed");
+          }}
         />
       ) : null}
 
