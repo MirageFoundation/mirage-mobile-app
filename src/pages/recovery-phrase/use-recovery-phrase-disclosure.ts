@@ -1,6 +1,6 @@
 import { walletService } from "@/src/services/wallet-service";
 import * as Sentry from "@sentry/react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import * as Clipboard from "expo-clipboard";
 import * as Crypto from "expo-crypto";
 import * as LocalAuthentication from "expo-local-authentication";

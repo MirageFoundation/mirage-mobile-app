@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/react-native";
-import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "expo-router/react-navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Platform, type AppStateStatus } from "react-native";
 

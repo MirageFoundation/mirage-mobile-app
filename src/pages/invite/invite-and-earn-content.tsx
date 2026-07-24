@@ -3,7 +3,7 @@ import * as Sentry from "@sentry/react-native";
 import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "@/src/navigation/guarded-router";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import { useCallback, useState, useRef, useEffect } from "react";
 import {
   Pressable,

@@ -12,7 +12,7 @@ import {
   usePreferencesStore,
 } from "@/src/stores";
 import { usePendingPostsStore } from "@/src/stores/pending-posts-store";
-import { useIsFocused } from "@react-navigation/native";
+import { useIsFocused } from "expo-router/react-navigation";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {

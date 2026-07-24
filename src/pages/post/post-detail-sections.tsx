@@ -3,8 +3,9 @@ import type { Post } from "@/src/components/molecules";
 import { Box } from "@/src/components/ui/primitives";
 import type { useAuthGuard } from "@/src/hooks";
 import type { useAuthStore } from "@/src/stores/auth-store";
-import type { StyleProp, ViewStyle } from "react-native";
+import type { ViewStyle } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import type { AnimatedStyle } from "react-native-reanimated";
 import { useUnistyles } from "react-native-unistyles";
 
 import { PostDetailActionSheets } from "./post-detail-action-sheets";
@@ -46,7 +47,7 @@ type PostDetailSectionsProps = {
   screenActive: boolean;
   shareServer: string;
   videoSyncScope?: string;
-  postEnteringStyle: StyleProp<ViewStyle>;
+  postEnteringStyle: AnimatedStyle<ViewStyle>;
   isLoggedIn: boolean;
   showAuthSheet: () => void;
   requireAuth: AuthGuard["requireAuth"];

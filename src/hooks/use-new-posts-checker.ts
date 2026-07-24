@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useIsFocused } from "@react-navigation/native";
+import { useIsFocused } from "expo-router/react-navigation";
 import { getPosts, type PostsResponse } from "@/src/api";
 import { useAuthStore } from "@/src/stores";
 import { useAppState } from "./use-app-state";

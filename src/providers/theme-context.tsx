@@ -81,7 +81,7 @@ export const ThemeContextProvider = ({
     persistThemeMode(mode);
     if (mode === "system") {
       cancelPendingFrames();
-      Appearance.setColorScheme(null);
+      Appearance.setColorScheme("unspecified");
       pendingFrameRef.current = requestAnimationFrame(() => {
         pendingFrameRef.current = null;
         const resolvedTheme = Appearance.getColorScheme() === "dark"

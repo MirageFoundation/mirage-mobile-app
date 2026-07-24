@@ -2,7 +2,7 @@ import { EvilIcons, Ionicons } from "@expo/vector-icons";
 import * as Sentry from "@sentry/react-native";
 import * as Clipboard from "expo-clipboard";
 import { useRouter } from "@/src/navigation/guarded-router";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import { useCallback, useState, useMemo, useEffect } from "react";
 import {
   FlatList,

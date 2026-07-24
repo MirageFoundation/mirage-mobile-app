@@ -26,7 +26,7 @@ import { useHomePostCardStore } from "@/src/stores/home-post-card-store";
 import { usePostEditStore } from "@/src/stores/post-edit-store";
 import { composeCommentContent, resolveCommentMediaUrl } from "@/src/utils/comment-media";
 import * as Sentry from "@sentry/react-native";
-import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "expo-router/react-navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList } from "react-native";

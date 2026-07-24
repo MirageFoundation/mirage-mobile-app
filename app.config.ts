@@ -60,10 +60,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       "expo-build-properties",
       {
         ios: {
-          deploymentTarget: "16.0",
-        },
-        android: {
-          compileSdkVersion: 35,
+          deploymentTarget: "16.4",
         },
       },
     ],
@@ -115,7 +112,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     icon: "./assets/images/icon.png",
     scheme: scheme,
     userInterfaceStyle: "automatic",
-    newArchEnabled: true,
     ios: {
       supportsTablet: false,
       requireFullScreen: true,
@@ -139,7 +135,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       ...(isFdroidBuild
         ? {}
         : { googleServicesFile: process.env.GOOGLE_SERVICES_JSON }),
-      edgeToEdgeEnabled: true,
       predictiveBackGestureEnabled: false,
       softwareKeyboardLayoutMode: "resize",
       intentFilters: [

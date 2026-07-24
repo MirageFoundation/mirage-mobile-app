@@ -2,7 +2,7 @@ import { useLocalSearchParams } from "expo-router";
 import * as Sentry from "@sentry/react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, InteractionManager, Platform } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "expo-router/react-navigation";
 import * as Notifications from "expo-notifications";
 
 import { useInfiniteInbox } from "@/src/api/read/hooks/use-inbox";

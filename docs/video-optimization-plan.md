@@ -1,6 +1,6 @@
 # Video Optimization Plan (Feed Video: Seamless Playback Without Memory Blowups)
 
-Status: Phases 1 (except 1.2) and 2 implemented (Jul 2026). 1.2 blocked on backend MP4 decision; Phase 3 awaits a dependency-upgrade decision; device profiling pending.
+Status: Phases 1 (except 1.2) and 2 implemented (Jul 2026). 1.2 blocked on backend MP4 decision. Phase 3 unblocked Jul 2026: SDK 56 upgrade landed expo-video 56.1.4 (`maxResolution` now available; iOS crash workarounds re-ported to `patches/expo-video@56.1.4.patch`) — wiring `maxResolution` into the feed player profiles is still to-do. Device profiling pending.
 Goal: Instagram/Reddit-grade feed video — poster paints instantly, active video starts in well under a second, scrolling stays smooth — while keeping native player count and buffer memory bounded.
 
 Researched: Jul 2026. Sources: expo-video changelog/docs, expo/expo#40376 (FlashList feed freeze + player-pool guidance), expo/expo#42688 (maintainer: multiple players x default 50s buffer = OOM), TheWidlarzGroup `react-native-video-feed` boilerplate (asymmetric preload, pool of 3–5, MP4-poster strategy, TTFF metrics), Bunny Stream storage-structure docs (per-resolution MP4 fallback, preview animations, seek sprites).
@@ -170,9 +170,9 @@ Detail → fullscreen no longer re-streams. The handoff module was generalized f
 
 Result: feed → detail → fullscreen → back → back plays one continuous player with zero re-buffering at every hop. YouTube fullscreen unchanged (no native player).
 
-### Phase 3 — expo-video upgrade (requires explicit dependency decision — flag before doing)
+### Phase 3 — expo-video upgrade (landed Jul 2026 via the Expo SDK 56 upgrade)
 
-Not part of cleanup work per AGENTS.md. When we're ready to take a dependency change (likely with the next SDK bump):
+The SDK 56 upgrade brought expo-video 56.1.4. What remains of this phase is adopting the new APIs (notably `maxResolution` in the feed buffer profiles). Original rationale:
 
 - expo-video 55/56 brings, all directly relevant:
   - `maxResolution` player option — per-player rendition cap that works directly on Bunny's HLS playlist (removes the need for the MP4-rewrite trick if we prefer staying on HLS).
