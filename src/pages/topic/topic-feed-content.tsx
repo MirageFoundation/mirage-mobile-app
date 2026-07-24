@@ -261,7 +261,6 @@ export function TopicFeedScreen() {
   const clearVoteOverride = useHomePostCardStore(
     (state) => state.clearVoteOverride,
   );
-  const sideMenuOpen = useHomePostCardStore((state) => state.sideMenuOpen);
   const savedPostIds = useMemo(
     () => new Set(savedPosts.map((post) => post.id)),
     [savedPosts],
@@ -591,7 +590,11 @@ export function TopicFeedScreen() {
     revealedPosts,
     shareServer,
     allowAutoplay,
-    active: isFocused && !sideMenuOpen,
+    // Unlike the home/following feeds, the side menu lives inside the tab
+    // layout and can never overlay this screen (topic routes are pushed on
+    // the root stack), so sideMenuOpen must not gate playback here — it
+    // stays true when a topic is opened from the side menu.
+    active: isFocused,
     disabledTopicName: topicName,
     handlers: {
       onPostPress: handlersRef.current.handlePostPress,
@@ -619,7 +622,6 @@ export function TopicFeedScreen() {
     isFocused,
     revealedPosts,
     shareServer,
-    sideMenuOpen,
     topicName,
   ]);
 
