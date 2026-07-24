@@ -178,10 +178,14 @@ export function MediaPostDetailCommentSheet({
         data={comments}
         keyExtractor={(c: Comment) => c.id}
         showsVerticalScrollIndicator={false}
-        onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
-          commentActions.scrollYChange(event.nativeEvent.contentOffset.y);
-        }}
-        scrollEventThrottle={16}
+        // bottom-sheet's prop types omit onScroll (it owns the scroll
+        // handler), but the runtime merges a user handler into it via
+        // useScrollHandler, so this keeps working.
+        {...({
+          onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+            commentActions.scrollYChange(event.nativeEvent.contentOffset.y);
+          },
+        } as object)}
         onScrollToIndexFailed={({ index }: { index: number }) => {
           setTimeout(() => {
             commentActions.scrollToIndex(index);

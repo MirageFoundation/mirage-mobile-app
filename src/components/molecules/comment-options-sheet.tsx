@@ -4,11 +4,10 @@ import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetView,
-  SCREEN_WIDTH,
 } from "@gorhom/bottom-sheet";
 import * as Clipboard from "expo-clipboard";
 import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
-import { Platform, Pressable, Share, View } from "react-native";
+import { Dimensions, Platform, Pressable, Share, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 
@@ -406,7 +405,7 @@ const styles = StyleSheet.create((theme) => ({
     justifyContent: "center",
   },
   divider: {
-    width: SCREEN_WIDTH,
+    width: Dimensions.get("window").width,
     alignSelf: "center",
     marginBottom: theme.sizing.md,
   },

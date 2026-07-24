@@ -86,35 +86,6 @@ export function useMediaPostDetailLayout({
     mediaEnterProgress.value = withTiming(1, { duration: 260 });
   }, [mediaEnterProgress, sourceMediaTransition]);
 
-  // TEMP DEBUG (SDK 56): trace sheet position feeding the media layout.
-  const logMediaLayout = useCallback(
-    (position: number, progress: number, enter: number) => {
-      console.log("[MediaLayoutDebug]", {
-        animatedPosition: position,
-        collapseProgress: progress,
-        enter,
-        listTopY,
-        initialSheetTop,
-        collapsedMediaH,
-        expandedMediaTop,
-      });
-    },
-    [collapsedMediaH, expandedMediaTop, initialSheetTop, listTopY],
-  );
-  useAnimatedReaction(
-    () => Math.round(animatedPosition.value),
-    (value, prev) => {
-      if (value !== prev) {
-        runOnJS(logMediaLayout)(
-          value,
-          Math.round(collapseProgress.value * 1000) / 1000,
-          Math.round(mediaEnterProgress.value * 1000) / 1000,
-        );
-      }
-    },
-    [logMediaLayout],
-  );
-
   const openSheet = useCallback(() => {
     sheetRef.current?.snapToIndex(1);
   }, []);

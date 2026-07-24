@@ -40,7 +40,7 @@ export const ReportSheet = forwardRef<ReportSheetRef, ReportSheetProps>(
 
     const present = useCallback(() => {
       setReason("");
-      bottomSheetRef.current?.present(0);
+      bottomSheetRef.current?.present();
     }, []);
 
     const dismiss = useCallback(() => {

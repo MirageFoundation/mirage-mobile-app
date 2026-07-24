@@ -238,7 +238,7 @@ export const PostOptionsSheet = forwardRef<
     const shareServer = usePreferencesStore((s) => s.apiServer);
 
     const present = useCallback(() => {
-      bottomSheetRef.current?.present(0);
+      bottomSheetRef.current?.present();
     }, []);
 
     const dismiss = useCallback(() => {
