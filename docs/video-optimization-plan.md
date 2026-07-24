@@ -158,6 +158,10 @@ The 2127-line `post-card-media.tsx` monolith was split by media type; video now 
 
 Known intentional deltas (documented, not regressions): per-surface 8s loading fallbacks start on the surface's own uri-change instead of one shared timer; gallery presses no longer feed a (previously duplicate-player, now removed) position snapshot into the press transition overlay.
 
+Same treatment applied to the fullscreen preview (`media-preview-modal.tsx`, 1020 → ~445): `media-preview-video-item.tsx` (~155, owns its player + position sync), `media-preview-youtube-item.tsx` (~310), `use-preview-zoom-gesture.ts` (~95, pinch/pan/double-tap), `media-preview-item-styles.ts`. Verbatim port; modal keeps orchestration (orientation lock, gallery pager, single-media paths).
+
+Noted improvement opportunity (not done): detail → fullscreen still creates a fresh player and re-streams — the handoff mechanism currently only offers feed players (detail controllers pass `handoffKey: null`). Extending offers to detail-owned players would make fullscreen opens instant too, but needs care with lease chaining (feed → detail → fullscreen) and is deferred.
+
 ### Phase 3 — expo-video upgrade (requires explicit dependency decision — flag before doing)
 
 Not part of cleanup work per AGENTS.md. When we're ready to take a dependency change (likely with the next SDK bump):
