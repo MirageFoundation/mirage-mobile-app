@@ -19,6 +19,14 @@ import {
 
 export { getAppliedVideoSourceUri, getVideoSourceUri } from "@/src/utils/video-player-handoff";
 
+/**
+ * Re-renders the caller whenever any handoff lease changes, so surfaces can
+ * re-evaluate whether they currently control their player.
+ */
+export function useVideoPlayerLeaseVersion(): number {
+  return useSyncExternalStore(subscribeVideoPlayerLeases, getVideoPlayerLeaseVersion);
+}
+
 let nextVideoPlayerDiagnosticId = 0;
 
 /**

@@ -5,6 +5,7 @@ import {
   getAppliedVideoSourceUri,
   getVideoSourceUri,
 } from "@/src/hooks/use-video-player-controller";
+import { isVideoPlayerControlledElsewhere } from "@/src/utils/video-player-handoff";
 import type { PostCardVideoPlayback } from "./use-post-card-video-playback";
 
 /**
@@ -27,6 +28,7 @@ export function usePostCardVideoListeners({
 }) {
   const {
     videoPlayer,
+    adoptedLease,
     shouldPlayNativeVideo,
     videoPositionKey,
     getPosition,
@@ -65,7 +67,12 @@ export function usePostCardVideoListeners({
       "playingChange",
       ({ isPlaying }) => {
         if (!isPlaying) {
-          if (shouldPlayNativeVideo && videoPlayer.status === "readyToPlay") {
+          if (
+            shouldPlayNativeVideo &&
+            videoPlayer.status === "readyToPlay" &&
+            // A newer lease holder (fullscreen) may have paused on purpose.
+            !isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)
+          ) {
             videoPlayer.play();
           }
           return;
@@ -86,7 +93,9 @@ export function usePostCardVideoListeners({
       ({ availableVideoTracks, videoSource }) => {
         if (getVideoSourceUri(videoSource) !== resolvedMediaUri) return;
         applySourceMetadata(availableVideoTracks);
-        if (shouldPlayNativeVideo) videoPlayer.play();
+        if (shouldPlayNativeVideo && !isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) {
+          videoPlayer.play();
+        }
       },
     );
     const statusSubscription = videoPlayer.addListener(
@@ -95,7 +104,9 @@ export function usePostCardVideoListeners({
         if (status === "readyToPlay") {
           if (getAppliedVideoSourceUri(videoPlayer) !== resolvedMediaUri) return;
           applySourceMetadata(videoPlayer.availableVideoTracks);
-          if (shouldPlayNativeVideo) videoPlayer.play();
+          if (shouldPlayNativeVideo && !isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) {
+            videoPlayer.play();
+          }
           return;
         }
         if (status !== "loading") return;
@@ -125,6 +136,7 @@ export function usePostCardVideoListeners({
     setMediaLoaded,
     updateMediaAspectRatioFromSize,
     videoPlayer,
+    adoptedLease,
     videoPositionKey,
     currentVideoPositionRef,
     hasRestoredVideoPositionRef,

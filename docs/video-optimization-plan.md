@@ -160,7 +160,15 @@ Known intentional deltas (documented, not regressions): per-surface 8s loading f
 
 Same treatment applied to the fullscreen preview (`media-preview-modal.tsx`, 1020 → ~445): `media-preview-video-item.tsx` (~155, owns its player + position sync), `media-preview-youtube-item.tsx` (~310), `use-preview-zoom-gesture.ts` (~95, pinch/pan/double-tap), `media-preview-item-styles.ts`. Verbatim port; modal keeps orchestration (orientation lock, gallery pager, single-media paths).
 
-Noted improvement opportunity (not done): detail → fullscreen still creates a fresh player and re-streams — the handoff mechanism currently only offers feed players (detail controllers pass `handoffKey: null`). Extending offers to detail-owned players would make fullscreen opens instant too, but needs care with lease chaining (feed → detail → fullscreen) and is deferred.
+**Phase 2d — fullscreen handoff via lease chains (done Jul 2026):**
+Detail → fullscreen no longer re-streams. The handoff module was generalized from single-adopter to **lease chains**:
+
+- Offers per key form a stack (most recent wins): feed controllers offer to detail; detail controllers now offer too (`handoffKey` is always set), so fullscreen adopts the detail's live player — or, when detail itself adopted from feed, fullscreen leases the same feed player on top of detail's lease.
+- Leases per player form a chain of tokens; only the **top holder controls** the player (`isVideoPlayerControlledElsewhere(player, lease)`). Suppressed surfaces skip all writes including event-listener auto-replay (otherwise detail would fight the fullscreen pause button).
+- On release, a lease-version bump re-runs the next holder's effects; a was-suppressed → now-controlling transition additionally triggers a seek-in-place repaint nudge (re-attaching video output across `VideoView`s can leave the lower surface blank).
+- Fullscreen surfaces (`media-preview-modal.tsx` single-video path, `media-preview-video-item.tsx` gallery pages) adopt with skip-restore (the adopted player is already at the live position). Gallery pages hold their lease for the whole modal session — releasing on page swipe would let the suppressed card under the modal resume audio.
+
+Result: feed → detail → fullscreen → back → back plays one continuous player with zero re-buffering at every hop. YouTube fullscreen unchanged (no native player).
 
 ### Phase 3 — expo-video upgrade (requires explicit dependency decision — flag before doing)
 

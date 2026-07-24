@@ -30,6 +30,12 @@ import {
   useVideoMuteStore,
   useVideoPositionStore,
 } from "@/src/stores";
+import { canonicalVideoAssetId } from "@/src/utils/video-asset-id";
+import {
+  adoptHandoffPlayer,
+  releaseHandoffPlayer,
+  type VideoPlayerLease,
+} from "@/src/utils/video-player-handoff";
 import { PreviewVideoItem } from "./media-preview-video-item";
 import { PreviewYouTubeItem } from "./media-preview-youtube-item";
 import { usePreviewZoomGesture } from "./use-preview-zoom-gesture";
@@ -88,19 +94,78 @@ export const MediaPreviewModal = memo(function MediaPreviewModal({
     ? buildVideoPositionKey(media.uri, videoSyncScope)
     : "";
   const hasGallery = !!(mediaList && mediaList.length > 1);
-  const videoPlayer = useVideoPlayerController(
-    media?.type === "video" && !hasGallery ? media.uri : null,
+
+  // Adopt the underlying screen's already-buffered player (the feed/detail
+  // card stays mounted beneath the modal), so fullscreen opens continue
+  // instantly instead of re-streaming. Adopted players are already at the
+  // live position, so the saved-position restore is skipped.
+  const isSingleVideo = media?.type === "video" && !hasGallery;
+  const singleVideoUri = isSingleVideo ? media.uri : null;
+  const videoHandoffKey =
+    singleVideoUri && !singleVideoUri.startsWith("file://")
+      ? canonicalVideoAssetId(singleVideoUri)
+      : null;
+  const [adoptedLease, setAdoptedLease] = useState<VideoPlayerLease | null>(null);
+  const adoptedPlayer = adoptedLease?.player ?? null;
+  useEffect(() => {
+    if (!visible || !videoHandoffKey || !singleVideoUri) return;
+    const lease = adoptHandoffPlayer(videoHandoffKey, singleVideoUri);
+    if (!lease) return;
+    hasRestoredVideoRef.current = true;
+    setAdoptedLease(lease);
+    return () => {
+      setAdoptedLease(null);
+      releaseHandoffPlayer(lease);
+    };
+  }, [visible, videoHandoffKey, singleVideoUri]);
+  const controllerPlayer = useVideoPlayerController(
+    isSingleVideo && !adoptedLease ? media.uri : null,
     {
       loop: true,
       muted: isMuted,
       shouldPlay:
-        media?.type === "video" &&
-        !hasGallery &&
+        isSingleVideo &&
+        !adoptedLease &&
         isVideoPlaying &&
         mediaSurfaceActive,
       timeUpdateInterval: 0.1,
     },
   );
+  const videoPlayer = adoptedPlayer ?? controllerPlayer;
+
+  // An adopted player bypasses the controller's option effects; as the top
+  // lease holder the modal applies its settings directly.
+  useEffect(() => {
+    if (!adoptedPlayer) return;
+    try {
+      adoptedPlayer.loop = true;
+      adoptedPlayer.timeUpdateEventInterval = 0.1;
+      setIsLoading(false);
+    } catch {
+      // Native player was released underneath us.
+      setAdoptedLease(null);
+    }
+  }, [adoptedPlayer]);
+  useEffect(() => {
+    if (!adoptedPlayer) return;
+    try {
+      adoptedPlayer.muted = isMuted;
+    } catch {
+      setAdoptedLease(null);
+    }
+  }, [adoptedPlayer, isMuted]);
+  useEffect(() => {
+    if (!adoptedPlayer) return;
+    try {
+      if (isVideoPlaying && mediaSurfaceActive) {
+        adoptedPlayer.play();
+      } else {
+        adoptedPlayer.pause();
+      }
+    } catch {
+      setAdoptedLease(null);
+    }
+  }, [adoptedPlayer, isVideoPlaying, mediaSurfaceActive]);
 
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(initialIndex);
   const galleryListRef = useRef<FlatList>(null);

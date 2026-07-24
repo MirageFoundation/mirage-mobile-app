@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { VideoView, type VideoPlayer } from "expo-video";
+import { VideoView } from "expo-video";
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ActivityIndicator, AppState, Platform, Pressable, View } from "react-native";
 import { getVideoThumbnailUri, type ResolvedMedia } from "./post-card-utils";
@@ -9,12 +9,15 @@ import {
   applyVideoBufferProfile,
   getCachedVideoSource,
   useVideoPlayerController,
+  useVideoPlayerLeaseVersion,
 } from "@/src/hooks/use-video-player-controller";
 import { useVideoMuteStore } from "@/src/stores";
 import { canonicalVideoAssetId } from "@/src/utils/video-asset-id";
 import {
   adoptHandoffPlayer,
+  isVideoPlayerControlledElsewhere,
   releaseHandoffPlayer,
+  type VideoPlayerLease,
 } from "@/src/utils/video-player-handoff";
 import {
   clearVideoPrepareMark,
@@ -86,55 +89,66 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
   // gallery card stays mounted underneath the pushed detail screen, so the
   // detail gallery adopts its already-buffered player instead of creating a
   // fresh one and re-streaming the HLS.
-  const [adoptedPlayer, setAdoptedPlayer] = useState<VideoPlayer | null>(null);
+  const [adoptedLease, setAdoptedLease] = useState<VideoPlayerLease | null>(null);
+  const adoptedPlayer = adoptedLease?.player ?? null;
   useLayoutEffect(() => {
     if (!isPostDetail || !handoffKey || !shouldPrepare) return;
-    const player = adoptHandoffPlayer(handoffKey, itemUri);
-    if (!player) return;
-    setAdoptedPlayer(player);
+    const lease = adoptHandoffPlayer(handoffKey, itemUri);
+    if (!lease) return;
+    setAdoptedLease(lease);
     return () => {
-      setAdoptedPlayer(null);
-      releaseHandoffPlayer(handoffKey, player);
+      setAdoptedLease(null);
+      releaseHandoffPlayer(lease);
     };
   }, [isPostDetail, handoffKey, itemUri, shouldPrepare]);
   const controllerPlayer = useVideoPlayerController(
-    shouldPrepare && !adoptedPlayer ? item.uri : null,
+    shouldPrepare && !adoptedLease ? item.uri : null,
     {
       loop: true,
       muted: effectiveMuted,
-      shouldPlay: shouldPlayVideo && !adoptedPlayer,
+      shouldPlay: shouldPlayVideo && !adoptedLease,
       bufferProfile: isPostDetail
         ? "detail"
         : shouldPlayVideo
           ? "feedActive"
           : "feedWarm",
-      handoffKey: isPostDetail ? null : handoffKey,
+      // Offer onward: feed items offer to detail, detail items offer to the
+      // fullscreen preview.
+      handoffKey,
     },
   );
   const videoPlayer = adoptedPlayer ?? controllerPlayer;
+
+  // Stand down while a surface stacked above (fullscreen preview) holds a
+  // newer lease on this player; re-assert once it releases.
+  const leaseVersion = useVideoPlayerLeaseVersion();
+  const controlledElsewhere = isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease);
 
   // An adopted player bypasses the controller's option effects, so detail
   // applies its settings directly.
   useEffect(() => {
     if (!adoptedPlayer) return;
+    if (isVideoPlayerControlledElsewhere(adoptedPlayer, adoptedLease)) return;
     try {
       applyVideoBufferProfile(adoptedPlayer, "detail");
       adoptedPlayer.loop = true;
     } catch {
       // Native player was released underneath us (feed unmounted).
-      setAdoptedPlayer(null);
+      setAdoptedLease(null);
     }
-  }, [adoptedPlayer]);
+  }, [adoptedPlayer, adoptedLease, leaseVersion]);
   useEffect(() => {
     if (!adoptedPlayer) return;
+    if (isVideoPlayerControlledElsewhere(adoptedPlayer, adoptedLease)) return;
     try {
       adoptedPlayer.muted = effectiveMuted;
     } catch {
-      setAdoptedPlayer(null);
+      setAdoptedLease(null);
     }
-  }, [adoptedPlayer, effectiveMuted]);
+  }, [adoptedPlayer, adoptedLease, effectiveMuted, leaseVersion]);
   useEffect(() => {
     if (!adoptedPlayer) return;
+    if (isVideoPlayerControlledElsewhere(adoptedPlayer, adoptedLease)) return;
     try {
       if (shouldPlayVideo) {
         adoptedPlayer.play();
@@ -142,9 +156,28 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
         adoptedPlayer.pause();
       }
     } catch {
-      setAdoptedPlayer(null);
+      setAdoptedLease(null);
     }
-  }, [adoptedPlayer, shouldPlayVideo]);
+  }, [adoptedPlayer, adoptedLease, shouldPlayVideo, leaseVersion]);
+
+  // When the fullscreen preview releases this player, nudge the surface to
+  // repaint and resume playback if we still want it playing.
+  const wasControlledElsewhereRef = useRef(false);
+  useEffect(() => {
+    const was = wasControlledElsewhereRef.current;
+    wasControlledElsewhereRef.current = controlledElsewhere;
+    if (!was || controlledElsewhere) return;
+    if (!shouldPlayVideo) return;
+    try {
+      if (videoPlayer.status === "readyToPlay") {
+        const position = videoPlayer.currentTime;
+        videoPlayer.currentTime = position;
+        videoPlayer.play();
+      }
+    } catch {
+      // Player already released; the prepare gates will recreate it.
+    }
+  }, [controlledElsewhere, shouldPlayVideo, videoPlayer]);
 
   useEffect(() => {
     if (shouldPrepare) {
@@ -167,6 +200,7 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
       if (nextState !== "active" || !wasBackgroundedRef.current) return;
       wasBackgroundedRef.current = false;
       if (!shouldPlayVideo) return;
+      if (isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) return;
       try {
         if (videoPlayer.status === "readyToPlay") {
           const position = videoPlayer.currentTime;
@@ -178,7 +212,7 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
       }
     });
     return () => sub.remove();
-  }, [shouldPlayVideo, videoPlayer]);
+  }, [shouldPlayVideo, videoPlayer, adoptedLease]);
 
   useEffect(() => {
     if (!shouldPrepare || GALLERY_LOADED_CACHE.has(itemUri)) return;
@@ -232,7 +266,9 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
       ({ availableVideoTracks }) => {
         markLoaded();
         applyAspectRatio(availableVideoTracks);
-        if (shouldPlayVideo) videoPlayer.play();
+        if (shouldPlayVideo && !isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) {
+          videoPlayer.play();
+        }
       },
     );
     const statusSubscription = videoPlayer.addListener(
@@ -241,7 +277,9 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
         if (status === "readyToPlay") {
           markLoaded();
           applyAspectRatio(videoPlayer.availableVideoTracks);
-          if (shouldPlayVideo) videoPlayer.play();
+          if (shouldPlayVideo && !isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) {
+            videoPlayer.play();
+          }
         } else if (status === "error" && errorRetryCountRef.current < 3) {
           errorRetryCountRef.current += 1;
           if (errorRetryRef.current) clearTimeout(errorRetryRef.current);
@@ -258,7 +296,9 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
     if (videoPlayer.status === "readyToPlay") {
       markLoaded();
       applyAspectRatio(videoPlayer.availableVideoTracks);
-      if (shouldPlayVideo) videoPlayer.play();
+      if (shouldPlayVideo && !isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) {
+        videoPlayer.play();
+      }
     }
 
     return () => {
@@ -270,7 +310,7 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
         errorRetryRef.current = null;
       }
     };
-  }, [item.uri, onAspectRatioDetected, shouldPlayVideo, shouldPrepare, videoPlayer]);
+  }, [item.uri, onAspectRatioDetected, shouldPlayVideo, shouldPrepare, videoPlayer, adoptedLease]);
 
   useEffect(() => {
     if (isActive && screenActive && isVisible && (allowAutoplay || feedTappedToPlay)) {

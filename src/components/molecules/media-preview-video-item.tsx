@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { VideoView } from "expo-video";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, View } from "react-native";
 import type { ResolvedMedia } from "./post-card-utils";
 import { useVideoPlayerController } from "@/src/hooks/use-video-player-controller";
@@ -9,6 +9,12 @@ import {
   useVideoMuteStore,
   useVideoPositionStore,
 } from "@/src/stores";
+import { canonicalVideoAssetId } from "@/src/utils/video-asset-id";
+import {
+  adoptHandoffPlayer,
+  releaseHandoffPlayer,
+  type VideoPlayerLease,
+} from "@/src/utils/video-player-handoff";
 import { previewItemStyles } from "./media-preview-item-styles";
 
 type PreviewVideoItemProps = {
@@ -41,12 +47,82 @@ export const PreviewVideoItem = memo(function PreviewVideoItem({
   const positionKey = buildVideoPositionKey(item.uri, videoSyncScope);
   const currentPositionRef = useRef(0);
   const hasRestoredRef = useRef(false);
-  const player = useVideoPlayerController(shouldPrepare ? item.uri : null, {
-    loop: true,
-    muted,
-    shouldPlay: playing && isActive,
-    timeUpdateInterval: 0.1,
-  });
+  // Adopt the underlying screen's already-buffered player for this video
+  // (feed or detail card stays mounted beneath the fullscreen modal), so
+  // fullscreen opens continue instantly instead of re-streaming. The
+  // adopted player is already at the live position, so the saved-position
+  // restore must be skipped.
+  const handoffKey = item.uri.startsWith("file://")
+    ? null
+    : canonicalVideoAssetId(item.uri);
+  const [adoptedLease, setAdoptedLease] = useState<VideoPlayerLease | null>(null);
+  const adoptedPlayer = adoptedLease?.player ?? null;
+  // The lease is held for as long as this page is mounted (the whole modal
+  // session), not just while inside the prepare window: releasing it on a
+  // page swipe would let the suppressed card underneath the modal resume
+  // playing audio.
+  const adoptedLeaseRef = useRef<VideoPlayerLease | null>(null);
+  useLayoutEffect(() => {
+    if (!handoffKey || !shouldPrepare || adoptedLeaseRef.current) return;
+    const lease = adoptHandoffPlayer(handoffKey, item.uri);
+    if (!lease) return;
+    adoptedLeaseRef.current = lease;
+    hasRestoredRef.current = true;
+    setAdoptedLease(lease);
+  }, [handoffKey, item.uri, shouldPrepare]);
+  useEffect(() => {
+    return () => {
+      if (adoptedLeaseRef.current) {
+        releaseHandoffPlayer(adoptedLeaseRef.current);
+        adoptedLeaseRef.current = null;
+      }
+      setAdoptedLease(null);
+    };
+  }, [item.uri]);
+  const controllerPlayer = useVideoPlayerController(
+    shouldPrepare && !adoptedLease ? item.uri : null,
+    {
+      loop: true,
+      muted,
+      shouldPlay: playing && isActive && !adoptedLease,
+      timeUpdateInterval: 0.1,
+    },
+  );
+  const player = adoptedPlayer ?? controllerPlayer;
+
+  // An adopted player bypasses the controller's option effects; as the top
+  // lease holder this surface applies its settings directly.
+  useEffect(() => {
+    if (!adoptedPlayer) return;
+    try {
+      adoptedPlayer.loop = true;
+      adoptedPlayer.timeUpdateEventInterval = 0.1;
+      setIsLoading(false);
+    } catch {
+      // Native player was released underneath us.
+      setAdoptedLease(null);
+    }
+  }, [adoptedPlayer]);
+  useEffect(() => {
+    if (!adoptedPlayer) return;
+    try {
+      adoptedPlayer.muted = muted;
+    } catch {
+      setAdoptedLease(null);
+    }
+  }, [adoptedPlayer, muted]);
+  useEffect(() => {
+    if (!adoptedPlayer) return;
+    try {
+      if (playing && isActive) {
+        adoptedPlayer.play();
+      } else {
+        adoptedPlayer.pause();
+      }
+    } catch {
+      setAdoptedLease(null);
+    }
+  }, [adoptedPlayer, playing, isActive]);
 
   useEffect(() => {
     if (!isActive) {

@@ -1,24 +1,27 @@
 import type { VideoPlayer, VideoSource } from "expo-video";
 
 /**
- * Feed -> detail player handoff.
+ * Player handoff between video surfaces (feed -> detail -> fullscreen).
  *
- * The feed card and the post-detail screen are separate components, each of
- * which would normally own its own native player. Because HLS cannot be disk
- * cached, letting detail create a fresh player re-streams the whole video on
- * every open. But when detail is pushed, the feed card (and its prepared,
- * buffered player) stays mounted underneath it in the navigation stack — so
- * detail can *adopt* that exact player instance: same buffer, same position,
- * zero network, instant first frame.
+ * Because HLS cannot be disk cached, letting each surface create a fresh
+ * player re-streams the whole video on every transition. Instead, a surface
+ * that owns a prepared player *offers* it under the video's canonical asset
+ * id, and the surface pushed on top *adopts* that exact player instance:
+ * same buffer, same position, zero network, instant first frame.
  *
- * Ownership rules:
- * - Feed controllers `offer` their player once a source is applied and
- *   `revoke` on source change/unmount.
- * - Detail `adopt`s a player (verifying it currently holds the expected
- *   source) which marks it leased. While leased, the offering controller
- *   suppresses all writes (play/pause/replace/options) to avoid fighting.
- * - Detail `release`s on unmount; a version bump re-runs controller effects
- *   so the owner re-asserts its desired state (pause, warm buffer profile).
+ * Ownership model:
+ * - Controllers `offer` their player once a source is applied and `revoke`
+ *   on source change/unmount. Offers per key form a stack — the most recent
+ *   offer wins (a detail screen's own player shadows the feed's warm player
+ *   for the same video).
+ * - An overlaying surface `adopt`s a player, receiving a lease token. Leases
+ *   per player also form a chain: feed's controller stands down while detail
+ *   holds the lease; detail stands down while fullscreen holds a newer
+ *   lease on the same player. Only the top lease holder may control the
+ *   player; everyone else suppresses writes.
+ * - `release` pops the lease and bumps a version that re-runs subscriber
+ *   effects, so the next holder down (or the owning controller) re-asserts
+ *   its desired state.
  */
 
 const appliedSourceUris = new WeakMap<VideoPlayer, string | null>();
@@ -45,13 +48,22 @@ export function getVideoSourceUri(source: VideoSource): string | null {
   return source.uri ?? null;
 }
 
-type HandoffEntry = {
-  player: VideoPlayer;
-  leased: boolean;
+export type VideoPlayerLease = {
+  readonly key: string;
+  readonly player: VideoPlayer;
+  readonly token: symbol;
 };
 
-const entries = new Map<string, HandoffEntry>();
-const leasedPlayers = new WeakSet<VideoPlayer>();
+type HandoffOffer = {
+  player: VideoPlayer;
+  /** Lease tokens in adoption order; last entry is the current controller. */
+  leases: symbol[];
+  /** The offering controller revoked while leases were active. */
+  revoked: boolean;
+};
+
+const offerStacks = new Map<string, HandoffOffer[]>();
+const leaseCounts = new WeakMap<VideoPlayer, number>();
 const listeners = new Set<() => void>();
 let leaseVersion = 0;
 
@@ -70,47 +82,89 @@ export function getVideoPlayerLeaseVersion(): number {
 }
 
 export function isVideoPlayerLeased(player: VideoPlayer): boolean {
-  return leasedPlayers.has(player);
+  return (leaseCounts.get(player) ?? 0) > 0;
+}
+
+/**
+ * True when a surface other than the holder of `lease` currently controls
+ * the player. Pass `null` for surfaces without a lease (owning controllers):
+ * any active lease then means someone else controls it.
+ */
+export function isVideoPlayerControlledElsewhere(
+  player: VideoPlayer,
+  lease: VideoPlayerLease | null,
+): boolean {
+  const count = leaseCounts.get(player) ?? 0;
+  if (count === 0) return false;
+  if (!lease) return true;
+  const offer = offerStacks.get(lease.key)?.find((entry) => entry.player === player);
+  if (!offer || offer.leases.length === 0) return true;
+  return offer.leases[offer.leases.length - 1] !== lease.token;
 }
 
 export function offerHandoffPlayer(key: string, player: VideoPlayer): void {
-  const existing = entries.get(key);
-  // Never displace an entry that is currently leased by an adopter.
-  if (existing && existing.leased && existing.player !== player) return;
-  if (existing?.player === player) return;
-  entries.set(key, { player, leased: isVideoPlayerLeased(player) });
+  const stack = offerStacks.get(key) ?? [];
+  // Re-offers keep their stack position; only new offers go on top.
+  if (stack.some((entry) => entry.player === player)) return;
+  stack.push({ player, leases: [], revoked: false });
+  offerStacks.set(key, stack);
 }
 
 export function revokeHandoffOffer(key: string, player: VideoPlayer): void {
-  const entry = entries.get(key);
-  if (!entry || entry.player !== player) return;
-  // Keep leased entries so the adopter's release can still find and clear
-  // them; the adopter holds its own reference to the player.
-  if (!entry.leased) entries.delete(key);
+  const stack = offerStacks.get(key);
+  if (!stack) return;
+  const index = stack.findIndex((entry) => entry.player === player);
+  if (index === -1) return;
+  // Keep leased entries so adopters' releases can still resolve them; the
+  // entry is dropped once the last lease is released.
+  if (stack[index].leases.length > 0) {
+    stack[index].revoked = true;
+    return;
+  }
+  stack.splice(index, 1);
+  if (stack.length === 0) offerStacks.delete(key);
 }
 
-export function adoptHandoffPlayer(key: string, expectedUri: string): VideoPlayer | null {
-  const entry = entries.get(key);
-  if (!entry) return null;
-  try {
-    // Throws if the native player was already released.
-    void entry.player.status;
-  } catch {
-    entries.delete(key);
-    return null;
+/**
+ * Adopt the most recently offered player for `key` that currently holds
+ * `expectedUri`. Returns a lease the adopter must `release` on unmount.
+ */
+export function adoptHandoffPlayer(key: string, expectedUri: string): VideoPlayerLease | null {
+  const stack = offerStacks.get(key);
+  if (!stack) return null;
+  for (let i = stack.length - 1; i >= 0; i--) {
+    const offer = stack[i];
+    try {
+      // Throws if the native player was already released.
+      void offer.player.status;
+    } catch {
+      stack.splice(i, 1);
+      continue;
+    }
+    if (getAppliedVideoSourceUri(offer.player) !== expectedUri) continue;
+    const token = Symbol("video-player-lease");
+    offer.leases.push(token);
+    leaseCounts.set(offer.player, (leaseCounts.get(offer.player) ?? 0) + 1);
+    bumpLeaseVersion();
+    return { key, player: offer.player, token };
   }
-  if (getAppliedVideoSourceUri(entry.player) !== expectedUri) return null;
-  entry.leased = true;
-  leasedPlayers.add(entry.player);
-  bumpLeaseVersion();
-  return entry.player;
+  if (stack.length === 0) offerStacks.delete(key);
+  return null;
 }
 
-export function releaseHandoffPlayer(key: string, player: VideoPlayer): void {
-  const entry = entries.get(key);
-  if (entry && entry.player === player) {
-    entry.leased = false;
+export function releaseHandoffPlayer(lease: VideoPlayerLease): void {
+  const stack = offerStacks.get(lease.key);
+  const offerIndex = stack?.findIndex((entry) => entry.player === lease.player) ?? -1;
+  const offer = offerIndex >= 0 ? stack![offerIndex] : undefined;
+  if (offer) {
+    const tokenIndex = offer.leases.indexOf(lease.token);
+    if (tokenIndex !== -1) offer.leases.splice(tokenIndex, 1);
+    if (offer.leases.length === 0 && offer.revoked) {
+      stack!.splice(offerIndex, 1);
+      if (stack!.length === 0) offerStacks.delete(lease.key);
+    }
   }
-  leasedPlayers.delete(player);
+  const count = leaseCounts.get(lease.player) ?? 0;
+  if (count > 0) leaseCounts.set(lease.player, count - 1);
   bumpLeaseVersion();
 }

@@ -1,4 +1,3 @@
-import type { VideoPlayer } from "expo-video";
 import {
   useCallback,
   useEffect,
@@ -18,10 +17,13 @@ import {
 import {
   applyVideoBufferProfile,
   useVideoPlayerController,
+  useVideoPlayerLeaseVersion,
 } from "@/src/hooks/use-video-player-controller";
 import {
   adoptHandoffPlayer,
+  isVideoPlayerControlledElsewhere,
   releaseHandoffPlayer,
+  type VideoPlayerLease,
 } from "@/src/utils/video-player-handoff";
 import { canonicalVideoAssetId } from "@/src/utils/video-asset-id";
 import {
@@ -170,54 +172,68 @@ export function usePostCardVideoPlayback({
   // video when one exists (the feed stays mounted underneath in the nav
   // stack), instead of creating a fresh player and re-streaming the HLS
   // from scratch on every open.
-  const [adoptedPlayer, setAdoptedPlayer] = useState<VideoPlayer | null>(null);
+  const [adoptedLease, setAdoptedLease] = useState<VideoPlayerLease | null>(null);
+  const adoptedPlayer = adoptedLease?.player ?? null;
   useLayoutEffect(() => {
     if (!isPostDetail || !videoHandoffKey || !resolvedMediaUri) return;
-    const player = adoptHandoffPlayer(videoHandoffKey, resolvedMediaUri);
-    if (!player) return;
-    setAdoptedPlayer(player);
+    const lease = adoptHandoffPlayer(videoHandoffKey, resolvedMediaUri);
+    if (!lease) return;
+    setAdoptedLease(lease);
     return () => {
-      setAdoptedPlayer(null);
-      releaseHandoffPlayer(videoHandoffKey, player);
+      setAdoptedLease(null);
+      releaseHandoffPlayer(lease);
     };
   }, [isPostDetail, videoHandoffKey, resolvedMediaUri]);
 
   const controllerPlayer = useVideoPlayerController(
-    shouldPrepareNativeVideo && !adoptedPlayer ? resolvedMediaUri : null,
+    shouldPrepareNativeVideo && !adoptedLease ? resolvedMediaUri : null,
     {
       loop: true,
       muted: videoMuted,
-      shouldPlay: shouldPlayNativeVideo && !adoptedPlayer,
+      shouldPlay: shouldPlayNativeVideo && !adoptedLease,
       timeUpdateInterval: 0.1,
       bufferProfile: videoBufferProfile,
-      handoffKey: isPostDetail ? null : videoHandoffKey,
+      // Offer the player onward: feed offers to detail, detail offers to
+      // fullscreen. (Controllers only offer once they own a source, so a
+      // detail card that adopted the feed's player adds no duplicate offer.)
+      handoffKey: videoHandoffKey,
     },
   );
   const videoPlayer = adoptedPlayer ?? controllerPlayer;
+
+  // Whether some surface stacked above us (e.g. the fullscreen preview)
+  // currently holds a newer lease on our player. While true, all writes are
+  // suppressed; the lease-version bump on release re-runs these effects so
+  // this surface re-asserts its state.
+  const leaseVersion = useVideoPlayerLeaseVersion();
+  const controlledElsewhere = isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease);
 
   // An adopted player bypasses the controller's option effects, so detail
   // applies its settings directly.
   useEffect(() => {
     if (!adoptedPlayer) return;
+    if (isVideoPlayerControlledElsewhere(adoptedPlayer, adoptedLease)) return;
     try {
       applyVideoBufferProfile(adoptedPlayer, "detail");
       adoptedPlayer.loop = true;
       adoptedPlayer.timeUpdateEventInterval = 0.1;
     } catch {
       // Native player was released underneath us (feed unmounted).
-      setAdoptedPlayer(null);
+      setAdoptedLease(null);
     }
-  }, [adoptedPlayer]);
+  }, [adoptedPlayer, adoptedLease, leaseVersion]);
   useEffect(() => {
     if (!adoptedPlayer) return;
+    if (isVideoPlayerControlledElsewhere(adoptedPlayer, adoptedLease)) return;
     try {
       adoptedPlayer.muted = videoMuted;
     } catch {
-      setAdoptedPlayer(null);
+      setAdoptedLease(null);
     }
-  }, [adoptedPlayer, videoMuted]);
+  }, [adoptedPlayer, adoptedLease, videoMuted, leaseVersion]);
   useEffect(() => {
     if (!adoptedPlayer) return;
+    if (isVideoPlayerControlledElsewhere(adoptedPlayer, adoptedLease)) return;
     try {
       if (shouldPlayNativeVideo) {
         adoptedPlayer.play();
@@ -225,9 +241,30 @@ export function usePostCardVideoPlayback({
         adoptedPlayer.pause();
       }
     } catch {
-      setAdoptedPlayer(null);
+      setAdoptedLease(null);
     }
-  }, [adoptedPlayer, shouldPlayNativeVideo]);
+  }, [adoptedPlayer, adoptedLease, shouldPlayNativeVideo, leaseVersion]);
+
+  // When a newer lease holder (fullscreen) releases our player, nudge the
+  // surface: re-attaching video output can leave this view blank even though
+  // the player is playing, and playback state may have changed while we were
+  // suppressed.
+  const wasControlledElsewhereRef = useRef(false);
+  useEffect(() => {
+    const was = wasControlledElsewhereRef.current;
+    wasControlledElsewhereRef.current = controlledElsewhere;
+    if (!was || controlledElsewhere) return;
+    if (!shouldPlayNativeVideo) return;
+    try {
+      if (videoPlayer.status === "readyToPlay") {
+        const position = videoPlayer.currentTime;
+        videoPlayer.currentTime = position;
+        videoPlayer.play();
+      }
+    } catch {
+      // Player already released; the mount gates will recreate it.
+    }
+  }, [controlledElsewhere, shouldPlayNativeVideo, videoPlayer]);
 
   useEffect(() => {
     if (!resolvedMediaUri) return;
@@ -484,6 +521,7 @@ export function usePostCardVideoPlayback({
       if (nextState !== "active" || !wasBackgroundedRef.current) return;
       wasBackgroundedRef.current = false;
       if (!shouldPlayNativeVideo) return;
+      if (isVideoPlayerControlledElsewhere(videoPlayer, adoptedLease)) return;
       try {
         if (videoPlayer.status === "readyToPlay") {
           const position = videoPlayer.currentTime;
@@ -495,7 +533,7 @@ export function usePostCardVideoPlayback({
       }
     });
     return () => sub.remove();
-  }, [shouldPlayNativeVideo, videoPlayer]);
+  }, [shouldPlayNativeVideo, videoPlayer, adoptedLease]);
 
   return {
     // Effective visibility (optimistic prime applied).
@@ -504,6 +542,8 @@ export function usePostCardVideoPlayback({
     // Player.
     videoPlayer,
     adoptedPlayer,
+    adoptedLease,
+    controlledElsewhere,
     // Playback state.
     isVideoPlaying,
     setIsVideoPlaying,
