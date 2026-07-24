@@ -139,9 +139,24 @@ Original caveats, resolved:
 `retainPlayerForDetail` turned out not to be a handoff at all — it only kept the feed card's video mounted under the push animation; detail always created a fresh player and re-streamed the HLS on every open. Real handoff now lives in `src/utils/video-player-handoff.ts`: feed controllers *offer* their prepared player under the video's canonical Bunny guid (`handoffKey` option on `useVideoPlayerController`), and the detail surface *adopts* that exact instance in a `useLayoutEffect` (same commit as the feed's blur re-render, so the lease lands before the feed controller's `replaceAsync(null)` effect can drop the buffer; worst case degrades to no-handoff, never breakage). While leased, the offering controller suppresses all writes; on release (back-nav) a lease-version bump re-runs its effects so it re-asserts state.
 
 Both video surfaces are consolidated on this pattern:
-- Single-video posts: `post-card-media.tsx` (offer in feed mode, adopt in detail mode).
-- Gallery posts: `GalleryVideoItem` in `media-gallery.tsx` (same offer/adopt, plus the same TTFF marks — `gallery-feed`/`gallery-detail` contexts — and the same background-repaint nudge).
-- `post-card-media`'s single-video machinery is fully inert for multi-media posts (`isGalleryPost` gate): previously the primary media item was **streamed twice** (post-card's own controller + gallery item 0), and with handoff on both paths the duplicate would also have fought over the same handoff key.
+- Single-video posts: `post-card-video.tsx` (offer in feed mode, adopt in detail mode).
+- Gallery posts: `gallery-video-item.tsx` (same offer/adopt, plus the same TTFF marks — `gallery-feed`/`gallery-detail` contexts — and the same background-repaint nudge).
+- For multi-media posts only the gallery items own players: previously the primary media item was **streamed twice** (post-card's own controller + gallery item 0), and with handoff on both paths the duplicate would also have fought over the same handoff key.
+
+**Phase 2c — media component decomposition (done Jul 2026):**
+The 2127-line `post-card-media.tsx` monolith was split by media type; video now fully owns its player lifecycle in dedicated files. Public surface unchanged (`PostCardMedia`/`PostCardMediaRef`, `MediaGallery`). Behavior-preserving port; all guardrails green.
+
+- `post-card-media.tsx` (~190) — thin coordinator: picks gallery / video / YouTube / image surface, forwards `pauseVideo` ref.
+- `post-card-video.tsx` (~545) — native-video surface: rendering, handlers, first-frame bookkeeping, retry-key source re-apply.
+  - `use-post-card-video-playback.ts` (~540) — player ownership (controller + handoff adoption), warm/active buffer switching, viewability play/pause orchestration, audio-focus singleton, position save/restore, background repaint nudge, optimistic prime.
+  - `use-post-card-video-listeners.ts` (~155) — player event listeners with stale-source guards; mount breadcrumb.
+  - `use-post-card-video-health.ts` (~435) — error retries, hosted-stream processing poll, offline/background/focus recovery.
+- `post-card-youtube.tsx` (~585) — YouTube embeds (Android autoplay embed vs iframe), position sync, retry-until-playing, controls.
+- `post-card-image.tsx` (~170) — image/GIF surface with offline error recovery.
+- `post-card-media-shared.ts` (~200) — `useMediaAspectRatio`, `useMediaLoadedState`, `useMediaPressTransition` (shared across surfaces); `post-card-media-styles.ts` — shared frame/chrome styles.
+- `media-gallery.tsx` (~245) — pager container only; items extracted to `gallery-video-item.tsx` (~425) and `gallery-image-item.tsx` (~90) with `media-gallery-shared.ts` for caches/sizing/styles.
+
+Known intentional deltas (documented, not regressions): per-surface 8s loading fallbacks start on the surface's own uri-change instead of one shared timer; gallery presses no longer feed a (previously duplicate-player, now removed) position snapshot into the press transition overlay.
 
 ### Phase 3 — expo-video upgrade (requires explicit dependency decision — flag before doing)
 
