@@ -50,7 +50,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     [
       "expo-local-authentication",
       {
-        faceIDPermission: "Allow $(PRODUCT_NAME) to authenticate before showing your recovery phrase.",
+        faceIDPermission:
+          "Allow $(PRODUCT_NAME) to authenticate before showing your recovery phrase.",
       },
     ],
     "expo-video",
@@ -109,7 +110,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name,
     slug,
-    version: "1.1.4",
+    version: "1.1.5",
     orientation: "default",
     icon: "./assets/images/icon.png",
     scheme: scheme,
