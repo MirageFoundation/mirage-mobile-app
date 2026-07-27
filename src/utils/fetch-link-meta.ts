@@ -1,5 +1,7 @@
 import * as Sentry from "@sentry/react-native";
 
+import { extractRedditEmbedMeta, getRedditEmbedUrl } from "./reddit-embed-meta";
+
 export type LinkMeta = {
   title: string | null;
   description: string | null;
@@ -130,6 +132,43 @@ async function resolveRedirectUrl(url: string, signal: AbortSignal): Promise<str
   return url;
 }
 
+async function fetchRedditEmbedMeta(url: string, signal: AbortSignal): Promise<Partial<LinkMeta>> {
+  const embedUrl = getRedditEmbedUrl(url);
+  if (!embedUrl) return {};
+
+  try {
+    const res = await fetch(embedUrl, {
+      signal,
+      headers: {
+        "User-Agent": BROWSER_UA,
+        Accept: "text/html,application/xhtml+xml",
+      },
+      redirect: "follow",
+    });
+    if (!res.ok) return {};
+
+    const meta = extractRedditEmbedMeta(await res.text());
+    return {
+      ...meta,
+      images: meta.image ? [meta.image] : [],
+      videos: meta.video ? [meta.video] : [],
+      siteName: "Reddit",
+    };
+  } catch (error) {
+    Sentry.addBreadcrumb({
+      category: "link-meta",
+      message: "Reddit embed fallback failed",
+      data: { error: String(error) },
+      level: "warning",
+    });
+    return {};
+  }
+}
+
+function hasRedditEmbedMeta(meta: Partial<LinkMeta>): boolean {
+  return !!(meta.title || meta.description || meta.image || meta.video || meta.externalUrl);
+}
+
 function isRedditUrl(url: string): boolean {
   try {
     const host = new URL(url).hostname.replace(/^www\./, "").replace(/^m\./, "").replace(/^old\./, "");
@@ -221,6 +260,16 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
     }
     if (!res.ok) {
       console.log("[fetchRedditVideo] JSON fetch failed:", { status: res.status, jsonUrl });
+      const embed = await fetchRedditEmbedMeta(resolvedUrl, signal);
+      if (hasRedditEmbedMeta(embed)) {
+        Sentry.addBreadcrumb({
+          category: "link-meta",
+          message: "Reddit metadata recovered from embed fallback",
+          data: { jsonStatus: res.status, hasVideo: !!embed.video, hasImage: !!embed.image },
+          level: "info",
+        });
+        return embed;
+      }
       Sentry.captureMessage("Reddit JSON fetch failed", {
         level: "warning",
         tags: { feature: "share-intent", domain: "reddit.com" },
@@ -232,6 +281,8 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
     const raw = await res.text();
     if (!raw.trim()) {
       console.log("[fetchRedditVideo] JSON fetch returned empty body:", { jsonUrl });
+      const embed = await fetchRedditEmbedMeta(resolvedUrl, signal);
+      if (hasRedditEmbedMeta(embed)) return embed;
       Sentry.captureMessage("Reddit JSON returned empty body", {
         level: "warning",
         tags: { feature: "share-intent", domain: "reddit.com" },
@@ -245,6 +296,8 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
       data = JSON.parse(raw);
     } catch (parseErr) {
       console.log("[fetchRedditVideo] JSON parse failed:", { jsonUrl, error: String(parseErr) });
+      const embed = await fetchRedditEmbedMeta(resolvedUrl, signal);
+      if (hasRedditEmbedMeta(embed)) return embed;
       Sentry.captureMessage("Reddit JSON parse failed", {
         level: "warning",
         tags: { feature: "share-intent", domain: "reddit.com" },
@@ -263,6 +316,8 @@ async function fetchRedditVideo(url: string, signal: AbortSignal): Promise<Parti
     const post = listing?.data?.children?.[0]?.data;
     if (!post) {
       console.log("[fetchRedditVideo] No post data found in JSON response");
+      const embed = await fetchRedditEmbedMeta(resolvedUrl, signal);
+      if (hasRedditEmbedMeta(embed)) return embed;
       Sentry.captureMessage("Reddit JSON returned no post data", {
         level: "warning",
         tags: { feature: "share-intent", domain: "reddit.com" },
@@ -967,7 +1022,7 @@ export async function fetchLinkMeta(url: string): Promise<LinkMeta> {
 
     const fxUrl = getFxTwitterUrl(resolvedUrl);
     let html: string | null = null;
-    let shouldSkipGenericHtmlFallback = false;
+    let shouldSkipGenericHtmlFallback = isRedditUrl(resolvedUrl) && !!(title || description || image || video);
 
     if (fxUrl) {
       try {
