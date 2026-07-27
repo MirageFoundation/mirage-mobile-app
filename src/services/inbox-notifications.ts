@@ -1529,7 +1529,8 @@ export async function initInboxNotifications(): Promise<void> {
       await Notifications.setNotificationChannelAsync("inbox", {
         name: "Inbox Replies",
         importance: Notifications.AndroidImportance.HIGH,
-        sound: "default",
+        // Omitting `sound` selects Android's system notification sound. Expo
+        // otherwise treats the value as the filename of a bundled custom sound.
         vibrationPattern: [0, 250, 250, 250],
       });
     }

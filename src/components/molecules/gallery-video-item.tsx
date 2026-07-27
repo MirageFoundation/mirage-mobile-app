@@ -7,7 +7,6 @@ import { getVideoThumbnailUri, type ResolvedMedia } from "./post-card-utils";
 import { Text } from "@/src/components/ui/primitives";
 import {
   applyVideoBufferProfile,
-  getCachedVideoSource,
   useVideoPlayerController,
   useVideoPlayerLeaseVersion,
 } from "@/src/hooks/use-video-player-controller";
@@ -25,6 +24,7 @@ import {
   markVideoPrepareStart,
 } from "@/src/utils/video-ttff";
 import { getMediaImagePolicy } from "./media-image-policy";
+import { replaceVideoPlayerSourceAsync } from "@/src/utils/video-source-replacement";
 import {
   GALLERY_ASPECT_RATIO_CACHE,
   GALLERY_LOADED_CACHE,
@@ -286,7 +286,7 @@ export const GalleryVideoItem = memo(function GalleryVideoItem({
           errorRetryRef.current = setTimeout(() => {
             if (cancelled) return;
             setIsLoading(true);
-            void videoPlayer.replaceAsync(getCachedVideoSource(item.uri)).catch(() => {
+            void replaceVideoPlayerSourceAsync(videoPlayer, item.uri).catch(() => {
               if (!cancelled) setIsLoading(false);
             });
           }, 2000 * errorRetryCountRef.current);

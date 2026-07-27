@@ -2,7 +2,10 @@
 import { describe, expect, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
 
-import { getInfinitePostsQueryPolicy } from "../src/api/read/infinite-posts-policy";
+import {
+  getInfinitePostsQueryPolicy,
+  INFINITE_POSTS_STALE_TIME,
+} from "../src/api/read/infinite-posts-policy";
 
 describe("infinite post reconciliation policy", () => {
   test("restoration pauses fetching without letting cached data disable it", () => {
@@ -19,10 +22,10 @@ describe("infinite post reconciliation policy", () => {
     });
     expect(restored).toEqual({
       enabled: true,
-      staleTime: 0,
+      staleTime: INFINITE_POSTS_STALE_TIME,
       refetchOnMount: true,
       refetchOnWindowFocus: false,
-      refetchOnReconnect: true,
+      refetchOnReconnect: false,
     });
   });
 

@@ -9,15 +9,15 @@ import {
 } from "expo-video";
 import {
   getVideoPlayerLeaseVersion,
-  getVideoSourceUri,
   isVideoPlayerLeased,
   offerHandoffPlayer,
   revokeHandoffOffer,
-  setAppliedVideoSourceUri,
   subscribeVideoPlayerLeases,
 } from "@/src/utils/video-player-handoff";
+import { replaceVideoPlayerSourceAsync } from "@/src/utils/video-source-replacement";
 
 export { getAppliedVideoSourceUri, getVideoSourceUri } from "@/src/utils/video-player-handoff";
+export { getCachedVideoSource } from "@/src/utils/video-source-replacement";
 
 /**
  * Re-renders the caller whenever any handoff lease changes, so surfaces can
@@ -84,20 +84,6 @@ export function applyVideoBufferProfile(
   profile: VideoBufferProfile,
 ): void {
   player.bufferOptions = BUFFER_PROFILES[profile];
-}
-
-export function getCachedVideoSource(source: VideoSource): VideoSource {
-  if (typeof source !== "string" || !/^https?:\/\//i.test(source)) {
-    return source;
-  }
-  const path = source.split(/[?#]/, 1)[0]?.toLowerCase() ?? "";
-  if (path.endsWith(".m3u8") || path.endsWith(".mpd")) {
-    return source;
-  }
-  return {
-    uri: source,
-    useCaching: true,
-  };
 }
 
 function getSourceKey(source: VideoSource): string | null {
@@ -169,7 +155,6 @@ export function useVideoPlayerController(
   const initialTimeRef = useRef(initialTime);
   initialTimeRef.current = initialTime;
   const appliedSourceKeyRef = useRef<string | null | undefined>(undefined);
-  const replaceChainRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     // While an adopter (detail screen) holds this player, leave it alone; the
@@ -178,13 +163,12 @@ export function useVideoPlayerController(
     if (appliedSourceKeyRef.current === sourceKey) return;
     appliedSourceKeyRef.current = sourceKey;
     const targetSource = sourceRef.current;
-    replaceChainRef.current = replaceChainRef.current
-      .then(async () => {
+    void replaceVideoPlayerSourceAsync(player, targetSource)
+      .then((didReplace) => {
+        if (!didReplace) return;
         // A newer source superseded this one while earlier swaps were queued.
         if (appliedSourceKeyRef.current !== sourceKey) return;
         if (isVideoPlayerLeased(player)) return;
-        await player.replaceAsync(getCachedVideoSource(targetSource));
-        setAppliedVideoSourceUri(player, getVideoSourceUri(targetSource));
         if (appliedSourceKeyRef.current !== sourceKey) return;
         if (sourceKey != null && initialTimeRef.current > 0.5) {
           player.currentTime = initialTimeRef.current;

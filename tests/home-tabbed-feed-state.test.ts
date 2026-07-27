@@ -2,9 +2,11 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  FOLLOWING_AUTO_FILL_MAX_PAGES,
   getHomeFeedContext,
   getLatestPostTimestamp,
   selectHomeFeedTab,
+  shouldAutoFillFollowingFeed,
   shouldPrefetchNextPage,
 } from "../src/pages/home/home-tabbed-feed-state";
 
@@ -30,5 +32,29 @@ describe("home tabbed feed state", () => {
     expect(shouldPrefetchNextPage(14, 20)).toBe(true);
     expect(shouldPrefetchNextPage(5, 8)).toBe(false);
     expect(shouldPrefetchNextPage(6, 8)).toBe(true);
+  });
+
+  test("bounds following-feed auto-fill when filtering keeps the feed sparse", () => {
+    const ready = {
+      renderedPostCount: 4,
+      loadedPageCount: 1,
+      hasNextPage: true,
+      isFetching: false,
+      isFetchingNextPage: false,
+    };
+
+    expect(shouldAutoFillFollowingFeed(ready)).toBe(true);
+    expect(shouldAutoFillFollowingFeed({
+      ...ready,
+      loadedPageCount: FOLLOWING_AUTO_FILL_MAX_PAGES,
+    })).toBe(false);
+    expect(shouldAutoFillFollowingFeed({
+      ...ready,
+      renderedPostCount: 10,
+    })).toBe(false);
+    expect(shouldAutoFillFollowingFeed({
+      ...ready,
+      isFetchingNextPage: true,
+    })).toBe(false);
   });
 });

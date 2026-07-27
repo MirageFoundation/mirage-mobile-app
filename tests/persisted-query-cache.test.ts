@@ -3,9 +3,12 @@ import { describe, expect, test } from "bun:test";
 
 import {
   PERSISTED_QUERY_MAX_BYTES,
+  PERSISTED_QUERY_BUSTER,
+  PERSISTED_QUERY_MAX_AGE_MS,
   PERSISTED_QUERY_SCHEMA_VERSION,
   buildPersistedQueryNamespace,
   buildPersistedQueryStorageKey,
+  getHydratablePersistedQueryClient,
   isLaunchCriticalFeedQuery,
   preparePersistedQueryClient,
   restorePersistedQueryClient,
@@ -207,6 +210,29 @@ describe("persisted launch feed allowlist", () => {
 });
 
 describe("persisted payload restore", () => {
+  test("hydrates a valid launch cache and rejects expired or incompatible clients", () => {
+    const now = 10_000;
+    const valid = {
+      timestamp: now - 1_000,
+      buster: PERSISTED_QUERY_BUSTER,
+      clientState: { queries: [], mutations: [] },
+    };
+
+    expect(getHydratablePersistedQueryClient(valid, { now })).toEqual(valid);
+    expect(getHydratablePersistedQueryClient(
+      { ...valid, buster: "old-cache" },
+      { now },
+    )).toBeNull();
+    expect(getHydratablePersistedQueryClient(
+      { ...valid, timestamp: now - PERSISTED_QUERY_MAX_AGE_MS - 1 },
+      { now },
+    )).toBeNull();
+    expect(getHydratablePersistedQueryClient(
+      { ...valid, timestamp: now + 60_001 },
+      { now },
+    )).toBeNull();
+  });
+
   test("rejects malformed, old-schema, wrong-namespace, and oversized payloads", () => {
     expect(restorePersistedQueryClient("not json", namespace)).toBeNull();
     expect(

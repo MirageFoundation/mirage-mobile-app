@@ -45,6 +45,7 @@ import { usePostCardVideoPlayback } from "./use-post-card-video-playback";
 import { usePostCardVideoListeners } from "./use-post-card-video-listeners";
 import { usePostCardVideoHealth } from "./use-post-card-video-health";
 import { getMediaImagePolicy } from "./media-image-policy";
+import { replaceVideoPlayerSourceAsync } from "@/src/utils/video-source-replacement";
 
 export type PostCardVideoRef = {
   pauseVideo: () => void;
@@ -205,7 +206,7 @@ export const PostCardVideo = memo(
       if (!shouldMountNativeVideo || !resolvedMediaUri) return;
       hasRestoredVideoPositionRef.current = false;
       let cancelled = false;
-      void videoPlayer.replaceAsync(mediaSource).catch((error) => {
+      void replaceVideoPlayerSourceAsync(videoPlayer, mediaSource).catch((error) => {
         if (cancelled) return;
         Sentry.addBreadcrumb({
           category: "post-media",

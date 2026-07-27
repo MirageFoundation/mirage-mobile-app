@@ -40,6 +40,7 @@ import {
   INITIAL_PAGE_SIZE,
   NEXT_PAGE_SIZE,
   selectHomeFeedTab,
+  shouldAutoFillFollowingFeed,
   shouldPrefetchNextPage,
 } from "./home-tabbed-feed-state";
 import { useHomeTabbedFeedPosts } from "./use-home-tabbed-feed-posts";
@@ -468,8 +469,14 @@ export function useHomeTabbedFeedController({
   }, [activeTabIndex, query.isLoading, showBars]);
 
   useEffect(() => {
-    if (baseFeed !== "following" || posts.length >= INITIAL_PAGE_SIZE) return;
-    if (!query.hasNextPage || query.isFetching || query.isFetchingNextPage) return;
+    if (baseFeed !== "following") return;
+    if (!shouldAutoFillFollowingFeed({
+      renderedPostCount: posts.length,
+      loadedPageCount: query.data?.pages.length ?? 0,
+      hasNextPage: Boolean(query.hasNextPage),
+      isFetching: query.isFetching,
+      isFetchingNextPage: query.isFetchingNextPage,
+    })) return;
     void query.fetchNextPage();
   }, [baseFeed, posts.length, query]);
 

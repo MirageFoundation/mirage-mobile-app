@@ -1,6 +1,7 @@
 export const INITIAL_PAGE_SIZE = 10;
 export const NEXT_PAGE_SIZE = 12;
 export const PREFETCH_THRESHOLD = 6;
+export const FOLLOWING_AUTO_FILL_MAX_PAGES = 4;
 
 export type HomeFeedTabSelection = {
   key: "magic" | "latest";
@@ -41,4 +42,27 @@ export function shouldPrefetchNextPage(
 ): boolean {
   const currentPageStart = Math.max(0, totalLoaded - pageSize);
   return visibleIndex - currentPageStart >= threshold;
+}
+
+export function shouldAutoFillFollowingFeed({
+  renderedPostCount,
+  loadedPageCount,
+  hasNextPage,
+  isFetching,
+  isFetchingNextPage,
+}: {
+  renderedPostCount: number;
+  loadedPageCount: number;
+  hasNextPage: boolean;
+  isFetching: boolean;
+  isFetchingNextPage: boolean;
+}): boolean {
+  return (
+    renderedPostCount < INITIAL_PAGE_SIZE &&
+    loadedPageCount > 0 &&
+    loadedPageCount < FOLLOWING_AUTO_FILL_MAX_PAGES &&
+    hasNextPage &&
+    !isFetching &&
+    !isFetchingNextPage
+  );
 }

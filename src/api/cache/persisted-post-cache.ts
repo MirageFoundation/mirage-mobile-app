@@ -6,6 +6,8 @@ type UnknownRecord = Record<string, unknown>;
 export const PERSISTED_QUERY_SCHEMA_VERSION = 3;
 export const PERSISTED_QUERY_MAX_PAGES = 1;
 export const PERSISTED_QUERY_MAX_BYTES = 1024 * 1024;
+export const PERSISTED_QUERY_BUSTER = "launch-feed-cache-v3";
+export const PERSISTED_QUERY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type PersistedQueryMetrics = {
   queryCount: number;
@@ -18,6 +20,12 @@ export type PreparedPersistedClient = {
   client: unknown;
   serialized: string;
   metrics: PersistedQueryMetrics;
+};
+
+export type HydratablePersistedQueryClient = {
+  timestamp: number;
+  buster: string;
+  clientState: unknown;
 };
 
 type PersistedEnvelope = {
@@ -48,6 +56,36 @@ export function buildPersistedQueryNamespace(
 
 export function buildPersistedQueryStorageKey(namespace: string): string {
   return `mirage-query-cache:${encodeURIComponent(namespace)}`;
+}
+
+export function getHydratablePersistedQueryClient(
+  client: unknown,
+  {
+    buster = PERSISTED_QUERY_BUSTER,
+    maxAgeMs = PERSISTED_QUERY_MAX_AGE_MS,
+    now = Date.now(),
+  }: {
+    buster?: string;
+    maxAgeMs?: number;
+    now?: number;
+  } = {},
+): HydratablePersistedQueryClient | null {
+  if (!isRecord(client) || !isRecord(client.clientState)) return null;
+  const timestamp = Number(client.timestamp);
+  if (
+    !Number.isFinite(timestamp) ||
+    timestamp <= 0 ||
+    client.buster !== buster ||
+    now - timestamp > maxAgeMs ||
+    timestamp > now + 60_000
+  ) {
+    return null;
+  }
+  return {
+    timestamp,
+    buster,
+    clientState: client.clientState,
+  };
 }
 
 export function isLaunchCriticalFeedQuery(queryKey: unknown): boolean {

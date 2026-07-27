@@ -1,5 +1,10 @@
 import * as Sentry from "@sentry/react-native";
-import { focusManager, onlineManager } from "@tanstack/react-query";
+import {
+  focusManager,
+  hydrate,
+  onlineManager,
+  type DehydratedState,
+} from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { useEffect } from "react";
@@ -17,7 +22,10 @@ import {
 import {
   buildPersistedQueryNamespace,
   buildPersistedQueryStorageKey,
+  getHydratablePersistedQueryClient,
   isLaunchCriticalFeedQuery,
+  PERSISTED_QUERY_BUSTER,
+  PERSISTED_QUERY_MAX_AGE_MS,
   preparePersistedQueryClient,
   restorePersistedQueryClient,
   type PersistedQueryMetrics,
@@ -64,6 +72,23 @@ const mmkvQueryStorage = {
 
 let restoredMetrics: PersistedQueryMetrics | null = null;
 
+function hydrateLaunchFeedSynchronously(): void {
+  const namespace = getCurrentPersistedNamespace();
+  const storageKey = buildPersistedQueryStorageKey(namespace);
+  const cachedString = storage.getString(storageKey);
+  if (!cachedString) return;
+
+  const restored = restorePersistedQueryClient(cachedString, namespace);
+  const hydratable = getHydratablePersistedQueryClient(restored?.client);
+  if (!restored || !hydratable) {
+    storage.remove(storageKey);
+    return;
+  }
+
+  hydrate(queryClient, hydratable.clientState as DehydratedState);
+  restoredMetrics = restored.metrics;
+}
+
 function addPersistenceBreadcrumb(
   operation: "persist" | "restore",
   metrics: PersistedQueryMetrics,
@@ -104,6 +129,11 @@ const persister = createSyncStoragePersister({
   },
 });
 
+// MMKV and Zustand hydration are synchronous, so the server/viewer namespace
+// is already available here. Seed the query client before any screen renders;
+// PersistQueryClientProvider still owns subsequent persistence and refreshes.
+hydrateLaunchFeedSynchronously();
+
 function addPersistedCacheRestoredBreadcrumb() {
   if (restoredMetrics) addPersistenceBreadcrumb("restore", restoredMetrics);
 }
@@ -143,7 +173,8 @@ export const QueryProvider = ({ children }: { children: React.ReactNode }) => {
       client={queryClient}
       persistOptions={{
         persister,
-        buster: "launch-feed-cache-v3",
+        buster: PERSISTED_QUERY_BUSTER,
+        maxAge: PERSISTED_QUERY_MAX_AGE_MS,
         dehydrateOptions: {
           shouldDehydrateQuery: (query) =>
             query.state.status === "success" &&
