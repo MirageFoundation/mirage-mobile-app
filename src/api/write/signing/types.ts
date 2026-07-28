@@ -103,6 +103,8 @@ export interface PoWProgress {
   elapsedMs: number;
   /** Estimated total time in milliseconds */
   estimatedTotalMs: number;
+  /** Expected attempts for this target (PoW completion is probabilistic) */
+  expectedAttempts?: number;
 }
 
 export type PoWProgressCallback = (progress: PoWProgress) => void;

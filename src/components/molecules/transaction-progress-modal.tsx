@@ -46,6 +46,7 @@ export interface TransactionProgress {
     attempts: number;
     elapsedMs: number;
     estimatedTotalMs: number;
+    expectedAttempts?: number;
   };
   /** Error message if phase is error */
   error?: string;
@@ -228,11 +229,31 @@ export function TransactionProgressModal({
 
   const config = PHASE_CONFIG[progress.phase];
 
-  // Calculate PoW progress percentage
+  // PoW has no deterministic completion percentage. When available, show the
+  // probability that a valid nonce would have been found by this many tries.
+  // This stays meaningful on devices that run far below the initial estimate.
   const powProgressPercent = useMemo(() => {
-    if (!progress.powProgress || progress.powProgress.estimatedTotalMs === 0) {
+    if (!progress.powProgress) {
       return 0;
     }
+
+    if (
+      progress.powProgress.expectedAttempts &&
+      progress.powProgress.expectedAttempts > 0
+    ) {
+      const probability =
+        1 -
+        Math.exp(
+          -progress.powProgress.attempts /
+            progress.powProgress.expectedAttempts,
+        );
+      return Math.round(Math.min(probability * 100, 95));
+    }
+
+    if (progress.powProgress.estimatedTotalMs === 0) {
+      return 0;
+    }
+
     const percent = Math.min(
       (progress.powProgress.elapsedMs / progress.powProgress.estimatedTotalMs) *
         100,
@@ -387,7 +408,7 @@ export function TransactionProgressModal({
               )}
 
               <Text size="xs" mode="subtle" style={styles.powHint}>
-                This may take 1-5 minutes on mobile devices
+                Speed varies by device. Keep the app open while this finishes.
               </Text>
             </View>
           )}

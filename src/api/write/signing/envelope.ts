@@ -4,6 +4,7 @@ import {
   estimatePoWTime,
   hexToBytes,
   isPowCancelled,
+  isPowTimedOut,
   type MirageWallet,
   signCanonical,
 } from "@/src/wallet";
@@ -50,6 +51,11 @@ function randomUint32(): number {
   return Math.floor(Math.random() * 0x100000000) >>> 0;
 }
 
+// Refresh before the chain's recent-block-hash window can expire. Multiple
+// fresh challenges still give slower devices enough aggregate compute time.
+const POW_CHALLENGE_COMPUTE_TIME_MS = 20_000;
+const MAX_POW_CHALLENGES = 15;
+
 function generateEnvelopeNonce(): bigint {
   const timestampNs = BigInt(Date.now()) * 1000000n;
   const nonce = timestampNs + BigInt(randomUint32());
@@ -85,7 +91,10 @@ export async function buildSignedEnvelope<
 
     console.log(`[Envelope] Using last_block_hash: ${params.last_block_hash.substring(0, 16)}...`);
 
-    if (params.user_level !== cachedUserLevel) {
+    if (
+      typeof params.user_level === "number" &&
+      params.user_level !== cachedUserLevel
+    ) {
       useAuthStore.getState().setUserLevel(params.user_level, wallet.address);
     }
   }
@@ -93,7 +102,7 @@ export async function buildSignedEnvelope<
   const userLevel = params?.user_level ?? cachedUserLevel;
   const userCanSkipPoW = canSkipPoWForUser(userLevel, cachedTier);
   const needsPoW = !skipPoW && (forcePoW || !userCanSkipPoW);
-  const difficulty = needsPoW ? (userCanSkipPoW ? 0 : params?.pow_difficulty ?? 0) : 0;
+  let difficulty = needsPoW ? (userCanSkipPoW ? 0 : params?.pow_difficulty ?? 0) : 0;
 
   const envelopeNonce = generateEnvelopeNonce();
   let timestampMs = Math.max(0, Date.now() - 15000);
@@ -116,35 +125,6 @@ export async function buildSignedEnvelope<
       throw new Error("PoW parameters missing");
     }
 
-    const estimatedTime = estimatePoWTime(difficulty, params.pow_base_bits, params.pow_factor) * 1000;
-
-    console.log(
-      `[PoW] Starting computation with difficulty=${difficulty}, baseBits=${params.pow_base_bits}, factor=${params.pow_factor}`
-    );
-    console.log(
-      `[PoW] Estimated time: ${Math.round(
-        estimatedTime / 1000
-      )}s (~${Math.round(estimatedTime / 60000)}min)`
-    );
-
-    const progressCallback = onPoWProgress
-      ? (attempts: number, elapsedMs: number) => {
-          if (attempts % 100 === 0) {
-            const rate = attempts / (elapsedMs / 1000);
-            console.log(
-              `[PoW] Progress: ${attempts} attempts, ${Math.round(
-                elapsedMs / 1000
-              )}s elapsed, ${rate.toFixed(1)} hashes/sec`
-            );
-          }
-          onPoWProgress({
-            attempts,
-            elapsedMs,
-            estimatedTotalMs: estimatedTime,
-          });
-        }
-      : undefined;
-
     const attemptFactorEnv =
       (typeof process !== "undefined" &&
         (process as any).env?.EXPO_PUBLIC_POW_ATTEMPT_FACTOR) ||
@@ -153,83 +133,131 @@ export async function buildSignedEnvelope<
     const attemptFactor = attemptFactorEnv
       ? Math.max(1, Number(attemptFactorEnv))
       : 8;
-    const expectedAttempts = Number(
-      BigInt(Math.round(1000 * Math.pow(1 + params.pow_factor, difficulty))) *
-      BigInt(Math.pow(2, params.pow_base_bits)) / 1000n
-    );
-    const maxAttempts = Math.max(
-      1000,
-      Math.floor(expectedAttempts * attemptFactor)
-    );
+    let currentParams = params;
+    let completedAttempts = 0;
+    let completedElapsedMs = 0;
 
-    try {
-      const powResult = await computePoW(
-        {
-          base,
-          lastBlockHash: params.last_block_hash,
-          powDifficulty: difficulty,
-          powBaseBits: params.pow_base_bits,
-          powFactor: params.pow_factor,
-        },
-        progressCallback,
-        maxAttempts
-      );
+    for (let challenge = 0; challenge < MAX_POW_CHALLENGES; challenge++) {
+      difficulty = userCanSkipPoW ? 0 : currentParams.pow_difficulty;
+      timestampMs = challenge === 0 ? timestampMs : Date.now();
+      effectiveBlockHash = currentParams.last_block_hash;
+      base = baseBuilder({
+        pubkey33: wallet.publicKey,
+        lastBlockHashBytes: hexToBytes(effectiveBlockHash),
+        difficulty,
+        timestampMs,
+        envelopeNonce,
+        ...payloadFields,
+      });
 
-      pow = powResult.pow;
-      console.log(
-        `[PoW] Complete! Found nonce=${pow} after ${powResult.attempts} attempts in ${powResult.computeTimeMs}ms`
-      );
-    } catch (err) {
-      const msg = String((err as Error)?.message || err || "");
-      if (/exceeded \d+ attempts/i.test(msg)) {
-        Sentry.addBreadcrumb({
-          category: "pow",
-          message: "PoW attempt cap reached, retrying with fresh params",
-          level: "warning",
-          data: { difficulty, maxAttempts },
-        });
-        console.log(
-          "[PoW] Attempt cap reached; refreshing parameters and retrying once..."
-        );
-
-        const refreshed = await getParameters({ address: wallet.address });
-        timestampMs = Date.now();
-        const lastBlockHashBytes2 = hexToBytes(refreshed.last_block_hash);
-        const envelopeParams2: EnvelopeParams = {
-          pubkey33: wallet.publicKey,
-          lastBlockHashBytes: lastBlockHashBytes2,
+      const estimatedTime =
+        estimatePoWTime(
           difficulty,
-          timestampMs,
-          envelopeNonce,
-        };
-        const base2 = baseBuilder({ ...envelopeParams2, ...payloadFields });
+          currentParams.pow_base_bits,
+          currentParams.pow_factor,
+        ) * 1000;
+      const expectedAttempts = Number(
+        BigInt(
+          Math.round(
+            1000 * Math.pow(1 + currentParams.pow_factor, difficulty),
+          ),
+        ) * BigInt(Math.pow(2, currentParams.pow_base_bits)) / 1000n,
+      );
+      const maxAttempts = Math.max(
+        1000,
+        Math.floor(expectedAttempts * attemptFactor),
+      );
+      let challengeAttempts = 0;
+      let challengeElapsedMs = 0;
+      const progressCallback = onPoWProgress
+        ? (attempts: number, elapsedMs: number) => {
+            challengeAttempts = attempts;
+            challengeElapsedMs = elapsedMs;
+            const totalAttempts = completedAttempts + attempts;
+            const totalElapsedMs = completedElapsedMs + elapsedMs;
+            const observedRate =
+              totalElapsedMs > 0
+                ? totalAttempts / (totalElapsedMs / 1000)
+                : 0;
+            onPoWProgress({
+              attempts: totalAttempts,
+              elapsedMs: totalElapsedMs,
+              estimatedTotalMs:
+                observedRate > 0
+                  ? (expectedAttempts / observedRate) * 1000
+                  : estimatedTime,
+              expectedAttempts,
+            });
+          }
+        : undefined;
 
-        const powResult2 = await computePoW(
+      console.log(
+        `[PoW] Challenge ${challenge + 1}/${MAX_POW_CHALLENGES}: difficulty=${difficulty}, baseBits=${currentParams.pow_base_bits}, factor=${currentParams.pow_factor}`,
+      );
+
+      try {
+        const powResult = await computePoW(
           {
-            base: base2,
-            lastBlockHash: refreshed.last_block_hash,
+            base,
+            lastBlockHash: currentParams.last_block_hash,
             powDifficulty: difficulty,
-            powBaseBits: refreshed.pow_base_bits,
-            powFactor: refreshed.pow_factor,
+            powBaseBits: currentParams.pow_base_bits,
+            powFactor: currentParams.pow_factor,
           },
           progressCallback,
-          maxAttempts
+          maxAttempts,
+          POW_CHALLENGE_COMPUTE_TIME_MS,
+          false,
         );
 
-        pow = powResult2.pow;
-        base = base2;
-        effectiveBlockHash = refreshed.last_block_hash;
-        (params as any).last_block_hash = refreshed.last_block_hash;
+        pow = powResult.pow;
         console.log(
-          `[PoW] Complete (retry)! Found nonce=${pow} after ${powResult2.attempts} attempts in ${powResult2.computeTimeMs}ms`
+          `[PoW] Complete! Found nonce=${pow} after ${completedAttempts + powResult.attempts} attempts`,
         );
-      } else {
+        break;
+      } catch (err) {
         if (isPowCancelled(err)) {
           throw err;
         }
+
+        const msg = String((err as Error)?.message || err || "");
+        const shouldRefreshChallenge =
+          isPowTimedOut(err) ||
+          /max attempts|attempt cap|exceeded .*attempts/i.test(msg);
+
+        if (shouldRefreshChallenge && challenge < MAX_POW_CHALLENGES - 1) {
+          completedAttempts += challengeAttempts;
+          completedElapsedMs += challengeElapsedMs;
+          Sentry.addBreadcrumb({
+            category: "pow",
+            message: "Refreshing PoW challenge before it becomes stale",
+            level: "info",
+            data: {
+              challenge: challenge + 1,
+              elapsedMs: challengeElapsedMs,
+              attempts: challengeAttempts,
+            },
+          });
+          currentParams = await getParameters({ address: wallet.address });
+          if (
+            typeof currentParams.user_level === "number" &&
+            currentParams.user_level !== useAuthStore.getState().userLevel
+          ) {
+            useAuthStore
+              .getState()
+              .setUserLevel(currentParams.user_level, wallet.address);
+          }
+          continue;
+        }
+
         Sentry.captureException(err, {
           tags: { action: "pow_computation" },
-          extra: { difficulty, powBaseBits: params.pow_base_bits, powFactor: params.pow_factor },
+          extra: {
+            challenge: challenge + 1,
+            difficulty,
+            powBaseBits: currentParams.pow_base_bits,
+            powFactor: currentParams.pow_factor,
+          },
         });
         throw err;
       }
@@ -307,13 +335,23 @@ export async function buildEnvelopeWithParams<
   let pow = 0;
   if (needsPoW) {
     const estimatedTime = estimatePoWTime(difficulty, powBaseBits, powFactor) * 1000;
+    const expectedAttempts = Number(
+      BigInt(Math.round(1000 * Math.pow(1 + powFactor, difficulty))) *
+      BigInt(Math.pow(2, powBaseBits)) / 1000n
+    );
 
     const progressCallback = onPoWProgress
       ? (attempts: number, elapsedMs: number) => {
+          const observedRate =
+            elapsedMs > 0 ? attempts / (elapsedMs / 1000) : 0;
           onPoWProgress({
             attempts,
             elapsedMs,
-            estimatedTotalMs: estimatedTime,
+            estimatedTotalMs:
+              observedRate > 0
+                ? (expectedAttempts / observedRate) * 1000
+                : estimatedTime,
+            expectedAttempts,
           });
         }
       : undefined;
@@ -326,10 +364,6 @@ export async function buildEnvelopeWithParams<
     const attemptFactor = attemptFactorEnv
       ? Math.max(1, Number(attemptFactorEnv))
       : 8;
-    const expectedAttempts = Number(
-      BigInt(Math.round(1000 * Math.pow(1 + powFactor, difficulty))) *
-      BigInt(Math.pow(2, powBaseBits)) / 1000n
-    );
     const maxAttempts = Math.max(
       1000,
       Math.floor(expectedAttempts * attemptFactor)

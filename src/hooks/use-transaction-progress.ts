@@ -133,6 +133,7 @@ export function useTransactionProgress(): UseTransactionProgressReturn {
         attempts: powProgress.attempts,
         elapsedMs: powProgress.elapsedMs,
         estimatedTotalMs: powProgress.estimatedTotalMs,
+        expectedAttempts: powProgress.expectedAttempts,
       },
     }));
   }, []);

@@ -26,9 +26,13 @@ export async function withPowRetry<T>(
     } catch (error: any) {
       const parsed = parseApiError(error);
       const errorCode = parsed.errorCode;
+      const normalizedMessage = parsed.message.toLowerCase();
       const isPowRetryable =
         errorCode === "insufficient_pow_precheck" ||
-        errorCode === "invalid_last_block_hash";
+        errorCode === "invalid_last_block_hash" ||
+        normalizedMessage.includes("insufficient pow") ||
+        normalizedMessage.includes("invalid last block hash") ||
+        normalizedMessage.includes("invalid_last_block_hash");
       if (isPowRetryable && attempt < MAX_POW_RETRIES) {
         Sentry.addBreadcrumb({
           category: "pow-retry",

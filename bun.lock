@@ -112,6 +112,7 @@
     "expo-share-intent@7.0.0": "patches/expo-share-intent@7.0.0.patch",
     "react-native-compressor@1.18.2": "patches/react-native-compressor@1.18.2.patch",
     "expo-video@56.1.4": "patches/expo-video@56.1.4.patch",
+    "react-native-argon2-turbo@0.1.1": "patches/react-native-argon2-turbo@0.1.1.patch",
     "react-native-unistyles@3.3.0": "patches/react-native-unistyles@3.3.0.patch",
   },
   "packages": {

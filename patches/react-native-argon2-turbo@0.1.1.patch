@@ -1,0 +1,49 @@
+diff --git a/android/src/main/java/com/argon2turbo/Argon2TurboModule.kt b/android/src/main/java/com/argon2turbo/Argon2TurboModule.kt
+index 7454db38da14cacfa3fc64f9a939e0afee760d56..70513a59254db019d5bcb6117a8ad54f0865f3d9 100644
+--- a/android/src/main/java/com/argon2turbo/Argon2TurboModule.kt
++++ b/android/src/main/java/com/argon2turbo/Argon2TurboModule.kt
+@@ -252,8 +252,13 @@ class Argon2TurboModule(reactContext: ReactApplicationContext) :
+                     totalAttempts.set(total)
+                 }
+ 
+-                // Cancel remaining workers
+-                cancelFlag.set(true)
++                // Preserve whether cancellation came from the caller. Setting
++                // this unconditionally made normal max-attempt exhaustion look
++                // like POW_CANCELLED to JavaScript.
++                val wasCancelled = cancelFlag.get()
++                if (result != null) {
++                    cancelFlag.set(true)
++                }
+                 coroutineContext.cancelChildren()
+ 
+                 val elapsedMs = System.currentTimeMillis() - powStartTime
+@@ -271,7 +276,7 @@ class Argon2TurboModule(reactContext: ReactApplicationContext) :
+                     }
+                 } else {
+                     withContext(Dispatchers.Main) {
+-                        if (cancelFlag.get()) {
++                        if (wasCancelled) {
+                             promise.reject("POW_CANCELLED", "PoW computation was cancelled")
+                         } else {
+                             promise.reject("POW_MAX_ATTEMPTS", "Max attempts exceeded")
+diff --git a/ios/Argon2Turbo.mm b/ios/Argon2Turbo.mm
+index 4ad288582cc611957af043e1728351ca370048e8..e4c8343a259acf96bd33567e411d9c94f89bf47c 100644
+--- a/ios/Argon2Turbo.mm
++++ b/ios/Argon2Turbo.mm
+@@ -244,6 +244,15 @@ - (void)computePow:(NSString *)base
+     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+         dispatch_time_t timeout = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeoutMs * NSEC_PER_MSEC));
+         long waitResult = dispatch_group_wait(group, timeout);
++
++        // Workers still reference foundResultPtr and workerAttemptsPtr. Stop
++        // and join them before reading or freeing either allocation; otherwise
++        // a timeout can race into a use-after-free, especially when a retry
++        // starts immediately afterward.
++        if (waitResult != 0) {
++            self->_cancelFlag.store(true);
++            dispatch_group_wait(group, DISPATCH_TIME_FOREVER);
++        }
+         
+         // Calculate total attempts
+         int totalAttempts = 0;
